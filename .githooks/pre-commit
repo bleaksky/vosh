@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Pre-commit hook for mudclient.
+# Enable once with: git config core.hooksPath .githooks
+
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# Collect staged files by type.
+staged_ts=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx|js|jsx|json|css|html|md)$' || true)
+staged_rs=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.rs$' || true)
+
+if [ -n "$staged_ts" ]; then
+  echo "==> prettier --check"
+  npx --no-install prettier --check $staged_ts
+  echo "==> eslint"
+  npx --no-install eslint $staged_ts
+fi
+
+if [ -n "$staged_rs" ]; then
+  echo "==> cargo fmt --check"
+  cargo fmt --all -- --check
+  echo "==> cargo clippy"
+  cargo clippy --workspace --all-targets --all-features -- -D warnings
+fi
+
+echo "pre-commit checks passed"
