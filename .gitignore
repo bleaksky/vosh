@@ -1,0 +1,38 @@
+# Build artifacts
+dist/
+build/
+target/
+src-tauri/target/
+
+# Node
+node_modules/
+.npm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor and OS
+.vscode/
+.idea/
+.claude/settings.local.json
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Tauri runtime artifacts
+src-tauri/gen/
+src-tauri/WixTools/
+
+# Local profile data and logs (do not commit user data)
+profiles/
+logs/
+*.sqlite
+*.sqlite-journal
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local

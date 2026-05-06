@@ -1,0 +1,12 @@
+dist/
+build/
+node_modules/
+target/
+src-tauri/target/
+src-tauri/gen/
+package-lock.json
+Cargo.lock
+*.min.js
+*.min.css
+LICENSE
+fixtures/
