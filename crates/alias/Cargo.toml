@@ -1,0 +1,14 @@
+[package]
+name = "mudclient-alias"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Alias engine with parameter substitution and recursion guards."
+rust-version.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[lints]
+workspace = true
