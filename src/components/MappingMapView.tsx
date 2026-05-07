@@ -10,7 +10,8 @@ import {
   type MapRoom,
 } from '../lib/session';
 
-const ROOM_SIZE = 18;
+// Maximum spacing in pixels per cell. The renderer shrinks below this to
+// keep the area's bounding box inside the canvas.
 const ROOM_SPACING = 28;
 const PADDING = 10;
 const COLOR_BG = '#0d1117';
@@ -76,23 +77,26 @@ interface ContextMenu {
   room: MapRoom;
 }
 
+interface Layout {
+  ox: number;
+  oy: number;
+  pitch: number;
+  roomSize: number;
+  currentZ: number;
+}
+
 function findRoomAtPoint(
   px: number,
   py: number,
   rooms: MapRoom[],
-  origin: { ox: number; oy: number },
-  currentZ: number,
+  layout: Layout,
 ): MapRoom | null {
+  const half = layout.roomSize / 2;
   for (const room of rooms) {
-    if (room.z !== currentZ) continue;
-    const cx = origin.ox + room.x * ROOM_SPACING;
-    const cy = origin.oy + room.y * ROOM_SPACING;
-    if (
-      px >= cx - ROOM_SIZE / 2 &&
-      px <= cx + ROOM_SIZE / 2 &&
-      py >= cy - ROOM_SIZE / 2 &&
-      py <= cy + ROOM_SIZE / 2
-    ) {
+    if (room.z !== layout.currentZ) continue;
+    const cx = layout.ox + room.x * layout.pitch;
+    const cy = layout.oy + room.y * layout.pitch;
+    if (px >= cx - half && px <= cx + half && py >= cy - half && py <= cy + half) {
       return room;
     }
   }
@@ -109,6 +113,9 @@ export function MappingMapView() {
   const [tilesetUrl, setTilesetUrl] = useState<string | null>(loadTileset);
   const [tilesetImage, setTilesetImage] = useState<HTMLImageElement | null>(null);
   const lastRefreshRef = useRef<number>(0);
+  // Latest layout computed by draw(); read by mouse handlers so hit-testing
+  // matches the current pitch and origin even after a resize.
+  const layoutRef = useRef<Layout | null>(null);
 
   useEffect(() => {
     try {
@@ -220,19 +227,45 @@ export function MappingMapView() {
       return;
     }
 
-    const ox = current ? cssWidth / 2 - current.x * ROOM_SPACING : cssWidth / 2;
-    const oy = current ? cssHeight / 2 - current.y * ROOM_SPACING : cssHeight / 2;
+    // Anchor on the bounding box of every room on this floor so a tile
+    // keeps its on-screen position when the player walks. Only changes to
+    // the floor or to the discovered area (a new room outside the current
+    // bbox) shift the layout. The pitch shrinks to fit when the bbox grows
+    // past the canvas, but stays within sane bounds for small areas.
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const r of visible) {
+      if (r.x < minX) minX = r.x;
+      if (r.x > maxX) maxX = r.x;
+      if (r.y < minY) minY = r.y;
+      if (r.y > maxY) maxY = r.y;
+    }
+    const bboxW = maxX - minX + 1;
+    const bboxH = maxY - minY + 1;
+    const fitX = bboxW > 0 ? cssWidth / (bboxW + 1) : ROOM_SPACING;
+    const fitY = bboxH > 0 ? cssHeight / (bboxH + 1) : ROOM_SPACING;
+    const pitch = Math.max(12, Math.min(ROOM_SPACING, Math.floor(Math.min(fitX, fitY))));
+    const roomSize = Math.max(8, Math.floor(pitch * 0.65));
+    const centerWorldX = (minX + maxX) / 2;
+    const centerWorldY = (minY + maxY) / 2;
+    const ox = cssWidth / 2 - centerWorldX * pitch;
+    const oy = cssHeight / 2 - centerWorldY * pitch;
+    layoutRef.current = { ox, oy, pitch, roomSize, currentZ };
 
     // Faint grid for orientation.
     ctx.strokeStyle = COLOR_GRID;
     ctx.lineWidth = 1;
-    for (let x = ox % ROOM_SPACING; x < cssWidth; x += ROOM_SPACING) {
+    const gridStartX = ox - Math.ceil(ox / pitch) * pitch;
+    const gridStartY = oy - Math.ceil(oy / pitch) * pitch;
+    for (let x = gridStartX; x < cssWidth; x += pitch) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, cssHeight);
       ctx.stroke();
     }
-    for (let y = oy % ROOM_SPACING; y < cssHeight; y += ROOM_SPACING) {
+    for (let y = gridStartY; y < cssHeight; y += pitch) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(cssWidth, y);
@@ -249,16 +282,16 @@ export function MappingMapView() {
       const to = visible.find((r) => r.id === exit.to_room);
       if (!from || !to) continue;
       ctx.beginPath();
-      ctx.moveTo(ox + from.x * ROOM_SPACING, oy + from.y * ROOM_SPACING);
-      ctx.lineTo(ox + to.x * ROOM_SPACING, oy + to.y * ROOM_SPACING);
+      ctx.moveTo(ox + from.x * pitch, oy + from.y * pitch);
+      ctx.lineTo(ox + to.x * pitch, oy + to.y * pitch);
       ctx.stroke();
     }
 
     // Rooms.
     const useTiles = style === 'tileset' && tilesetImage !== null;
     for (const room of visible) {
-      const cx = ox + room.x * ROOM_SPACING;
-      const cy = oy + room.y * ROOM_SPACING;
+      const cx = ox + room.x * pitch;
+      const cy = oy + room.y * pitch;
       const isCurrent = room.id === snapshot.current_room_id;
 
       if (useTiles && tilesetImage) {
@@ -271,26 +304,26 @@ export function MappingMapView() {
           0,
           tileSize,
           tileSize,
-          cx - ROOM_SPACING / 2,
-          cy - ROOM_SPACING / 2,
-          ROOM_SPACING,
-          ROOM_SPACING,
+          cx - pitch / 2,
+          cy - pitch / 2,
+          pitch,
+          pitch,
         );
         if (isCurrent) {
           ctx.strokeStyle = COLOR_TEXT;
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.rect(cx - ROOM_SPACING / 2, cy - ROOM_SPACING / 2, ROOM_SPACING, ROOM_SPACING);
+          ctx.rect(cx - pitch / 2, cy - pitch / 2, pitch, pitch);
           ctx.stroke();
         }
         if (room.avoid) {
           ctx.strokeStyle = '#f85149';
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.moveTo(cx - ROOM_SPACING / 2, cy - ROOM_SPACING / 2);
-          ctx.lineTo(cx + ROOM_SPACING / 2, cy + ROOM_SPACING / 2);
-          ctx.moveTo(cx + ROOM_SPACING / 2, cy - ROOM_SPACING / 2);
-          ctx.lineTo(cx - ROOM_SPACING / 2, cy + ROOM_SPACING / 2);
+          ctx.moveTo(cx - pitch / 2, cy - pitch / 2);
+          ctx.lineTo(cx + pitch / 2, cy + pitch / 2);
+          ctx.moveTo(cx + pitch / 2, cy - pitch / 2);
+          ctx.lineTo(cx - pitch / 2, cy + pitch / 2);
           ctx.stroke();
         }
       } else {
@@ -298,7 +331,7 @@ export function MappingMapView() {
         ctx.strokeStyle = isCurrent ? COLOR_TEXT : COLOR_ROOM_BORDER;
         ctx.lineWidth = isCurrent ? 2 : 1;
         ctx.beginPath();
-        ctx.rect(cx - ROOM_SIZE / 2, cy - ROOM_SIZE / 2, ROOM_SIZE, ROOM_SIZE);
+        ctx.rect(cx - roomSize / 2, cy - roomSize / 2, roomSize, roomSize);
         ctx.fill();
         ctx.stroke();
       }
@@ -306,7 +339,7 @@ export function MappingMapView() {
       if (room.notes) {
         ctx.fillStyle = '#f1c232';
         ctx.beginPath();
-        ctx.arc(cx + ROOM_SIZE / 2 - 3, cy - ROOM_SIZE / 2 + 3, 2.5, 0, Math.PI * 2);
+        ctx.arc(cx + roomSize / 2 - 3, cy - roomSize / 2 + 3, 2.5, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -327,52 +360,36 @@ export function MappingMapView() {
     };
   }, [draw]);
 
-  const computeOrigin = (current: MapRoom | null, w: number, h: number) => ({
-    ox: current ? w / 2 - current.x * ROOM_SPACING : w / 2,
-    oy: current ? h / 2 - current.y * ROOM_SPACING : h / 2,
-  });
-
-  const handleClick = (event: MouseEvent<HTMLCanvasElement>) => {
-    if (!snapshot || !containerRef.current) return;
-    setMenu(null);
+  const pickRoom = (event: MouseEvent<HTMLCanvasElement>): MapRoom | null => {
+    if (!snapshot || !containerRef.current || !layoutRef.current) return null;
     const rect = containerRef.current.getBoundingClientRect();
     const px = event.clientX - rect.left;
     const py = event.clientY - rect.top;
-    const current = snapshot.rooms.find((r) => r.id === snapshot.current_room_id) ?? null;
-    const origin = computeOrigin(current, rect.width, rect.height);
-    const currentZ = current?.z ?? 0;
-    const room = findRoomAtPoint(px, py, snapshot.rooms, origin, currentZ);
+    return findRoomAtPoint(px, py, snapshot.rooms, layoutRef.current);
+  };
+
+  const handleClick = (event: MouseEvent<HTMLCanvasElement>) => {
+    setMenu(null);
+    const room = pickRoom(event);
     if (!room) return;
-    if (room.id === snapshot.current_room_id) return;
+    if (room.id === snapshot?.current_room_id) return;
     void walkToRoom(room.id).catch(() => {});
   };
 
   const handleContextMenu = (event: MouseEvent<HTMLCanvasElement>) => {
     event.preventDefault();
-    if (!snapshot || !containerRef.current) return;
+    if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
-    const px = event.clientX - rect.left;
-    const py = event.clientY - rect.top;
-    const current = snapshot.rooms.find((r) => r.id === snapshot.current_room_id) ?? null;
-    const origin = computeOrigin(current, rect.width, rect.height);
-    const currentZ = current?.z ?? 0;
-    const room = findRoomAtPoint(px, py, snapshot.rooms, origin, currentZ);
+    const room = pickRoom(event);
     if (!room) {
       setMenu(null);
       return;
     }
-    setMenu({ x: px, y: py, room });
+    setMenu({ x: event.clientX - rect.left, y: event.clientY - rect.top, room });
   };
 
   const handleMouseMove = (event: MouseEvent<HTMLCanvasElement>) => {
-    if (!snapshot || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const px = event.clientX - rect.left;
-    const py = event.clientY - rect.top;
-    const current = snapshot.rooms.find((r) => r.id === snapshot.current_room_id) ?? null;
-    const origin = computeOrigin(current, rect.width, rect.height);
-    const currentZ = current?.z ?? 0;
-    const room = findRoomAtPoint(px, py, snapshot.rooms, origin, currentZ);
+    const room = pickRoom(event);
     if (room) {
       const note = room.notes ? ` — ${room.notes}` : '';
       setHoverInfo(`#${room.id} ${room.name}${note}`);
