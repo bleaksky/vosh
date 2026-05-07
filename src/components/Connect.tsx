@@ -6,6 +6,8 @@ interface Props {
   onError: (message: string) => void;
   onToggleTriggers?: () => void;
   triggersOpen?: boolean;
+  onToggleSidePanel?: () => void;
+  sidePanelOpen?: boolean;
 }
 
 export type ConnectionStatus =
@@ -17,7 +19,14 @@ export type ConnectionStatus =
 const DEFAULT_HOST = 'play.theforsakenlands.com';
 const DEFAULT_PORT = 1848;
 
-export function Connect({ status, onError, onToggleTriggers, triggersOpen }: Props) {
+export function Connect({
+  status,
+  onError,
+  onToggleTriggers,
+  triggersOpen,
+  onToggleSidePanel,
+  sidePanelOpen,
+}: Props) {
   const [host, setHost] = useState(DEFAULT_HOST);
   const [port, setPort] = useState(DEFAULT_PORT);
   const [tls, setTls] = useState(false);
@@ -79,6 +88,16 @@ export function Connect({ status, onError, onToggleTriggers, triggersOpen }: Pro
       </label>
       <button type="submit">{isLive ? 'disconnect' : 'connect'}</button>
       <span className="status">{renderStatus()}</span>
+      {onToggleSidePanel && (
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={sidePanelOpen ?? false}
+          onClick={onToggleSidePanel}
+        >
+          panes
+        </button>
+      )}
       {onToggleTriggers && (
         <button
           type="button"
