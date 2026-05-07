@@ -9,6 +9,7 @@ use mudclient_vars::Scope;
 use tokio::time::Instant;
 
 use crate::profile::Profile;
+use crate::script_state;
 
 /// What the input pipeline produced.
 pub(crate) struct InputResult {
@@ -41,6 +42,10 @@ slash commands:
   #tick sound on|off                   toggle the tick beep
   #tick disable                        stop the tick timer
   #tick enable                         start the tick timer
+  #script load <name>                  load <name>.lua from the scripts dir
+  #script reload                       re-run all loaded scripts
+  #scripts                             list loaded scripts and Lua triggers
+  #lua <code>                          evaluate Lua inline
   #help                                show this list
 trigger actions:
   highlight <color> [bold] [underline] [inverse] [bg:<color>]
@@ -105,6 +110,9 @@ fn handle_slash(profile: &mut Profile, rest: &str) -> InputResult {
         "untrigger" => slash_untrigger(profile, args),
         "triggers" => slash_triggers_list(profile),
         "tick" => slash_tick(profile, args),
+        "script" => slash_script(profile, args),
+        "scripts" => slash_scripts_list(profile),
+        "lua" => slash_lua(profile, args),
         "help" => echo_lines(HELP_TEXT.lines()),
         "" => error_echo("missing slash command. try #help".to_string()),
         other => error_echo(format!("unknown slash command #{other}. try #help")),
@@ -364,6 +372,123 @@ fn describe_action(action: &TriggerAction) -> String {
         TriggerAction::Send { template } => format!("send `{template}`"),
         TriggerAction::Route { pane } => format!("route {pane}"),
     }
+}
+
+fn slash_script(profile: &mut Profile, args: &str) -> InputResult {
+    let (cmd, rest) = split_first_word(args);
+    match cmd {
+        "load" => slash_script_load(profile, rest),
+        "reload" => slash_script_reload(profile),
+        "" => error_echo("usage #script load <name> | #script reload".to_string()),
+        other => error_echo(format!("unknown #script subcommand `{other}`")),
+    }
+}
+
+fn slash_script_load(profile: &mut Profile, args: &str) -> InputResult {
+    let name = args.trim();
+    if name.is_empty() {
+        return error_echo("usage #script load <name>".to_string());
+    }
+    let Some(path) = script_path_for(name) else {
+        return error_echo("could not resolve scripts directory".to_string());
+    };
+    let code = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => return error_echo(format!("read failed: {e} ({})", path.display())),
+    };
+    script_state::snapshot_vars(&profile.script, &profile.vars);
+    let outcome = match profile.script.load_script(name, code) {
+        Ok(o) => o,
+        Err(e) => return error_echo(format!("script error: {e}")),
+    };
+    let apply = script_state::apply_actions(profile, outcome);
+    let mut echoes = vec![format!("loaded {}", path.display())];
+    echoes.extend(apply.echoes);
+    InputResult {
+        bytes: apply.send_bytes,
+        echo: echoes,
+    }
+}
+
+fn slash_script_reload(profile: &mut Profile) -> InputResult {
+    script_state::snapshot_vars(&profile.script, &profile.vars);
+    let outcome = match profile.script.reload_scripts() {
+        Ok(o) => o,
+        Err(e) => return error_echo(format!("reload error: {e}")),
+    };
+    let apply = script_state::apply_actions(profile, outcome);
+    let mut echoes = vec!["scripts reloaded".to_string()];
+    echoes.extend(apply.echoes);
+    InputResult {
+        bytes: apply.send_bytes,
+        echo: echoes,
+    }
+}
+
+fn slash_scripts_list(profile: &Profile) -> InputResult {
+    let names = profile.script.loaded_script_names();
+    let triggers = profile.script.lua_triggers();
+    let mut lines = Vec::new();
+    if names.is_empty() {
+        lines.push("no scripts loaded".to_string());
+    } else {
+        lines.push(format!("{} script(s) loaded:", names.len()));
+        for n in names {
+            lines.push(format!("  {n}"));
+        }
+    }
+    if !triggers.is_empty() {
+        lines.push(format!("{} lua trigger(s):", triggers.len()));
+        for t in triggers {
+            let mark = if t.enabled { ' ' } else { '*' };
+            lines.push(format!(
+                "  {mark} [{:>3}] {} /{}/",
+                t.priority, t.name, t.pattern
+            ));
+        }
+    }
+    InputResult {
+        bytes: Vec::new(),
+        echo: lines,
+    }
+}
+
+fn slash_lua(profile: &mut Profile, args: &str) -> InputResult {
+    let code = args.trim_start();
+    if code.is_empty() {
+        return error_echo("usage #lua <code>".to_string());
+    }
+    script_state::snapshot_vars(&profile.script, &profile.vars);
+    let outcome = match profile.script.eval(code, "#lua") {
+        Ok(o) => o,
+        Err(e) => return error_echo(format!("lua error: {e}")),
+    };
+    let apply = script_state::apply_actions(profile, outcome);
+    InputResult {
+        bytes: apply.send_bytes,
+        echo: apply.echoes,
+    }
+}
+
+fn script_path_for(name: &str) -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    let base = std::path::PathBuf::from(home);
+    // macOS specific for the demo. Phase 9 will move to the OS-aware app
+    // data dir Tauri already exposes for the map store.
+    let dir = base
+        .join("Library")
+        .join("Application Support")
+        .join("com.aabahran.mudclient")
+        .join("scripts");
+    let with_lua = if std::path::Path::new(name)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("lua"))
+    {
+        dir.join(name)
+    } else {
+        dir.join(format!("{name}.lua"))
+    };
+    Some(with_lua)
 }
 
 fn slash_tick(profile: &mut Profile, args: &str) -> InputResult {
