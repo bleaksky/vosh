@@ -6,7 +6,7 @@ The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, but 
 
 ## Status
 
-Phase 6 complete. The status pane now shows a tick timer at the top with the remaining seconds before the next MUD tick. Configure it with `#tick interval <secs>`, set a reset pattern with `#tick on {regex}`, set an auto-fire command with `#tick fire <command>`, and toggle the beep with `#tick sound on|off`. The countdown flashes red below 5 seconds and plays a short beep when the timer fires. Type `#tick` to see the current state. Phase 7 lands the map window.
+Phase 6 complete. The status pane now shows a tick timer at the top with the remaining seconds before the next MUD tick. On servers that send GMCP `World.Time` (Aabahran does), the timer auto-resets the moment the in-game hour advances, which is when ROM ticks fire. Configure the interval with `#tick interval <secs>`, add a regex reset for MUDs without `World.Time` via `#tick on {regex}`, set an auto-fire command with `#tick fire <command>`, and toggle the beep with `#tick sound on|off`. The countdown flashes red below 5 seconds and plays a short beep when the timer fires. Type `#tick` to see the current state. Phase 7 lands the map window.
 
 See `prompt.md` for the full phase plan and `CLAUDE.md` for stack and workflow rules.
 
