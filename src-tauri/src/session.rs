@@ -192,7 +192,7 @@ async fn io_loop(
                         // on screen (almost certainly a prompt waiting for
                         // them) gets flushed as a complete line so the
                         // server's response lands on its own row.
-                        flush_partial_prompt(&app, &profile, &mut accumulator).await;
+                        flush_partial_prompt(&app, &mut accumulator);
                     }
                     if let Err(e) = stream.write_all(&bytes).await {
                         error!(error = %e, "write failed");
@@ -251,7 +251,7 @@ async fn io_loop(
                 // almost certainly a complete prompt waiting for input.
                 if let Some(age) = accumulator.idle_since(Instant::now()) {
                     if age >= PARTIAL_FLUSH_IDLE {
-                        flush_partial_prompt(&app, &profile, &mut accumulator).await;
+                        flush_partial_prompt(&app, &mut accumulator);
                     }
                 }
             }
@@ -393,7 +393,7 @@ async fn handle_event(
             // had buffered so the prompt sits on its own line and the
             // next chunk's first complete line lands cleanly below it
             // instead of merging into the prompt.
-            flush_partial_prompt(app, profile, accumulator).await;
+            flush_partial_prompt(app, accumulator);
             Ok(())
         }
         TelnetEvent::Will(opt) if opt == telnet_option::GMCP => {
@@ -639,22 +639,25 @@ async fn fire_due_script_timers(
     apply_script_result(app, stream, profile, timers, apply).await
 }
 
-/// Treat any buffered partial as a complete prompt line and emit it. Called
-/// when the telnet GA or EOR command arrives. Runs the line through the
-/// trigger engine like a normal complete line so highlights still apply.
-async fn flush_partial_prompt(
+/// Treat any buffered partial as a complete prompt line. The prompt is
+/// already on screen as raw text (the `LineAccumulator` emitted it as a
+/// `RawDisplay` chunk when the bytes first arrived). All we need to do
+/// is push the cursor past it so the next chunk's content lands on a
+/// fresh row. Skipping the trigger reprocess and clear-rewrite avoids
+/// the visible flicker that previously read as input lag.
+///
+/// Called both when the telnet parser reports a GA or EOR command and
+/// when the user submits typed input.
+fn flush_partial_prompt(
     app: &AppHandle,
-    profile: &Arc<Mutex<Profile>>,
     accumulator: &mut LineAccumulator,
 ) {
-    let Some((bytes, already_shown)) = accumulator.flush_partial() else {
+    let Some((_bytes, already_shown)) = accumulator.flush_partial() else {
         return;
     };
-    let result = {
-        let p = profile.lock().await;
-        mudclient_trigger::process(&p.triggers, &bytes)
-    };
-    emit_line_result(app, &result, already_shown);
+    if already_shown {
+        emit_output(app, b"\r\n".to_vec());
+    }
 }
 
 async fn send_trigger_outputs(stream: &mut Stream, sends: &[String]) -> std::io::Result<()> {
