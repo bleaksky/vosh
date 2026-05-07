@@ -119,17 +119,6 @@ pub(crate) async fn session_send_input(
         return Ok(());
     }
 
-    // Push the cursor to a fresh line before the MUD's response arrives.
-    // Many MUDs send their prompt without a trailing newline and follow up
-    // with the next room name on the same line; injecting a CRLF here
-    // gives that output its own row in the terminal.
-    let _ = app.emit(
-        "session://output",
-        OutputPayload {
-            bytes: b"\r\n".to_vec(),
-        },
-    );
-
     let current = state.session.lock().await;
     let Some(handle) = current.as_ref() else {
         let _ = app.emit(

@@ -88,6 +88,24 @@ impl LineAccumulator {
         self.buffer.clear();
         self.displayed_len = 0;
     }
+
+    /// Take the current partial out of the buffer and return it as bytes.
+    /// Used when the telnet GA or EOR command arrives, telling us the
+    /// partial is in fact a complete prompt that should sit on its own
+    /// line. Returns None when no partial is buffered.
+    ///
+    /// `displayed` reports how many bytes had already been shown raw, so
+    /// the caller knows whether the line needs the clear-and-rewrite
+    /// treatment when re-emitting through trigger processing.
+    pub(crate) fn flush_partial(&mut self) -> Option<(Vec<u8>, bool)> {
+        if self.buffer.is_empty() {
+            return None;
+        }
+        let already_shown = self.displayed_len > 0;
+        let bytes = std::mem::take(&mut self.buffer);
+        self.displayed_len = 0;
+        Some((bytes, already_shown))
+    }
 }
 
 #[cfg(test)]

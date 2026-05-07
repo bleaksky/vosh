@@ -4,7 +4,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use mudclient_telnet::{option as telnet_option, Event as TelnetEvent, Negotiator, Parser};
+use mudclient_telnet::{
+    codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator, Parser,
+};
 use mudclient_trigger::LineResult;
 use serde::Serialize;
 use serde_json::json;
@@ -327,6 +329,16 @@ async fn handle_event(
             handle_gmcp(app, profile, map, timers, stream, &payload).await?;
             Ok(())
         }
+        TelnetEvent::Command(byte)
+            if byte == telnet_codes::EOR || byte == telnet_codes::GA =>
+        {
+            // The server marked the end of a prompt. Flush any partial we
+            // had buffered so the prompt sits on its own line and the
+            // next chunk's first complete line lands cleanly below it
+            // instead of merging into the prompt.
+            flush_partial_prompt(app, profile, accumulator).await;
+            Ok(())
+        }
         TelnetEvent::Will(opt) if opt == telnet_option::GMCP => {
             // Accept GMCP via the negotiator, then immediately announce
             // ourselves and the packages we want.
@@ -568,6 +580,24 @@ async fn fire_due_script_timers(
         script_state::apply_actions(&mut p, outcome)
     };
     apply_script_result(app, stream, profile, timers, apply).await
+}
+
+/// Treat any buffered partial as a complete prompt line and emit it. Called
+/// when the telnet GA or EOR command arrives. Runs the line through the
+/// trigger engine like a normal complete line so highlights still apply.
+async fn flush_partial_prompt(
+    app: &AppHandle,
+    profile: &Arc<Mutex<Profile>>,
+    accumulator: &mut LineAccumulator,
+) {
+    let Some((bytes, already_shown)) = accumulator.flush_partial() else {
+        return;
+    };
+    let result = {
+        let p = profile.lock().await;
+        mudclient_trigger::process(&p.triggers, &bytes)
+    };
+    emit_line_result(app, &result, already_shown);
 }
 
 async fn send_trigger_outputs(stream: &mut Stream, sends: &[String]) -> std::io::Result<()> {
