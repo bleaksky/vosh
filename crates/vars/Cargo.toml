@@ -1,0 +1,11 @@
+[package]
+name = "mudclient-vars"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Variable store with profile and session scope plus interpolation."
+rust-version.workspace = true
+
+[lints]
+workspace = true
