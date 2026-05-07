@@ -5,12 +5,13 @@ use tracing_subscriber::EnvFilter;
 mod commands;
 mod connection;
 mod input;
+mod line_accumulator;
 mod profile;
 mod session;
 
 use commands::{
-    app_version, session_connect, session_disconnect, session_send, session_send_input, AppState,
-    SharedState,
+    app_version, session_connect, session_disconnect, session_send, session_send_input,
+    triggers_export, triggers_import, triggers_list, AppState, SharedState,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -32,6 +33,9 @@ pub fn run() {
             session_send,
             session_send_input,
             session_disconnect,
+            triggers_list,
+            triggers_export,
+            triggers_import,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

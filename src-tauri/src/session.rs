@@ -1,14 +1,19 @@
-//! Per-session task. Wires the connection, the telnet parser, and the
-//! Tauri event bus together.
+//! Per-session task. Wires the connection, the telnet parser, the line
+//! accumulator, and the trigger engine together. Emits Tauri events.
+
+use std::sync::Arc;
 
 use mudclient_telnet::{Event as TelnetEvent, Negotiator, Parser};
+use mudclient_trigger::LineResult;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
 use crate::connection::{self, ConnectionError, Stream};
+use crate::line_accumulator::LineAccumulator;
+use crate::profile::Profile;
 
 const READ_BUFFER_BYTES: usize = 8 * 1024;
 
@@ -50,6 +55,7 @@ pub(crate) async fn spawn(
     host: String,
     port: u16,
     tls: bool,
+    profile: Arc<Mutex<Profile>>,
 ) -> Result<SessionHandle, ConnectionError> {
     emit_state(
         &app,
@@ -73,7 +79,7 @@ pub(crate) async fn spawn(
     );
 
     let (tx_outgoing, rx_outgoing) = mpsc::unbounded_channel::<Vec<u8>>();
-    let task = tokio::spawn(io_loop(app, stream, rx_outgoing));
+    let task = tokio::spawn(io_loop(app, stream, rx_outgoing, profile));
 
     Ok(SessionHandle { tx_outgoing, task })
 }
@@ -82,9 +88,11 @@ async fn io_loop(
     app: AppHandle,
     mut stream: Stream,
     mut rx_outgoing: mpsc::UnboundedReceiver<Vec<u8>>,
+    profile: Arc<Mutex<Profile>>,
 ) {
     let mut parser = Parser::new();
     let negotiator = Negotiator::new();
+    let mut accumulator = LineAccumulator::new();
     let mut buf = vec![0u8; READ_BUFFER_BYTES];
 
     let disconnect_reason = loop {
@@ -114,7 +122,14 @@ async fn io_loop(
                 Ok(n) => {
                     let events = parser.feed(&buf[..n]);
                     for event in events {
-                        if let Err(e) = handle_event(&app, &mut stream, &negotiator, event).await {
+                        if let Err(e) = handle_event(
+                            &app,
+                            &mut stream,
+                            &negotiator,
+                            &mut accumulator,
+                            &profile,
+                            event,
+                        ).await {
                             warn!(error = %e, "event handling failed");
                             break;
                         }
@@ -128,6 +143,7 @@ async fn io_loop(
         }
     };
 
+    accumulator.reset();
     let _ = stream.shutdown().await;
     emit_state(
         &app,
@@ -141,11 +157,21 @@ async fn handle_event(
     app: &AppHandle,
     stream: &mut Stream,
     negotiator: &Negotiator,
+    accumulator: &mut LineAccumulator,
+    profile: &Arc<Mutex<Profile>>,
     event: TelnetEvent,
 ) -> std::io::Result<()> {
     match event {
         TelnetEvent::Data(bytes) => {
-            emit_output(app, bytes);
+            let lines = accumulator.feed(&bytes);
+            for line in lines {
+                let result = {
+                    let p = profile.lock().await;
+                    mudclient_trigger::process(&p.triggers, &line)
+                };
+                emit_line_result(app, &result);
+                send_trigger_outputs(stream, &result.sends).await?;
+            }
             Ok(())
         }
         other => {
@@ -157,6 +183,31 @@ async fn handle_event(
             Ok(())
         }
     }
+}
+
+fn emit_line_result(app: &AppHandle, result: &LineResult) {
+    if let Some(text) = &result.display {
+        let mut bytes = Vec::with_capacity(text.len() + 2);
+        bytes.extend_from_slice(text.as_bytes());
+        bytes.extend_from_slice(b"\r\n");
+        emit_output(app, bytes);
+    }
+    for pane in &result.routes {
+        debug!(target = %pane, "route hint queued (Phase 5 will render panes)");
+    }
+}
+
+async fn send_trigger_outputs(stream: &mut Stream, sends: &[String]) -> std::io::Result<()> {
+    if sends.is_empty() {
+        return Ok(());
+    }
+    let mut payload = Vec::new();
+    for cmd in sends {
+        payload.extend_from_slice(cmd.as_bytes());
+        payload.extend_from_slice(b"\r\n");
+    }
+    stream.write_all(&payload).await?;
+    stream.flush().await
 }
 
 fn emit_output(app: &AppHandle, bytes: Vec<u8>) {

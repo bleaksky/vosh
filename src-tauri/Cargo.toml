@@ -30,6 +30,7 @@ thiserror = { workspace = true }
 mudclient-telnet = { path = "../crates/telnet" }
 mudclient-alias = { path = "../crates/alias" }
 mudclient-vars = { path = "../crates/vars" }
+mudclient-trigger = { path = "../crates/trigger" }
 
 [features]
 default = ["custom-protocol"]

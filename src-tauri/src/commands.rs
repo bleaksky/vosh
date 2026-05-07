@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use mudclient_trigger::Trigger;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
@@ -15,7 +16,7 @@ use crate::session::{self, OutputPayload, SessionHandle};
 #[derive(Default)]
 pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
-    pub(crate) profile: Mutex<Profile>,
+    pub(crate) profile: Arc<Mutex<Profile>>,
 }
 
 pub(crate) type SharedState = Arc<AppState>;
@@ -36,7 +37,7 @@ pub(crate) async fn session_connect(
     // Clear session-scoped variables on reconnect; profile-scoped survive.
     state.profile.lock().await.vars.clear_session();
 
-    let handle = session::spawn(app, host, port, tls)
+    let handle = session::spawn(app, host, port, tls, state.profile.clone())
         .await
         .map_err(|e| e.to_string())?;
     *current = Some(handle);
@@ -106,6 +107,27 @@ pub(crate) async fn session_disconnect(state: State<'_, SharedState>) -> Result<
         handle.shutdown().await;
     }
     Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn triggers_list(state: State<'_, SharedState>) -> Result<Vec<Trigger>, String> {
+    let p = state.profile.lock().await;
+    Ok(p.triggers.list())
+}
+
+#[tauri::command]
+pub(crate) async fn triggers_export(state: State<'_, SharedState>) -> Result<String, String> {
+    let p = state.profile.lock().await;
+    p.triggers.export_json().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn triggers_import(
+    state: State<'_, SharedState>,
+    json: String,
+) -> Result<usize, String> {
+    let mut p = state.profile.lock().await;
+    p.triggers.import_json(&json).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
