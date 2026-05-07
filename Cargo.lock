@@ -1891,6 +1891,7 @@ name = "mudclient-app"
 version = "0.0.1"
 dependencies = [
  "mudclient-alias",
+ "mudclient-gmcp",
  "mudclient-telnet",
  "mudclient-trigger",
  "mudclient-vars",
@@ -1907,6 +1908,15 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "webpki-roots 0.26.11",
+]
+
+[[package]]
+name = "mudclient-gmcp"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
