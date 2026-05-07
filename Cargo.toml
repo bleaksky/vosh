@@ -8,6 +8,7 @@ members = [
     "crates/vars",
     "crates/trigger",
     "crates/gmcp",
+    "crates/map",
 ]
 
 [workspace.package]

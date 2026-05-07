@@ -1,0 +1,16 @@
+[package]
+name = "mudclient-map"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "SQLite-backed room and exit storage for the mudclient map."
+rust-version.workspace = true
+
+[dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true
