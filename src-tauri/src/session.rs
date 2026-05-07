@@ -28,8 +28,9 @@ use crate::tick::{TickPayload, TickRuntime};
 const TICK_EMIT_INTERVAL: Duration = Duration::from_millis(250);
 /// How long a buffered partial may sit without new bytes before we treat
 /// it as a complete prompt and flush it. Acts as a fallback for MUDs that
-/// do not honor EOR or GA negotiation.
-const PARTIAL_FLUSH_IDLE: Duration = Duration::from_millis(200);
+/// do not honor EOR or GA negotiation. Set short enough that the prompt
+/// appears on its own row as soon as the eye registers it.
+const PARTIAL_FLUSH_IDLE: Duration = Duration::from_millis(40);
 
 const READ_BUFFER_BYTES: usize = 8 * 1024;
 
@@ -157,6 +158,11 @@ async fn io_loop(
 
     let mut tick_interval = tokio::time::interval(TICK_EMIT_INTERVAL);
     tick_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // A faster timer just for the partial-prompt idle check. Polling at
+    // ~30 ms keeps the worst-case visible lag below human reaction time
+    // while costing essentially nothing.
+    let mut partial_check = tokio::time::interval(Duration::from_millis(30));
+    partial_check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     let disconnect_reason = loop {
         tokio::select! {
@@ -213,6 +219,8 @@ async fn io_loop(
                 if let Err(e) = fire_due_script_timers(&app, &mut stream, &profile, &timers).await {
                     error!(error = %e, "script timer firing failed");
                 }
+            }
+            _ = partial_check.tick() => {
                 // Fallback for MUDs that do not send EOR or GA: a partial
                 // that has been idle for more than the threshold below is
                 // almost certainly a complete prompt waiting for input.
