@@ -6,7 +6,7 @@ The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, but 
 
 ## Status
 
-Phase 4 complete. The client now negotiates GMCP, identifies itself with Core.Hello, subscribes to the Char, Room, and Comm packages, and parses incoming messages into typed events. Common packages auto-bind onto session variables: Char.Vitals updates `hp`, `mp`, `sp`, `maxhp`, `maxmp`, `maxsp` and Room.Info updates `room_name`, `room_area`, `room_id`. Type `#vars` after a few moves to see the live values. Phase 5 lands split panes plus chat capture.
+Phase 5 complete. A toggleable side panel sits next to the terminal with two stacked sub-panes. The status pane shows your character name, level, class, HP/MP/SP bars, and current room. The chat pane captures `Comm.Channel.Text` GMCP traffic and any line you push to it from a trigger via `route chat`. Layout visibility persists in local storage. Phase 6 lands the tick timer.
 
 See `prompt.md` for the full phase plan and `CLAUDE.md` for stack and workflow rules.
 
