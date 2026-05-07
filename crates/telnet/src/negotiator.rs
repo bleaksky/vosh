@@ -48,6 +48,21 @@ impl Negotiator {
         self.window_size = (cols, rows);
     }
 
+    /// Wrap a GMCP wire payload (`package <json>` bytes from
+    /// `mudclient_gmcp::build`) in `IAC SB GMCP ... IAC SE`. Any literal
+    /// 0xFF inside the payload is doubled per the telnet escape rule.
+    pub fn build_gmcp_subnegotiation(payload: &[u8]) -> Vec<u8> {
+        let mut out = vec![IAC, SB, option::GMCP];
+        for &b in payload {
+            if b == IAC {
+                out.push(IAC);
+            }
+            out.push(b);
+        }
+        out.extend_from_slice(&[IAC, SE]);
+        out
+    }
+
     /// Build a NAWS subnegotiation block for the current window size, with
     /// the IAC IAC escaping required when any byte happens to equal 0xFF.
     pub fn naws_subnegotiation(&self) -> Vec<u8> {
@@ -72,7 +87,7 @@ impl Negotiator {
     fn respond_will(&self, opt: u8) -> Vec<u8> {
         // Server says it WILL do something. Reply DO if we want it.
         match opt {
-            option::EOR | option::SUPPRESS_GO_AHEAD | option::ECHO => {
+            option::EOR | option::SUPPRESS_GO_AHEAD | option::ECHO | option::GMCP => {
                 vec![IAC, DO, opt]
             }
             _ => vec![IAC, DONT, opt],
@@ -87,7 +102,7 @@ impl Negotiator {
     fn respond_do(&self, opt: u8) -> Vec<u8> {
         // Server requests we DO an option.
         match opt {
-            option::TTYPE | option::CHARSET | option::SUPPRESS_GO_AHEAD => {
+            option::TTYPE | option::CHARSET | option::SUPPRESS_GO_AHEAD | option::GMCP => {
                 vec![IAC, WILL, opt]
             }
             option::NAWS => {
@@ -151,8 +166,38 @@ mod tests {
     #[test]
     fn refuses_unknown_will() {
         let n = Negotiator::new();
+        let bytes = n.handle(&Event::Will(option::MCCP2));
+        assert_eq!(bytes, vec![IAC, DONT, option::MCCP2]);
+    }
+
+    #[test]
+    fn accepts_will_gmcp() {
+        let n = Negotiator::new();
         let bytes = n.handle(&Event::Will(option::GMCP));
-        assert_eq!(bytes, vec![IAC, DONT, option::GMCP]);
+        assert_eq!(bytes, vec![IAC, DO, option::GMCP]);
+    }
+
+    #[test]
+    fn accepts_do_gmcp() {
+        let n = Negotiator::new();
+        let bytes = n.handle(&Event::Do(option::GMCP));
+        assert_eq!(bytes, vec![IAC, WILL, option::GMCP]);
+    }
+
+    #[test]
+    fn build_gmcp_subnegotiation_wraps_payload() {
+        let bytes = Negotiator::build_gmcp_subnegotiation(b"Core.Hello {}");
+        let mut expected = vec![IAC, SB, option::GMCP];
+        expected.extend_from_slice(b"Core.Hello {}");
+        expected.extend_from_slice(&[IAC, SE]);
+        assert_eq!(bytes, expected);
+    }
+
+    #[test]
+    fn build_gmcp_subnegotiation_escapes_iac() {
+        let bytes = Negotiator::build_gmcp_subnegotiation(&[b'a', IAC, b'b']);
+        let expected = vec![IAC, SB, option::GMCP, b'a', IAC, IAC, b'b', IAC, SE];
+        assert_eq!(bytes, expected);
     }
 
     #[test]
