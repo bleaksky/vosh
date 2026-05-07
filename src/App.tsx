@@ -42,17 +42,19 @@ function App() {
         onToggleTriggers={() => setTriggersOpen((v) => !v)}
         triggersOpen={triggersOpen}
       />
-      <Terminal
-        onReady={(handle) => {
-          termRef.current = handle;
-        }}
-      />
+      <div className="middle">
+        <Terminal
+          onReady={(handle) => {
+            termRef.current = handle;
+          }}
+        />
+        <TriggersDrawer
+          open={triggersOpen}
+          onClose={() => setTriggersOpen(false)}
+          onError={handleError}
+        />
+      </div>
       <Input enabled onError={handleError} />
-      <TriggersDrawer
-        open={triggersOpen}
-        onClose={() => setTriggersOpen(false)}
-        onError={handleError}
-      />
     </main>
   );
 }
