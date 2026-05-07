@@ -38,6 +38,12 @@ pub(crate) struct GmcpPayload {
     pub data: serde_json::Value,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct RoutedPayload {
+    pub pane: String,
+    pub text: String,
+}
+
 /// GMCP packages we ask the server to enable in Core.Supports.Set. Phase 4
 /// covers Char and Room. Comm goes here too so chat capture in Phase 5 has
 /// data to subscribe to. More packages land alongside the script engine.
@@ -274,8 +280,18 @@ fn emit_line_result(app: &AppHandle, result: &LineResult, clear_first: bool) {
     if !bytes.is_empty() {
         emit_output(app, bytes);
     }
-    for pane in &result.routes {
-        debug!(target = %pane, "route hint queued (Phase 5 will render panes)");
+    if let Some(text) = &result.display {
+        for pane in &result.routes {
+            if let Err(e) = app.emit(
+                "session://routed",
+                RoutedPayload {
+                    pane: pane.clone(),
+                    text: text.clone(),
+                },
+            ) {
+                warn!(error = %e, "failed to emit routed line");
+            }
+        }
     }
 }
 
