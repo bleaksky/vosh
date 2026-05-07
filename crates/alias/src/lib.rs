@@ -8,13 +8,19 @@
 
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Alias {
     pub name: String,
     pub expansion: String,
+    #[serde(default = "default_enabled")]
     pub enabled: bool,
+}
+
+fn default_enabled() -> bool {
+    true
 }
 
 impl Alias {

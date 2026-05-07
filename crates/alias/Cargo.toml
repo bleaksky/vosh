@@ -8,6 +8,7 @@ description = "Alias engine with parameter substitution and recursion guards."
 rust-version.workspace = true
 
 [dependencies]
+serde = { workspace = true }
 thiserror = { workspace = true }
 
 [lints]
