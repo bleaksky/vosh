@@ -14,8 +14,8 @@ export type ConnectionStatus =
   | { kind: 'connected'; host: string; port: number; tls: boolean }
   | { kind: 'error'; message: string };
 
-const DEFAULT_HOST = 'theforsakenlands.com';
-const DEFAULT_PORT = 9009;
+const DEFAULT_HOST = 'play.theforsakenlands.com';
+const DEFAULT_PORT = 1848;
 
 export function Connect({ status, onError, onToggleTriggers, triggersOpen }: Props) {
   const [host, setHost] = useState(DEFAULT_HOST);
