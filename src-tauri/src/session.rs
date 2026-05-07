@@ -12,7 +12,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
 use crate::connection::{self, ConnectionError, Stream};
-use crate::line_accumulator::LineAccumulator;
+use crate::line_accumulator::{ChunkOp, LineAccumulator};
 use crate::profile::Profile;
 
 const READ_BUFFER_BYTES: usize = 8 * 1024;
@@ -163,14 +163,20 @@ async fn handle_event(
 ) -> std::io::Result<()> {
     match event {
         TelnetEvent::Data(bytes) => {
-            let lines = accumulator.feed(&bytes);
-            for line in lines {
-                let result = {
-                    let p = profile.lock().await;
-                    mudclient_trigger::process(&p.triggers, &line)
-                };
-                emit_line_result(app, &result);
-                send_trigger_outputs(stream, &result.sends).await?;
+            for op in accumulator.feed(&bytes) {
+                match op {
+                    ChunkOp::RawDisplay(b) => {
+                        emit_output(app, b);
+                    }
+                    ChunkOp::LineComplete { bytes, clear_first } => {
+                        let result = {
+                            let p = profile.lock().await;
+                            mudclient_trigger::process(&p.triggers, &bytes)
+                        };
+                        emit_line_result(app, &result, clear_first);
+                        send_trigger_outputs(stream, &result.sends).await?;
+                    }
+                }
             }
             Ok(())
         }
@@ -185,11 +191,19 @@ async fn handle_event(
     }
 }
 
-fn emit_line_result(app: &AppHandle, result: &LineResult) {
+fn emit_line_result(app: &AppHandle, result: &LineResult, clear_first: bool) {
+    let mut bytes: Vec<u8> = Vec::new();
+    if clear_first {
+        // Wipe the partial that was already shown raw so the trigger-
+        // processed line replaces it cleanly. ESC [ 2 K clears the entire
+        // line, then \r returns the cursor to column zero.
+        bytes.extend_from_slice(b"\x1b[2K\r");
+    }
     if let Some(text) = &result.display {
-        let mut bytes = Vec::with_capacity(text.len() + 2);
         bytes.extend_from_slice(text.as_bytes());
         bytes.extend_from_slice(b"\r\n");
+    }
+    if !bytes.is_empty() {
         emit_output(app, bytes);
     }
     for pane in &result.routes {
