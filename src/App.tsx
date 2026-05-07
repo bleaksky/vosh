@@ -3,6 +3,7 @@ import { Terminal, type TerminalHandle } from './components/Terminal';
 import { Input, type InputHandle } from './components/Input';
 import { Connect, type ConnectionStatus } from './components/Connect';
 import { TriggersDrawer } from './components/TriggersDrawer';
+import { SettingsDrawer } from './components/SettingsDrawer';
 import { SidePanel } from './components/SidePanel';
 import { onState, type StatePayload } from './lib/session';
 
@@ -21,6 +22,7 @@ function loadSidePanelOpen(): boolean {
 function App() {
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
   const [triggersOpen, setTriggersOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidePanelOpen, setSidePanelOpen] = useState(loadSidePanelOpen);
   const termRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
@@ -78,6 +80,8 @@ function App() {
         triggersOpen={triggersOpen}
         onToggleSidePanel={() => setSidePanelOpen((v) => !v)}
         sidePanelOpen={sidePanelOpen}
+        onToggleSettings={() => setSettingsOpen((v) => !v)}
+        settingsOpen={settingsOpen}
       />
       <div className="middle" onMouseUp={handleMiddleMouseDown}>
         <Terminal
@@ -89,6 +93,11 @@ function App() {
         <TriggersDrawer
           open={triggersOpen}
           onClose={() => setTriggersOpen(false)}
+          onError={handleError}
+        />
+        <SettingsDrawer
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
           onError={handleError}
         />
       </div>

@@ -105,6 +105,14 @@ export async function onTick(cb: (payload: TickPayload) => void): Promise<Unlist
   });
 }
 
+export async function exportProfile(): Promise<string> {
+  return invoke('profile_export');
+}
+
+export async function importProfile(toml: string): Promise<string[]> {
+  return invoke('profile_import', { toml });
+}
+
 export interface MapPayload {
   current_room_id: number | null;
   area: string | null;

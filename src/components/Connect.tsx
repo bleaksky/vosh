@@ -8,6 +8,8 @@ interface Props {
   triggersOpen?: boolean;
   onToggleSidePanel?: () => void;
   sidePanelOpen?: boolean;
+  onToggleSettings?: () => void;
+  settingsOpen?: boolean;
 }
 
 export type ConnectionStatus =
@@ -26,6 +28,8 @@ export function Connect({
   triggersOpen,
   onToggleSidePanel,
   sidePanelOpen,
+  onToggleSettings,
+  settingsOpen,
 }: Props) {
   const [host, setHost] = useState(DEFAULT_HOST);
   const [port, setPort] = useState(DEFAULT_PORT);
@@ -106,6 +110,16 @@ export function Connect({
           onClick={onToggleTriggers}
         >
           triggers
+        </button>
+      )}
+      {onToggleSettings && (
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={settingsOpen ?? false}
+          onClick={onToggleSettings}
+        >
+          profile
         </button>
       )}
     </form>

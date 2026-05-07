@@ -38,11 +38,7 @@ export function MapPane() {
           >
             mapping
           </button>
-          <button
-            type="button"
-            aria-pressed={mode === 'server'}
-            onClick={() => setMode('server')}
-          >
+          <button type="button" aria-pressed={mode === 'server'} onClick={() => setMode('server')}>
             server
           </button>
         </div>
