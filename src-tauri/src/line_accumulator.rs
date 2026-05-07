@@ -125,6 +125,16 @@ impl LineAccumulator {
         self.last_byte_at = None;
         Some((bytes, already_shown))
     }
+
+    /// Drop the buffered partial without redrawing. Use when the caller has
+    /// already advanced the on-screen cursor past it (for example, by
+    /// echoing typed input locally) and the next chunk should not try to
+    /// merge with it.
+    pub(crate) fn forget_partial(&mut self) {
+        self.buffer.clear();
+        self.displayed_len = 0;
+        self.last_byte_at = None;
+    }
 }
 
 #[cfg(test)]

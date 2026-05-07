@@ -66,13 +66,12 @@ pub(crate) struct RoutedPayload {
 /// mode. More packages land alongside the script engine in Phase 8.
 const REQUESTED_GMCP_PACKAGES: &[&str] = &["Char 1", "Room 1", "Comm 1", "World 1", "Map 1"];
 
-/// Message kinds carried over the outgoing channel. Typed input from the
-/// user marks `flush_partial` so the `io_loop` drains any displayed prompt
-/// to its own line before sending. Trigger sends, script sends, and other
-/// in-band traffic ride the regular Send variant.
+/// Bytes flowing to the server, optionally with a local-echo signal. Typed
+/// input asks the `io_loop` to echo the command into the terminal pane
+/// and forget any displayed prompt before writing to the wire.
 pub(crate) enum OutgoingMsg {
     Send(Vec<u8>),
-    SendAfterFlush(Vec<u8>),
+    SendWithEcho(Vec<u8>),
 }
 
 pub(crate) struct SessionHandle {
@@ -87,12 +86,12 @@ impl SessionHandle {
         self.tx_outgoing.send(OutgoingMsg::Send(bytes)).is_ok()
     }
 
-    /// Send typed user input. Flushes any partial prompt to its own line
-    /// before the bytes leave the wire so the response lands on a fresh
-    /// row.
+    /// Send typed user input. The bytes are also echoed to the terminal so
+    /// the user sees what they typed, and the partial-prompt buffer drops
+    /// without redrawing so the MUD response does not merge with it.
     pub(crate) fn send_input(&self, bytes: Vec<u8>) -> bool {
         self.tx_outgoing
-            .send(OutgoingMsg::SendAfterFlush(bytes))
+            .send(OutgoingMsg::SendWithEcho(bytes))
             .is_ok()
     }
 
@@ -183,16 +182,18 @@ async fn io_loop(
             biased;
             outgoing = rx_outgoing.recv() => match outgoing {
                 Some(msg) => {
-                    let (bytes, flush_first) = match msg {
+                    let (bytes, echo) = match msg {
                         OutgoingMsg::Send(b) => (b, false),
-                        OutgoingMsg::SendAfterFlush(b) => (b, true),
+                        OutgoingMsg::SendWithEcho(b) => (b, true),
                     };
-                    if flush_first {
-                        // The user just typed input. Whatever partial sits
-                        // on screen (almost certainly a prompt waiting for
-                        // them) gets flushed as a complete line so the
-                        // server's response lands on its own row.
-                        flush_partial_prompt(&app, &mut accumulator);
+                    if echo {
+                        // Echo the typed command into the terminal pane so
+                        // the user sees what they typed (TinTin++ style)
+                        // and the cursor moves past the on-screen prompt.
+                        // Forget the buffered prompt so the MUD response
+                        // does not merge with it on the next chunk.
+                        emit_output(&app, bytes.clone());
+                        accumulator.forget_partial();
                     }
                     if let Err(e) = stream.write_all(&bytes).await {
                         error!(error = %e, "write failed");
