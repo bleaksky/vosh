@@ -4,10 +4,13 @@ use tracing_subscriber::EnvFilter;
 
 mod commands;
 mod connection;
+mod input;
+mod profile;
 mod session;
 
 use commands::{
-    app_version, session_connect, session_disconnect, session_send, AppState, SharedState,
+    app_version, session_connect, session_disconnect, session_send, session_send_input, AppState,
+    SharedState,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -27,6 +30,7 @@ pub fn run() {
             app_version,
             session_connect,
             session_send,
+            session_send_input,
             session_disconnect,
         ])
         .run(tauri::generate_context!())

@@ -28,6 +28,8 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 thiserror = { workspace = true }
 mudclient-telnet = { path = "../crates/telnet" }
+mudclient-alias = { path = "../crates/alias" }
+mudclient-vars = { path = "../crates/vars" }
 
 [features]
 default = ["custom-protocol"]

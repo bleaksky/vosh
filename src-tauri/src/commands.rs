@@ -2,16 +2,20 @@
 
 use std::sync::Arc;
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
-use crate::session::{self, SessionHandle};
+use crate::input;
+use crate::profile::Profile;
+use crate::session::{self, OutputPayload, SessionHandle};
 
-/// Application-wide state. Phase 1 carries a single optional session. Phase 5
-/// turns this into a map keyed by session id.
+/// Application-wide state. Phase 1 carries a single optional session and one
+/// profile. Phase 5 widens this to a session map; Phase 9 widens to multiple
+/// profiles.
 #[derive(Default)]
 pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
+    pub(crate) profile: Mutex<Profile>,
 }
 
 pub(crate) type SharedState = Arc<AppState>;
@@ -28,6 +32,9 @@ pub(crate) async fn session_connect(
     if let Some(handle) = current.take() {
         handle.shutdown().await;
     }
+
+    // Clear session-scoped variables on reconnect; profile-scoped survive.
+    state.profile.lock().await.vars.clear_session();
 
     let handle = session::spawn(app, host, port, tls)
         .await
@@ -46,6 +53,47 @@ pub(crate) async fn session_send(
         return Err("not connected".to_string());
     };
     if !handle.send(bytes) {
+        return Err("session task gone".to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn session_send_input(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    line: String,
+) -> Result<(), String> {
+    let result = {
+        let mut profile = state.profile.lock().await;
+        input::process(&mut profile, &line)
+    };
+
+    if !result.echo.is_empty() {
+        let mut buf = Vec::new();
+        for line in &result.echo {
+            buf.extend_from_slice(b"\r\n");
+            buf.extend_from_slice(line.as_bytes());
+        }
+        buf.extend_from_slice(b"\r\n");
+        let _ = app.emit("session://output", OutputPayload { bytes: buf });
+    }
+
+    if result.bytes.is_empty() {
+        return Ok(());
+    }
+
+    let current = state.session.lock().await;
+    let Some(handle) = current.as_ref() else {
+        let _ = app.emit(
+            "session://output",
+            OutputPayload {
+                bytes: b"\r\n[not connected]\r\n".to_vec(),
+            },
+        );
+        return Ok(());
+    };
+    if !handle.send(result.bytes) {
         return Err("session task gone".to_string());
     }
     Ok(())

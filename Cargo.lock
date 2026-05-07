@@ -1873,6 +1873,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mudclient-alias"
+version = "0.0.1"
+dependencies = [
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "mudclient-ansi"
 version = "0.0.1"
 dependencies = [
@@ -1883,7 +1890,9 @@ dependencies = [
 name = "mudclient-app"
 version = "0.0.1"
 dependencies = [
+ "mudclient-alias",
  "mudclient-telnet",
+ "mudclient-vars",
  "rustls",
  "rustls-pki-types",
  "serde",
@@ -1905,6 +1914,10 @@ version = "0.0.1"
 dependencies = [
  "thiserror 1.0.69",
 ]
+
+[[package]]
+name = "mudclient-vars"
+version = "0.0.1"
 
 [[package]]
 name = "ndk"
