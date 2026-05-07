@@ -1,7 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["src-tauri"]
-# Phase 1 will add parser crates under crates/ (telnet, ansi, gmcp).
+members = ["src-tauri", "crates/telnet", "crates/ansi"]
 
 [workspace.package]
 version = "0.0.1"

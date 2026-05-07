@@ -1,0 +1,14 @@
+[package]
+name = "mudclient-ansi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "ANSI escape sequence parser for mudclient triggers and tests."
+rust-version.workspace = true
+
+[dependencies]
+vte = "0.13"
+
+[lints]
+workspace = true
