@@ -130,7 +130,7 @@ pub(crate) async fn session_send_input(
         );
         return Ok(());
     };
-    if !handle.send(result.bytes) {
+    if !handle.send_input(result.bytes) {
         return Err("session task gone".to_string());
     }
     Ok(())

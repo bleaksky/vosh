@@ -66,8 +66,17 @@ pub(crate) struct RoutedPayload {
 /// mode. More packages land alongside the script engine in Phase 8.
 const REQUESTED_GMCP_PACKAGES: &[&str] = &["Char 1", "Room 1", "Comm 1", "World 1", "Map 1"];
 
+/// Message kinds carried over the outgoing channel. Typed input from the
+/// user marks `flush_partial` so the `io_loop` drains any displayed prompt
+/// to its own line before sending. Trigger sends, script sends, and other
+/// in-band traffic ride the regular Send variant.
+pub(crate) enum OutgoingMsg {
+    Send(Vec<u8>),
+    SendAfterFlush(Vec<u8>),
+}
+
 pub(crate) struct SessionHandle {
-    tx_outgoing: mpsc::UnboundedSender<Vec<u8>>,
+    tx_outgoing: mpsc::UnboundedSender<OutgoingMsg>,
     task: JoinHandle<()>,
 }
 
@@ -75,7 +84,16 @@ impl SessionHandle {
     /// Send raw bytes to the connection. Returns false when the session has
     /// already been torn down.
     pub(crate) fn send(&self, bytes: Vec<u8>) -> bool {
-        self.tx_outgoing.send(bytes).is_ok()
+        self.tx_outgoing.send(OutgoingMsg::Send(bytes)).is_ok()
+    }
+
+    /// Send typed user input. Flushes any partial prompt to its own line
+    /// before the bytes leave the wire so the response lands on a fresh
+    /// row.
+    pub(crate) fn send_input(&self, bytes: Vec<u8>) -> bool {
+        self.tx_outgoing
+            .send(OutgoingMsg::SendAfterFlush(bytes))
+            .is_ok()
     }
 
     pub(crate) async fn shutdown(self) {
@@ -126,7 +144,7 @@ pub(crate) async fn spawn(
         },
     );
 
-    let (tx_outgoing, rx_outgoing) = mpsc::unbounded_channel::<Vec<u8>>();
+    let (tx_outgoing, rx_outgoing) = mpsc::unbounded_channel::<OutgoingMsg>();
     let task = tokio::spawn(io_loop(app, stream, rx_outgoing, profile, map, timers));
 
     Ok(SessionHandle { tx_outgoing, task })
@@ -135,7 +153,7 @@ pub(crate) async fn spawn(
 async fn io_loop(
     app: AppHandle,
     mut stream: Stream,
-    mut rx_outgoing: mpsc::UnboundedReceiver<Vec<u8>>,
+    mut rx_outgoing: mpsc::UnboundedReceiver<OutgoingMsg>,
     profile: Arc<Mutex<Profile>>,
     map: SharedMap,
     timers: SharedTimers,
@@ -164,7 +182,18 @@ async fn io_loop(
         tokio::select! {
             biased;
             outgoing = rx_outgoing.recv() => match outgoing {
-                Some(bytes) => {
+                Some(msg) => {
+                    let (bytes, flush_first) = match msg {
+                        OutgoingMsg::Send(b) => (b, false),
+                        OutgoingMsg::SendAfterFlush(b) => (b, true),
+                    };
+                    if flush_first {
+                        // The user just typed input. Whatever partial sits
+                        // on screen (almost certainly a prompt waiting for
+                        // them) gets flushed as a complete line so the
+                        // server's response lands on its own row.
+                        flush_partial_prompt(&app, &profile, &mut accumulator).await;
+                    }
                     if let Err(e) = stream.write_all(&bytes).await {
                         error!(error = %e, "write failed");
                         break Some(format!("write failed: {e}"));
