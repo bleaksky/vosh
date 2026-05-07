@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["src-tauri", "crates/telnet", "crates/ansi", "crates/alias", "crates/vars"]
+members = [
+    "src-tauri",
+    "crates/telnet",
+    "crates/ansi",
+    "crates/alias",
+    "crates/vars",
+    "crates/trigger",
+]
 
 [workspace.package]
 version = "0.0.1"
@@ -30,6 +37,7 @@ similar_names = "allow"
 struct_excessive_bools = "allow"
 fn_params_excessive_bools = "allow"
 single_match_else = "allow"
+trivially_copy_pass_by_ref = "allow"
 
 [workspace.dependencies]
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }

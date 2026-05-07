@@ -1892,6 +1892,7 @@ version = "0.0.1"
 dependencies = [
  "mudclient-alias",
  "mudclient-telnet",
+ "mudclient-trigger",
  "mudclient-vars",
  "rustls",
  "rustls-pki-types",
@@ -1912,6 +1913,17 @@ dependencies = [
 name = "mudclient-telnet"
 version = "0.0.1"
 dependencies = [
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "mudclient-trigger"
+version = "0.0.1"
+dependencies = [
+ "mudclient-ansi",
+ "regex",
+ "serde",
+ "serde_json",
  "thiserror 1.0.69",
 ]
 

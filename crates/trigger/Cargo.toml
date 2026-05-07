@@ -1,0 +1,18 @@
+[package]
+name = "mudclient-trigger"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Regex trigger engine with highlight, gag, replace, send, and route actions."
+rust-version.workspace = true
+
+[dependencies]
+regex = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+mudclient-ansi = { path = "../ansi" }
+
+[lints]
+workspace = true
