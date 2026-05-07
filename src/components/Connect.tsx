@@ -4,6 +4,8 @@ import { connectSession, disconnectSession } from '../lib/session';
 interface Props {
   status: ConnectionStatus;
   onError: (message: string) => void;
+  onToggleTriggers?: () => void;
+  triggersOpen?: boolean;
 }
 
 export type ConnectionStatus =
@@ -15,7 +17,7 @@ export type ConnectionStatus =
 const DEFAULT_HOST = 'theforsakenlands.com';
 const DEFAULT_PORT = 9009;
 
-export function Connect({ status, onError }: Props) {
+export function Connect({ status, onError, onToggleTriggers, triggersOpen }: Props) {
   const [host, setHost] = useState(DEFAULT_HOST);
   const [port, setPort] = useState(DEFAULT_PORT);
   const [tls, setTls] = useState(false);
@@ -77,6 +79,16 @@ export function Connect({ status, onError }: Props) {
       </label>
       <button type="submit">{isLive ? 'disconnect' : 'connect'}</button>
       <span className="status">{renderStatus()}</span>
+      {onToggleTriggers && (
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={triggersOpen ?? false}
+          onClick={onToggleTriggers}
+        >
+          triggers
+        </button>
+      )}
     </form>
   );
 }

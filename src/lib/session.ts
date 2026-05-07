@@ -35,6 +35,39 @@ export async function sendInput(line: string): Promise<void> {
   await invoke('session_send_input', { line });
 }
 
+export interface TriggerRecord {
+  name: string;
+  pattern: string;
+  priority: number;
+  enabled: boolean;
+  action:
+    | { kind: 'highlight'; style: HighlightStyle }
+    | { kind: 'gag' }
+    | { kind: 'replace'; template: string }
+    | { kind: 'send'; template: string }
+    | { kind: 'route'; pane: string };
+}
+
+export interface HighlightStyle {
+  fg?: string;
+  bg?: string;
+  bold?: boolean;
+  underline?: boolean;
+  inverse?: boolean;
+}
+
+export async function exportTriggers(): Promise<string> {
+  return invoke('triggers_export');
+}
+
+export async function importTriggers(json: string): Promise<number> {
+  return invoke('triggers_import', { json });
+}
+
+export async function listTriggers(): Promise<TriggerRecord[]> {
+  return invoke('triggers_list');
+}
+
 export async function onOutput(cb: (bytes: Uint8Array) => void): Promise<UnlistenFn> {
   return listen<OutputPayload>('session://output', (event) => {
     cb(new Uint8Array(event.payload.bytes));

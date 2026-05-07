@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal, type TerminalHandle } from './components/Terminal';
 import { Input } from './components/Input';
 import { Connect, type ConnectionStatus } from './components/Connect';
+import { TriggersDrawer } from './components/TriggersDrawer';
 import { onState, type StatePayload } from './lib/session';
 
 function App() {
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
+  const [triggersOpen, setTriggersOpen] = useState(false);
   const termRef = useRef<TerminalHandle | null>(null);
 
   useEffect(() => {
@@ -34,13 +36,23 @@ function App() {
 
   return (
     <main className="app">
-      <Connect status={status} onError={handleError} />
+      <Connect
+        status={status}
+        onError={handleError}
+        onToggleTriggers={() => setTriggersOpen((v) => !v)}
+        triggersOpen={triggersOpen}
+      />
       <Terminal
         onReady={(handle) => {
           termRef.current = handle;
         }}
       />
       <Input enabled onError={handleError} />
+      <TriggersDrawer
+        open={triggersOpen}
+        onClose={() => setTriggersOpen(false)}
+        onError={handleError}
+      />
     </main>
   );
 }
