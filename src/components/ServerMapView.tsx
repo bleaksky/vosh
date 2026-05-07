@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { getAreaSnapshot, onGmcp, onMap, onState, type AreaSnapshot } from '../lib/session';
+import { MAP_COLORS, hexToRgba, sectorForCode } from '../lib/mapPalette';
 
 /// One cell of the server-side map grid.
 interface ServerCell {
@@ -52,35 +53,10 @@ function loadTileset(): string | null {
   }
 }
 
-// Sector code → color, used by both glyphs and squares so the two views
-// read consistently. Same palette serves as a fallback in tileset mode.
-const SECTOR_COLORS: Record<string, string> = {
-  '0': '#c9d1d9', // inside / road
-  '1': '#f0c674', // city
-  '2': '#3fb950', // field
-  '3': '#2ea043', // forest
-  '4': '#a39080', // hill
-  '5': '#8b95a0', // mountain
-  '6': '#58a6ff', // water swim
-  '7': '#1f6feb', // water no-swim
-  '8': '#7d8590', // air
-  '9': '#bb8d3a', // desert
-  a: '#3fb950', // pasture
-  b: '#d2a8ff', // ice
-  c: '#a371f7', // underwater
-};
-
 // Default sector code order in a horizontal sprite strip. A tileset PNG
 // supplied by the user is assumed to lay tiles out left-to-right in this
-// order until a manifest format lands.
+// order.
 const SECTOR_ORDER: string[] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c'];
-
-const PLAYER_COLOR = '#1f6feb';
-const PLAYER_BORDER = '#c9d1d9';
-const ROOM_BORDER = '#444c56';
-const EDGE_COLOR = '#3a444f';
-const BG = '#0d1117';
-const GRID_LINE = '#1c2229';
 
 function parseTextGrid(text: string | undefined): string[] {
   if (!text) return [];
@@ -115,12 +91,6 @@ function gridDims(payload: MapTilesPayload): { rows: number; cols: number } {
     return { rows: text.length, cols: Math.max(...text.map((r) => r.length)) };
   }
   return { rows: 0, cols: 0 };
-}
-
-
-function colorForCell(cell: ServerCell): string {
-  if (cell.s && SECTOR_COLORS[cell.s]) return SECTOR_COLORS[cell.s];
-  return '#21262d';
 }
 
 function hasExit(cell: ServerCell, dir: 'n' | 's' | 'e' | 'w'): boolean {
@@ -236,7 +206,7 @@ export function ServerMapView() {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = BG;
+      ctx.fillStyle = MAP_COLORS.bg;
       ctx.fillRect(0, 0, cssWidth, cssHeight);
 
       if (!tiles) {
@@ -256,7 +226,16 @@ export function ServerMapView() {
       const centerR = Math.floor((rows + 1) / 2);
       const centerC = Math.floor((cols + 1) / 2);
 
-      const anchor = computeAnchor(snapshot, tiles, rows, cols, centerR, centerC, cssWidth, cssHeight);
+      const anchor = computeAnchor(
+        snapshot,
+        tiles,
+        rows,
+        cols,
+        centerR,
+        centerC,
+        cssWidth,
+        cssHeight,
+      );
 
       if (style === 'glyphs') {
         drawGlyphs(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC, anchor);
@@ -465,8 +444,8 @@ function computeAnchor(
 
 function drawSquares(
   ctx: CanvasRenderingContext2D,
-  cssWidth: number,
-  cssHeight: number,
+  _cssWidth: number,
+  _cssHeight: number,
   payload: MapTilesPayload,
   rows: number,
   cols: number,
@@ -483,27 +462,10 @@ function drawSquares(
   const ox = Math.floor(playerX - centerC * pitch);
   const oy = Math.floor(playerY - centerR * pitch);
 
-  // Faint grid so the layout reads even when many cells are empty.
-  ctx.strokeStyle = GRID_LINE;
-  ctx.lineWidth = 1;
-  for (let c = 0; c <= cols; c++) {
-    const x = ox + (c + 0.5) * pitch;
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, cssHeight);
-    ctx.stroke();
-  }
-  for (let r = 0; r <= rows; r++) {
-    const y = oy + (r + 0.5) * pitch;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(cssWidth, y);
-    ctx.stroke();
-  }
-
-  // Edges first so squares draw on top.
-  ctx.strokeStyle = EDGE_COLOR;
+  // Corridors under the squares, single thin gray pass like the FL web map.
+  ctx.strokeStyle = MAP_COLORS.corridor;
   ctx.lineWidth = 1.5;
+  ctx.beginPath();
   for (let r = 1; r <= rows; r++) {
     for (let c = 1; c <= cols; c++) {
       const cell = getCell(payload, r, c);
@@ -511,21 +473,27 @@ function drawSquares(
       const cx = ox + c * pitch;
       const cy = oy + r * pitch;
       if (hasExit(cell, 'n') && getCell(payload, r - 1, c)) {
-        line(ctx, cx, cy, cx, cy - pitch);
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx, cy - pitch);
       }
       if (hasExit(cell, 'e') && getCell(payload, r, c + 1)) {
-        line(ctx, cx, cy, cx + pitch, cy);
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + pitch, cy);
       }
       if (hasExit(cell, 's') && getCell(payload, r + 1, c)) {
-        line(ctx, cx, cy, cx, cy + pitch);
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx, cy + pitch);
       }
       if (hasExit(cell, 'w') && getCell(payload, r, c - 1)) {
-        line(ctx, cx, cy, cx - pitch, cy);
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx - pitch, cy);
       }
     }
   }
+  ctx.stroke();
 
-  // Squares.
+  // Squares, FL web map style: dim sector fill + 0.8-alpha sector border,
+  // origin gets a yellow glow + bright yellow border.
   for (let r = 1; r <= rows; r++) {
     for (let c = 1; c <= cols; c++) {
       const cell = getCell(payload, r, c);
@@ -533,24 +501,39 @@ function drawSquares(
       const cx = ox + c * pitch;
       const cy = oy + r * pitch;
       const isCenter = r === centerR && c === centerC;
-      ctx.fillStyle = isCenter ? PLAYER_COLOR : colorForCell(cell);
-      ctx.strokeStyle = isCenter ? PLAYER_BORDER : ROOM_BORDER;
-      ctx.lineWidth = isCenter ? 2 : 1;
-      ctx.beginPath();
-      ctx.rect(cx - size / 2, cy - size / 2, size, size);
-      ctx.fill();
-      ctx.stroke();
+      const sector = sectorForCode(cell.s);
+
+      if (isCenter) {
+        ctx.fillStyle = MAP_COLORS.originGlow;
+        ctx.beginPath();
+        ctx.arc(cx, cy, pitch * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = sector.fill;
+      ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
+
+      if (isCenter) {
+        ctx.strokeStyle = MAP_COLORS.origin;
+        ctx.lineWidth = 2;
+      } else {
+        ctx.strokeStyle = hexToRgba(sector.border, 0.8);
+        ctx.lineWidth = 1;
+      }
+      ctx.strokeRect(cx - size / 2, cy - size / 2, size, size);
 
       const exits = (cell.e ?? '').toLowerCase();
       if (exits.includes('u') || exits.includes('d')) {
-        ctx.fillStyle = '#0d1117';
-        ctx.font = `${Math.max(8, Math.floor(size * 0.55))}px monospace`;
+        ctx.fillStyle = MAP_COLORS.text;
+        ctx.font = `${Math.max(7, Math.floor(size * 0.5))}px monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        const marks = [];
-        if (exits.includes('u')) marks.push('↑');
-        if (exits.includes('d')) marks.push('↓');
-        ctx.fillText(marks.join(''), cx, cy);
+        if (exits.includes('u')) {
+          ctx.fillText('▲', cx, cy - size / 2 - size * 0.25);
+        }
+        if (exits.includes('d')) {
+          ctx.fillText('▼', cx, cy + size / 2 + size * 0.25);
+        }
       }
     }
   }
@@ -591,7 +574,8 @@ function drawGlyphs(
       const ch = row[c] ?? ' ';
       if (ch === ' ') continue;
       const isCenter = r + 1 === centerR && c + 1 === centerC;
-      ctx.fillStyle = isCenter ? '#f1c232' : (SECTOR_COLORS[ch] ?? '#7d8590');
+      const glyphSector = sectorForCode(ch);
+      ctx.fillStyle = isCenter ? MAP_COLORS.origin : glyphSector.halo;
       ctx.fillText(isCenter ? '@' : ch, ox + (c + 0.5) * pitchX, oy + (r + 0.5) * pitchY);
     }
   }
@@ -620,7 +604,7 @@ function drawTileset(
   const oy = Math.floor(playerY - centerR * pitch);
 
   // Edges underneath the tiles so the connectivity still reads.
-  ctx.strokeStyle = EDGE_COLOR;
+  ctx.strokeStyle = MAP_COLORS.corridor;
   ctx.lineWidth = 1.5;
   for (let r = 1; r <= rows; r++) {
     for (let c = 1; c <= cols; c++) {
@@ -664,7 +648,7 @@ function drawTileset(
       );
 
       if (r === centerR && c === centerC) {
-        ctx.strokeStyle = PLAYER_BORDER;
+        ctx.strokeStyle = MAP_COLORS.origin;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.rect(cx - pitch / 2, cy - pitch / 2, pitch, pitch);

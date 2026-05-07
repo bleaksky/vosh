@@ -9,19 +9,12 @@ import {
   type AreaSnapshot,
   type MapRoom,
 } from '../lib/session';
+import { MAP_COLORS, SECTORS, hexToRgba, sectorForTerrain } from '../lib/mapPalette';
 
 // Maximum spacing in pixels per cell. The renderer shrinks below this to
 // keep the area's bounding box inside the canvas.
 const ROOM_SPACING = 28;
 const PADDING = 10;
-const COLOR_BG = '#0d1117';
-const COLOR_GRID = '#1c2229';
-const COLOR_EDGE = '#3a444f';
-const COLOR_ROOM = '#21262d';
-const COLOR_ROOM_BORDER = '#444c56';
-const COLOR_ROOM_AVOID = '#572323';
-const COLOR_CURRENT = '#1f6feb';
-const COLOR_TEXT = '#c9d1d9';
 
 type Style = 'squares' | 'tileset';
 
@@ -30,26 +23,20 @@ const STYLE_KEY = 'mudclient.layout.mappingMapStyle';
 // available in both.
 const TILESET_KEY = 'mudclient.layout.serverMapTileset';
 
-const SECTOR_ORDER: string[] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c'];
+// Order used by the tileset PNG: one tile per sector index in this slot
+// position. Matches the SECTORS table in the palette module.
+const TILE_INDEX_FOR_SECTOR: number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
-// Map a free-form terrain string from Room.Info onto the same sector code
-// table used by the server view. Lets a single tileset PNG drive both.
-function terrainToSectorIndex(terrain: string): number {
-  const t = terrain.toLowerCase();
-  if (!t) return 0;
-  if (t.includes('inside') || t.includes('road') || t.includes('indoor')) return 0;
-  if (t.includes('city') || t.includes('street')) return 1;
-  if (t.includes('pasture')) return SECTOR_ORDER.indexOf('a');
-  if (t.includes('field') || t.includes('grass')) return 2;
-  if (t.includes('forest') || t.includes('wood')) return 3;
-  if (t.includes('hill')) return 4;
-  if (t.includes('mountain')) return 5;
-  if (t.includes('underwater')) return SECTOR_ORDER.indexOf('c');
-  if (t.includes('water')) return t.includes('noswim') ? 7 : 6;
-  if (t.includes('air')) return 8;
-  if (t.includes('desert') || t.includes('sand')) return 9;
-  if (t.includes('ice') || t.includes('arctic') || t.includes('tundra')) {
-    return SECTOR_ORDER.indexOf('b');
+function terrainToTileIndex(terrain: string): number {
+  // Tileset PNG slot positions match sector ids 0..12 directly.
+  const id = terrainToSectorId(terrain);
+  return TILE_INDEX_FOR_SECTOR[id] ?? 0;
+}
+
+function terrainToSectorId(terrain: string): number {
+  const sector = sectorForTerrain(terrain);
+  for (const [k, v] of Object.entries(SECTORS)) {
+    if (v === sector) return Number(k);
   }
   return 0;
 }
@@ -85,12 +72,7 @@ interface Layout {
   currentZ: number;
 }
 
-function findRoomAtPoint(
-  px: number,
-  py: number,
-  rooms: MapRoom[],
-  layout: Layout,
-): MapRoom | null {
+function findRoomAtPoint(px: number, py: number, rooms: MapRoom[], layout: Layout): MapRoom | null {
   const half = layout.roomSize / 2;
   for (const room of rooms) {
     if (room.z !== layout.currentZ) continue;
@@ -207,7 +189,7 @@ export function MappingMapView() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = COLOR_BG;
+    ctx.fillStyle = MAP_COLORS.bg;
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
     if (!snapshot) {
@@ -254,38 +236,57 @@ export function MappingMapView() {
     const oy = cssHeight / 2 - centerWorldY * pitch;
     layoutRef.current = { ox, oy, pitch, roomSize, currentZ };
 
-    // Faint grid for orientation.
-    ctx.strokeStyle = COLOR_GRID;
-    ctx.lineWidth = 1;
-    const gridStartX = ox - Math.ceil(ox / pitch) * pitch;
-    const gridStartY = oy - Math.ceil(oy / pitch) * pitch;
-    for (let x = gridStartX; x < cssWidth; x += pitch) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, cssHeight);
-      ctx.stroke();
-    }
-    for (let y = gridStartY; y < cssHeight; y += pitch) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(cssWidth, y);
-      ctx.stroke();
+    // Area name watermark behind everything, sized to the bbox so it
+    // reads as a faint label like the FL web map.
+    if (snapshot.area) {
+      const sectorCounts: Record<number, number> = {};
+      for (const r of visible) {
+        const sid = terrainToSectorId(r.terrain);
+        sectorCounts[sid] = (sectorCounts[sid] ?? 0) + 1;
+      }
+      let dominantId = 0;
+      let bestCount = 0;
+      for (const [id, count] of Object.entries(sectorCounts)) {
+        if (count > bestCount) {
+          bestCount = count;
+          dominantId = Number(id);
+        }
+      }
+      const halo = SECTORS[dominantId]?.halo ?? SECTORS[0].halo;
+      const charW = 0.6;
+      const fitSize = Math.min(
+        cssHeight * 0.45,
+        (bboxW * pitch * 0.85) / (snapshot.area.length * charW),
+      );
+      ctx.font = `bold ${Math.max(14, Math.floor(fitSize))}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = hexToRgba(halo, 0.18);
+      ctx.fillText(snapshot.area.toUpperCase(), cssWidth / 2, cssHeight / 2);
     }
 
-    // Edges.
+    // Corridors first, drawn under rooms. Single thin gray pass like the
+    // web map; up/down exits skip this and show as small arrows on the
+    // cell instead.
     const visibleIds = new Set(visible.map((r) => r.id));
-    ctx.strokeStyle = COLOR_EDGE;
+    ctx.strokeStyle = MAP_COLORS.corridor;
     ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const drawnEdges = new Set<string>();
     for (const exit of snapshot.exits) {
       if (!visibleIds.has(exit.from_room) || !visibleIds.has(exit.to_room)) continue;
+      const lo = Math.min(exit.from_room, exit.to_room);
+      const hi = Math.max(exit.from_room, exit.to_room);
+      const key = `${lo}:${hi}`;
+      if (drawnEdges.has(key)) continue;
+      drawnEdges.add(key);
       const from = visible.find((r) => r.id === exit.from_room);
       const to = visible.find((r) => r.id === exit.to_room);
       if (!from || !to) continue;
-      ctx.beginPath();
       ctx.moveTo(ox + from.x * pitch, oy + from.y * pitch);
       ctx.lineTo(ox + to.x * pitch, oy + to.y * pitch);
-      ctx.stroke();
     }
+    ctx.stroke();
 
     // Rooms.
     const useTiles = style === 'tileset' && tilesetImage !== null;
@@ -293,11 +294,12 @@ export function MappingMapView() {
       const cx = ox + room.x * pitch;
       const cy = oy + room.y * pitch;
       const isCurrent = room.id === snapshot.current_room_id;
+      const sector = sectorForTerrain(room.terrain);
 
       if (useTiles && tilesetImage) {
         const tileSize = tilesetImage.naturalHeight;
         const tilesInImage = Math.max(1, Math.floor(tilesetImage.naturalWidth / tileSize));
-        const idx = Math.min(terrainToSectorIndex(room.terrain), tilesInImage - 1);
+        const idx = Math.min(terrainToTileIndex(room.terrain), tilesInImage - 1);
         ctx.drawImage(
           tilesetImage,
           idx * tileSize,
@@ -309,31 +311,28 @@ export function MappingMapView() {
           pitch,
           pitch,
         );
-        if (isCurrent) {
-          ctx.strokeStyle = COLOR_TEXT;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.rect(cx - pitch / 2, cy - pitch / 2, pitch, pitch);
-          ctx.stroke();
-        }
-        if (room.avoid) {
-          ctx.strokeStyle = '#f85149';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(cx - pitch / 2, cy - pitch / 2);
-          ctx.lineTo(cx + pitch / 2, cy + pitch / 2);
-          ctx.moveTo(cx + pitch / 2, cy - pitch / 2);
-          ctx.lineTo(cx - pitch / 2, cy + pitch / 2);
-          ctx.stroke();
-        }
       } else {
-        ctx.fillStyle = isCurrent ? COLOR_CURRENT : room.avoid ? COLOR_ROOM_AVOID : COLOR_ROOM;
-        ctx.strokeStyle = isCurrent ? COLOR_TEXT : COLOR_ROOM_BORDER;
-        ctx.lineWidth = isCurrent ? 2 : 1;
-        ctx.beginPath();
-        ctx.rect(cx - roomSize / 2, cy - roomSize / 2, roomSize, roomSize);
-        ctx.fill();
-        ctx.stroke();
+        // Origin glow under the cell.
+        if (isCurrent) {
+          ctx.fillStyle = MAP_COLORS.originGlow;
+          ctx.beginPath();
+          ctx.arc(cx, cy, pitch * 0.85, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // Sector fill + 0.8 alpha border, matching the web map.
+        ctx.fillStyle = sector.fill;
+        ctx.fillRect(cx - roomSize / 2, cy - roomSize / 2, roomSize, roomSize);
+        if (isCurrent) {
+          ctx.strokeStyle = MAP_COLORS.origin;
+          ctx.lineWidth = 2;
+        } else if (room.avoid) {
+          ctx.strokeStyle = MAP_COLORS.dest;
+          ctx.lineWidth = 1.5;
+        } else {
+          ctx.strokeStyle = hexToRgba(sector.border, 0.8);
+          ctx.lineWidth = 1;
+        }
+        ctx.strokeRect(cx - roomSize / 2, cy - roomSize / 2, roomSize, roomSize);
       }
 
       if (room.notes) {
