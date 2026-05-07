@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { onGmcp, onState } from '../lib/session';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { getAreaSnapshot, onGmcp, onMap, onState, type AreaSnapshot } from '../lib/session';
 
 /// One cell of the server-side map grid.
 interface ServerCell {
@@ -117,32 +117,6 @@ function gridDims(payload: MapTilesPayload): { rows: number; cols: number } {
   return { rows: 0, cols: 0 };
 }
 
-/// Find the bounding box of populated cells. Used to center the visible map
-/// on its actual content rather than on the player when the player sits
-/// near the edge of an explored region (which leaves a lot of dead space
-/// on one side and biases the visual center).
-function populatedBounds(
-  payload: MapTilesPayload,
-  rows: number,
-  cols: number,
-): { minR: number; maxR: number; minC: number; maxC: number } | null {
-  let minR = rows + 1;
-  let maxR = 0;
-  let minC = cols + 1;
-  let maxC = 0;
-  let any = false;
-  for (let r = 1; r <= rows; r++) {
-    for (let c = 1; c <= cols; c++) {
-      if (!getCell(payload, r, c)) continue;
-      any = true;
-      if (r < minR) minR = r;
-      if (r > maxR) maxR = r;
-      if (c < minC) minC = c;
-      if (c > maxC) maxC = c;
-    }
-  }
-  return any ? { minR, maxR, minC, maxC } : null;
-}
 
 function colorForCell(cell: ServerCell): string {
   if (cell.s && SECTOR_COLORS[cell.s]) return SECTOR_COLORS[cell.s];
@@ -162,6 +136,20 @@ export function ServerMapView() {
   const [tilesetUrl, setTilesetUrl] = useState<string | null>(loadTileset);
   const [tilesetImage, setTilesetImage] = useState<HTMLImageElement | null>(null);
   const [tilesetError, setTilesetError] = useState<string | null>(null);
+  // Snapshot of the persistent mapping store. We use it to translate the
+  // player-centric Map.Tiles grid into stable world coordinates so cells
+  // do not shift on canvas as the player walks.
+  const [snapshot, setSnapshot] = useState<AreaSnapshot | null>(null);
+  const lastRefreshRef = useRef<number>(0);
+
+  const refreshSnapshot = useCallback(async () => {
+    try {
+      const snap = await getAreaSnapshot();
+      setSnapshot(snap);
+    } catch {
+      setSnapshot(null);
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -190,6 +178,7 @@ export function ServerMapView() {
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
+    let unsubMap: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
 
     onGmcp((payload) => {
@@ -200,19 +189,34 @@ export function ServerMapView() {
       unsubGmcp = fn;
     });
 
+    onMap(() => {
+      const now = Date.now();
+      if (now - lastRefreshRef.current < 80) return;
+      lastRefreshRef.current = now;
+      void refreshSnapshot();
+    }).then((fn) => {
+      unsubMap = fn;
+    });
+
     onState((payload) => {
       if (payload.kind === 'disconnected') {
         setTiles(null);
+        setSnapshot(null);
+      } else if (payload.kind === 'connected') {
+        void refreshSnapshot();
       }
     }).then((fn) => {
       unsubState = fn;
     });
 
+    void refreshSnapshot();
+
     return () => {
       unsubGmcp?.();
+      unsubMap?.();
       unsubState?.();
     };
-  }, []);
+  }, [refreshSnapshot]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -252,12 +256,25 @@ export function ServerMapView() {
       const centerR = Math.floor((rows + 1) / 2);
       const centerC = Math.floor((cols + 1) / 2);
 
+      const anchor = computeAnchor(snapshot, tiles, rows, cols, centerR, centerC, cssWidth, cssHeight);
+
       if (style === 'glyphs') {
-        drawGlyphs(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC);
+        drawGlyphs(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC, anchor);
       } else if (style === 'tileset') {
-        drawTileset(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC, tilesetImage);
+        drawTileset(
+          ctx,
+          cssWidth,
+          cssHeight,
+          tiles,
+          rows,
+          cols,
+          centerR,
+          centerC,
+          tilesetImage,
+          anchor,
+        );
       } else {
-        drawSquares(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC);
+        drawSquares(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC, anchor);
       }
     };
 
@@ -269,7 +286,7 @@ export function ServerMapView() {
       observer.disconnect();
       window.removeEventListener('resize', draw);
     };
-  }, [tiles, style, tilesetImage]);
+  }, [tiles, style, tilesetImage, snapshot]);
 
   const handleLoadTileset = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -361,6 +378,91 @@ export function ServerMapView() {
   );
 }
 
+interface Anchor {
+  /// Pitch in pixels per cell.
+  pitch: number;
+  /// Canvas pixel where the player cell (centerR, centerC) sits.
+  playerX: number;
+  playerY: number;
+  /// True when the anchor is locked to the player's known absolute world
+  /// coords (so cells stay put across walks). False means we fell back to
+  /// player-centered because the world coord is not known.
+  worldLocked: boolean;
+}
+
+/// Pick the pitch and the anchor point for the player cell. When the
+/// mapping store knows the player's absolute coords, we anchor on the
+/// bounding box of every explored room on this floor. The player cell
+/// then renders at its world position so individual rooms stay put on
+/// canvas as the player walks through the area. When the player has not
+/// been mapped yet (just connected), we fall back to canvas-centered.
+function computeAnchor(
+  snapshot: AreaSnapshot | null,
+  _payload: MapTilesPayload,
+  rows: number,
+  cols: number,
+  _centerR: number,
+  _centerC: number,
+  cssWidth: number,
+  cssHeight: number,
+): Anchor {
+  const targetPitch = 36;
+  const minPitch = 16;
+  const fitToCanvas = Math.floor(Math.min(cssWidth / cols, cssHeight / rows));
+  const naivePitch = Math.max(minPitch, Math.min(targetPitch, fitToCanvas));
+
+  if (!snapshot) {
+    return {
+      pitch: naivePitch,
+      playerX: cssWidth / 2,
+      playerY: cssHeight / 2,
+      worldLocked: false,
+    };
+  }
+  const player = snapshot.rooms.find((r) => r.id === snapshot.current_room_id) ?? null;
+  if (!player) {
+    return {
+      pitch: naivePitch,
+      playerX: cssWidth / 2,
+      playerY: cssHeight / 2,
+      worldLocked: false,
+    };
+  }
+
+  const visible = snapshot.rooms.filter((r) => r.z === player.z);
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const r of visible) {
+    if (r.x < minX) minX = r.x;
+    if (r.x > maxX) maxX = r.x;
+    if (r.y < minY) minY = r.y;
+    if (r.y > maxY) maxY = r.y;
+  }
+  if (!Number.isFinite(minX)) {
+    return {
+      pitch: naivePitch,
+      playerX: cssWidth / 2,
+      playerY: cssHeight / 2,
+      worldLocked: false,
+    };
+  }
+
+  const bboxW = maxX - minX + 1;
+  const bboxH = maxY - minY + 1;
+  const fitX = bboxW > 0 ? cssWidth / (bboxW + 1) : naivePitch;
+  const fitY = bboxH > 0 ? cssHeight / (bboxH + 1) : naivePitch;
+  const pitch = Math.max(minPitch, Math.min(targetPitch, Math.floor(Math.min(fitX, fitY))));
+
+  const centerWorldX = (minX + maxX) / 2;
+  const centerWorldY = (minY + maxY) / 2;
+  const playerX = cssWidth / 2 + (player.x - centerWorldX) * pitch;
+  const playerY = cssHeight / 2 + (player.y - centerWorldY) * pitch;
+
+  return { pitch, playerX, playerY, worldLocked: true };
+}
+
 function drawSquares(
   ctx: CanvasRenderingContext2D,
   cssWidth: number,
@@ -370,24 +472,16 @@ function drawSquares(
   cols: number,
   centerR: number,
   centerC: number,
+  anchor: Anchor,
 ) {
-  // Wider pitch and a smaller fill ratio so squares read as separated
-  // tiles rather than a continuous wash.
-  const targetPitch = 36;
-  const pitch = Math.max(
-    16,
-    Math.min(targetPitch, Math.floor(Math.min(cssWidth / cols, cssHeight / rows))),
-  );
+  const { pitch, playerX, playerY } = anchor;
   const size = Math.max(8, Math.floor(pitch * 0.55));
-
-  // Center on the bounding box of populated cells so the visible map
-  // looks centered even when the player sits near the edge of an
-  // explored region. Player cell still highlights at its real position.
-  const bounds = populatedBounds(payload, rows, cols);
-  const focusR = bounds ? (bounds.minR + bounds.maxR) / 2 : centerR;
-  const focusC = bounds ? (bounds.minC + bounds.maxC) / 2 : centerC;
-  const ox = Math.floor(cssWidth / 2 - focusC * pitch);
-  const oy = Math.floor(cssHeight / 2 - focusR * pitch);
+  // Place each grid cell relative to the player's canvas position so the
+  // ROOM at world coord (x, y) keeps its on-screen position across pushes.
+  // Cells outside the populated bounding box are still drawn but ignored
+  // by hit-testing in this Phase 7 cut.
+  const ox = Math.floor(playerX - centerC * pitch);
+  const oy = Math.floor(playerY - centerR * pitch);
 
   // Faint grid so the layout reads even when many cells are empty.
   ctx.strokeStyle = GRID_LINE;
@@ -471,6 +565,7 @@ function drawGlyphs(
   cols: number,
   centerR: number,
   centerC: number,
+  anchor: Anchor,
 ) {
   const text = parseTextGrid(payload.t);
   if (text.length === 0) {
@@ -481,13 +576,11 @@ function drawGlyphs(
   }
   const pitchX = Math.max(8, Math.min(20, Math.floor(cssWidth / (cols * 1.6))));
   const pitchY = Math.max(10, Math.min(22, Math.floor(cssHeight / rows)));
-  // Center on the bounding box of populated cells, falling back to the
-  // player cell when the grid has no usable structured payload.
-  const bounds = populatedBounds(payload, rows, cols);
-  const focusR = bounds ? (bounds.minR + bounds.maxR) / 2 - 0.5 : centerR - 0.5;
-  const focusC = bounds ? (bounds.minC + bounds.maxC) / 2 - 0.5 : centerC - 0.5;
-  const ox = Math.floor(cssWidth / 2 - focusC * pitchX);
-  const oy = Math.floor(cssHeight / 2 - focusR * pitchY);
+  // Anchor on the player cell whose canvas position holds steady across
+  // walks (locked to world coords when the mapping store knows the
+  // player's room).
+  const ox = Math.floor(anchor.playerX - (centerC - 0.5) * pitchX);
+  const oy = Math.floor(anchor.playerY - (centerR - 0.5) * pitchY);
   ctx.font = `${Math.floor(pitchY * 0.85)}px "JetBrains Mono", "Menlo", monospace`;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
@@ -514,23 +607,17 @@ function drawTileset(
   centerR: number,
   centerC: number,
   image: HTMLImageElement | null,
+  anchor: Anchor,
 ) {
   if (!image) {
-    drawSquares(ctx, cssWidth, cssHeight, payload, rows, cols, centerR, centerC);
+    drawSquares(ctx, cssWidth, cssHeight, payload, rows, cols, centerR, centerC, anchor);
     return;
   }
   const tileSize = image.naturalHeight;
   const tilesInImage = Math.max(1, Math.floor(image.naturalWidth / tileSize));
-  const targetPitch = 36;
-  const pitch = Math.max(
-    16,
-    Math.min(targetPitch, Math.floor(Math.min(cssWidth / cols, cssHeight / rows))),
-  );
-  const bounds = populatedBounds(payload, rows, cols);
-  const focusR = bounds ? (bounds.minR + bounds.maxR) / 2 : centerR;
-  const focusC = bounds ? (bounds.minC + bounds.maxC) / 2 : centerC;
-  const ox = Math.floor(cssWidth / 2 - focusC * pitch);
-  const oy = Math.floor(cssHeight / 2 - focusR * pitch);
+  const { pitch, playerX, playerY } = anchor;
+  const ox = Math.floor(playerX - centerC * pitch);
+  const oy = Math.floor(playerY - centerR * pitch);
 
   // Edges underneath the tiles so the connectivity still reads.
   ctx.strokeStyle = EDGE_COLOR;
