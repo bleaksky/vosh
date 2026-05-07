@@ -6,6 +6,7 @@
 use mudclient_alias::{Alias, ExpandError};
 use mudclient_trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
 use mudclient_vars::Scope;
+use tokio::time::Instant;
 
 use crate::profile::Profile;
 
@@ -30,6 +31,16 @@ slash commands:
   #trigger <name> {pattern} <action>   define or replace a trigger
   #untrigger <name>                    remove a trigger
   #triggers                            list triggers
+  #tick                                show tick timer state
+  #tick interval <secs>                set the tick interval
+  #tick reset                          reset the timer now
+  #tick on {pattern}                   reset on a regex match
+  #tick off                            clear the reset pattern
+  #tick fire <command>                 run a command on each fire
+  #tick nofire                         clear the auto-fire command
+  #tick sound on|off                   toggle the tick beep
+  #tick disable                        stop the tick timer
+  #tick enable                         start the tick timer
   #help                                show this list
 trigger actions:
   highlight <color> [bold] [underline] [inverse] [bg:<color>]
@@ -93,6 +104,7 @@ fn handle_slash(profile: &mut Profile, rest: &str) -> InputResult {
         "trigger" => slash_trigger(profile, args),
         "untrigger" => slash_untrigger(profile, args),
         "triggers" => slash_triggers_list(profile),
+        "tick" => slash_tick(profile, args),
         "help" => echo_lines(HELP_TEXT.lines()),
         "" => error_echo("missing slash command. try #help".to_string()),
         other => error_echo(format!("unknown slash command #{other}. try #help")),
@@ -351,6 +363,102 @@ fn describe_action(action: &TriggerAction) -> String {
         TriggerAction::Replace { template } => format!("replace `{template}`"),
         TriggerAction::Send { template } => format!("send `{template}`"),
         TriggerAction::Route { pane } => format!("route {pane}"),
+    }
+}
+
+fn slash_tick(profile: &mut Profile, args: &str) -> InputResult {
+    let (cmd, rest) = split_first_word(args);
+    let now = Instant::now();
+    match cmd {
+        "" => slash_tick_show(profile, now),
+        "interval" => match rest.trim().parse::<u64>() {
+            Ok(secs) if secs > 0 => {
+                profile.tick.set_interval(secs, now);
+                echo_one(format!("tick interval set to {secs}s"))
+            }
+            _ => error_echo("usage #tick interval <secs>".to_string()),
+        },
+        "reset" => {
+            profile.tick.reset(now);
+            echo_one("tick reset".to_string())
+        }
+        "on" => {
+            let Some((pattern, _rest)) = parse_braced_pattern(rest) else {
+                return error_echo("usage #tick on {pattern}".to_string());
+            };
+            match profile.tick.set_reset_pattern(Some(pattern.clone())) {
+                Ok(()) => echo_one(format!("tick will reset on /{pattern}/")),
+                Err(e) => error_echo(format!("invalid regex: {e}")),
+            }
+        }
+        "off" => {
+            let _ = profile.tick.set_reset_pattern(None);
+            echo_one("tick reset pattern cleared".to_string())
+        }
+        "fire" => {
+            let trimmed = rest.trim();
+            if trimmed.is_empty() {
+                profile.tick.config.auto_fire = None;
+                echo_one("tick auto-fire cleared".to_string())
+            } else {
+                profile.tick.config.auto_fire = Some(trimmed.to_string());
+                echo_one(format!("tick auto-fire set to: {trimmed}"))
+            }
+        }
+        "nofire" => {
+            profile.tick.config.auto_fire = None;
+            echo_one("tick auto-fire cleared".to_string())
+        }
+        "sound" => match rest.trim() {
+            "on" => {
+                profile.tick.config.sound = true;
+                echo_one("tick sound on".to_string())
+            }
+            "off" => {
+                profile.tick.config.sound = false;
+                echo_one("tick sound off".to_string())
+            }
+            _ => error_echo("usage #tick sound on|off".to_string()),
+        },
+        "disable" => {
+            profile.tick.disable();
+            echo_one("tick disabled".to_string())
+        }
+        "enable" => {
+            profile.tick.enable(now);
+            echo_one("tick enabled".to_string())
+        }
+        other => error_echo(format!("unknown #tick subcommand `{other}`")),
+    }
+}
+
+fn slash_tick_show(profile: &Profile, now: Instant) -> InputResult {
+    let cfg = &profile.tick.config;
+    let mut lines = Vec::new();
+    let state = if cfg.enabled { "enabled" } else { "disabled" };
+    lines.push(format!(
+        "tick {state}, interval {}s",
+        cfg.interval.as_secs()
+    ));
+    if let Some(remaining) = profile.tick.remaining(now) {
+        lines.push(format!("  remaining {}s", remaining.as_secs()));
+    } else {
+        lines.push("  remaining (not running)".to_string());
+    }
+    if let Some(p) = &cfg.reset_pattern {
+        lines.push(format!("  reset on /{p}/"));
+    } else {
+        lines.push("  no reset pattern".to_string());
+    }
+    if let Some(f) = &cfg.auto_fire {
+        lines.push(format!("  auto-fire: {f}"));
+    } else {
+        lines.push("  auto-fire: (none)".to_string());
+    }
+    lines.push(format!("  sound {}", if cfg.sound { "on" } else { "off" }));
+    InputResult {
+        bytes: Vec::new(),
+        echo: lines,
     }
 }
 
