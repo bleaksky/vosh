@@ -1,12 +1,26 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import { sendInput } from '../lib/session';
+
+export interface InputHandle {
+  focus: () => void;
+}
 
 interface Props {
   enabled: boolean;
   onError?: (message: string) => void;
 }
 
-export function Input({ enabled, onError }: Props) {
+export const Input = forwardRef<InputHandle, Props>(function Input(
+  { enabled, onError }: Props,
+  ref,
+) {
   const [value, setValue] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   // When the user starts arrow-key navigation with non-empty input, we
@@ -19,6 +33,14 @@ export function Input({ enabled, onError }: Props) {
   useEffect(() => {
     if (enabled) inputRef.current?.focus();
   }, [enabled]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: () => inputRef.current?.focus(),
+    }),
+    [],
+  );
 
   const matchingIndices = (prefix: string | null): number[] => {
     if (prefix === null || prefix === '') {
@@ -117,4 +139,4 @@ export function Input({ enabled, onError }: Props) {
       />
     </div>
   );
-}
+});

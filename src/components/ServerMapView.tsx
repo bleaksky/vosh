@@ -377,17 +377,15 @@ interface Anchor {
 function computeAnchor(
   _snapshot: AreaSnapshot | null,
   _payload: MapTilesPayload,
-  rows: number,
-  cols: number,
+  _rows: number,
+  _cols: number,
   _centerR: number,
   _centerC: number,
   cssWidth: number,
   cssHeight: number,
 ): Anchor {
-  const targetPitch = 36;
-  const minPitch = 16;
-  const fitToCanvas = Math.floor(Math.min(cssWidth / cols, cssHeight / rows));
-  const pitch = Math.max(minPitch, Math.min(targetPitch, fitToCanvas));
+  // Same pitch as the mapping view so both modes render at the same scale.
+  const pitch = 20;
   return {
     pitch,
     playerX: Math.floor(cssWidth / 2),

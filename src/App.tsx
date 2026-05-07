@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Terminal, type TerminalHandle } from './components/Terminal';
-import { Input } from './components/Input';
+import { Input, type InputHandle } from './components/Input';
 import { Connect, type ConnectionStatus } from './components/Connect';
 import { TriggersDrawer } from './components/TriggersDrawer';
 import { SidePanel } from './components/SidePanel';
@@ -23,6 +23,19 @@ function App() {
   const [triggersOpen, setTriggersOpen] = useState(false);
   const [sidePanelOpen, setSidePanelOpen] = useState(loadSidePanelOpen);
   const termRef = useRef<TerminalHandle | null>(null);
+  const inputRef = useRef<InputHandle | null>(null);
+
+  // Click anywhere in the middle area focuses the input. Skip if the user
+  // is in the middle of selecting text (so they can still copy from the
+  // terminal pane), if they clicked an actual interactive element (button,
+  // input, textarea), or if the click landed inside the triggers drawer.
+  const handleMiddleMouseDown = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('button, input, textarea, select, .drawer')) return;
+    const selection = window.getSelection?.();
+    if (selection && selection.toString().length > 0) return;
+    inputRef.current?.focus();
+  };
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
@@ -66,7 +79,7 @@ function App() {
         onToggleSidePanel={() => setSidePanelOpen((v) => !v)}
         sidePanelOpen={sidePanelOpen}
       />
-      <div className="middle">
+      <div className="middle" onMouseUp={handleMiddleMouseDown}>
         <Terminal
           onReady={(handle) => {
             termRef.current = handle;
@@ -79,7 +92,7 @@ function App() {
           onError={handleError}
         />
       </div>
-      <Input enabled onError={handleError} />
+      <Input ref={inputRef} enabled onError={handleError} />
     </main>
   );
 }

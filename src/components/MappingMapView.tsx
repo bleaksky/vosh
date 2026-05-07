@@ -11,9 +11,9 @@ import {
 } from '../lib/session';
 import { MAP_COLORS, SECTORS, hexToRgba, sectorForTerrain } from '../lib/mapPalette';
 
-// Maximum spacing in pixels per cell. The renderer shrinks below this to
-// keep the area's bounding box inside the canvas.
-const ROOM_SPACING = 28;
+// Pitch in pixels per cell. Matches the server view so the two modes
+// render at the same scale.
+const ROOM_SPACING = 20;
 const PADDING = 10;
 
 type Style = 'squares' | 'tileset';
