@@ -4,6 +4,7 @@
 //! profile rather than the connection.
 
 use mudclient_alias::{Alias, ExpandError};
+use mudclient_trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
 use mudclient_vars::Scope;
 
 use crate::profile::Profile;
@@ -19,16 +20,26 @@ pub(crate) struct InputResult {
 
 const HELP_TEXT: &str = "\
 slash commands:
-  #alias <name> <expansion>   define or replace an alias
-  #unalias <name>             remove an alias
-  #aliases                    list aliases
-  #var <name> <value>         set a session variable
-  #var <name>                 show a variable
-  #unvar <name>               remove a variable
-  #vars                       list variables
-  #help                       show this list
+  #alias <name> <expansion>            define or replace an alias
+  #unalias <name>                      remove an alias
+  #aliases                             list aliases
+  #var <name> <value>                  set a session variable
+  #var <name>                          show a variable
+  #unvar <name>                        remove a variable
+  #vars                                list variables
+  #trigger <name> {pattern} <action>   define or replace a trigger
+  #untrigger <name>                    remove a trigger
+  #triggers                            list triggers
+  #help                                show this list
+trigger actions:
+  highlight <color> [bold] [underline] [inverse] [bg:<color>]
+  gag
+  replace <template>
+  send <template>
+  route <pane>
 parameter substitution: %0 entire args, %1..%9 positional, %% literal %
-variable substitution: $name or ${name}, $$ literal $\
+variable substitution: $name or ${name}, $$ literal $
+trigger captures: $0 full match, $1..$9 positional groups, ${name} named group\
 ";
 
 /// Run the input pipeline against the given profile and return what to send
@@ -70,6 +81,9 @@ fn handle_slash(profile: &mut Profile, rest: &str) -> InputResult {
         "var" => slash_var(profile, args),
         "unvar" => slash_unvar(profile, args),
         "vars" => slash_vars_list(profile),
+        "trigger" => slash_trigger(profile, args),
+        "untrigger" => slash_untrigger(profile, args),
+        "triggers" => slash_triggers_list(profile),
         "help" => echo_lines(HELP_TEXT.lines()),
         "" => error_echo("missing slash command. try #help".to_string()),
         other => error_echo(format!("unknown slash command #{other}. try #help")),
@@ -141,6 +155,193 @@ fn slash_unvar(profile: &mut Profile, args: &str) -> InputResult {
         echo_one(format!("var {name} removed"))
     } else {
         error_echo(format!("var {name} not set"))
+    }
+}
+
+fn slash_trigger(profile: &mut Profile, args: &str) -> InputResult {
+    let (name, rest) = split_first_word(args);
+    if name.is_empty() {
+        return error_echo("usage #trigger <name> {pattern} <action> [args]".to_string());
+    }
+    let Some((pattern, after_pattern)) = parse_braced_pattern(rest) else {
+        return error_echo("usage #trigger <name> {pattern} <action> [args]".to_string());
+    };
+    let action = match parse_action(after_pattern) {
+        Ok(a) => a,
+        Err(msg) => return error_echo(msg),
+    };
+    let trigger = Trigger {
+        name: name.to_string(),
+        pattern,
+        priority: 0,
+        enabled: true,
+        action,
+    };
+    match profile.triggers.set(trigger) {
+        Ok(()) => echo_one(format!("trigger {name} set")),
+        Err(e) => error_echo(format!("trigger {name} rejected: {e}")),
+    }
+}
+
+fn slash_untrigger(profile: &mut Profile, args: &str) -> InputResult {
+    let name = args.trim();
+    if name.is_empty() {
+        return error_echo("usage #untrigger <name>".to_string());
+    }
+    if profile.triggers.remove(name) {
+        echo_one(format!("trigger {name} removed"))
+    } else {
+        error_echo(format!("trigger {name} not found"))
+    }
+}
+
+fn slash_triggers_list(profile: &Profile) -> InputResult {
+    let triggers = profile.triggers.list();
+    if triggers.is_empty() {
+        return echo_one("no triggers defined".to_string());
+    }
+    let mut lines = Vec::with_capacity(triggers.len() + 1);
+    lines.push(format!("{} trigger(s) by priority:", triggers.len()));
+    for t in triggers {
+        let mark = if t.enabled { ' ' } else { '*' };
+        let action = describe_action(&t.action);
+        lines.push(format!(
+            "  {mark} [{:>3}] {} /{}/ -> {action}",
+            t.priority, t.name, t.pattern,
+        ));
+    }
+    InputResult {
+        bytes: Vec::new(),
+        echo: lines,
+    }
+}
+
+/// Parse a `{pattern}` block. Supports `\}` to escape a closing brace inside
+/// the pattern. Returns the pattern (escapes resolved) plus the remainder
+/// after the closing brace.
+fn parse_braced_pattern(input: &str) -> Option<(String, &str)> {
+    let trimmed = input.trim_start();
+    let mut chars = trimmed.char_indices();
+    let (_, first) = chars.next()?;
+    if first != '{' {
+        return None;
+    }
+    let mut pattern = String::new();
+    let mut last_end = 0;
+    while let Some((i, ch)) = chars.next() {
+        if ch == '\\' {
+            if let Some((_, next)) = chars.next() {
+                if next == '}' || next == '\\' {
+                    pattern.push(next);
+                    continue;
+                }
+                pattern.push(ch);
+                pattern.push(next);
+                continue;
+            }
+            pattern.push(ch);
+            continue;
+        }
+        if ch == '}' {
+            last_end = i + 1;
+            break;
+        }
+        pattern.push(ch);
+    }
+    if last_end == 0 {
+        return None;
+    }
+    Some((pattern, trimmed[last_end..].trim_start()))
+}
+
+fn parse_action(input: &str) -> Result<TriggerAction, String> {
+    let (kind, rest) = split_first_word(input);
+    match kind {
+        "highlight" => parse_highlight_action(rest),
+        "gag" => Ok(TriggerAction::Gag),
+        "replace" => {
+            if rest.is_empty() {
+                Err("usage replace <template>".to_string())
+            } else {
+                Ok(TriggerAction::Replace {
+                    template: rest.to_string(),
+                })
+            }
+        }
+        "send" => {
+            if rest.is_empty() {
+                Err("usage send <template>".to_string())
+            } else {
+                Ok(TriggerAction::Send {
+                    template: rest.to_string(),
+                })
+            }
+        }
+        "route" => {
+            if rest.is_empty() {
+                Err("usage route <pane>".to_string())
+            } else {
+                Ok(TriggerAction::Route {
+                    pane: rest.to_string(),
+                })
+            }
+        }
+        "" => Err("missing action keyword".to_string()),
+        other => Err(format!("unknown action `{other}`")),
+    }
+}
+
+fn parse_highlight_action(input: &str) -> Result<TriggerAction, String> {
+    let mut style = HighlightStyle::default();
+    for token in input.split_whitespace() {
+        match token.to_ascii_lowercase().as_str() {
+            "bold" => style.bold = true,
+            "underline" => style.underline = true,
+            "inverse" => style.inverse = true,
+            other => {
+                if let Some(name) = other.strip_prefix("bg:") {
+                    let color =
+                        NamedColor::parse(name).ok_or_else(|| format!("unknown color `{name}`"))?;
+                    style.bg = Some(color);
+                } else if let Some(color) = NamedColor::parse(other) {
+                    style.fg = Some(color);
+                } else {
+                    return Err(format!("unknown highlight token `{other}`"));
+                }
+            }
+        }
+    }
+    if style.is_empty() {
+        return Err("highlight needs at least one color or attribute".to_string());
+    }
+    Ok(TriggerAction::Highlight { style })
+}
+
+fn describe_action(action: &TriggerAction) -> String {
+    match action {
+        TriggerAction::Highlight { style } => {
+            let mut parts = Vec::new();
+            if let Some(c) = style.fg {
+                parts.push(format!("fg={c:?}"));
+            }
+            if let Some(c) = style.bg {
+                parts.push(format!("bg={c:?}"));
+            }
+            if style.bold {
+                parts.push("bold".to_string());
+            }
+            if style.underline {
+                parts.push("underline".to_string());
+            }
+            if style.inverse {
+                parts.push("inverse".to_string());
+            }
+            format!("highlight {}", parts.join(" "))
+        }
+        TriggerAction::Gag => "gag".to_string(),
+        TriggerAction::Replace { template } => format!("replace `{template}`"),
+        TriggerAction::Send { template } => format!("send `{template}`"),
+        TriggerAction::Route { pane } => format!("route {pane}"),
     }
 }
 
@@ -286,5 +487,71 @@ mod tests {
         let r = process(&mut p, "loop");
         assert!(r.bytes.is_empty());
         assert!(r.echo.iter().any(|l| l.contains("recursion limit")));
+    }
+
+    #[test]
+    fn slash_trigger_highlight_registers() {
+        let mut p = Profile::default();
+        let r = process(&mut p, "#trigger tells {tells you} highlight cyan bold");
+        assert!(r.echo.iter().any(|l| l == "trigger tells set"));
+        assert_eq!(p.triggers.len(), 1);
+        let trig = p.triggers.get("tells").unwrap();
+        match &trig.action {
+            TriggerAction::Highlight { style } => {
+                assert_eq!(style.fg, Some(NamedColor::Cyan));
+                assert!(style.bold);
+            }
+            _ => panic!("expected highlight action"),
+        }
+    }
+
+    #[test]
+    fn slash_trigger_gag_registers() {
+        let mut p = Profile::default();
+        let r = process(&mut p, "#trigger spam {tingle} gag");
+        assert!(r.echo.iter().any(|l| l == "trigger spam set"));
+        assert!(matches!(
+            p.triggers.get("spam").unwrap().action,
+            TriggerAction::Gag
+        ));
+    }
+
+    #[test]
+    fn slash_trigger_send_with_capture() {
+        let mut p = Profile::default();
+        let r = process(
+            &mut p,
+            r"#trigger loot {The (\w+) is DEAD} send loot $1 from corpse",
+        );
+        assert!(r.echo.iter().any(|l| l == "trigger loot set"));
+        match &p.triggers.get("loot").unwrap().action {
+            TriggerAction::Send { template } => {
+                assert_eq!(template, "loot $1 from corpse");
+            }
+            _ => panic!("expected send action"),
+        }
+    }
+
+    #[test]
+    fn slash_trigger_invalid_regex_rejected() {
+        let mut p = Profile::default();
+        let r = process(&mut p, "#trigger bad {[unclosed} gag");
+        assert!(r.echo.iter().any(|l| l.contains("rejected")));
+        assert_eq!(p.triggers.len(), 0);
+    }
+
+    #[test]
+    fn slash_untrigger_removes() {
+        let mut p = Profile::default();
+        let _ = process(&mut p, "#trigger spam {tingle} gag");
+        let _ = process(&mut p, "#untrigger spam");
+        assert_eq!(p.triggers.len(), 0);
+    }
+
+    #[test]
+    fn parse_braced_pattern_handles_escaped_close() {
+        let (pattern, rest) = parse_braced_pattern(r"{a\}b} send hi").unwrap();
+        assert_eq!(pattern, "a}b");
+        assert_eq!(rest, "send hi");
     }
 }
