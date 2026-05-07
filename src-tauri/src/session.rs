@@ -395,6 +395,7 @@ async fn handle_gmcp(
             return Ok(());
         }
     };
+    info!(package = %msg.package, data = %msg.data, "gmcp received");
     let (tick_reset, script_apply) = {
         let mut p = profile.lock().await;
         gmcp_bind::apply(&mut p.vars, &msg);

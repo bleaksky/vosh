@@ -38,6 +38,11 @@ interface CharStatus {
   fullname?: string;
   level?: number | string;
   class?: string;
+  race?: string;
+  alignment?: string | number;
+  // Aabahran sometimes nests fields differently across Char.* packages.
+  // Allow extra keys so any Char.* push enriches the displayed line.
+  [key: string]: unknown;
 }
 
 function pct(current: number | string | undefined, max: number | string | undefined): number {
@@ -110,19 +115,20 @@ export function StatusPane() {
     let unsubTick: (() => void) | undefined;
 
     onGmcp((payload) => {
-      switch (payload.package) {
-        case 'Char.Vitals':
-          setVitals(payload.data ?? {});
-          break;
-        case 'Room.Info':
-          setRoom(payload.data ?? {});
-          break;
-        case 'Char.Name':
-        case 'Char.Status':
-          setChar((prev) => ({ ...prev, ...(payload.data ?? {}) }));
-          break;
-        default:
-          break;
+      if (payload.package === 'Char.Vitals') {
+        setVitals(payload.data ?? {});
+        return;
+      }
+      if (payload.package === 'Room.Info') {
+        setRoom(payload.data ?? {});
+        return;
+      }
+      // Any other Char.* push (Name, Status, Info, Stats, Worth, Base...)
+      // gets merged into the char snapshot. Different MUDs split the
+      // identity fields across different sub-packages, so being permissive
+      // means the display fills in regardless of which one Aabahran sends.
+      if (payload.package.startsWith('Char.') && payload.data && typeof payload.data === 'object') {
+        setChar((prev) => ({ ...prev, ...(payload.data as Record<string, unknown>) }));
       }
     }).then((fn) => {
       unsubGmcp = fn;
@@ -187,10 +193,22 @@ export function StatusPane() {
             <span className="status-value">{char.class}</span>
           </div>
         )}
+        {char.race && (
+          <div className="status-row">
+            <span className="status-label">race</span>
+            <span className="status-value">{char.race}</span>
+          </div>
+        )}
         {char.level !== undefined && (
           <div className="status-row">
             <span className="status-label">level</span>
-            <span className="status-value">{char.level}</span>
+            <span className="status-value">{String(char.level)}</span>
+          </div>
+        )}
+        {char.alignment !== undefined && (
+          <div className="status-row">
+            <span className="status-label">align</span>
+            <span className="status-value">{String(char.alignment)}</span>
           </div>
         )}
         <Bar label="hp" current={vitals.hp} max={vitals.maxhp} color="#da3633" />
