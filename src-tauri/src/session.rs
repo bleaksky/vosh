@@ -20,6 +20,7 @@ use crate::input;
 use crate::line_accumulator::{ChunkOp, LineAccumulator};
 use crate::map_state::{self, SharedMap};
 use crate::profile::Profile;
+use crate::script_state::{self, ApplyResult, PendingTimer, SharedTimers};
 use crate::tick::{TickPayload, TickRuntime};
 
 const TICK_EMIT_INTERVAL: Duration = Duration::from_millis(250);
@@ -85,6 +86,7 @@ pub(crate) async fn spawn(
     tls: bool,
     profile: Arc<Mutex<Profile>>,
     map: SharedMap,
+    timers: SharedTimers,
 ) -> Result<SessionHandle, ConnectionError> {
     emit_state(
         &app,
@@ -108,7 +110,7 @@ pub(crate) async fn spawn(
     );
 
     let (tx_outgoing, rx_outgoing) = mpsc::unbounded_channel::<Vec<u8>>();
-    let task = tokio::spawn(io_loop(app, stream, rx_outgoing, profile, map));
+    let task = tokio::spawn(io_loop(app, stream, rx_outgoing, profile, map, timers));
 
     Ok(SessionHandle { tx_outgoing, task })
 }
@@ -119,6 +121,7 @@ async fn io_loop(
     mut rx_outgoing: mpsc::UnboundedReceiver<Vec<u8>>,
     profile: Arc<Mutex<Profile>>,
     map: SharedMap,
+    timers: SharedTimers,
 ) {
     let mut parser = Parser::new();
     let negotiator = Negotiator::new();
@@ -169,6 +172,7 @@ async fn io_loop(
                             &mut accumulator,
                             &profile,
                             &map,
+                            &timers,
                             event,
                         ).await {
                             warn!(error = %e, "event handling failed");
@@ -185,6 +189,9 @@ async fn io_loop(
                 if let Err(e) = handle_tick(&app, &mut stream, &profile).await {
                     error!(error = %e, "tick handling failed");
                     break Some(format!("tick handling failed: {e}"));
+                }
+                if let Err(e) = fire_due_script_timers(&app, &mut stream, &profile, &timers).await {
+                    error!(error = %e, "script timer firing failed");
                 }
             }
         }
@@ -264,6 +271,7 @@ async fn handle_event(
     accumulator: &mut LineAccumulator,
     profile: &Arc<Mutex<Profile>>,
     map: &SharedMap,
+    timers: &SharedTimers,
     event: TelnetEvent,
 ) -> std::io::Result<()> {
     match event {
@@ -275,7 +283,7 @@ async fn handle_event(
                     }
                     ChunkOp::LineComplete { bytes, clear_first } => {
                         let plain = mudclient_ansi::plain_text(&bytes);
-                        let (result, tick_reset) = {
+                        let (result, tick_reset, script_apply) = {
                             let mut p = profile.lock().await;
                             let result = mudclient_trigger::process(&p.triggers, &bytes);
                             let ticked = if p.tick.check_reset_match(&plain) {
@@ -284,10 +292,23 @@ async fn handle_event(
                             } else {
                                 false
                             };
-                            (result, ticked)
+                            // Run Lua triggers on the same plain text so
+                            // patterns can match without worrying about
+                            // ANSI escape bytes.
+                            script_state::snapshot_vars(&p.script, &p.vars);
+                            let outcome = match p.script.match_line(&plain) {
+                                Ok(o) => o,
+                                Err(err) => {
+                                    warn!(error = %err, "lua match_line failed");
+                                    mudclient_script::ScriptOutcome::default()
+                                }
+                            };
+                            let apply = script_state::apply_actions(&mut p, outcome);
+                            (result, ticked, apply)
                         };
                         emit_line_result(app, &result, clear_first);
                         send_trigger_outputs(stream, &result.sends).await?;
+                        apply_script_result(app, stream, profile, timers, script_apply).await?;
                         if tick_reset {
                             let payload = {
                                 let p = profile.lock().await;
@@ -303,7 +324,7 @@ async fn handle_event(
             Ok(())
         }
         TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
-            handle_gmcp(app, profile, map, &payload).await;
+            handle_gmcp(app, profile, map, timers, stream, &payload).await?;
             Ok(())
         }
         TelnetEvent::Will(opt) if opt == telnet_option::GMCP => {
@@ -331,19 +352,31 @@ async fn handle_gmcp(
     app: &AppHandle,
     profile: &Arc<Mutex<Profile>>,
     map: &SharedMap,
+    timers: &SharedTimers,
+    stream: &mut Stream,
     payload: &[u8],
-) {
+) -> std::io::Result<()> {
     let msg = match mudclient_gmcp::parse(payload) {
         Ok(m) => m,
         Err(e) => {
             warn!(error = %e, "failed to parse GMCP payload");
-            return;
+            return Ok(());
         }
     };
-    let tick_reset = {
+    let (tick_reset, script_apply) = {
         let mut p = profile.lock().await;
         gmcp_bind::apply(&mut p.vars, &msg);
-        observe_world_time_for_tick(&mut p.tick, &msg)
+        let ticked = observe_world_time_for_tick(&mut p.tick, &msg);
+        script_state::snapshot_vars(&p.script, &p.vars);
+        let outcome = match p.script.dispatch_gmcp(&msg.package, &msg.data) {
+            Ok(o) => o,
+            Err(err) => {
+                warn!(error = %err, "lua dispatch_gmcp failed");
+                mudclient_script::ScriptOutcome::default()
+            }
+        };
+        let apply = script_state::apply_actions(&mut p, outcome);
+        (ticked, apply)
     };
     if tick_reset {
         let payload = {
@@ -354,6 +387,7 @@ async fn handle_gmcp(
             warn!(error = %e, "failed to emit tick payload after world hour change");
         }
     }
+    apply_script_result(app, stream, profile, timers, script_apply).await?;
     if let Err(e) = map_state::handle_room_info(app, map, &msg).await {
         warn!(error = %e, "failed to update map from Room.Info");
     }
@@ -366,6 +400,7 @@ async fn handle_gmcp(
     ) {
         warn!(error = %e, "failed to emit GMCP event");
     }
+    Ok(())
 }
 
 /// Detect a tick fire from a GMCP `World.Time` push. Aabahran (and most ROM
@@ -441,6 +476,98 @@ fn emit_line_result(app: &AppHandle, result: &LineResult, clear_first: bool) {
             }
         }
     }
+}
+
+/// Perform the IO and timer bookkeeping for the actions a Lua callback
+/// produced. Sends and echoes flow to the server and the terminal pane;
+/// timers register with the shared list; `mud.input` lines are run through
+/// the input pipeline so they pick up aliases and slash commands too.
+async fn apply_script_result(
+    app: &AppHandle,
+    stream: &mut Stream,
+    profile: &Arc<Mutex<Profile>>,
+    timers: &SharedTimers,
+    apply: ApplyResult,
+) -> std::io::Result<()> {
+    if !apply.send_bytes.is_empty() {
+        stream.write_all(&apply.send_bytes).await?;
+        stream.flush().await?;
+    }
+    if !apply.echoes.is_empty() {
+        let mut buf = Vec::new();
+        for line in &apply.echoes {
+            buf.extend_from_slice(b"\r\n");
+            buf.extend_from_slice(line.as_bytes());
+        }
+        buf.extend_from_slice(b"\r\n");
+        emit_output(app, buf);
+    }
+    if !apply.inputs.is_empty() {
+        let mut input_bytes = Vec::new();
+        let mut input_echoes: Vec<String> = Vec::new();
+        {
+            let mut p = profile.lock().await;
+            for line in apply.inputs {
+                let result = crate::input::process(&mut p, &line);
+                input_bytes.extend(result.bytes);
+                input_echoes.extend(result.echo);
+            }
+        }
+        if !input_bytes.is_empty() {
+            stream.write_all(&input_bytes).await?;
+            stream.flush().await?;
+        }
+        if !input_echoes.is_empty() {
+            let mut buf = Vec::new();
+            for line in &input_echoes {
+                buf.extend_from_slice(b"\r\n");
+                buf.extend_from_slice(line.as_bytes());
+            }
+            buf.extend_from_slice(b"\r\n");
+            emit_output(app, buf);
+        }
+    }
+    if !apply.new_timers.is_empty() || !apply.cancel_timers.is_empty() {
+        let mut guard = timers.lock().await;
+        for cancel in apply.cancel_timers {
+            guard.retain(|t| t.timer_id != cancel);
+        }
+        guard.extend(apply.new_timers);
+    }
+    Ok(())
+}
+
+async fn fire_due_script_timers(
+    app: &AppHandle,
+    stream: &mut Stream,
+    profile: &Arc<Mutex<Profile>>,
+    timers: &SharedTimers,
+) -> std::io::Result<()> {
+    let now = Instant::now();
+    let due: Vec<PendingTimer> = {
+        let mut guard = timers.lock().await;
+        let (ready, keep): (Vec<_>, Vec<_>) = std::mem::take(&mut *guard)
+            .into_iter()
+            .partition(|t| t.deadline <= now);
+        *guard = keep;
+        ready
+    };
+    if due.is_empty() {
+        return Ok(());
+    }
+    let apply = {
+        let mut p = profile.lock().await;
+        script_state::snapshot_vars(&p.script, &p.vars);
+        let mut outcome = mudclient_script::ScriptOutcome::default();
+        for t in due {
+            match p.script.fire_timer(t.callback_id) {
+                Ok(o) => outcome.actions.extend(o.actions),
+                Err(err) => warn!(error = %err, "lua timer fire failed"),
+            }
+        }
+        script_state::apply_actions(&mut p, outcome)
+    };
+    apply_script_result(app, stream, profile, timers, apply).await
 }
 
 async fn send_trigger_outputs(stream: &mut Stream, sends: &[String]) -> std::io::Result<()> {

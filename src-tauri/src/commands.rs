@@ -10,6 +10,7 @@ use tokio::sync::Mutex;
 use crate::input;
 use crate::map_state::SharedMap;
 use crate::profile::Profile;
+use crate::script_state::SharedTimers;
 use crate::session::{self, OutputPayload, SessionHandle};
 
 /// Application-wide state. Phase 1 carries a single optional session and one
@@ -20,6 +21,7 @@ pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
     pub(crate) profile: Arc<Mutex<Profile>>,
     pub(crate) map: SharedMap,
+    pub(crate) script_timers: SharedTimers,
 }
 
 pub(crate) type SharedState = Arc<AppState>;
@@ -53,6 +55,7 @@ pub(crate) async fn session_connect(
         tls,
         state.profile.clone(),
         state.map.clone(),
+        state.script_timers.clone(),
     )
     .await
     .map_err(|e| {

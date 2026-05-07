@@ -12,6 +12,7 @@ mod input;
 mod line_accumulator;
 mod map_state;
 mod profile;
+mod script_state;
 mod session;
 mod tick;
 
@@ -71,6 +72,10 @@ pub fn run() {
 fn open_map_store(app: &tauri::App) -> Result<MapStore, Box<dyn std::error::Error>> {
     let dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&dir)?;
+    let scripts_dir = dir.join("scripts");
+    if !scripts_dir.exists() {
+        std::fs::create_dir_all(&scripts_dir)?;
+    }
     let path = dir.join("maps.sqlite");
     info!(path = %path.display(), "opening map store");
     Ok(MapStore::open(&path)?)

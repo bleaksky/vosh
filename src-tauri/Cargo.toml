@@ -34,6 +34,7 @@ mudclient-trigger = { path = "../crates/trigger" }
 mudclient-gmcp = { path = "../crates/gmcp" }
 mudclient-ansi = { path = "../crates/ansi" }
 mudclient-map = { path = "../crates/map" }
+mudclient-script = { path = "../crates/script" }
 regex = "1"
 
 [features]

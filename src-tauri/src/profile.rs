@@ -3,6 +3,7 @@
 //! cycles.
 
 use mudclient_alias::AliasStore;
+use mudclient_script::ScriptEngine;
 use mudclient_trigger::TriggerStore;
 use mudclient_vars::VariableStore;
 
@@ -14,4 +15,5 @@ pub(crate) struct Profile {
     pub(crate) vars: VariableStore,
     pub(crate) triggers: TriggerStore,
     pub(crate) tick: TickRuntime,
+    pub(crate) script: ScriptEngine,
 }
