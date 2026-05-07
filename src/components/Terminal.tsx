@@ -21,6 +21,12 @@ interface Props {
 export function Terminal({ onReady }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
+  // Hold the latest onReady in a ref so the setup effect can call it without
+  // listing it as a dependency. Without this, every parent re-render passes
+  // a fresh arrow function, the effect re-runs, and the xterm instance is
+  // disposed and recreated, wiping all output.
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -74,7 +80,7 @@ export function Terminal({ onReady }: Props) {
       focus: () => term.focus(),
       clear: () => term.clear(),
     };
-    onReady?.(handle);
+    onReadyRef.current?.(handle);
 
     return () => {
       observer.disconnect();
@@ -83,7 +89,10 @@ export function Terminal({ onReady }: Props) {
       term.dispose();
       termRef.current = null;
     };
-  }, [onReady]);
+    // Setup runs exactly once for the lifetime of the component. The
+    // onReady callback is read through a ref so it can change between
+    // renders without re-mounting the xterm instance.
+  }, []);
 
   return <div ref={containerRef} className="terminal-host" />;
 }
