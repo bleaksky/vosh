@@ -4,6 +4,7 @@
 //! without caring whether the underlying transport is plain or TLS.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -12,10 +13,16 @@ use tokio_rustls::client::TlsStream;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
 
+/// Hard cap on a connect attempt. Bad hosts and silent firewalls otherwise
+/// hang the UI for the OS-level timeout (often minutes).
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
 #[derive(Debug, Error)]
 pub(crate) enum ConnectionError {
     #[error("invalid host name `{0}`")]
     InvalidHost(String),
+    #[error("connect timed out after {}s", CONNECT_TIMEOUT.as_secs())]
+    Timeout,
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("tls error: {0}")]
@@ -60,24 +67,32 @@ impl Stream {
 }
 
 /// Open a connection. Returns a [`Stream`] ready for the session loop.
+/// Bounded by `CONNECT_TIMEOUT` so the UI cannot hang forever on a bad host.
 pub(crate) async fn connect(host: &str, port: u16, tls: bool) -> Result<Stream, ConnectionError> {
-    let tcp = TcpStream::connect((host, port)).await?;
-    tcp.set_nodelay(true)?;
+    let attempt = async {
+        let tcp = TcpStream::connect((host, port)).await?;
+        tcp.set_nodelay(true)?;
 
-    if !tls {
-        return Ok(Stream::Tcp(tcp));
+        if !tls {
+            return Ok::<Stream, ConnectionError>(Stream::Tcp(tcp));
+        }
+
+        let server_name = rustls_pki_types::ServerName::try_from(host.to_string())
+            .map_err(|_| ConnectionError::InvalidHost(host.to_string()))?;
+
+        let config = build_tls_config();
+        let connector = TlsConnector::from(Arc::new(config));
+        let tls_stream = connector
+            .connect(server_name, tcp)
+            .await
+            .map_err(|e| ConnectionError::Tls(e.to_string()))?;
+        Ok(Stream::Tls(Box::new(tls_stream)))
+    };
+
+    match tokio::time::timeout(CONNECT_TIMEOUT, attempt).await {
+        Ok(result) => result,
+        Err(_) => Err(ConnectionError::Timeout),
     }
-
-    let server_name = rustls_pki_types::ServerName::try_from(host.to_string())
-        .map_err(|_| ConnectionError::InvalidHost(host.to_string()))?;
-
-    let config = build_tls_config();
-    let connector = TlsConnector::from(Arc::new(config));
-    let tls_stream = connector
-        .connect(server_name, tcp)
-        .await
-        .map_err(|e| ConnectionError::Tls(e.to_string()))?;
-    Ok(Stream::Tls(Box::new(tls_stream)))
 }
 
 fn build_tls_config() -> ClientConfig {

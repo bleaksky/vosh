@@ -29,17 +29,39 @@ pub(crate) async fn session_connect(
     port: u16,
     tls: bool,
 ) -> Result<(), String> {
-    let mut current = state.session.lock().await;
-    if let Some(handle) = current.take() {
+    // Take any existing handle out under a brief lock and drop the lock
+    // before doing the long-running connect. This lets `session_disconnect`
+    // run concurrently to cancel a hung connect attempt.
+    let old = {
+        let mut current = state.session.lock().await;
+        current.take()
+    };
+    if let Some(handle) = old {
         handle.shutdown().await;
     }
 
     // Clear session-scoped variables on reconnect; profile-scoped survive.
     state.profile.lock().await.vars.clear_session();
 
-    let handle = session::spawn(app, host, port, tls, state.profile.clone())
+    let handle = session::spawn(app.clone(), host, port, tls, state.profile.clone())
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            // Surface the disconnected state so the UI does not stay stuck on
+            // "connecting...". The frontend listens for session://state.
+            let _ = app.emit(
+                "session://state",
+                crate::session::StatePayload::Disconnected {
+                    reason: Some(e.to_string()),
+                },
+            );
+            e.to_string()
+        })?;
+
+    let mut current = state.session.lock().await;
+    if let Some(prev) = current.take() {
+        // A concurrent connect raced us. Shut down our old handle.
+        prev.shutdown().await;
+    }
     *current = Some(handle);
     Ok(())
 }
