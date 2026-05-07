@@ -22,6 +22,54 @@ const COLOR_ROOM_AVOID = '#572323';
 const COLOR_CURRENT = '#1f6feb';
 const COLOR_TEXT = '#c9d1d9';
 
+type Style = 'squares' | 'tileset';
+
+const STYLE_KEY = 'mudclient.layout.mappingMapStyle';
+// Same key as ServerMapView so loading a tileset in either mode makes it
+// available in both.
+const TILESET_KEY = 'mudclient.layout.serverMapTileset';
+
+const SECTOR_ORDER: string[] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c'];
+
+// Map a free-form terrain string from Room.Info onto the same sector code
+// table used by the server view. Lets a single tileset PNG drive both.
+function terrainToSectorIndex(terrain: string): number {
+  const t = terrain.toLowerCase();
+  if (!t) return 0;
+  if (t.includes('inside') || t.includes('road') || t.includes('indoor')) return 0;
+  if (t.includes('city') || t.includes('street')) return 1;
+  if (t.includes('pasture')) return SECTOR_ORDER.indexOf('a');
+  if (t.includes('field') || t.includes('grass')) return 2;
+  if (t.includes('forest') || t.includes('wood')) return 3;
+  if (t.includes('hill')) return 4;
+  if (t.includes('mountain')) return 5;
+  if (t.includes('underwater')) return SECTOR_ORDER.indexOf('c');
+  if (t.includes('water')) return t.includes('noswim') ? 7 : 6;
+  if (t.includes('air')) return 8;
+  if (t.includes('desert') || t.includes('sand')) return 9;
+  if (t.includes('ice') || t.includes('arctic') || t.includes('tundra')) {
+    return SECTOR_ORDER.indexOf('b');
+  }
+  return 0;
+}
+
+function loadStyle(): Style {
+  try {
+    const value = localStorage.getItem(STYLE_KEY);
+    return value === 'tileset' ? 'tileset' : 'squares';
+  } catch {
+    return 'squares';
+  }
+}
+
+function loadTileset(): string | null {
+  try {
+    return localStorage.getItem(TILESET_KEY);
+  } catch {
+    return null;
+  }
+}
+
 interface ContextMenu {
   x: number;
   y: number;
@@ -57,7 +105,42 @@ export function MappingMapView() {
   const [snapshot, setSnapshot] = useState<AreaSnapshot | null>(null);
   const [hoverInfo, setHoverInfo] = useState<string | null>(null);
   const [menu, setMenu] = useState<ContextMenu | null>(null);
+  const [style, setStyle] = useState<Style>(loadStyle);
+  const [tilesetUrl, setTilesetUrl] = useState<string | null>(loadTileset);
+  const [tilesetImage, setTilesetImage] = useState<HTMLImageElement | null>(null);
   const lastRefreshRef = useRef<number>(0);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STYLE_KEY, style);
+    } catch {
+      // ignore
+    }
+  }, [style]);
+
+  // Sync tileset URL with localStorage on focus so loading from the server
+  // view also lights up the mapping view next time it renders.
+  useEffect(() => {
+    const sync = () => setTilesetUrl(loadTileset());
+    sync();
+    window.addEventListener('storage', sync);
+    window.addEventListener('focus', sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('focus', sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!tilesetUrl) {
+      setTilesetImage(null);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => setTilesetImage(img);
+    img.onerror = () => setTilesetImage(null);
+    img.src = tilesetUrl;
+  }, [tilesetUrl]);
 
   const refresh = useCallback(async () => {
     try {
@@ -172,17 +255,53 @@ export function MappingMapView() {
     }
 
     // Rooms.
+    const useTiles = style === 'tileset' && tilesetImage !== null;
     for (const room of visible) {
       const cx = ox + room.x * ROOM_SPACING;
       const cy = oy + room.y * ROOM_SPACING;
       const isCurrent = room.id === snapshot.current_room_id;
-      ctx.fillStyle = isCurrent ? COLOR_CURRENT : room.avoid ? COLOR_ROOM_AVOID : COLOR_ROOM;
-      ctx.strokeStyle = isCurrent ? COLOR_TEXT : COLOR_ROOM_BORDER;
-      ctx.lineWidth = isCurrent ? 2 : 1;
-      ctx.beginPath();
-      ctx.rect(cx - ROOM_SIZE / 2, cy - ROOM_SIZE / 2, ROOM_SIZE, ROOM_SIZE);
-      ctx.fill();
-      ctx.stroke();
+
+      if (useTiles && tilesetImage) {
+        const tileSize = tilesetImage.naturalHeight;
+        const tilesInImage = Math.max(1, Math.floor(tilesetImage.naturalWidth / tileSize));
+        const idx = Math.min(terrainToSectorIndex(room.terrain), tilesInImage - 1);
+        ctx.drawImage(
+          tilesetImage,
+          idx * tileSize,
+          0,
+          tileSize,
+          tileSize,
+          cx - ROOM_SPACING / 2,
+          cy - ROOM_SPACING / 2,
+          ROOM_SPACING,
+          ROOM_SPACING,
+        );
+        if (isCurrent) {
+          ctx.strokeStyle = COLOR_TEXT;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.rect(cx - ROOM_SPACING / 2, cy - ROOM_SPACING / 2, ROOM_SPACING, ROOM_SPACING);
+          ctx.stroke();
+        }
+        if (room.avoid) {
+          ctx.strokeStyle = '#f85149';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(cx - ROOM_SPACING / 2, cy - ROOM_SPACING / 2);
+          ctx.lineTo(cx + ROOM_SPACING / 2, cy + ROOM_SPACING / 2);
+          ctx.moveTo(cx + ROOM_SPACING / 2, cy - ROOM_SPACING / 2);
+          ctx.lineTo(cx - ROOM_SPACING / 2, cy + ROOM_SPACING / 2);
+          ctx.stroke();
+        }
+      } else {
+        ctx.fillStyle = isCurrent ? COLOR_CURRENT : room.avoid ? COLOR_ROOM_AVOID : COLOR_ROOM;
+        ctx.strokeStyle = isCurrent ? COLOR_TEXT : COLOR_ROOM_BORDER;
+        ctx.lineWidth = isCurrent ? 2 : 1;
+        ctx.beginPath();
+        ctx.rect(cx - ROOM_SIZE / 2, cy - ROOM_SIZE / 2, ROOM_SIZE, ROOM_SIZE);
+        ctx.fill();
+        ctx.stroke();
+      }
 
       if (room.notes) {
         ctx.fillStyle = '#f1c232';
@@ -191,7 +310,7 @@ export function MappingMapView() {
         ctx.fill();
       }
     }
-  }, [snapshot]);
+  }, [snapshot, style, tilesetImage]);
 
   useEffect(() => {
     draw();
@@ -290,8 +409,26 @@ export function MappingMapView() {
   return (
     <div className="mapping-view">
       <div className="map-subhead">
-        {snapshot?.area ? `${snapshot.area}` : 'unknown area'}
-        {snapshot ? ` · ${snapshot.rooms.length} room(s)` : ''}
+        <span>
+          {snapshot?.area ? `${snapshot.area}` : 'unknown area'}
+          {snapshot ? ` · ${snapshot.rooms.length} room(s)` : ''}
+        </span>
+        <div className="map-mode-toggle">
+          <button
+            type="button"
+            aria-pressed={style === 'squares'}
+            onClick={() => setStyle('squares')}
+          >
+            squares
+          </button>
+          <button
+            type="button"
+            aria-pressed={style === 'tileset'}
+            onClick={() => setStyle('tileset')}
+          >
+            tileset
+          </button>
+        </div>
       </div>
       <div ref={containerRef} className="map-canvas-host" onMouseLeave={() => setHoverInfo(null)}>
         <canvas
