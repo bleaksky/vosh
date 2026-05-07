@@ -6,7 +6,7 @@ The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, but 
 
 ## Status
 
-Phase 3 complete. On top of the Phase 2 alias and variable engine, the client now ships a regex trigger system with five actions: highlight, gag, replace, send, and route. Triggers compose by priority and edit live via slash commands or the Triggers drawer (which loads, saves, copies, downloads, and uploads the JSON). Type `#help` in the input box for the full slash command list. Phase 4 lands GMCP plus the event bus.
+Phase 4 complete. The client now negotiates GMCP, identifies itself with Core.Hello, subscribes to the Char, Room, and Comm packages, and parses incoming messages into typed events. Common packages auto-bind onto session variables: Char.Vitals updates `hp`, `mp`, `sp`, `maxhp`, `maxmp`, `maxsp` and Room.Info updates `room_name`, `room_area`, `room_id`. Type `#vars` after a few moves to see the live values. Phase 5 lands split panes plus chat capture.
 
 See `prompt.md` for the full phase plan and `CLAUDE.md` for stack and workflow rules.
 
