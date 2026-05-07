@@ -32,8 +32,6 @@ function App() {
     termRef.current?.write(`\r\n\x1b[31m[${message}]\x1b[0m\r\n`);
   };
 
-  const inputEnabled = status.kind === 'connected';
-
   return (
     <main className="app">
       <Connect status={status} onError={handleError} />
@@ -42,7 +40,7 @@ function App() {
           termRef.current = handle;
         }}
       />
-      <Input enabled={inputEnabled} onError={handleError} />
+      <Input enabled onError={handleError} />
     </main>
   );
 }

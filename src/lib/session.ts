@@ -28,6 +28,13 @@ export async function sendLine(line: string): Promise<void> {
   await sendBytes(payload);
 }
 
+/// Run a typed input line through the backend pipeline. Variables, aliases,
+/// and slash commands are handled there; the result either goes to the
+/// connection or echoes back as a session://output event.
+export async function sendInput(line: string): Promise<void> {
+  await invoke('session_send_input', { line });
+}
+
 export async function onOutput(cb: (bytes: Uint8Array) => void): Promise<UnlistenFn> {
   return listen<OutputPayload>('session://output', (event) => {
     cb(new Uint8Array(event.payload.bytes));
