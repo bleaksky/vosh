@@ -89,4 +89,9 @@ Applies to README, CONTRIBUTING, settings labels, error messages, commit message
 
 ## Phase Status
 
-Phase 7 complete. The `mudclient-map` crate stores rooms and exits in a SQLite file at the OS app data dir (`~/Library/Application Support/com.aabahran.mudclient/maps.sqlite` on macOS). On every GMCP `Room.Info` push the session upserts the room, replaces its exit list, and positions newly-seen rooms relative to the previous room using the direction that connects them. The Map pane in the side panel renders the current area as a node-and-edge canvas; click a known room to walk there (BFS over the exit graph, avoid-flagged rooms skipped unless target). Right-click opens a context menu with edit note, mark/unmark avoid, and walk here. Yellow dots mark rooms that have notes. The map persists across reconnects and app restarts. Phase 8 (scripting via mlua) starts only after explicit approval in chat.
+Phase 7 complete. The `mudclient-map` crate stores rooms and exits in a SQLite file at the OS app data dir (`~/Library/Application Support/com.aabahran.mudclient/maps.sqlite` on macOS). The Map pane offers two modes (toggle persists in `localStorage`):
+
+- **mapping** — the disk-backed map. On every GMCP `Room.Info` push the session upserts the room, replaces its exit list, and positions newly-seen rooms relative to the previous room using the direction that connects them. Click a known room to walk there (BFS over the exit graph, avoid-flagged rooms skipped unless target). Right-click opens edit note, mark/unmark avoid, and walk here. Yellow dots flag rooms with notes. Persists across reconnects and app restarts.
+- **server** — renders the live `Map.Tiles` GMCP grid the server pushes. Sector glyphs paint with a 13-color palette; the player marker `@` highlights the center cell. No persistence; updates with each push.
+
+Map joins Char/Room/Comm/World in the Core.Supports.Set request. Phase 8 (scripting via mlua) starts only after explicit approval in chat.

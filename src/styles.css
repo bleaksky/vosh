@@ -343,6 +343,56 @@ body,
   border-bottom: 1px solid #30363d;
 }
 
+.map-pane > .pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.map-mode-toggle {
+  display: inline-flex;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.map-mode-toggle button {
+  background: transparent;
+  border: 0;
+  color: #8b949e;
+  font: inherit;
+  font-size: 11px;
+  text-transform: lowercase;
+  padding: 1px 8px;
+  cursor: pointer;
+}
+
+.map-mode-toggle button[aria-pressed='true'] {
+  background: #1f6feb;
+  color: #ffffff;
+}
+
+.map-mode-toggle button + button {
+  border-left: 1px solid #30363d;
+}
+
+.mapping-view,
+.server-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-subhead {
+  padding: 0.2rem 0.75rem;
+  font-size: 11px;
+  color: #6e7681;
+  background: #0d1117;
+  border-bottom: 1px solid #1c2229;
+}
+
 .map-canvas-host {
   flex: 1 1 auto;
   position: relative;

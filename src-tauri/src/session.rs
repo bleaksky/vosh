@@ -53,9 +53,10 @@ pub(crate) struct RoutedPayload {
 
 /// GMCP packages we ask the server to enable in Core.Supports.Set. Char,
 /// Room, and Comm cover the player view; World powers the tick timer reset
-/// (Aabahran ticks fire the moment its `World.Time.hour` field advances).
-/// More packages land alongside the script engine in Phase 8.
-const REQUESTED_GMCP_PACKAGES: &[&str] = &["Char 1", "Room 1", "Comm 1", "World 1"];
+/// (Aabahran ticks fire the moment its `World.Time.hour` field advances);
+/// Map carries the server-rendered tile grid for the map pane's server
+/// mode. More packages land alongside the script engine in Phase 8.
+const REQUESTED_GMCP_PACKAGES: &[&str] = &["Char 1", "Room 1", "Comm 1", "World 1", "Map 1"];
 
 pub(crate) struct SessionHandle {
     tx_outgoing: mpsc::UnboundedSender<Vec<u8>>,

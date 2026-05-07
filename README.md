@@ -6,7 +6,7 @@ The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, but 
 
 ## Status
 
-Phase 7 complete. The side panel now shows a map of your current area, populated automatically from GMCP `Room.Info`. Rooms position themselves relative to where you walked from. Click a known room to walk there (the client computes the path and queues the directions). Right-click for a small menu with edit note, mark or unmark avoid, and walk here. Maps persist in a SQLite file under your OS app data directory and survive restarts. Phase 8 lands embedded Lua scripting.
+Phase 7 complete. The side panel shows a map of your current area in one of two modes. **Mapping** mode auto-builds a persistent map from GMCP `Room.Info` as you walk, supports click-to-walk over the discovered graph, and lets you mark notes or avoid flags by right-clicking. **Server** mode renders the live `Map.Tiles` grid the server pushes (no persistence, updates with each tile push). Toggle modes from the pane header. Maps persist in a SQLite file under your OS app data directory. Phase 8 lands embedded Lua scripting.
 
 See `prompt.md` for the full phase plan and `CLAUDE.md` for stack and workflow rules.
 
