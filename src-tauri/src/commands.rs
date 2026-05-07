@@ -109,10 +109,9 @@ pub(crate) async fn session_send_input(
     if !result.echo.is_empty() {
         let mut buf = Vec::new();
         for line in &result.echo {
-            buf.extend_from_slice(b"\r\n");
             buf.extend_from_slice(line.as_bytes());
+            buf.extend_from_slice(b"\r\n");
         }
-        buf.extend_from_slice(b"\r\n");
         let _ = app.emit("session://output", OutputPayload { bytes: buf });
     }
 
@@ -130,7 +129,7 @@ pub(crate) async fn session_send_input(
         );
         return Ok(());
     };
-    if !handle.send_input(result.bytes) {
+    if !handle.send(result.bytes) {
         return Err("session task gone".to_string());
     }
     Ok(())

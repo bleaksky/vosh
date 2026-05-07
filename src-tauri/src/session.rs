@@ -26,11 +26,6 @@ use crate::script_state::{self, ApplyResult, PendingTimer, SharedTimers};
 use crate::tick::{TickPayload, TickRuntime};
 
 const TICK_EMIT_INTERVAL: Duration = Duration::from_millis(250);
-/// How long a buffered partial may sit without new bytes before we treat
-/// it as a complete prompt and flush it. Acts as a fallback for MUDs that
-/// do not honor EOR or GA negotiation. Set short enough that the prompt
-/// appears on its own row as soon as the eye registers it.
-const PARTIAL_FLUSH_IDLE: Duration = Duration::from_millis(40);
 
 const READ_BUFFER_BYTES: usize = 8 * 1024;
 
@@ -66,12 +61,10 @@ pub(crate) struct RoutedPayload {
 /// mode. More packages land alongside the script engine in Phase 8.
 const REQUESTED_GMCP_PACKAGES: &[&str] = &["Char 1", "Room 1", "Comm 1", "World 1", "Map 1"];
 
-/// Bytes flowing to the server, optionally with a local-echo signal. Typed
-/// input asks the `io_loop` to echo the command into the terminal pane
-/// and forget any displayed prompt before writing to the wire.
+/// Bytes flowing to the server. The frontend echoes typed commands into the
+/// terminal pane synchronously, so the `io_loop` only writes to the wire.
 pub(crate) enum OutgoingMsg {
     Send(Vec<u8>),
-    SendWithEcho(Vec<u8>),
 }
 
 pub(crate) struct SessionHandle {
@@ -84,15 +77,6 @@ impl SessionHandle {
     /// already been torn down.
     pub(crate) fn send(&self, bytes: Vec<u8>) -> bool {
         self.tx_outgoing.send(OutgoingMsg::Send(bytes)).is_ok()
-    }
-
-    /// Send typed user input. The bytes are also echoed to the terminal so
-    /// the user sees what they typed, and the partial-prompt buffer drops
-    /// without redrawing so the MUD response does not merge with it.
-    pub(crate) fn send_input(&self, bytes: Vec<u8>) -> bool {
-        self.tx_outgoing
-            .send(OutgoingMsg::SendWithEcho(bytes))
-            .is_ok()
     }
 
     pub(crate) async fn shutdown(self) {
@@ -171,30 +155,18 @@ async fn io_loop(
 
     let mut tick_interval = tokio::time::interval(TICK_EMIT_INTERVAL);
     tick_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    // A faster timer just for the partial-prompt idle check. Polling at
-    // ~30 ms keeps the worst-case visible lag below human reaction time
-    // while costing essentially nothing.
-    let mut partial_check = tokio::time::interval(Duration::from_millis(30));
-    partial_check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     let disconnect_reason = loop {
         tokio::select! {
             biased;
             outgoing = rx_outgoing.recv() => match outgoing {
                 Some(msg) => {
-                    let (bytes, echo) = match msg {
-                        OutgoingMsg::Send(b) => (b, false),
-                        OutgoingMsg::SendWithEcho(b) => (b, true),
-                    };
-                    if echo {
-                        // Echo the typed command into the terminal pane so
-                        // the user sees what they typed (TinTin++ style)
-                        // and the cursor moves past the on-screen prompt.
-                        // Forget the buffered prompt so the MUD response
-                        // does not merge with it on the next chunk.
-                        emit_output(&app, bytes.clone());
-                        accumulator.forget_partial();
-                    }
+                    let OutgoingMsg::Send(bytes) = msg;
+                    // The frontend already echoed the typed line inline
+                    // with the on-screen prompt. Drop the buffered partial
+                    // so the next chunk from the server starts fresh on a
+                    // new row instead of merging with the displayed prompt.
+                    accumulator.forget_partial();
                     if let Err(e) = stream.write_all(&bytes).await {
                         error!(error = %e, "write failed");
                         break Some(format!("write failed: {e}"));
@@ -244,16 +216,6 @@ async fn io_loop(
                 }
                 if let Err(e) = fire_due_script_timers(&app, &mut stream, &profile, &timers).await {
                     error!(error = %e, "script timer firing failed");
-                }
-            }
-            _ = partial_check.tick() => {
-                // Fallback for MUDs that do not send EOR or GA: a partial
-                // that has been idle for more than the threshold below is
-                // almost certainly a complete prompt waiting for input.
-                if let Some(age) = accumulator.idle_since(Instant::now()) {
-                    if age >= PARTIAL_FLUSH_IDLE {
-                        flush_partial_prompt(&app, &mut accumulator);
-                    }
                 }
             }
         }

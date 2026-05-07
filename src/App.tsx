@@ -101,7 +101,12 @@ function App() {
           onError={handleError}
         />
       </div>
-      <Input ref={inputRef} enabled onError={handleError} />
+      <Input
+        ref={inputRef}
+        enabled
+        onError={handleError}
+        onLocalEcho={(text) => termRef.current?.write(text)}
+      />
     </main>
   );
 }

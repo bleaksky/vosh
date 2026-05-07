@@ -15,10 +15,11 @@ export interface InputHandle {
 interface Props {
   enabled: boolean;
   onError?: (message: string) => void;
+  onLocalEcho?: (text: string) => void;
 }
 
 export const Input = forwardRef<InputHandle, Props>(function Input(
-  { enabled, onError }: Props,
+  { enabled, onError, onLocalEcho }: Props,
   ref,
 ) {
   const [value, setValue] = useState('');
@@ -81,6 +82,12 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           return [...prev, line];
         });
       }
+      // Echo synchronously so the typed line appears the same frame the
+      // user pressed Enter. The cursor sits at the end of the partial
+      // prompt, so the line lands inline (TinTin++ style) and the
+      // trailing \r\n moves the cursor to the row where the server
+      // response will print.
+      onLocalEcho?.(`${line}\r\n`);
       try {
         await sendInput(line);
       } catch (e) {

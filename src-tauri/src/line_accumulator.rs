@@ -98,15 +98,6 @@ impl LineAccumulator {
         self.last_byte_at = None;
     }
 
-    /// Time since the last byte was appended, if a partial is still buffered.
-    pub(crate) fn idle_since(&self, now: tokio::time::Instant) -> Option<std::time::Duration> {
-        if self.buffer.is_empty() {
-            return None;
-        }
-        self.last_byte_at
-            .map(|at| now.saturating_duration_since(at))
-    }
-
     /// Take the current partial out of the buffer and return it as bytes.
     /// Used when the telnet GA or EOR command arrives, telling us the
     /// partial is in fact a complete prompt that should sit on its own
@@ -126,10 +117,10 @@ impl LineAccumulator {
         Some((bytes, already_shown))
     }
 
-    /// Drop the buffered partial without redrawing. Use when the caller has
-    /// already advanced the on-screen cursor past it (for example, by
-    /// echoing typed input locally) and the next chunk should not try to
-    /// merge with it.
+    /// Drop the buffered partial without redrawing. Use when the caller
+    /// has already advanced the on-screen cursor past it (for example, by
+    /// echoing typed input locally inline with the prompt) so the next
+    /// chunk from the server does not merge with the displayed prompt.
     pub(crate) fn forget_partial(&mut self) {
         self.buffer.clear();
         self.displayed_len = 0;
