@@ -6,7 +6,7 @@ The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, but 
 
 ## Status
 
-Phase 8 complete. Embedded Lua scripting via `mlua` (Lua 5.4). Scripts get a sandboxed `mud.*` API for `send`, `input`, `echo`, aliases, variables (with per-call snapshot so reads are fresh), regex triggers with Lua callbacks, GMCP subscribers per package, and one-shot timers. Lua callbacks queue side effects that the session applies under the profile lock. Slash commands: `#script load <name>` (reads `<app_data_dir>/scripts/<name>.lua`), `#script reload`, `#scripts` (list loaded scripts and Lua triggers), `#lua <code>` for one-shot evaluation. The Phase 8 demo script in `scripts/combat.lua` covers auto-loot, low-HP flee, a combat alias, and a tell reminder timer. Phase 9 lands per-profile config persistence.
+Phase 9 complete. The active profile (aliases, profile-scoped variables, triggers, tick config) saves to `<app_data_dir>/profile.toml` and auto-loads on startup. Use `#profile save`, `#profile load`, `#profile reset` to manage it from the input box. The new **profile** button in the header opens a settings drawer that edits the TOML directly with apply/copy/paste/download/upload. `#import-tintin <path>` reads a TinTin++ `.tin` file, imports its `#alias` and `#variable` lines, and reports any directives it skipped. Phase 10 lands logging, scrollback, and search.
 
 See `prompt.md` for the full phase plan and `CLAUDE.md` for stack and workflow rules.
 
