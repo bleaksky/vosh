@@ -2,11 +2,13 @@
 
 use std::sync::Arc;
 
+use mudclient_map::Room;
 use mudclient_trigger::Trigger;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 use crate::input;
+use crate::map_state::SharedMap;
 use crate::profile::Profile;
 use crate::session::{self, OutputPayload, SessionHandle};
 
@@ -17,6 +19,7 @@ use crate::session::{self, OutputPayload, SessionHandle};
 pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
     pub(crate) profile: Arc<Mutex<Profile>>,
+    pub(crate) map: SharedMap,
 }
 
 pub(crate) type SharedState = Arc<AppState>;
@@ -43,19 +46,26 @@ pub(crate) async fn session_connect(
     // Clear session-scoped variables on reconnect; profile-scoped survive.
     state.profile.lock().await.vars.clear_session();
 
-    let handle = session::spawn(app.clone(), host, port, tls, state.profile.clone())
-        .await
-        .map_err(|e| {
-            // Surface the disconnected state so the UI does not stay stuck on
-            // "connecting...". The frontend listens for session://state.
-            let _ = app.emit(
-                "session://state",
-                crate::session::StatePayload::Disconnected {
-                    reason: Some(e.to_string()),
-                },
-            );
-            e.to_string()
-        })?;
+    let handle = session::spawn(
+        app.clone(),
+        host,
+        port,
+        tls,
+        state.profile.clone(),
+        state.map.clone(),
+    )
+    .await
+    .map_err(|e| {
+        // Surface the disconnected state so the UI does not stay stuck on
+        // "connecting...". The frontend listens for session://state.
+        let _ = app.emit(
+            "session://state",
+            crate::session::StatePayload::Disconnected {
+                reason: Some(e.to_string()),
+            },
+        );
+        e.to_string()
+    })?;
 
     let mut current = state.session.lock().await;
     if let Some(prev) = current.take() {
@@ -155,4 +165,103 @@ pub(crate) async fn triggers_import(
 #[tauri::command]
 pub(crate) fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct AreaSnapshot {
+    pub current_room_id: Option<i64>,
+    pub area: String,
+    pub rooms: Vec<Room>,
+    pub exits: Vec<mudclient_map::Exit>,
+}
+
+#[tauri::command]
+pub(crate) async fn map_area_snapshot(
+    state: State<'_, SharedState>,
+) -> Result<Option<AreaSnapshot>, String> {
+    let guard = state.map.lock().await;
+    let Some(map) = guard.as_ref() else {
+        return Ok(None);
+    };
+    let Some(current_id) = map.current_room_id else {
+        return Ok(None);
+    };
+    let Some(current) = map.store.get_room(current_id).map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+    let area = current.area.clone();
+    let rooms = map.store.list_area(&area).map_err(|e| e.to_string())?;
+    let exits = map.store.exits_in_area(&area).map_err(|e| e.to_string())?;
+    Ok(Some(AreaSnapshot {
+        current_room_id: Some(current_id),
+        area,
+        rooms,
+        exits,
+    }))
+}
+
+#[tauri::command]
+pub(crate) async fn map_walk_to(
+    state: State<'_, SharedState>,
+    target_id: i64,
+) -> Result<(), String> {
+    let path = {
+        let guard = state.map.lock().await;
+        let Some(map) = guard.as_ref() else {
+            return Err("map not ready".to_string());
+        };
+        let Some(current) = map.current_room_id else {
+            return Err("not in a known room".to_string());
+        };
+        map.store
+            .find_path(current, target_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "no known path".to_string())?
+    };
+    if path.is_empty() {
+        return Ok(());
+    }
+    let mut bytes = Vec::with_capacity(path.iter().map(|s| s.len() + 2).sum());
+    for dir in path {
+        bytes.extend_from_slice(dir.as_bytes());
+        bytes.extend_from_slice(b"\r\n");
+    }
+    let session = state.session.lock().await;
+    let Some(handle) = session.as_ref() else {
+        return Err("not connected".to_string());
+    };
+    if !handle.send(bytes) {
+        return Err("session task gone".to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn map_set_note(
+    state: State<'_, SharedState>,
+    room_id: i64,
+    notes: String,
+) -> Result<(), String> {
+    let mut guard = state.map.lock().await;
+    let Some(map) = guard.as_mut() else {
+        return Err("map not ready".to_string());
+    };
+    map.store
+        .set_note(room_id, &notes)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn map_set_avoid(
+    state: State<'_, SharedState>,
+    room_id: i64,
+    avoid: bool,
+) -> Result<(), String> {
+    let mut guard = state.map.lock().await;
+    let Some(map) = guard.as_mut() else {
+        return Err("map not ready".to_string());
+    };
+    map.store
+        .set_avoid(room_id, avoid)
+        .map_err(|e| e.to_string())
 }

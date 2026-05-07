@@ -33,6 +33,7 @@ mudclient-vars = { path = "../crates/vars" }
 mudclient-trigger = { path = "../crates/trigger" }
 mudclient-gmcp = { path = "../crates/gmcp" }
 mudclient-ansi = { path = "../crates/ansi" }
+mudclient-map = { path = "../crates/map" }
 regex = "1"
 
 [features]

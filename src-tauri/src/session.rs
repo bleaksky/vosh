@@ -18,6 +18,7 @@ use crate::connection::{self, ConnectionError, Stream};
 use crate::gmcp_bind;
 use crate::input;
 use crate::line_accumulator::{ChunkOp, LineAccumulator};
+use crate::map_state::{self, SharedMap};
 use crate::profile::Profile;
 use crate::tick::{TickPayload, TickRuntime};
 
@@ -82,6 +83,7 @@ pub(crate) async fn spawn(
     port: u16,
     tls: bool,
     profile: Arc<Mutex<Profile>>,
+    map: SharedMap,
 ) -> Result<SessionHandle, ConnectionError> {
     emit_state(
         &app,
@@ -105,7 +107,7 @@ pub(crate) async fn spawn(
     );
 
     let (tx_outgoing, rx_outgoing) = mpsc::unbounded_channel::<Vec<u8>>();
-    let task = tokio::spawn(io_loop(app, stream, rx_outgoing, profile));
+    let task = tokio::spawn(io_loop(app, stream, rx_outgoing, profile, map));
 
     Ok(SessionHandle { tx_outgoing, task })
 }
@@ -115,6 +117,7 @@ async fn io_loop(
     mut stream: Stream,
     mut rx_outgoing: mpsc::UnboundedReceiver<Vec<u8>>,
     profile: Arc<Mutex<Profile>>,
+    map: SharedMap,
 ) {
     let mut parser = Parser::new();
     let negotiator = Negotiator::new();
@@ -164,6 +167,7 @@ async fn io_loop(
                             &negotiator,
                             &mut accumulator,
                             &profile,
+                            &map,
                             event,
                         ).await {
                             warn!(error = %e, "event handling failed");
@@ -258,6 +262,7 @@ async fn handle_event(
     negotiator: &Negotiator,
     accumulator: &mut LineAccumulator,
     profile: &Arc<Mutex<Profile>>,
+    map: &SharedMap,
     event: TelnetEvent,
 ) -> std::io::Result<()> {
     match event {
@@ -297,7 +302,7 @@ async fn handle_event(
             Ok(())
         }
         TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
-            handle_gmcp(app, profile, &payload).await;
+            handle_gmcp(app, profile, map, &payload).await;
             Ok(())
         }
         TelnetEvent::Will(opt) if opt == telnet_option::GMCP => {
@@ -321,7 +326,12 @@ async fn handle_event(
     }
 }
 
-async fn handle_gmcp(app: &AppHandle, profile: &Arc<Mutex<Profile>>, payload: &[u8]) {
+async fn handle_gmcp(
+    app: &AppHandle,
+    profile: &Arc<Mutex<Profile>>,
+    map: &SharedMap,
+    payload: &[u8],
+) {
     let msg = match mudclient_gmcp::parse(payload) {
         Ok(m) => m,
         Err(e) => {
@@ -342,6 +352,9 @@ async fn handle_gmcp(app: &AppHandle, profile: &Arc<Mutex<Profile>>, payload: &[
         if let Err(e) = app.emit("session://tick", &payload) {
             warn!(error = %e, "failed to emit tick payload after world hour change");
         }
+    }
+    if let Err(e) = map_state::handle_room_info(app, map, &msg).await {
+        warn!(error = %e, "failed to update map from Room.Info");
     }
     if let Err(e) = app.emit(
         "session://gmcp",

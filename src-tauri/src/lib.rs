@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use mudclient_map::MapStore;
+use tauri::Manager;
+use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
 mod commands;
@@ -7,14 +10,17 @@ mod connection;
 mod gmcp_bind;
 mod input;
 mod line_accumulator;
+mod map_state;
 mod profile;
 mod session;
 mod tick;
 
 use commands::{
-    app_version, session_connect, session_disconnect, session_send, session_send_input,
-    triggers_export, triggers_import, triggers_list, AppState, SharedState,
+    app_version, map_area_snapshot, map_set_avoid, map_set_note, map_walk_to, session_connect,
+    session_disconnect, session_send, session_send_input, triggers_export, triggers_import,
+    triggers_list, AppState, SharedState,
 };
+use map_state::MapState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -28,7 +34,22 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(state)
+        .manage(state.clone())
+        .setup(move |app| {
+            match open_map_store(app) {
+                Ok(store) => {
+                    let map = state.map.clone();
+                    tauri::async_runtime::block_on(async move {
+                        let mut guard = map.lock().await;
+                        *guard = Some(MapState::new(store));
+                    });
+                }
+                Err(e) => {
+                    error!(error = %e, "map store failed to open; map features disabled");
+                }
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             app_version,
             session_connect,
@@ -38,9 +59,21 @@ pub fn run() {
             triggers_list,
             triggers_export,
             triggers_import,
+            map_area_snapshot,
+            map_walk_to,
+            map_set_note,
+            map_set_avoid,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn open_map_store(app: &tauri::App) -> Result<MapStore, Box<dyn std::error::Error>> {
+    let dir = app.path().app_data_dir()?;
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join("maps.sqlite");
+    info!(path = %path.display(), "opening map store");
+    Ok(MapStore::open(&path)?)
 }
 
 #[cfg(test)]
