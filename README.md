@@ -6,7 +6,7 @@ The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, but 
 
 ## Status
 
-Phase 2 complete. On top of the Phase 1 telnet plus ANSI display, the client now ships an alias engine with positional substitution and recursion guards, a two-scope variable store (profile and session), prefix history search, and a small set of slash commands for live editing. Type `#help` in the input box to see them. Phase 3 lands regex triggers, highlights, and gags.
+Phase 3 complete. On top of the Phase 2 alias and variable engine, the client now ships a regex trigger system with five actions: highlight, gag, replace, send, and route. Triggers compose by priority and edit live via slash commands or the Triggers drawer (which loads, saves, copies, downloads, and uploads the JSON). Type `#help` in the input box for the full slash command list. Phase 4 lands GMCP plus the event bus.
 
 See `prompt.md` for the full phase plan and `CLAUDE.md` for stack and workflow rules.
 
