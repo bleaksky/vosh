@@ -402,6 +402,38 @@ body,
   font-size: 10px;
 }
 
+.tileset-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.75rem;
+  background: #11161d;
+  border-bottom: 1px solid #1c2229;
+  font-size: 11px;
+}
+
+.tileset-bar button {
+  background: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  padding: 1px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tileset-bar button:hover {
+  background: #30363d;
+}
+
+.tileset-status {
+  color: #8b949e;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .map-canvas-host {
   flex: 1 1 auto;
   position: relative;

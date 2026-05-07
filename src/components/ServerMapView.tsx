@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { onGmcp, onState } from '../lib/session';
 
 /// One cell of the server-side map grid.
 interface ServerCell {
-  /// Exit string like `"nesw"`. Each character is a direction the cell
-  /// has an exit in.
+  /// Exit string like `"nesw"`.
   e?: string;
   /// Area id this cell belongs to.
   ar?: number | string;
@@ -30,21 +29,31 @@ interface MapTilesPayload {
   areas?: Record<string, AreaInfo>;
 }
 
-type Style = 'squares' | 'glyphs';
+type Style = 'squares' | 'glyphs' | 'tileset';
 
 const STYLE_KEY = 'mudclient.layout.serverMapStyle';
+const TILESET_KEY = 'mudclient.layout.serverMapTileset';
 
 function loadStyle(): Style {
   try {
     const value = localStorage.getItem(STYLE_KEY);
-    return value === 'glyphs' ? 'glyphs' : 'squares';
+    if (value === 'glyphs' || value === 'tileset') return value;
+    return 'squares';
   } catch {
     return 'squares';
   }
 }
 
-// Sector code → label and a base color drawn in glyph mode and as a fill
-// fallback when no per-area color is present.
+function loadTileset(): string | null {
+  try {
+    return localStorage.getItem(TILESET_KEY);
+  } catch {
+    return null;
+  }
+}
+
+// Sector code → color, used by both glyphs and squares so the two views
+// read consistently. Same palette serves as a fallback in tileset mode.
 const SECTOR_COLORS: Record<string, string> = {
   '0': '#c9d1d9', // inside / road
   '1': '#f0c674', // city
@@ -60,6 +69,13 @@ const SECTOR_COLORS: Record<string, string> = {
   b: '#d2a8ff', // ice
   c: '#a371f7', // underwater
 };
+
+// Default sector code order in a horizontal sprite strip. A tileset PNG
+// supplied by the user is assumed to lay tiles out left-to-right in this
+// order until a manifest format lands.
+const SECTOR_ORDER: string[] = [
+  '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c',
+];
 
 const PLAYER_COLOR = '#1f6feb';
 const PLAYER_BORDER = '#c9d1d9';
@@ -96,7 +112,6 @@ function gridDims(payload: MapTilesPayload): { rows: number; cols: number } {
     }
     if (maxRow > 0 && maxCol > 0) return { rows: maxRow, cols: maxCol };
   }
-  // Fall back to the t field.
   const text = parseTextGrid(payload.t);
   if (text.length > 0) {
     return { rows: text.length, cols: Math.max(...text.map((r) => r.length)) };
@@ -104,15 +119,7 @@ function gridDims(payload: MapTilesPayload): { rows: number; cols: number } {
   return { rows: 0, cols: 0 };
 }
 
-function fillFor(payload: MapTilesPayload, cell: ServerCell): string {
-  const aid = cell.ar !== undefined ? String(cell.ar) : null;
-  if (aid && payload.areas) {
-    const area = payload.areas[aid];
-    if (area?.color) {
-      const color = area.color.startsWith('#') ? area.color : `#${area.color}`;
-      return color;
-    }
-  }
+function colorForCell(cell: ServerCell): string {
   if (cell.s && SECTOR_COLORS[cell.s]) return SECTOR_COLORS[cell.s];
   return '#21262d';
 }
@@ -124,8 +131,12 @@ function hasExit(cell: ServerCell, dir: 'n' | 's' | 'e' | 'w'): boolean {
 export function ServerMapView() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [tiles, setTiles] = useState<MapTilesPayload | null>(null);
   const [style, setStyle] = useState<Style>(loadStyle);
+  const [tilesetUrl, setTilesetUrl] = useState<string | null>(loadTileset);
+  const [tilesetImage, setTilesetImage] = useState<HTMLImageElement | null>(null);
+  const [tilesetError, setTilesetError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -134,6 +145,23 @@ export function ServerMapView() {
       // ignore
     }
   }, [style]);
+
+  useEffect(() => {
+    if (!tilesetUrl) {
+      setTilesetImage(null);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      setTilesetImage(img);
+      setTilesetError(null);
+    };
+    img.onerror = () => {
+      setTilesetImage(null);
+      setTilesetError('failed to decode tileset image');
+    };
+    img.src = tilesetUrl;
+  }, [tilesetUrl]);
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
@@ -201,6 +229,18 @@ export function ServerMapView() {
 
       if (style === 'glyphs') {
         drawGlyphs(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC);
+      } else if (style === 'tileset') {
+        drawTileset(
+          ctx,
+          cssWidth,
+          cssHeight,
+          tiles,
+          rows,
+          cols,
+          centerR,
+          centerC,
+          tilesetImage,
+        );
       } else {
         drawSquares(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC);
       }
@@ -214,16 +254,39 @@ export function ServerMapView() {
       observer.disconnect();
       window.removeEventListener('resize', draw);
     };
-  }, [tiles, style]);
+  }, [tiles, style, tilesetImage]);
+
+  const handleLoadTileset = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result ?? '');
+      setTilesetUrl(url);
+      try {
+        localStorage.setItem(TILESET_KEY, url);
+      } catch {
+        // ignore (quota or private mode)
+      }
+    };
+    reader.onerror = () => setTilesetError('file read failed');
+    reader.readAsDataURL(file);
+  };
+
+  const clearTileset = () => {
+    setTilesetUrl(null);
+    setTilesetImage(null);
+    try {
+      localStorage.removeItem(TILESET_KEY);
+    } catch {
+      // ignore
+    }
+  };
 
   return (
     <div className="server-view">
       <div className="map-subhead">
-        <span>
-          {tiles
-            ? `radius ${tiles.r ?? '?'} · server tiles`
-            : 'waiting for server map'}
-        </span>
+        <span>{tiles ? `radius ${tiles.r ?? '?'}` : 'waiting for server map'}</span>
         <div className="map-mode-toggle">
           <button
             type="button"
@@ -239,8 +302,43 @@ export function ServerMapView() {
           >
             glyphs
           </button>
+          <button
+            type="button"
+            aria-pressed={style === 'tileset'}
+            onClick={() => setStyle('tileset')}
+          >
+            tileset
+          </button>
         </div>
       </div>
+      {style === 'tileset' && (
+        <div className="tileset-bar">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={handleLoadTileset}
+            hidden
+          />
+          <button type="button" onClick={() => fileInputRef.current?.click()}>
+            load tileset
+          </button>
+          {tilesetUrl && (
+            <button type="button" onClick={clearTileset}>
+              clear
+            </button>
+          )}
+          <span className="tileset-status">
+            {tilesetError
+              ? tilesetError
+              : tilesetImage
+                ? `tileset loaded (${tilesetImage.naturalWidth}x${tilesetImage.naturalHeight})`
+                : tilesetUrl
+                  ? 'loading...'
+                  : 'horizontal strip of 13 tiles in sector order 0..9, a, b, c'}
+          </span>
+        </div>
+      )}
       <div ref={containerRef} className="map-canvas-host">
         <canvas ref={canvasRef} />
       </div>
@@ -258,36 +356,39 @@ function drawSquares(
   centerR: number,
   centerC: number,
 ) {
-  // Match the mapping view's square + spacing aesthetic. The cell pitch
-  // adapts to the available pane size so the whole grid fits.
-  const targetPitch = 28;
+  // Wider pitch and a smaller fill ratio so squares read as separated
+  // tiles rather than a continuous wash.
+  const targetPitch = 36;
   const pitch = Math.max(
-    14,
+    16,
     Math.min(targetPitch, Math.floor(Math.min(cssWidth / cols, cssHeight / rows))),
   );
-  const size = Math.max(8, Math.floor(pitch * 0.65));
-  const ox = Math.floor(cssWidth / 2 - (centerC - 0.5) * pitch);
-  const oy = Math.floor(cssHeight / 2 - (centerR - 0.5) * pitch);
+  const size = Math.max(8, Math.floor(pitch * 0.55));
 
-  // Grid lines for orientation.
+  // Place the player's cell exactly at the canvas center. Cells at (r, c)
+  // render with their center at (ox + c*pitch, oy + r*pitch).
+  const ox = Math.floor(cssWidth / 2 - centerC * pitch);
+  const oy = Math.floor(cssHeight / 2 - centerR * pitch);
+
+  // Faint grid so the layout reads even when many cells are empty.
   ctx.strokeStyle = GRID_LINE;
   ctx.lineWidth = 1;
-  for (let c = 1; c <= cols + 1; c++) {
-    const x = ox + (c - 0.5) * pitch;
+  for (let c = 0; c <= cols; c++) {
+    const x = ox + (c + 0.5) * pitch;
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, cssHeight);
     ctx.stroke();
   }
-  for (let r = 1; r <= rows + 1; r++) {
-    const y = oy + (r - 0.5) * pitch;
+  for (let r = 0; r <= rows; r++) {
+    const y = oy + (r + 0.5) * pitch;
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(cssWidth, y);
     ctx.stroke();
   }
 
-  // Edges first (under squares).
+  // Edges first so squares draw on top.
   ctx.strokeStyle = EDGE_COLOR;
   ctx.lineWidth = 1.5;
   for (let r = 1; r <= rows; r++) {
@@ -297,28 +398,16 @@ function drawSquares(
       const cx = ox + c * pitch;
       const cy = oy + r * pitch;
       if (hasExit(cell, 'n') && getCell(payload, r - 1, c)) {
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx, cy - pitch);
-        ctx.stroke();
+        line(ctx, cx, cy, cx, cy - pitch);
       }
       if (hasExit(cell, 'e') && getCell(payload, r, c + 1)) {
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + pitch, cy);
-        ctx.stroke();
+        line(ctx, cx, cy, cx + pitch, cy);
       }
       if (hasExit(cell, 's') && getCell(payload, r + 1, c)) {
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx, cy + pitch);
-        ctx.stroke();
+        line(ctx, cx, cy, cx, cy + pitch);
       }
       if (hasExit(cell, 'w') && getCell(payload, r, c - 1)) {
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx - pitch, cy);
-        ctx.stroke();
+        line(ctx, cx, cy, cx - pitch, cy);
       }
     }
   }
@@ -331,7 +420,7 @@ function drawSquares(
       const cx = ox + c * pitch;
       const cy = oy + r * pitch;
       const isCenter = r === centerR && c === centerC;
-      ctx.fillStyle = isCenter ? PLAYER_COLOR : fillFor(payload, cell);
+      ctx.fillStyle = isCenter ? PLAYER_COLOR : colorForCell(cell);
       ctx.strokeStyle = isCenter ? PLAYER_BORDER : ROOM_BORDER;
       ctx.lineWidth = isCenter ? 2 : 1;
       ctx.beginPath();
@@ -339,10 +428,9 @@ function drawSquares(
       ctx.fill();
       ctx.stroke();
 
-      // Up/down hints in the corner.
       const exits = (cell.e ?? '').toLowerCase();
       if (exits.includes('u') || exits.includes('d')) {
-        ctx.fillStyle = '#f1c232';
+        ctx.fillStyle = '#0d1117';
         ctx.font = `${Math.max(8, Math.floor(size * 0.55))}px monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -372,11 +460,12 @@ function drawGlyphs(
     ctx.fillText('no glyph data in payload', 10, 22);
     return;
   }
-  const cellW = Math.max(8, Math.min(20, Math.floor(cssWidth / (cols * 1.6))));
-  const cellH = Math.max(10, Math.min(22, Math.floor(cssHeight / rows)));
-  const ox = Math.max(0, Math.floor((cssWidth - cols * cellW) / 2));
-  const oy = Math.max(0, Math.floor((cssHeight - rows * cellH) / 2));
-  ctx.font = `${Math.floor(cellH * 0.85)}px "JetBrains Mono", "Menlo", monospace`;
+  const pitchX = Math.max(8, Math.min(20, Math.floor(cssWidth / (cols * 1.6))));
+  const pitchY = Math.max(10, Math.min(22, Math.floor(cssHeight / rows)));
+  // Center the player cell exactly.
+  const ox = Math.floor(cssWidth / 2 - (centerC - 0.5) * pitchX);
+  const oy = Math.floor(cssHeight / 2 - (centerR - 0.5) * pitchY);
+  ctx.font = `${Math.floor(pitchY * 0.85)}px "JetBrains Mono", "Menlo", monospace`;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
 
@@ -387,7 +476,101 @@ function drawGlyphs(
       if (ch === ' ') continue;
       const isCenter = r + 1 === centerR && c + 1 === centerC;
       ctx.fillStyle = isCenter ? '#f1c232' : (SECTOR_COLORS[ch] ?? '#7d8590');
-      ctx.fillText(isCenter ? '@' : ch, ox + c * cellW + cellW / 2, oy + r * cellH + cellH / 2);
+      ctx.fillText(
+        isCenter ? '@' : ch,
+        ox + (c + 0.5) * pitchX,
+        oy + (r + 0.5) * pitchY,
+      );
     }
   }
+}
+
+function drawTileset(
+  ctx: CanvasRenderingContext2D,
+  cssWidth: number,
+  cssHeight: number,
+  payload: MapTilesPayload,
+  rows: number,
+  cols: number,
+  centerR: number,
+  centerC: number,
+  image: HTMLImageElement | null,
+) {
+  if (!image) {
+    drawSquares(ctx, cssWidth, cssHeight, payload, rows, cols, centerR, centerC);
+    ctx.fillStyle = '#f0c674';
+    ctx.font = '12px monospace';
+    ctx.fillText('tileset not loaded — using squares fallback', 10, cssHeight - 12);
+    return;
+  }
+  const tileSize = image.naturalHeight;
+  const tilesInImage = Math.max(1, Math.floor(image.naturalWidth / tileSize));
+  const targetPitch = 36;
+  const pitch = Math.max(
+    16,
+    Math.min(targetPitch, Math.floor(Math.min(cssWidth / cols, cssHeight / rows))),
+  );
+  const ox = Math.floor(cssWidth / 2 - centerC * pitch);
+  const oy = Math.floor(cssHeight / 2 - centerR * pitch);
+
+  // Edges underneath the tiles so the connectivity still reads.
+  ctx.strokeStyle = EDGE_COLOR;
+  ctx.lineWidth = 1.5;
+  for (let r = 1; r <= rows; r++) {
+    for (let c = 1; c <= cols; c++) {
+      const cell = getCell(payload, r, c);
+      if (!cell) continue;
+      const cx = ox + c * pitch;
+      const cy = oy + r * pitch;
+      if (hasExit(cell, 'n') && getCell(payload, r - 1, c)) {
+        line(ctx, cx, cy, cx, cy - pitch);
+      }
+      if (hasExit(cell, 'e') && getCell(payload, r, c + 1)) {
+        line(ctx, cx, cy, cx + pitch, cy);
+      }
+      if (hasExit(cell, 's') && getCell(payload, r + 1, c)) {
+        line(ctx, cx, cy, cx, cy + pitch);
+      }
+      if (hasExit(cell, 'w') && getCell(payload, r, c - 1)) {
+        line(ctx, cx, cy, cx - pitch, cy);
+      }
+    }
+  }
+
+  for (let r = 1; r <= rows; r++) {
+    for (let c = 1; c <= cols; c++) {
+      const cell = getCell(payload, r, c);
+      if (!cell) continue;
+      const cx = ox + c * pitch;
+      const cy = oy + r * pitch;
+      const idx = cell.s ? SECTOR_ORDER.indexOf(cell.s) : -1;
+      const tileIndex = idx >= 0 && idx < tilesInImage ? idx : 0;
+      ctx.drawImage(
+        image,
+        tileIndex * tileSize,
+        0,
+        tileSize,
+        tileSize,
+        cx - pitch / 2,
+        cy - pitch / 2,
+        pitch,
+        pitch,
+      );
+
+      if (r === centerR && c === centerC) {
+        ctx.strokeStyle = PLAYER_BORDER;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.rect(cx - pitch / 2, cy - pitch / 2, pitch, pitch);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+function line(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) {
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
 }
