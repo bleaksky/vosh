@@ -68,6 +68,18 @@ export async function listTriggers(): Promise<TriggerRecord[]> {
   return invoke('triggers_list');
 }
 
+export interface GmcpPayload {
+  package: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any;
+}
+
+export async function onGmcp(cb: (payload: GmcpPayload) => void): Promise<UnlistenFn> {
+  return listen<GmcpPayload>('session://gmcp', (event) => {
+    cb(event.payload);
+  });
+}
+
 export async function onOutput(cb: (bytes: Uint8Array) => void): Promise<UnlistenFn> {
   return listen<OutputPayload>('session://output', (event) => {
     cb(new Uint8Array(event.payload.bytes));
