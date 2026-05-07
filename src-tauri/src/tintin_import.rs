@@ -24,8 +24,13 @@ pub(crate) struct ImportReport {
 }
 
 pub(crate) fn import_file(path: &Path) -> std::io::Result<ImportReport> {
-    let text = std::fs::read_to_string(path)?;
-    Ok(parse(&text))
+    // TinTin++ scripts often stash raw telnet bytes (IAC, DO, etc.) inside
+    // #variable values. Those bytes are not valid UTF-8, so read as bytes
+    // and decode lossily; the substitute character on a non-UTF-8 byte is
+    // fine for the alias and variable extraction we do here.
+    let raw = std::fs::read(path)?;
+    let text = String::from_utf8_lossy(&raw);
+    Ok(parse(text.as_ref()))
 }
 
 pub(crate) fn parse(text: &str) -> ImportReport {
