@@ -1,13 +1,30 @@
 import { useEffect, useState } from 'react';
 import { onGmcp, onState } from '../lib/session';
 
+type Stat = number | string | undefined;
+
 interface Vitals {
-  hp?: number | string;
-  maxhp?: number | string;
-  mp?: number | string;
-  maxmp?: number | string;
-  sp?: number | string;
-  maxsp?: number | string;
+  hp?: Stat;
+  maxhp?: Stat;
+  // MUDs disagree on names. We accept both common pairs for mana and
+  // movement so the bars populate regardless of which the server sends.
+  mp?: Stat;
+  maxmp?: Stat;
+  mana?: Stat;
+  maxmana?: Stat;
+  sp?: Stat;
+  maxsp?: Stat;
+  move?: Stat;
+  maxmove?: Stat;
+  movement?: Stat;
+  maxmovement?: Stat;
+}
+
+function pickFirst(...candidates: Stat[]): Stat {
+  for (const c of candidates) {
+    if (c !== undefined && c !== null && c !== '') return c;
+  }
+  return undefined;
 }
 
 interface RoomInfo {
@@ -122,8 +139,18 @@ export function StatusPane() {
           </div>
         )}
         <Bar label="hp" current={vitals.hp} max={vitals.maxhp} color="#da3633" />
-        <Bar label="mp" current={vitals.mp} max={vitals.maxmp} color="#1f6feb" />
-        <Bar label="sp" current={vitals.sp} max={vitals.maxsp} color="#3fb950" />
+        <Bar
+          label="mp"
+          current={pickFirst(vitals.mp, vitals.mana)}
+          max={pickFirst(vitals.maxmp, vitals.maxmana)}
+          color="#1f6feb"
+        />
+        <Bar
+          label="mv"
+          current={pickFirst(vitals.sp, vitals.move, vitals.movement)}
+          max={pickFirst(vitals.maxsp, vitals.maxmove, vitals.maxmovement)}
+          color="#3fb950"
+        />
         <div className="status-row">
           <span className="status-label">room</span>
           <span className="status-value">{room.name ?? '-'}</span>
