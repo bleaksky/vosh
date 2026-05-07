@@ -80,6 +80,17 @@ export async function onGmcp(cb: (payload: GmcpPayload) => void): Promise<Unlist
   });
 }
 
+export interface RoutedPayload {
+  pane: string;
+  text: string;
+}
+
+export async function onRouted(cb: (payload: RoutedPayload) => void): Promise<UnlistenFn> {
+  return listen<RoutedPayload>('session://routed', (event) => {
+    cb(event.payload);
+  });
+}
+
 export async function onOutput(cb: (bytes: Uint8Array) => void): Promise<UnlistenFn> {
   return listen<OutputPayload>('session://output', (event) => {
     cb(new Uint8Array(event.payload.bytes));
