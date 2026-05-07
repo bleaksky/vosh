@@ -1,9 +1,7 @@
 //! Default policy for telnet option negotiation. Decides which options to
 //! accept and produces response bytes for the session loop to send.
 
-use crate::codes::{
-    charset, option, ttype, DO, DONT, IAC, SB, SE, WILL, WONT,
-};
+use crate::codes::{charset, option, ttype, DO, DONT, IAC, SB, SE, WILL, WONT};
 use crate::parser::Event;
 
 /// Default terminal type advertised in TTYPE subnegotiation.
@@ -207,18 +205,7 @@ mod tests {
         n.set_window_size(255, 24);
         let bytes = n.naws_subnegotiation();
         // Width high byte is 0, low byte is 0xFF and must be doubled.
-        let expected = vec![
-            IAC,
-            SB,
-            option::NAWS,
-            0,
-            IAC,
-            IAC,
-            0,
-            24,
-            IAC,
-            SE,
-        ];
+        let expected = vec![IAC, SB, option::NAWS, 0, IAC, IAC, 0, 24, IAC, SE];
         assert_eq!(bytes, expected);
     }
 
@@ -256,6 +243,9 @@ mod tests {
             option: option::CHARSET,
             payload,
         });
-        assert_eq!(bytes, vec![IAC, SB, option::CHARSET, charset::REJECTED, IAC, SE]);
+        assert_eq!(
+            bytes,
+            vec![IAC, SB, option::CHARSET, charset::REJECTED, IAC, SE]
+        );
     }
 }

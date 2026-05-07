@@ -12,7 +12,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-D warnings"
+  RUSTFLAGS: '-D warnings'
 
 jobs:
   frontend:
@@ -60,7 +60,7 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: ". -> target"
+          workspaces: '. -> target'
 
       - name: Build frontend (needed for tauri context)
         uses: actions/setup-node@v4

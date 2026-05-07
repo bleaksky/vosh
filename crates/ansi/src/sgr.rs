@@ -66,10 +66,7 @@ impl Sgr {
 ///
 /// Legacy semicolon form, e.g. `38;5;200` or `38;2;255;0;0`. The payload is
 /// split across consecutive parameters in the iterator.
-fn parse_extended_color(
-    param: &[u16],
-    iter: &mut vte::ParamsIter<'_>,
-) -> Color {
+fn parse_extended_color(param: &[u16], iter: &mut vte::ParamsIter<'_>) -> Color {
     if param.len() > 1 {
         match param.get(1).copied() {
             Some(5) => return Color::Indexed256(param.get(2).copied().unwrap_or(0) as u8),
@@ -95,16 +92,10 @@ fn parse_extended_color(
     }
 
     // Legacy semicolon form. Pull subsequent parameters from the iterator.
-    let kind = iter
-        .next()
-        .and_then(|p| p.first().copied())
-        .unwrap_or(0);
+    let kind = iter.next().and_then(|p| p.first().copied()).unwrap_or(0);
     match kind {
         5 => {
-            let idx = iter
-                .next()
-                .and_then(|p| p.first().copied())
-                .unwrap_or(0) as u8;
+            let idx = iter.next().and_then(|p| p.first().copied()).unwrap_or(0) as u8;
             Color::Indexed256(idx)
         }
         2 => {
