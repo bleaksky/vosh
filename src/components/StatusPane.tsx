@@ -161,8 +161,12 @@ export function StatusPane() {
   }, []);
 
   const charLine = char.fullname || char.name || '-';
-  const tickRemaining = tick?.enabled ? Math.ceil(tick.remaining_ms / 1000) : null;
-  const tickInterval = tick?.enabled ? Math.round(tick.interval_ms / 1000) : null;
+  // Count up from 1 since the last reset, matching the conventional MUD
+  // "tick: Ns" display. The remaining_ms field still drives the near-fire
+  // flash so the user sees a visual cue right before the next tick.
+  const tickElapsed = tick?.enabled
+    ? Math.max(1, Math.ceil((tick.interval_ms - tick.remaining_ms) / 1000))
+    : null;
   const tickFlash = tick?.enabled && tick.remaining_ms <= 5000;
 
   return (
@@ -171,9 +175,7 @@ export function StatusPane() {
       <div className="status-body">
         <div className={`status-row tick-row${tickFlash ? ' tick-flash' : ''}`}>
           <span className="status-label">tick</span>
-          <span className="status-value">
-            {tick?.enabled ? `${tickRemaining}s / ${tickInterval}s` : 'off'}
-          </span>
+          <span className="status-value">{tick?.enabled ? `${tickElapsed}s` : 'off'}</span>
         </div>
         <div className="status-row">
           <span className="status-label">char</span>

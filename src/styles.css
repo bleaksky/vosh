@@ -386,11 +386,20 @@ body,
 }
 
 .map-subhead {
-  padding: 0.2rem 0.75rem;
+  padding: 0.25rem 0.75rem;
   font-size: 11px;
   color: #6e7681;
   background: #0d1117;
   border-bottom: 1px solid #1c2229;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.map-subhead .map-mode-toggle button {
+  padding: 0 6px;
+  font-size: 10px;
 }
 
 .map-canvas-host {
