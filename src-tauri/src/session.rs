@@ -2,6 +2,7 @@
 //! accumulator, and the trigger engine together. Emits Tauri events.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use mudclient_telnet::{option as telnet_option, Event as TelnetEvent, Negotiator, Parser};
 use mudclient_trigger::LineResult;
@@ -10,12 +11,17 @@ use serde_json::json;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
+use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
 
 use crate::connection::{self, ConnectionError, Stream};
 use crate::gmcp_bind;
+use crate::input;
 use crate::line_accumulator::{ChunkOp, LineAccumulator};
 use crate::profile::Profile;
+use crate::tick::TickPayload;
+
+const TICK_EMIT_INTERVAL: Duration = Duration::from_millis(250);
 
 const READ_BUFFER_BYTES: usize = 8 * 1024;
 
@@ -114,6 +120,16 @@ async fn io_loop(
     let mut accumulator = LineAccumulator::new();
     let mut buf = vec![0u8; READ_BUFFER_BYTES];
 
+    // Activate the tick timer for this session. The user can disable it
+    // later through the slash command.
+    {
+        let mut p = profile.lock().await;
+        p.tick.enable(Instant::now());
+    }
+
+    let mut tick_interval = tokio::time::interval(TICK_EMIT_INTERVAL);
+    tick_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
     let disconnect_reason = loop {
         tokio::select! {
             biased;
@@ -159,8 +175,19 @@ async fn io_loop(
                     break Some(format!("read failed: {e}"));
                 }
             },
+            _ = tick_interval.tick() => {
+                if let Err(e) = handle_tick(&app, &mut stream, &profile).await {
+                    error!(error = %e, "tick handling failed");
+                    break Some(format!("tick handling failed: {e}"));
+                }
+            }
         }
     };
+
+    {
+        let mut p = profile.lock().await;
+        p.tick.disable();
+    }
 
     accumulator.reset();
     let _ = stream.shutdown().await;
@@ -170,6 +197,58 @@ async fn io_loop(
             reason: disconnect_reason,
         },
     );
+}
+
+async fn handle_tick(
+    app: &AppHandle,
+    stream: &mut Stream,
+    profile: &Arc<Mutex<Profile>>,
+) -> std::io::Result<()> {
+    let now = Instant::now();
+    // Take the firing decision under the lock. If the timer fired, capture
+    // the auto-fire command (if any) so we can run it after releasing the
+    // lock.
+    let (payload, auto_fire) = {
+        let mut p = profile.lock().await;
+        let fired = p.tick.try_consume_fire(now);
+        let payload = TickPayload::from_runtime(&p.tick, now, fired);
+        let auto_fire = if fired {
+            p.tick.config.auto_fire.clone()
+        } else {
+            None
+        };
+        (payload, auto_fire)
+    };
+
+    if !payload.enabled && !payload.fired {
+        return Ok(());
+    }
+
+    if let Err(e) = app.emit("session://tick", &payload) {
+        warn!(error = %e, "failed to emit tick payload");
+    }
+
+    if let Some(command) = auto_fire {
+        let result = {
+            let mut p = profile.lock().await;
+            input::process(&mut p, &command)
+        };
+        if !result.echo.is_empty() {
+            let mut buf = Vec::new();
+            for line in &result.echo {
+                buf.extend_from_slice(b"\r\n");
+                buf.extend_from_slice(line.as_bytes());
+            }
+            buf.extend_from_slice(b"\r\n");
+            emit_output(app, buf);
+        }
+        if !result.bytes.is_empty() {
+            stream.write_all(&result.bytes).await?;
+            stream.flush().await?;
+        }
+    }
+
+    Ok(())
 }
 
 async fn handle_event(
@@ -188,12 +267,29 @@ async fn handle_event(
                         emit_output(app, b);
                     }
                     ChunkOp::LineComplete { bytes, clear_first } => {
-                        let result = {
-                            let p = profile.lock().await;
-                            mudclient_trigger::process(&p.triggers, &bytes)
+                        let plain = mudclient_ansi::plain_text(&bytes);
+                        let (result, tick_reset) = {
+                            let mut p = profile.lock().await;
+                            let result = mudclient_trigger::process(&p.triggers, &bytes);
+                            let ticked = if p.tick.check_reset_match(&plain) {
+                                p.tick.reset(Instant::now());
+                                true
+                            } else {
+                                false
+                            };
+                            (result, ticked)
                         };
                         emit_line_result(app, &result, clear_first);
                         send_trigger_outputs(stream, &result.sends).await?;
+                        if tick_reset {
+                            let payload = {
+                                let p = profile.lock().await;
+                                TickPayload::from_runtime(&p.tick, Instant::now(), false)
+                            };
+                            if let Err(e) = app.emit("session://tick", &payload) {
+                                warn!(error = %e, "failed to emit tick reset payload");
+                            }
+                        }
                     }
                 }
             }
