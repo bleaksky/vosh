@@ -73,9 +73,7 @@ const SECTOR_COLORS: Record<string, string> = {
 // Default sector code order in a horizontal sprite strip. A tileset PNG
 // supplied by the user is assumed to lay tiles out left-to-right in this
 // order until a manifest format lands.
-const SECTOR_ORDER: string[] = [
-  '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c',
-];
+const SECTOR_ORDER: string[] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c'];
 
 const PLAYER_COLOR = '#1f6feb';
 const PLAYER_BORDER = '#c9d1d9';
@@ -117,6 +115,33 @@ function gridDims(payload: MapTilesPayload): { rows: number; cols: number } {
     return { rows: text.length, cols: Math.max(...text.map((r) => r.length)) };
   }
   return { rows: 0, cols: 0 };
+}
+
+/// Find the bounding box of populated cells. Used to center the visible map
+/// on its actual content rather than on the player when the player sits
+/// near the edge of an explored region (which leaves a lot of dead space
+/// on one side and biases the visual center).
+function populatedBounds(
+  payload: MapTilesPayload,
+  rows: number,
+  cols: number,
+): { minR: number; maxR: number; minC: number; maxC: number } | null {
+  let minR = rows + 1;
+  let maxR = 0;
+  let minC = cols + 1;
+  let maxC = 0;
+  let any = false;
+  for (let r = 1; r <= rows; r++) {
+    for (let c = 1; c <= cols; c++) {
+      if (!getCell(payload, r, c)) continue;
+      any = true;
+      if (r < minR) minR = r;
+      if (r > maxR) maxR = r;
+      if (c < minC) minC = c;
+      if (c > maxC) maxC = c;
+    }
+  }
+  return any ? { minR, maxR, minC, maxC } : null;
 }
 
 function colorForCell(cell: ServerCell): string {
@@ -230,17 +255,7 @@ export function ServerMapView() {
       if (style === 'glyphs') {
         drawGlyphs(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC);
       } else if (style === 'tileset') {
-        drawTileset(
-          ctx,
-          cssWidth,
-          cssHeight,
-          tiles,
-          rows,
-          cols,
-          centerR,
-          centerC,
-          tilesetImage,
-        );
+        drawTileset(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC, tilesetImage);
       } else {
         drawSquares(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC);
       }
@@ -365,10 +380,14 @@ function drawSquares(
   );
   const size = Math.max(8, Math.floor(pitch * 0.55));
 
-  // Place the player's cell exactly at the canvas center. Cells at (r, c)
-  // render with their center at (ox + c*pitch, oy + r*pitch).
-  const ox = Math.floor(cssWidth / 2 - centerC * pitch);
-  const oy = Math.floor(cssHeight / 2 - centerR * pitch);
+  // Center on the bounding box of populated cells so the visible map
+  // looks centered even when the player sits near the edge of an
+  // explored region. Player cell still highlights at its real position.
+  const bounds = populatedBounds(payload, rows, cols);
+  const focusR = bounds ? (bounds.minR + bounds.maxR) / 2 : centerR;
+  const focusC = bounds ? (bounds.minC + bounds.maxC) / 2 : centerC;
+  const ox = Math.floor(cssWidth / 2 - focusC * pitch);
+  const oy = Math.floor(cssHeight / 2 - focusR * pitch);
 
   // Faint grid so the layout reads even when many cells are empty.
   ctx.strokeStyle = GRID_LINE;
@@ -462,9 +481,13 @@ function drawGlyphs(
   }
   const pitchX = Math.max(8, Math.min(20, Math.floor(cssWidth / (cols * 1.6))));
   const pitchY = Math.max(10, Math.min(22, Math.floor(cssHeight / rows)));
-  // Center the player cell exactly.
-  const ox = Math.floor(cssWidth / 2 - (centerC - 0.5) * pitchX);
-  const oy = Math.floor(cssHeight / 2 - (centerR - 0.5) * pitchY);
+  // Center on the bounding box of populated cells, falling back to the
+  // player cell when the grid has no usable structured payload.
+  const bounds = populatedBounds(payload, rows, cols);
+  const focusR = bounds ? (bounds.minR + bounds.maxR) / 2 - 0.5 : centerR - 0.5;
+  const focusC = bounds ? (bounds.minC + bounds.maxC) / 2 - 0.5 : centerC - 0.5;
+  const ox = Math.floor(cssWidth / 2 - focusC * pitchX);
+  const oy = Math.floor(cssHeight / 2 - focusR * pitchY);
   ctx.font = `${Math.floor(pitchY * 0.85)}px "JetBrains Mono", "Menlo", monospace`;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
@@ -476,11 +499,7 @@ function drawGlyphs(
       if (ch === ' ') continue;
       const isCenter = r + 1 === centerR && c + 1 === centerC;
       ctx.fillStyle = isCenter ? '#f1c232' : (SECTOR_COLORS[ch] ?? '#7d8590');
-      ctx.fillText(
-        isCenter ? '@' : ch,
-        ox + (c + 0.5) * pitchX,
-        oy + (r + 0.5) * pitchY,
-      );
+      ctx.fillText(isCenter ? '@' : ch, ox + (c + 0.5) * pitchX, oy + (r + 0.5) * pitchY);
     }
   }
 }
@@ -498,9 +517,6 @@ function drawTileset(
 ) {
   if (!image) {
     drawSquares(ctx, cssWidth, cssHeight, payload, rows, cols, centerR, centerC);
-    ctx.fillStyle = '#f0c674';
-    ctx.font = '12px monospace';
-    ctx.fillText('tileset not loaded — using squares fallback', 10, cssHeight - 12);
     return;
   }
   const tileSize = image.naturalHeight;
@@ -510,8 +526,11 @@ function drawTileset(
     16,
     Math.min(targetPitch, Math.floor(Math.min(cssWidth / cols, cssHeight / rows))),
   );
-  const ox = Math.floor(cssWidth / 2 - centerC * pitch);
-  const oy = Math.floor(cssHeight / 2 - centerR * pitch);
+  const bounds = populatedBounds(payload, rows, cols);
+  const focusR = bounds ? (bounds.minR + bounds.maxR) / 2 : centerR;
+  const focusC = bounds ? (bounds.minC + bounds.maxC) / 2 : centerC;
+  const ox = Math.floor(cssWidth / 2 - focusC * pitch);
+  const oy = Math.floor(cssHeight / 2 - focusR * pitch);
 
   // Edges underneath the tiles so the connectivity still reads.
   ctx.strokeStyle = EDGE_COLOR;
