@@ -89,4 +89,4 @@ Applies to README, CONTRIBUTING, settings labels, error messages, commit message
 
 ## Phase Status
 
-Phase 1 complete. Telnet IAC parser, ANSI parser, TCP and TLS transport, session task, Tauri commands, and an xterm.js terminal UI all land. The app connects, negotiates a sensible set of telnet options, renders ANSI 16, 256, and truecolor through xterm.js, and round trips UTF-8. Phase 2 (aliases, variables, history) starts only after explicit approval in chat.
+Phase 2 complete. The alias engine, variable store, and input pipeline land. Slash commands (`#alias`, `#unalias`, `#aliases`, `#var`, `#unvar`, `#vars`, `#help`) edit the in-memory profile; the Phase 9 disk persistence is still pending. The Input component now does prefix history search. Aliases and profile variables survive a disconnect; session variables clear on connect. Phase 3 (regex triggers and highlights) starts only after explicit approval in chat.

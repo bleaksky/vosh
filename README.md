@@ -6,7 +6,7 @@ The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, but 
 
 ## Status
 
-Phase 1 complete. The app connects to a MUD over TCP or TLS, negotiates the core telnet options, refuses what it does not yet understand, and renders the full ANSI repertoire through xterm.js. Input round trips as UTF-8 with command history. Phase 2 lands aliases, variables, and prefix history search.
+Phase 2 complete. On top of the Phase 1 telnet plus ANSI display, the client now ships an alias engine with positional substitution and recursion guards, a two-scope variable store (profile and session), prefix history search, and a small set of slash commands for live editing. Type `#help` in the input box to see them. Phase 3 lands regex triggers, highlights, and gags.
 
 See `prompt.md` for the full phase plan and `CLAUDE.md` for stack and workflow rules.
 
