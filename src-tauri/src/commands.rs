@@ -10,6 +10,7 @@ use tokio::sync::Mutex;
 use crate::input;
 use crate::map_state::SharedMap;
 use crate::profile::Profile;
+use crate::profile_config::ProfileConfig;
 use crate::script_state::SharedTimers;
 use crate::session::{self, OutputPayload, SessionHandle};
 
@@ -168,6 +169,23 @@ pub(crate) async fn triggers_import(
 #[tauri::command]
 pub(crate) fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[tauri::command]
+pub(crate) async fn profile_export(state: State<'_, SharedState>) -> Result<String, String> {
+    let p = state.profile.lock().await;
+    let snapshot = ProfileConfig::from_profile(&p);
+    snapshot.to_toml().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn profile_import(
+    state: State<'_, SharedState>,
+    toml: String,
+) -> Result<Vec<String>, String> {
+    let snapshot = ProfileConfig::from_toml(&toml).map_err(|e| e.to_string())?;
+    let mut p = state.profile.lock().await;
+    Ok(snapshot.apply_to(&mut p))
 }
 
 #[derive(serde::Serialize)]

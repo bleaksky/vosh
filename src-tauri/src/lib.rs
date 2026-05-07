@@ -12,16 +12,19 @@ mod input;
 mod line_accumulator;
 mod map_state;
 mod profile;
+mod profile_config;
 mod script_state;
 mod session;
 mod tick;
+mod tintin_import;
 
 use commands::{
-    app_version, map_area_snapshot, map_set_avoid, map_set_note, map_walk_to, session_connect,
-    session_disconnect, session_send, session_send_input, triggers_export, triggers_import,
-    triggers_list, AppState, SharedState,
+    app_version, map_area_snapshot, map_set_avoid, map_set_note, map_walk_to, profile_export,
+    profile_import, session_connect, session_disconnect, session_send, session_send_input,
+    triggers_export, triggers_import, triggers_list, AppState, SharedState,
 };
 use map_state::MapState;
+use profile_config::ProfileConfig;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -49,6 +52,27 @@ pub fn run() {
                     error!(error = %e, "map store failed to open; map features disabled");
                 }
             }
+            if let Ok(path) = app.path().app_data_dir() {
+                let toml_path = path.join("profile.toml");
+                if toml_path.exists() {
+                    match ProfileConfig::load(&toml_path) {
+                        Ok(snapshot) => {
+                            let profile = state.profile.clone();
+                            tauri::async_runtime::block_on(async move {
+                                let mut p = profile.lock().await;
+                                let warnings = snapshot.apply_to(&mut p);
+                                for w in warnings {
+                                    info!(warning = %w, "profile apply warning");
+                                }
+                            });
+                            info!(path = %toml_path.display(), "loaded profile");
+                        }
+                        Err(e) => {
+                            error!(error = %e, "failed to load profile.toml at startup");
+                        }
+                    }
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -64,6 +88,8 @@ pub fn run() {
             map_walk_to,
             map_set_note,
             map_set_avoid,
+            profile_export,
+            profile_import,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

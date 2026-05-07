@@ -9,7 +9,9 @@ use mudclient_vars::Scope;
 use tokio::time::Instant;
 
 use crate::profile::Profile;
+use crate::profile_config::ProfileConfig;
 use crate::script_state;
+use crate::tintin_import;
 
 /// What the input pipeline produced.
 pub(crate) struct InputResult {
@@ -46,6 +48,10 @@ slash commands:
   #script reload                       re-run all loaded scripts
   #scripts                             list loaded scripts and Lua triggers
   #lua <code>                          evaluate Lua inline
+  #profile save                        save the current profile to disk
+  #profile load                        replace state with the saved profile
+  #profile reset                       wipe aliases, vars, triggers, tick
+  #import-tintin <path>                import #alias and #variable from a .tin
   #help                                show this list
 trigger actions:
   highlight <color> [bold] [underline] [inverse] [bg:<color>]
@@ -113,6 +119,8 @@ fn handle_slash(profile: &mut Profile, rest: &str) -> InputResult {
         "script" => slash_script(profile, args),
         "scripts" => slash_scripts_list(profile),
         "lua" => slash_lua(profile, args),
+        "profile" => slash_profile(profile, args),
+        "import-tintin" => slash_import_tintin(profile, args),
         "help" => echo_lines(HELP_TEXT.lines()),
         "" => error_echo("missing slash command. try #help".to_string()),
         other => error_echo(format!("unknown slash command #{other}. try #help")),
@@ -372,6 +380,110 @@ fn describe_action(action: &TriggerAction) -> String {
         TriggerAction::Send { template } => format!("send `{template}`"),
         TriggerAction::Route { pane } => format!("route {pane}"),
     }
+}
+
+fn slash_profile(profile: &mut Profile, args: &str) -> InputResult {
+    let (cmd, _rest) = split_first_word(args);
+    match cmd {
+        "save" => match profile_path() {
+            Some(path) => {
+                let snapshot = ProfileConfig::from_profile(profile);
+                match snapshot.save(&path) {
+                    Ok(()) => echo_one(format!("profile saved to {}", path.display())),
+                    Err(e) => error_echo(format!("save failed: {e}")),
+                }
+            }
+            None => error_echo("could not resolve profile path".to_string()),
+        },
+        "load" => match profile_path() {
+            Some(path) => match ProfileConfig::load(&path) {
+                Ok(snapshot) => {
+                    let warnings = snapshot.apply_to(profile);
+                    let mut lines = vec![format!("profile loaded from {}", path.display())];
+                    for w in warnings {
+                        lines.push(format!("  {w}"));
+                    }
+                    InputResult {
+                        bytes: Vec::new(),
+                        echo: lines,
+                    }
+                }
+                Err(e) => error_echo(format!("load failed: {e}")),
+            },
+            None => error_echo("could not resolve profile path".to_string()),
+        },
+        "reset" => {
+            let blank = ProfileConfig::default();
+            let _ = blank.apply_to(profile);
+            echo_one("profile reset to defaults".to_string())
+        }
+        "" => error_echo("usage #profile save | load | reset".to_string()),
+        other => error_echo(format!("unknown #profile subcommand `{other}`")),
+    }
+}
+
+fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputResult {
+    let path = args.trim();
+    if path.is_empty() {
+        return error_echo("usage #import-tintin <path>".to_string());
+    }
+    let expanded = expand_home(path);
+    let report = match tintin_import::import_file(&expanded) {
+        Ok(r) => r,
+        Err(e) => return error_echo(format!("read failed: {e}")),
+    };
+    for alias in &report.aliases {
+        profile.aliases.set(alias.clone());
+    }
+    for (name, value) in &report.vars {
+        profile
+            .vars
+            .set(Scope::Profile, name.clone(), value.clone());
+    }
+    let mut lines = vec![
+        format!("imported {}", expanded.display()),
+        format!(
+            "  {} aliases, {} vars",
+            report.aliases.len(),
+            report.vars.len()
+        ),
+    ];
+    if !report.unsupported.is_empty() {
+        let mut counts: std::collections::BTreeMap<String, usize> =
+            std::collections::BTreeMap::new();
+        for (kind, _) in &report.unsupported {
+            *counts.entry(kind.clone()).or_default() += 1;
+        }
+        let summary: Vec<String> = counts.iter().map(|(k, v)| format!("{k}={v}")).collect();
+        lines.push(format!("  skipped (unsupported): {}", summary.join(" ")));
+    }
+    if !report.unparsed.is_empty() {
+        lines.push(format!("  unparsed: {} line(s)", report.unparsed.len()));
+    }
+    InputResult {
+        bytes: Vec::new(),
+        echo: lines,
+    }
+}
+
+fn profile_path() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    let base = std::path::PathBuf::from(home);
+    Some(
+        base.join("Library")
+            .join("Application Support")
+            .join("com.aabahran.mudclient")
+            .join("profile.toml"),
+    )
+}
+
+fn expand_home(path: &str) -> std::path::PathBuf {
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Some(home) = std::env::var_os("HOME") {
+            return std::path::PathBuf::from(home).join(rest);
+        }
+    }
+    std::path::PathBuf::from(path)
 }
 
 fn slash_script(profile: &mut Profile, args: &str) -> InputResult {

@@ -111,11 +111,7 @@ pub(crate) async fn spawn(
     // Without this, ROM derivatives that gate EOR on negotiation never
     // send the byte, and we have to merge the prompt with the next room
     // line. Other negotiations stay reactive in handle_event.
-    let initial = [
-        mudclient_telnet::IAC,
-        telnet_codes::DO,
-        telnet_option::EOR,
-    ];
+    let initial = [mudclient_telnet::IAC, telnet_codes::DO, telnet_option::EOR];
     if let Err(e) = stream.write_all(&initial).await {
         warn!(error = %e, "failed to send initial DO EOR");
     }
@@ -363,9 +359,7 @@ async fn handle_event(
             handle_gmcp(app, profile, map, timers, stream, &payload).await?;
             Ok(())
         }
-        TelnetEvent::Command(byte)
-            if byte == telnet_codes::EOR || byte == telnet_codes::GA =>
-        {
+        TelnetEvent::Command(byte) if byte == telnet_codes::EOR || byte == telnet_codes::GA => {
             // The server marked the end of a prompt. Flush any partial we
             // had buffered so the prompt sits on its own line and the
             // next chunk's first complete line lands cleanly below it

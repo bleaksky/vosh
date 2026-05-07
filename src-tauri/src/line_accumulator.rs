@@ -99,14 +99,12 @@ impl LineAccumulator {
     }
 
     /// Time since the last byte was appended, if a partial is still buffered.
-    pub(crate) fn idle_since(
-        &self,
-        now: tokio::time::Instant,
-    ) -> Option<std::time::Duration> {
+    pub(crate) fn idle_since(&self, now: tokio::time::Instant) -> Option<std::time::Duration> {
         if self.buffer.is_empty() {
             return None;
         }
-        self.last_byte_at.map(|at| now.saturating_duration_since(at))
+        self.last_byte_at
+            .map(|at| now.saturating_duration_since(at))
     }
 
     /// Take the current partial out of the buffer and return it as bytes.
