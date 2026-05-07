@@ -209,11 +209,22 @@ export function MappingMapView() {
       return;
     }
 
-    // Anchor on the bounding box of every room on this floor so a tile
-    // keeps its on-screen position when the player walks. Only changes to
-    // the floor or to the discovered area (a new room outside the current
-    // bbox) shift the layout. The pitch shrinks to fit when the bbox grows
-    // past the canvas, but stays within sane bounds for small areas.
+    // Camera follows the player. The view re-centers on the player every
+    // frame, but every cell renders at an integer pixel position so tiles
+    // snap to the grid instead of sliding between half-pixel positions.
+    // pitch is integer; the player's world coords are integer; ox/oy are
+    // floored; every cell coord is therefore an exact multiple of pitch
+    // away from a known integer origin.
+    const pitch = ROOM_SPACING;
+    const roomSize = Math.max(8, Math.floor(pitch * 0.65));
+    const focus = current ?? visible[0];
+    const ox = Math.floor(cssWidth / 2 - focus.x * pitch);
+    const oy = Math.floor(cssHeight / 2 - focus.y * pitch);
+    layoutRef.current = { ox, oy, pitch, roomSize, currentZ };
+
+    // Compute the area's bounding box for the watermark only. The view
+    // does NOT anchor on the bbox; that would let new rooms shift every
+    // existing tile.
     let minX = Infinity;
     let maxX = -Infinity;
     let minY = Infinity;
@@ -225,16 +236,6 @@ export function MappingMapView() {
       if (r.y > maxY) maxY = r.y;
     }
     const bboxW = maxX - minX + 1;
-    const bboxH = maxY - minY + 1;
-    const fitX = bboxW > 0 ? cssWidth / (bboxW + 1) : ROOM_SPACING;
-    const fitY = bboxH > 0 ? cssHeight / (bboxH + 1) : ROOM_SPACING;
-    const pitch = Math.max(12, Math.min(ROOM_SPACING, Math.floor(Math.min(fitX, fitY))));
-    const roomSize = Math.max(8, Math.floor(pitch * 0.65));
-    const centerWorldX = (minX + maxX) / 2;
-    const centerWorldY = (minY + maxY) / 2;
-    const ox = cssWidth / 2 - centerWorldX * pitch;
-    const oy = cssHeight / 2 - centerWorldY * pitch;
-    layoutRef.current = { ox, oy, pitch, roomSize, currentZ };
 
     // Area name watermark behind everything, sized to the bbox so it
     // reads as a faint label like the FL web map.

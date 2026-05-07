@@ -369,14 +369,13 @@ interface Anchor {
   worldLocked: boolean;
 }
 
-/// Pick the pitch and the anchor point for the player cell. When the
-/// mapping store knows the player's absolute coords, we anchor on the
-/// bounding box of every explored room on this floor. The player cell
-/// then renders at its world position so individual rooms stay put on
-/// canvas as the player walks through the area. When the player has not
-/// been mapped yet (just connected), we fall back to canvas-centered.
+/// Pick the pitch and the anchor point for the player cell. The camera
+/// follows the player: the player cell always sits at the canvas center,
+/// floored to integer pixels so cells render on the same pixel grid every
+/// frame. The pitch is also integer; multiplying integer cell offsets by
+/// integer pitch lands every neighbor on a clean grid line.
 function computeAnchor(
-  snapshot: AreaSnapshot | null,
+  _snapshot: AreaSnapshot | null,
   _payload: MapTilesPayload,
   rows: number,
   cols: number,
@@ -388,58 +387,13 @@ function computeAnchor(
   const targetPitch = 36;
   const minPitch = 16;
   const fitToCanvas = Math.floor(Math.min(cssWidth / cols, cssHeight / rows));
-  const naivePitch = Math.max(minPitch, Math.min(targetPitch, fitToCanvas));
-
-  if (!snapshot) {
-    return {
-      pitch: naivePitch,
-      playerX: cssWidth / 2,
-      playerY: cssHeight / 2,
-      worldLocked: false,
-    };
-  }
-  const player = snapshot.rooms.find((r) => r.id === snapshot.current_room_id) ?? null;
-  if (!player) {
-    return {
-      pitch: naivePitch,
-      playerX: cssWidth / 2,
-      playerY: cssHeight / 2,
-      worldLocked: false,
-    };
-  }
-
-  const visible = snapshot.rooms.filter((r) => r.z === player.z);
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const r of visible) {
-    if (r.x < minX) minX = r.x;
-    if (r.x > maxX) maxX = r.x;
-    if (r.y < minY) minY = r.y;
-    if (r.y > maxY) maxY = r.y;
-  }
-  if (!Number.isFinite(minX)) {
-    return {
-      pitch: naivePitch,
-      playerX: cssWidth / 2,
-      playerY: cssHeight / 2,
-      worldLocked: false,
-    };
-  }
-
-  const bboxW = maxX - minX + 1;
-  const bboxH = maxY - minY + 1;
-  const fitX = bboxW > 0 ? cssWidth / (bboxW + 1) : naivePitch;
-  const fitY = bboxH > 0 ? cssHeight / (bboxH + 1) : naivePitch;
-  const pitch = Math.max(minPitch, Math.min(targetPitch, Math.floor(Math.min(fitX, fitY))));
-
-  const centerWorldX = (minX + maxX) / 2;
-  const centerWorldY = (minY + maxY) / 2;
-  const playerX = cssWidth / 2 + (player.x - centerWorldX) * pitch;
-  const playerY = cssHeight / 2 + (player.y - centerWorldY) * pitch;
-
-  return { pitch, playerX, playerY, worldLocked: true };
+  const pitch = Math.max(minPitch, Math.min(targetPitch, fitToCanvas));
+  return {
+    pitch,
+    playerX: Math.floor(cssWidth / 2),
+    playerY: Math.floor(cssHeight / 2),
+    worldLocked: false,
+  };
 }
 
 function drawSquares(
