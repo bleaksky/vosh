@@ -36,6 +36,7 @@ mudclient-ansi = { path = "../crates/ansi" }
 mudclient-map = { path = "../crates/map" }
 mudclient-script = { path = "../crates/script" }
 regex = "1"
+toml = "0.8"
 
 [features]
 default = ["custom-protocol"]

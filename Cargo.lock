@@ -2004,6 +2004,7 @@ dependencies = [
 name = "mudclient-alias"
 version = "0.0.1"
 dependencies = [
+ "serde",
  "thiserror 1.0.69",
 ]
 
@@ -2037,6 +2038,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-rustls",
+ "toml 0.8.2",
  "tracing",
  "tracing-subscriber",
  "webpki-roots 0.26.11",
