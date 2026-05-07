@@ -89,4 +89,4 @@ Applies to README, CONTRIBUTING, settings labels, error messages, commit message
 
 ## Phase Status
 
-Phase 0 in progress. Scaffolding committed, CI in place, lint and format hooks wired. Phase 1 (telnet plus ANSI) starts only after explicit approval in chat.
+Phase 1 complete. Telnet IAC parser, ANSI parser, TCP and TLS transport, session task, Tauri commands, and an xterm.js terminal UI all land. The app connects, negotiates a sensible set of telnet options, renders ANSI 16, 256, and truecolor through xterm.js, and round trips UTF-8. Phase 2 (aliases, variables, history) starts only after explicit approval in chat.

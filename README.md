@@ -6,7 +6,7 @@ The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, but 
 
 ## Status
 
-Phase 0. Scaffolding only. The app does not connect yet. Phase 1 lands raw TCP and TLS, telnet option negotiation, and ANSI rendering.
+Phase 1 complete. The app connects to a MUD over TCP or TLS, negotiates the core telnet options, refuses what it does not yet understand, and renders the full ANSI repertoire through xterm.js. Input round trips as UTF-8 with command history. Phase 2 lands aliases, variables, and prefix history search.
 
 See `prompt.md` for the full phase plan and `CLAUDE.md` for stack and workflow rules.
 
