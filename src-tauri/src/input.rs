@@ -52,6 +52,15 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
         return handle_slash(profile, rest);
     }
 
+    // A bare Enter sends a blank line to the server. MUDs use this to
+    // advance prompts and paginated output.
+    if trimmed.is_empty() {
+        return InputResult {
+            bytes: b"\r\n".to_vec(),
+            echo: Vec::new(),
+        };
+    }
+
     // Plain input. Interpolate variables, then expand aliases, then encode.
     let interpolated = profile.vars.interpolate(trimmed);
     let commands = match profile.aliases.expand_line(&interpolated) {
@@ -412,6 +421,21 @@ mod tests {
         let r = process(&mut p, "look");
         assert_eq!(r.bytes, b"look\r\n");
         assert!(r.echo.is_empty());
+    }
+
+    #[test]
+    fn empty_input_sends_bare_crlf() {
+        let mut p = Profile::default();
+        let r = process(&mut p, "");
+        assert_eq!(r.bytes, b"\r\n");
+        assert!(r.echo.is_empty());
+    }
+
+    #[test]
+    fn whitespace_only_input_sends_bare_crlf() {
+        let mut p = Profile::default();
+        let r = process(&mut p, "   ");
+        assert_eq!(r.bytes, b"\r\n");
     }
 
     #[test]
