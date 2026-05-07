@@ -168,14 +168,7 @@ mod tests {
     fn parses_truecolor_background() {
         let mut p = AnsiParser::new();
         let spans = p.feed(b"\x1b[48;2;0;255;0mlawn");
-        assert_eq!(
-            spans[0].attrs.bg,
-            Color::Rgb {
-                r: 0,
-                g: 255,
-                b: 0
-            }
-        );
+        assert_eq!(spans[0].attrs.bg, Color::Rgb { r: 0, g: 255, b: 0 });
     }
 
     #[test]
@@ -189,8 +182,8 @@ mod tests {
     fn bold_then_unbold() {
         let mut p = AnsiParser::new();
         let spans = p.feed(b"\x1b[1mB\x1b[22mn");
-        assert_eq!(spans[0].attrs.bold, true);
-        assert_eq!(spans[1].attrs.bold, false);
+        assert!(spans[0].attrs.bold);
+        assert!(!spans[1].attrs.bold);
     }
 
     #[test]
