@@ -6,7 +6,7 @@ The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, but 
 
 ## Status
 
-Phase 5 complete. A toggleable side panel sits next to the terminal with two stacked sub-panes. The status pane shows your character name, level, class, HP/MP/SP bars, and current room. The chat pane captures `Comm.Channel.Text` GMCP traffic and any line you push to it from a trigger via `route chat`. Layout visibility persists in local storage. Phase 6 lands the tick timer.
+Phase 6 complete. The status pane now shows a tick timer at the top with the remaining seconds before the next MUD tick. Configure it with `#tick interval <secs>`, set a reset pattern with `#tick on {regex}`, set an auto-fire command with `#tick fire <command>`, and toggle the beep with `#tick sound on|off`. The countdown flashes red below 5 seconds and plays a short beep when the timer fires. Type `#tick` to see the current state. Phase 7 lands the map window.
 
 See `prompt.md` for the full phase plan and `CLAUDE.md` for stack and workflow rules.
 
