@@ -31,6 +31,11 @@ pub(crate) struct LineAccumulator {
     buffer: Vec<u8>,
     /// How many bytes of `buffer` have already been emitted as `RawDisplay`.
     displayed_len: usize,
+    /// Wall-clock instant of the last byte appended to `buffer`. The
+    /// session loop polls this on each tick; when the partial has been
+    /// idle past a threshold, it gets flushed as a prompt even if the
+    /// server never sent EOR or GA.
+    last_byte_at: Option<tokio::time::Instant>,
 }
 
 impl LineAccumulator {
@@ -41,6 +46,9 @@ impl LineAccumulator {
     /// Append new bytes and return the operations the session loop should
     /// perform in order.
     pub(crate) fn feed(&mut self, bytes: &[u8]) -> Vec<ChunkOp> {
+        if !bytes.is_empty() {
+            self.last_byte_at = Some(tokio::time::Instant::now());
+        }
         let prev_displayed = self.displayed_len;
         self.buffer.extend_from_slice(bytes);
 
@@ -87,6 +95,18 @@ impl LineAccumulator {
     pub(crate) fn reset(&mut self) {
         self.buffer.clear();
         self.displayed_len = 0;
+        self.last_byte_at = None;
+    }
+
+    /// Time since the last byte was appended, if a partial is still buffered.
+    pub(crate) fn idle_since(
+        &self,
+        now: tokio::time::Instant,
+    ) -> Option<std::time::Duration> {
+        if self.buffer.is_empty() {
+            return None;
+        }
+        self.last_byte_at.map(|at| now.saturating_duration_since(at))
     }
 
     /// Take the current partial out of the buffer and return it as bytes.
@@ -104,6 +124,7 @@ impl LineAccumulator {
         let already_shown = self.displayed_len > 0;
         let bytes = std::mem::take(&mut self.buffer);
         self.displayed_len = 0;
+        self.last_byte_at = None;
         Some((bytes, already_shown))
     }
 }

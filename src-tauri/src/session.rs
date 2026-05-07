@@ -26,6 +26,10 @@ use crate::script_state::{self, ApplyResult, PendingTimer, SharedTimers};
 use crate::tick::{TickPayload, TickRuntime};
 
 const TICK_EMIT_INTERVAL: Duration = Duration::from_millis(250);
+/// How long a buffered partial may sit without new bytes before we treat
+/// it as a complete prompt and flush it. Acts as a fallback for MUDs that
+/// do not honor EOR or GA negotiation.
+const PARTIAL_FLUSH_IDLE: Duration = Duration::from_millis(200);
 
 const READ_BUFFER_BYTES: usize = 8 * 1024;
 
@@ -99,8 +103,22 @@ pub(crate) async fn spawn(
         },
     );
 
-    let stream = connection::connect(&host, port, tls).await?;
+    let mut stream = connection::connect(&host, port, tls).await?;
     info!(%host, port, tls, "session connected");
+
+    // Proactively ask for end-of-record so the server marks each prompt.
+    // Without this, ROM derivatives that gate EOR on negotiation never
+    // send the byte, and we have to merge the prompt with the next room
+    // line. Other negotiations stay reactive in handle_event.
+    let initial = [
+        mudclient_telnet::IAC,
+        telnet_codes::DO,
+        telnet_option::EOR,
+    ];
+    if let Err(e) = stream.write_all(&initial).await {
+        warn!(error = %e, "failed to send initial DO EOR");
+    }
+    let _ = stream.flush().await;
 
     emit_state(
         &app,
@@ -194,6 +212,14 @@ async fn io_loop(
                 }
                 if let Err(e) = fire_due_script_timers(&app, &mut stream, &profile, &timers).await {
                     error!(error = %e, "script timer firing failed");
+                }
+                // Fallback for MUDs that do not send EOR or GA: a partial
+                // that has been idle for more than the threshold below is
+                // almost certainly a complete prompt waiting for input.
+                if let Some(age) = accumulator.idle_since(Instant::now()) {
+                    if age >= PARTIAL_FLUSH_IDLE {
+                        flush_partial_prompt(&app, &profile, &mut accumulator).await;
+                    }
                 }
             }
         }
