@@ -6,7 +6,7 @@ The client targets [Aabahran](https://theforsakenlands.com), a ROM 2.4 MUD, but 
 
 ## Status
 
-Phase 7 complete. The side panel shows a map of your current area in one of two modes. **Mapping** mode auto-builds a persistent map from GMCP `Room.Info` as you walk, supports click-to-walk over the discovered graph, and lets you mark notes or avoid flags by right-clicking. **Server** mode renders the live `Map.Tiles` grid the server pushes (no persistence, updates with each tile push). Toggle modes from the pane header. Maps persist in a SQLite file under your OS app data directory. Phase 8 lands embedded Lua scripting.
+Phase 8 complete. Embedded Lua scripting via `mlua` (Lua 5.4). Scripts get a sandboxed `mud.*` API for `send`, `input`, `echo`, aliases, variables (with per-call snapshot so reads are fresh), regex triggers with Lua callbacks, GMCP subscribers per package, and one-shot timers. Lua callbacks queue side effects that the session applies under the profile lock. Slash commands: `#script load <name>` (reads `<app_data_dir>/scripts/<name>.lua`), `#script reload`, `#scripts` (list loaded scripts and Lua triggers), `#lua <code>` for one-shot evaluation. The Phase 8 demo script in `scripts/combat.lua` covers auto-loot, low-HP flee, a combat alias, and a tell reminder timer. Phase 9 lands per-profile config persistence.
 
 See `prompt.md` for the full phase plan and `CLAUDE.md` for stack and workflow rules.
 
