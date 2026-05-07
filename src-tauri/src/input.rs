@@ -34,8 +34,8 @@ slash commands:
   #tick                                show tick timer state
   #tick interval <secs>                set the tick interval
   #tick reset                          reset the timer now
-  #tick on {pattern}                   reset on a regex match
-  #tick off                            clear the reset pattern
+  #tick on {pattern}                   also reset on a regex match
+  #tick off                            clear the regex reset pattern
   #tick fire <command>                 run a command on each fire
   #tick nofire                         clear the auto-fire command
   #tick sound on|off                   toggle the tick beep

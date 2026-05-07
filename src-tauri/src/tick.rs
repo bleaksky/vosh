@@ -46,6 +46,10 @@ pub(crate) struct TickRuntime {
     /// Wall-clock instant the timer should fire next. `None` while the
     /// timer is disabled.
     pub next_fire: Option<Instant>,
+    /// Last `hour` value observed on a GMCP `World.Time` push. Used to
+    /// detect the moment the server's tick fires on MUDs that report
+    /// world time (Aabahran does, and many ROM derivatives do as well).
+    pub last_world_hour: Option<String>,
 }
 
 impl TickRuntime {
@@ -87,6 +91,24 @@ impl TickRuntime {
 
     pub(crate) fn check_reset_match(&self, line: &str) -> bool {
         self.reset_regex.as_ref().is_some_and(|r| r.is_match(line))
+    }
+
+    /// Update the last observed world hour. Returns true when the value
+    /// actually changed (and the caller should reset the tick). The first
+    /// observation primes the state without firing a reset, so the user
+    /// does not see a spurious tick the moment they connect.
+    pub(crate) fn observe_world_hour(&mut self, hour: &str) -> bool {
+        match &self.last_world_hour {
+            Some(prev) if prev == hour => false,
+            Some(_) => {
+                self.last_world_hour = Some(hour.to_string());
+                true
+            }
+            None => {
+                self.last_world_hour = Some(hour.to_string());
+                false
+            }
+        }
     }
 
     pub(crate) fn remaining(&self, now: Instant) -> Option<Duration> {
@@ -203,5 +225,21 @@ mod tests {
     fn check_reset_match_false_when_no_pattern() {
         let t = TickRuntime::default();
         assert!(!t.check_reset_match("anything"));
+    }
+
+    #[test]
+    fn observe_world_hour_first_call_primes_without_reset() {
+        let mut t = TickRuntime::default();
+        assert!(!t.observe_world_hour("9"));
+        assert_eq!(t.last_world_hour.as_deref(), Some("9"));
+    }
+
+    #[test]
+    fn observe_world_hour_returns_true_when_value_changes() {
+        let mut t = TickRuntime::default();
+        let _ = t.observe_world_hour("9");
+        assert!(!t.observe_world_hour("9"));
+        assert!(t.observe_world_hour("10"));
+        assert_eq!(t.last_world_hour.as_deref(), Some("10"));
     }
 }

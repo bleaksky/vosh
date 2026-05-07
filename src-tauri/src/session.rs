@@ -19,7 +19,7 @@ use crate::gmcp_bind;
 use crate::input;
 use crate::line_accumulator::{ChunkOp, LineAccumulator};
 use crate::profile::Profile;
-use crate::tick::TickPayload;
+use crate::tick::{TickPayload, TickRuntime};
 
 const TICK_EMIT_INTERVAL: Duration = Duration::from_millis(250);
 
@@ -50,10 +50,11 @@ pub(crate) struct RoutedPayload {
     pub text: String,
 }
 
-/// GMCP packages we ask the server to enable in Core.Supports.Set. Phase 4
-/// covers Char and Room. Comm goes here too so chat capture in Phase 5 has
-/// data to subscribe to. More packages land alongside the script engine.
-const REQUESTED_GMCP_PACKAGES: &[&str] = &["Char 1", "Room 1", "Comm 1"];
+/// GMCP packages we ask the server to enable in Core.Supports.Set. Char,
+/// Room, and Comm cover the player view; World powers the tick timer reset
+/// (Aabahran ticks fire the moment its `World.Time.hour` field advances).
+/// More packages land alongside the script engine in Phase 8.
+const REQUESTED_GMCP_PACKAGES: &[&str] = &["Char 1", "Room 1", "Comm 1", "World 1"];
 
 pub(crate) struct SessionHandle {
     tx_outgoing: mpsc::UnboundedSender<Vec<u8>>,
@@ -328,9 +329,19 @@ async fn handle_gmcp(app: &AppHandle, profile: &Arc<Mutex<Profile>>, payload: &[
             return;
         }
     };
-    {
+    let tick_reset = {
         let mut p = profile.lock().await;
         gmcp_bind::apply(&mut p.vars, &msg);
+        observe_world_time_for_tick(&mut p.tick, &msg)
+    };
+    if tick_reset {
+        let payload = {
+            let p = profile.lock().await;
+            TickPayload::from_runtime(&p.tick, Instant::now(), false)
+        };
+        if let Err(e) = app.emit("session://tick", &payload) {
+            warn!(error = %e, "failed to emit tick payload after world hour change");
+        }
     }
     if let Err(e) = app.emit(
         "session://gmcp",
@@ -340,6 +351,33 @@ async fn handle_gmcp(app: &AppHandle, profile: &Arc<Mutex<Profile>>, payload: &[
         },
     ) {
         warn!(error = %e, "failed to emit GMCP event");
+    }
+}
+
+/// Detect a tick fire from a GMCP `World.Time` push. Aabahran (and most ROM
+/// derivatives that ship World.Time) advance the `hour` field every server
+/// tick, so an hour change is the natural reset signal. Returns true when
+/// the tick was reset.
+fn observe_world_time_for_tick(tick: &mut TickRuntime, msg: &mudclient_gmcp::Message) -> bool {
+    if msg.package != "World.Time" {
+        return false;
+    }
+    let Some(obj) = msg.data.as_object() else {
+        return false;
+    };
+    let Some(hour_value) = obj.get("hour") else {
+        return false;
+    };
+    let hour_str = match hour_value {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Number(n) => n.to_string(),
+        _ => return false,
+    };
+    if tick.observe_world_hour(&hour_str) {
+        tick.reset(Instant::now());
+        true
+    } else {
+        false
     }
 }
 
