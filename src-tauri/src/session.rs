@@ -3,15 +3,17 @@
 
 use std::sync::Arc;
 
-use mudclient_telnet::{Event as TelnetEvent, Negotiator, Parser};
+use mudclient_telnet::{option as telnet_option, Event as TelnetEvent, Negotiator, Parser};
 use mudclient_trigger::LineResult;
 use serde::Serialize;
+use serde_json::json;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
 use crate::connection::{self, ConnectionError, Stream};
+use crate::gmcp_bind;
 use crate::line_accumulator::{ChunkOp, LineAccumulator};
 use crate::profile::Profile;
 
@@ -29,6 +31,17 @@ pub(crate) enum StatePayload {
     Connected { host: String, port: u16, tls: bool },
     Disconnected { reason: Option<String> },
 }
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct GmcpPayload {
+    pub package: String,
+    pub data: serde_json::Value,
+}
+
+/// GMCP packages we ask the server to enable in Core.Supports.Set. Phase 4
+/// covers Char and Room. Comm goes here too so chat capture in Phase 5 has
+/// data to subscribe to. More packages land alongside the script engine.
+const REQUESTED_GMCP_PACKAGES: &[&str] = &["Char 1", "Room 1", "Comm 1"];
 
 pub(crate) struct SessionHandle {
     tx_outgoing: mpsc::UnboundedSender<Vec<u8>>,
@@ -180,6 +193,20 @@ async fn handle_event(
             }
             Ok(())
         }
+        TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
+            handle_gmcp(app, profile, &payload).await;
+            Ok(())
+        }
+        TelnetEvent::Will(opt) if opt == telnet_option::GMCP => {
+            // Accept GMCP via the negotiator, then immediately announce
+            // ourselves and the packages we want.
+            let response = negotiator.handle(&TelnetEvent::Will(opt));
+            stream.write_all(&response).await?;
+            stream.write_all(&hello_subnegotiation()).await?;
+            stream.write_all(&supports_subnegotiation()).await?;
+            stream.flush().await?;
+            Ok(())
+        }
         other => {
             let response = negotiator.handle(&other);
             if !response.is_empty() {
@@ -189,6 +216,47 @@ async fn handle_event(
             Ok(())
         }
     }
+}
+
+async fn handle_gmcp(app: &AppHandle, profile: &Arc<Mutex<Profile>>, payload: &[u8]) {
+    let msg = match mudclient_gmcp::parse(payload) {
+        Ok(m) => m,
+        Err(e) => {
+            warn!(error = %e, "failed to parse GMCP payload");
+            return;
+        }
+    };
+    {
+        let mut p = profile.lock().await;
+        gmcp_bind::apply(&mut p.vars, &msg);
+    }
+    if let Err(e) = app.emit(
+        "session://gmcp",
+        GmcpPayload {
+            package: msg.package,
+            data: msg.data,
+        },
+    ) {
+        warn!(error = %e, "failed to emit GMCP event");
+    }
+}
+
+fn hello_subnegotiation() -> Vec<u8> {
+    let body = mudclient_gmcp::build(
+        "Core.Hello",
+        &json!({
+            "client": "mudclient",
+            "version": env!("CARGO_PKG_VERSION"),
+        }),
+    )
+    .unwrap_or_default();
+    Negotiator::build_gmcp_subnegotiation(&body)
+}
+
+fn supports_subnegotiation() -> Vec<u8> {
+    let body = mudclient_gmcp::build("Core.Supports.Set", &REQUESTED_GMCP_PACKAGES.to_vec())
+        .unwrap_or_default();
+    Negotiator::build_gmcp_subnegotiation(&body)
 }
 
 fn emit_line_result(app: &AppHandle, result: &LineResult, clear_first: bool) {

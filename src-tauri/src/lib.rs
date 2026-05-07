@@ -4,6 +4,7 @@ use tracing_subscriber::EnvFilter;
 
 mod commands;
 mod connection;
+mod gmcp_bind;
 mod input;
 mod line_accumulator;
 mod profile;
