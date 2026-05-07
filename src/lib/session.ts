@@ -91,6 +91,20 @@ export async function onRouted(cb: (payload: RoutedPayload) => void): Promise<Un
   });
 }
 
+export interface TickPayload {
+  enabled: boolean;
+  interval_ms: number;
+  remaining_ms: number;
+  fired: boolean;
+  sound: boolean;
+}
+
+export async function onTick(cb: (payload: TickPayload) => void): Promise<UnlistenFn> {
+  return listen<TickPayload>('session://tick', (event) => {
+    cb(event.payload);
+  });
+}
+
 export async function onOutput(cb: (bytes: Uint8Array) => void): Promise<UnlistenFn> {
   return listen<OutputPayload>('session://output', (event) => {
     cb(new Uint8Array(event.payload.bytes));

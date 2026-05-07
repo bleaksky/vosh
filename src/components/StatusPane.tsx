@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { onGmcp, onState } from '../lib/session';
+import { useEffect, useRef, useState } from 'react';
+import { onGmcp, onState, onTick, type TickPayload } from '../lib/session';
 
 type Stat = number | string | undefined;
 
@@ -72,14 +72,42 @@ function Bar({
   );
 }
 
+function playBeep() {
+  try {
+    type WindowWithWebkit = Window & { webkitAudioContext?: typeof AudioContext };
+    const w = window as WindowWithWebkit;
+    const Ctx = window.AudioContext ?? w.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const now = ctx.currentTime;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.18, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+    osc.start(now);
+    osc.stop(now + 0.2);
+    osc.onended = () => ctx.close();
+  } catch {
+    // Audio unavailable; ignore.
+  }
+}
+
 export function StatusPane() {
   const [vitals, setVitals] = useState<Vitals>({});
   const [room, setRoom] = useState<RoomInfo>({});
   const [char, setChar] = useState<CharStatus>({});
+  const [tick, setTick] = useState<TickPayload | null>(null);
+  const lastFiredRef = useRef<number>(0);
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
+    let unsubTick: (() => void) | undefined;
 
     onGmcp((payload) => {
       switch (payload.package) {
@@ -105,23 +133,48 @@ export function StatusPane() {
         setVitals({});
         setRoom({});
         setChar({});
+        setTick(null);
       }
     }).then((fn) => {
       unsubState = fn;
     });
 
+    onTick((payload) => {
+      setTick(payload);
+      if (payload.fired && payload.sound) {
+        // Debounce in case of duplicate fire emits.
+        const now = Date.now();
+        if (now - lastFiredRef.current > 500) {
+          lastFiredRef.current = now;
+          playBeep();
+        }
+      }
+    }).then((fn) => {
+      unsubTick = fn;
+    });
+
     return () => {
       unsubGmcp?.();
       unsubState?.();
+      unsubTick?.();
     };
   }, []);
 
   const charLine = char.fullname || char.name || '-';
+  const tickRemaining = tick?.enabled ? Math.ceil(tick.remaining_ms / 1000) : null;
+  const tickInterval = tick?.enabled ? Math.round(tick.interval_ms / 1000) : null;
+  const tickFlash = tick?.enabled && tick.remaining_ms <= 5000;
 
   return (
     <section className="status-pane" aria-label="status">
       <header className="pane-header">status</header>
       <div className="status-body">
+        <div className={`status-row tick-row${tickFlash ? ' tick-flash' : ''}`}>
+          <span className="status-label">tick</span>
+          <span className="status-value">
+            {tick?.enabled ? `${tickRemaining}s / ${tickInterval}s` : 'off'}
+          </span>
+        </div>
         <div className="status-row">
           <span className="status-label">char</span>
           <span className="status-value">{charLine}</span>

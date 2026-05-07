@@ -270,6 +270,30 @@ body,
   white-space: nowrap;
 }
 
+.tick-row .status-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.tick-row.tick-flash {
+  animation: tick-flash 1s ease-in-out infinite;
+}
+
+@keyframes tick-flash {
+  0%,
+  100% {
+    color: #e6edf3;
+  }
+  50% {
+    color: #f85149;
+  }
+}
+
+.tick-row.tick-flash .status-label,
+.tick-row.tick-flash .status-value {
+  color: inherit;
+}
+
 .bar-row {
   display: flex;
   align-items: center;
