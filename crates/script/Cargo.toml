@@ -1,0 +1,18 @@
+[package]
+name = "mudclient-script"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Embedded Lua scripting engine with sandboxed mud.* API."
+rust-version.workspace = true
+
+[dependencies]
+mlua = { version = "0.10", features = ["lua54", "vendored", "send"] }
+regex = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

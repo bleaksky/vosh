@@ -9,6 +9,7 @@ members = [
     "crates/trigger",
     "crates/gmcp",
     "crates/map",
+    "crates/script",
 ]
 
 [workspace.package]
@@ -40,6 +41,8 @@ struct_excessive_bools = "allow"
 fn_params_excessive_bools = "allow"
 single_match_else = "allow"
 trivially_copy_pass_by_ref = "allow"
+too_many_arguments = "allow"
+too_many_lines = "allow"
 
 [workspace.dependencies]
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }
