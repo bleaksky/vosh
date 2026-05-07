@@ -6,9 +6,12 @@ use mudclient_alias::AliasStore;
 use mudclient_trigger::TriggerStore;
 use mudclient_vars::VariableStore;
 
+use crate::tick::TickRuntime;
+
 #[derive(Debug, Default)]
 pub(crate) struct Profile {
     pub(crate) aliases: AliasStore,
     pub(crate) vars: VariableStore,
     pub(crate) triggers: TriggerStore,
+    pub(crate) tick: TickRuntime,
 }

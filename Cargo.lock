@@ -1891,10 +1891,12 @@ name = "mudclient-app"
 version = "0.0.1"
 dependencies = [
  "mudclient-alias",
+ "mudclient-ansi",
  "mudclient-gmcp",
  "mudclient-telnet",
  "mudclient-trigger",
  "mudclient-vars",
+ "regex",
  "rustls",
  "rustls-pki-types",
  "serde",

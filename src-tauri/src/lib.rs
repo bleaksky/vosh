@@ -9,6 +9,7 @@ mod input;
 mod line_accumulator;
 mod profile;
 mod session;
+mod tick;
 
 use commands::{
     app_version, session_connect, session_disconnect, session_send, session_send_input,
