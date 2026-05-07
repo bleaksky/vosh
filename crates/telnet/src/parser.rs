@@ -222,14 +222,7 @@ mod tests {
     #[test]
     fn parses_subnegotiation() {
         let mut p = Parser::new();
-        let bytes = [
-            IAC,
-            SB,
-            option::TTYPE,
-            crate::codes::ttype::SEND,
-            IAC,
-            SE,
-        ];
+        let bytes = [IAC, SB, option::TTYPE, crate::codes::ttype::SEND, IAC, SE];
         let events = p.feed(&bytes);
         assert_eq!(
             events,
@@ -243,17 +236,7 @@ mod tests {
     #[test]
     fn escaped_iac_in_subnegotiation() {
         let mut p = Parser::new();
-        let bytes = [
-            IAC,
-            SB,
-            option::GMCP,
-            b'a',
-            IAC,
-            IAC,
-            b'b',
-            IAC,
-            SE,
-        ];
+        let bytes = [IAC, SB, option::GMCP, b'a', IAC, IAC, b'b', IAC, SE];
         let events = p.feed(&bytes);
         assert_eq!(
             events,
