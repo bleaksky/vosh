@@ -133,20 +133,25 @@ body,
   z-index: 0;
 }
 
-/* The terminal column wraps the host in a positioned shell. The host
-   itself is absolutely positioned inside, so xterm's canvas height
-   has no chance to feed back into the column's flex sizing. */
+/* The terminal column is a flex column itself, with the host as a
+   flex child. FitAddon reads parentElement.clientHeight on the
+   xterm element (.xterm) — its parent is .terminal-host. With the
+   host as a real flex child of .terminal-column (not
+   position: absolute), clientHeight reports the actual flexed-to
+   height in the steady state, which is what FitAddon needs. */
 .terminal-column {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .terminal-host {
-  position: absolute;
-  inset: 0;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
   overflow: hidden;
   padding: 0.6rem 0.8rem;
   background: #090e13;
