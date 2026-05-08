@@ -23,6 +23,16 @@ pub(crate) struct TickConfig {
     pub auto_fire: Option<String>,
     pub sound: bool,
     pub reset_pattern: Option<String>,
+    /// Seconds before the next fire at which the warning echo should
+    /// land. None disables the warning.
+    pub warn_at_secs: Option<u64>,
+    /// Text printed to the terminal as the warning. None falls back to
+    /// a sensible default when `warn_at_secs` is set.
+    pub warn_message: Option<String>,
+    /// Named color for the warning text. Accepts standard ANSI names
+    /// ("red", "bright-red", "yellow", etc.). None defaults to
+    /// bright-red.
+    pub warn_color: Option<String>,
 }
 
 impl Default for TickConfig {
@@ -33,6 +43,9 @@ impl Default for TickConfig {
             auto_fire: None,
             sound: true,
             reset_pattern: None,
+            warn_at_secs: None,
+            warn_message: None,
+            warn_color: None,
         }
     }
 }
@@ -50,23 +63,29 @@ pub(crate) struct TickRuntime {
     /// detect the moment the server's tick fires on MUDs that report
     /// world time (Aabahran does, and many ROM derivatives do as well).
     pub last_world_hour: Option<String>,
+    /// Whether the warning echo has already fired for the current cycle.
+    /// Resets on tick fire, on `reset()`, and on interval changes.
+    pub warned_this_cycle: bool,
 }
 
 impl TickRuntime {
     pub(crate) fn enable(&mut self, now: Instant) {
         self.config.enabled = true;
         self.next_fire = Some(now + self.config.interval);
+        self.warned_this_cycle = false;
     }
 
     pub(crate) fn disable(&mut self) {
         self.config.enabled = false;
         self.next_fire = None;
+        self.warned_this_cycle = false;
     }
 
     pub(crate) fn reset(&mut self, now: Instant) {
         if self.config.enabled {
             self.next_fire = Some(now + self.config.interval);
         }
+        self.warned_this_cycle = false;
     }
 
     pub(crate) fn set_interval(&mut self, secs: u64, now: Instant) {
@@ -74,6 +93,7 @@ impl TickRuntime {
         if self.config.enabled {
             self.next_fire = Some(now + self.config.interval);
         }
+        self.warned_this_cycle = false;
     }
 
     pub(crate) fn set_reset_pattern(
@@ -127,7 +147,53 @@ impl TickRuntime {
             return false;
         }
         self.next_fire = Some(now + self.config.interval);
+        self.warned_this_cycle = false;
         true
+    }
+
+    /// Take the warning slot if the configured threshold is set, the
+    /// remaining time has fallen below it, and we haven't already
+    /// fired this cycle. Returns true exactly once per cycle.
+    pub(crate) fn try_consume_warn(&mut self, now: Instant) -> bool {
+        if !self.config.enabled || self.warned_this_cycle {
+            return false;
+        }
+        let Some(secs) = self.config.warn_at_secs else {
+            return false;
+        };
+        let Some(remaining) = self.remaining(now) else {
+            return false;
+        };
+        if remaining.as_secs() <= secs && remaining > Duration::ZERO {
+            self.warned_this_cycle = true;
+            return true;
+        }
+        false
+    }
+}
+
+/// Resolve a named color into the SGR escape that paints it. Unknown
+/// names fall back to bright red so a misconfigured color still draws
+/// attention.
+pub(crate) fn warn_color_escape(name: Option<&str>) -> &'static str {
+    let lowered = name.unwrap_or("").to_ascii_lowercase();
+    match lowered.as_str() {
+        "red" => "\x1b[31m",
+        "green" => "\x1b[32m",
+        "yellow" => "\x1b[33m",
+        "blue" => "\x1b[34m",
+        "magenta" => "\x1b[35m",
+        "cyan" => "\x1b[36m",
+        "white" => "\x1b[37m",
+        "bright-green" | "bgreen" => "\x1b[1;32m",
+        "bright-yellow" | "byellow" => "\x1b[1;33m",
+        "bright-blue" | "bblue" => "\x1b[1;34m",
+        "bright-magenta" | "bmagenta" => "\x1b[1;35m",
+        "bright-cyan" | "bcyan" => "\x1b[1;36m",
+        "bright-white" | "bwhite" => "\x1b[1;37m",
+        // bright-red doubles as the unknown-name fallback so a typo
+        // still draws attention.
+        _ => "\x1b[1;31m",
     }
 }
 

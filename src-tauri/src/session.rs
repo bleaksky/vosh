@@ -321,20 +321,40 @@ async fn handle_tick(
     // Take the firing decision under the lock. If the timer fired, capture
     // the auto-fire command (if any) so we can run it after releasing the
     // lock.
-    let (payload, auto_fire) = {
+    let (payload, auto_fire, warn_echo) = {
         let mut p = profile.lock().await;
         let fired = p.tick.try_consume_fire(now);
+        let warned = p.tick.try_consume_warn(now);
         let payload = TickPayload::from_runtime(&p.tick, now, fired);
         let auto_fire = if fired {
             p.tick.config.auto_fire.clone()
         } else {
             None
         };
-        (payload, auto_fire)
+        let warn_echo = if warned {
+            let message = p
+                .tick
+                .config
+                .warn_message
+                .clone()
+                .unwrap_or_else(|| match p.tick.config.warn_at_secs {
+                    Some(s) => format!("TICK IN {s}s"),
+                    None => "TICK INCOMING".to_string(),
+                });
+            let color = crate::tick::warn_color_escape(p.tick.config.warn_color.as_deref());
+            Some(format!("\r\n{color}{message}\x1b[0m\r\n"))
+        } else {
+            None
+        };
+        (payload, auto_fire, warn_echo)
     };
 
     if !payload.enabled && !payload.fired {
         return Ok(());
+    }
+
+    if let Some(text) = warn_echo {
+        emit_output(app, text.into_bytes());
     }
 
     if let Err(e) = app.emit("session://tick", &payload) {

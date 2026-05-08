@@ -135,6 +135,14 @@ pub(crate) struct TickPersistConfig {
     pub sound: bool,
     #[serde(default)]
     pub reset_pattern: Option<String>,
+    /// Seconds before the next fire to print the warning echo. None
+    /// disables the warning entirely.
+    #[serde(default)]
+    pub warn_at_secs: Option<u64>,
+    #[serde(default)]
+    pub warn_message: Option<String>,
+    #[serde(default)]
+    pub warn_color: Option<String>,
 }
 
 impl Default for TickPersistConfig {
@@ -145,6 +153,9 @@ impl Default for TickPersistConfig {
             auto_fire: None,
             sound: true,
             reset_pattern: None,
+            warn_at_secs: None,
+            warn_message: None,
+            warn_color: None,
         }
     }
 }
@@ -177,6 +188,9 @@ impl ProfileConfig {
             auto_fire: profile.tick.config.auto_fire.clone(),
             sound: profile.tick.config.sound,
             reset_pattern: profile.tick.config.reset_pattern.clone(),
+            warn_at_secs: profile.tick.config.warn_at_secs,
+            warn_message: profile.tick.config.warn_message.clone(),
+            warn_color: profile.tick.config.warn_color.clone(),
         };
 
         let ui = UiConfig {
@@ -254,6 +268,9 @@ impl ProfileConfig {
                 auto_fire: self.tick.auto_fire.clone(),
                 sound: self.tick.sound,
                 reset_pattern: self.tick.reset_pattern.clone(),
+                warn_at_secs: self.tick.warn_at_secs,
+                warn_message: self.tick.warn_message.clone(),
+                warn_color: self.tick.warn_color.clone(),
             },
             ..Default::default()
         };
