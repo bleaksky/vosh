@@ -124,15 +124,10 @@ body,
   font-size: 12px;
 }
 
-/* `.middle` is now a CSS grid itself (terminal column + optional side
-   panel column), not a flex container. Flex made the terminal-host's
-   size depend on xterm's intrinsic canvas height, so when the grid
-   row shrank, the host refused to follow and the canvas overflowed
-   downward into the input/status rows. Grid columns size purely from
-   the cell allocation, no content feedback. */
+/* `.middle` is the terminal + side surfaces row. Flex row so the
+   side panel and drawers slot in next to the terminal naturally. */
 .middle {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   min-height: 0;
   min-width: 0;
   width: 100%;
@@ -142,11 +137,21 @@ body,
   z-index: 0;
 }
 
-.terminal-host {
+/* The terminal column wraps the host in a positioned shell. The host
+   itself is absolutely positioned inside, so xterm's canvas height
+   has no chance to feed back into the column's flex sizing. */
+.terminal-column {
+  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  overflow: clip;
   position: relative;
+  overflow: clip;
+}
+
+.terminal-host {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
   padding: 0.6rem 0.8rem;
   background: #090e13;
   box-sizing: border-box;

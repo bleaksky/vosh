@@ -143,13 +143,15 @@ function App() {
         searchOpen={searchOpen}
       />
       <div className="middle" onMouseUp={handleMiddleMouseDown}>
-        <Terminal
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          onReady={(handle) => {
-            termRef.current = handle;
-          }}
-        />
+        <div className="terminal-column">
+          <Terminal
+            fontFamily={fontFamily}
+            fontSize={fontSize}
+            onReady={(handle) => {
+              termRef.current = handle;
+            }}
+          />
+        </div>
         {searchOpen ? (
           <Resizable
             storageKey="mudclient.layout.searchWidth"
