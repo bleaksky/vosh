@@ -62,20 +62,31 @@ body,
   flex: 0 0 6rem;
 }
 
-/* Scoped to the connect/disconnect submit button only. The pill
-   toggles next to it use .pill rules and must not inherit this fill. */
+/* Connect / disconnect submit button. Calmer than the original loud
+   green: matches the toggle pills in shape, gets a subtle green text
+   tint when idle and a red one when live so the state still reads
+   without the bar shouting about it. */
 .connect button[type='submit'] {
-  background: #87a987;
-  color: #ffffff;
+  background: #14141a;
+  color: #87a987;
   border: 0;
-  border-radius: 4px;
-  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  padding: 0.18rem 0.85rem;
   font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
   cursor: pointer;
+  letter-spacing: 0.02em;
 }
 
 .connect button[type='submit']:hover {
-  background: #8a9a7b;
+  background: #1d1d24;
+}
+
+/* When the user is connected the same button reads as "disconnect" —
+   tint it red so the action it'll perform is clear. */
+.connect.is-live button[type='submit'] {
+  color: #e46876;
 }
 
 .connect .status {
@@ -1230,4 +1241,44 @@ body,
 
 .map-mode-toggle button[aria-pressed='true'] {
   color: #7fb4ca;
+}
+
+.statusbar-moons {
+  gap: 0.3rem;
+}
+
+.moon-glyph {
+  color: #5a5a52;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.moon-glyph.moon-active {
+  color: #e6c384;
+  text-shadow: 0 0 4px rgba(230, 195, 132, 0.45);
+}
+
+.moon-badge {
+  margin-left: 0.25rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.moon-badge.moon-eclipse {
+  background: rgba(228, 104, 118, 0.18);
+  color: #e46876;
+}
+
+.moon-badge.moon-triad {
+  background: rgba(147, 138, 169, 0.18);
+  color: #d2a8ff;
+}
+
+.moon-badge.moon-near {
+  background: rgba(230, 195, 132, 0.16);
+  color: #e6c384;
 }

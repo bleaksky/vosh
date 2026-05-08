@@ -67,7 +67,7 @@ export function Connect({
   };
 
   return (
-    <form className="connect" onSubmit={handleSubmit}>
+    <form className={`connect${isLive ? ' is-live' : ''}`} onSubmit={handleSubmit}>
       <input
         type="text"
         value={host}

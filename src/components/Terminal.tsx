@@ -21,7 +21,11 @@ interface Props {
 }
 
 // Kanso Zen palette, matching the user's Ghostty config so the terminal
-// inside the app looks the same as the one outside it.
+// inside the app looks the same as the one outside it. ANSI 7 (white)
+// in the published Kanso Zen palette is `#c8c093` — a warm tan that the
+// MUD's plain "white" labels render as a yellow-gold. We keep every
+// other slot faithful to the theme but pin 7 to the cool fg gray so
+// "white" reads as the user expects.
 const KANSO_ZEN_THEME: ITheme = {
   background: '#090e13',
   foreground: '#c5c9c7',
@@ -36,7 +40,7 @@ const KANSO_ZEN_THEME: ITheme = {
   blue: '#8ba4b0',
   magenta: '#a292a3',
   cyan: '#8ea4a2',
-  white: '#c8c093',
+  white: '#c5c9c7',
   brightBlack: '#a4a7a4',
   brightRed: '#e46876',
   brightGreen: '#87a987',
@@ -44,7 +48,7 @@ const KANSO_ZEN_THEME: ITheme = {
   brightBlue: '#7fb4ca',
   brightMagenta: '#938aa9',
   brightCyan: '#7aa89f',
-  brightWhite: '#c5c9c7',
+  brightWhite: '#f0f3f1',
 };
 
 export function Terminal({ onReady, fontFamily, fontSize }: Props) {

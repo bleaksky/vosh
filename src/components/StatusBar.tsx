@@ -51,8 +51,34 @@ interface WorldTime {
   weather?: string;
   precip?: string;
   light?: string;
-  moon?: string;
 }
+
+interface MoonInfo {
+  name?: string;
+  active?: boolean;
+  phase?: number;
+  phase_name?: string;
+}
+
+interface MoonsState {
+  moons: MoonInfo[];
+  eclipse?: boolean;
+  triad?: boolean;
+  near_alignment?: boolean;
+}
+
+// Phase glyphs lifted from the user's TinTin moons_panel.tin so the
+// in-app status bar shows the same shapes they're used to seeing.
+const MOON_GLYPHS: Record<number, string> = {
+  0: '●',
+  1: '◐',
+  2: '◐',
+  3: '◑',
+  4: '○',
+  5: '◑',
+  6: '◐',
+  7: '◐',
+};
 
 function pickFirst<T>(...values: (T | undefined)[]): T | undefined {
   for (const v of values) {
@@ -128,6 +154,7 @@ function StatBar({
 export function StatusBar() {
   const [vitals, setVitals] = useState<Vitals>({});
   const [world, setWorld] = useState<WorldTime>({});
+  const [moons, setMoons] = useState<MoonsState>({ moons: [] });
   const [tick, setTick] = useState<TickPayload | null>(null);
   const lastFiredRef = useRef<number>(0);
 
@@ -143,6 +170,17 @@ export function StatusBar() {
       }
       if (payload.package === 'World.Time' && payload.data && typeof payload.data === 'object') {
         setWorld((prev) => ({ ...prev, ...(payload.data as WorldTime) }));
+        return;
+      }
+      if (payload.package === 'World.Moons' && payload.data && typeof payload.data === 'object') {
+        const data = payload.data as Partial<MoonsState>;
+        const next: MoonsState = {
+          moons: Array.isArray(data.moons) ? data.moons : [],
+        };
+        if (data.eclipse !== undefined) next.eclipse = data.eclipse;
+        if (data.triad !== undefined) next.triad = data.triad;
+        if (data.near_alignment !== undefined) next.near_alignment = data.near_alignment;
+        setMoons(next);
       }
     }).then((fn) => {
       unsubGmcp = fn;
@@ -152,6 +190,7 @@ export function StatusBar() {
       if (payload.kind === 'disconnected') {
         setVitals({});
         setWorld({});
+        setMoons({ moons: [] });
         setTick(null);
       }
     }).then((fn) => {
@@ -218,10 +257,32 @@ export function StatusBar() {
           {weatherLabel && <span className="statusbar-value">{weatherLabel}</span>}
         </div>
       )}
-      {world.moon && (
-        <div className="statusbar-cell">
-          <span className="statusbar-key">moon</span>
-          <span className="statusbar-value">{world.moon}</span>
+      {moons.moons.length > 0 && (
+        <div
+          className="statusbar-cell statusbar-moons"
+          title={moons.moons
+            .map(
+              (m) =>
+                `${m.name ?? '?'}: ${m.phase_name ?? `phase ${m.phase ?? '?'}`}` +
+                (m.active ? ' (active)' : ''),
+            )
+            .join('\n')}
+        >
+          {moons.moons.map((m, i) => (
+            <span
+              key={m.name ?? i}
+              className={`moon-glyph${m.active ? ' moon-active' : ''}`}
+            >
+              {MOON_GLYPHS[m.phase ?? -1] ?? '◯'}
+            </span>
+          ))}
+          {moons.eclipse && <span className="moon-badge moon-eclipse">eclipse</span>}
+          {!moons.eclipse && moons.triad && (
+            <span className="moon-badge moon-triad">triad</span>
+          )}
+          {!moons.eclipse && !moons.triad && moons.near_alignment && (
+            <span className="moon-badge moon-near">near</span>
+          )}
         </div>
       )}
     </div>

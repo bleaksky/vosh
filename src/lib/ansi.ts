@@ -17,26 +17,30 @@ export interface AnsiChunk {
   style: AnsiStyle;
 }
 
+// Match the Kanso Zen palette used by the live xterm terminal so log
+// search hits in SearchView render with the same colors as the live
+// session. ANSI 7 ("white") is pinned to the cool fg gray, not Kanso's
+// warm-tan #c8c093, for the same reason as in Terminal.tsx.
 const PALETTE_8: Record<number, string> = {
-  0: '#0d1117',
-  1: '#cf222e',
-  2: '#1a7f37',
-  3: '#9a6700',
-  4: '#0969da',
-  5: '#8250df',
-  6: '#1b7c83',
-  7: '#c6cdd5',
+  0: '#0d0c0c',
+  1: '#c4746e',
+  2: '#8a9a7b',
+  3: '#c4b28a',
+  4: '#8ba4b0',
+  5: '#a292a3',
+  6: '#8ea4a2',
+  7: '#c5c9c7',
 };
 
 const PALETTE_BRIGHT: Record<number, string> = {
-  0: '#57606a',
-  1: '#ff8182',
-  2: '#56d364',
-  3: '#e3b341',
-  4: '#79c0ff',
-  5: '#d2a8ff',
-  6: '#56d4dd',
-  7: '#f0f6fc',
+  0: '#a4a7a4',
+  1: '#e46876',
+  2: '#87a987',
+  3: '#e6c384',
+  4: '#7fb4ca',
+  5: '#938aa9',
+  6: '#7aa89f',
+  7: '#f0f3f1',
 };
 
 function rgbForAnsi256(n: number): string {
