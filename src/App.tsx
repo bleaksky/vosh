@@ -6,6 +6,7 @@ import { TriggersDrawer } from './components/TriggersDrawer';
 import { SettingsDrawer } from './components/SettingsDrawer';
 import { SidePanel } from './components/SidePanel';
 import { SearchView } from './components/SearchView';
+import { StatusBar } from './components/StatusBar';
 import { checkForUpdate, getUiConfig, onState, type StatePayload } from './lib/session';
 import { applyTheme } from './lib/theme';
 
@@ -125,6 +126,7 @@ function App() {
           onError={handleError}
         />
       </div>
+      <StatusBar />
       <Input
         ref={inputRef}
         enabled

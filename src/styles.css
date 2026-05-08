@@ -20,7 +20,7 @@ body,
 
 .app {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr auto auto;
   grid-template-columns: minmax(0, 1fr);
   height: 100vh;
   width: 100vw;
@@ -932,4 +932,146 @@ body,
 
 .plugin-actions button:not(:disabled):hover {
   background: #21262d;
+}
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.45rem 0.85rem 0.5rem;
+  background: #0d1117;
+  border-top: 1px solid #30363d;
+  font-family: 'JetBrains Mono', 'Fira Code', Menlo, Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  color: #c9d1d9;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.statusbar::-webkit-scrollbar {
+  height: 4px;
+}
+
+.statusbar::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 2px;
+}
+
+.statusbar-bar {
+  display: grid;
+  grid-template-columns: auto auto minmax(70px, 130px);
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    'label percent track'
+    '.     .       value';
+  column-gap: 0.4rem;
+  row-gap: 0.05rem;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.statusbar-bar-label {
+  grid-area: label;
+  color: #c9d1d9;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.statusbar-bar-percent {
+  grid-area: percent;
+  color: #c9d1d9;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusbar-bar-track {
+  grid-area: track;
+  position: relative;
+  height: 0.7rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.statusbar-bar-fill {
+  display: block;
+  height: 100%;
+  transition: width 0.18s ease-out;
+}
+
+.statusbar-bar-value {
+  grid-area: value;
+  text-align: center;
+  color: #8b949e;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.statusbar-divider {
+  width: 1px;
+  align-self: stretch;
+  background: #30363d;
+  margin: 0 0.2rem;
+}
+
+.statusbar-cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+
+.statusbar-key {
+  color: #8b949e;
+  letter-spacing: 0.04em;
+}
+
+.statusbar-value {
+  color: #c9d1d9;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusbar-conditions .statusbar-value {
+  color: #8b949e;
+}
+
+.statusbar-sep {
+  color: #6e7681;
+}
+
+.statusbar-tick.statusbar-flash .statusbar-value {
+  color: #f85149;
+  animation: tick-flash 1s ease-in-out infinite;
+}
+
+/* Carry the high-contrast palette into the status bar so it stays
+   legible when the user picks the alternate theme. */
+:root[data-theme='high-contrast'] .statusbar,
+:root[data-theme='system'][data-prefers-contrast='more'] .statusbar {
+  background: #000000;
+  color: #ffffff;
+  border-top-color: #ffffff;
+}
+
+:root[data-theme='high-contrast'] .statusbar-bar-label,
+:root[data-theme='high-contrast'] .statusbar-bar-percent,
+:root[data-theme='high-contrast'] .statusbar-value,
+:root[data-theme='system'][data-prefers-contrast='more'] .statusbar-bar-label,
+:root[data-theme='system'][data-prefers-contrast='more'] .statusbar-bar-percent,
+:root[data-theme='system'][data-prefers-contrast='more'] .statusbar-value {
+  color: #ffffff;
+}
+
+:root[data-theme='high-contrast'] .statusbar-key,
+:root[data-theme='high-contrast'] .statusbar-bar-value,
+:root[data-theme='system'][data-prefers-contrast='more'] .statusbar-key,
+:root[data-theme='system'][data-prefers-contrast='more'] .statusbar-bar-value {
+  color: #ffff00;
+}
+
+:root[data-theme='high-contrast'] .statusbar-bar-track,
+:root[data-theme='system'][data-prefers-contrast='more'] .statusbar-bar-track {
+  background: #000000;
+  border-color: #ffffff;
 }
