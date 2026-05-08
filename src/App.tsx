@@ -37,7 +37,6 @@ function App() {
   const [fontSize, setFontSize] = useState(14);
   const termRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
-  const railRef = useRef<HTMLDivElement | null>(null);
 
   // Click anywhere in the middle area focuses the input. Skip if the user
   // is in the middle of selecting text (so they can still copy from the
@@ -124,26 +123,6 @@ function App() {
     }
   }, [sidePanelOpen]);
 
-  // Mirror the bottom rail's measured height onto a CSS variable so
-  // .middle can reserve exactly that much padding. This is how the
-  // terminal pane physically can't enter the rail's territory — even
-  // if xterm computes its canvas oddly, the .middle box ends at the
-  // top of the rail.
-  useEffect(() => {
-    const rail = railRef.current;
-    if (!rail) return;
-    const apply = (h: number) => {
-      document.documentElement.style.setProperty('--bottom-rail-height', `${h}px`);
-    };
-    apply(rail.offsetHeight);
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        apply(entry.contentRect.height);
-      }
-    });
-    observer.observe(rail);
-    return () => observer.disconnect();
-  }, []);
 
   const handleError = (message: string) => {
     setStatus({ kind: 'error', message });
@@ -228,12 +207,11 @@ function App() {
           </Resizable>
         )}
       </div>
-      {/* Bottom rail. position:fixed at the viewport bottom (see
-          styles.css). Its measured height feeds back into
-          --bottom-rail-height so .middle can reserve exactly that
-          much padding-bottom — meaning the terminal physically cannot
-          enter the rail's screen area. */}
-      <div className="bottom-rail" ref={railRef} aria-label="bottom rail">
+      {/* Bottom rail. flex: 0 0 auto in the .app flex column, so the
+          terminal area above (.middle, flex: 1 1 0) takes whatever
+          space remains and the rail anchors to the bottom of the
+          viewport without any positioning trickery. */}
+      <div className="bottom-rail" aria-label="bottom rail">
         <Input
           ref={inputRef}
           enabled

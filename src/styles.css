@@ -25,28 +25,20 @@ body,
 }
 
 .app {
-  display: grid;
-  /* Two flat rows. The bottom rail is position:fixed so it sits
-     outside the grid flow and physically pins to the viewport
-     bottom. .middle reserves space for the rail via a CSS variable
-     (set from JS in App.tsx via ResizeObserver) so its content
-     area ends exactly where the rail begins.
-       row 1 — connect bar
-       row 2 — terminal + side panel + drawers */
-  grid-template-rows: auto minmax(120px, 1fr);
-  grid-template-columns: minmax(0, 1fr);
+  /* Plain flex column. The connect bar pins to the top, the bottom
+     rail pins to the bottom, the middle takes whatever's left. With
+     `min-height: 0` on .middle a flex item can shrink below its
+     content's intrinsic size — required for xterm not to grow the
+     terminal area past the bars. */
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   width: 100vw;
-  gap: 0;
   overflow: hidden;
 }
 
 .bottom-rail {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   background: #090e13;
@@ -123,22 +115,20 @@ body,
   font-size: 12px;
 }
 
-/* `.middle` is the terminal + side surfaces row. Flex row so the
-   side panel and drawers slot in next to the terminal naturally.
-   Bottom padding equals the fixed bottom rail's measured height
-   (driven by JS in App.tsx) so the terminal pane physically cannot
-   reach the rail's territory. */
+/* The terminal + side surfaces row. flex: 1 1 0 with min-height: 0
+   means it grows to fill the remaining vertical space and shrinks
+   freely, so the bottom rail (flex: 0 0 auto) is always at the
+   bottom and the middle can't ever push past it. */
 .middle {
+  flex: 1 1 0;
   display: flex;
+  flex-direction: row;
   min-height: 0;
   min-width: 0;
   width: 100%;
-  height: 100%;
   overflow: clip;
   position: relative;
   z-index: 0;
-  padding-bottom: var(--bottom-rail-height, 110px);
-  box-sizing: border-box;
 }
 
 /* The terminal column wraps the host in a positioned shell. The host
