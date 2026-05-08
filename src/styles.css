@@ -99,13 +99,20 @@ body,
   height: 100%;
 }
 
+/* Input row reads as a continuation of the terminal pane: same dark
+   background, monospace font, hairline separators above and below. The
+   field itself has no box of its own so it looks like a literal prompt
+   line, TinTin style. */
 .input-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  background: #161b22;
+  padding: 0.3rem 0.55rem;
+  background: #0d1117;
   border-top: 1px solid #30363d;
+  font-family: 'JetBrains Mono', 'Fira Code', Menlo, Consolas, ui-monospace, monospace;
+  font-size: 14px;
+  color: #e6edf3;
 }
 
 .input-row .prompt {
@@ -115,16 +122,38 @@ body,
 
 .input-row input {
   flex: 1;
-  background: #0d1117;
-  color: #e6edf3;
-  border: 1px solid #30363d;
-  border-radius: 4px;
-  padding: 0.4rem 0.6rem;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  outline: none;
+  padding: 0;
   font: inherit;
+  caret-color: #58a6ff;
+}
+
+.input-row input:focus-visible {
+  outline: none;
+}
+
+.input-row input::placeholder {
+  color: #6e7681;
+  font-style: italic;
 }
 
 .input-row input:disabled {
   opacity: 0.5;
+}
+
+:root[data-theme='high-contrast'] .input-row,
+:root[data-theme='system'][data-prefers-contrast='more'] .input-row {
+  background: #000000;
+  border-top-color: #ffffff;
+  color: #ffffff;
+}
+
+:root[data-theme='high-contrast'] .input-row .prompt,
+:root[data-theme='system'][data-prefers-contrast='more'] .input-row .prompt {
+  color: #ffff00;
 }
 
 .connect button.secondary {

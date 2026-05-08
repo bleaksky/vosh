@@ -74,6 +74,16 @@ function pct(current: number | string | undefined, max: number | string | undefi
   return Math.max(0, Math.min(100, Math.round((c / m) * 100)));
 }
 
+// Green at full, maroon at empty. The same ramp drives the fill block
+// and the percent/label text so the eye reads severity at a glance.
+function colorForPct(value: number): string {
+  if (value >= 80) return '#3fb950'; // green
+  if (value >= 60) return '#d4c441'; // yellow
+  if (value >= 40) return '#e0823c'; // orange
+  if (value >= 20) return '#da3633'; // red
+  return '#7d1d1d'; // maroon
+}
+
 function formatHour(value: number | string | undefined): string | null {
   const n = num(value);
   if (n === null) return null;
@@ -85,18 +95,21 @@ function StatBar({
   label,
   current,
   max,
-  color,
 }: {
   label: string;
   current: number | string | undefined;
   max: number | string | undefined;
-  color: string;
 }) {
   const value = pct(current, max);
+  const color = colorForPct(value);
   return (
     <div className="statusbar-bar">
-      <span className="statusbar-bar-label">{label}</span>
-      <span className="statusbar-bar-percent">{value}%</span>
+      <span className="statusbar-bar-label" style={{ color }}>
+        {label}
+      </span>
+      <span className="statusbar-bar-percent" style={{ color }}>
+        {value}%
+      </span>
       <span className="statusbar-bar-track" aria-hidden="true">
         <span
           className="statusbar-bar-fill"
@@ -175,18 +188,16 @@ export function StatusBar() {
 
   return (
     <div className="statusbar" role="status" aria-label="vitals and world conditions">
-      <StatBar label="HP" current={vitals.hp} max={vitals.maxhp} color="#3fb950" />
+      <StatBar label="HP" current={vitals.hp} max={vitals.maxhp} />
       <StatBar
         label="MN"
         current={pickFirst(vitals.mp, vitals.mana)}
         max={pickFirst(vitals.maxmp, vitals.maxmana)}
-        color="#1f6feb"
       />
       <StatBar
         label="MV"
         current={pickFirst(vitals.sp, vitals.move, vitals.movement)}
         max={pickFirst(vitals.maxsp, vitals.maxmove, vitals.maxmovement)}
-        color="#d29922"
       />
       <div className="statusbar-divider" aria-hidden="true" />
       <div className={`statusbar-cell statusbar-tick${tickFlash ? ' statusbar-flash' : ''}`}>

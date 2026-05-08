@@ -126,13 +126,13 @@ function App() {
           onError={handleError}
         />
       </div>
-      <StatusBar />
       <Input
         ref={inputRef}
         enabled
         onError={handleError}
         onLocalEcho={(text) => termRef.current?.write(text)}
       />
+      <StatusBar />
     </main>
   );
 }
