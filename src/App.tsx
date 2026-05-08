@@ -5,6 +5,7 @@ import { Connect, type ConnectionStatus } from './components/Connect';
 import { TriggersDrawer } from './components/TriggersDrawer';
 import { SettingsDrawer } from './components/SettingsDrawer';
 import { SidePanel } from './components/SidePanel';
+import { Resizable } from './components/Resizable';
 import { SearchView } from './components/SearchView';
 import { StatusBar } from './components/StatusBar';
 import { checkForUpdate, getUiConfig, onState, type StatePayload } from './lib/session';
@@ -141,20 +142,58 @@ function App() {
           }}
         />
         {searchOpen ? (
-          <SearchView onError={handleError} />
+          <Resizable
+            storageKey="mudclient.layout.searchWidth"
+            defaultWidth={420}
+            minWidth={280}
+            maxWidth={900}
+            handleLabel="resize search panel"
+          >
+            <SearchView onError={handleError} />
+          </Resizable>
         ) : (
-          sidePanelOpen && <SidePanel />
+          sidePanelOpen && (
+            <Resizable
+              storageKey="mudclient.layout.sidePanelWidth"
+              defaultWidth={320}
+              minWidth={220}
+              maxWidth={720}
+              handleLabel="resize side panel"
+            >
+              <SidePanel />
+            </Resizable>
+          )
         )}
-        <TriggersDrawer
-          open={triggersOpen}
-          onClose={() => setTriggersOpen(false)}
-          onError={handleError}
-        />
-        <SettingsDrawer
-          open={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
-          onError={handleError}
-        />
+        {triggersOpen && (
+          <Resizable
+            storageKey="mudclient.layout.triggersWidth"
+            defaultWidth={560}
+            minWidth={320}
+            maxWidth={1100}
+            handleLabel="resize triggers drawer"
+          >
+            <TriggersDrawer
+              open={triggersOpen}
+              onClose={() => setTriggersOpen(false)}
+              onError={handleError}
+            />
+          </Resizable>
+        )}
+        {settingsOpen && (
+          <Resizable
+            storageKey="mudclient.layout.settingsWidth"
+            defaultWidth={560}
+            minWidth={320}
+            maxWidth={1100}
+            handleLabel="resize settings drawer"
+          >
+            <SettingsDrawer
+              open={settingsOpen}
+              onClose={() => setSettingsOpen(false)}
+              onError={handleError}
+            />
+          </Resizable>
+        )}
       </div>
       <Input
         ref={inputRef}

@@ -1110,3 +1110,59 @@ body,
   background: #000000;
   border-color: #ffffff;
 }
+
+/* Wrapper for any panel that lives on the right side of the layout
+   and accepts horizontal resizing. The handle is a thin column on
+   the left edge that the user grabs to widen or narrow the panel. */
+.resizable {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  height: 100%;
+}
+
+.resizable-content {
+  flex: 1 1 auto;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.resizable-handle {
+  flex: 0 0 4px;
+  cursor: col-resize;
+  background: transparent;
+  border-left: 1px solid #393b44;
+  transition: background-color 0.12s ease;
+}
+
+.resizable-handle:hover,
+.resizable-handle:focus-visible {
+  background: #7fb4ca;
+  outline: none;
+}
+
+/* The panels inside the resizable wrapper don't need their own width
+   constraints any more; the wrapper sets the width and the panel
+   fills it. */
+.resizable .side-panel,
+.resizable .search-view,
+.resizable .drawer {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  border-left: 0;
+}
+
+:root[data-theme='high-contrast'] .resizable-handle,
+:root[data-theme='system'][data-prefers-contrast='more'] .resizable-handle {
+  border-left-color: #ffffff;
+}
+
+:root[data-theme='high-contrast'] .resizable-handle:hover,
+:root[data-theme='high-contrast'] .resizable-handle:focus-visible,
+:root[data-theme='system'][data-prefers-contrast='more'] .resizable-handle:hover,
+:root[data-theme='system'][data-prefers-contrast='more'] .resizable-handle:focus-visible {
+  background: #ffff00;
+}
