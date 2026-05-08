@@ -5,8 +5,9 @@ use std::sync::Arc;
 use mudclient_log::{SearchHit, SearchOptions, SessionRow};
 use mudclient_map::Room;
 use mudclient_trigger::Trigger;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
+use tracing::warn;
 
 use crate::input;
 use crate::log_state::{SharedLogStore, SharedScrollback};
@@ -32,6 +33,24 @@ pub(crate) struct AppState {
 }
 
 pub(crate) type SharedState = Arc<AppState>;
+
+/// Snapshot the live profile and write it to `<app_data_dir>/profile.toml`.
+/// Failures are logged but not surfaced — callers don't want a UI toggle
+/// to fail because the disk is full mid-flight, and the in-memory state
+/// is still correct for the rest of the session.
+async fn persist_profile(app: &AppHandle, state: &SharedState) {
+    let Ok(dir) = app.path().app_data_dir() else {
+        return;
+    };
+    let path = dir.join("profile.toml");
+    let snapshot = {
+        let p = state.profile.lock().await;
+        ProfileConfig::from_profile(&p)
+    };
+    if let Err(e) = snapshot.save(&path) {
+        warn!(error = %e, path = %path.display(), "auto-save profile failed");
+    }
+}
 
 #[tauri::command]
 pub(crate) async fn session_connect(
@@ -376,17 +395,22 @@ pub(crate) async fn ui_get_config(
 
 #[tauri::command]
 pub(crate) async fn ui_set_config(
+    app: AppHandle,
     state: State<'_, SharedState>,
     theme: String,
     auto_update: bool,
     font_family: String,
     font_size: u32,
 ) -> Result<(), String> {
-    let mut p = state.profile.lock().await;
-    p.ui.theme = theme;
-    p.ui.auto_update = auto_update;
-    p.ui.font_family = font_family;
-    p.ui.font_size = font_size.clamp(6, 64);
+    {
+        let mut p = state.profile.lock().await;
+        p.ui.theme = theme;
+        p.ui.auto_update = auto_update;
+        p.ui.font_family = font_family;
+        p.ui.font_size = font_size.clamp(6, 64);
+    }
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
     Ok(())
 }
 
@@ -431,6 +455,7 @@ pub(crate) async fn plugins_list(state: State<'_, SharedState>) -> Result<Vec<Pl
 
 #[tauri::command]
 pub(crate) async fn plugins_set_enabled(
+    app: AppHandle,
     state: State<'_, SharedState>,
     name: String,
     enabled: bool,
@@ -463,6 +488,8 @@ pub(crate) async fn plugins_set_enabled(
             .map_err(|e| e.to_string())?;
         let _ = crate::script_state::apply_actions(&mut p, outcome);
     }
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
     Ok(enabled)
 }
 
