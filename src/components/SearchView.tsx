@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   exportLogSession,
   listLogSessions,
@@ -6,15 +6,22 @@ import {
   type LogSearchHit,
   type LogSession,
 } from '../lib/session';
+import { parseAnsi, styleToCss } from '../lib/ansi';
 
 interface Props {
   onError?: (message: string) => void;
 }
 
-function formatTime(ts_ms: number): string {
+function formatDate(ts_ms: number): string {
   const d = new Date(ts_ms);
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function formatTime(ts_ms: number): string {
+  const d = new Date(ts_ms);
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 function downloadText(filename: string, content: string) {
@@ -29,6 +36,23 @@ function downloadText(filename: string, content: string) {
   URL.revokeObjectURL(url);
 }
 
+function HitText({ hit }: { hit: LogSearchHit }) {
+  if (!hit.raw || hit.raw.length === 0) {
+    return <span className="search-hit-text">{hit.text}</span>;
+  }
+  const bytes = new Uint8Array(hit.raw);
+  const chunks = parseAnsi(bytes);
+  return (
+    <span className="search-hit-text">
+      {chunks.map((chunk, i) => (
+        <span key={i} style={styleToCss(chunk.style)}>
+          {chunk.text}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export function SearchView({ onError }: Props) {
   const [pattern, setPattern] = useState('');
   const [caseSensitive, setCaseSensitive] = useState(false);
@@ -38,6 +62,7 @@ export function SearchView({ onError }: Props) {
   const [hits, setHits] = useState<LogSearchHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  const [showTimes, setShowTimes] = useState(false);
 
   useEffect(() => {
     listLogSessions(50)
@@ -90,11 +115,20 @@ export function SearchView({ onError }: Props) {
     }
   };
 
-  const groupedHits = hits.reduce<Record<number, LogSearchHit[]>>((acc, hit) => {
-    if (!acc[hit.session_id]) acc[hit.session_id] = [];
-    acc[hit.session_id]!.push(hit);
-    return acc;
-  }, {});
+  // Hits arrive newest-first from the database (so max_results caps the
+  // most recent matches). Display each session's hits oldest-first so
+  // the transcript reads top-down like a normal log.
+  const groupedHits = useMemo(() => {
+    const groups: Record<number, LogSearchHit[]> = {};
+    for (const hit of hits) {
+      if (!groups[hit.session_id]) groups[hit.session_id] = [];
+      groups[hit.session_id]!.push(hit);
+    }
+    for (const sid of Object.keys(groups)) {
+      groups[Number(sid)]!.reverse();
+    }
+    return groups;
+  }, [hits]);
 
   return (
     <section className="search-view" aria-label="log search">
@@ -121,24 +155,34 @@ export function SearchView({ onError }: Props) {
             }
           }}
         />
-        <label>
-          <input
-            type="checkbox"
-            checked={caseSensitive}
-            onChange={(e) => setCaseSensitive(e.target.checked)}
-          />
-          case sensitive
-        </label>
-        <label>
-          max
-          <input
-            type="number"
-            min={1}
-            max={10000}
-            value={maxResults}
-            onChange={(e) => setMaxResults(Math.max(1, Number(e.target.value) || 1))}
-          />
-        </label>
+        <div className="search-options-row">
+          <label>
+            <input
+              type="checkbox"
+              checked={caseSensitive}
+              onChange={(e) => setCaseSensitive(e.target.checked)}
+            />
+            case
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={showTimes}
+              onChange={(e) => setShowTimes(e.target.checked)}
+            />
+            time
+          </label>
+          <label>
+            max
+            <input
+              type="number"
+              min={1}
+              max={10000}
+              value={maxResults}
+              onChange={(e) => setMaxResults(Math.max(1, Number(e.target.value) || 1))}
+            />
+          </label>
+        </div>
         <select
           value={sessionFilter ?? ''}
           onChange={(e) =>
@@ -174,7 +218,7 @@ export function SearchView({ onError }: Props) {
               <div className="search-session-header">
                 <span>
                   session #{sid}
-                  {meta ? ` ${meta.host}:${meta.port} ${formatTime(meta.started_at_ms)}` : ''}
+                  {meta ? ` ${meta.host}:${meta.port} ${formatDate(meta.started_at_ms)}` : ''}
                 </span>
                 <span className="search-session-actions">
                   <button type="button" onClick={() => handleExport(sessionId, false)}>
@@ -188,8 +232,12 @@ export function SearchView({ onError }: Props) {
               <ul className="search-hit-list">
                 {lines.map((hit) => (
                   <li key={hit.line_id} className="search-hit">
-                    <span className="search-hit-time">{formatTime(hit.ts_ms)}</span>
-                    <span className="search-hit-text">{hit.text}</span>
+                    {showTimes && (
+                      <span className="search-hit-time" title={formatDate(hit.ts_ms)}>
+                        {formatTime(hit.ts_ms)}
+                      </span>
+                    )}
+                    <HitText hit={hit} />
                   </li>
                 ))}
               </ul>

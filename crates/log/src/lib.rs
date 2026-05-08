@@ -44,6 +44,10 @@ pub struct SearchHit {
     pub line_id: i64,
     pub ts_ms: i64,
     pub text: String,
+    /// Original ANSI-bearing bytes for the line, when stored. Lets the
+    /// frontend render the hit with its original colors instead of the
+    /// ANSI-stripped plain text.
+    pub raw: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -184,7 +188,7 @@ impl LogStore {
         let (sql, params): (&str, Vec<Box<dyn rusqlite::ToSql>>) =
             if let Some(sid) = options.session_id {
                 (
-                    "SELECT l.id, l.session_id, l.ts_ms, l.text, s.host, s.port
+                    "SELECT l.id, l.session_id, l.ts_ms, l.text, l.raw, s.host, s.port
                      FROM log_lines l
                      JOIN sessions s ON s.id = l.session_id
                      WHERE l.session_id = ?1
@@ -193,7 +197,7 @@ impl LogStore {
                 )
             } else {
                 (
-                    "SELECT l.id, l.session_id, l.ts_ms, l.text, s.host, s.port
+                    "SELECT l.id, l.session_id, l.ts_ms, l.text, l.raw, s.host, s.port
                      FROM log_lines l
                      JOIN sessions s ON s.id = l.session_id
                      ORDER BY l.id DESC",
@@ -221,8 +225,9 @@ impl LogStore {
                     session_id: row.get(1)?,
                     ts_ms: row.get(2)?,
                     text,
-                    host: row.get(4)?,
-                    port: row.get::<_, i64>(5)? as u16,
+                    raw: row.get(4)?,
+                    host: row.get(5)?,
+                    port: row.get::<_, i64>(6)? as u16,
                 });
             }
         }

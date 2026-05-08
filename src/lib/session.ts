@@ -193,6 +193,7 @@ export interface LogSearchHit {
   line_id: number;
   ts_ms: number;
   text: string;
+  raw: number[] | null;
 }
 
 export async function listLogSessions(limit: number): Promise<LogSession[]> {
