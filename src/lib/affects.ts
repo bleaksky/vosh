@@ -7,12 +7,75 @@ export interface Affect {
   /// Hours remaining. -1 means permanent. The server sometimes sends it
   /// as a string; coerce on read.
   duration?: number;
+  /// Stat the modifier applies to (e.g. "saves", "hitroll", "str").
+  /// Aabahran sends one entry per (affect, location, modifier); bless
+  /// shows up as several rows with the same name but different
+  /// locations.
+  location?: string;
+  /// Numeric magnitude of the modifier on `location`. Negative for
+  /// improvements on saves; positive for stat boosts; etc.
+  modifier?: number | string;
   /// Human-readable hint when the server provides one.
   description?: string;
   /// Same name some servers use for description.
   desc?: string;
   /// Stack count when the server tracks it.
   stacks?: number;
+}
+
+export interface AffectModifier {
+  location: string;
+  modifier: number | string;
+}
+
+export interface GroupedAffect {
+  name: string;
+  duration?: number;
+  description?: string;
+  modifiers: AffectModifier[];
+}
+
+/// Aabahran sends one Char.Affects entry per (affect, modifier) pair.
+/// Group them so multi-modifier spells like bless appear as a single
+/// row with several modifiers attached.
+export function groupAffects(raw: Affect[]): GroupedAffect[] {
+  const order: string[] = [];
+  const map = new Map<string, GroupedAffect>();
+  for (const aff of raw) {
+    if (!aff?.name) continue;
+    let group = map.get(aff.name);
+    if (!group) {
+      const dur =
+        typeof aff.duration === 'number'
+          ? aff.duration
+          : aff.duration !== undefined
+            ? Number(aff.duration)
+            : undefined;
+      group = {
+        name: aff.name,
+        modifiers: [],
+      };
+      if (dur !== undefined && Number.isFinite(dur)) group.duration = dur;
+      const desc = affectDescription(aff);
+      if (desc) group.description = desc;
+      map.set(aff.name, group);
+      order.push(aff.name);
+    }
+    if (aff.location && aff.location !== 'none') {
+      group.modifiers.push({
+        location: aff.location,
+        modifier: aff.modifier ?? 0,
+      });
+    }
+  }
+  return order.map((name) => map.get(name)!);
+}
+
+export function formatModifier(modifier: number | string): string {
+  const n = typeof modifier === 'number' ? modifier : Number(modifier);
+  if (!Number.isFinite(n)) return String(modifier);
+  if (n > 0) return `+${n}`;
+  return String(n);
 }
 
 /// Tone the duration cell to convey urgency, mirroring the tintin
