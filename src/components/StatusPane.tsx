@@ -65,7 +65,6 @@ export function StatusPane() {
 
   return (
     <section className="status-pane" aria-label="status">
-      <header className="pane-header">status</header>
       <div className="status-body">
         <div className="status-row">
           <span className="status-label">room</span>

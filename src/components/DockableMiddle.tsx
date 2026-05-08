@@ -203,6 +203,11 @@ export function DockableMiddle({
       components={components}
       defaultTabComponent={PanelTab}
       onReady={onReady}
+      // singleTabMode='fullwidth' makes a group with one panel render
+      // its tab as a full-width header bar, matching the original
+      // .pane-header look. Multi-panel groups (formed by dragging one
+      // panel onto another) fall back to the normal tab strip.
+      singleTabMode="fullwidth"
       // dockview-theme-abyss provides the full set of CSS variables
       // including drop indicator colors and overlay z-indices. Without
       // a theme class drag would still work but the indicators are

@@ -1662,18 +1662,51 @@ body,
   border-bottom: 2px solid #7fb4ca;
 }
 
-/* Custom panel tab — text only, no close X. dockview wraps the
-   content in its own draggable element, so dragging by the tab text
-   still moves the panel between groups. */
+/* Custom panel tab — text only, no close X. Fills its parent so
+   pointerdown anywhere on the tab actually initiates dockview's
+   drag, and in singleTabMode='fullwidth' the tab spans the entire
+   header bar, matching the look of the old .pane-header. */
 .panel-tab {
-  padding: 0 0.65rem;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+  padding: 0 0.75rem;
   font-family: var(--app-font-family);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: inherit;
+  color: #a4a7a4;
   white-space: nowrap;
+  cursor: grab;
   user-select: none;
   -webkit-user-select: none;
+  box-sizing: border-box;
+}
+
+.panel-tab:active {
+  cursor: grabbing;
+}
+
+/* Dockview header (the bar that holds the tabs) styled to match the
+   old .pane-header surface: dark bg, hairline bottom border, no
+   per-tab pill backgrounds. */
+.dockable-middle .dv-tabs-and-actions-container,
+.dockable-middle .dv-tabs-container {
+  background: #0d0c0c;
+  border-bottom: 1px solid #393b44;
+}
+
+.dockable-middle .dv-tab,
+.dockable-middle .dv-tab.dv-active-tab,
+.dockable-middle .dv-tab.dv-inactive-tab {
+  background: transparent;
+  border-bottom: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.dockable-middle .dv-tab.dv-active-tab .panel-tab {
+  color: #c5c9c7;
 }

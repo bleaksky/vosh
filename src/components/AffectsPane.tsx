@@ -53,7 +53,6 @@ export function AffectsPane() {
 
   return (
     <section className="affects-pane" aria-label="affects">
-      <header className="pane-header">affects</header>
       <div className="affects-body">
         {groups.length === 0 ? (
           <div className="affects-empty">no active affects</div>

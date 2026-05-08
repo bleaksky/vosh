@@ -28,8 +28,9 @@ export function MapPane() {
 
   return (
     <section className="map-pane" aria-label="map">
-      <header className="pane-header">
-        <span>map</span>
+      {/* Mode toggle lives in a thin sub-header; the dockview tab is
+          the panel's primary header. */}
+      <div className="map-mode-row">
         <div className="map-mode-toggle">
           <button
             type="button"
@@ -42,7 +43,7 @@ export function MapPane() {
             server
           </button>
         </div>
-      </header>
+      </div>
       {mode === 'mapping' ? <MappingMapView /> : <ServerMapView />}
     </section>
   );
