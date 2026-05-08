@@ -119,9 +119,6 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
       font_family: overrides.font_family ?? fontFamily,
       font_size: overrides.font_size ?? fontSize,
       tracked_affects: overrides.tracked_affects ?? currentTrackedAffects(),
-      // dock_layout is managed by DockableMiddle via setDockLayout;
-      // this code path doesn't touch it.
-      dock_layout: '',
     });
   };
 

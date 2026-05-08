@@ -78,10 +78,6 @@ pub(crate) struct UiConfig {
     /// red-bordered pill so the player notices the gap at a glance.
     #[serde(default)]
     pub tracked_affects: Vec<String>,
-    /// Serialized dockview layout (JSON string). Empty means use the
-    /// default arrangement on next load.
-    #[serde(default)]
-    pub dock_layout: String,
 }
 
 impl Default for UiConfig {
@@ -92,7 +88,6 @@ impl Default for UiConfig {
             font_family: default_font_family(),
             font_size: default_font_size(),
             tracked_affects: Vec::new(),
-            dock_layout: String::new(),
         }
     }
 }
@@ -204,7 +199,6 @@ impl ProfileConfig {
             font_family: profile.ui.font_family.clone(),
             font_size: profile.ui.font_size,
             tracked_affects: profile.ui.tracked_affects.clone(),
-            dock_layout: profile.ui.dock_layout.clone(),
         };
 
         let plugins = PluginsPersist {
@@ -292,7 +286,6 @@ impl ProfileConfig {
             font_family: self.ui.font_family.clone(),
             font_size: self.ui.font_size,
             tracked_affects: self.ui.tracked_affects.clone(),
-            dock_layout: self.ui.dock_layout.clone(),
         };
 
         // Plugin enabled-set is persisted; the actual load happens in the

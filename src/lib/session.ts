@@ -248,7 +248,6 @@ export interface UiConfig {
   font_family: string;
   font_size: number;
   tracked_affects: string[];
-  dock_layout: string;
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -258,7 +257,6 @@ export async function getUiConfig(): Promise<UiConfig> {
     font_family: string;
     font_size: number;
     tracked_affects: string[];
-    dock_layout: string;
   }>('ui_get_config');
   const theme: ThemeChoice =
     cfg.theme === 'high-contrast' || cfg.theme === 'system' ? cfg.theme : 'default';
@@ -268,7 +266,6 @@ export async function getUiConfig(): Promise<UiConfig> {
     font_family: cfg.font_family,
     font_size: cfg.font_size,
     tracked_affects: Array.isArray(cfg.tracked_affects) ? cfg.tracked_affects : [],
-    dock_layout: cfg.dock_layout ?? '',
   };
 }
 
@@ -280,13 +277,6 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     fontSize: config.font_size,
     trackedAffects: config.tracked_affects,
   });
-}
-
-/// Cheap setter for the dockview layout JSON. Doesn't touch other UI
-/// config fields, so it's safe to call frequently as the user drags
-/// panels around.
-export async function setDockLayout(layout: string): Promise<void> {
-  await invoke('ui_set_dock_layout', { layout });
 }
 
 export interface UpdateCheckResult {
