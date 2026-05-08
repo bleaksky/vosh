@@ -1620,105 +1620,14 @@ body,
   line-height: 1.4;
 }
 
-/* Dockable middle. The component sets className="dockable-middle" on
-   DockviewReact; we fill the flex item and apply Kanso-toned overrides
-   on the dockview CSS variables. */
+/* Dockable middle: just fill the flex slot. All other dockview
+   styling is intentionally left at the theme defaults — earlier
+   overrides were interfering with drag/drop event paths and we're
+   prioritizing working drag-and-drop over visual matching for now. */
 .dockable-middle {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
   height: 100%;
   width: 100%;
-  position: relative;
-  --dv-paneview-active-outline-color: #7fb4ca;
-  --dv-tabs-and-actions-container-background-color: #0d0c0c;
-  --dv-tabs-and-actions-container-font-size: 11px;
-  --dv-tabs-and-actions-container-height: 28px;
-  --dv-tab-divider-color: #393b44;
-  --dv-group-view-background-color: #090e13;
-  --dv-tabs-container-scrollbar-color: #393b44;
-  --dv-icon-hover-background-color: #393b44;
-  --dv-floating-box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
-  --dv-active-tab-background-color: #090e13;
-  --dv-inactive-tab-background-color: #0d0c0c;
-  --dv-active-tab-color: #c5c9c7;
-  --dv-inactive-tab-color: #73726a;
-  --dv-tab-close-icon: #a4a7a4;
-  --dv-tab-divider-color: #23232b;
-  --dv-separator-border: #23232b;
-  --dv-paneview-header-border-color: #23232b;
-  --dv-drag-over-background-color: rgba(127, 180, 202, 0.18);
-  --dv-drag-over-border-color: #7fb4ca;
-}
-
-.dockable-middle .dv-tab {
-  font-family: var(--app-font-family);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-weight: 700;
-}
-
-.dockable-middle .dv-tab.dv-tab-active {
-  border-bottom: 2px solid #7fb4ca;
-}
-
-/* Dockview header (the bar that holds the tabs) styled to match the
-   old .pane-header surface: dark bg, hairline bottom border. */
-.dockable-middle .dv-tabs-and-actions-container,
-.dockable-middle .dv-tabs-container {
-  background: #0d0c0c;
-  border-bottom: 1px solid #393b44;
-}
-
-/* dockview's default tab content: pad, color, font to match .pane-header. */
-.dockable-middle .dv-default-tab,
-.dockable-middle .dv-tab {
-  background: transparent;
-  border: 0;
-  padding: 0 0.75rem;
-  font-family: var(--app-font-family);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #a4a7a4;
-  white-space: nowrap;
-  cursor: grab;
-}
-
-.dockable-middle .dv-tab:active {
-  cursor: grabbing;
-}
-
-.dockable-middle .dv-tab.dv-active-tab {
-  background: transparent;
-  color: #c5c9c7;
-}
-
-.dockable-middle .dv-tab.dv-inactive-tab {
-  background: transparent;
-}
-
-/* Hide the close X — users have no good way to recover a closed
-   panel. The "panes" pill in the connect bar resets the layout. */
-.dockable-middle .dv-default-tab-action,
-.dockable-middle .dv-default-tab .dv-svg {
-  display: none !important;
-}
-
-/* Drop indicators. dockview-theme-abyss hides the cross-container
-   indicator (the highlight that appears when you drag a panel toward
-   the outer edge of the whole dockview to make it a new sidebar) by
-   setting opacity: 0. We want it visible so the user can actually see
-   where a drop will land. Also bump the background color of the
-   drop-target highlight to a clearly visible kanso blue. */
-.dockable-middle .dv-drop-target-container .dv-drop-target-anchor {
-  opacity: 1 !important;
-  transition: opacity 0.1s ease-in !important;
-}
-
-.dockable-middle .dv-drop-target > .dv-drop-target-dropzone > .dv-drop-target-selection {
-  background-color: rgba(127, 180, 202, 0.32) !important;
-  border: 1px solid rgba(127, 180, 202, 0.85) !important;
-  box-sizing: border-box;
 }

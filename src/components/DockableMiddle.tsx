@@ -74,26 +74,6 @@ const components = {
   cabal: CabalPanel,
 };
 
-/// Walk a parsed dockview layout and verify every panel's component
-/// name is in our known components map. A layout serialized by an
-/// older build can reference a component (e.g. 'info') that no longer
-/// exists; restoring it leaves an empty phantom panel that obscures
-/// the rest of the layout.
-function layoutMatchesComponents(
-  layout: unknown,
-  known: Record<string, unknown>,
-): boolean {
-  if (!layout || typeof layout !== 'object') return false;
-  const panels = (layout as { panels?: Record<string, { contentComponent?: string }> }).panels;
-  if (!panels || typeof panels !== 'object') return false;
-  for (const panel of Object.values(panels)) {
-    if (!panel?.contentComponent || !(panel.contentComponent in known)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 function buildDefault(api: DockviewApi, params: TerminalParams) {
   // Drop everything that may exist from a prior layout, then build the
   // default arrangement: terminal in the main area, side panes stacked
@@ -170,30 +150,12 @@ export function DockableMiddle({
     const api = event.api;
     apiRef.current = api;
 
-    // Restore from saved layout if present, parseable, and compatible
-    // with the current panel set. Layouts saved before chat/gold/cabal
-    // were split out of InfoTabsPane reference an `info` component
-    // that no longer exists; restoring them leaves a phantom panel
-    // that hides the terminal. Validate first.
-    let restored = false;
-    if (savedLayout) {
-      try {
-        const parsed = JSON.parse(savedLayout);
-        if (layoutMatchesComponents(parsed, components)) {
-          api.fromJSON(parsed);
-          const term = api.getPanel('terminal');
-          if (term) {
-            term.api.updateParameters(paramsRef.current);
-            restored = true;
-          }
-        }
-      } catch {
-        restored = false;
-      }
-    }
-    if (!restored) {
-      buildDefault(api, paramsRef.current);
-    }
+    // FIXME: saved-layout restoration is currently disabled. Several
+    // users have reported the saved layout puts the terminal in a
+    // hidden tab group, breaking visibility. Always start from the
+    // default layout until we're confident in the restore path.
+    void savedLayout;
+    buildDefault(api, paramsRef.current);
 
     // Persist on every structural mutation. Debounced via the upstream
     // callback so we don't spam the backend during a drag.
