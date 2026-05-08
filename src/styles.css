@@ -133,12 +133,13 @@ body,
   z-index: 0;
 }
 
-/* The terminal column is a flex column itself, with the host as a
-   flex child. FitAddon reads parentElement.clientHeight on the
-   xterm element (.xterm) — its parent is .terminal-host. With the
-   host as a real flex child of .terminal-column (not
-   position: absolute), clientHeight reports the actual flexed-to
-   height in the steady state, which is what FitAddon needs. */
+/* The terminal column is a flex item that owns a sizer wrapper
+   whose bounding rect is the truth source for the terminal host's
+   width/height. Terminal.tsx writes those dimensions in pixels onto
+   the host every frame so xterm's FitAddon (which reads computed
+   `height` from its parent element) always gets a real number,
+   even when flex layout passes don't propagate dimensions to the
+   computed style in time. */
 .terminal-column {
   flex: 1 1 0;
   min-width: 0;
@@ -148,10 +149,20 @@ body,
   overflow: hidden;
 }
 
-.terminal-host {
+.terminal-sizer {
   flex: 1 1 0;
-  min-height: 0;
   min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.terminal-host {
+  /* Width/height are written by JS in pixels. Other rules pin it
+     to the top-left of the sizer. */
+  position: absolute;
+  top: 0;
+  left: 0;
   overflow: hidden;
   padding: 0.6rem 0.8rem;
   background: #090e13;

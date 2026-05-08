@@ -55,6 +55,7 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const sizingRef = useRef<HTMLDivElement | null>(null);
   // Hold the latest onReady in a ref so the setup effect can call it without
   // listing it as a dependency. Without this, every parent re-render passes
   // a fresh arrow function, the effect re-runs, and the xterm instance is
@@ -114,44 +115,41 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
     termRef.current = term;
     fitRef.current = fit;
 
-    // Refit on container/window size changes. A size-delta guard
-    // skips noise events to avoid the "ResizeObserver loop limit
-    // exceeded" warning.
+    // The actual fix. Read the sizing wrapper's bounding rect every
+    // frame and explicitly write width/height in pixels onto the
+    // terminal-host element. xterm-addon-fit reads the host's
+    // computed `height` style (not its clientHeight); without an
+    // explicit pixel height, computed height comes back wrong in some
+    // Tauri/WebKit layout passes — opening DevTools forces a layout
+    // and the value goes right, but otherwise it stays stale.
     let lastW = 0;
     let lastH = 0;
-    const refit = (w: number, h: number) => {
-      if (Math.abs(w - lastW) < 1 && Math.abs(h - lastH) < 1) return;
+    const sizer = sizingRef.current;
+    const host = containerRef.current;
+    const sync = () => {
+      if (!sizer || !host) return;
+      const rect = sizer.getBoundingClientRect();
+      const w = Math.floor(rect.width);
+      const h = Math.floor(rect.height);
+      if (w === lastW && h === lastH) return;
       lastW = w;
       lastH = h;
+      host.style.width = `${w}px`;
+      host.style.height = `${h}px`;
       safeFit();
     };
-    const handleWindowResize = () => {
-      const el = containerRef.current;
-      if (el) refit(el.clientWidth, el.clientHeight);
-    };
+
+    const handleWindowResize = sync;
     window.addEventListener('resize', handleWindowResize);
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        refit(entry.contentRect.width, entry.contentRect.height);
-      }
-    });
-    observer.observe(containerRef.current);
-    // Also observe the body so anything that changes the viewport
-    // (devtools toggle, scrollbar appearance, font load that shifts
-    // sibling sizes) drives a refit even if the container's own
-    // border-box doesn't immediately update.
+    const observer = new ResizeObserver(sync);
+    if (sizer) observer.observe(sizer);
     observer.observe(document.body);
 
-    // Belt-and-suspenders poll. Some Tauri/WebKit cases never fire
-    // a resize event when sibling chrome (status bar, affects bar)
-    // grows on connect — the terminal container is sized via the
-    // flex column rules but the resize observer never trips. Poll
-    // the container's clientHeight every animation frame and refit
-    // when it drifts. The delta guard makes this near-free.
+    // Per-frame sync as belt-and-suspenders for Tauri/WebKit cases
+    // where ResizeObserver doesn't fire on sibling chrome growth.
     let rafId = 0;
     const pollLoop = () => {
-      const el = containerRef.current;
-      if (el) refit(el.clientWidth, el.clientHeight);
+      sync();
       rafId = requestAnimationFrame(pollLoop);
     };
     rafId = requestAnimationFrame(pollLoop);
@@ -212,12 +210,14 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
   }, [fontFamily, fontSize]);
 
   return (
-    <div
-      ref={containerRef}
-      className="terminal-host"
-      role="log"
-      aria-live="polite"
-      aria-label="MUD output"
-    />
+    <div ref={sizingRef} className="terminal-sizer">
+      <div
+        ref={containerRef}
+        className="terminal-host"
+        role="log"
+        aria-live="polite"
+        aria-label="MUD output"
+      />
+    </div>
   );
 }
