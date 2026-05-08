@@ -16,6 +16,13 @@ interface Props {
 const DEFAULT_MIN = 220;
 const DEFAULT_MAX = 1200;
 
+// Reserve at least this many pixels of width for the terminal column —
+// roughly 75 monospace columns at 14px BerkeleyMono Nerd Font plus the
+// terminal pane's own padding. The Resizable wrappers honor this when
+// computing their effective max so a stale persisted width can't push
+// the MUD output below 75 columns.
+const RESERVE_FOR_TERMINAL = 700;
+
 function loadWidth(key: string, fallback: number): number {
   try {
     const raw = localStorage.getItem(key);
@@ -25,6 +32,10 @@ function loadWidth(key: string, fallback: number): number {
   } catch {
     return fallback;
   }
+}
+
+function viewportWidth(): number {
+  return typeof window === 'undefined' ? 1280 : window.innerWidth;
 }
 
 /**
@@ -43,6 +54,7 @@ export function Resizable({
   handleLabel = 'resize panel',
 }: Props) {
   const [width, setWidth] = useState<number>(() => loadWidth(storageKey, defaultWidth));
+  const [viewportW, setViewportW] = useState<number>(() => viewportWidth());
   const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   useEffect(() => {
@@ -53,9 +65,20 @@ export function Resizable({
     }
   }, [storageKey, width]);
 
-  // Cap the effective max at most of the viewport so a stale persisted
-  // width can't push the terminal off-screen on a small window.
-  const effectiveMax = Math.min(maxWidth, window.innerWidth - 240);
+  // Recompute the cap whenever the OS window resizes so the user
+  // can't drag past the 75-char terminal floor on a smaller window.
+  useEffect(() => {
+    const handler = () => setViewportW(viewportWidth());
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
+  // Cap so the terminal column always has at least 75 monospace cells
+  // of width to render game text into.
+  const effectiveMax = Math.max(
+    minWidth,
+    Math.min(maxWidth, viewportW - RESERVE_FOR_TERMINAL),
+  );
   const clamped = Math.max(minWidth, Math.min(effectiveMax, width));
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {

@@ -116,7 +116,9 @@ function formatHour(value: number | string | undefined): string | null {
   const n = num(value);
   if (n === null) return null;
   const hour = ((Math.trunc(n) % 24) + 24) % 24;
-  return `${hour.toString().padStart(2, '0')}:00`;
+  // No colon — military-style HH00 reads tighter and matches the
+  // "less eye travel" goal across the bottom rail.
+  return `${hour.toString().padStart(2, '0')}00`;
 }
 
 function StatBar({
@@ -135,17 +137,15 @@ function StatBar({
       <span className="statusbar-bar-label" style={{ color }}>
         {label}
       </span>
-      <span className="statusbar-bar-percent" style={{ color }}>
-        {value}%
-      </span>
-      <span className="statusbar-bar-track" aria-hidden="true">
+      <span className="statusbar-bar-track">
         <span
           className="statusbar-bar-fill"
           style={{ width: `${value}%`, background: color }}
+          aria-hidden="true"
         />
-      </span>
-      <span className="statusbar-bar-value">
-        {current ?? '-'}/{max ?? '-'}
+        <span className="statusbar-bar-text">
+          {current ?? '-'}/{max ?? '-'}
+        </span>
       </span>
     </div>
   );

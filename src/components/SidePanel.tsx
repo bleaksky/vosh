@@ -1,7 +1,7 @@
 import { StatusPane } from './StatusPane';
 import { MapPane } from './MapPane';
-import { ChatPane } from './ChatPane';
 import { AffectsPane } from './AffectsPane';
+import { InfoTabsPane } from './InfoTabsPane';
 
 export function SidePanel() {
   return (
@@ -9,7 +9,7 @@ export function SidePanel() {
       <StatusPane />
       <AffectsPane />
       <MapPane />
-      <ChatPane />
+      <InfoTabsPane />
     </aside>
   );
 }

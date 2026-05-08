@@ -169,7 +169,10 @@ function App() {
               storageKey="mudclient.layout.sidePanelWidth"
               defaultWidth={320}
               minWidth={220}
-              maxWidth={720}
+              /* Big enough to grow the map panel, while the Resizable
+                 wrapper still caps at viewport - 75-char terminal
+                 reserve so the MUD output stays readable. */
+              maxWidth={1400}
               handleLabel="resize side panel"
             >
               <SidePanel />
