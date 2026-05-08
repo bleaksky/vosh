@@ -247,6 +247,7 @@ export interface UiConfig {
   auto_update: boolean;
   font_family: string;
   font_size: number;
+  tracked_affects: string[];
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -255,6 +256,7 @@ export async function getUiConfig(): Promise<UiConfig> {
     auto_update: boolean;
     font_family: string;
     font_size: number;
+    tracked_affects: string[];
   }>('ui_get_config');
   const theme: ThemeChoice =
     cfg.theme === 'high-contrast' || cfg.theme === 'system' ? cfg.theme : 'default';
@@ -263,6 +265,7 @@ export async function getUiConfig(): Promise<UiConfig> {
     auto_update: cfg.auto_update,
     font_family: cfg.font_family,
     font_size: cfg.font_size,
+    tracked_affects: Array.isArray(cfg.tracked_affects) ? cfg.tracked_affects : [],
   };
 }
 
@@ -272,6 +275,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     autoUpdate: config.auto_update,
     fontFamily: config.font_family,
     fontSize: config.font_size,
+    trackedAffects: config.tracked_affects,
   });
 }
 

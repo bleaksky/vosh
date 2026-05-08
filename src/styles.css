@@ -1282,3 +1282,154 @@ body,
   background: rgba(230, 195, 132, 0.16);
   color: #e6c384;
 }
+
+/* Affects: a second row of pills below the vitals row, plus a side
+   pane listing every active affect with collapsible description rows. */
+.statusbar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.statusbar-row {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.statusbar-row-affects {
+  gap: 0.45rem;
+  padding-top: 0.15rem;
+  border-top: 1px dashed #23232b;
+}
+
+.affect-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: #14141a;
+  border: 1px solid #23232b;
+  font-size: 11px;
+  font-weight: 600;
+  color: #c5c9c7;
+  letter-spacing: 0.02em;
+}
+
+.affect-pill-name {
+  text-transform: lowercase;
+}
+
+.affect-pill-dur {
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  opacity: 0.85;
+}
+
+.affect-pill-missing {
+  color: #e46876;
+  border-color: #e46876;
+  text-decoration: line-through;
+  text-decoration-color: rgba(228, 104, 118, 0.7);
+  opacity: 0.85;
+}
+
+/* AffectsPane in the right side panel. */
+.affects-pane {
+  flex: 0 0 auto;
+  border-bottom: 1px solid #393b44;
+  display: flex;
+  flex-direction: column;
+  max-height: 30vh;
+}
+
+.affects-body {
+  overflow-y: auto;
+  padding: 0.35rem 0;
+  font-size: 12px;
+}
+
+.affects-empty {
+  color: #73726a;
+  font-style: italic;
+  padding: 0.5rem 0.75rem;
+}
+
+.affects-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.affect-row {
+  border-bottom: 1px solid #14141a;
+}
+
+.affect-row-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  color: #c5c9c7;
+  padding: 0.25rem 0.75rem;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.affect-row-head:hover {
+  background: #14141a;
+}
+
+.affect-row-toggle {
+  width: 0.9rem;
+  color: #73726a;
+  font-size: 10px;
+  text-align: center;
+}
+
+.affect-row-name {
+  flex: 1;
+}
+
+.affect-row-stacks {
+  color: #a4a7a4;
+  font-size: 11px;
+}
+
+.affect-row-dur {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.affect-row-desc {
+  padding: 0.1rem 0.75rem 0.4rem 1.7rem;
+  color: #a4a7a4;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.drawer-hint {
+  font-size: 11.5px;
+  color: #a4a7a4;
+  line-height: 1.4;
+  margin: 0 0 0.4rem;
+}
+
+.drawer-tracked {
+  background: #06090d;
+  color: #c5c9c7;
+  border: 1px solid #393b44;
+  border-radius: 4px;
+  padding: 0.4rem 0.55rem;
+  font-family: var(--app-font-family);
+  font-size: 12px;
+  resize: vertical;
+  min-height: 5rem;
+}

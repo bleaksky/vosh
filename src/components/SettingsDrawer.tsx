@@ -27,6 +27,7 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
   const [autoUpdate, setAutoUpdate] = useState(false);
   const [fontFamily, setFontFamily] = useState('');
   const [fontSize, setFontSize] = useState(14);
+  const [trackedAffectsText, setTrackedAffectsText] = useState('');
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -56,6 +57,7 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
         setAutoUpdate(cfg.auto_update);
         setFontFamily(cfg.font_family);
         setFontSize(cfg.font_size);
+        setTrackedAffectsText((cfg.tracked_affects ?? []).join('\n'));
       })
       .catch(() => {});
     listPlugins()
@@ -98,17 +100,25 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
 
   if (!open) return null;
 
+  const currentTrackedAffects = (): string[] =>
+    trackedAffectsText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
   const persist = async (overrides: Partial<{
     theme: ThemeChoice;
     auto_update: boolean;
     font_family: string;
     font_size: number;
+    tracked_affects: string[];
   }>) => {
     await setUiConfig({
       theme: overrides.theme ?? theme,
       auto_update: overrides.auto_update ?? autoUpdate,
       font_family: overrides.font_family ?? fontFamily,
       font_size: overrides.font_size ?? fontSize,
+      tracked_affects: overrides.tracked_affects ?? currentTrackedAffects(),
     });
   };
 
@@ -158,6 +168,19 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
       setStatus(`font size ${clamped}px`);
     } catch (e) {
       setStatus(`font save failed ${String(e)}`);
+    }
+  };
+
+  const handleTrackedAffectsBlur = async () => {
+    const list = currentTrackedAffects();
+    try {
+      await persist({ tracked_affects: list });
+      window.dispatchEvent(
+        new CustomEvent('mudclient:tracked-affects-changed', { detail: list }),
+      );
+      setStatus(`tracked affects saved (${list.length})`);
+    } catch (e) {
+      setStatus(`tracked affects save failed ${String(e)}`);
     }
   };
 
@@ -291,6 +314,23 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
         <button type="button" onClick={handleCheckUpdate}>
           check for updates now
         </button>
+      </fieldset>
+      <fieldset className="drawer-fieldset">
+        <legend>Tracked Affects</legend>
+        <p className="drawer-hint">
+          One affect name per line. Pills appear in the status bar with the
+          remaining duration; missing affects render struck-through with a
+          red border.
+        </p>
+        <textarea
+          className="drawer-tracked"
+          value={trackedAffectsText}
+          spellCheck={false}
+          rows={6}
+          onChange={(e) => setTrackedAffectsText(e.target.value)}
+          onBlur={() => void handleTrackedAffectsBlur()}
+          placeholder={'haste\nstoneskin\nblade barrier\nsanctuary'}
+        />
       </fieldset>
       <fieldset className="drawer-fieldset">
         <legend>Plugins</legend>

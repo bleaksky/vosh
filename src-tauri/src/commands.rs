@@ -378,6 +378,7 @@ pub(crate) struct UiConfigPayload {
     pub auto_update: bool,
     pub font_family: String,
     pub font_size: u32,
+    pub tracked_affects: Vec<String>,
 }
 
 #[tauri::command]
@@ -390,6 +391,7 @@ pub(crate) async fn ui_get_config(
         auto_update: p.ui.auto_update,
         font_family: p.ui.font_family.clone(),
         font_size: p.ui.font_size,
+        tracked_affects: p.ui.tracked_affects.clone(),
     })
 }
 
@@ -401,6 +403,7 @@ pub(crate) async fn ui_set_config(
     auto_update: bool,
     font_family: String,
     font_size: u32,
+    tracked_affects: Vec<String>,
 ) -> Result<(), String> {
     {
         let mut p = state.profile.lock().await;
@@ -408,6 +411,11 @@ pub(crate) async fn ui_set_config(
         p.ui.auto_update = auto_update;
         p.ui.font_family = font_family;
         p.ui.font_size = font_size.clamp(6, 64);
+        p.ui.tracked_affects = tracked_affects
+            .into_iter()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;

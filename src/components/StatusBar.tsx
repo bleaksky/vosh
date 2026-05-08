@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { onGmcp, onState, onTick, type TickPayload } from '../lib/session';
+import {
+  affectDescription,
+  colorForDuration,
+  formatDuration,
+  normalizeAffectName,
+  type Affect,
+} from '../lib/affects';
+import { getUiConfig, onGmcp, onState, onTick, type TickPayload } from '../lib/session';
 
 function playBeep() {
   try {
@@ -156,12 +163,36 @@ export function StatusBar() {
   const [world, setWorld] = useState<WorldTime>({});
   const [moons, setMoons] = useState<MoonsState>({ moons: [] });
   const [tick, setTick] = useState<TickPayload | null>(null);
+  const [affects, setAffects] = useState<Affect[]>([]);
+  const [tracked, setTracked] = useState<string[]>([]);
   const lastFiredRef = useRef<number>(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    getUiConfig()
+      .then((cfg) => {
+        if (!cancelled) setTracked(cfg.tracked_affects ?? []);
+      })
+      .catch(() => {});
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<string[]>).detail;
+      if (Array.isArray(detail)) setTracked(detail);
+    };
+    window.addEventListener('mudclient:tracked-affects-changed', handler as EventListener);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(
+        'mudclient:tracked-affects-changed',
+        handler as EventListener,
+      );
+    };
+  }, []);
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
     let unsubTick: (() => void) | undefined;
+    let cancelled = false;
 
     onGmcp((payload) => {
       if (payload.package === 'Char.Vitals') {
@@ -181,9 +212,25 @@ export function StatusBar() {
         if (data.triad !== undefined) next.triad = data.triad;
         if (data.near_alignment !== undefined) next.near_alignment = data.near_alignment;
         setMoons(next);
+        return;
+      }
+      if (payload.package === 'Char.Affects' && payload.data && typeof payload.data === 'object') {
+        const data = payload.data as { affects?: Affect[] };
+        const list = Array.isArray(data.affects) ? data.affects : [];
+        // Dedupe by name; keep first occurrence to preserve any
+        // server-provided ordering.
+        const seen = new Set<string>();
+        const deduped: Affect[] = [];
+        for (const a of list) {
+          if (!a?.name || seen.has(a.name)) continue;
+          seen.add(a.name);
+          deduped.push(a);
+        }
+        setAffects(deduped);
       }
     }).then((fn) => {
-      unsubGmcp = fn;
+      if (cancelled) fn();
+      else unsubGmcp = fn;
     });
 
     onState((payload) => {
@@ -191,10 +238,12 @@ export function StatusBar() {
         setVitals({});
         setWorld({});
         setMoons({ moons: [] });
+        setAffects([]);
         setTick(null);
       }
     }).then((fn) => {
-      unsubState = fn;
+      if (cancelled) fn();
+      else unsubState = fn;
     });
 
     onTick((payload) => {
@@ -207,15 +256,28 @@ export function StatusBar() {
         }
       }
     }).then((fn) => {
-      unsubTick = fn;
+      if (cancelled) fn();
+      else unsubTick = fn;
     });
 
     return () => {
+      cancelled = true;
       unsubGmcp?.();
       unsubState?.();
       unsubTick?.();
     };
   }, []);
+
+  // Build the tracked affects pill row. For each tracked name we look
+  // up the live affect (case-insensitive); pills for missing affects
+  // render with a strikethrough red border.
+  const liveByKey = new Map<string, Affect>();
+  for (const a of affects) liveByKey.set(normalizeAffectName(a.name), a);
+  const trackedPills = tracked.map((wanted) => {
+    const key = normalizeAffectName(wanted);
+    const live = liveByKey.get(key);
+    return { wanted, live };
+  });
 
   const tickElapsed =
     tick?.enabled !== undefined && tick.enabled
@@ -229,60 +291,101 @@ export function StatusBar() {
 
   return (
     <div className="statusbar" role="status" aria-label="vitals and world conditions">
-      <StatBar label="HP" current={vitals.hp} max={vitals.maxhp} />
-      <StatBar
-        label="MN"
-        current={pickFirst(vitals.mp, vitals.mana)}
-        max={pickFirst(vitals.maxmp, vitals.maxmana)}
-      />
-      <StatBar
-        label="MV"
-        current={pickFirst(vitals.sp, vitals.move, vitals.movement)}
-        max={pickFirst(vitals.maxsp, vitals.maxmove, vitals.maxmovement)}
-      />
-      <div className="statusbar-divider" aria-hidden="true" />
-      <div className={`statusbar-cell statusbar-tick${tickFlash ? ' statusbar-flash' : ''}`}>
-        <span className="statusbar-key">tick</span>
-        <span className="statusbar-value">{tickElapsed === null ? 'off' : `${tickElapsed}s`}</span>
+      <div className="statusbar-row statusbar-row-vitals">
+        <StatBar label="HP" current={vitals.hp} max={vitals.maxhp} />
+        <StatBar
+          label="MN"
+          current={pickFirst(vitals.mp, vitals.mana)}
+          max={pickFirst(vitals.maxmp, vitals.maxmana)}
+        />
+        <StatBar
+          label="MV"
+          current={pickFirst(vitals.sp, vitals.move, vitals.movement)}
+          max={pickFirst(vitals.maxsp, vitals.maxmove, vitals.maxmovement)}
+        />
+        <div className="statusbar-divider" aria-hidden="true" />
+        <div className={`statusbar-cell statusbar-tick${tickFlash ? ' statusbar-flash' : ''}`}>
+          <span className="statusbar-key">tick</span>
+          <span className="statusbar-value">{tickElapsed === null ? 'off' : `${tickElapsed}s`}</span>
+        </div>
+        {hourLabel && (
+          <div className="statusbar-cell">
+            <span className="statusbar-value">{hourLabel}</span>
+          </div>
+        )}
+        {(skyLabel || weatherLabel) && (
+          <div className="statusbar-cell statusbar-conditions">
+            {skyLabel && <span className="statusbar-value">{skyLabel}</span>}
+            {skyLabel && weatherLabel && <span className="statusbar-sep">·</span>}
+            {weatherLabel && <span className="statusbar-value">{weatherLabel}</span>}
+          </div>
+        )}
+        {moons.moons.length > 0 && (
+          <div
+            className="statusbar-cell statusbar-moons"
+            title={moons.moons
+              .map(
+                (m) =>
+                  `${m.name ?? '?'}: ${m.phase_name ?? `phase ${m.phase ?? '?'}`}` +
+                  (m.active ? ' (active)' : ''),
+              )
+              .join('\n')}
+          >
+            {moons.moons.map((m, i) => (
+              <span
+                key={m.name ?? i}
+                className={`moon-glyph${m.active ? ' moon-active' : ''}`}
+              >
+                {MOON_GLYPHS[m.phase ?? -1] ?? '◯'}
+              </span>
+            ))}
+            {moons.eclipse && <span className="moon-badge moon-eclipse">eclipse</span>}
+            {!moons.eclipse && moons.triad && (
+              <span className="moon-badge moon-triad">triad</span>
+            )}
+            {!moons.eclipse && !moons.triad && moons.near_alignment && (
+              <span className="moon-badge moon-near">near</span>
+            )}
+          </div>
+        )}
       </div>
-      {hourLabel && (
-        <div className="statusbar-cell">
-          <span className="statusbar-value">{hourLabel}</span>
-        </div>
-      )}
-      {(skyLabel || weatherLabel) && (
-        <div className="statusbar-cell statusbar-conditions">
-          {skyLabel && <span className="statusbar-value">{skyLabel}</span>}
-          {skyLabel && weatherLabel && <span className="statusbar-sep">·</span>}
-          {weatherLabel && <span className="statusbar-value">{weatherLabel}</span>}
-        </div>
-      )}
-      {moons.moons.length > 0 && (
+      {trackedPills.length > 0 && (
         <div
-          className="statusbar-cell statusbar-moons"
-          title={moons.moons
-            .map(
-              (m) =>
-                `${m.name ?? '?'}: ${m.phase_name ?? `phase ${m.phase ?? '?'}`}` +
-                (m.active ? ' (active)' : ''),
-            )
-            .join('\n')}
+          className="statusbar-row statusbar-row-affects"
+          aria-label="tracked affects"
         >
-          {moons.moons.map((m, i) => (
-            <span
-              key={m.name ?? i}
-              className={`moon-glyph${m.active ? ' moon-active' : ''}`}
-            >
-              {MOON_GLYPHS[m.phase ?? -1] ?? '◯'}
-            </span>
-          ))}
-          {moons.eclipse && <span className="moon-badge moon-eclipse">eclipse</span>}
-          {!moons.eclipse && moons.triad && (
-            <span className="moon-badge moon-triad">triad</span>
-          )}
-          {!moons.eclipse && !moons.triad && moons.near_alignment && (
-            <span className="moon-badge moon-near">near</span>
-          )}
+          {trackedPills.map(({ wanted, live }) => {
+            if (!live) {
+              return (
+                <span
+                  key={wanted}
+                  className="affect-pill affect-pill-missing"
+                  title={`${wanted} is not active`}
+                >
+                  {wanted}
+                </span>
+              );
+            }
+            const dur =
+              typeof live.duration === 'number'
+                ? live.duration
+                : live.duration !== undefined
+                  ? Number(live.duration)
+                  : undefined;
+            const color = colorForDuration(dur);
+            const desc = affectDescription(live);
+            return (
+              <span
+                key={wanted}
+                className="affect-pill"
+                style={{ borderColor: color, color }}
+                title={desc ?? `${live.name} ${formatDuration(dur)}`}
+              >
+                <span className="affect-pill-name">{live.name}</span>
+                <span className="affect-pill-dur">{formatDuration(dur)}</span>
+              </span>
+            );
+          })}
         </div>
       )}
     </div>

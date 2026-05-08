@@ -73,6 +73,11 @@ pub(crate) struct UiConfig {
     /// Terminal font size in pixels.
     #[serde(default = "default_font_size")]
     pub font_size: u32,
+    /// Affect names rendered as pills in the status bar. Present affects
+    /// show their remaining duration; absent ones render as a struck-out
+    /// red-bordered pill so the player notices the gap at a glance.
+    #[serde(default)]
+    pub tracked_affects: Vec<String>,
 }
 
 impl Default for UiConfig {
@@ -82,6 +87,7 @@ impl Default for UiConfig {
             auto_update: false,
             font_family: default_font_family(),
             font_size: default_font_size(),
+            tracked_affects: Vec::new(),
         }
     }
 }
@@ -178,6 +184,7 @@ impl ProfileConfig {
             auto_update: profile.ui.auto_update,
             font_family: profile.ui.font_family.clone(),
             font_size: profile.ui.font_size,
+            tracked_affects: profile.ui.tracked_affects.clone(),
         };
 
         let plugins = PluginsPersist {
@@ -261,6 +268,7 @@ impl ProfileConfig {
             auto_update: self.ui.auto_update,
             font_family: self.ui.font_family.clone(),
             font_size: self.ui.font_size,
+            tracked_affects: self.ui.tracked_affects.clone(),
         };
 
         // Plugin enabled-set is persisted; the actual load happens in the
