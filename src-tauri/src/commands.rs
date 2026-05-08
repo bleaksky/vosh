@@ -379,6 +379,7 @@ pub(crate) struct UiConfigPayload {
     pub font_family: String,
     pub font_size: u32,
     pub tracked_affects: Vec<String>,
+    pub dock_layout: String,
 }
 
 #[tauri::command]
@@ -392,7 +393,23 @@ pub(crate) async fn ui_get_config(
         font_family: p.ui.font_family.clone(),
         font_size: p.ui.font_size,
         tracked_affects: p.ui.tracked_affects.clone(),
+        dock_layout: p.ui.dock_layout.clone(),
     })
+}
+
+#[tauri::command]
+pub(crate) async fn ui_set_dock_layout(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    layout: String,
+) -> Result<(), String> {
+    {
+        let mut p = state.profile.lock().await;
+        p.ui.dock_layout = layout;
+    }
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    Ok(())
 }
 
 #[tauri::command]

@@ -1619,3 +1619,45 @@ body,
   font-size: 11.5px;
   line-height: 1.4;
 }
+
+/* Dockable middle. The component sets className="dockable-middle" on
+   DockviewReact; we fill the flex item and apply Kanso-toned overrides
+   on the dockview CSS variables. */
+.dockable-middle {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  position: relative;
+  --dv-paneview-active-outline-color: #7fb4ca;
+  --dv-tabs-and-actions-container-background-color: #0d0c0c;
+  --dv-tabs-and-actions-container-font-size: 11px;
+  --dv-tabs-and-actions-container-height: 28px;
+  --dv-tab-divider-color: #393b44;
+  --dv-group-view-background-color: #090e13;
+  --dv-tabs-container-scrollbar-color: #393b44;
+  --dv-icon-hover-background-color: #393b44;
+  --dv-floating-box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  --dv-active-tab-background-color: #090e13;
+  --dv-inactive-tab-background-color: #0d0c0c;
+  --dv-active-tab-color: #c5c9c7;
+  --dv-inactive-tab-color: #73726a;
+  --dv-tab-close-icon: #a4a7a4;
+  --dv-tab-divider-color: #23232b;
+  --dv-separator-border: #23232b;
+  --dv-paneview-header-border-color: #23232b;
+  --dv-drag-over-background-color: rgba(127, 180, 202, 0.18);
+  --dv-drag-over-border-color: #7fb4ca;
+}
+
+.dockable-middle .dv-tab {
+  font-family: var(--app-font-family);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.dockable-middle .dv-tab.dv-tab-active {
+  border-bottom: 2px solid #7fb4ca;
+}

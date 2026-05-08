@@ -26,7 +26,7 @@ use commands::{
     map_set_note, map_walk_to, profile_export, profile_import, scrollback_load, session_connect,
     session_disconnect, session_send, session_send_input, triggers_export, triggers_import,
     plugins_list, plugins_reload, plugins_set_enabled, triggers_list, ui_get_config,
-    ui_set_config, updater_check, AppState, SharedState,
+    ui_set_config, ui_set_dock_layout, updater_check, AppState, SharedState,
 };
 use map_state::MapState;
 use profile_config::ProfileConfig;
@@ -161,6 +161,7 @@ pub fn run() {
             scrollback_load,
             ui_get_config,
             ui_set_config,
+            ui_set_dock_layout,
             updater_check,
             plugins_list,
             plugins_set_enabled,

@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { Terminal, type TerminalHandle } from './components/Terminal';
+import { type TerminalHandle } from './components/Terminal';
 import { Input, type InputHandle } from './components/Input';
 import { Connect, type ConnectionStatus } from './components/Connect';
 import { TriggersDrawer } from './components/TriggersDrawer';
 import { SettingsDrawer } from './components/SettingsDrawer';
-import { SidePanel } from './components/SidePanel';
 import { AffectsBar } from './components/AffectsBar';
+import { DockableMiddle } from './components/DockableMiddle';
 import { Resizable } from './components/Resizable';
 import { SearchView } from './components/SearchView';
 import { StatusBar } from './components/StatusBar';
-import { checkForUpdate, getUiConfig, onState, type StatePayload } from './lib/session';
+import {
+  checkForUpdate,
+  getUiConfig,
+  onState,
+  setDockLayout,
+  type StatePayload,
+} from './lib/session';
 import { applyTheme } from './lib/theme';
 
 const SIDE_PANEL_STORAGE_KEY = 'mudclient.layout.sidePanelOpen';
@@ -35,8 +41,10 @@ function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
   const [fontSize, setFontSize] = useState(14);
+  const [dockLayout, setDockLayoutState] = useState('');
   const termRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
+  const dockSaveTimer = useRef<number | null>(null);
 
   // Click anywhere in the middle area focuses the input. Skip if the user
   // is in the middle of selecting text (so they can still copy from the
@@ -58,6 +66,7 @@ function App() {
         applyTheme(cfg.theme);
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
+        setDockLayoutState(cfg.dock_layout ?? '');
         if (cfg.auto_update) {
           // Background check; failures are silent so a missing endpoint
           // doesn't pop an error banner on every launch.
@@ -66,6 +75,19 @@ function App() {
       })
       .catch(() => applyTheme('system'));
   }, []);
+
+  // Debounced layout persistence — dockview emits move/add/remove
+  // events frequently during a drag and we don't want to burn the
+  // backend writing on each one.
+  const handleDockLayoutChange = (json: string) => {
+    if (dockSaveTimer.current !== null) {
+      window.clearTimeout(dockSaveTimer.current);
+    }
+    dockSaveTimer.current = window.setTimeout(() => {
+      dockSaveTimer.current = null;
+      setDockLayout(json).catch(() => undefined);
+    }, 400);
+  };
 
   useEffect(() => {
     // Mirror the font choice to CSS variables so the chrome (status bar,
@@ -144,16 +166,16 @@ function App() {
         searchOpen={searchOpen}
       />
       <div className="middle" onMouseUp={handleMiddleMouseDown}>
-        <div className="terminal-column">
-          <Terminal
-            fontFamily={fontFamily}
-            fontSize={fontSize}
-            onReady={(handle) => {
-              termRef.current = handle;
-            }}
-          />
-        </div>
-        {searchOpen ? (
+        <DockableMiddle
+          fontFamily={fontFamily}
+          fontSize={fontSize}
+          onTerminalReady={(handle) => {
+            termRef.current = handle;
+          }}
+          savedLayout={dockLayout}
+          onLayoutChange={handleDockLayoutChange}
+        />
+        {searchOpen && (
           <Resizable
             storageKey="mudclient.layout.searchWidth"
             defaultWidth={420}
@@ -163,21 +185,6 @@ function App() {
           >
             <SearchView onError={handleError} />
           </Resizable>
-        ) : (
-          sidePanelOpen && (
-            <Resizable
-              storageKey="mudclient.layout.sidePanelWidth"
-              defaultWidth={320}
-              minWidth={220}
-              /* Big enough to grow the map panel, while the Resizable
-                 wrapper still caps at viewport - 75-char terminal
-                 reserve so the MUD output stays readable. */
-              maxWidth={1400}
-              handleLabel="resize side panel"
-            >
-              <SidePanel />
-            </Resizable>
-          )
         )}
         {triggersOpen && (
           <Resizable
