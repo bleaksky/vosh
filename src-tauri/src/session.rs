@@ -54,6 +54,16 @@ pub(crate) struct RoutedPayload {
     pub text: String,
 }
 
+/// Sent when the server's WILL/WONT ECHO negotiation flips. ROM derivatives
+/// use this to ask for passwords: WILL ECHO means "the server is taking
+/// over echoing, so don't show what the user types"; WONT ECHO means
+/// "back to normal local echo." The frontend masks the input row when
+/// password=true.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct InputModePayload {
+    pub password: bool,
+}
+
 /// GMCP packages we ask the server to enable in Core.Supports.Set. Char,
 /// Room, and Comm cover the player view; World powers the tick timer reset
 /// (Aabahran ticks fire the moment its `World.Time.hour` field advances);
@@ -291,6 +301,9 @@ async fn io_loop(
 
     accumulator.reset();
     let _ = stream.shutdown().await;
+    // Reset password mode on disconnect so the next session starts with
+    // a normal-text input even if the server bailed mid-password-prompt.
+    emit_input_mode(&app, false);
     emit_state(
         &app,
         StatePayload::Disconnected {
@@ -450,6 +463,27 @@ async fn handle_event(
             stream.write_all(&hello_subnegotiation()).await?;
             stream.write_all(&supports_subnegotiation()).await?;
             stream.flush().await?;
+            Ok(())
+        }
+        TelnetEvent::Will(opt) if opt == telnet_option::ECHO => {
+            // Server is taking over echo (password prompt incoming).
+            // Acknowledge and tell the frontend to mask the input.
+            let response = negotiator.handle(&TelnetEvent::Will(opt));
+            if !response.is_empty() {
+                stream.write_all(&response).await?;
+                stream.flush().await?;
+            }
+            emit_input_mode(app, true);
+            Ok(())
+        }
+        TelnetEvent::Wont(opt) if opt == telnet_option::ECHO => {
+            // Server hands echo back to us (password done).
+            let response = negotiator.handle(&TelnetEvent::Wont(opt));
+            if !response.is_empty() {
+                stream.write_all(&response).await?;
+                stream.flush().await?;
+            }
+            emit_input_mode(app, false);
             Ok(())
         }
         other => {
@@ -729,5 +763,11 @@ fn emit_output(app: &AppHandle, bytes: Vec<u8>) {
 fn emit_state(app: &AppHandle, payload: StatePayload) {
     if let Err(e) = app.emit("session://state", payload) {
         warn!(error = %e, "failed to emit session state");
+    }
+}
+
+fn emit_input_mode(app: &AppHandle, password: bool) {
+    if let Err(e) = app.emit("session://input-mode", InputModePayload { password }) {
+        warn!(error = %e, "failed to emit input mode");
     }
 }

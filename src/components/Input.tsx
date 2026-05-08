@@ -6,7 +6,7 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
-import { sendInput } from '../lib/session';
+import { onInputMode, sendInput } from '../lib/session';
 
 export interface InputHandle {
   focus: () => void;
@@ -24,6 +24,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
 ) {
   const [value, setValue] = useState('');
   const [history, setHistory] = useState<string[]>([]);
+  const [passwordMode, setPasswordMode] = useState(false);
   // When the user starts arrow-key navigation with non-empty input, we
   // remember that prefix so Up and Down cycle only matching history entries.
   // Null means no active prefix search; cycle the full history.
@@ -34,6 +35,21 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   useEffect(() => {
     if (enabled) inputRef.current?.focus();
   }, [enabled]);
+
+  useEffect(() => {
+    let unsub: (() => void) | undefined;
+    let cancelled = false;
+    onInputMode((payload) => {
+      setPasswordMode(payload.password);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
 
   useImperativeHandle(
     ref,
@@ -76,7 +92,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       setValue('');
       setSearchPrefix(null);
       setHistoryIndex(null);
-      if (line.length > 0) {
+      if (line.length > 0 && !passwordMode) {
         setHistory((prev) => {
           if (prev[prev.length - 1] === line) return prev;
           return [...prev, line];
@@ -86,8 +102,13 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       // user pressed Enter. The cursor sits at the end of the partial
       // prompt, so the line lands inline (TinTin++ style) and the
       // trailing \r\n moves the cursor to the row where the server
-      // response will print.
-      onLocalEcho?.(`${line}\r\n`);
+      // response will print. In password mode, only echo a newline so
+      // the password itself never lands in the terminal scrollback.
+      if (passwordMode) {
+        onLocalEcho?.('\r\n');
+      } else {
+        onLocalEcho?.(`${line}\r\n`);
+      }
       try {
         await sendInput(line);
       } catch (e) {
@@ -135,15 +156,17 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       </span>
       <input
         ref={inputRef}
-        type="text"
+        type={passwordMode ? 'password' : 'text'}
         value={value}
         disabled={!enabled}
         spellCheck={false}
         autoCapitalize="off"
         autoCorrect="off"
-        autoComplete="off"
-        placeholder={enabled ? 'type a command, or #help' : 'input disabled'}
-        aria-label="command input"
+        autoComplete={passwordMode ? 'current-password' : 'off'}
+        placeholder={
+          passwordMode ? 'password' : enabled ? 'type a command, or #help' : 'input disabled'
+        }
+        aria-label={passwordMode ? 'password input' : 'command input'}
         onChange={(e) => handleChange(e.target.value)}
         onKeyDown={handleKeyDown}
       />

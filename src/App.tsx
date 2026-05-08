@@ -88,7 +88,13 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // Tauri's listener attach is async, but React StrictMode in dev runs
+    // the effect cleanup before the promise resolves. If we just stash
+    // unsub when it lands, the first listener leaks and the second mount
+    // adds another, so disconnect events fire twice. Track a cancelled
+    // flag so a late-arriving handle gets unlistened immediately.
     let unsub: (() => void) | undefined;
+    let cancelled = false;
     onState((payload: StatePayload) => {
       if (payload.kind === 'disconnected') {
         setStatus({ kind: 'idle' });
@@ -99,9 +105,11 @@ function App() {
         setStatus(payload);
       }
     }).then((fn) => {
-      unsub = fn;
+      if (cancelled) fn();
+      else unsub = fn;
     });
     return () => {
+      cancelled = true;
       unsub?.();
     };
   }, []);

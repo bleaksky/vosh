@@ -66,8 +66,14 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
     if (!containerRef.current) return;
 
     const term = new XTerm({
-      cursorBlink: true,
-      cursorStyle: 'block',
+      // The user types into the bottom input box, not into xterm, so a
+      // cursor block in the output pane is just noise (and a confusing
+      // leftover after disconnect). Disable blink and pick the bar style
+      // before we send the DECTCEM hide below to keep behavior even if
+      // some path turns the cursor back on.
+      cursorBlink: false,
+      cursorStyle: 'bar',
+      cursorInactiveStyle: 'none',
       fontFamily,
       fontSize,
       lineHeight: 1.2,
@@ -85,6 +91,10 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
     term.unicode.activeVersion = '11';
 
     term.open(containerRef.current);
+    // DECTCEM: hide the cursor entirely. Belt-and-suspenders alongside
+    // the cursor* options above; some terminals re-show it on certain
+    // sequences and we want the read-only pane to stay clean.
+    term.write('\x1b[?25l');
     fit.fit();
     termRef.current = term;
     fitRef.current = fit;

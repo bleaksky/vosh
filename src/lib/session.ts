@@ -177,6 +177,18 @@ export async function onState(cb: (state: StatePayload) => void): Promise<Unlist
   });
 }
 
+export interface InputModePayload {
+  password: boolean;
+}
+
+export async function onInputMode(
+  cb: (payload: InputModePayload) => void,
+): Promise<UnlistenFn> {
+  return listen<InputModePayload>('session://input-mode', (event) => {
+    cb(event.payload);
+  });
+}
+
 export interface LogSession {
   id: number;
   host: string;
