@@ -3,6 +3,7 @@ import {
   DockviewReact,
   type DockviewApi,
   type DockviewReadyEvent,
+  type IDockviewPanelHeaderProps,
   type IDockviewPanelProps,
 } from 'dockview';
 import 'dockview-core/dist/styles/dockview.css';
@@ -62,6 +63,18 @@ const components = {
   map: MapPanel,
   info: InfoPanel,
 };
+
+/// Custom tab renderer: just the title text. dockview's default tab
+/// includes a close X that the user has no good way to undo, so we
+/// strip it. dockview still wraps this in its own draggable element,
+/// so dragging the title still works.
+function PanelTab(props: IDockviewPanelHeaderProps) {
+  return (
+    <div className="panel-tab" title={props.api.title ?? props.api.id}>
+      {props.api.title ?? props.api.id}
+    </div>
+  );
+}
 
 function buildDefault(api: DockviewApi, params: TerminalParams) {
   // Drop everything that may exist from a prior layout, then build the
@@ -162,6 +175,19 @@ export function DockableMiddle({
     return () => subs.forEach((d) => d.dispose());
   };
 
+  // Reset to default layout when the user clicks "panes" (or any
+  // other path that fires the reset event). Useful for recovering
+  // from a layout that's hidden everything.
+  useEffect(() => {
+    const handler = () => {
+      const api = apiRef.current;
+      if (!api) return;
+      buildDefault(api, paramsRef.current);
+    };
+    window.addEventListener('mudclient:layout-reset', handler);
+    return () => window.removeEventListener('mudclient:layout-reset', handler);
+  }, []);
+
   // When the font changes, push it into the running terminal panel via
   // updateParameters so the panel's React props refresh.
   useEffect(() => {
@@ -175,8 +201,14 @@ export function DockableMiddle({
   return (
     <DockviewReact
       components={components}
+      defaultTabComponent={PanelTab}
       onReady={onReady}
-      className="dockable-middle"
+      // dockview-theme-abyss provides the full set of CSS variables
+      // including drop indicator colors and overlay z-indices. Without
+      // a theme class drag would still work but the indicators are
+      // invisible. Our extra .dockable-middle class layers Kanso-toned
+      // overrides on top.
+      className="dockable-middle dockview-theme-abyss"
     />
   );
 }

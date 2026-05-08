@@ -37,7 +37,7 @@ function App() {
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
   const [triggersOpen, setTriggersOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [sidePanelOpen, setSidePanelOpen] = useState(loadSidePanelOpen);
+  const [sidePanelOpen] = useState(loadSidePanelOpen);
   const [searchOpen, setSearchOpen] = useState(false);
   const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
   const [fontSize, setFontSize] = useState(14);
@@ -158,7 +158,11 @@ function App() {
         onError={handleError}
         onToggleTriggers={() => setTriggersOpen((v) => !v)}
         triggersOpen={triggersOpen}
-        onToggleSidePanel={() => setSidePanelOpen((v) => !v)}
+        onToggleSidePanel={() => {
+          // The "panes" button now resets the dockview layout so a
+          // user who's accidentally hidden every panel can recover.
+          window.dispatchEvent(new CustomEvent('mudclient:layout-reset'));
+        }}
         sidePanelOpen={sidePanelOpen}
         onToggleSettings={() => setSettingsOpen((v) => !v)}
         settingsOpen={settingsOpen}

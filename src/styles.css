@@ -1661,3 +1661,19 @@ body,
 .dockable-middle .dv-tab.dv-tab-active {
   border-bottom: 2px solid #7fb4ca;
 }
+
+/* Custom panel tab — text only, no close X. dockview wraps the
+   content in its own draggable element, so dragging by the tab text
+   still moves the panel between groups. */
+.panel-tab {
+  padding: 0 0.65rem;
+  font-family: var(--app-font-family);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: inherit;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+}
