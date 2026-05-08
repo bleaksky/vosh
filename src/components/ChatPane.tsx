@@ -19,10 +19,15 @@ const newId = () => {
 function commTextLine(payload: unknown): ChatLine | null {
   if (!payload || typeof payload !== 'object') return null;
   const data = payload as Record<string, unknown>;
-  const channel = String(data.chan ?? data.channel ?? 'chat');
-  const text = String(data.msg ?? data.text ?? data.message ?? '');
+  // Aabahran's Comm.Channel push uses `channel`, `speaker`, `text`.
+  // Other ROM derivatives sometimes send `chan` / `msg` / `message`,
+  // so honour both spellings.
+  const channel = String(data.channel ?? data.chan ?? 'chat');
+  const speaker = data.speaker ? String(data.speaker) : '';
+  const text = String(data.text ?? data.msg ?? data.message ?? '');
   if (!text) return null;
-  return { id: newId(), channel, text, ts: Date.now() };
+  const composed = speaker ? `${speaker}: ${text}` : text;
+  return { id: newId(), channel, text: composed, ts: Date.now() };
 }
 
 function stripAnsi(text: string): string {
@@ -40,7 +45,11 @@ export function ChatPane() {
     let unsubState: (() => void) | undefined;
 
     onGmcp((payload) => {
-      if (payload.package !== 'Comm.Channel.Text') return;
+      // Accept both the bare `Comm.Channel` package (Aabahran) and the
+      // longer `Comm.Channel.Text` form some MUDs use.
+      if (payload.package !== 'Comm.Channel' && payload.package !== 'Comm.Channel.Text') {
+        return;
+      }
       const line = commTextLine(payload.data);
       if (!line) return;
       setLines((prev) => [...prev.slice(-(MAX_LINES - 1)), line]);
