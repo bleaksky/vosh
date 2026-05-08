@@ -255,3 +255,25 @@ export interface UpdateCheckResult {
 export async function checkForUpdate(): Promise<UpdateCheckResult> {
   return invoke('updater_check');
 }
+
+export interface PluginInfo {
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  entry: string;
+  dir: string;
+  enabled: boolean;
+}
+
+export async function listPlugins(): Promise<PluginInfo[]> {
+  return invoke('plugins_list');
+}
+
+export async function setPluginEnabled(name: string, enabled: boolean): Promise<boolean> {
+  return invoke('plugins_set_enabled', { name, enabled });
+}
+
+export async function reloadPlugin(name: string): Promise<void> {
+  await invoke('plugins_reload', { name });
+}

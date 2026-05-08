@@ -13,6 +13,7 @@ mod input;
 mod line_accumulator;
 mod log_state;
 mod map_state;
+mod plugins;
 mod profile;
 mod profile_config;
 mod script_state;
@@ -24,7 +25,8 @@ use commands::{
     app_version, logs_export, logs_list_sessions, logs_search, map_area_snapshot, map_set_avoid,
     map_set_note, map_walk_to, profile_export, profile_import, scrollback_load, session_connect,
     session_disconnect, session_send, session_send_input, triggers_export, triggers_import,
-    triggers_list, ui_get_config, ui_set_config, updater_check, AppState, SharedState,
+    plugins_list, plugins_reload, plugins_set_enabled, triggers_list, ui_get_config,
+    ui_set_config, updater_check, AppState, SharedState,
 };
 use map_state::MapState;
 use profile_config::ProfileConfig;
@@ -97,6 +99,44 @@ pub fn run() {
                     });
                     info!(path = %scrollback_path.display(), "loaded scrollback");
                 }
+
+                let plugins_dir = path.join("plugins");
+                let _ = std::fs::create_dir_all(&plugins_dir);
+                seed_example_plugins(&plugins_dir);
+                let plugins_handle = state.plugins.clone();
+                let profile_handle = state.profile.clone();
+                tauri::async_runtime::block_on(async move {
+                    let mut mgr = plugins_handle.lock().await;
+                    mgr.set_plugins_dir(plugins_dir.clone());
+                    if let Err(e) = mgr.discover() {
+                        error!(error = %e, "plugin discovery failed");
+                    }
+                    let enabled = {
+                        let p = profile_handle.lock().await;
+                        p.plugins.enabled.clone()
+                    };
+                    mgr.set_enabled(enabled.clone());
+                    for name in &enabled {
+                        match mgr.read_entry(name) {
+                            Ok(code) => {
+                                let mut p = profile_handle.lock().await;
+                                crate::script_state::snapshot_vars(&p.script, &p.vars);
+                                match p.script.load_script(&format!("plugin:{name}"), code) {
+                                    Ok(outcome) => {
+                                        let _ = crate::script_state::apply_actions(&mut p, outcome);
+                                        info!(name = %name, "loaded plugin");
+                                    }
+                                    Err(e) => {
+                                        error!(name = %name, error = %e, "plugin script error");
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!(name = %name, error = %e, "plugin entry missing");
+                            }
+                        }
+                    }
+                });
             }
             Ok(())
         })
@@ -122,6 +162,9 @@ pub fn run() {
             ui_get_config,
             ui_set_config,
             updater_check,
+            plugins_list,
+            plugins_set_enabled,
+            plugins_reload,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -144,6 +187,42 @@ fn open_log_store(dir: &std::path::Path) -> Result<LogStore, Box<dyn std::error:
     let path = log_state::log_db_path(dir);
     info!(path = %path.display(), "opening log store");
     Ok(LogStore::open(&path)?)
+}
+
+/// Drop the example plugins shipped with the app into the user's plugins
+/// directory if they're not already there. Lets a fresh install show
+/// something usable in the Plugins fieldset without manual setup.
+fn seed_example_plugins(plugins_dir: &std::path::Path) {
+    const EXAMPLES: &[(&str, &[(&str, &str)])] = &[(
+        "vitals_alert",
+        &[
+            (
+                "manifest.toml",
+                include_str!("../../plugins/vitals_alert/manifest.toml"),
+            ),
+            (
+                "main.lua",
+                include_str!("../../plugins/vitals_alert/main.lua"),
+            ),
+        ],
+    )];
+    for (name, files) in EXAMPLES {
+        let dir = plugins_dir.join(name);
+        if dir.exists() {
+            continue;
+        }
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            error!(plugin = %name, error = %e, "failed to seed plugin directory");
+            continue;
+        }
+        for (filename, contents) in *files {
+            let path = dir.join(filename);
+            if let Err(e) = std::fs::write(&path, contents) {
+                error!(plugin = %name, file = %filename, error = %e, "failed to seed plugin file");
+            }
+        }
+        info!(plugin = %name, "seeded example plugin");
+    }
 }
 
 #[cfg(test)]

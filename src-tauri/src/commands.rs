@@ -11,6 +11,7 @@ use tokio::sync::Mutex;
 use crate::input;
 use crate::log_state::{SharedLogStore, SharedScrollback};
 use crate::map_state::SharedMap;
+use crate::plugins::{PluginRecord, SharedPluginManager};
 use crate::profile::Profile;
 use crate::profile_config::ProfileConfig;
 use crate::script_state::SharedTimers;
@@ -27,6 +28,7 @@ pub(crate) struct AppState {
     pub(crate) script_timers: SharedTimers,
     pub(crate) logs: SharedLogStore,
     pub(crate) scrollback: SharedScrollback,
+    pub(crate) plugins: SharedPluginManager,
 }
 
 pub(crate) type SharedState = Arc<AppState>;
@@ -385,6 +387,94 @@ pub(crate) struct UpdateCheckResult {
     pub available: bool,
     pub version: Option<String>,
     pub notes: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct PluginInfo {
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub author: String,
+    pub entry: String,
+    pub dir: String,
+    pub enabled: bool,
+}
+
+impl From<&PluginRecord> for PluginInfo {
+    fn from(p: &PluginRecord) -> Self {
+        Self {
+            name: p.manifest.name.clone(),
+            version: p.manifest.version.clone(),
+            description: p.manifest.description.clone(),
+            author: p.manifest.author.clone(),
+            entry: p.manifest.entry.clone(),
+            dir: p.dir.display().to_string(),
+            enabled: p.enabled,
+        }
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn plugins_list(state: State<'_, SharedState>) -> Result<Vec<PluginInfo>, String> {
+    let mut mgr = state.plugins.lock().await;
+    mgr.discover().map_err(|e| e.to_string())?;
+    Ok(mgr.list().iter().map(PluginInfo::from).collect())
+}
+
+#[tauri::command]
+pub(crate) async fn plugins_set_enabled(
+    state: State<'_, SharedState>,
+    name: String,
+    enabled: bool,
+) -> Result<bool, String> {
+    let body = if enabled {
+        let mgr = state.plugins.lock().await;
+        if !mgr.list().iter().any(|p| p.manifest.name == name) {
+            return Err(format!("plugin `{name}` not found"));
+        }
+        Some(mgr.read_entry(&name).map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+
+    {
+        let mut mgr = state.plugins.lock().await;
+        if !mgr.mark_enabled(&name, enabled) {
+            return Err(format!("plugin `{name}` not found"));
+        }
+        let mut p = state.profile.lock().await;
+        p.plugins.enabled = mgr.enabled_names();
+    }
+
+    if let Some(code) = body {
+        let mut p = state.profile.lock().await;
+        crate::script_state::snapshot_vars(&p.script, &p.vars);
+        let outcome = p
+            .script
+            .load_script(&format!("plugin:{name}"), code)
+            .map_err(|e| e.to_string())?;
+        let _ = crate::script_state::apply_actions(&mut p, outcome);
+    }
+    Ok(enabled)
+}
+
+#[tauri::command]
+pub(crate) async fn plugins_reload(
+    state: State<'_, SharedState>,
+    name: String,
+) -> Result<(), String> {
+    let code = {
+        let mgr = state.plugins.lock().await;
+        mgr.read_entry(&name).map_err(|e| e.to_string())?
+    };
+    let mut p = state.profile.lock().await;
+    crate::script_state::snapshot_vars(&p.script, &p.vars);
+    let outcome = p
+        .script
+        .load_script(&format!("plugin:{name}"), code)
+        .map_err(|e| e.to_string())?;
+    let _ = crate::script_state::apply_actions(&mut p, outcome);
+    Ok(())
 }
 
 #[tauri::command]

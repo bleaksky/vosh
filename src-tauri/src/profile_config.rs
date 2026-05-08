@@ -46,6 +46,15 @@ pub(crate) struct ProfileConfig {
     pub autoload_scripts: Vec<String>,
     #[serde(default)]
     pub ui: UiConfig,
+    #[serde(default)]
+    pub plugins: PluginsPersist,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub(crate) struct PluginsPersist {
+    /// Names of plugins to load on startup.
+    #[serde(default)]
+    pub enabled: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -142,6 +151,10 @@ impl ProfileConfig {
             auto_update: profile.ui.auto_update,
         };
 
+        let plugins = PluginsPersist {
+            enabled: profile.plugins.enabled.clone(),
+        };
+
         Self {
             connection: ConnectionConfig::default(),
             aliases,
@@ -150,6 +163,7 @@ impl ProfileConfig {
             tick,
             autoload_scripts: Vec::new(),
             ui,
+            plugins,
         }
     }
 
@@ -216,6 +230,12 @@ impl ProfileConfig {
         profile.ui = UiConfig {
             theme: self.ui.theme.clone(),
             auto_update: self.ui.auto_update,
+        };
+
+        // Plugin enabled-set is persisted; the actual load happens in the
+        // PluginManager wired into AppState.
+        profile.plugins = PluginsPersist {
+            enabled: self.plugins.enabled.clone(),
         };
 
         warnings
