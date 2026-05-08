@@ -114,10 +114,9 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
     termRef.current = term;
     fitRef.current = fit;
 
-    // Refit synchronously on container or window size changes. A
-    // size-delta guard skips noise events to avoid the
-    // "ResizeObserver loop limit exceeded" warning while still
-    // catching every real layout change.
+    // Refit on container/window size changes. A size-delta guard
+    // skips noise events to avoid the "ResizeObserver loop limit
+    // exceeded" warning.
     let lastW = 0;
     let lastH = 0;
     const refit = (w: number, h: number) => {
@@ -142,6 +141,20 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
     // sibling sizes) drives a refit even if the container's own
     // border-box doesn't immediately update.
     observer.observe(document.body);
+
+    // Belt-and-suspenders poll. Some Tauri/WebKit cases never fire
+    // a resize event when sibling chrome (status bar, affects bar)
+    // grows on connect — the terminal container is sized via the
+    // flex column rules but the resize observer never trips. Poll
+    // the container's clientHeight every animation frame and refit
+    // when it drifts. The delta guard makes this near-free.
+    let rafId = 0;
+    const pollLoop = () => {
+      const el = containerRef.current;
+      if (el) refit(el.clientWidth, el.clientHeight);
+      rafId = requestAnimationFrame(pollLoop);
+    };
+    rafId = requestAnimationFrame(pollLoop);
 
     let unsubOutput: (() => void) | undefined;
     // Replay persisted scrollback before any live output lands so the
@@ -169,6 +182,7 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
     onReadyRef.current?.(handle);
 
     return () => {
+      cancelAnimationFrame(rafId);
       observer.disconnect();
       window.removeEventListener('resize', handleWindowResize);
       unsubOutput?.();
