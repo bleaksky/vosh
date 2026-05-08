@@ -44,18 +44,21 @@ impl Scrollback {
 
     pub(crate) fn load_from_bytes(&mut self, bytes: &[u8]) {
         self.lines.clear();
-        for chunk in bytes.split(|b| *b == b'\n') {
-            if chunk.is_empty() {
+        // Keep empty intermediate rows so blank lines in the original
+        // output show up again on restore. Splitting on \n always yields
+        // one trailing empty chunk after a final \n; that one is an
+        // artifact of the encoding and gets dropped.
+        let parts: Vec<&[u8]> = bytes.split(|b| *b == b'\n').collect();
+        let n = parts.len();
+        for (i, chunk) in parts.iter().enumerate() {
+            if i == n - 1 && chunk.is_empty() {
                 continue;
             }
             let trimmed = if chunk.last() == Some(&b'\r') {
                 &chunk[..chunk.len() - 1]
             } else {
-                chunk
+                *chunk
             };
-            if trimmed.is_empty() {
-                continue;
-            }
             self.push(trimmed.to_vec());
         }
     }
@@ -105,12 +108,34 @@ mod tests {
     }
 
     #[test]
-    fn load_skips_blank_lines_and_handles_crlf() {
+    fn load_preserves_blank_lines_and_handles_crlf() {
         let mut s = Scrollback::default();
         s.load_from_bytes(b"alpha\r\nbeta\r\n\r\ngamma\r\n");
-        assert_eq!(s.lines.len(), 3);
+        assert_eq!(s.lines.len(), 4);
         assert_eq!(s.lines[0], b"alpha");
         assert_eq!(s.lines[1], b"beta");
-        assert_eq!(s.lines[2], b"gamma");
+        assert_eq!(s.lines[2], b"");
+        assert_eq!(s.lines[3], b"gamma");
+    }
+
+    #[test]
+    fn round_trip_preserves_blank_rows() {
+        let mut a = Scrollback::default();
+        a.push(b"first".to_vec());
+        a.push(b"".to_vec());
+        a.push(b"third".to_vec());
+        a.push(b"".to_vec());
+        a.push(b"".to_vec());
+        a.push(b"sixth".to_vec());
+        let bytes = a.dump();
+        let mut b = Scrollback::default();
+        b.load_from_bytes(&bytes);
+        assert_eq!(b.lines.len(), 6);
+        assert_eq!(b.lines[0], b"first");
+        assert_eq!(b.lines[1], b"");
+        assert_eq!(b.lines[2], b"third");
+        assert_eq!(b.lines[3], b"");
+        assert_eq!(b.lines[4], b"");
+        assert_eq!(b.lines[5], b"sixth");
     }
 }

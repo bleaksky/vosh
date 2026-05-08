@@ -26,7 +26,12 @@ body,
 
 .app {
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  /* minmax(0, 1fr) lets the terminal row shrink below its content's
+     intrinsic size when the status bar grows (e.g. when the affects
+     row appears). Without that the 1fr default acts like minmax(auto,
+     1fr), the terminal stays full-height, and the status bar lands on
+     top of it. */
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   grid-template-columns: minmax(0, 1fr);
   height: 100vh;
   width: 100vw;
