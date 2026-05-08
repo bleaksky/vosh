@@ -62,7 +62,9 @@ body,
   flex: 0 0 6rem;
 }
 
-.connect button {
+/* Scoped to the connect/disconnect submit button only. The pill
+   toggles next to it use .pill rules and must not inherit this fill. */
+.connect button[type='submit'] {
   background: #87a987;
   color: #ffffff;
   border: 0;
@@ -72,7 +74,7 @@ body,
   cursor: pointer;
 }
 
-.connect button:hover {
+.connect button[type='submit']:hover {
   background: #8a9a7b;
 }
 
@@ -164,19 +166,6 @@ body,
   color: #ffff00;
 }
 
-.connect button.secondary {
-  background: #181616;
-  color: #c5c9c7;
-}
-
-.connect button.secondary:hover {
-  background: #393b44;
-}
-
-.connect button.secondary[aria-pressed='true'] {
-  background: #7fb4ca;
-  color: #ffffff;
-}
 
 .drawer {
   flex: 0 0 min(560px, 50vw);
@@ -1244,9 +1233,6 @@ body,
   margin-right: 0.4rem;
   pointer-events: none;
   font-weight: 400;
-  display: inline-block;
-  background: #090e13;
-  padding: 0 0.1rem;
 }
 
 .map-mode-toggle button {
