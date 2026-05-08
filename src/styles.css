@@ -19,9 +19,7 @@ body,
   margin: 0;
   padding: 0;
   height: 100%;
-  /* Outer bezel sits a touch darker than the panel bg so the app reads
-     as a floating panel inside the window. */
-  background: #04060a;
+  background: #090e13;
   color: #c5c9c7;
   overflow: hidden;
 }
@@ -30,13 +28,8 @@ body,
   display: grid;
   grid-template-rows: auto 1fr auto auto;
   grid-template-columns: minmax(0, 1fr);
-  height: calc(100vh - 14px);
-  width: calc(100vw - 14px);
-  margin: 7px;
-  border-radius: 10px;
-  border: 1px solid #23232b;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
-  background: #090e13;
+  height: 100vh;
+  width: 100vw;
   gap: 0;
   overflow: hidden;
 }
@@ -103,7 +96,9 @@ body,
   min-width: 0;
   height: 100%;
   overflow: hidden;
-  padding: 0.25rem;
+  /* Visible breathing room around the MUD output so text doesn't
+     touch the chrome on either side. */
+  padding: 0.6rem 0.8rem;
   background: #090e13;
   box-sizing: border-box;
 }
@@ -1174,70 +1169,73 @@ body,
   background: #ffff00;
 }
 
-/* Pill toggle group — small rounded buttons separated by slashes,
-   each pill colored by its kanso accent. Used in the connect bar and
-   in any map mode/style toggle. */
+/* Pill toggle group — small rounded buttons each with a dark slate
+   background and a kanso-colored bold label. Slashes are rendered as
+   their own dim cells between pills so the slash never inherits the
+   pill background. */
 .pill-group {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
   flex: 0 0 auto;
 }
 
-.pill-group > button + button::before {
-  content: '/';
+.pill-cell {
+  display: inline-flex;
+  align-items: center;
+}
+
+.pill-sep {
   color: #393b44;
-  margin-right: 0.5rem;
-  pointer-events: none;
+  padding: 0 0.45rem;
   font-weight: 400;
+  user-select: none;
+  pointer-events: none;
 }
 
 .pill {
-  background: #181616;
-  border: 1px solid #23232b;
+  background: #14141a;
+  border: 0;
   border-radius: 999px;
-  color: #a4a7a4;
-  padding: 0.18rem 0.85rem;
-  font: inherit;
+  color: #73726a;
+  padding: 0.18rem 0.7rem;
+  font-family: inherit;
   font-size: 11.5px;
-  cursor: pointer;
+  font-weight: 700;
   letter-spacing: 0.02em;
-  transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+  cursor: pointer;
+  transition: color 0.12s ease, background-color 0.12s ease;
 }
 
 .pill:hover {
-  background: #23232b;
+  background: #1d1d24;
+  color: #c5c9c7;
 }
 
-.pill[aria-pressed='true'] {
-  background: #181616;
-  font-weight: 600;
-}
+/* Inactive pills hold a muted gray so the bar doesn't shout when
+   nothing is open. Pressed state pulls the kanso accent forward. */
+.pill-cyan[aria-pressed='true'] { color: #7aa89f; }
+.pill-yellow[aria-pressed='true'] { color: #e6c384; }
+.pill-magenta[aria-pressed='true'] { color: #938aa9; }
+.pill-green[aria-pressed='true'] { color: #87a987; }
+.pill-red[aria-pressed='true'] { color: #e46876; }
 
-.pill-cyan { color: #7aa89f; }
-.pill-cyan[aria-pressed='true'] { color: #7aa89f; border-color: #7aa89f; }
+.pill-cyan:hover { color: #7aa89f; }
+.pill-yellow:hover { color: #e6c384; }
+.pill-magenta:hover { color: #938aa9; }
+.pill-green:hover { color: #87a987; }
+.pill-red:hover { color: #e46876; }
 
-.pill-yellow { color: #e6c384; }
-.pill-yellow[aria-pressed='true'] { color: #e6c384; border-color: #e6c384; }
-
-.pill-magenta { color: #938aa9; }
-.pill-magenta[aria-pressed='true'] { color: #938aa9; border-color: #938aa9; }
-
-.pill-green { color: #87a987; }
-.pill-green[aria-pressed='true'] { color: #87a987; border-color: #87a987; }
-
-.pill-red { color: #e46876; }
-.pill-red[aria-pressed='true'] { color: #e46876; border-color: #e46876; }
-
-/* Map mode/style toggles inherit the same look. Override the existing
-   segmented-switch box. */
+/* Map mode/style toggles inherit the same pill look. */
 .map-mode-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
   border: 0;
   border-radius: 0;
   overflow: visible;
+}
+
+.map-mode-toggle > button + button {
+  margin-left: 0.4rem;
 }
 
 .map-mode-toggle > button + button::before {
@@ -1246,30 +1244,28 @@ body,
   margin-right: 0.4rem;
   pointer-events: none;
   font-weight: 400;
+  display: inline-block;
+  background: #090e13;
+  padding: 0 0.1rem;
 }
 
 .map-mode-toggle button {
-  background: #181616;
-  border: 1px solid #23232b;
+  background: #14141a;
+  border: 0;
   border-radius: 999px;
-  color: #a4a7a4;
+  color: #73726a;
   padding: 1px 10px;
   font-size: 11px;
+  font-weight: 700;
   text-transform: lowercase;
   cursor: pointer;
 }
 
 .map-mode-toggle button:hover {
-  background: #23232b;
+  background: #1d1d24;
+  color: #c5c9c7;
 }
 
 .map-mode-toggle button[aria-pressed='true'] {
-  background: #181616;
   color: #7fb4ca;
-  border-color: #7fb4ca;
-  font-weight: 600;
-}
-
-.map-mode-toggle button + button {
-  border-left: 1px solid #23232b;
 }

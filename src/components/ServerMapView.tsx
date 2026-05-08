@@ -525,7 +525,9 @@ function drawSquares(
   ctx.stroke();
 
   // Squares, FL web map style: dim sector fill + 0.8-alpha sector border,
-  // origin gets a yellow glow + bright yellow border.
+  // origin gets a yellow glow + bright yellow border. Each cell's alpha
+  // tracks Manhattan distance from the player so the player sits in a
+  // bright pool that fades outward.
   for (let r = 1; r <= rows; r++) {
     for (let c = 1; c <= cols; c++) {
       const cell = getCell(payload, r, c);
@@ -534,6 +536,8 @@ function drawSquares(
       const cy = oy + r * pitch;
       const isCenter = r === centerR && c === centerC;
       const sector = sectorForCode(cell.s);
+      const dist = Math.abs(r - centerR) + Math.abs(c - centerC);
+      const depth = depthAlphaForRing(dist);
 
       if (isCenter) {
         ctx.fillStyle = MAP_COLORS.originGlow;
@@ -542,6 +546,8 @@ function drawSquares(
         ctx.fill();
       }
 
+      ctx.save();
+      ctx.globalAlpha = depth;
       ctx.fillStyle = sector.fill;
       ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
 
@@ -553,6 +559,7 @@ function drawSquares(
         ctx.lineWidth = 1;
       }
       ctx.strokeRect(cx - size / 2, cy - size / 2, size, size);
+      ctx.restore();
 
       const exits = (cell.e ?? '').toLowerCase();
       if (exits.includes('u') || exits.includes('d')) {
@@ -569,6 +576,17 @@ function drawSquares(
       }
     }
   }
+}
+
+// Same fade table as the mapping view's BFS distance, but keyed to a
+// ring index since the server payload doesn't ship full graph data.
+function depthAlphaForRing(d: number): number {
+  if (d === 0) return 1;
+  if (d <= 2) return 0.9;
+  if (d <= 4) return 0.72;
+  if (d <= 6) return 0.55;
+  if (d <= 9) return 0.4;
+  return 0.28;
 }
 
 function drawGlyphs(

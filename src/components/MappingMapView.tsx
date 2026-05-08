@@ -42,6 +42,20 @@ function terrainToSectorId(terrain: string): number {
   return 0;
 }
 
+// Depth fade keyed to BFS hop distance from the player. The current
+// room renders at full alpha; each ring out drops a step until distant
+// rooms barely peek above the bg. Unreachable rooms (no path through
+// the visible cluster) get the dimmest treatment.
+function depthAlphaFor(dist: number | undefined): number {
+  if (dist === undefined) return 0.22;
+  if (dist === 0) return 1;
+  if (dist <= 2) return 0.9;
+  if (dist <= 5) return 0.72;
+  if (dist <= 9) return 0.55;
+  if (dist <= 14) return 0.4;
+  return 0.28;
+}
+
 function loadStyle(): Style {
   try {
     const value = localStorage.getItem(STYLE_KEY);
@@ -317,6 +331,32 @@ export function MappingMapView() {
     }
     ctx.stroke();
 
+    // BFS hop distance from the player to every visible room. Drives a
+    // depth fade so closer rooms read brightly and far rooms recede
+    // toward the bg, the way TinTin++ shades distance.
+    const distance = new Map<number, number>();
+    if (snapshot.current_room_id !== null) {
+      const adj = new Map<number, number[]>();
+      for (const exit of snapshot.exits) {
+        if (!visibleIds.has(exit.from_room) || !visibleIds.has(exit.to_room)) continue;
+        const list = adj.get(exit.from_room);
+        if (list) list.push(exit.to_room);
+        else adj.set(exit.from_room, [exit.to_room]);
+      }
+      distance.set(snapshot.current_room_id, 0);
+      const queue: number[] = [snapshot.current_room_id];
+      while (queue.length > 0) {
+        const cur = queue.shift()!;
+        const d = distance.get(cur)!;
+        for (const nb of adj.get(cur) ?? []) {
+          if (!distance.has(nb)) {
+            distance.set(nb, d + 1);
+            queue.push(nb);
+          }
+        }
+      }
+    }
+
     // Rooms.
     const useTiles = style === 'tileset' && tilesetImage !== null;
     for (const room of visible) {
@@ -324,11 +364,14 @@ export function MappingMapView() {
       const cy = oy + room.y * pitch;
       const isCurrent = room.id === snapshot.current_room_id;
       const sector = sectorForTerrain(room.terrain);
+      const depth = depthAlphaFor(distance.get(room.id));
 
       if (useTiles && tilesetImage) {
         const tileSize = tilesetImage.naturalHeight;
         const tilesInImage = Math.max(1, Math.floor(tilesetImage.naturalWidth / tileSize));
         const idx = Math.min(terrainToTileIndex(room.terrain), tilesInImage - 1);
+        ctx.save();
+        ctx.globalAlpha = depth;
         ctx.drawImage(
           tilesetImage,
           idx * tileSize,
@@ -340,15 +383,18 @@ export function MappingMapView() {
           pitch,
           pitch,
         );
+        ctx.restore();
       } else {
-        // Origin glow under the cell.
+        // Origin glow under the cell. Stays at full alpha so the player
+        // tile pops against the depth-faded neighbors.
         if (isCurrent) {
           ctx.fillStyle = MAP_COLORS.originGlow;
           ctx.beginPath();
           ctx.arc(cx, cy, pitch * 0.85, 0, Math.PI * 2);
           ctx.fill();
         }
-        // Sector fill + 0.8 alpha border, matching the web map.
+        ctx.save();
+        ctx.globalAlpha = depth;
         ctx.fillStyle = sector.fill;
         ctx.fillRect(cx - roomSize / 2, cy - roomSize / 2, roomSize, roomSize);
         if (isCurrent) {
@@ -362,6 +408,7 @@ export function MappingMapView() {
           ctx.lineWidth = 1;
         }
         ctx.strokeRect(cx - roomSize / 2, cy - roomSize / 2, roomSize, roomSize);
+        ctx.restore();
       }
 
       if (room.notes) {

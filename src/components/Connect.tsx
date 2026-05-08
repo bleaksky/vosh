@@ -97,46 +97,61 @@ export function Connect({
       <button type="submit">{isLive ? 'disconnect' : 'connect'}</button>
       <span className="status">{renderStatus()}</span>
       <div className="pill-group">
-        {onToggleSidePanel && (
-          <button
-            type="button"
-            className="pill pill-cyan"
-            aria-pressed={sidePanelOpen ?? false}
-            onClick={onToggleSidePanel}
-          >
-            panes
-          </button>
-        )}
-        {onToggleTriggers && (
-          <button
-            type="button"
-            className="pill pill-yellow"
-            aria-pressed={triggersOpen ?? false}
-            onClick={onToggleTriggers}
-          >
-            triggers
-          </button>
-        )}
-        {onToggleSettings && (
-          <button
-            type="button"
-            className="pill pill-magenta"
-            aria-pressed={settingsOpen ?? false}
-            onClick={onToggleSettings}
-          >
-            profile
-          </button>
-        )}
-        {onToggleSearch && (
-          <button
-            type="button"
-            className="pill pill-green"
-            aria-pressed={searchOpen ?? false}
-            onClick={onToggleSearch}
-          >
-            search
-          </button>
-        )}
+        {(() => {
+          const items = [
+            onToggleSidePanel && {
+              key: 'panes',
+              label: 'panes',
+              tone: 'cyan',
+              pressed: sidePanelOpen ?? false,
+              onClick: onToggleSidePanel,
+            },
+            onToggleTriggers && {
+              key: 'triggers',
+              label: 'triggers',
+              tone: 'yellow',
+              pressed: triggersOpen ?? false,
+              onClick: onToggleTriggers,
+            },
+            onToggleSettings && {
+              key: 'profile',
+              label: 'profile',
+              tone: 'magenta',
+              pressed: settingsOpen ?? false,
+              onClick: onToggleSettings,
+            },
+            onToggleSearch && {
+              key: 'search',
+              label: 'search',
+              tone: 'green',
+              pressed: searchOpen ?? false,
+              onClick: onToggleSearch,
+            },
+          ].filter(Boolean) as {
+            key: string;
+            label: string;
+            tone: string;
+            pressed: boolean;
+            onClick: () => void;
+          }[];
+          return items.map((item, i) => (
+            <span key={item.key} className="pill-cell">
+              {i > 0 && (
+                <span className="pill-sep" aria-hidden="true">
+                  /
+                </span>
+              )}
+              <button
+                type="button"
+                className={`pill pill-${item.tone}`}
+                aria-pressed={item.pressed}
+                onClick={item.onClick}
+              >
+                {item.label}
+              </button>
+            </span>
+          ));
+        })()}
       </div>
     </form>
   );
