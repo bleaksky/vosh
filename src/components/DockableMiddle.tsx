@@ -3,7 +3,6 @@ import {
   DockviewReact,
   type DockviewApi,
   type DockviewReadyEvent,
-  type IDockviewPanelHeaderProps,
   type IDockviewPanelProps,
 } from 'dockview';
 import 'dockview-core/dist/styles/dockview.css';
@@ -12,7 +11,8 @@ import { Terminal, type TerminalHandle } from './Terminal';
 import { StatusPane } from './StatusPane';
 import { AffectsPane } from './AffectsPane';
 import { MapPane } from './MapPane';
-import { InfoTabsPane } from './InfoTabsPane';
+import { ChatPane } from './ChatPane';
+import { GoldPane, CabalPane } from './WorthPanes';
 
 export interface DockableMiddleProps {
   fontFamily: string;
@@ -52,8 +52,16 @@ function MapPanel() {
   return <MapPane />;
 }
 
-function InfoPanel() {
-  return <InfoTabsPane />;
+function ChatPanel() {
+  return <ChatPane />;
+}
+
+function GoldPanel() {
+  return <GoldPane />;
+}
+
+function CabalPanel() {
+  return <CabalPane />;
 }
 
 const components = {
@@ -61,25 +69,16 @@ const components = {
   status: StatusPanel,
   affects: AffectsPanel,
   map: MapPanel,
-  info: InfoPanel,
+  chat: ChatPanel,
+  gold: GoldPanel,
+  cabal: CabalPanel,
 };
-
-/// Custom tab renderer: just the title text. dockview's default tab
-/// includes a close X that the user has no good way to undo, so we
-/// strip it. dockview still wraps this in its own draggable element,
-/// so dragging the title still works.
-function PanelTab(props: IDockviewPanelHeaderProps) {
-  return (
-    <div className="panel-tab" title={props.api.title ?? props.api.id}>
-      {props.api.title ?? props.api.id}
-    </div>
-  );
-}
 
 function buildDefault(api: DockviewApi, params: TerminalParams) {
   // Drop everything that may exist from a prior layout, then build the
   // default arrangement: terminal in the main area, side panes stacked
-  // on the right.
+  // on the right. Chat/Gold/Cabal share one group at the bottom and
+  // appear as native dockview tabs (no in-pane tab strip).
   api.clear();
   api.addPanel({
     id: 'terminal',
@@ -106,11 +105,27 @@ function buildDefault(api: DockviewApi, params: TerminalParams) {
     position: { referencePanel: 'affects', direction: 'below' },
   });
   api.addPanel({
-    id: 'info',
-    component: 'info',
-    title: 'chat / gold / cabal',
+    id: 'chat',
+    component: 'chat',
+    title: 'chat',
     position: { referencePanel: 'map', direction: 'below' },
   });
+  // Gold and cabal land in the SAME group as chat by referencing the
+  // chat panel directly — `position: { referencePanel, direction }`
+  // omitted means "same group as the reference, as a sibling tab."
+  api.addPanel({
+    id: 'gold',
+    component: 'gold',
+    title: 'gold',
+    position: { referencePanel: 'chat' },
+  });
+  api.addPanel({
+    id: 'cabal',
+    component: 'cabal',
+    title: 'cabal',
+    position: { referencePanel: 'chat' },
+  });
+  api.getPanel('chat')?.api.setActive();
 }
 
 export function DockableMiddle({
@@ -201,18 +216,12 @@ export function DockableMiddle({
   return (
     <DockviewReact
       components={components}
-      defaultTabComponent={PanelTab}
       onReady={onReady}
-      // singleTabMode='fullwidth' makes a group with one panel render
-      // its tab as a full-width header bar, matching the original
-      // .pane-header look. Multi-panel groups (formed by dragging one
-      // panel onto another) fall back to the normal tab strip.
+      // Use dockview's default tab component (it carries the correct
+      // drag/drop wiring); the close X is hidden via CSS. singleTabMode
+      // 'fullwidth' makes a group with one panel render its tab as a
+      // full-width header bar, matching the old .pane-header look.
       singleTabMode="fullwidth"
-      // dockview-theme-abyss provides the full set of CSS variables
-      // including drop indicator colors and overlay z-indices. Without
-      // a theme class drag would still work but the indicators are
-      // invisible. Our extra .dockable-middle class layers Kanso-toned
-      // overrides on top.
       className="dockable-middle dockview-theme-abyss"
     />
   );

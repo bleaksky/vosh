@@ -1662,15 +1662,19 @@ body,
   border-bottom: 2px solid #7fb4ca;
 }
 
-/* Custom panel tab — text only, no close X. Fills its parent so
-   pointerdown anywhere on the tab actually initiates dockview's
-   drag, and in singleTabMode='fullwidth' the tab spans the entire
-   header bar, matching the look of the old .pane-header. */
-.panel-tab {
-  display: flex;
-  align-items: center;
-  height: 100%;
-  width: 100%;
+/* Dockview header (the bar that holds the tabs) styled to match the
+   old .pane-header surface: dark bg, hairline bottom border. */
+.dockable-middle .dv-tabs-and-actions-container,
+.dockable-middle .dv-tabs-container {
+  background: #0d0c0c;
+  border-bottom: 1px solid #393b44;
+}
+
+/* dockview's default tab content: pad, color, font to match .pane-header. */
+.dockable-middle .dv-default-tab,
+.dockable-middle .dv-tab {
+  background: transparent;
+  border: 0;
   padding: 0 0.75rem;
   font-family: var(--app-font-family);
   font-size: 12px;
@@ -1680,33 +1684,24 @@ body,
   color: #a4a7a4;
   white-space: nowrap;
   cursor: grab;
-  user-select: none;
-  -webkit-user-select: none;
-  box-sizing: border-box;
 }
 
-.panel-tab:active {
+.dockable-middle .dv-tab:active {
   cursor: grabbing;
 }
 
-/* Dockview header (the bar that holds the tabs) styled to match the
-   old .pane-header surface: dark bg, hairline bottom border, no
-   per-tab pill backgrounds. */
-.dockable-middle .dv-tabs-and-actions-container,
-.dockable-middle .dv-tabs-container {
-  background: #0d0c0c;
-  border-bottom: 1px solid #393b44;
+.dockable-middle .dv-tab.dv-active-tab {
+  background: transparent;
+  color: #c5c9c7;
 }
 
-.dockable-middle .dv-tab,
-.dockable-middle .dv-tab.dv-active-tab,
 .dockable-middle .dv-tab.dv-inactive-tab {
   background: transparent;
-  border-bottom: 0;
-  padding: 0;
-  margin: 0;
 }
 
-.dockable-middle .dv-tab.dv-active-tab .panel-tab {
-  color: #c5c9c7;
+/* Hide the close X — users have no good way to recover a closed
+   panel. The "panes" pill in the connect bar resets the layout. */
+.dockable-middle .dv-default-tab-action,
+.dockable-middle .dv-default-tab .dv-svg {
+  display: none !important;
 }
