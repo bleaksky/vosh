@@ -233,17 +233,34 @@ export type ThemeChoice = 'default' | 'high-contrast' | 'system';
 export interface UiConfig {
   theme: ThemeChoice;
   auto_update: boolean;
+  font_family: string;
+  font_size: number;
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
-  const cfg = await invoke<{ theme: string; auto_update: boolean }>('ui_get_config');
+  const cfg = await invoke<{
+    theme: string;
+    auto_update: boolean;
+    font_family: string;
+    font_size: number;
+  }>('ui_get_config');
   const theme: ThemeChoice =
     cfg.theme === 'high-contrast' || cfg.theme === 'system' ? cfg.theme : 'default';
-  return { theme, auto_update: cfg.auto_update };
+  return {
+    theme,
+    auto_update: cfg.auto_update,
+    font_family: cfg.font_family,
+    font_size: cfg.font_size,
+  };
 }
 
 export async function setUiConfig(config: UiConfig): Promise<void> {
-  await invoke('ui_set_config', { theme: config.theme, autoUpdate: config.auto_update });
+  await invoke('ui_set_config', {
+    theme: config.theme,
+    autoUpdate: config.auto_update,
+    fontFamily: config.font_family,
+    fontSize: config.font_size,
+  });
 }
 
 export interface UpdateCheckResult {

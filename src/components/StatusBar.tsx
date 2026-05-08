@@ -76,12 +76,14 @@ function pct(current: number | string | undefined, max: number | string | undefi
 
 // Green at full, maroon at empty. The same ramp drives the fill block
 // and the percent/label text so the eye reads severity at a glance.
+// Tones lean into the Kanso Zen palette so the bars match the rest of
+// the chrome.
 function colorForPct(value: number): string {
-  if (value >= 80) return '#3fb950'; // green
-  if (value >= 60) return '#d4c441'; // yellow
-  if (value >= 40) return '#e0823c'; // orange
-  if (value >= 20) return '#da3633'; // red
-  return '#7d1d1d'; // maroon
+  if (value >= 80) return '#87a987'; // kanso bright green
+  if (value >= 60) return '#e6c384'; // kanso bright yellow
+  if (value >= 40) return '#d99a6c'; // warm orange
+  if (value >= 20) return '#e46876'; // kanso bright red
+  return '#7d1d1d'; // deep maroon
 }
 
 function formatHour(value: number | string | undefined): string | null {

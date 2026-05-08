@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Terminal as XTerm } from '@xterm/xterm';
+import { Terminal as XTerm, type ITheme } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
@@ -16,11 +16,41 @@ export interface TerminalHandle {
 
 interface Props {
   onReady?: (handle: TerminalHandle) => void;
+  fontFamily: string;
+  fontSize: number;
 }
 
-export function Terminal({ onReady }: Props) {
+// Kanso Zen palette, matching the user's Ghostty config so the terminal
+// inside the app looks the same as the one outside it.
+const KANSO_ZEN_THEME: ITheme = {
+  background: '#090e13',
+  foreground: '#c5c9c7',
+  cursor: '#c5c9c7',
+  cursorAccent: '#090e13',
+  selectionBackground: '#393b44',
+  selectionForeground: '#c5c9c7',
+  black: '#0d0c0c',
+  red: '#c4746e',
+  green: '#8a9a7b',
+  yellow: '#c4b28a',
+  blue: '#8ba4b0',
+  magenta: '#a292a3',
+  cyan: '#8ea4a2',
+  white: '#c8c093',
+  brightBlack: '#a4a7a4',
+  brightRed: '#e46876',
+  brightGreen: '#87a987',
+  brightYellow: '#e6c384',
+  brightBlue: '#7fb4ca',
+  brightMagenta: '#938aa9',
+  brightCyan: '#7aa89f',
+  brightWhite: '#c5c9c7',
+};
+
+export function Terminal({ onReady, fontFamily, fontSize }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
   // Hold the latest onReady in a ref so the setup effect can call it without
   // listing it as a dependency. Without this, every parent re-render passes
   // a fresh arrow function, the effect re-runs, and the xterm instance is
@@ -34,17 +64,13 @@ export function Terminal({ onReady }: Props) {
     const term = new XTerm({
       cursorBlink: true,
       cursorStyle: 'block',
-      fontFamily: '"JetBrains Mono", "Fira Code", Menlo, Consolas, ui-monospace, monospace',
-      fontSize: 14,
+      fontFamily,
+      fontSize,
       lineHeight: 1.2,
       scrollback: 10000,
       allowProposedApi: true,
       convertEol: false,
-      theme: {
-        background: '#0d1117',
-        foreground: '#e6edf3',
-        cursor: '#e6edf3',
-      },
+      theme: KANSO_ZEN_THEME,
     });
 
     const fit = new FitAddon();
@@ -57,6 +83,7 @@ export function Terminal({ onReady }: Props) {
     term.open(containerRef.current);
     fit.fit();
     termRef.current = term;
+    fitRef.current = fit;
 
     const handleResize = () => {
       try {
@@ -100,11 +127,28 @@ export function Terminal({ onReady }: Props) {
       unsubOutput?.();
       term.dispose();
       termRef.current = null;
+      fitRef.current = null;
     };
-    // Setup runs exactly once for the lifetime of the component. The
-    // onReady callback is read through a ref so it can change between
-    // renders without re-mounting the xterm instance.
+    // Setup runs exactly once. Font is read from props on initial mount;
+    // later font changes re-apply via the effect below without disposing
+    // the xterm instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Apply font changes without rebuilding the terminal so scrollback and
+  // listeners survive. xterm reflows on the next fit() call.
+  useEffect(() => {
+    const term = termRef.current;
+    const fit = fitRef.current;
+    if (!term || !fit) return;
+    term.options.fontFamily = fontFamily;
+    term.options.fontSize = fontSize;
+    try {
+      fit.fit();
+    } catch {
+      // ignore
+    }
+  }, [fontFamily, fontSize]);
 
   return (
     <div

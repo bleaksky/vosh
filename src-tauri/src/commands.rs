@@ -357,6 +357,8 @@ pub(crate) async fn scrollback_load(state: State<'_, SharedState>) -> Result<Vec
 pub(crate) struct UiConfigPayload {
     pub theme: String,
     pub auto_update: bool,
+    pub font_family: String,
+    pub font_size: u32,
 }
 
 #[tauri::command]
@@ -367,6 +369,8 @@ pub(crate) async fn ui_get_config(
     Ok(UiConfigPayload {
         theme: p.ui.theme.clone(),
         auto_update: p.ui.auto_update,
+        font_family: p.ui.font_family.clone(),
+        font_size: p.ui.font_size,
     })
 }
 
@@ -375,10 +379,14 @@ pub(crate) async fn ui_set_config(
     state: State<'_, SharedState>,
     theme: String,
     auto_update: bool,
+    font_family: String,
+    font_size: u32,
 ) -> Result<(), String> {
     let mut p = state.profile.lock().await;
     p.ui.theme = theme;
     p.ui.auto_update = auto_update;
+    p.ui.font_family = font_family;
+    p.ui.font_size = font_size.clamp(6, 64);
     Ok(())
 }
 

@@ -57,7 +57,7 @@ pub(crate) struct PluginsPersist {
     pub enabled: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct UiConfig {
     /// `default`, `high-contrast`, or `system`. `system` follows the OS
     /// `prefers-contrast` media query.
@@ -66,10 +66,37 @@ pub(crate) struct UiConfig {
     /// Opt in to background update checks. Off by default.
     #[serde(default)]
     pub auto_update: bool,
+    /// CSS font-family stack used by the terminal, status bar, and input.
+    /// Falls back to `default_font_family` when not set.
+    #[serde(default = "default_font_family")]
+    pub font_family: String,
+    /// Terminal font size in pixels.
+    #[serde(default = "default_font_size")]
+    pub font_size: u32,
+}
+
+impl Default for UiConfig {
+    fn default() -> Self {
+        Self {
+            theme: default_theme(),
+            auto_update: false,
+            font_family: default_font_family(),
+            font_size: default_font_size(),
+        }
+    }
 }
 
 fn default_theme() -> String {
     "default".to_string()
+}
+
+fn default_font_family() -> String {
+    "BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace"
+        .to_string()
+}
+
+fn default_font_size() -> u32 {
+    14
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -149,6 +176,8 @@ impl ProfileConfig {
         let ui = UiConfig {
             theme: profile.ui.theme.clone(),
             auto_update: profile.ui.auto_update,
+            font_family: profile.ui.font_family.clone(),
+            font_size: profile.ui.font_size,
         };
 
         let plugins = PluginsPersist {
@@ -230,6 +259,8 @@ impl ProfileConfig {
         profile.ui = UiConfig {
             theme: self.ui.theme.clone(),
             auto_update: self.ui.auto_update,
+            font_family: self.ui.font_family.clone(),
+            font_size: self.ui.font_size,
         };
 
         // Plugin enabled-set is persisted; the actual load happens in the

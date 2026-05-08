@@ -22,12 +22,17 @@ function loadSidePanelOpen(): boolean {
   }
 }
 
+const DEFAULT_FONT_FAMILY =
+  'BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace';
+
 function App() {
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
   const [triggersOpen, setTriggersOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidePanelOpen, setSidePanelOpen] = useState(loadSidePanelOpen);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
+  const [fontSize, setFontSize] = useState(14);
   const termRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
 
@@ -44,11 +49,13 @@ function App() {
   };
 
   useEffect(() => {
-    // Pick up the persisted theme on first render. If the backend isn't
-    // ready (early dev mode), fall back to whatever the OS suggests.
+    // Pick up the persisted theme + font on first render. If the backend
+    // isn't ready (early dev mode), fall back to whatever the OS suggests.
     getUiConfig()
       .then((cfg) => {
         applyTheme(cfg.theme);
+        setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
+        setFontSize(cfg.font_size || 14);
         if (cfg.auto_update) {
           // Background check; failures are silent so a missing endpoint
           // doesn't pop an error banner on every launch.
@@ -56,6 +63,27 @@ function App() {
         }
       })
       .catch(() => applyTheme('system'));
+  }, []);
+
+  useEffect(() => {
+    // Mirror the font choice to CSS variables so the chrome (status bar,
+    // input row, drawers) shares the same family and size as the
+    // terminal pane. Components read the variables in styles.css.
+    const root = document.documentElement;
+    root.style.setProperty('--app-font-family', fontFamily);
+    root.style.setProperty('--app-font-size', `${fontSize}px`);
+  }, [fontFamily, fontSize]);
+
+  // Listen for app-wide setting updates emitted by SettingsDrawer so
+  // changes apply without a relaunch.
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ family: string; size: number }>).detail;
+      setFontFamily(detail.family || DEFAULT_FONT_FAMILY);
+      setFontSize(detail.size || 14);
+    };
+    window.addEventListener('mudclient:font-changed', handler as EventListener);
+    return () => window.removeEventListener('mudclient:font-changed', handler as EventListener);
   }, []);
 
   useEffect(() => {
@@ -106,6 +134,8 @@ function App() {
       />
       <div className="middle" onMouseUp={handleMiddleMouseDown}>
         <Terminal
+          fontFamily={fontFamily}
+          fontSize={fontSize}
           onReady={(handle) => {
             termRef.current = handle;
           }}

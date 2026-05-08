@@ -25,6 +25,8 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
   const [loading, setLoading] = useState(false);
   const [theme, setTheme] = useState<ThemeChoice>('default');
   const [autoUpdate, setAutoUpdate] = useState(false);
+  const [fontFamily, setFontFamily] = useState('');
+  const [fontSize, setFontSize] = useState(14);
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -52,6 +54,8 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
         if (cancelled) return;
         setTheme(cfg.theme);
         setAutoUpdate(cfg.auto_update);
+        setFontFamily(cfg.font_family);
+        setFontSize(cfg.font_size);
       })
       .catch(() => {});
     listPlugins()
@@ -94,11 +98,25 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
 
   if (!open) return null;
 
+  const persist = async (overrides: Partial<{
+    theme: ThemeChoice;
+    auto_update: boolean;
+    font_family: string;
+    font_size: number;
+  }>) => {
+    await setUiConfig({
+      theme: overrides.theme ?? theme,
+      auto_update: overrides.auto_update ?? autoUpdate,
+      font_family: overrides.font_family ?? fontFamily,
+      font_size: overrides.font_size ?? fontSize,
+    });
+  };
+
   const handleThemeChange = async (next: ThemeChoice) => {
     setTheme(next);
     applyTheme(next);
     try {
-      await setUiConfig({ theme: next, auto_update: autoUpdate });
+      await persist({ theme: next });
       setStatus(`theme set to ${next}`);
     } catch (e) {
       setStatus(`theme save failed ${String(e)}`);
@@ -108,10 +126,38 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
   const handleAutoUpdateChange = async (next: boolean) => {
     setAutoUpdate(next);
     try {
-      await setUiConfig({ theme, auto_update: next });
+      await persist({ auto_update: next });
       setStatus(next ? 'auto update on' : 'auto update off');
     } catch (e) {
       setStatus(`auto update save failed ${String(e)}`);
+    }
+  };
+
+  const broadcastFont = (family: string, size: number) => {
+    window.dispatchEvent(
+      new CustomEvent('mudclient:font-changed', { detail: { family, size } }),
+    );
+  };
+
+  const handleFontFamilyBlur = async () => {
+    try {
+      await persist({ font_family: fontFamily });
+      broadcastFont(fontFamily, fontSize);
+      setStatus('font family saved');
+    } catch (e) {
+      setStatus(`font save failed ${String(e)}`);
+    }
+  };
+
+  const handleFontSizeChange = async (next: number) => {
+    const clamped = Math.max(6, Math.min(64, Math.round(next) || 14));
+    setFontSize(clamped);
+    try {
+      await persist({ font_size: clamped });
+      broadcastFont(fontFamily, clamped);
+      setStatus(`font size ${clamped}px`);
+    } catch (e) {
+      setStatus(`font save failed ${String(e)}`);
     }
   };
 
@@ -206,6 +252,33 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
             <option value="high-contrast">high contrast</option>
             <option value="system">match system contrast</option>
           </select>
+        </label>
+        <label>
+          <span>font</span>
+          <input
+            type="text"
+            value={fontFamily}
+            spellCheck={false}
+            onChange={(e) => setFontFamily(e.target.value)}
+            onBlur={() => void handleFontFamilyBlur()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void handleFontFamilyBlur();
+              }
+            }}
+            placeholder="font-family stack"
+          />
+        </label>
+        <label>
+          <span>size</span>
+          <input
+            type="number"
+            min={6}
+            max={64}
+            value={fontSize}
+            onChange={(e) => void handleFontSizeChange(Number(e.target.value))}
+          />
         </label>
         <label>
           <input
