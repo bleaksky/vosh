@@ -95,26 +95,36 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
     // the cursor* options above; some terminals re-show it on certain
     // sequences and we want the read-only pane to stay clean.
     term.write('\x1b[?25l');
-    fit.fit();
+    // Initial fit is a moving target — the container may not have
+    // its final dimensions until after one or two layout/paint
+    // cycles (viewport units, fonts, etc). Schedule fit() across
+    // several deadlines so at least one lands on the settled layout.
+    const safeFit = () => {
+      try {
+        fit.fit();
+      } catch {
+        // ignore resize before layout settles
+      }
+    };
+    safeFit();
+    requestAnimationFrame(safeFit);
+    setTimeout(safeFit, 50);
+    setTimeout(safeFit, 200);
+    setTimeout(safeFit, 800);
     termRef.current = term;
     fitRef.current = fit;
 
-    // Refit synchronously on container size changes. The
-    // ResizeObserver fires after layout with the new content rect, so
-    // fit() reads accurate dimensions and the canvas re-sizes in the
-    // same frame. A guard skips noise events where the box size
-    // didn't actually move.
+    // Refit synchronously on container or window size changes. A
+    // size-delta guard skips noise events to avoid the
+    // "ResizeObserver loop limit exceeded" warning while still
+    // catching every real layout change.
     let lastW = 0;
     let lastH = 0;
     const refit = (w: number, h: number) => {
       if (Math.abs(w - lastW) < 1 && Math.abs(h - lastH) < 1) return;
       lastW = w;
       lastH = h;
-      try {
-        fit.fit();
-      } catch {
-        // ignore resize before layout settles
-      }
+      safeFit();
     };
     const handleWindowResize = () => {
       const el = containerRef.current;
@@ -127,6 +137,11 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
       }
     });
     observer.observe(containerRef.current);
+    // Also observe the body so anything that changes the viewport
+    // (devtools toggle, scrollbar appearance, font load that shifts
+    // sibling sizes) drives a refit even if the container's own
+    // border-box doesn't immediately update.
+    observer.observe(document.body);
 
     let unsubOutput: (() => void) | undefined;
     // Replay persisted scrollback before any live output lands so the
