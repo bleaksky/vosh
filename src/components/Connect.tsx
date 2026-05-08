@@ -10,6 +10,8 @@ interface Props {
   sidePanelOpen?: boolean;
   onToggleSettings?: () => void;
   settingsOpen?: boolean;
+  onToggleSearch?: () => void;
+  searchOpen?: boolean;
 }
 
 export type ConnectionStatus =
@@ -30,6 +32,8 @@ export function Connect({
   sidePanelOpen,
   onToggleSettings,
   settingsOpen,
+  onToggleSearch,
+  searchOpen,
 }: Props) {
   const [host, setHost] = useState(DEFAULT_HOST);
   const [port, setPort] = useState(DEFAULT_PORT);
@@ -120,6 +124,16 @@ export function Connect({
           onClick={onToggleSettings}
         >
           profile
+        </button>
+      )}
+      {onToggleSearch && (
+        <button
+          type="button"
+          className="secondary"
+          aria-pressed={searchOpen ?? false}
+          onClick={onToggleSearch}
+        >
+          search
         </button>
       )}
     </form>

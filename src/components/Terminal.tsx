@@ -5,7 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 
 import '@xterm/xterm/css/xterm.css';
-import { onOutput } from '../lib/session';
+import { loadScrollback, onOutput } from '../lib/session';
 
 export interface TerminalHandle {
   write: (data: Uint8Array | string) => void;
@@ -70,6 +70,18 @@ export function Terminal({ onReady }: Props) {
     observer.observe(containerRef.current);
 
     let unsubOutput: (() => void) | undefined;
+    // Replay persisted scrollback before any live output lands so the
+    // user opens the app to the tail of their last session.
+    loadScrollback()
+      .then((bytes) => {
+        if (bytes.length > 0) {
+          term.write(bytes);
+          term.write('\r\n\x1b[2m[scrollback restored]\x1b[0m\r\n');
+        }
+      })
+      .catch(() => {
+        // No scrollback yet, or backend not ready; ignore.
+      });
     onOutput((bytes) => term.write(bytes)).then((unlisten) => {
       unsubOutput = unlisten;
     });

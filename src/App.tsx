@@ -5,6 +5,7 @@ import { Connect, type ConnectionStatus } from './components/Connect';
 import { TriggersDrawer } from './components/TriggersDrawer';
 import { SettingsDrawer } from './components/SettingsDrawer';
 import { SidePanel } from './components/SidePanel';
+import { SearchView } from './components/SearchView';
 import { onState, type StatePayload } from './lib/session';
 
 const SIDE_PANEL_STORAGE_KEY = 'mudclient.layout.sidePanelOpen';
@@ -24,6 +25,7 @@ function App() {
   const [triggersOpen, setTriggersOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidePanelOpen, setSidePanelOpen] = useState(loadSidePanelOpen);
+  const [searchOpen, setSearchOpen] = useState(false);
   const termRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
 
@@ -82,6 +84,8 @@ function App() {
         sidePanelOpen={sidePanelOpen}
         onToggleSettings={() => setSettingsOpen((v) => !v)}
         settingsOpen={settingsOpen}
+        onToggleSearch={() => setSearchOpen((v) => !v)}
+        searchOpen={searchOpen}
       />
       <div className="middle" onMouseUp={handleMiddleMouseDown}>
         <Terminal
@@ -89,7 +93,11 @@ function App() {
             termRef.current = handle;
           }}
         />
-        {sidePanelOpen && <SidePanel />}
+        {searchOpen ? (
+          <SearchView onError={handleError} />
+        ) : (
+          sidePanelOpen && <SidePanel />
+        )}
         <TriggersDrawer
           open={triggersOpen}
           onClose={() => setTriggersOpen(false)}

@@ -35,6 +35,7 @@ mudclient-gmcp = { path = "../crates/gmcp" }
 mudclient-ansi = { path = "../crates/ansi" }
 mudclient-map = { path = "../crates/map" }
 mudclient-script = { path = "../crates/script" }
+mudclient-log = { path = "../crates/log" }
 regex = "1"
 toml = "0.8"
 

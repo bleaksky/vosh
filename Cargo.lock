@@ -2022,6 +2022,7 @@ dependencies = [
  "mudclient-alias",
  "mudclient-ansi",
  "mudclient-gmcp",
+ "mudclient-log",
  "mudclient-map",
  "mudclient-script",
  "mudclient-telnet",
@@ -2050,6 +2051,17 @@ version = "0.0.1"
 dependencies = [
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "mudclient-log"
+version = "0.0.1"
+dependencies = [
+ "mudclient-ansi",
+ "regex",
+ "rusqlite",
+ "serde",
  "thiserror 1.0.69",
 ]
 

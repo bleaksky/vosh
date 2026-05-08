@@ -10,6 +10,7 @@ members = [
     "crates/gmcp",
     "crates/map",
     "crates/script",
+    "crates/log",
 ]
 
 [workspace.package]

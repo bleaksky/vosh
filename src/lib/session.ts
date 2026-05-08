@@ -176,3 +176,53 @@ export async function onState(cb: (state: StatePayload) => void): Promise<Unlist
     cb(event.payload);
   });
 }
+
+export interface LogSession {
+  id: number;
+  host: string;
+  port: number;
+  started_at_ms: number;
+  ended_at_ms: number | null;
+  line_count: number;
+}
+
+export interface LogSearchHit {
+  session_id: number;
+  host: string;
+  port: number;
+  line_id: number;
+  ts_ms: number;
+  text: string;
+}
+
+export async function listLogSessions(limit: number): Promise<LogSession[]> {
+  return invoke('logs_list_sessions', { limit });
+}
+
+export async function searchLogs(
+  pattern: string,
+  options: {
+    caseSensitive?: boolean;
+    maxResults?: number;
+    sessionId?: number | null;
+  } = {},
+): Promise<LogSearchHit[]> {
+  return invoke('logs_search', {
+    pattern,
+    caseSensitive: options.caseSensitive ?? false,
+    maxResults: options.maxResults ?? 500,
+    sessionId: options.sessionId ?? null,
+  });
+}
+
+export async function exportLogSession(
+  sessionId: number,
+  withAnsi: boolean,
+): Promise<string> {
+  return invoke('logs_export', { sessionId, withAnsi });
+}
+
+export async function loadScrollback(): Promise<Uint8Array> {
+  const bytes = await invoke<number[]>('scrollback_load');
+  return new Uint8Array(bytes);
+}

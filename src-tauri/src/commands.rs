@@ -2,12 +2,14 @@
 
 use std::sync::Arc;
 
+use mudclient_log::{SearchHit, SearchOptions, SessionRow};
 use mudclient_map::Room;
 use mudclient_trigger::Trigger;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 use crate::input;
+use crate::log_state::{SharedLogStore, SharedScrollback};
 use crate::map_state::SharedMap;
 use crate::profile::Profile;
 use crate::profile_config::ProfileConfig;
@@ -23,6 +25,8 @@ pub(crate) struct AppState {
     pub(crate) profile: Arc<Mutex<Profile>>,
     pub(crate) map: SharedMap,
     pub(crate) script_timers: SharedTimers,
+    pub(crate) logs: SharedLogStore,
+    pub(crate) scrollback: SharedScrollback,
 }
 
 pub(crate) type SharedState = Arc<AppState>;
@@ -49,6 +53,11 @@ pub(crate) async fn session_connect(
     // Clear session-scoped variables on reconnect; profile-scoped survive.
     state.profile.lock().await.vars.clear_session();
 
+    let scrollback_path = tauri::Manager::path(&app)
+        .app_data_dir()
+        .ok()
+        .map(|dir| crate::log_state::scrollback_path(&dir));
+
     let handle = session::spawn(
         app.clone(),
         host,
@@ -57,6 +66,9 @@ pub(crate) async fn session_connect(
         state.profile.clone(),
         state.map.clone(),
         state.script_timers.clone(),
+        state.logs.clone(),
+        state.scrollback.clone(),
+        scrollback_path,
     )
     .await
     .map_err(|e| {
@@ -284,4 +296,57 @@ pub(crate) async fn map_set_avoid(
     map.store
         .set_avoid(room_id, avoid)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn logs_list_sessions(
+    state: State<'_, SharedState>,
+    limit: usize,
+) -> Result<Vec<SessionRow>, String> {
+    let guard = state.logs.lock().await;
+    let Some(store) = guard.as_ref() else {
+        return Ok(Vec::new());
+    };
+    store.list_sessions(limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn logs_search(
+    state: State<'_, SharedState>,
+    pattern: String,
+    case_sensitive: bool,
+    max_results: usize,
+    session_id: Option<i64>,
+) -> Result<Vec<SearchHit>, String> {
+    let guard = state.logs.lock().await;
+    let Some(store) = guard.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let opts = SearchOptions {
+        case_sensitive,
+        max_results,
+        session_id,
+    };
+    store.search(&pattern, &opts).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn logs_export(
+    state: State<'_, SharedState>,
+    session_id: i64,
+    with_ansi: bool,
+) -> Result<String, String> {
+    let guard = state.logs.lock().await;
+    let Some(store) = guard.as_ref() else {
+        return Err("log store not ready".to_string());
+    };
+    store
+        .export_session(session_id, with_ansi)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn scrollback_load(state: State<'_, SharedState>) -> Result<Vec<u8>, String> {
+    let sb = state.scrollback.lock().await;
+    Ok(sb.dump())
 }

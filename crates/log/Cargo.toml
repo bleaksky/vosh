@@ -1,0 +1,18 @@
+[package]
+name = "mudclient-log"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "SQLite-backed session log store with regex search and ANSI export."
+rust-version.workspace = true
+
+[dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }
+mudclient-ansi = { path = "../ansi" }
+regex = "1"
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

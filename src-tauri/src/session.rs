@@ -95,6 +95,9 @@ pub(crate) async fn spawn(
     profile: Arc<Mutex<Profile>>,
     map: SharedMap,
     timers: SharedTimers,
+    logs: crate::log_state::SharedLogStore,
+    scrollback: crate::log_state::SharedScrollback,
+    scrollback_path: Option<std::path::PathBuf>,
 ) -> Result<SessionHandle, ConnectionError> {
     emit_state(
         &app,
@@ -127,10 +130,45 @@ pub(crate) async fn spawn(
         },
     );
 
+    // Open a log session row up front so every line emitted by the loop
+    // can attach to the same id. If logging is disabled or fails, the
+    // io_loop just skips the appends.
+    let log_session_id = {
+        let mut guard = logs.lock().await;
+        match guard.as_mut() {
+            Some(store) => match store.start_session(&host, port, now_ms()) {
+                Ok(id) => Some(id),
+                Err(e) => {
+                    warn!(error = %e, "failed to open log session");
+                    None
+                }
+            },
+            None => None,
+        }
+    };
+
     let (tx_outgoing, rx_outgoing) = mpsc::unbounded_channel::<OutgoingMsg>();
-    let task = tokio::spawn(io_loop(app, stream, rx_outgoing, profile, map, timers));
+    let task = tokio::spawn(io_loop(
+        app,
+        stream,
+        rx_outgoing,
+        profile,
+        map,
+        timers,
+        logs,
+        log_session_id,
+        scrollback,
+        scrollback_path,
+    ));
 
     Ok(SessionHandle { tx_outgoing, task })
+}
+
+fn now_ms() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as i64)
 }
 
 async fn io_loop(
@@ -140,6 +178,10 @@ async fn io_loop(
     profile: Arc<Mutex<Profile>>,
     map: SharedMap,
     timers: SharedTimers,
+    logs: crate::log_state::SharedLogStore,
+    log_session_id: Option<i64>,
+    scrollback: crate::log_state::SharedScrollback,
+    scrollback_path: Option<std::path::PathBuf>,
 ) {
     let mut parser = Parser::new();
     let negotiator = Negotiator::new();
@@ -197,6 +239,9 @@ async fn io_loop(
                             &profile,
                             &map,
                             &timers,
+                            &logs,
+                            log_session_id,
+                            &scrollback,
                             event,
                         ).await {
                             warn!(error = %e, "event handling failed");
@@ -224,6 +269,24 @@ async fn io_loop(
     {
         let mut p = profile.lock().await;
         p.tick.disable();
+    }
+
+    // Close the log session row and flush the scrollback ring buffer to
+    // disk so the next launch can restore it. Failures here are
+    // non-fatal; we still want the disconnect state to propagate.
+    if let Some(sid) = log_session_id {
+        let mut guard = logs.lock().await;
+        if let Some(store) = guard.as_mut() {
+            if let Err(e) = store.end_session(sid, now_ms()) {
+                warn!(error = %e, "log end_session failed");
+            }
+        }
+    }
+    if let Some(path) = scrollback_path {
+        let bytes = scrollback.lock().await.dump();
+        if let Err(e) = std::fs::write(&path, bytes) {
+            warn!(path = %path.display(), error = %e, "scrollback write failed");
+        }
     }
 
     accumulator.reset();
@@ -296,6 +359,9 @@ async fn handle_event(
     profile: &Arc<Mutex<Profile>>,
     map: &SharedMap,
     timers: &SharedTimers,
+    logs: &crate::log_state::SharedLogStore,
+    log_session_id: Option<i64>,
+    scrollback: &crate::log_state::SharedScrollback,
     event: TelnetEvent,
 ) -> std::io::Result<()> {
     match event {
@@ -331,6 +397,23 @@ async fn handle_event(
                             (result, ticked, apply)
                         };
                         emit_line_result(app, &result, clear_first);
+                        if let Some(text) = &result.display {
+                            // Persist to the searchable SQLite log and the
+                            // ring buffer that becomes scrollback on next
+                            // launch. The raw bytes carry ANSI; the plain
+                            // text column drives the regex search.
+                            if let Some(sid) = log_session_id {
+                                let mut guard = logs.lock().await;
+                                if let Some(store) = guard.as_mut() {
+                                    if let Err(e) =
+                                        store.append(sid, now_ms(), &plain, Some(&bytes))
+                                    {
+                                        warn!(error = %e, "log append failed");
+                                    }
+                                }
+                            }
+                            scrollback.lock().await.push(text.as_bytes().to_vec());
+                        }
                         send_trigger_outputs(stream, &result.sends).await?;
                         apply_script_result(app, stream, profile, timers, script_apply).await?;
                         if tick_reset {
