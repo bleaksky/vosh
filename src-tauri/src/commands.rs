@@ -350,3 +350,58 @@ pub(crate) async fn scrollback_load(state: State<'_, SharedState>) -> Result<Vec
     let sb = state.scrollback.lock().await;
     Ok(sb.dump())
 }
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(crate) struct UiConfigPayload {
+    pub theme: String,
+    pub auto_update: bool,
+}
+
+#[tauri::command]
+pub(crate) async fn ui_get_config(
+    state: State<'_, SharedState>,
+) -> Result<UiConfigPayload, String> {
+    let p = state.profile.lock().await;
+    Ok(UiConfigPayload {
+        theme: p.ui.theme.clone(),
+        auto_update: p.ui.auto_update,
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn ui_set_config(
+    state: State<'_, SharedState>,
+    theme: String,
+    auto_update: bool,
+) -> Result<(), String> {
+    let mut p = state.profile.lock().await;
+    p.ui.theme = theme;
+    p.ui.auto_update = auto_update;
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct UpdateCheckResult {
+    pub available: bool,
+    pub version: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[tauri::command]
+pub(crate) async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    match updater.check().await {
+        Ok(Some(update)) => Ok(UpdateCheckResult {
+            available: true,
+            version: Some(update.version.clone()),
+            notes: update.body.clone(),
+        }),
+        Ok(None) => Ok(UpdateCheckResult {
+            available: false,
+            version: None,
+            notes: None,
+        }),
+        Err(e) => Err(e.to_string()),
+    }
+}

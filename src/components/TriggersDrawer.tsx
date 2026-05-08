@@ -95,7 +95,7 @@ export function TriggersDrawer({ open, onClose, onError }: Props) {
     <aside className="drawer" role="dialog" aria-label="trigger editor">
       <header className="drawer-header">
         <h2>Triggers</h2>
-        <button type="button" onClick={onClose} aria-label="close">
+        <button type="button" onClick={onClose} aria-label="close triggers">
           ×
         </button>
       </header>

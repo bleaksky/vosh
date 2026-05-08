@@ -708,3 +708,152 @@ body,
 .search-hit-text {
   white-space: pre-wrap;
 }
+
+/* High contrast theme. Pure backgrounds, thicker borders, brighter
+   accents, and a bold focus ring on every interactive element. The
+   selector matches both the manual toggle and the auto-applied case
+   when the OS asks for more contrast. */
+:root[data-theme='high-contrast'],
+:root[data-theme='system'][data-prefers-contrast='more'] {
+  color-scheme: dark;
+}
+
+:root[data-theme='high-contrast'] body,
+:root[data-theme='high-contrast'] #root,
+:root[data-theme='system'][data-prefers-contrast='more'] body,
+:root[data-theme='system'][data-prefers-contrast='more'] #root {
+  background: #000000;
+  color: #ffffff;
+}
+
+:root[data-theme='high-contrast'] .connect,
+:root[data-theme='high-contrast'] .pane-header,
+:root[data-theme='high-contrast'] .search-session-header,
+:root[data-theme='system'][data-prefers-contrast='more'] .connect,
+:root[data-theme='system'][data-prefers-contrast='more'] .pane-header,
+:root[data-theme='system'][data-prefers-contrast='more'] .search-session-header {
+  background: #000000;
+  color: #ffffff;
+  border-color: #ffffff;
+}
+
+:root[data-theme='high-contrast'] .terminal-host,
+:root[data-theme='high-contrast'] .side-panel,
+:root[data-theme='high-contrast'] .search-view,
+:root[data-theme='system'][data-prefers-contrast='more'] .terminal-host,
+:root[data-theme='system'][data-prefers-contrast='more'] .side-panel,
+:root[data-theme='system'][data-prefers-contrast='more'] .search-view {
+  background: #000000;
+  border-color: #ffffff;
+}
+
+:root[data-theme='high-contrast'] .status-pane,
+:root[data-theme='high-contrast'] .search-session-group,
+:root[data-theme='system'][data-prefers-contrast='more'] .status-pane,
+:root[data-theme='system'][data-prefers-contrast='more'] .search-session-group {
+  border-color: #ffffff;
+}
+
+:root[data-theme='high-contrast'] .status-label,
+:root[data-theme='high-contrast'] .status,
+:root[data-theme='high-contrast'] .search-summary,
+:root[data-theme='high-contrast'] .search-session-header,
+:root[data-theme='system'][data-prefers-contrast='more'] .status-label,
+:root[data-theme='system'][data-prefers-contrast='more'] .status,
+:root[data-theme='system'][data-prefers-contrast='more'] .search-summary,
+:root[data-theme='system'][data-prefers-contrast='more'] .search-session-header {
+  color: #ffff00;
+}
+
+:root[data-theme='high-contrast'] input,
+:root[data-theme='high-contrast'] select,
+:root[data-theme='high-contrast'] textarea,
+:root[data-theme='system'][data-prefers-contrast='more'] input,
+:root[data-theme='system'][data-prefers-contrast='more'] select,
+:root[data-theme='system'][data-prefers-contrast='more'] textarea {
+  background: #000000;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+}
+
+:root[data-theme='high-contrast'] button,
+:root[data-theme='system'][data-prefers-contrast='more'] button {
+  background: #ffff00;
+  color: #000000;
+  border: 2px solid #ffff00;
+  font-weight: 700;
+}
+
+:root[data-theme='high-contrast'] button.secondary,
+:root[data-theme='system'][data-prefers-contrast='more'] button.secondary {
+  background: #000000;
+  color: #ffff00;
+  border-color: #ffff00;
+}
+
+:root[data-theme='high-contrast'] button:disabled,
+:root[data-theme='system'][data-prefers-contrast='more'] button:disabled {
+  background: #404040;
+  color: #c0c0c0;
+  border-color: #c0c0c0;
+}
+
+/* Focus ring across both themes. Visible on keyboard nav, suppressed
+   on mouse so chrome stays clean. */
+:focus-visible {
+  outline: 2px solid #58a6ff;
+  outline-offset: 2px;
+}
+
+:root[data-theme='high-contrast'] :focus-visible,
+:root[data-theme='system'][data-prefers-contrast='more'] :focus-visible {
+  outline: 3px solid #ffff00;
+  outline-offset: 3px;
+}
+
+/* Honor reduced motion for the tick flash and any future animations. */
+@media (prefers-reduced-motion: reduce) {
+  .tick-row.tick-flash {
+    animation: none;
+    background: rgba(248, 81, 73, 0.25);
+  }
+}
+
+.drawer-fieldset {
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem 0.7rem;
+  margin: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.drawer-fieldset legend {
+  padding: 0 0.4rem;
+  color: #8b949e;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.drawer-fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 13px;
+}
+
+.drawer-fieldset label > span {
+  flex: 0 0 5rem;
+  color: #8b949e;
+}
+
+.drawer-fieldset select {
+  background: #0d1117;
+  color: #e6edf3;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font: inherit;
+}

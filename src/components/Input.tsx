@@ -130,7 +130,9 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
 
   return (
     <div className="input-row">
-      <span className="prompt">&gt;</span>
+      <span className="prompt" aria-hidden="true">
+        &gt;
+      </span>
       <input
         ref={inputRef}
         type="text"
@@ -141,6 +143,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         autoCorrect="off"
         autoComplete="off"
         placeholder={enabled ? 'type a command, or #help' : 'input disabled'}
+        aria-label="command input"
         onChange={(e) => handleChange(e.target.value)}
         onKeyDown={handleKeyDown}
       />

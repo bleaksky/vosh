@@ -106,5 +106,13 @@ export function Terminal({ onReady }: Props) {
     // renders without re-mounting the xterm instance.
   }, []);
 
-  return <div ref={containerRef} className="terminal-host" />;
+  return (
+    <div
+      ref={containerRef}
+      className="terminal-host"
+      role="log"
+      aria-live="polite"
+      aria-label="MUD output"
+    />
+  );
 }

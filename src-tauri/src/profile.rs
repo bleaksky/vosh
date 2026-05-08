@@ -7,6 +7,7 @@ use mudclient_script::ScriptEngine;
 use mudclient_trigger::TriggerStore;
 use mudclient_vars::VariableStore;
 
+use crate::profile_config::UiConfig;
 use crate::tick::TickRuntime;
 
 #[derive(Debug, Default)]
@@ -16,4 +17,5 @@ pub(crate) struct Profile {
     pub(crate) triggers: TriggerStore,
     pub(crate) tick: TickRuntime,
     pub(crate) script: ScriptEngine,
+    pub(crate) ui: UiConfig,
 }

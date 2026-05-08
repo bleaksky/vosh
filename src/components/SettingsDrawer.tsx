@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { exportProfile, importProfile } from '../lib/session';
+import {
+  checkForUpdate,
+  exportProfile,
+  getUiConfig,
+  importProfile,
+  setUiConfig,
+  type ThemeChoice,
+} from '../lib/session';
+import { applyTheme } from '../lib/theme';
 
 interface Props {
   open: boolean;
@@ -11,6 +19,8 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
   const [toml, setToml] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
+  const [theme, setTheme] = useState<ThemeChoice>('default');
+  const [autoUpdate, setAutoUpdate] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -32,12 +42,54 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
         if (cancelled) return;
         setLoading(false);
       });
+    getUiConfig()
+      .then((cfg) => {
+        if (cancelled) return;
+        setTheme(cfg.theme);
+        setAutoUpdate(cfg.auto_update);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [open, onError]);
 
   if (!open) return null;
+
+  const handleThemeChange = async (next: ThemeChoice) => {
+    setTheme(next);
+    applyTheme(next);
+    try {
+      await setUiConfig({ theme: next, auto_update: autoUpdate });
+      setStatus(`theme set to ${next}`);
+    } catch (e) {
+      setStatus(`theme save failed ${String(e)}`);
+    }
+  };
+
+  const handleAutoUpdateChange = async (next: boolean) => {
+    setAutoUpdate(next);
+    try {
+      await setUiConfig({ theme, auto_update: next });
+      setStatus(next ? 'auto update on' : 'auto update off');
+    } catch (e) {
+      setStatus(`auto update save failed ${String(e)}`);
+    }
+  };
+
+  const handleCheckUpdate = async () => {
+    setStatus('checking for updates...');
+    try {
+      const result = await checkForUpdate();
+      if (result.available) {
+        setStatus(`update available: ${result.version ?? 'unknown'}`);
+      } else {
+        setStatus('no updates available');
+      }
+    } catch (e) {
+      setStatus(`update check failed ${String(e)}`);
+    }
+  };
 
   const handleApply = async () => {
     try {
@@ -100,10 +152,35 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
     <aside className="drawer" role="dialog" aria-label="profile editor">
       <header className="drawer-header">
         <h2>Profile</h2>
-        <button type="button" onClick={onClose} aria-label="close">
+        <button type="button" onClick={onClose} aria-label="close settings">
           ×
         </button>
       </header>
+      <fieldset className="drawer-fieldset">
+        <legend>Appearance</legend>
+        <label>
+          <span>theme</span>
+          <select
+            value={theme}
+            onChange={(e) => void handleThemeChange(e.target.value as ThemeChoice)}
+          >
+            <option value="default">default</option>
+            <option value="high-contrast">high contrast</option>
+            <option value="system">match system contrast</option>
+          </select>
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={autoUpdate}
+            onChange={(e) => void handleAutoUpdateChange(e.target.checked)}
+          />
+          check for updates on launch
+        </label>
+        <button type="button" onClick={handleCheckUpdate}>
+          check for updates now
+        </button>
+      </fieldset>
       <textarea
         className="drawer-textarea"
         value={toml}

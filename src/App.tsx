@@ -6,7 +6,8 @@ import { TriggersDrawer } from './components/TriggersDrawer';
 import { SettingsDrawer } from './components/SettingsDrawer';
 import { SidePanel } from './components/SidePanel';
 import { SearchView } from './components/SearchView';
-import { onState, type StatePayload } from './lib/session';
+import { checkForUpdate, getUiConfig, onState, type StatePayload } from './lib/session';
+import { applyTheme } from './lib/theme';
 
 const SIDE_PANEL_STORAGE_KEY = 'mudclient.layout.sidePanelOpen';
 
@@ -40,6 +41,21 @@ function App() {
     if (selection && selection.toString().length > 0) return;
     inputRef.current?.focus();
   };
+
+  useEffect(() => {
+    // Pick up the persisted theme on first render. If the backend isn't
+    // ready (early dev mode), fall back to whatever the OS suggests.
+    getUiConfig()
+      .then((cfg) => {
+        applyTheme(cfg.theme);
+        if (cfg.auto_update) {
+          // Background check; failures are silent so a missing endpoint
+          // doesn't pop an error banner on every launch.
+          checkForUpdate().catch(() => undefined);
+        }
+      })
+      .catch(() => applyTheme('system'));
+  }, []);
 
   useEffect(() => {
     let unsub: (() => void) | undefined;

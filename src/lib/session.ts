@@ -227,3 +227,31 @@ export async function loadScrollback(): Promise<Uint8Array> {
   const bytes = await invoke<number[]>('scrollback_load');
   return new Uint8Array(bytes);
 }
+
+export type ThemeChoice = 'default' | 'high-contrast' | 'system';
+
+export interface UiConfig {
+  theme: ThemeChoice;
+  auto_update: boolean;
+}
+
+export async function getUiConfig(): Promise<UiConfig> {
+  const cfg = await invoke<{ theme: string; auto_update: boolean }>('ui_get_config');
+  const theme: ThemeChoice =
+    cfg.theme === 'high-contrast' || cfg.theme === 'system' ? cfg.theme : 'default';
+  return { theme, auto_update: cfg.auto_update };
+}
+
+export async function setUiConfig(config: UiConfig): Promise<void> {
+  await invoke('ui_set_config', { theme: config.theme, autoUpdate: config.auto_update });
+}
+
+export interface UpdateCheckResult {
+  available: boolean;
+  version: string | null;
+  notes: string | null;
+}
+
+export async function checkForUpdate(): Promise<UpdateCheckResult> {
+  return invoke('updater_check');
+}

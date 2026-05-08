@@ -44,6 +44,23 @@ pub(crate) struct ProfileConfig {
     /// to `<app_data_dir>/scripts/<name>.lua`.
     #[serde(default)]
     pub autoload_scripts: Vec<String>,
+    #[serde(default)]
+    pub ui: UiConfig,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub(crate) struct UiConfig {
+    /// `default`, `high-contrast`, or `system`. `system` follows the OS
+    /// `prefers-contrast` media query.
+    #[serde(default = "default_theme")]
+    pub theme: String,
+    /// Opt in to background update checks. Off by default.
+    #[serde(default)]
+    pub auto_update: bool,
+}
+
+fn default_theme() -> String {
+    "default".to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -120,6 +137,11 @@ impl ProfileConfig {
             reset_pattern: profile.tick.config.reset_pattern.clone(),
         };
 
+        let ui = UiConfig {
+            theme: profile.ui.theme.clone(),
+            auto_update: profile.ui.auto_update,
+        };
+
         Self {
             connection: ConnectionConfig::default(),
             aliases,
@@ -127,6 +149,7 @@ impl ProfileConfig {
             triggers,
             tick,
             autoload_scripts: Vec::new(),
+            ui,
         }
     }
 
@@ -188,6 +211,12 @@ impl ProfileConfig {
             warnings.push(format!("tick reset pattern rejected: {e}"));
         }
         profile.tick = tick;
+
+        // UI preferences carry across.
+        profile.ui = UiConfig {
+            theme: self.ui.theme.clone(),
+            auto_update: self.ui.auto_update,
+        };
 
         warnings
     }

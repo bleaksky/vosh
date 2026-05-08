@@ -24,7 +24,7 @@ use commands::{
     app_version, logs_export, logs_list_sessions, logs_search, map_area_snapshot, map_set_avoid,
     map_set_note, map_walk_to, profile_export, profile_import, scrollback_load, session_connect,
     session_disconnect, session_send, session_send_input, triggers_export, triggers_import,
-    triggers_list, AppState, SharedState,
+    triggers_list, ui_get_config, ui_set_config, updater_check, AppState, SharedState,
 };
 use map_state::MapState;
 use profile_config::ProfileConfig;
@@ -41,6 +41,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state.clone())
         .setup(move |app| {
             match open_map_store(app) {
@@ -118,6 +119,9 @@ pub fn run() {
             logs_search,
             logs_export,
             scrollback_load,
+            ui_get_config,
+            ui_set_config,
+            updater_check,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
