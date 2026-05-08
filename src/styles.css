@@ -376,32 +376,8 @@ body,
   gap: 0.5rem;
 }
 
-.map-mode-toggle {
-  display: inline-flex;
-  border: 1px solid #393b44;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.map-mode-toggle button {
-  background: transparent;
-  border: 0;
-  color: #a4a7a4;
-  font: inherit;
-  font-size: 11px;
-  text-transform: lowercase;
-  padding: 1px 8px;
-  cursor: pointer;
-}
-
-.map-mode-toggle button[aria-pressed='true'] {
-  background: #7fb4ca;
-  color: #ffffff;
-}
-
-.map-mode-toggle button + button {
-  border-left: 1px solid #393b44;
-}
+/* All .map-mode-toggle styling lives in the pill block lower down so
+   the segmented-switch look from earlier phases doesn't bleed through. */
 
 .mapping-view,
 .server-view {
