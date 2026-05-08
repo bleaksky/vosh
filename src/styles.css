@@ -110,22 +110,26 @@ body,
   min-height: 0;
   min-width: 0;
   width: 100%;
-  height: 100%;
+  /* The grid cell already gives .middle its height via the
+     `auto`/`1fr` row sizing. align-self stretches it to fill the row.
+     Don't repeat with height:100% — that re-introduces a percentage
+     dependency that lets xterm's intrinsic content drag the row taller
+     than the grid expects. */
+  align-self: stretch;
   /* `overflow: clip` clips both the visual box and any positioned
-     descendants more strictly than `overflow: hidden` does. xterm's
-     canvases live inside `.xterm` (position: relative); this guarantees
-     they can never escape the grid row. */
+     descendants more strictly than `overflow: hidden`. */
   overflow: clip;
   position: relative;
   z-index: 0;
-  contain: layout size;
 }
 
 .terminal-host {
-  flex: 1 1 auto;
+  /* `flex: 1 1 0` is the key — flex-basis 0 means xterm's intrinsic
+     canvas size never feeds back into the parent's width/height, so
+     the host shrinks freely when the grid row shrinks. */
+  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  height: 100%;
   overflow: clip;
   position: relative;
   /* Visible breathing room around the MUD output so text doesn't
@@ -133,11 +137,11 @@ body,
   padding: 0.6rem 0.8rem;
   background: #090e13;
   box-sizing: border-box;
-  contain: layout size;
 }
 
 .terminal-host .xterm {
   height: 100%;
+  width: 100%;
   /* xterm's wrapper defaults to overflow: visible, which lets its
      canvases paint outside its bounds. Clip it ourselves so it can't
      leak past the host. */
