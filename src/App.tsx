@@ -204,14 +204,21 @@ function App() {
           </Resizable>
         )}
       </div>
-      <Input
-        ref={inputRef}
-        enabled
-        onError={handleError}
-        onLocalEcho={(text) => termRef.current?.write(text)}
-      />
-      <StatusBar />
-      <AffectsBar />
+      {/* Bottom rail. The input row, status bar, and affects bar live
+          here as a pinned column. The rail's own grid row is `auto`,
+          so the terminal row above can never overflow into it — and
+          the rail carries its own z-index so even if some descendant
+          tried to escape, the rail paints above it. */}
+      <div className="bottom-rail" aria-label="bottom rail">
+        <Input
+          ref={inputRef}
+          enabled
+          onError={handleError}
+          onLocalEcho={(text) => termRef.current?.write(text)}
+        />
+        <StatusBar />
+        <AffectsBar />
+      </div>
     </main>
   );
 }

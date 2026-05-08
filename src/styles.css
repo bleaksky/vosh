@@ -26,22 +26,41 @@ body,
 
 .app {
   display: grid;
-  /* minmax(120px, 1fr) lets the terminal row shrink below its
-     content's intrinsic size when the bottom rows grow (e.g. when
-     the affects bar appears) but never below 120 px so xterm always
-     has a sensible row count to render and the bars never visually
-     overlap a still-laying-out terminal pane.
+  /* Three flat rows. The bottom rail is one auto-sized grid row that
+     contains the input + status + affects rows itself, so they can
+     never bleed into the terminal row no matter what the inner flex
+     layout does.
        row 1 — connect bar
        row 2 — terminal + side panel (shrinkable, 120 px floor)
-       row 3 — input row
-       row 4 — status bar
-       row 5 — affects bar (collapses when no tracked affects) */
-  grid-template-rows: auto minmax(120px, 1fr) auto auto auto;
+       row 3 — bottom rail (input + status + affects) */
+  grid-template-rows: auto minmax(120px, 1fr) auto;
   grid-template-columns: minmax(0, 1fr);
   height: 100vh;
   width: 100vw;
   gap: 0;
   overflow: hidden;
+}
+
+.bottom-rail {
+  display: flex;
+  flex-direction: column;
+  background: #090e13;
+  /* Bottom rail always paints above the terminal pane. */
+  position: relative;
+  z-index: 10;
+  /* Top edge separator so it reads as its own surface. */
+  border-top: 1px solid #393b44;
+}
+
+.bottom-rail > * {
+  flex: 0 0 auto;
+}
+
+/* The rail owns its own border on the input row's top — the rail's
+   border-top already provides the seam, so the input row drops the
+   one it had. */
+.bottom-rail .input-row {
+  border-top: 0;
 }
 
 .connect {
@@ -105,35 +124,29 @@ body,
   font-size: 12px;
 }
 
+/* `.middle` is now a CSS grid itself (terminal column + optional side
+   panel column), not a flex container. Flex made the terminal-host's
+   size depend on xterm's intrinsic canvas height, so when the grid
+   row shrank, the host refused to follow and the canvas overflowed
+   downward into the input/status rows. Grid columns size purely from
+   the cell allocation, no content feedback. */
 .middle {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-height: 0;
   min-width: 0;
   width: 100%;
-  /* The grid cell already gives .middle its height via the
-     `auto`/`1fr` row sizing. align-self stretches it to fill the row.
-     Don't repeat with height:100% — that re-introduces a percentage
-     dependency that lets xterm's intrinsic content drag the row taller
-     than the grid expects. */
-  align-self: stretch;
-  /* `overflow: clip` clips both the visual box and any positioned
-     descendants more strictly than `overflow: hidden`. */
+  height: 100%;
   overflow: clip;
   position: relative;
   z-index: 0;
 }
 
 .terminal-host {
-  /* `flex: 1 1 0` is the key — flex-basis 0 means xterm's intrinsic
-     canvas size never feeds back into the parent's width/height, so
-     the host shrinks freely when the grid row shrinks. */
-  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
   overflow: clip;
   position: relative;
-  /* Visible breathing room around the MUD output so text doesn't
-     touch the chrome on either side. */
   padding: 0.6rem 0.8rem;
   background: #090e13;
   box-sizing: border-box;
@@ -142,9 +155,6 @@ body,
 .terminal-host .xterm {
   height: 100%;
   width: 100%;
-  /* xterm's wrapper defaults to overflow: visible, which lets its
-     canvases paint outside its bounds. Clip it ourselves so it can't
-     leak past the host. */
   overflow: clip;
 }
 
