@@ -5,6 +5,7 @@ import { Connect, type ConnectionStatus } from './components/Connect';
 import { TriggersDrawer } from './components/TriggersDrawer';
 import { SettingsDrawer } from './components/SettingsDrawer';
 import { SidePanel } from './components/SidePanel';
+import { AffectsBar } from './components/AffectsBar';
 import { Resizable } from './components/Resizable';
 import { SearchView } from './components/SearchView';
 import { StatusBar } from './components/StatusBar';
@@ -210,6 +211,7 @@ function App() {
         onLocalEcho={(text) => termRef.current?.write(text)}
       />
       <StatusBar />
+      <AffectsBar />
     </main>
   );
 }

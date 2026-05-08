@@ -27,11 +27,16 @@ body,
 .app {
   display: grid;
   /* minmax(0, 1fr) lets the terminal row shrink below its content's
-     intrinsic size when the status bar grows (e.g. when the affects
-     row appears). Without that the 1fr default acts like minmax(auto,
-     1fr), the terminal stays full-height, and the status bar lands on
-     top of it. */
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+     intrinsic size when the bottom rows grow (e.g. when the affects
+     bar appears). Without that the 1fr default acts like minmax(auto,
+     1fr), the terminal stays full-height, and the bars land on top
+     of it.
+       row 1 — connect bar
+       row 2 — terminal + side panel (shrinkable)
+       row 3 — input row
+       row 4 — status bar
+       row 5 — affects bar (collapses when no tracked affects) */
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
   grid-template-columns: minmax(0, 1fr);
   height: 100vh;
   width: 100vw;
@@ -1298,31 +1303,28 @@ body,
   color: #e6c384;
 }
 
-/* Affects: a second row of pills below the vitals row, plus a side
-   pane listing every active affect with collapsible description rows. */
+/* Stacking rule on .statusbar so the bar is guaranteed to paint above
+   the terminal even if xterm's canvas hasn't yet re-fit to a freshly
+   shrunk container. .statusbar stays its base single-row flex shape;
+   the affects pills live in their own grid row via .affects-bar. */
 .statusbar {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.4rem;
-  /* Same stacking rule as .input-row so the bar is guaranteed to
-     paint above the terminal even if xterm's canvas hasn't yet
-     re-fit to a freshly shrunk container. */
   position: relative;
   z-index: 1;
 }
 
-.statusbar-row {
+/* Affects bar: its own grid row beneath the status bar. Keeps the
+   layout simple — each row is a flat grid auto track, so growing or
+   shrinking one row doesn't fight any nested flex layout. */
+.affects-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1.25rem;
-  white-space: nowrap;
-  overflow-x: auto;
-}
-
-.statusbar-row-affects {
-  gap: 0.45rem;
-  padding-top: 0.15rem;
+  gap: 0.4rem;
+  padding: 0.3rem 0.85rem;
+  background: #090e13;
   border-top: 1px dashed #23232b;
+  position: relative;
+  z-index: 1;
 }
 
 .affect-pill {
