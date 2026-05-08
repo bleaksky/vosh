@@ -99,21 +99,33 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
     termRef.current = term;
     fitRef.current = fit;
 
-    // Refit on any container resize. Defer the fit one frame so the
-    // browser has finished layout (the call from inside ResizeObserver
-    // can race with the layout pass that triggered it, leaving the
-    // canvas at its prior pixel height).
-    const refitNextFrame = () => {
-      requestAnimationFrame(() => {
-        try {
-          fit.fit();
-        } catch {
-          // ignore resize before layout settles
-        }
-      });
+    // Refit synchronously on container size changes. The
+    // ResizeObserver fires after layout with the new content rect, so
+    // fit() reads accurate dimensions and the canvas re-sizes in the
+    // same frame. A guard skips noise events where the box size
+    // didn't actually move.
+    let lastW = 0;
+    let lastH = 0;
+    const refit = (w: number, h: number) => {
+      if (Math.abs(w - lastW) < 1 && Math.abs(h - lastH) < 1) return;
+      lastW = w;
+      lastH = h;
+      try {
+        fit.fit();
+      } catch {
+        // ignore resize before layout settles
+      }
     };
-    window.addEventListener('resize', refitNextFrame);
-    const observer = new ResizeObserver(refitNextFrame);
+    const handleWindowResize = () => {
+      const el = containerRef.current;
+      if (el) refit(el.clientWidth, el.clientHeight);
+    };
+    window.addEventListener('resize', handleWindowResize);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        refit(entry.contentRect.width, entry.contentRect.height);
+      }
+    });
     observer.observe(containerRef.current);
 
     let unsubOutput: (() => void) | undefined;
@@ -143,7 +155,7 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
 
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', refitNextFrame);
+      window.removeEventListener('resize', handleWindowResize);
       unsubOutput?.();
       term.dispose();
       termRef.current = null;
