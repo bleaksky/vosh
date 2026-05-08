@@ -96,46 +96,48 @@ export function Connect({
       </label>
       <button type="submit">{isLive ? 'disconnect' : 'connect'}</button>
       <span className="status">{renderStatus()}</span>
-      {onToggleSidePanel && (
-        <button
-          type="button"
-          className="secondary"
-          aria-pressed={sidePanelOpen ?? false}
-          onClick={onToggleSidePanel}
-        >
-          panes
-        </button>
-      )}
-      {onToggleTriggers && (
-        <button
-          type="button"
-          className="secondary"
-          aria-pressed={triggersOpen ?? false}
-          onClick={onToggleTriggers}
-        >
-          triggers
-        </button>
-      )}
-      {onToggleSettings && (
-        <button
-          type="button"
-          className="secondary"
-          aria-pressed={settingsOpen ?? false}
-          onClick={onToggleSettings}
-        >
-          profile
-        </button>
-      )}
-      {onToggleSearch && (
-        <button
-          type="button"
-          className="secondary"
-          aria-pressed={searchOpen ?? false}
-          onClick={onToggleSearch}
-        >
-          search
-        </button>
-      )}
+      <div className="pill-group">
+        {onToggleSidePanel && (
+          <button
+            type="button"
+            className="pill pill-cyan"
+            aria-pressed={sidePanelOpen ?? false}
+            onClick={onToggleSidePanel}
+          >
+            panes
+          </button>
+        )}
+        {onToggleTriggers && (
+          <button
+            type="button"
+            className="pill pill-yellow"
+            aria-pressed={triggersOpen ?? false}
+            onClick={onToggleTriggers}
+          >
+            triggers
+          </button>
+        )}
+        {onToggleSettings && (
+          <button
+            type="button"
+            className="pill pill-magenta"
+            aria-pressed={settingsOpen ?? false}
+            onClick={onToggleSettings}
+          >
+            profile
+          </button>
+        )}
+        {onToggleSearch && (
+          <button
+            type="button"
+            className="pill pill-green"
+            aria-pressed={searchOpen ?? false}
+            onClick={onToggleSearch}
+          >
+            search
+          </button>
+        )}
+      </div>
     </form>
   );
 }

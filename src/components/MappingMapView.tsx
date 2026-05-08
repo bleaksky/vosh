@@ -10,6 +10,7 @@ import {
   type MapRoom,
 } from '../lib/session';
 import { MAP_COLORS, SECTORS, hexToRgba, sectorForTerrain } from '../lib/mapPalette';
+import { drawTerrainDecorations } from '../lib/terrainDecor';
 
 // Pitch in pixels per cell. Matches the server view so the two modes
 // render at the same scale.
@@ -237,23 +238,50 @@ export function MappingMapView() {
     }
     const bboxW = maxX - minX + 1;
 
+    // Compute the dominant sector for both the watermark tone and the
+    // terrain decorations painted in the void below.
+    const sectorCounts: Record<number, number> = {};
+    for (const r of visible) {
+      const sid = terrainToSectorId(r.terrain);
+      sectorCounts[sid] = (sectorCounts[sid] ?? 0) + 1;
+    }
+    let dominantId = 0;
+    let bestCount = 0;
+    for (const [id, count] of Object.entries(sectorCounts)) {
+      if (count > bestCount) {
+        bestCount = count;
+        dominantId = Number(id);
+      }
+    }
+    const dominantHalo = SECTORS[dominantId]?.halo ?? SECTORS[0].halo;
+
+    // Terrain decorations: trees in the forest, peaks in the mountains,
+    // wavy lines over water. Painted between the bg and the corridors so
+    // rooms always sit on top.
+    {
+      const bboxCx = ((minX + maxX) / 2) * pitch + ox;
+      const bboxCy = ((minY + maxY) / 2) * pitch + oy;
+      const halfW = ((maxX - minX) * pitch) / 2 + pitch * 0.5;
+      const halfH = ((maxY - minY) * pitch) / 2 + pitch * 0.5;
+      drawTerrainDecorations(
+        ctx,
+        [
+          {
+            cx: bboxCx,
+            cy: bboxCy,
+            hw: halfW,
+            hh: halfH,
+            sector: dominantId,
+            haloColor: dominantHalo,
+          },
+        ],
+        { cssWidth, cssHeight, pitch },
+      );
+    }
+
     // Area name watermark behind everything, sized to the bbox so it
     // reads as a faint label like the FL web map.
     if (snapshot.area) {
-      const sectorCounts: Record<number, number> = {};
-      for (const r of visible) {
-        const sid = terrainToSectorId(r.terrain);
-        sectorCounts[sid] = (sectorCounts[sid] ?? 0) + 1;
-      }
-      let dominantId = 0;
-      let bestCount = 0;
-      for (const [id, count] of Object.entries(sectorCounts)) {
-        if (count > bestCount) {
-          bestCount = count;
-          dominantId = Number(id);
-        }
-      }
-      const halo = SECTORS[dominantId]?.halo ?? SECTORS[0].halo;
       const charW = 0.6;
       const fitSize = Math.min(
         cssHeight * 0.45,
@@ -262,7 +290,7 @@ export function MappingMapView() {
       ctx.font = `bold ${Math.max(14, Math.floor(fitSize))}px monospace`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = hexToRgba(halo, 0.18);
+      ctx.fillStyle = hexToRgba(dominantHalo, 0.18);
       ctx.fillText(snapshot.area.toUpperCase(), cssWidth / 2, cssHeight / 2);
     }
 

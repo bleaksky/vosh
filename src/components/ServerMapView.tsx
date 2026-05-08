@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { getAreaSnapshot, onGmcp, onMap, onState, type AreaSnapshot } from '../lib/session';
-import { MAP_COLORS, hexToRgba, sectorForCode } from '../lib/mapPalette';
+import { MAP_COLORS, SECTORS, hexToRgba, sectorForCode } from '../lib/mapPalette';
+import { drawTerrainDecorations } from '../lib/terrainDecor';
 
 /// One cell of the server-side map grid.
 interface ServerCell {
@@ -225,6 +226,85 @@ export function ServerMapView() {
       }
       const centerR = Math.floor((rows + 1) / 2);
       const centerC = Math.floor((cols + 1) / 2);
+
+      // Pick the dominant sector from the visible cells. Drives both the
+      // terrain decorations in the void and the watermark tint.
+      const sectorCounts: Record<string, number> = {};
+      for (const rowKey of Object.keys(tiles.g ?? {})) {
+        const colMap = tiles.g?.[rowKey];
+        if (!colMap) continue;
+        for (const cellKey of Object.keys(colMap)) {
+          const cell = colMap[cellKey];
+          if (!cell || typeof cell === 'string') continue;
+          const code = cell.s ?? '';
+          if (!code) continue;
+          sectorCounts[code] = (sectorCounts[code] ?? 0) + 1;
+        }
+      }
+      let dominantCode = '0';
+      let bestCount = 0;
+      for (const [code, count] of Object.entries(sectorCounts)) {
+        if (count > bestCount) {
+          bestCount = count;
+          dominantCode = code;
+        }
+      }
+      const sector = sectorForCode(dominantCode) ?? sectorForCode('0');
+      const halo = sector?.halo ?? '#7fb4ca';
+      let dominantSectorId = 0;
+      for (const [id, theme] of Object.entries(SECTORS)) {
+        if (theme === sector) {
+          dominantSectorId = Number(id);
+          break;
+        }
+      }
+
+      // Terrain decorations in the void around the visible cell cluster.
+      // We don't have the area's true world bbox here; approximate it
+      // from the rendered tile grid.
+      {
+        const anchorPitch = computeAnchor(
+          snapshot,
+          tiles,
+          rows,
+          cols,
+          centerR,
+          centerC,
+          cssWidth,
+          cssHeight,
+        );
+        const halfW = (cols / 2) * anchorPitch.pitch;
+        const halfH = (rows / 2) * anchorPitch.pitch;
+        drawTerrainDecorations(
+          ctx,
+          [
+            {
+              cx: anchorPitch.playerX,
+              cy: anchorPitch.playerY,
+              hw: halfW,
+              hh: halfH,
+              sector: dominantSectorId,
+              haloColor: halo,
+            },
+          ],
+          { cssWidth, cssHeight, pitch: anchorPitch.pitch },
+        );
+      }
+
+      // Area name watermark behind the cells, mirroring the mapping
+      // view so both modes share the same context cue.
+      if (snapshot?.area) {
+        const charW = 0.6;
+        const fitSize = Math.min(
+          cssHeight * 0.45,
+          (cssWidth * 0.85) / (snapshot.area.length * charW),
+        );
+        ctx.font = `bold ${Math.max(14, Math.floor(fitSize))}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = hexToRgba(halo, 0.18);
+        ctx.fillText(snapshot.area.toUpperCase(), cssWidth / 2, cssHeight / 2);
+      }
 
       const anchor = computeAnchor(
         snapshot,
