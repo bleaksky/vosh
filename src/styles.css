@@ -107,13 +107,19 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
+  /* Pin a stacking context here so xterm's absolutely-positioned
+     canvas layers can't paint outside the grid row. */
+  position: relative;
+  z-index: 0;
 }
 
 .terminal-host {
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
   height: 100%;
   overflow: hidden;
+  position: relative;
   /* Visible breathing room around the MUD output so text doesn't
      touch the chrome on either side. */
   padding: 0.6rem 0.8rem;
@@ -139,6 +145,10 @@ body,
   font-family: var(--app-font-family);
   font-size: var(--app-font-size);
   color: #c5c9c7;
+  /* Always paint above the terminal so a stale xterm canvas height
+     can't visually leak underneath the prompt row. */
+  position: relative;
+  z-index: 1;
 }
 
 .input-row .prompt {
@@ -1294,6 +1304,11 @@ body,
   flex-direction: column;
   align-items: stretch;
   gap: 0.4rem;
+  /* Same stacking rule as .input-row so the bar is guaranteed to
+     paint above the terminal even if xterm's canvas hasn't yet
+     re-fit to a freshly shrunk container. */
+  position: relative;
+  z-index: 1;
 }
 
 .statusbar-row {

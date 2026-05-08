@@ -99,15 +99,21 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
     termRef.current = term;
     fitRef.current = fit;
 
-    const handleResize = () => {
-      try {
-        fit.fit();
-      } catch {
-        // ignore resize before layout settles
-      }
+    // Refit on any container resize. Defer the fit one frame so the
+    // browser has finished layout (the call from inside ResizeObserver
+    // can race with the layout pass that triggered it, leaving the
+    // canvas at its prior pixel height).
+    const refitNextFrame = () => {
+      requestAnimationFrame(() => {
+        try {
+          fit.fit();
+        } catch {
+          // ignore resize before layout settles
+        }
+      });
     };
-    window.addEventListener('resize', handleResize);
-    const observer = new ResizeObserver(handleResize);
+    window.addEventListener('resize', refitNextFrame);
+    const observer = new ResizeObserver(refitNextFrame);
     observer.observe(containerRef.current);
 
     let unsubOutput: (() => void) | undefined;
@@ -137,7 +143,7 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
 
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', refitNextFrame);
       unsubOutput?.();
       term.dispose();
       termRef.current = null;
