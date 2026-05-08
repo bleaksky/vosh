@@ -1705,3 +1705,20 @@ body,
 .dockable-middle .dv-default-tab .dv-svg {
   display: none !important;
 }
+
+/* Drop indicators. dockview-theme-abyss hides the cross-container
+   indicator (the highlight that appears when you drag a panel toward
+   the outer edge of the whole dockview to make it a new sidebar) by
+   setting opacity: 0. We want it visible so the user can actually see
+   where a drop will land. Also bump the background color of the
+   drop-target highlight to a clearly visible kanso blue. */
+.dockable-middle .dv-drop-target-container .dv-drop-target-anchor {
+  opacity: 1 !important;
+  transition: opacity 0.1s ease-in !important;
+}
+
+.dockable-middle .dv-drop-target > .dv-drop-target-dropzone > .dv-drop-target-selection {
+  background-color: rgba(127, 180, 202, 0.32) !important;
+  border: 1px solid rgba(127, 180, 202, 0.85) !important;
+  box-sizing: border-box;
+}
