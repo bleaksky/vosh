@@ -18,6 +18,12 @@ pub struct Trigger {
     #[serde(default = "default_enabled")]
     pub enabled: bool,
     pub action: TriggerAction,
+    /// Optional preset identifier. Triggers installed by the
+    /// "Highlights" preset library tag themselves with the preset's
+    /// id so the UI can list/remove them as a group. User-authored
+    /// triggers leave this empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
 }
 
 fn default_enabled() -> bool {
@@ -73,6 +79,26 @@ impl TriggerStore {
         let before = self.items.len();
         self.items.retain(|t| t.trigger.name != name);
         before != self.items.len()
+    }
+
+    /// Remove every trigger tagged with the given preset id. Returns the
+    /// number removed.
+    pub fn remove_by_preset(&mut self, preset_id: &str) -> usize {
+        let before = self.items.len();
+        self.items
+            .retain(|t| t.trigger.preset.as_deref() != Some(preset_id));
+        before - self.items.len()
+    }
+
+    /// List preset ids currently present in the store, deduplicated.
+    pub fn preset_ids(&self) -> Vec<String> {
+        let mut seen = std::collections::BTreeSet::new();
+        for t in &self.items {
+            if let Some(id) = t.trigger.preset.as_deref() {
+                seen.insert(id.to_string());
+            }
+        }
+        seen.into_iter().collect()
     }
 
     pub fn get(&self, name: &str) -> Option<&Trigger> {

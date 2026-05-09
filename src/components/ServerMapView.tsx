@@ -3,19 +3,48 @@ import { getAreaSnapshot, onGmcp, onMap, onState, type AreaSnapshot } from '../l
 import { MAP_COLORS, SECTORS, hexToRgba, sectorForCode } from '../lib/mapPalette';
 import { drawTerrainDecorations } from '../lib/terrainDecor';
 
-/// One cell of the server-side map grid.
+/// One cell of the server-side map grid (player's floor only).
+/// Per the Aabahran GMCP wiki:
+/// `g[y][x]` carries `{s, e, l, h, ar, f, d, ex}`. Multi-floor rooms
+/// live in a separate top-level `zr` array (see `MultiZEntry`), not
+/// in the `g` grid.
 interface ServerCell {
-  /// Exit string like `"nesw"`.
+  /// Exit string like `"nesw"`. Uppercase letter means an exit that
+  /// leads off-grid.
   e?: string;
-  /// Area id this cell belongs to.
+  /// Area vnum this cell belongs to.
   ar?: number | string;
   /// Light level 0..4.
   l?: number | string;
-  /// Flag chars (e.g. `"$bthsq"`).
+  /// `1` only on the player's own cell, omitted otherwise.
+  h?: number;
+  /// Flag chars (e.g. `"$bthsq"` for safe/bank/trainer/healer/shop/quest).
   f?: string;
-  /// Sector code (`"0"..."9"`, `"a"..."c"` on Aabahran).
+  /// Sector index (`"0".."9"`, `"a".."c"` on Aabahran).
   s?: string;
+  /// Door state dict keyed by direction.
+  d?: Record<string, unknown>;
   /// Exit destinations keyed by direction.
+  ex?: Record<string, number | string>;
+}
+
+/// Off-floor room entry. Aabahran ships ±1-floor rooms in
+/// `payload.a` (above) and `payload.b` (below); deeper floors come
+/// through `payload.zr` per the GMCP wiki, with an explicit `z`
+/// floor-delta. `x` and `y` share the same 0-indexed `[y][x]`
+/// coordinate space as `g`.
+interface OffFloorEntry {
+  x: number;
+  y: number;
+  /// Present in `zr` entries; absent in `a` / `b` entries (where the
+  /// array name implies +1 / -1).
+  z?: number;
+  s?: string;
+  e?: string;
+  l?: number | string;
+  ar?: number | string;
+  f?: string;
+  d?: Record<string, unknown>;
   ex?: Record<string, number | string>;
 }
 
@@ -28,6 +57,18 @@ interface MapTilesPayload {
   r?: number;
   t?: string;
   g?: Record<string, Record<string, ServerCell | null | string>>;
+  /// Rooms one floor above the player's current floor, in the same
+  /// `[y][x]` coordinate space as `g`. Empty/absent when no above-
+  /// floor rooms are within radius.
+  a?: OffFloorEntry[];
+  /// Rooms one floor below.
+  b?: OffFloorEntry[];
+  /// Per the GMCP wiki, the multi-Z array carries rooms at any
+  /// floor delta (positive=above, negative=below) via an explicit
+  /// `z` field on each entry. Aabahran's current production server
+  /// uses `a`/`b` for ±1; `zr` should still be honored if it shows
+  /// up so deeper-floor rooms render too.
+  zr?: OffFloorEntry[];
   areas?: Record<string, AreaInfo>;
 }
 
@@ -494,9 +535,9 @@ function drawSquares(
   const ox = Math.floor(playerX - centerC * pitch);
   const oy = Math.floor(playerY - centerR * pitch);
 
-  // Corridors under the squares, single thin gray pass like the FL web map.
-  ctx.strokeStyle = MAP_COLORS.corridor;
-  ctx.lineWidth = 1.5;
+  // Corridors under the squares, single thin pass like the FL web map.
+  ctx.strokeStyle = '#474b55';
+  ctx.lineWidth = 1.25;
   ctx.beginPath();
   for (let r = 1; r <= rows; r++) {
     for (let c = 1; c <= cols; c++) {
@@ -524,6 +565,23 @@ function drawSquares(
   }
   ctx.stroke();
 
+  // Off-floor: cells THEN lines, both drawn BEFORE same-floor cells.
+  // Same-floor cells render last and wipe their cell area, so any
+  // off-floor line crossing under a same-floor cell gets hidden —
+  // the line "stops at" the same-floor cell visually. Off-floor
+  // lines stay visible inside off-floor cells (translucent) and in
+  // empty grid positions where no same-floor cell sits.
+  drawOffFloorCells(ctx, payload.a, ox, oy, pitch, size, centerR, centerC);
+  drawOffFloorCells(ctx, payload.b, ox, oy, pitch, size, centerR, centerC);
+  if (Array.isArray(payload.zr)) {
+    drawOffFloorCells(ctx, payload.zr, ox, oy, pitch, size, centerR, centerC);
+  }
+  drawOffFloorOverlay(ctx, payload.a, ox, oy, pitch);
+  drawOffFloorOverlay(ctx, payload.b, ox, oy, pitch);
+  if (Array.isArray(payload.zr)) {
+    drawOffFloorOverlay(ctx, payload.zr, ox, oy, pitch);
+  }
+
   // Squares, FL web map style: dim sector fill + 0.8-alpha sector border,
   // origin gets a yellow glow + bright yellow border. Each cell's alpha
   // tracks Manhattan distance from the player so the player sits in a
@@ -547,6 +605,13 @@ function drawSquares(
       }
 
       ctx.save();
+      // Wipe the background under the cell first so corridor lines
+      // drawn underneath don't bleed through the (less-than-fully-
+      // opaque) sector fill. Without this, every distance-faded cell
+      // shows a faint corridor stripe across it.
+      ctx.fillStyle = MAP_COLORS.bg;
+      ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
+
       ctx.globalAlpha = depth;
       ctx.fillStyle = sector.fill;
       ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
@@ -564,19 +629,128 @@ function drawSquares(
       const exits = (cell.e ?? '').toLowerCase();
       if (exits.includes('u') || exits.includes('d')) {
         ctx.fillStyle = MAP_COLORS.text;
-        ctx.font = `${Math.max(7, Math.floor(size * 0.5))}px monospace`;
+        ctx.font = `${Math.max(7, Math.floor(size * 0.55))}px monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        // Up/down arrows render INSIDE the cell so they don't bleed
+        // into adjacent rooms or the corridor lines. ~30% offset
+        // above/below center keeps them readable at small pitch.
         if (exits.includes('u')) {
-          ctx.fillText('▲', cx, cy - size / 2 - size * 0.25);
+          ctx.fillText('▲', cx, cy - size * 0.25);
         }
         if (exits.includes('d')) {
-          ctx.fillText('▼', cx, cy + size / 2 + size * 0.25);
+          ctx.fillText('▼', cx, cy + size * 0.25);
         }
       }
     }
   }
+
 }
+
+// Three-tier distance fade for off-floor cells, mirroring the
+// TinTin map_panel.tin convention (close <= 2, medium <= 5, far).
+// Each tier knocks the alpha down a step so distant off-floor
+// chains darken visibly without becoming invisible.
+function offFloorDistanceFade(d: number): number {
+  if (d <= 2) return 1.0;
+  if (d <= 5) return 0.75;
+  return 0.55;
+}
+
+// Pass A: only the dim cell fills. Drawn under everything;
+// same-floor cells will paint over off-floor cells at overlapping
+// positions. No border outline — the corridor lines drawn over the
+// top in pass B carry the connectivity signal.
+function drawOffFloorCells(
+  ctx: CanvasRenderingContext2D,
+  entries: OffFloorEntry[] | undefined,
+  ox: number,
+  oy: number,
+  pitch: number,
+  size: number,
+  centerR: number,
+  centerC: number,
+) {
+  if (!Array.isArray(entries) || entries.length === 0) return;
+  const half = size / 2;
+  for (const entry of entries) {
+    const cx = ox + entry.x * pitch;
+    const cy = oy + entry.y * pitch;
+    const sector = sectorForCode(entry.s);
+    const dist = Math.abs(entry.y - centerR) + Math.abs(entry.x - centerC);
+    const fade = offFloorDistanceFade(dist);
+    ctx.save();
+    // Off-floor cell uses sector.border (medium-bright) at 0.4 alpha.
+    // Visible enough to read against the dark map background but
+    // dim enough that the corridor lines drawn in pass B remain the
+    // dominant connectivity signal.
+    ctx.globalAlpha = 0.4 * fade;
+    ctx.fillStyle = sector.border;
+    ctx.fillRect(cx - half, cy - half, size, size);
+    ctx.restore();
+  }
+}
+
+// Pass B: corridor lines (full pitch when both endpoints in the
+// off-floor data, half-pitch stubs otherwise). Drawn AFTER same-
+// floor cells so off-floor connectivity stays visible no matter
+// what's underneath.
+function drawOffFloorOverlay(
+  ctx: CanvasRenderingContext2D,
+  entries: OffFloorEntry[] | undefined,
+  ox: number,
+  oy: number,
+  pitch: number,
+) {
+  if (!Array.isArray(entries) || entries.length === 0) return;
+  const reach = Math.floor(pitch / 2);
+  const byCoord = new Map<string, OffFloorEntry>();
+  for (const e of entries) byCoord.set(`${e.x},${e.y}`, e);
+
+  // Lines: full pitch between connected pairs, half-pitch stubs for
+  // exits whose neighbor isn't in this push (so isolated off-floor
+  // cells still announce their connections). Stroke at full alpha
+  // so the connectivity signal stays loud — distance fade is for
+  // the cell fill, not the line.
+  ctx.save();
+  ctx.lineWidth = 1.25;
+  ctx.strokeStyle = '#474b55';
+  ctx.globalAlpha = 1;
+  ctx.beginPath();
+  for (const entry of entries) {
+    const cx = ox + entry.x * pitch;
+    const cy = oy + entry.y * pitch;
+    const exits = (entry.e ?? '').toLowerCase();
+    if (exits.includes('n')) {
+      const reachLen = byCoord.has(`${entry.x},${entry.y - 1}`) ? pitch : reach;
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx, cy - reachLen);
+    }
+    if (exits.includes('s')) {
+      const reachLen = byCoord.has(`${entry.x},${entry.y + 1}`) ? pitch : reach;
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx, cy + reachLen);
+    }
+    if (exits.includes('e')) {
+      const reachLen = byCoord.has(`${entry.x + 1},${entry.y}`) ? pitch : reach;
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + reachLen, cy);
+    }
+    if (exits.includes('w')) {
+      const reachLen = byCoord.has(`${entry.x - 1},${entry.y}`) ? pitch : reach;
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx - reachLen, cy);
+    }
+  }
+  ctx.stroke();
+  ctx.restore();
+  // Up/down arrows are intentionally NOT rendered on off-floor
+  // cells. They appear on the player's same-floor cell when needed
+  // (the renderer for `g` cells handles that). Off-floor rooms are
+  // already off-axis by definition; adding vertical arrows inside
+  // them is redundant and visually noisy.
+}
+
 
 // Same fade table as the mapping view's BFS distance, but keyed to a
 // ring index since the server payload doesn't ship full graph data.
@@ -644,6 +818,8 @@ function drawTileset(
   anchor: Anchor,
 ) {
   if (!image) {
+    // Fallback when no tileset is loaded — render with the standard
+    // squares style and the line-based off-floor glyphs.
     drawSquares(ctx, cssWidth, cssHeight, payload, rows, cols, centerR, centerC, anchor);
     return;
   }
@@ -654,8 +830,8 @@ function drawTileset(
   const oy = Math.floor(playerY - centerR * pitch);
 
   // Edges underneath the tiles so the connectivity still reads.
-  ctx.strokeStyle = MAP_COLORS.corridor;
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#474b55';
+  ctx.lineWidth = 1.25;
   for (let r = 1; r <= rows; r++) {
     for (let c = 1; c <= cols; c++) {
       const cell = getCell(payload, r, c);

@@ -67,17 +67,18 @@ interface MoonsState {
   near_alignment?: boolean;
 }
 
-// Phase glyphs lifted from the user's TinTin moons_panel.tin so the
-// in-app status bar shows the same shapes they're used to seeing.
+// Eight distinct moon phase emoji so each phase reads at a glance.
+// Aabahran's GMCP convention (matching the user's TinTin file) is
+// 0 = full, 4 = new, with phases 1-3 waning and 5-7 waxing.
 const MOON_GLYPHS: Record<number, string> = {
-  0: '●',
-  1: '◐',
-  2: '◐',
-  3: '◑',
-  4: '○',
-  5: '◑',
-  6: '◐',
-  7: '◐',
+  0: '🌕',
+  1: '🌖',
+  2: '🌗',
+  3: '🌘',
+  4: '🌑',
+  5: '🌒',
+  6: '🌓',
+  7: '🌔',
 };
 
 function pickFirst<T>(...values: (T | undefined)[]): T | undefined {
@@ -270,7 +271,7 @@ export function StatusBar() {
             .map(
               (m) =>
                 `${m.name ?? '?'}: ${m.phase_name ?? `phase ${m.phase ?? '?'}`}` +
-                (m.active ? ' (active)' : ''),
+              (m.active ? ' (active)' : ''),
             )
             .join('\n')}
         >

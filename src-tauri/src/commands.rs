@@ -5,7 +5,7 @@ use std::sync::Arc;
 use mudclient_log::{SearchHit, SearchOptions, SessionRow};
 use mudclient_map::Room;
 use mudclient_trigger::Trigger;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::Mutex;
 use tracing::warn;
 
@@ -14,7 +14,7 @@ use crate::log_state::{SharedLogStore, SharedScrollback};
 use crate::map_state::SharedMap;
 use crate::plugins::{PluginRecord, SharedPluginManager};
 use crate::profile::Profile;
-use crate::profile_config::ProfileConfig;
+use crate::profile_config::{DockEntryPersist, ProfileConfig};
 use crate::script_state::SharedTimers;
 use crate::session::{self, OutputPayload, SessionHandle};
 
@@ -203,6 +203,71 @@ pub(crate) fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// Read the persistent dock layout. Returns the same shape as the
+/// frontend `DockEntry` (id + zone) so the layout editor can render
+/// from it directly.
+#[tauri::command]
+pub(crate) async fn dock_layout_get(
+    state: State<'_, SharedState>,
+) -> Result<Vec<DockEntryPersist>, String> {
+    let p = state.profile.lock().await;
+    Ok(p.ui.dock_layout.clone())
+}
+
+/// Replace the persistent dock layout. Persists to profile.toml and
+/// broadcasts `mudclient://dock-layout-changed` so other open windows
+/// (specifically the main window) can re-apply without a relaunch.
+#[tauri::command]
+pub(crate) async fn dock_layout_set(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    entries: Vec<DockEntryPersist>,
+) -> Result<(), String> {
+    {
+        let mut p = state.profile.lock().await;
+        p.ui.dock_layout.clone_from(&entries);
+    }
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    if let Err(e) = app.emit("mudclient://dock-layout-changed", &entries) {
+        warn!(error = %e, "failed to broadcast dock-layout-changed");
+    }
+    Ok(())
+}
+
+/// Open (or focus, if already open) the standalone settings window.
+/// The settings window is a separate webview pointed at the same
+/// frontend bundle with `?view=settings`, so the React entry can
+/// branch and render the `SettingsApp` instead of the main `App`.
+/// Both windows share the same Rust backend state.
+#[tauri::command]
+pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
+    if let Some(existing) = app.get_webview_window("settings") {
+        existing.show().map_err(|e| e.to_string())?;
+        existing.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("index.html?view=settings".into()))
+        .title("mudclient · settings")
+        .inner_size(900.0, 720.0)
+        .min_inner_size(560.0, 420.0)
+        .resizable(true)
+        // Match the app's dark background so the OS doesn't flash a
+        // default-white window for the few frames between window
+        // creation and the webview painting its first frame.
+        .background_color(tauri::webview::Color(9, 14, 19, 255))
+        // Stay hidden until the React app calls show() on first render
+        // so the user never sees the unstyled default state.
+        .visible(false)
+        // Disable Tauri's OS file-drop handler. When enabled it
+        // intercepts HTML5 drag-and-drop inside the webview, which
+        // breaks the layout editor's panel drag interactions.
+        .disable_drag_drop_handler()
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub(crate) async fn profile_export(state: State<'_, SharedState>) -> Result<String, String> {
     let p = state.profile.lock().await;
@@ -379,6 +444,7 @@ pub(crate) struct UiConfigPayload {
     pub font_family: String,
     pub font_size: u32,
     pub tracked_affects: Vec<String>,
+    pub enabled_presets: Vec<String>,
 }
 
 #[tauri::command]
@@ -392,6 +458,7 @@ pub(crate) async fn ui_get_config(
         font_family: p.ui.font_family.clone(),
         font_size: p.ui.font_size,
         tracked_affects: p.ui.tracked_affects.clone(),
+        enabled_presets: p.ui.enabled_presets.clone(),
     })
 }
 
@@ -404,6 +471,7 @@ pub(crate) async fn ui_set_config(
     font_family: String,
     font_size: u32,
     tracked_affects: Vec<String>,
+    enabled_presets: Vec<String>,
 ) -> Result<(), String> {
     {
         let mut p = state.profile.lock().await;
@@ -416,10 +484,57 @@ pub(crate) async fn ui_set_config(
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
+        p.ui.enabled_presets = enabled_presets
+            .into_iter()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        p.ui.enabled_presets.sort();
+        p.ui.enabled_presets.dedup();
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
     Ok(())
+}
+
+/// Bulk-install a set of preset triggers. Each trigger should already
+/// have its `preset` field set to the preset id; this command
+/// validates and inserts them so the engine starts matching
+/// immediately. Returns the number installed.
+#[tauri::command]
+pub(crate) async fn presets_install(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    triggers: Vec<Trigger>,
+) -> Result<usize, String> {
+    let mut installed = 0usize;
+    {
+        let mut p = state.profile.lock().await;
+        for t in triggers {
+            p.triggers.set(t).map_err(|e| e.to_string())?;
+            installed += 1;
+        }
+    }
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    Ok(installed)
+}
+
+/// Remove every trigger tagged with the given preset id. Returns the
+/// number removed.
+#[tauri::command]
+pub(crate) async fn presets_remove(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    preset_id: String,
+) -> Result<usize, String> {
+    let removed = {
+        let mut p = state.profile.lock().await;
+        p.triggers.remove_by_preset(&preset_id)
+    };
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    Ok(removed)
 }
 
 #[derive(serde::Serialize)]

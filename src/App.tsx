@@ -1,18 +1,30 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Terminal, type TerminalHandle } from './components/Terminal';
 import { Input, type InputHandle } from './components/Input';
 import { Connect, type ConnectionStatus } from './components/Connect';
-import { TriggersDrawer } from './components/TriggersDrawer';
-import { SettingsDrawer } from './components/SettingsDrawer';
 import { SidePanel } from './components/SidePanel';
 import { AffectsBar } from './components/AffectsBar';
 import { Resizable } from './components/Resizable';
-import { SearchView } from './components/SearchView';
+import { PRESETS, presetTriggers } from './lib/presets';
+import { dockLayoutStore } from './lib/docking';
+import {
+  checkForUpdate,
+  dockLayoutGet,
+  getUiConfig,
+  onState,
+  presetsInstall,
+  type DockEntryPersist,
+  type StatePayload,
+} from './lib/session';
+import type { SnapZone } from './lib/docking';
 import { StatusBar } from './components/StatusBar';
-import { checkForUpdate, getUiConfig, onState, type StatePayload } from './lib/session';
 import { applyTheme } from './lib/theme';
 
 const SIDE_PANEL_STORAGE_KEY = 'mudclient.layout.sidePanelOpen';
+const DOCK_MIGRATION_KEY = 'mudclient.docking.migrated_phase1_settings_hub';
 
 function loadSidePanelOpen(): boolean {
   try {
@@ -29,19 +41,58 @@ const DEFAULT_FONT_FAMILY =
 
 function App() {
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
-  const [triggersOpen, setTriggersOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidePanelOpen, setSidePanelOpen] = useState(loadSidePanelOpen);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
   const [fontSize, setFontSize] = useState(14);
   const termRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
 
+  // One-time migration: drag-to-dock has been removed from the main
+  // window so finicky leftover dock state from prior sessions would
+  // keep panels misplaced with no way to drag them back. Wipe the
+  // dock store the first time this build runs, then mark the
+  // migration so it doesn't fire again.
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(DOCK_MIGRATION_KEY)) {
+        dockLayoutStore.reset();
+        localStorage.setItem(DOCK_MIGRATION_KEY, '1');
+      }
+    } catch {
+      // ignore storage failures
+    }
+  }, []);
+
+  // Pull the persisted dock layout from the backend on startup, then
+  // listen for cross-window broadcasts so edits made in the Layout
+  // Editor window apply here without a relaunch.
+  useEffect(() => {
+    const isValidZone = (z: string): z is SnapZone =>
+      ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right'].includes(z);
+    const apply = (entries: DockEntryPersist[]) => {
+      const valid = entries
+        .filter((e) => typeof e.id === 'string' && isValidZone(e.zone))
+        .map((e) => ({ id: e.id, zone: e.zone as SnapZone }));
+      dockLayoutStore.applyExternal(valid);
+    };
+    dockLayoutGet().then(apply).catch((e) => console.error('dock_layout_get failed', e));
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    listen<DockEntryPersist[]>('mudclient://dock-layout-changed', (event) => {
+      apply(event.payload);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
   // Click anywhere in the middle area focuses the input. Skip if the user
   // is in the middle of selecting text (so they can still copy from the
-  // terminal pane), if they clicked an actual interactive element (button,
-  // input, textarea), or if the click landed inside the triggers drawer.
+  // terminal pane), or if they clicked an actual interactive element.
   const handleMiddleMouseDown = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (target.closest('button, input, textarea, select, .drawer')) return;
@@ -51,33 +102,65 @@ function App() {
   };
 
   useEffect(() => {
+    // Tauri creates the main window with visible=false so the user
+    // doesn't see a default-styled white flash. Call show() once the
+    // theme + font have applied so the window appears already-painted.
+    let revealed = false;
+    const reveal = () => {
+      if (revealed) return;
+      revealed = true;
+      const win = getCurrentWindow();
+      win
+        .show()
+        .then(() => win.setFocus())
+        .catch((e) => console.error('[main] window show failed', e));
+    };
+    // Backstop: even if every promise rejects, reveal after a short
+    // timeout so the window never stays hidden indefinitely.
+    const fallback = window.setTimeout(reveal, 500);
+    const onUnmount = () => window.clearTimeout(fallback);
     // Pick up the persisted theme + font on first render. If the backend
     // isn't ready (early dev mode), fall back to whatever the OS suggests.
     getUiConfig()
-      .then((cfg) => {
+      .then(async (cfg) => {
         applyTheme(cfg.theme);
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
         if (cfg.auto_update) {
-          // Background check; failures are silent so a missing endpoint
-          // doesn't pop an error banner on every launch.
           checkForUpdate().catch(() => undefined);
         }
+        // Re-install enabled highlight presets. Triggers don't survive a
+        // restart, so each launch needs to push the bundles back into
+        // the engine.
+        const enabled = new Set(cfg.enabled_presets);
+        const toInstall = PRESETS.filter((p) => enabled.has(p.id)).flatMap(
+          presetTriggers,
+        );
+        if (toInstall.length > 0) {
+          try {
+            const installed = await presetsInstall(toInstall);
+            console.log(
+              `[highlights] startup install: ${installed} preset triggers from ${enabled.size} preset(s)`,
+            );
+          } catch (e) {
+            console.error(
+              '[highlights] startup install FAILED — open Settings → Highlights and click "reset to defaults":',
+              e,
+            );
+          }
+        }
       })
-      .catch(() => applyTheme('system'));
+      .catch(() => applyTheme('system'))
+      .finally(reveal);
+    return onUnmount;
   }, []);
 
   useEffect(() => {
-    // Mirror the font choice to CSS variables so the chrome (status bar,
-    // input row, drawers) shares the same family and size as the
-    // terminal pane. Components read the variables in styles.css.
     const root = document.documentElement;
     root.style.setProperty('--app-font-family', fontFamily);
     root.style.setProperty('--app-font-size', `${fontSize}px`);
   }, [fontFamily, fontSize]);
 
-  // Listen for app-wide setting updates emitted by SettingsDrawer so
-  // changes apply without a relaunch.
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ family: string; size: number }>).detail;
@@ -85,15 +168,11 @@ function App() {
       setFontSize(detail.size || 14);
     };
     window.addEventListener('mudclient:font-changed', handler as EventListener);
-    return () => window.removeEventListener('mudclient:font-changed', handler as EventListener);
+    return () =>
+      window.removeEventListener('mudclient:font-changed', handler as EventListener);
   }, []);
 
   useEffect(() => {
-    // Tauri's listener attach is async, but React StrictMode in dev runs
-    // the effect cleanup before the promise resolves. If we just stash
-    // unsub when it lands, the first listener leaks and the second mount
-    // adds another, so disconnect events fire twice. Track a cancelled
-    // flag so a late-arriving handle gets unlistened immediately.
     let unsub: (() => void) | undefined;
     let cancelled = false;
     onState((payload: StatePayload) => {
@@ -123,10 +202,15 @@ function App() {
     }
   }, [sidePanelOpen]);
 
-
   const handleError = (message: string) => {
     setStatus({ kind: 'error', message });
     termRef.current?.write(`\r\n\x1b[31m[${message}]\x1b[0m\r\n`);
+  };
+
+  const openSettingsWindow = () => {
+    invoke('open_settings_window').catch((e) => {
+      handleError(`failed to open settings window: ${String(e)}`);
+    });
   };
 
   return (
@@ -134,14 +218,9 @@ function App() {
       <Connect
         status={status}
         onError={handleError}
-        onToggleTriggers={() => setTriggersOpen((v) => !v)}
-        triggersOpen={triggersOpen}
         onToggleSidePanel={() => setSidePanelOpen((v) => !v)}
         sidePanelOpen={sidePanelOpen}
-        onToggleSettings={() => setSettingsOpen((v) => !v)}
-        settingsOpen={settingsOpen}
-        onToggleSearch={() => setSearchOpen((v) => !v)}
-        searchOpen={searchOpen}
+        onOpenSettings={openSettingsWindow}
       />
       <div className="middle" onMouseUp={handleMiddleMouseDown}>
         <div className="terminal-column">
@@ -153,67 +232,18 @@ function App() {
             }}
           />
         </div>
-        {searchOpen ? (
+        {sidePanelOpen && (
           <Resizable
-            storageKey="mudclient.layout.searchWidth"
-            defaultWidth={420}
-            minWidth={280}
-            maxWidth={900}
-            handleLabel="resize search panel"
+            storageKey="mudclient.layout.sidePanelWidth"
+            defaultWidth={320}
+            minWidth={220}
+            maxWidth={1400}
+            handleLabel="resize side panel"
           >
-            <SearchView onError={handleError} />
-          </Resizable>
-        ) : (
-          sidePanelOpen && (
-            <Resizable
-              storageKey="mudclient.layout.sidePanelWidth"
-              defaultWidth={320}
-              minWidth={220}
-              /* Big enough to grow the map panel, while the Resizable
-                 wrapper still caps at viewport - 75-char terminal
-                 reserve so the MUD output stays readable. */
-              maxWidth={1400}
-              handleLabel="resize side panel"
-            >
-              <SidePanel />
-            </Resizable>
-          )
-        )}
-        {triggersOpen && (
-          <Resizable
-            storageKey="mudclient.layout.triggersWidth"
-            defaultWidth={560}
-            minWidth={320}
-            maxWidth={1100}
-            handleLabel="resize triggers drawer"
-          >
-            <TriggersDrawer
-              open={triggersOpen}
-              onClose={() => setTriggersOpen(false)}
-              onError={handleError}
-            />
-          </Resizable>
-        )}
-        {settingsOpen && (
-          <Resizable
-            storageKey="mudclient.layout.settingsWidth"
-            defaultWidth={560}
-            minWidth={320}
-            maxWidth={1100}
-            handleLabel="resize settings drawer"
-          >
-            <SettingsDrawer
-              open={settingsOpen}
-              onClose={() => setSettingsOpen(false)}
-              onError={handleError}
-            />
+            <SidePanel />
           </Resizable>
         )}
       </div>
-      {/* Bottom rail. flex: 0 0 auto in the .app flex column, so the
-          terminal area above (.middle, flex: 1 1 0) takes whatever
-          space remains and the rail anchors to the bottom of the
-          viewport without any positioning trickery. */}
       <div className="bottom-rail" aria-label="bottom rail">
         <Input
           ref={inputRef}

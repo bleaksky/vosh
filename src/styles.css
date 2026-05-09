@@ -242,10 +242,17 @@ body,
 .drawer {
   flex: 0 0 min(560px, 50vw);
   min-width: 0;
+  /* min-height: 0 lets the drawer shrink inside its flex parent so
+     overflow-y: auto can take effect when content is taller than the
+     viewport. Without it the drawer forces its content height onto
+     the parent and clips at the bottom. */
+  min-height: 0;
+  height: 100%;
   background: #090e13;
   border-left: 1px solid #393b44;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .drawer-header {
@@ -255,6 +262,11 @@ body,
   padding: 0.75rem 1rem;
   border-bottom: 1px solid #393b44;
   background: #0d0c0c;
+  /* Stick to the top of the scrollable drawer so the close button
+     stays reachable while the user scrolls long content. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .drawer-header h2 {
@@ -1251,12 +1263,14 @@ body,
 .pill-magenta[aria-pressed='true'] { color: #938aa9; }
 .pill-green[aria-pressed='true'] { color: #87a987; }
 .pill-red[aria-pressed='true'] { color: #e46876; }
+.pill-orange[aria-pressed='true'] { color: #d99a6c; }
 
 .pill-cyan:hover { color: #7aa89f; }
 .pill-yellow:hover { color: #e6c384; }
 .pill-magenta:hover { color: #938aa9; }
 .pill-green:hover { color: #87a987; }
 .pill-red:hover { color: #e46876; }
+.pill-orange:hover { color: #d99a6c; }
 
 /* Map mode/style toggles inherit the same pill look. */
 .map-mode-toggle {
@@ -1305,13 +1319,18 @@ body,
 }
 
 .moon-glyph {
-  color: #5a5a52;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
+  /* Color emoji ignore CSS `color`; dim with grayscale + opacity so
+     the inactive moons fade into the bar like the old monochrome
+     glyphs did. */
+  filter: grayscale(0.85) brightness(0.85);
+  opacity: 0.55;
 }
 
 .moon-glyph.moon-active {
-  color: #e6c384;
+  filter: none;
+  opacity: 1;
   text-shadow: 0 0 4px rgba(230, 195, 132, 0.45);
 }
 
@@ -1618,4 +1637,376 @@ body,
   color: #a4a7a4;
   font-size: 11.5px;
   line-height: 1.4;
+}
+
+/* Highlights drawer preset list. Each preset is a row with a
+   checkbox toggle, name, count badge, and a one-line description. */
+.preset-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.preset-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.preset-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.preset-toggle input[type='checkbox'] {
+  margin: 0;
+}
+
+.preset-name {
+  flex: 1;
+  color: #c5c9c7;
+}
+
+.preset-count {
+  color: #73726a;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.preset-desc {
+  margin: 0 0 0 1.6rem;
+  color: #a4a7a4;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.drawer-status-inline {
+  padding: 0;
+  color: #c5c9c7;
+  font-size: 12px;
+  align-self: center;
+}
+
+/* Settings window: full-window layout for the standalone settings
+   webview. The Tauri backend opens a separate window pointed at
+   index.html?view=settings; main.tsx branches on that and mounts
+   SettingsApp here instead of the main App. */
+.settings-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background: #090e13;
+  color: #c5c9c7;
+  overflow: hidden;
+}
+
+.settings-window-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem 0.4rem 0.75rem;
+  background: #0d0c0c;
+  border-bottom: 1px solid #393b44;
+}
+
+.settings-window-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.settings-error {
+  background: rgba(228, 104, 118, 0.16);
+  color: #e46876;
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid #393b44;
+  font-size: 12px;
+}
+
+.settings-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 0.25rem;
+  overflow-x: auto;
+}
+
+.settings-tab {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  color: #a4a7a4;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-tab:hover {
+  background: #14141a;
+  color: #c5c9c7;
+}
+
+.settings-tab.is-active {
+  background: #1d1d24;
+  color: #e6c384;
+}
+
+.settings-close {
+  background: transparent;
+  border: 0;
+  color: #c5c9c7;
+  font-size: 1.4rem;
+  cursor: pointer;
+  padding: 0 0.4rem;
+}
+
+.settings-tabpanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.settings-layout-placeholder {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Layout Editor — lives inside the Settings window's Layout tab. */
+.layout-editor-embedded {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.layout-editor-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.layout-editor-actions button {
+  background: #14141a;
+  color: #c5c9c7;
+  border: 1px solid #393b44;
+  border-radius: 4px;
+  padding: 0.35rem 0.85rem;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.layout-editor-actions button:hover:not(:disabled) {
+  background: #1d1d24;
+}
+
+.layout-editor-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.layout-editor-actions .layout-editor-save {
+  background: #1d3a1d;
+  border-color: #87a987;
+  color: #87a987;
+}
+
+.layout-editor-hint {
+  margin: 0;
+  color: #a4a7a4;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.layout-editor-body {
+  display: flex;
+  gap: 1rem;
+  flex: 1 1 auto;
+  min-height: 320px;
+}
+
+.layout-editor-panels {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid #393b44;
+  border-radius: 4px;
+  padding: 0.75rem;
+  background: #0d0c0c;
+}
+
+.layout-editor-panels h3 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a4a7a4;
+}
+
+.layout-editor-panels ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.layout-panel-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.15rem;
+  width: 100%;
+  background: #14141a;
+  color: #c5c9c7;
+  border: 1px solid #393b44;
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  text-align: left;
+  cursor: grab;
+  user-select: none;
+}
+
+.layout-panel-card:hover {
+  background: #1d1d24;
+  border-color: #5a5a52;
+}
+
+.layout-panel-card:active {
+  cursor: grabbing;
+}
+
+.layout-panel-card.is-dragging {
+  opacity: 0.4;
+}
+
+.layout-panel-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.layout-panel-zone {
+  font-size: 11px;
+  color: #73726a;
+  text-transform: lowercase;
+}
+
+.layout-editor-pickedhint {
+  margin: 0.4rem 0 0;
+  color: #7fb4ca;
+  font-size: 11.5px;
+}
+
+.layout-editor-grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-rows: 1fr 1.4fr 1fr;
+  grid-template-columns: 1fr 2fr 1fr;
+  gap: 0.4rem;
+  min-height: 0;
+}
+
+.layout-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: #0d0c0c;
+  border: 1px dashed #393b44;
+  border-radius: 4px;
+  color: #73726a;
+  font: inherit;
+  font-size: 12px;
+  padding: 0.5rem;
+  cursor: pointer;
+  transition:
+    border-color 100ms ease,
+    background 100ms ease,
+    color 100ms ease;
+}
+
+.layout-zone.is-target {
+  border-style: solid;
+  border-color: #5a5a52;
+  color: #c5c9c7;
+}
+
+.layout-zone.is-target.is-hover {
+  border-color: #7fb4ca;
+  background: #14202a;
+  color: #7fb4ca;
+}
+
+.layout-zone.is-occupied {
+  border-style: solid;
+  border-color: #87a987;
+  color: #87a987;
+  background: #0f1614;
+}
+
+.layout-zone-occupant {
+  background: #14141a;
+  color: #c5c9c7;
+  border: 1px solid #393b44;
+  border-radius: 3px;
+  padding: 0.25rem 0.5rem;
+  font-size: 11px;
+  cursor: grab;
+  user-select: none;
+}
+
+.layout-zone-occupant:hover {
+  background: #1d1d24;
+}
+
+.layout-zone-occupant.is-dragging {
+  opacity: 0.4;
+}
+
+.layout-zone-sidebar {
+  border-style: solid;
+  border-color: #393b44;
+}
+
+.layout-zone-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.layout-zone-occupants {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 11px;
+  text-align: center;
+}
+
+.layout-editor-status {
+  font-size: 12px;
+  color: #a4a7a4;
+  min-height: 1.2em;
 }

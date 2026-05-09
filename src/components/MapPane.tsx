@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MappingMapView } from './MappingMapView';
 import { ServerMapView } from './ServerMapView';
+import { useDockTarget } from '../lib/docking';
 
 type Mode = 'mapping' | 'server';
 
@@ -17,6 +18,8 @@ function loadMode(): Mode {
 
 export function MapPane() {
   const [mode, setMode] = useState<Mode>(loadMode);
+  const dockRef = useRef<HTMLElement>(null);
+  useDockTarget(dockRef, 'map-pane');
 
   useEffect(() => {
     try {
@@ -27,7 +30,7 @@ export function MapPane() {
   }, [mode]);
 
   return (
-    <section className="map-pane" aria-label="map">
+    <section ref={dockRef} className="map-pane" aria-label="map">
       <header className="pane-header">
         <span>map</span>
         <div className="map-mode-toggle">

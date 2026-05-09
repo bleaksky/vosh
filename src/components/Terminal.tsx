@@ -5,7 +5,9 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 
 import '@xterm/xterm/css/xterm.css';
-import { loadScrollback, onOutput } from '../lib/session';
+import { loadScrollback, onGmcp, onOutput } from '../lib/session';
+import { decorateCombat } from '../lib/combat';
+import { combatOverlayStore } from '../lib/combatOverlay';
 
 export interface TerminalHandle {
   write: (data: Uint8Array | string) => void;
@@ -155,6 +157,7 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
     rafId = requestAnimationFrame(pollLoop);
 
     let unsubOutput: (() => void) | undefined;
+    let unsubGmcp: (() => void) | undefined;
     // Replay persisted scrollback before any live output lands so the
     // user opens the app to the tail of their last session.
     loadScrollback()
@@ -167,8 +170,32 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
       .catch(() => {
         // No scrollback yet, or backend not ready; ignore.
       });
-    onOutput((bytes) => term.write(bytes)).then((unlisten) => {
+    onOutput((bytes) => {
+      const opts = combatOverlayStore.effective();
+      term.write(decorateCombat(bytes, opts));
+    }).then((unlisten) => {
       unsubOutput = unlisten;
+    });
+
+    // Track player level so the auto-hide threshold can suppress
+    // labels for veterans. Per the Aabahran GMCP wiki, level only
+    // appears in Char.Status (name/level/race/class), not Char.Vitals.
+    onGmcp((payload) => {
+      if (
+        payload.package === 'Char.Status' &&
+        payload.data &&
+        typeof payload.data === 'object'
+      ) {
+        const data = payload.data as Record<string, unknown>;
+        const raw = data.level;
+        const lvl =
+          typeof raw === 'number' ? raw : raw !== undefined ? Number(raw) : NaN;
+        if (Number.isFinite(lvl)) {
+          combatOverlayStore.setLevel(lvl);
+        }
+      }
+    }).then((unlisten) => {
+      unsubGmcp = unlisten;
     });
 
     const handle: TerminalHandle = {
@@ -184,6 +211,7 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
       observer.disconnect();
       window.removeEventListener('resize', handleWindowResize);
       unsubOutput?.();
+      unsubGmcp?.();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;

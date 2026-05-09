@@ -5,9 +5,11 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onError: (message: string) => void;
+  /** When true, render only the body so SettingsHub can embed it. */
+  chromeless?: boolean;
 }
 
-export function TriggersDrawer({ open, onClose, onError }: Props) {
+export function TriggersDrawer({ open, onClose, onError, chromeless }: Props) {
   const [json, setJson] = useState('[]');
   const [status, setStatus] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -36,11 +38,22 @@ export function TriggersDrawer({ open, onClose, onError }: Props) {
     };
   }, [open, onError]);
 
-  if (!open) return null;
+  if (!open && !chromeless) return null;
 
   const handleApply = async () => {
+    const trimmed = json.trim();
+    if (!trimmed) {
+      // Empty textarea would hit Rust's import_json with "" and yield
+      // the cryptic "invalid json: EOF" toast. Catch it here with a
+      // hint instead. To genuinely wipe all triggers, type `[]` (an
+      // empty JSON array).
+      setStatus(
+        'apply error: textarea is empty. Use [] to wipe all triggers.',
+      );
+      return;
+    }
     try {
-      const count = await importTriggers(json);
+      const count = await importTriggers(trimmed);
       setStatus(`applied ${count} trigger(s)`);
     } catch (e) {
       setStatus(`apply error ${String(e)}`);
@@ -91,14 +104,8 @@ export function TriggersDrawer({ open, onClose, onError }: Props) {
     reader.readAsText(file);
   };
 
-  return (
-    <aside className="drawer" role="dialog" aria-label="trigger editor">
-      <header className="drawer-header">
-        <h2>Triggers</h2>
-        <button type="button" onClick={onClose} aria-label="close triggers">
-          ×
-        </button>
-      </header>
+  const body = (
+    <>
       <textarea
         className="drawer-textarea"
         value={json}
@@ -126,6 +133,19 @@ export function TriggersDrawer({ open, onClose, onError }: Props) {
         </label>
       </div>
       <div className="drawer-status">{status}</div>
+    </>
+  );
+
+  if (chromeless) return body;
+  return (
+    <aside className="drawer" role="dialog" aria-label="trigger editor">
+      <header className="drawer-header">
+        <h2>Triggers</h2>
+        <button type="button" onClick={onClose} aria-label="close triggers">
+          ×
+        </button>
+      </header>
+      {body}
     </aside>
   );
 }

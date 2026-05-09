@@ -78,6 +78,24 @@ pub(crate) struct UiConfig {
     /// red-bordered pill so the player notices the gap at a glance.
     #[serde(default)]
     pub tracked_affects: Vec<String>,
+    /// Preset ids enabled in the Highlights drawer. On startup the
+    /// frontend re-installs these presets' bundled triggers so users
+    /// don't have to re-toggle each launch.
+    #[serde(default)]
+    pub enabled_presets: Vec<String>,
+    /// Persistent dock layout for the side-panel sections. Authored
+    /// in the standalone Layout Editor window; the main window reads
+    /// this at startup and listens for `mudclient://dock-layout-changed`
+    /// to pick up live edits without a relaunch.
+    #[serde(default)]
+    pub dock_layout: Vec<DockEntryPersist>,
+}
+
+/// On-disk representation of a single docked bar.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct DockEntryPersist {
+    pub id: String,
+    pub zone: String,
 }
 
 impl Default for UiConfig {
@@ -88,6 +106,8 @@ impl Default for UiConfig {
             font_family: default_font_family(),
             font_size: default_font_size(),
             tracked_affects: Vec::new(),
+            enabled_presets: Vec::new(),
+            dock_layout: Vec::new(),
         }
     }
 }
@@ -199,6 +219,8 @@ impl ProfileConfig {
             font_family: profile.ui.font_family.clone(),
             font_size: profile.ui.font_size,
             tracked_affects: profile.ui.tracked_affects.clone(),
+            enabled_presets: profile.ui.enabled_presets.clone(),
+            dock_layout: profile.ui.dock_layout.clone(),
         };
 
         let plugins = PluginsPersist {
@@ -286,6 +308,8 @@ impl ProfileConfig {
             font_family: self.ui.font_family.clone(),
             font_size: self.ui.font_size,
             tracked_affects: self.ui.tracked_affects.clone(),
+            enabled_presets: self.ui.enabled_presets.clone(),
+            dock_layout: self.ui.dock_layout.clone(),
         };
 
         // Plugin enabled-set is persisted; the actual load happens in the
@@ -342,6 +366,7 @@ mod tests {
                     ..Default::default()
                 },
             },
+            preset: None,
         });
         let text = config.to_toml().unwrap();
         let parsed = ProfileConfig::from_toml(&text).unwrap();
@@ -376,6 +401,7 @@ mod tests {
             priority: 0,
             enabled: true,
             action: TriggerAction::Gag,
+            preset: None,
         });
         let mut profile = Profile::default();
         let warnings = config.apply_to(&mut profile);

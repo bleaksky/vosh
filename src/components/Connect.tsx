@@ -4,14 +4,12 @@ import { connectSession, disconnectSession } from '../lib/session';
 interface Props {
   status: ConnectionStatus;
   onError: (message: string) => void;
-  onToggleTriggers?: () => void;
-  triggersOpen?: boolean;
   onToggleSidePanel?: () => void;
   sidePanelOpen?: boolean;
-  onToggleSettings?: () => void;
-  settingsOpen?: boolean;
-  onToggleSearch?: () => void;
-  searchOpen?: boolean;
+  /** Opens the standalone settings window. The button stays a normal
+   *  click action (no aria-pressed state) since the target is a
+   *  separate window, not an in-window drawer. */
+  onOpenSettings?: () => void;
 }
 
 export type ConnectionStatus =
@@ -26,14 +24,9 @@ const DEFAULT_PORT = 1848;
 export function Connect({
   status,
   onError,
-  onToggleTriggers,
-  triggersOpen,
   onToggleSidePanel,
   sidePanelOpen,
-  onToggleSettings,
-  settingsOpen,
-  onToggleSearch,
-  searchOpen,
+  onOpenSettings,
 }: Props) {
   const [host, setHost] = useState(DEFAULT_HOST);
   const [port, setPort] = useState(DEFAULT_PORT);
@@ -106,26 +99,12 @@ export function Connect({
               pressed: sidePanelOpen ?? false,
               onClick: onToggleSidePanel,
             },
-            onToggleTriggers && {
-              key: 'triggers',
-              label: 'triggers',
-              tone: 'yellow',
-              pressed: triggersOpen ?? false,
-              onClick: onToggleTriggers,
-            },
-            onToggleSettings && {
-              key: 'profile',
-              label: 'profile',
+            onOpenSettings && {
+              key: 'settings',
+              label: 'settings',
               tone: 'magenta',
-              pressed: settingsOpen ?? false,
-              onClick: onToggleSettings,
-            },
-            onToggleSearch && {
-              key: 'search',
-              label: 'search',
-              tone: 'green',
-              pressed: searchOpen ?? false,
-              onClick: onToggleSearch,
+              pressed: false,
+              onClick: onOpenSettings,
             },
           ].filter(Boolean) as {
             key: string;

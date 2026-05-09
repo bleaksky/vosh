@@ -46,11 +46,33 @@ export interface TriggerRecord {
     | { kind: 'replace'; template: string }
     | { kind: 'send'; template: string }
     | { kind: 'route'; pane: string };
+  /** Set when this trigger was installed by the Highlights preset
+   *  library. Toggling a preset off removes everything tagged with
+   *  the preset's id; user-authored triggers leave this empty. */
+  preset?: string | null;
 }
 
+export type NamedColor =
+  | 'black'
+  | 'red'
+  | 'green'
+  | 'yellow'
+  | 'blue'
+  | 'magenta'
+  | 'cyan'
+  | 'white'
+  | 'bright_black'
+  | 'bright_red'
+  | 'bright_green'
+  | 'bright_yellow'
+  | 'bright_blue'
+  | 'bright_magenta'
+  | 'bright_cyan'
+  | 'bright_white';
+
 export interface HighlightStyle {
-  fg?: string;
-  bg?: string;
+  fg?: NamedColor;
+  bg?: NamedColor;
   bold?: boolean;
   underline?: boolean;
   inverse?: boolean;
@@ -66,6 +88,14 @@ export async function importTriggers(json: string): Promise<number> {
 
 export async function listTriggers(): Promise<TriggerRecord[]> {
   return invoke('triggers_list');
+}
+
+export async function presetsInstall(triggers: TriggerRecord[]): Promise<number> {
+  return invoke('presets_install', { triggers });
+}
+
+export async function presetsRemove(presetId: string): Promise<number> {
+  return invoke('presets_remove', { presetId });
 }
 
 export interface GmcpPayload {
@@ -248,6 +278,7 @@ export interface UiConfig {
   font_family: string;
   font_size: number;
   tracked_affects: string[];
+  enabled_presets: string[];
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -257,6 +288,7 @@ export async function getUiConfig(): Promise<UiConfig> {
     font_family: string;
     font_size: number;
     tracked_affects: string[];
+    enabled_presets: string[];
   }>('ui_get_config');
   const theme: ThemeChoice =
     cfg.theme === 'high-contrast' || cfg.theme === 'system' ? cfg.theme : 'default';
@@ -266,6 +298,7 @@ export async function getUiConfig(): Promise<UiConfig> {
     font_family: cfg.font_family,
     font_size: cfg.font_size,
     tracked_affects: Array.isArray(cfg.tracked_affects) ? cfg.tracked_affects : [],
+    enabled_presets: Array.isArray(cfg.enabled_presets) ? cfg.enabled_presets : [],
   };
 }
 
@@ -276,6 +309,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     fontFamily: config.font_family,
     fontSize: config.font_size,
     trackedAffects: config.tracked_affects,
+    enabledPresets: config.enabled_presets,
   });
 }
 
@@ -309,4 +343,17 @@ export async function setPluginEnabled(name: string, enabled: boolean): Promise<
 
 export async function reloadPlugin(name: string): Promise<void> {
   await invoke('plugins_reload', { name });
+}
+
+export interface DockEntryPersist {
+  id: string;
+  zone: string;
+}
+
+export async function dockLayoutGet(): Promise<DockEntryPersist[]> {
+  return invoke('dock_layout_get');
+}
+
+export async function dockLayoutSet(entries: DockEntryPersist[]): Promise<void> {
+  await invoke('dock_layout_set', { entries });
 }

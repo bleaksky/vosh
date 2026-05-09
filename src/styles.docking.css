@@ -1,0 +1,80 @@
+/* Docking module stylesheet — Phase 2.
+
+   Selectors here are scoped to docking-only DOM. Nothing in this file
+   styles any element that exists at rest. The DockingOverlay renders
+   the ghost into document.body only while a drag is active, so this
+   stylesheet has no visual effect when nothing is being dragged. */
+
+.docking-ghost {
+  position: fixed;
+  pointer-events: none;
+  /* Faint translucent fill, no border or shadow. The source bar gets
+     opacity 0.6 separately, so the ghost is visual feedback that
+     drag is engaged, not a duplicate of the bar's appearance. */
+  background: rgba(125, 134, 162, 0.18);
+  border-radius: 2px;
+  z-index: 1000;
+  /* Smooth motion if the cursor pauses; cheap to render. */
+  will-change: transform;
+}
+
+/* While a drag is active, force the grabbing cursor everywhere and
+   suppress text selection so dragging across the terminal or chat
+   doesn't paint a selection highlight. The class is added to <html>
+   on drag start and removed on drop / cancel / unmount, so this rule
+   has no effect at rest. !important is used because individual
+   elements (input, button, the xterm canvas) set their own cursor. */
+html.docking-dragging,
+html.docking-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+/* Snap preview. Rendered when the cursor enters a snap zone during a
+   drag. 1px solid outline only, no fill, no shadow. Color matches the
+   client's existing border color (#393b44 in styles.css line 45 and
+   throughout). 100ms fade-in on appear. Sits above the ghost so the
+   outline stays visible if the two overlap. */
+.docking-snap {
+  position: fixed;
+  pointer-events: none;
+  outline: 1px solid #393b44;
+  background: transparent;
+  z-index: 1001;
+  opacity: 0;
+  animation: docking-snap-fade-in 100ms ease-out forwards;
+}
+
+@keyframes docking-snap-fade-in {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Docked bars get their dark fill explicitly because at rest they
+   inherit it from a parent (.side-panel for the four panes, or
+   .bottom-rail for the bars that already declare their own
+   background). Once a bar is absolutely positioned, that parent
+   chain is gone and the bar's body shows the terminal through it.
+   The colour matches the parent's #090e13 so the docked bar reads
+   the same as it did in flow. The attribute is set only when the
+   bar is docked, so this rule has no effect at rest. */
+[data-docked] {
+  background: #090e13;
+}
+
+/* Docked width for the four side-panel sections is set inline by
+   the docking engine to match the side panel's current width, so
+   resizing the side panel resizes every docked side-panel section
+   together. No CSS width rule is needed here. */
+
+/* Docked map pane needs an explicit height so its canvas has room
+   to render. At rest .map-pane gets `flex: 0 0 280px` which sets
+   its height in the side-panel's flex column, but flex-basis
+   doesn't apply to position-fixed elements so the docked panel
+   collapses to header height and the canvas has no space to
+   stretch into. */
+[data-docked].map-pane {
+  height: 280px;
+}

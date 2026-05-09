@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { onGmcp, onState } from '../lib/session';
+import { useDockTarget } from '../lib/docking';
 
 interface RoomInfo {
   name?: string;
@@ -17,6 +18,8 @@ interface CharStatus {
 export function StatusPane() {
   const [room, setRoom] = useState<RoomInfo>({});
   const [char, setChar] = useState<CharStatus>({});
+  const dockRef = useRef<HTMLElement>(null);
+  useDockTarget(dockRef, 'status-pane');
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
@@ -64,7 +67,7 @@ export function StatusPane() {
   const showLevel = level !== undefined && Number.isFinite(level) && level < 50;
 
   return (
-    <section className="status-pane" aria-label="status">
+    <section ref={dockRef} className="status-pane" aria-label="status">
       <header className="pane-header">status</header>
       <div className="status-body">
         <div className="status-row">

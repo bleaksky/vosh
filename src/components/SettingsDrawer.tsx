@@ -4,22 +4,22 @@ import {
   exportProfile,
   getUiConfig,
   importProfile,
-  listPlugins,
-  reloadPlugin,
-  setPluginEnabled,
   setUiConfig,
-  type PluginInfo,
   type ThemeChoice,
 } from '../lib/session';
 import { applyTheme } from '../lib/theme';
+import { dockLayoutStore } from '../lib/docking';
 
 interface Props {
   open: boolean;
   onClose: () => void;
   onError: (message: string) => void;
+  /** When true, render only the body (no <aside> wrapper or header)
+   *  so the drawer can be embedded inside SettingsHub tabs. */
+  chromeless?: boolean;
 }
 
-export function SettingsDrawer({ open, onClose, onError }: Props) {
+export function SettingsDrawer({ open, onClose, onError, chromeless }: Props) {
   const [toml, setToml] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,7 +28,6 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
   const [fontFamily, setFontFamily] = useState('');
   const [fontSize, setFontSize] = useState(14);
   const [trackedAffectsText, setTrackedAffectsText] = useState('');
-  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -60,45 +59,12 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
         setTrackedAffectsText((cfg.tracked_affects ?? []).join('\n'));
       })
       .catch(() => {});
-    listPlugins()
-      .then((list) => {
-        if (cancelled) return;
-        setPlugins(list);
-      })
-      .catch((e) => onError(String(e)));
     return () => {
       cancelled = true;
     };
   }, [open, onError]);
 
-  const refreshPlugins = async () => {
-    try {
-      setPlugins(await listPlugins());
-    } catch (e) {
-      onError(String(e));
-    }
-  };
-
-  const handlePluginToggle = async (name: string, next: boolean) => {
-    try {
-      await setPluginEnabled(name, next);
-      await refreshPlugins();
-      setStatus(next ? `enabled ${name}` : `disabled ${name} (effective next launch)`);
-    } catch (e) {
-      setStatus(`plugin toggle failed ${String(e)}`);
-    }
-  };
-
-  const handlePluginReload = async (name: string) => {
-    try {
-      await reloadPlugin(name);
-      setStatus(`reloaded ${name}`);
-    } catch (e) {
-      setStatus(`reload failed ${String(e)}`);
-    }
-  };
-
-  if (!open) return null;
+  if (!open && !chromeless) return null;
 
   const currentTrackedAffects = (): string[] =>
     trackedAffectsText
@@ -112,13 +78,16 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
     font_family: string;
     font_size: number;
     tracked_affects: string[];
+    enabled_presets: string[];
   }>) => {
+    const current = await getUiConfig();
     await setUiConfig({
       theme: overrides.theme ?? theme,
       auto_update: overrides.auto_update ?? autoUpdate,
       font_family: overrides.font_family ?? fontFamily,
       font_size: overrides.font_size ?? fontSize,
       tracked_affects: overrides.tracked_affects ?? currentTrackedAffects(),
+      enabled_presets: overrides.enabled_presets ?? current.enabled_presets,
     });
   };
 
@@ -198,6 +167,11 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
     }
   };
 
+  const handleResetLayout = () => {
+    dockLayoutStore.reset();
+    setStatus('dock layout reset');
+  };
+
   const handleApply = async () => {
     try {
       const warnings = await importProfile(toml);
@@ -255,14 +229,8 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
     reader.readAsText(file);
   };
 
-  return (
-    <aside className="drawer" role="dialog" aria-label="profile editor">
-      <header className="drawer-header">
-        <h2>Profile</h2>
-        <button type="button" onClick={onClose} aria-label="close settings">
-          ×
-        </button>
-      </header>
+  const body = (
+    <>
       <fieldset className="drawer-fieldset">
         <legend>Appearance</legend>
         <label>
@@ -316,6 +284,16 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
         </button>
       </fieldset>
       <fieldset className="drawer-fieldset">
+        <legend>Layout</legend>
+        <p className="drawer-hint">
+          Return all docked panels to their default positions in the
+          side panel and bottom rail.
+        </p>
+        <button type="button" onClick={handleResetLayout}>
+          reset dock layout
+        </button>
+      </fieldset>
+      <fieldset className="drawer-fieldset">
         <legend>Tracked Affects</legend>
         <p className="drawer-hint">
           One affect name per line. Pills appear in the status bar with the
@@ -331,51 +309,6 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
           onBlur={() => void handleTrackedAffectsBlur()}
           placeholder={'haste\nstoneskin\nblade barrier\nsanctuary'}
         />
-      </fieldset>
-      <fieldset className="drawer-fieldset">
-        <legend>Plugins</legend>
-        {plugins.length === 0 ? (
-          <p className="drawer-empty">
-            no plugins discovered. Drop a plugin directory into{' '}
-            <code>&lt;app_data_dir&gt;/plugins/</code> and click refresh.
-          </p>
-        ) : (
-          <ul className="plugin-list">
-            {plugins.map((plugin) => (
-              <li key={plugin.name} className="plugin-row">
-                <div className="plugin-meta">
-                  <strong>{plugin.name}</strong>
-                  {plugin.version && <span className="plugin-version">{plugin.version}</span>}
-                  {plugin.description && (
-                    <div className="plugin-description">{plugin.description}</div>
-                  )}
-                </div>
-                <div className="plugin-actions">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={plugin.enabled}
-                      onChange={(e) =>
-                        void handlePluginToggle(plugin.name, e.target.checked)
-                      }
-                    />
-                    enabled
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => void handlePluginReload(plugin.name)}
-                    disabled={!plugin.enabled}
-                  >
-                    reload
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        <button type="button" onClick={() => void refreshPlugins()}>
-          refresh plugin list
-        </button>
       </fieldset>
       <textarea
         className="drawer-textarea"
@@ -410,6 +343,19 @@ export function SettingsDrawer({ open, onClose, onError }: Props) {
         </label>
       </div>
       <div className="drawer-status">{status}</div>
+    </>
+  );
+
+  if (chromeless) return body;
+  return (
+    <aside className="drawer" role="dialog" aria-label="profile editor">
+      <header className="drawer-header">
+        <h2>Profile</h2>
+        <button type="button" onClick={onClose} aria-label="close settings">
+          ×
+        </button>
+      </header>
+      {body}
     </aside>
   );
 }

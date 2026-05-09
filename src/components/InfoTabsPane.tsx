@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { onGmcp, onRouted, onState } from '../lib/session';
+import { useDockTarget } from '../lib/docking';
 
 type TabId = 'chat' | 'gold' | 'cabal';
 
@@ -53,6 +54,8 @@ export function InfoTabsPane() {
   const [lines, setLines] = useState<ChatLine[]>([]);
   const [worth, setWorth] = useState<Worth>({});
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const dockRef = useRef<HTMLElement>(null);
+  useDockTarget(dockRef, 'info-tabs-pane');
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
@@ -111,7 +114,7 @@ export function InfoTabsPane() {
   }, [lines, tab]);
 
   return (
-    <section className="info-tabs-pane" aria-label="info tabs">
+    <section ref={dockRef} className="info-tabs-pane" aria-label="info tabs">
       <header className="info-tabs-header" role="tablist">
         <button
           type="button"

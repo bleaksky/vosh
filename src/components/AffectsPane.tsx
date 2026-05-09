@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   colorForDuration,
   formatDuration,
@@ -8,10 +8,13 @@ import {
   type GroupedAffect,
 } from '../lib/affects';
 import { onGmcp, onState } from '../lib/session';
+import { useDockTarget } from '../lib/docking';
 
 export function AffectsPane() {
   const [groups, setGroups] = useState<GroupedAffect[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const dockRef = useRef<HTMLElement>(null);
+  useDockTarget(dockRef, 'affects-pane');
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
@@ -52,7 +55,7 @@ export function AffectsPane() {
   };
 
   return (
-    <section className="affects-pane" aria-label="affects">
+    <section ref={dockRef} className="affects-pane" aria-label="affects">
       <header className="pane-header">affects</header>
       <div className="affects-body">
         {groups.length === 0 ? (

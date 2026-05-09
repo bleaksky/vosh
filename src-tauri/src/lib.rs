@@ -22,11 +22,12 @@ mod tick;
 mod tintin_import;
 
 use commands::{
-    app_version, logs_export, logs_list_sessions, logs_search, map_area_snapshot, map_set_avoid,
-    map_set_note, map_walk_to, profile_export, profile_import, scrollback_load, session_connect,
-    session_disconnect, session_send, session_send_input, triggers_export, triggers_import,
-    plugins_list, plugins_reload, plugins_set_enabled, triggers_list, ui_get_config,
-    ui_set_config, updater_check, AppState, SharedState,
+    app_version, dock_layout_get, dock_layout_set, logs_export, logs_list_sessions, logs_search,
+    map_area_snapshot, map_set_avoid, map_set_note, map_walk_to, open_settings_window,
+    presets_install, presets_remove, profile_export, profile_import, scrollback_load,
+    session_connect, session_disconnect, session_send, session_send_input, triggers_export,
+    triggers_import, plugins_list, plugins_reload, plugins_set_enabled, triggers_list,
+    ui_get_config, ui_set_config, updater_check, AppState, SharedState,
 };
 use map_state::MapState;
 use profile_config::ProfileConfig;
@@ -149,6 +150,8 @@ pub fn run() {
             triggers_list,
             triggers_export,
             triggers_import,
+            presets_install,
+            presets_remove,
             map_area_snapshot,
             map_walk_to,
             map_set_note,
@@ -165,6 +168,9 @@ pub fn run() {
             plugins_list,
             plugins_set_enabled,
             plugins_reload,
+            open_settings_window,
+            dock_layout_get,
+            dock_layout_set,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -159,6 +159,7 @@ mod tests {
                     ..Default::default()
                 },
             },
+            preset: None,
         }
     }
 
@@ -195,6 +196,7 @@ mod tests {
             priority: 0,
             enabled: true,
             action: TriggerAction::Gag,
+            preset: None,
         }]);
         let r = process(&s, b"You feel a tingle.");
         assert!(r.display.is_none());
@@ -210,6 +212,7 @@ mod tests {
             action: TriggerAction::Replace {
                 template: "wolf".into(),
             },
+            preset: None,
         }]);
         let r = process(&s, b"You see a goblin.");
         assert_eq!(r.display.as_deref(), Some("You see a wolf."));
@@ -225,6 +228,7 @@ mod tests {
             action: TriggerAction::Replace {
                 template: "$who calmly says".into(),
             },
+            preset: None,
         }]);
         let r = process(&s, b"Bob yells");
         assert_eq!(r.display.as_deref(), Some("Bob calmly says"));
@@ -240,6 +244,7 @@ mod tests {
             action: TriggerAction::Send {
                 template: "loot $1".into(),
             },
+            preset: None,
         }]);
         let r = process(&s, b"The goblin is DEAD!");
         assert_eq!(r.sends, vec!["loot goblin".to_string()]);
@@ -255,6 +260,7 @@ mod tests {
             action: TriggerAction::Route {
                 pane: "chat".into(),
             },
+            preset: None,
         }]);
         let r = process(&s, b"Bob tells you 'hi'");
         assert_eq!(r.routes, vec!["chat".to_string()]);
@@ -271,6 +277,7 @@ mod tests {
             action: TriggerAction::Replace {
                 template: "L".into(),
             },
+            preset: None,
         })
         .unwrap();
         s.set(Trigger {
@@ -281,6 +288,7 @@ mod tests {
             action: TriggerAction::Replace {
                 template: "H".into(),
             },
+            preset: None,
         })
         .unwrap();
         // High runs first on plain text "x". After high replaces to "H",
@@ -322,6 +330,7 @@ mod tests {
             priority: 0,
             enabled: true,
             action: TriggerAction::Gag,
+            preset: None,
         };
         assert!(s.set(bad).is_err());
     }
@@ -337,6 +346,7 @@ mod tests {
             priority: 50,
             enabled: true,
             action: TriggerAction::Gag,
+            preset: None,
         })
         .unwrap();
         let json = s.export_json().unwrap();
