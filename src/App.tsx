@@ -14,8 +14,10 @@ import {
   checkForUpdate,
   dockLayoutGet,
   getUiConfig,
+  listTriggers,
   onState,
   presetsInstall,
+  presetsRemove,
   type DockEntryPersist,
   type StatePayload,
 } from './lib/session';
@@ -130,9 +132,39 @@ function App() {
         if (cfg.auto_update) {
           checkForUpdate().catch(() => undefined);
         }
-        // Re-install enabled highlight presets. Triggers don't survive a
-        // restart, so each launch needs to push the bundles back into
-        // the engine.
+        // Sweep orphan preset triggers — anything tagged with a
+        // preset id that no longer exists in code (because the preset
+        // was renamed or removed in a newer build). Triggers persist
+        // in profile.toml across launches, so without this they'd
+        // linger forever even after we deleted the preset definition
+        // they came from.
+        try {
+          const validPresetIds = new Set(PRESETS.map((p) => p.id));
+          const allTriggers = await listTriggers();
+          const orphanIds = new Set<string>();
+          for (const t of allTriggers) {
+            if (t.preset && !validPresetIds.has(t.preset)) {
+              orphanIds.add(t.preset);
+            }
+          }
+          let removed = 0;
+          for (const id of orphanIds) {
+            removed += await presetsRemove(id);
+          }
+          if (removed > 0) {
+            console.log(
+              `[highlights] swept ${removed} orphan trigger(s) from retired preset(s):`,
+              Array.from(orphanIds),
+            );
+          }
+        } catch (e) {
+          console.error('[highlights] orphan sweep failed:', e);
+        }
+
+        // Re-install enabled presets so any pattern/template changes
+        // in the current build overwrite older versions stored in
+        // profile.toml. Triggers persist across launches, but their
+        // patterns/actions only refresh when the preset is re-pushed.
         const enabled = new Set(cfg.enabled_presets);
         const toInstall = PRESETS.filter((p) => enabled.has(p.id)).flatMap(
           presetTriggers,
