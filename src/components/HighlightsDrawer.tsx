@@ -28,8 +28,6 @@ const CATEGORY_ORDER: PresetCategory[] = [
   'healing',
   'defensive',
   'buff_falls_self',
-  'debuff_falls',
-  'recall',
   'events',
   'buff_falls_others',
 ];

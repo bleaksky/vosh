@@ -46,14 +46,26 @@ for (const tier of DAMAGE_TIERS) {
   for (const v of tier.verbs) VERB_TO_TIER.set(v, tier);
 }
 
-// All verbs combined into one regex. \b word boundaries keep us from
-// matching mid-word; case-sensitivity matters because verb casing
-// varies across Aabahran's tiers (lowercase for low-tier hits,
-// UPPERCASE for the heavy ones).
-const DAMAGE_VERB_RE = new RegExp(
-  `\\b(${DAMAGE_TIERS.flatMap((t) => t.verbs).join('|')})\\b`,
+// All verbs combined. We only annotate verbs the SERVER wraps in ANSI
+// SGR codes — that's how Aabahran marks combat verbs (your TinTin
+// `highlights.tin` lines 142-156 match the same shape: `\e[0;33m...\e[0;0m`
+// for outgoing damage, `\e[0;31m...\e[0m` for incoming, `\e[0;1;30m...`
+// for third-party). Bare occurrences of "hits" / "wound" / "injure" in
+// chat lines, room descriptions, or item names don't get the colored
+// envelope, so they no longer fire the decorator.
+//
+// Pattern shape: `<ANSI SGR><verb><ANSI SGR>`. We allow whitespace
+// inside the colored span (e.g. `UNSPEAKABLE things`) but require
+// the closing SGR within a short window so non-combat lines that just
+// happen to color something nearby don't catch a verb.
+const VERB_ALTERNATION = DAMAGE_TIERS.flatMap((t) => t.verbs).join('|');
+const COMBAT_VERB_RE = new RegExp(
+  `(\\x1b\\[[0-9;]+m)([^\\x1b]{0,40}?\\b(?:${VERB_ALTERNATION})\\b[^\\x1b]{0,40}?)(\\x1b\\[[0-9;]+m)`,
   'g',
 );
+// Inner finder pulls the actual verb out of the colored span so we
+// can look up its tier. Same alternation, no anchors.
+const VERB_FINDER_RE = new RegExp(`\\b(${VERB_ALTERNATION})\\b`);
 
 export interface DecorateOpts {
   showLabels: boolean;
@@ -62,27 +74,32 @@ export interface DecorateOpts {
 
 /// Append `[Label ~N]` after each damage verb in the byte stream
 /// using dim ANSI so the annotation sits inline without competing
-/// for attention. Returns the stream unchanged when no toggles are
-/// enabled or no verbs are present, so the cost is one regex test
-/// per line.
+/// for attention. Only fires when the verb is wrapped in server-emitted
+/// ANSI color (combat context); bare occurrences in chat or descriptions
+/// are left untouched. Returns the stream unchanged when no toggles are
+/// enabled or no combat-shaped verbs are present.
 export function decorateCombat(bytes: Uint8Array, opts: DecorateOpts): Uint8Array {
   if (!opts.showLabels && !opts.showAverages) return bytes;
   const decoder = new TextDecoder('utf-8', { fatal: false });
   const text = decoder.decode(bytes);
-  if (!DAMAGE_VERB_RE.test(text)) return bytes;
-  // Reset lastIndex since `test` advanced it on a global regex.
-  DAMAGE_VERB_RE.lastIndex = 0;
-  const decorated = text.replace(DAMAGE_VERB_RE, (match) => {
-    const tier = VERB_TO_TIER.get(match);
-    if (!tier) return match;
-    const parts: string[] = [];
-    if (opts.showLabels) parts.push(tier.label);
-    if (opts.showAverages) parts.push(`~${tier.avg}`);
-    if (parts.length === 0) return match;
-    // SGR 2 = faint, SGR 22 = normal intensity. Color of the
-    // surrounding text is preserved across the wrap because we don't
-    // touch foreground codes.
-    return `${match} \x1b[2m[${parts.join(' ')}]\x1b[22m`;
-  });
+  COMBAT_VERB_RE.lastIndex = 0;
+  if (!COMBAT_VERB_RE.test(text)) return bytes;
+  COMBAT_VERB_RE.lastIndex = 0;
+  const decorated = text.replace(
+    COMBAT_VERB_RE,
+    (full, openSgr: string, span: string, closeSgr: string) => {
+      const verbMatch = VERB_FINDER_RE.exec(span);
+      if (!verbMatch) return full;
+      const tier = VERB_TO_TIER.get(verbMatch[1]);
+      if (!tier) return full;
+      const parts: string[] = [];
+      if (opts.showLabels) parts.push(tier.label);
+      if (opts.showAverages) parts.push(`~${tier.avg}`);
+      if (parts.length === 0) return full;
+      // SGR 2 = faint, SGR 22 = normal intensity. Annotation goes
+      // AFTER the closing SGR so it isn't tinted by the combat color.
+      return `${openSgr}${span}${closeSgr} \x1b[2m[${parts.join(' ')}]\x1b[22m`;
+    },
+  );
   return new TextEncoder().encode(decorated);
 }

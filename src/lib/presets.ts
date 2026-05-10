@@ -23,8 +23,6 @@ export type PresetCategory =
   | 'defensive'
   | 'buff_falls_self'
   | 'buff_falls_others'
-  | 'debuff_falls'
-  | 'recall'
   | 'events';
 
 export interface Preset {
@@ -41,8 +39,6 @@ export const PRESET_CATEGORIES: Record<PresetCategory, string> = {
   defensive: 'Defensive Combat',
   buff_falls_self: 'Your Buffs Fading',
   buff_falls_others: "Others' Buffs Fading",
-  debuff_falls: 'Debuffs Wearing Off',
-  recall: 'Recall Events',
   events: 'Combat & Spell Events',
 };
 
@@ -79,7 +75,7 @@ function replace(
     pattern,
     priority,
     enabled: true,
-    action: { kind: 'replace', template },
+    action: { kind: 'replace', template: colorize(template) },
   };
 }
 
@@ -91,7 +87,45 @@ function replace(
 const GREEN: HighlightStyle = { fg: 'bright_green' };
 const SOFT_GREEN: HighlightStyle = { fg: 'green' };
 const RED: HighlightStyle = { fg: 'bright_red', bold: true };
-const CYAN: HighlightStyle = { fg: 'bright_cyan', bold: true };
+
+// Named-color templating for Replace actions. Authors write
+// `{bold_red}## {red}$0{reset}` instead of raw ANSI escape codes.
+// `{fg:N}` and `{bg:N}` cover 256-color.
+const COLOR_TOKENS: Record<string, string> = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  underline: '\x1b[4m',
+  black: '\x1b[30m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+  bright_black: '\x1b[90m',
+  bright_red: '\x1b[91m',
+  bright_green: '\x1b[92m',
+  bright_yellow: '\x1b[93m',
+  bright_blue: '\x1b[94m',
+  bright_magenta: '\x1b[95m',
+  bright_cyan: '\x1b[96m',
+  bright_white: '\x1b[97m',
+  bold_red: '\x1b[1;31m',
+  bold_green: '\x1b[1;32m',
+  bold_yellow: '\x1b[1;33m',
+  bold_blue: '\x1b[1;34m',
+  bold_magenta: '\x1b[1;35m',
+  bold_cyan: '\x1b[1;36m',
+  bold_white: '\x1b[1;37m',
+};
+
+function colorize(template: string): string {
+  let out = template.replace(/\{fg:(\d+)\}/g, (_, n) => `\x1b[38;5;${n}m`);
+  out = out.replace(/\{bg:(\d+)\}/g, (_, n) => `\x1b[48;5;${n}m`);
+  return out.replace(/\{([a-z_]+)\}/g, (m, name) => COLOR_TOKENS[name] ?? m);
+}
 
 export const PRESETS: Preset[] = [
   // ── Healing & Cure ────────────────────────────────────────────────
@@ -156,26 +190,26 @@ export const PRESETS: Preset[] = [
       replace(
         'buff_self.sanc',
         '^The white aura around your body fades\\.$',
-        '\x1b[1;31m## \x1b[0;31m$0\x1b[0m',
+        '{bold_red}## {red}$0{reset}',
         10,
       ),
       // Protection.
       replace(
         'buff_self.protection',
         '^The protective aura around your body fades\\.$',
-        '\x1b[1;31m## \x1b[0;31m$0\x1b[0m',
+        '{bold_red}## {red}$0{reset}',
       ),
       // Stone skin (shards of metal).
       replace(
         'buff_self.stoneskin',
         '^The shards of metal protecting you fall to the ground\\.$',
-        '\x1b[1;31m## \x1b[0;31m$0\x1b[0m',
+        '{bold_red}## {red}$0{reset}',
       ),
       // Spell turning.
       replace(
         'buff_self.spell_turning',
         '^Your shield of spell turning collapses\\.$',
-        '\x1b[1;31m## \x1b[0;31m$0\x1b[0m',
+        '{bold_red}## {red}$0{reset}',
       ),
     ],
   },
@@ -203,65 +237,27 @@ export const PRESETS: Preset[] = [
       replace(
         'buff_other.sanc',
         '^The white aura around (.+) fades\\.$',
-        '\x1b[1;33m## \x1b[0;33m$0\x1b[0m',
+        '{bold_yellow}## {yellow}$0{reset}',
         4,
       ),
       // Generic protective shield drop on another character.
       replace(
         'buff_other.shield',
         '^([A-Z][a-z]+) protective shield dissipates\\.$',
-        '\x1b[1;33m## \x1b[0;33m$0\x1b[0m',
+        '{bold_yellow}## {yellow}$0{reset}',
         4,
       ),
     ],
   },
 
   // ── Debuffs wearing off ───────────────────────────────────────────
-  {
-    id: 'debuff_falls',
-    category: 'debuff_falls',
-    name: 'Debuffs wearing off',
-    description:
-      'You stand up / no longer afraid / no longer blind. Greens up so ' +
-      'you know when control breaks.',
-    defaultEnabled: true,
-    triggers: [
-      highlight('debuff.no_longer_afraid', '^You are no longer afraid\\.$', GREEN),
-      highlight('debuff.no_longer_blinded', '^You can see again\\.$', GREEN),
-      highlight('debuff.no_longer_silenced', '^You can speak again\\.$', GREEN),
-      highlight('debuff.stand_up', '^You scramble to your feet\\.$', GREEN),
-      highlight('debuff.no_longer_held', '^You can move again\\.$', GREEN),
-      highlight('debuff.no_longer_slowed', '^You feel the time flow normally again\\.$', GREEN),
-      highlight('debuff.weakness_fades', '^You feel stronger\\.$', GREEN),
-      highlight('debuff.curse_fades', '^The cursed feeling leaves you\\.$', GREEN),
-    ],
-  },
+  // (debuff_falls removed: every pattern was a guess from generic ROM
+  // 2.4 conventions, not lifted from your highlights.tin. Add back
+  // once we have actual Aabahran wording captured.)
 
-  // ── Recall Events ─────────────────────────────────────────────────
-  {
-    id: 'recall_events',
-    category: 'recall',
-    name: 'Recall events (NAME RECALLED banner)',
-    description:
-      "Magick-style ///NAME RECALLED/// banner when someone recalls. " +
-      'Bright cyan, hard to miss in a busy fight.',
-    defaultEnabled: true,
-    triggers: [
-      // Self-recall: prepend a banner so it stands out.
-      replace(
-        'recall.self',
-        '^You disappear in a swirl of light\\.$',
-        '[1;36m///YOU RECALLED///[0m',
-      ),
-      // Other-player recall (typical Aabahran wording).
-      replace(
-        'recall.other',
-        '^(\\w+) disappears in a swirl of light\\.$',
-        '[1;36m///$1 RECALLED///[0m',
-      ),
-      highlight('recall.uttered', "^\\w+ utters the words, 'recall'\\.$", CYAN),
-    ],
-  },
+  // (recall_events removed: all 3 patterns were guessed from
+  // generic ROM 2.4 wording, not lifted from your highlights.tin.
+  // Capture actual Aabahran recall messages in-game to restore.)
 
   // ── Combat & Spell Events ─────────────────────────────────────────
   // Disarm patterns from highlights.tin lines 105-106 — they tell you
@@ -278,12 +274,12 @@ export const PRESETS: Preset[] = [
       replace(
         'disarm.secondary',
         '^([A-Z][a-z]+) disarms you and sends your secondary weapon flying!$',
-        '\x1b[1;31m## \x1b[0;33m$1 disarms you and sends your SECONDARY weapon flying!\x1b[0m',
+        '{bold_red}## {yellow}$1 disarms you and sends your SECONDARY weapon flying!{reset}',
       ),
       replace(
         'disarm.primary',
         '^([A-Z][a-z]+) disarms you and sends your weapon flying!$',
-        '\x1b[1;31m## \x1b[0;33m$1 disarms you and sends your PRIMARY weapon flying!\x1b[0m',
+        '{bold_red}## {yellow}$1 disarms you and sends your PRIMARY weapon flying!{reset}',
       ),
     ],
   },
