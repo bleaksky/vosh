@@ -556,10 +556,10 @@ function drawSquares(
   // the line "stops at" the same-floor cell visually. Off-floor
   // lines stay visible inside off-floor cells (translucent) and in
   // empty grid positions where no same-floor cell sits.
-  drawOffFloorCells(ctx, payload.a, ox, oy, pitch, size, centerR, centerC);
-  drawOffFloorCells(ctx, payload.b, ox, oy, pitch, size, centerR, centerC);
+  drawOffFloorCells(ctx, payload.a, ox, oy, pitch, size);
+  drawOffFloorCells(ctx, payload.b, ox, oy, pitch, size);
   if (Array.isArray(payload.zr)) {
-    drawOffFloorCells(ctx, payload.zr, ox, oy, pitch, size, centerR, centerC);
+    drawOffFloorCells(ctx, payload.zr, ox, oy, pitch, size);
   }
   drawOffFloorOverlay(ctx, payload.a, ox, oy, pitch);
   drawOffFloorOverlay(ctx, payload.b, ox, oy, pitch);
@@ -630,20 +630,16 @@ function drawSquares(
 
 }
 
-// Three-tier distance fade for off-floor cells, mirroring the
-// TinTin map_panel.tin convention (close <= 2, medium <= 5, far).
-// Each tier knocks the alpha down a step so distant off-floor
-// chains darken visibly without becoming invisible.
-function offFloorDistanceFade(d: number): number {
-  if (d <= 2) return 1.0;
-  if (d <= 5) return 0.75;
-  return 0.55;
-}
-
 // Pass A: only the dim cell fills. Drawn under everything;
 // same-floor cells will paint over off-floor cells at overlapping
 // positions. No border outline — the corridor lines drawn over the
 // top in pass B carry the connectivity signal.
+//
+// Off-floor cells render at a uniform alpha regardless of distance
+// from the player. The same-floor distance ramp deliberately doesn't
+// apply here: a room two floors above shouldn't get *more* visible
+// just because it's near the player's projected coords on this
+// floor.
 function drawOffFloorCells(
   ctx: CanvasRenderingContext2D,
   entries: OffFloorEntry[] | undefined,
@@ -651,8 +647,6 @@ function drawOffFloorCells(
   oy: number,
   pitch: number,
   size: number,
-  centerR: number,
-  centerC: number,
 ) {
   if (!Array.isArray(entries) || entries.length === 0) return;
   const half = size / 2;
@@ -660,14 +654,11 @@ function drawOffFloorCells(
     const cx = ox + entry.x * pitch;
     const cy = oy + entry.y * pitch;
     const sector = sectorForCode(entry.s);
-    const dist = Math.abs(entry.y - centerR) + Math.abs(entry.x - centerC);
-    const fade = offFloorDistanceFade(dist);
     ctx.save();
-    // Off-floor cell uses sector.border (medium-bright) at 0.22 alpha.
     // Faint enough that off-floor rooms read as background context
-    // without competing with same-floor cells; corridor lines in pass
-    // B carry the connectivity signal.
-    ctx.globalAlpha = 0.22 * fade;
+    // without competing with same-floor cells; corridor lines in
+    // pass B carry the connectivity signal.
+    ctx.globalAlpha = 0.22;
     ctx.fillStyle = sector.border;
     ctx.fillRect(cx - half, cy - half, size, size);
     ctx.restore();
