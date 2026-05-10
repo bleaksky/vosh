@@ -28,8 +28,11 @@ export const SECTORS: Record<number, SectorTheme> = {
 
 export const MAP_COLORS = {
   bg: '#07090f',
-  origin: '#d4c030',
-  originGlow: 'rgba(212,192,48,0.15)',
+  /// Player's room cell uses a sector-style fill+border pair: a dim
+  /// pink interior with a bright pink outline so it reads the same
+  /// way as a regular sector tile, just in pink.
+  origin: '#ff3399',
+  originFill: '#3a1424',
   dest: '#c83030',
   destGlow: 'rgba(200,48,48,0.15)',
   corridor: 'rgba(140,145,160,0.45)',

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MappingMapView } from './MappingMapView';
 import { ServerMapView } from './ServerMapView';
+import { RoomInfoBar } from './RoomInfoBar';
 import { useDockTarget } from '../lib/docking';
 
 type Mode = 'mapping' | 'server';
@@ -46,6 +47,7 @@ export function MapPane() {
           </button>
         </div>
       </header>
+      <RoomInfoBar />
       {mode === 'mapping' ? <MappingMapView /> : <ServerMapView />}
     </section>
   );

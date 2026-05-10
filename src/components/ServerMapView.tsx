@@ -332,21 +332,6 @@ export function ServerMapView() {
         );
       }
 
-      // Area name watermark behind the cells, mirroring the mapping
-      // view so both modes share the same context cue.
-      if (snapshot?.area) {
-        const charW = 0.6;
-        const fitSize = Math.min(
-          cssHeight * 0.45,
-          (cssWidth * 0.85) / (snapshot.area.length * charW),
-        );
-        ctx.font = `bold ${Math.max(14, Math.floor(fitSize))}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = hexToRgba(halo, 0.18);
-        ctx.fillText(snapshot.area.toUpperCase(), cssWidth / 2, cssHeight / 2);
-      }
-
       const anchor = computeAnchor(
         snapshot,
         tiles,
@@ -597,13 +582,6 @@ function drawSquares(
       const dist = Math.abs(r - centerR) + Math.abs(c - centerC);
       const depth = depthAlphaForRing(dist);
 
-      if (isCenter) {
-        ctx.fillStyle = MAP_COLORS.originGlow;
-        ctx.beginPath();
-        ctx.arc(cx, cy, pitch * 0.85, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
       ctx.save();
       // Wipe the background under the cell first so corridor lines
       // drawn underneath don't bleed through the (less-than-fully-
@@ -612,34 +590,39 @@ function drawSquares(
       ctx.fillStyle = MAP_COLORS.bg;
       ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
 
-      ctx.globalAlpha = depth;
-      ctx.fillStyle = sector.fill;
-      ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
-
       if (isCenter) {
+        // Player cell follows the same fill+border convention as a
+        // sector tile, just in pink: dim pink interior with a bright
+        // pink outline. Full alpha so it stays bright against the
+        // depth-faded neighbors.
+        ctx.fillStyle = MAP_COLORS.originFill;
+        ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
         ctx.strokeStyle = MAP_COLORS.origin;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(cx - size / 2, cy - size / 2, size, size);
       } else {
+        ctx.globalAlpha = depth;
+        ctx.fillStyle = sector.fill;
+        ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
         ctx.strokeStyle = hexToRgba(sector.border, 0.8);
         ctx.lineWidth = 1;
+        ctx.strokeRect(cx - size / 2, cy - size / 2, size, size);
       }
-      ctx.strokeRect(cx - size / 2, cy - size / 2, size, size);
       ctx.restore();
 
-      const exits = (cell.e ?? '').toLowerCase();
-      if (exits.includes('u') || exits.includes('d')) {
-        ctx.fillStyle = MAP_COLORS.text;
-        ctx.font = `${Math.max(7, Math.floor(size * 0.55))}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        // Up/down arrows render INSIDE the cell so they don't bleed
-        // into adjacent rooms or the corridor lines. ~30% offset
-        // above/below center keeps them readable at small pitch.
-        if (exits.includes('u')) {
-          ctx.fillText('▲', cx, cy - size * 0.25);
-        }
-        if (exits.includes('d')) {
-          ctx.fillText('▼', cx, cy + size * 0.25);
+      if (!isCenter) {
+        const exits = (cell.e ?? '').toLowerCase();
+        if (exits.includes('u') || exits.includes('d')) {
+          ctx.fillStyle = MAP_COLORS.text;
+          ctx.font = `${Math.max(7, Math.floor(size * 0.55))}px monospace`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          if (exits.includes('u')) {
+            ctx.fillText('▲', cx, cy - size * 0.25);
+          }
+          if (exits.includes('d')) {
+            ctx.fillText('▼', cx, cy + size * 0.25);
+          }
         }
       }
     }
@@ -680,11 +663,11 @@ function drawOffFloorCells(
     const dist = Math.abs(entry.y - centerR) + Math.abs(entry.x - centerC);
     const fade = offFloorDistanceFade(dist);
     ctx.save();
-    // Off-floor cell uses sector.border (medium-bright) at 0.4 alpha.
-    // Visible enough to read against the dark map background but
-    // dim enough that the corridor lines drawn in pass B remain the
-    // dominant connectivity signal.
-    ctx.globalAlpha = 0.4 * fade;
+    // Off-floor cell uses sector.border (medium-bright) at 0.22 alpha.
+    // Faint enough that off-floor rooms read as background context
+    // without competing with same-floor cells; corridor lines in pass
+    // B carry the connectivity signal.
+    ctx.globalAlpha = 0.22 * fade;
     ctx.fillStyle = sector.border;
     ctx.fillRect(cx - half, cy - half, size, size);
     ctx.restore();
@@ -874,11 +857,12 @@ function drawTileset(
       );
 
       if (r === centerR && c === centerC) {
+        // Player cell: dim pink overlay with a bright pink outline.
+        ctx.fillStyle = MAP_COLORS.originFill;
+        ctx.fillRect(cx - pitch / 2, cy - pitch / 2, pitch, pitch);
         ctx.strokeStyle = MAP_COLORS.origin;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.rect(cx - pitch / 2, cy - pitch / 2, pitch, pitch);
-        ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.strokeRect(cx - pitch / 2, cy - pitch / 2, pitch, pitch);
       }
     }
   }

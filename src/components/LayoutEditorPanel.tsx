@@ -5,6 +5,13 @@ import {
   type DockEntryPersist,
 } from '../lib/session';
 import type { SnapZone } from '../lib/docking';
+import {
+  broadcastSidebarOrder,
+  loadSidebarOrder,
+  moveSidebarPanel,
+  SIDEBAR_PANEL_IDS,
+  type SidebarPanelId,
+} from '../lib/sidebarOrder';
 
 interface Props {
   onError: (message: string) => void;
@@ -16,10 +23,9 @@ interface Props {
 type EditorZone = SnapZone | 'sidebar';
 
 const PANELS: { id: string; label: string }[] = [
-  { id: 'status-pane', label: 'Status' },
   { id: 'affects-pane', label: 'Affects' },
   { id: 'map-pane', label: 'Map' },
-  { id: 'info-tabs-pane', label: 'Chat / Gold / Cabal' },
+  { id: 'info-tabs-pane', label: 'Chat / Wealth / Group' },
 ];
 
 const ZONES: { id: EditorZone; label: string; row: number; col: number }[] = [
@@ -45,6 +51,10 @@ function entriesToMap(entries: DockEntryPersist[]): Record<string, EditorZone> {
   return map;
 }
 
+function isSidebarPanelId(id: string): id is SidebarPanelId {
+  return (SIDEBAR_PANEL_IDS as readonly string[]).includes(id);
+}
+
 export function LayoutEditorPanel({ onError }: Props) {
   const [placement, setPlacement] = useState<Record<string, EditorZone>>(() =>
     entriesToMap([]),
@@ -52,6 +62,9 @@ export function LayoutEditorPanel({ onError }: Props) {
   const [savedPlacement, setSavedPlacement] = useState<Record<string, EditorZone>>(() =>
     entriesToMap([]),
   );
+  const [sidebarOrder, setSidebarOrder] = useState<SidebarPanelId[]>(loadSidebarOrder);
+  const [savedSidebarOrder, setSavedSidebarOrder] =
+    useState<SidebarPanelId[]>(loadSidebarOrder);
   const [dragging, setDragging] = useState<string | null>(null);
   const [hoverZone, setHoverZone] = useState<EditorZone | null>(null);
   const [status, setStatus] = useState('');
@@ -71,7 +84,13 @@ export function LayoutEditorPanel({ onError }: Props) {
     };
   }, [onError]);
 
-  const dirty = PANELS.some((p) => placement[p.id] !== savedPlacement[p.id]);
+  const placementDirty = PANELS.some(
+    (p) => placement[p.id] !== savedPlacement[p.id],
+  );
+  const orderDirty =
+    sidebarOrder.length !== savedSidebarOrder.length ||
+    sidebarOrder.some((id, idx) => savedSidebarOrder[idx] !== id);
+  const dirty = placementDirty || orderDirty;
 
   const place = (panelId: string, zone: EditorZone) => {
     setPlacement((prev) => ({ ...prev, [panelId]: zone }));
@@ -110,6 +129,10 @@ export function LayoutEditorPanel({ onError }: Props) {
     setHoverZone(null);
   };
 
+  const moveSidebar = (id: SidebarPanelId, direction: 'up' | 'down') => {
+    setSidebarOrder((prev) => moveSidebarPanel(prev, id, direction));
+  };
+
   const handleSave = async () => {
     setStatus('saving…');
     try {
@@ -117,7 +140,9 @@ export function LayoutEditorPanel({ onError }: Props) {
         (p) => placement[p.id] !== 'sidebar',
       ).map((p) => ({ id: p.id, zone: placement[p.id] as SnapZone }));
       await dockLayoutSet(entries);
+      await broadcastSidebarOrder(sidebarOrder);
       setSavedPlacement(placement);
+      setSavedSidebarOrder(sidebarOrder);
       setStatus(
         `saved (${entries.length} docked, ${PANELS.length - entries.length} in sidebar)`,
       );
@@ -129,6 +154,7 @@ export function LayoutEditorPanel({ onError }: Props) {
 
   const handleRevert = () => {
     setPlacement(savedPlacement);
+    setSidebarOrder(savedSidebarOrder);
     setStatus('reverted to last saved');
   };
 
@@ -143,6 +169,13 @@ export function LayoutEditorPanel({ onError }: Props) {
   for (const p of PANELS) {
     panelsByZone[placement[p.id]].push(p.id);
   }
+  // Render the sidebar zone in the user's chosen order, not the
+  // arbitrary insertion order. Anything in `panelsByZone.sidebar`
+  // that's missing from the saved order falls back to the end.
+  panelsByZone.sidebar = [
+    ...sidebarOrder.filter((id) => panelsByZone.sidebar.includes(id)),
+    ...panelsByZone.sidebar.filter((id) => !sidebarOrder.includes(id as SidebarPanelId)),
+  ];
 
   return (
     <div className="layout-editor-embedded">
@@ -217,9 +250,13 @@ export function LayoutEditorPanel({ onError }: Props) {
                 <span className="layout-zone-label">{zone.label}</span>
                 {occupants.length > 0 && (
                   <ul className="layout-zone-occupants">
-                    {occupants.map((id) => {
+                    {occupants.map((id, idx) => {
                       const panel = PANELS.find((p) => p.id === id);
                       const isPanelDragging = dragging === id;
+                      const showOrderControls =
+                        zone.id === 'sidebar' &&
+                        isSidebarPanelId(id) &&
+                        occupants.length > 1;
                       return (
                         <li key={id}>
                           <div
@@ -230,7 +267,35 @@ export function LayoutEditorPanel({ onError }: Props) {
                             onDragStart={handleDragStart(id)}
                             onDragEnd={handleDragEnd}
                           >
-                            {panel?.label}
+                            <span className="layout-zone-occupant-label">{panel?.label}</span>
+                            {showOrderControls && isSidebarPanelId(id) && (
+                              <span className="layout-zone-occupant-controls">
+                                <button
+                                  type="button"
+                                  aria-label="move up"
+                                  title="move up"
+                                  disabled={idx === 0}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    moveSidebar(id, 'up');
+                                  }}
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label="move down"
+                                  title="move down"
+                                  disabled={idx === occupants.length - 1}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    moveSidebar(id, 'down');
+                                  }}
+                                >
+                                  ↓
+                                </button>
+                              </span>
+                            )}
                           </div>
                         </li>
                       );

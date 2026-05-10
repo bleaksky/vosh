@@ -237,9 +237,9 @@ export function MappingMapView() {
     const oy = Math.floor(cssHeight / 2 - focus.y * pitch);
     layoutRef.current = { ox, oy, pitch, roomSize, currentZ };
 
-    // Compute the area's bounding box for the watermark only. The view
-    // does NOT anchor on the bbox; that would let new rooms shift every
-    // existing tile.
+    // Bounding box of the visible rooms — used to position terrain
+    // decorations. The view does NOT anchor on the bbox; that would
+    // let new rooms shift every existing tile.
     let minX = Infinity;
     let maxX = -Infinity;
     let minY = Infinity;
@@ -250,10 +250,9 @@ export function MappingMapView() {
       if (r.y < minY) minY = r.y;
       if (r.y > maxY) maxY = r.y;
     }
-    const bboxW = maxX - minX + 1;
 
-    // Compute the dominant sector for both the watermark tone and the
-    // terrain decorations painted in the void below.
+    // Compute the dominant sector for the terrain decorations painted
+    // in the void below.
     const sectorCounts: Record<number, number> = {};
     for (const r of visible) {
       const sid = terrainToSectorId(r.terrain);
@@ -291,21 +290,6 @@ export function MappingMapView() {
         ],
         { cssWidth, cssHeight, pitch },
       );
-    }
-
-    // Area name watermark behind everything, sized to the bbox so it
-    // reads as a faint label like the FL web map.
-    if (snapshot.area) {
-      const charW = 0.6;
-      const fitSize = Math.min(
-        cssHeight * 0.45,
-        (bboxW * pitch * 0.85) / (snapshot.area.length * charW),
-      );
-      ctx.font = `bold ${Math.max(14, Math.floor(fitSize))}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = hexToRgba(dominantHalo, 0.18);
-      ctx.fillText(snapshot.area.toUpperCase(), cssWidth / 2, cssHeight / 2);
     }
 
     // Corridors first, drawn under rooms. Single thin gray pass like the
@@ -385,27 +369,25 @@ export function MappingMapView() {
         );
         ctx.restore();
       } else {
-        // Origin glow under the cell. Stays at full alpha so the player
-        // tile pops against the depth-faded neighbors.
-        if (isCurrent) {
-          ctx.fillStyle = MAP_COLORS.originGlow;
-          ctx.beginPath();
-          ctx.arc(cx, cy, pitch * 0.85, 0, Math.PI * 2);
-          ctx.fill();
-        }
         ctx.save();
-        ctx.globalAlpha = depth;
-        ctx.fillStyle = sector.fill;
-        ctx.fillRect(cx - roomSize / 2, cy - roomSize / 2, roomSize, roomSize);
         if (isCurrent) {
+          // Player cell: dim pink fill + bright pink border, full
+          // alpha so it stays bright against depth-faded neighbors.
+          ctx.fillStyle = MAP_COLORS.originFill;
+          ctx.fillRect(cx - roomSize / 2, cy - roomSize / 2, roomSize, roomSize);
           ctx.strokeStyle = MAP_COLORS.origin;
-          ctx.lineWidth = 2;
-        } else if (room.avoid) {
-          ctx.strokeStyle = MAP_COLORS.dest;
-          ctx.lineWidth = 1.5;
-        } else {
-          ctx.strokeStyle = hexToRgba(sector.border, 0.8);
           ctx.lineWidth = 1;
+        } else {
+          ctx.globalAlpha = depth;
+          ctx.fillStyle = sector.fill;
+          ctx.fillRect(cx - roomSize / 2, cy - roomSize / 2, roomSize, roomSize);
+          if (room.avoid) {
+            ctx.strokeStyle = MAP_COLORS.dest;
+            ctx.lineWidth = 1.5;
+          } else {
+            ctx.strokeStyle = hexToRgba(sector.border, 0.8);
+            ctx.lineWidth = 1;
+          }
         }
         ctx.strokeRect(cx - roomSize / 2, cy - roomSize / 2, roomSize, roomSize);
         ctx.restore();
