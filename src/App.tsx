@@ -21,6 +21,7 @@ import {
 } from './lib/session';
 import type { SnapZone } from './lib/docking';
 import { StatusBar } from './components/StatusBar';
+import { TargetBar } from './components/TargetBar';
 import { applyTheme } from './lib/theme';
 
 const SIDE_PANEL_STORAGE_KEY = 'mudclient.layout.sidePanelOpen';
@@ -245,6 +246,7 @@ function App() {
         )}
       </div>
       <div className="bottom-rail" aria-label="bottom rail">
+        <TargetBar />
         <Input
           ref={inputRef}
           enabled

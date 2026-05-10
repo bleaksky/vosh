@@ -1048,31 +1048,22 @@ body,
 .statusbar-bar {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   flex: 0 0 auto;
 }
 
 .statusbar-bar-label {
-  color: #c5c9c7;
+  color: #a4a7a4;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
 
-.statusbar-bar-track {
-  position: relative;
-  flex: 0 0 auto;
-  width: 130px;
-  height: 1.05rem;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.statusbar-bar-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  transition: width 0.18s ease-out;
+.statusbar-bar-percent {
+  color: #a4a7a4;
+  font-variant-numeric: tabular-nums;
+  font-size: calc(var(--app-font-size) - 3px);
+  min-width: 2.6em;
+  text-align: right;
 }
 
 .statusbar-bar-text {
@@ -1088,6 +1079,33 @@ body,
   text-shadow: 0 0 2px rgba(0, 0, 0, 0.85);
   letter-spacing: 0.02em;
   pointer-events: none;
+}
+
+.statusbar-bar-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 130px;
+  height: 0.85rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.statusbar-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  transition: width 0.18s ease-out;
+}
+
+.statusbar-bar-delta {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: calc(var(--app-font-size) - 2px);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 3.5em;
 }
 
 .statusbar-divider {
@@ -1366,6 +1384,80 @@ body,
 .statusbar {
   position: relative;
   z-index: 1;
+}
+
+/* Target bar: sits at the top of the bottom rail (above the input
+   line) and reflects the current Char.Combat target. Hidden entirely
+   when no target is active. */
+.target-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.18rem 0.85rem;
+  background: #090e13;
+  border-bottom: 1px dashed #23232b;
+  font-size: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.target-bar-swords {
+  color: #c34043;
+  font-size: 14px;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.target-bar-name {
+  color: #f0f3f1;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.target-bar-meter {
+  position: relative;
+  flex: 1 1 auto;
+  height: 0.85rem;
+  max-width: 22rem;
+  background: #14141a;
+  border: 1px solid #23232b;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.target-bar-fill {
+  height: 100%;
+  transition: width 120ms ease-out, background 120ms ease-out;
+}
+
+.target-bar-pct {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: #c5c9c7;
+  text-shadow: 0 0 3px #000;
+  letter-spacing: 0.03em;
+}
+
+.target-bar-pct-unknown {
+  position: static;
+  color: #73726a;
+  text-shadow: none;
+}
+
+.target-bar-condition {
+  font-size: 11px;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  color: #a4a7a4;
 }
 
 /* Affects bar: its own grid row beneath the status bar. Keeps the

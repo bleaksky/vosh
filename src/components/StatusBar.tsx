@@ -126,30 +126,72 @@ function StatBar({
   label,
   current,
   max,
+  delta,
 }: {
   label: string;
   current: number | string | undefined;
   max: number | string | undefined;
+  delta: number | null;
 }) {
   const value = pct(current, max);
-  const color = colorForPct(value);
+  const fillColor = colorForPct(value);
+  const currentNum = num(current);
+  const maxNum = num(max);
+  const showDelta = delta !== null && delta !== 0;
+  const deltaColor = delta !== null && delta > 0 ? '#87a987' : '#e46876';
+  const arrow = delta !== null && delta > 0 ? '↑' : '↓';
   return (
     <div className="statusbar-bar">
-      <span className="statusbar-bar-label" style={{ color }}>
-        {label}
-      </span>
+      <span className="statusbar-bar-label">{label}</span>
+      <span className="statusbar-bar-percent">{value}%</span>
       <span className="statusbar-bar-track">
         <span
           className="statusbar-bar-fill"
-          style={{ width: `${value}%`, background: color }}
+          style={{ width: `${value}%`, background: fillColor }}
           aria-hidden="true"
         />
         <span className="statusbar-bar-text">
-          {current ?? '-'}/{max ?? '-'}
+          {currentNum ?? current ?? '-'}/{maxNum ?? max ?? '-'}
         </span>
       </span>
+      {showDelta && (
+        <span className="statusbar-bar-delta" style={{ color: deltaColor }}>
+          <span aria-hidden="true">{arrow}</span>
+          {delta! > 0 ? `+${delta}` : delta}
+        </span>
+      )}
     </div>
   );
+}
+
+interface TickDeltas {
+  hp: number | null;
+  mn: number | null;
+  mv: number | null;
+}
+
+const NO_DELTAS: TickDeltas = { hp: null, mn: null, mv: null };
+
+interface VitalsSnapshot {
+  hp: number | null;
+  mn: number | null;
+  mv: number | null;
+}
+
+function snapshotVitals(v: Vitals): VitalsSnapshot {
+  return {
+    hp: num(v.hp),
+    mn: num(pickFirst(v.mp, v.mana)),
+    mv: num(pickFirst(v.sp, v.move, v.movement)),
+  };
+}
+
+function diffSnapshots(prev: VitalsSnapshot, curr: VitalsSnapshot): TickDeltas {
+  return {
+    hp: prev.hp !== null && curr.hp !== null ? curr.hp - prev.hp : null,
+    mn: prev.mn !== null && curr.mn !== null ? curr.mn - prev.mn : null,
+    mv: prev.mv !== null && curr.mv !== null ? curr.mv - prev.mv : null,
+  };
 }
 
 export function StatusBar() {
@@ -157,7 +199,9 @@ export function StatusBar() {
   const [world, setWorld] = useState<WorldTime>({});
   const [moons, setMoons] = useState<MoonsState>({ moons: [] });
   const [tick, setTick] = useState<TickPayload | null>(null);
+  const [deltas, setDeltas] = useState<TickDeltas>(NO_DELTAS);
   const lastFiredRef = useRef<number>(0);
+  const prevVitalsSnapshotRef = useRef<VitalsSnapshot | null>(null);
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
@@ -167,7 +211,14 @@ export function StatusBar() {
 
     onGmcp((payload) => {
       if (payload.package === 'Char.Vitals') {
-        setVitals(payload.data ?? {});
+        const next = (payload.data ?? {}) as Vitals;
+        const snapshot = snapshotVitals(next);
+        const prev = prevVitalsSnapshotRef.current;
+        if (prev) {
+          setDeltas(diffSnapshots(prev, snapshot));
+        }
+        prevVitalsSnapshotRef.current = snapshot;
+        setVitals(next);
         return;
       }
       if (payload.package === 'World.Time' && payload.data && typeof payload.data === 'object') {
@@ -195,6 +246,8 @@ export function StatusBar() {
         setWorld({});
         setMoons({ moons: [] });
         setTick(null);
+        setDeltas(NO_DELTAS);
+        prevVitalsSnapshotRef.current = null;
       }
     }).then((fn) => {
       if (cancelled) fn();
@@ -236,16 +289,18 @@ export function StatusBar() {
 
   return (
     <div className="statusbar" role="status" aria-label="vitals and world conditions">
-      <StatBar label="HP" current={vitals.hp} max={vitals.maxhp} />
+      <StatBar label="HP" current={vitals.hp} max={vitals.maxhp} delta={deltas.hp} />
       <StatBar
         label="MN"
         current={pickFirst(vitals.mp, vitals.mana)}
         max={pickFirst(vitals.maxmp, vitals.maxmana)}
+        delta={deltas.mn}
       />
       <StatBar
         label="MV"
         current={pickFirst(vitals.sp, vitals.move, vitals.movement)}
         max={pickFirst(vitals.maxsp, vitals.maxmove, vitals.maxmovement)}
+        delta={deltas.mv}
       />
       <div className="statusbar-divider" aria-hidden="true" />
       <div className={`statusbar-cell statusbar-tick${tickFlash ? ' statusbar-flash' : ''}`}>
