@@ -970,6 +970,95 @@ body,
   outline-offset: 3px;
 }
 
+/* High-contrast pass over the chrome that landed in Phase 12 stretch
+   work (target bar, room info, group/wealth tabs, affects, layout
+   editor). Names and values render in pure white; muted labels and
+   meta lift to yellow #ffff00 so they still read as secondary without
+   the muted greys that drop below WCAG AA contrast on pure black. */
+:root[data-theme='high-contrast'] .target-bar,
+:root[data-theme='high-contrast'] .room-info-bar,
+:root[data-theme='high-contrast'] .statusbar,
+:root[data-theme='high-contrast'] .info-tabs-pane,
+:root[data-theme='high-contrast'] .affects-pane,
+:root[data-theme='high-contrast'] .affects-bar,
+:root[data-theme='high-contrast'] .map-pane,
+:root[data-theme='high-contrast'] .sidebar-section,
+:root[data-theme='system'][data-prefers-contrast='more'] .target-bar,
+:root[data-theme='system'][data-prefers-contrast='more'] .room-info-bar,
+:root[data-theme='system'][data-prefers-contrast='more'] .statusbar,
+:root[data-theme='system'][data-prefers-contrast='more'] .info-tabs-pane,
+:root[data-theme='system'][data-prefers-contrast='more'] .affects-pane,
+:root[data-theme='system'][data-prefers-contrast='more'] .affects-bar,
+:root[data-theme='system'][data-prefers-contrast='more'] .map-pane,
+:root[data-theme='system'][data-prefers-contrast='more'] .sidebar-section {
+  background: #000000;
+  color: #ffffff;
+  border-color: #ffffff;
+}
+
+:root[data-theme='high-contrast'] .room-info-name,
+:root[data-theme='high-contrast'] .target-bar-name,
+:root[data-theme='high-contrast'] .statusbar-bar-text,
+:root[data-theme='high-contrast'] .group-name,
+:root[data-theme='high-contrast'] .chat-text,
+:root[data-theme='high-contrast'] .affect-row-name,
+:root[data-theme='high-contrast'] .info-grid dd,
+:root[data-theme='system'][data-prefers-contrast='more'] .room-info-name,
+:root[data-theme='system'][data-prefers-contrast='more'] .target-bar-name,
+:root[data-theme='system'][data-prefers-contrast='more'] .statusbar-bar-text,
+:root[data-theme='system'][data-prefers-contrast='more'] .group-name,
+:root[data-theme='system'][data-prefers-contrast='more'] .chat-text,
+:root[data-theme='system'][data-prefers-contrast='more'] .affect-row-name,
+:root[data-theme='system'][data-prefers-contrast='more'] .info-grid dd {
+  color: #ffffff;
+}
+
+:root[data-theme='high-contrast'] .room-info-vnum,
+:root[data-theme='high-contrast'] .room-info-bullet,
+:root[data-theme='high-contrast'] .room-info-list-label,
+:root[data-theme='high-contrast'] .target-bar-condition,
+:root[data-theme='high-contrast'] .statusbar-bar-label,
+:root[data-theme='high-contrast'] .statusbar-bar-percent,
+:root[data-theme='high-contrast'] .group-meta,
+:root[data-theme='high-contrast'] .info-grid dt,
+:root[data-theme='high-contrast'] .affect-row-level,
+:root[data-theme='high-contrast'] .affect-row-dur,
+:root[data-theme='high-contrast'] .chat-channel,
+:root[data-theme='high-contrast'] .chat-empty,
+:root[data-theme='system'][data-prefers-contrast='more'] .room-info-vnum,
+:root[data-theme='system'][data-prefers-contrast='more'] .room-info-bullet,
+:root[data-theme='system'][data-prefers-contrast='more'] .room-info-list-label,
+:root[data-theme='system'][data-prefers-contrast='more'] .target-bar-condition,
+:root[data-theme='system'][data-prefers-contrast='more'] .statusbar-bar-label,
+:root[data-theme='system'][data-prefers-contrast='more'] .statusbar-bar-percent,
+:root[data-theme='system'][data-prefers-contrast='more'] .group-meta,
+:root[data-theme='system'][data-prefers-contrast='more'] .info-grid dt,
+:root[data-theme='system'][data-prefers-contrast='more'] .affect-row-level,
+:root[data-theme='system'][data-prefers-contrast='more'] .affect-row-dur,
+:root[data-theme='system'][data-prefers-contrast='more'] .chat-channel,
+:root[data-theme='system'][data-prefers-contrast='more'] .chat-empty {
+  color: #ffff00;
+}
+
+:root[data-theme='high-contrast'] .statusbar-bar-track,
+:root[data-theme='high-contrast'] .target-bar-meter,
+:root[data-theme='system'][data-prefers-contrast='more'] .statusbar-bar-track,
+:root[data-theme='system'][data-prefers-contrast='more'] .target-bar-meter {
+  background: #000000;
+  border-color: #ffffff;
+}
+
+:root[data-theme='high-contrast'] .layout-panel-card,
+:root[data-theme='high-contrast'] .layout-zone-occupant,
+:root[data-theme='high-contrast'] .layout-zone,
+:root[data-theme='system'][data-prefers-contrast='more'] .layout-panel-card,
+:root[data-theme='system'][data-prefers-contrast='more'] .layout-zone-occupant,
+:root[data-theme='system'][data-prefers-contrast='more'] .layout-zone {
+  background: #000000;
+  color: #ffffff;
+  border-color: #ffffff;
+}
+
 /* Honor reduced motion for the tick flash and any future animations. */
 @media (prefers-reduced-motion: reduce) {
   .tick-row.tick-flash {
