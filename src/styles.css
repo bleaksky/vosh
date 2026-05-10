@@ -164,7 +164,7 @@ body,
   top: 0;
   left: 0;
   overflow: hidden;
-  padding: 0.6rem 0.8rem;
+  padding: 0.6rem 0.8rem 0;
   background: #090e13;
   box-sizing: border-box;
 }
