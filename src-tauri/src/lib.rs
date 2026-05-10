@@ -45,6 +45,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(state.clone())
         .setup(move |app| {
             match open_map_store(app) {
