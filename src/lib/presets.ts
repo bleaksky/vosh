@@ -135,6 +135,11 @@ const DAMAGE_VERBS = [
 ];
 const DAMAGE_VERB_ALT = DAMAGE_VERBS.join('|');
 
+// Top-tier ROM hits wrap the verb in a 3-char crit indicator: `*** verb
+// ***`, `=== verb ===`, or `>>> verb <<<`. Capture the optional wrapper
+// so the whole "*** ANNIHILATES ***" reads as one colored token.
+const DAMAGE_VERB_WRAPPED = `(?:[*=>]{3} )?(?:${DAMAGE_VERB_ALT})(?: [*=<]{3})?`;
+
 // Named-color templating for Replace actions. Authors write
 // `{bold_red}## {red}$0{reset}` instead of raw ANSI escape codes.
 // `{fg:N}` and `{bg:N}` cover 256-color.
@@ -459,7 +464,7 @@ export const PRESETS: Preset[] = [
     triggers: [
       replace(
         'combat.outgoing',
-        `^(Your .+? )(${DAMAGE_VERB_ALT})( .+[!.])$`,
+        `^(Your .+? )(${DAMAGE_VERB_WRAPPED})( .+[!.])$`,
         '{fg:253}$1{reset}{fg:214}$2{reset}{fg:253}$3{reset}',
         7,
       ),
@@ -489,7 +494,7 @@ export const PRESETS: Preset[] = [
     triggers: [
       replace(
         'combat.incoming',
-        `^(.+? )(${DAMAGE_VERB_ALT})( you[!.])$`,
+        `^(.+? )(${DAMAGE_VERB_WRAPPED})( you[!.])$`,
         '{fg:244}$1{reset}{fg:210}$2{reset}{fg:244}$3{reset}',
         7,
       ),

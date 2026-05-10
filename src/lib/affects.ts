@@ -7,6 +7,10 @@ export interface Affect {
   /// Hours remaining. -1 means permanent. The server sometimes sends it
   /// as a string; coerce on read.
   duration?: number;
+  /// Caster level when the spell was applied. Drives the shape of the
+  /// modifier (e.g. how much hitroll bless gives). Aabahran ships it
+  /// as `level`.
+  level?: number | string;
   /// Stat the modifier applies to (e.g. "saves", "hitroll", "str").
   /// Aabahran sends one entry per (affect, location, modifier); bless
   /// shows up as several rows with the same name but different
@@ -31,6 +35,7 @@ export interface AffectModifier {
 export interface GroupedAffect {
   name: string;
   duration?: number;
+  level?: number;
   description?: string;
   modifiers: AffectModifier[];
 }
@@ -56,6 +61,13 @@ export function groupAffects(raw: Affect[]): GroupedAffect[] {
         modifiers: [],
       };
       if (dur !== undefined && Number.isFinite(dur)) group.duration = dur;
+      const lvl =
+        typeof aff.level === 'number'
+          ? aff.level
+          : aff.level !== undefined
+            ? Number(aff.level)
+            : undefined;
+      if (lvl !== undefined && Number.isFinite(lvl)) group.level = lvl;
       const desc = affectDescription(aff);
       if (desc) group.description = desc;
       map.set(aff.name, group);

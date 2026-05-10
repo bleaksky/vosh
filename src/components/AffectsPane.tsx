@@ -79,6 +79,9 @@ export function AffectsPane() {
                       {hasDetails ? (isOpen ? '▾' : '▸') : '·'}
                     </span>
                     <span className="affect-row-name">{group.name}</span>
+                    {group.level !== undefined && (
+                      <span className="affect-row-level">L{group.level}</span>
+                    )}
                     <span className="affect-row-dur" style={{ color }}>
                       {formatDuration(group.duration)}
                     </span>
