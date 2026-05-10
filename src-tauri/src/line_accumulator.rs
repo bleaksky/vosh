@@ -61,12 +61,21 @@ impl LineAccumulator {
             if self.buffer[i] != b'\n' {
                 continue;
             }
-            let end = if i > start && self.buffer[i - 1] == b'\r' {
-                i - 1
-            } else {
-                i
-            };
-            let line_bytes = self.buffer[start..end].to_vec();
+            // ROM-derived MUDs (Aabahran, Forsaken) terminate lines with
+            // `\n\r` instead of standard `\r\n`. Splitting on `\n` then
+            // leaves the `\r` at the *start* of the next line. Strip both
+            // leading and trailing `\r` so anchored trigger patterns work
+            // against the actual line text and xterm doesn't see a stray
+            // CR that would slam the cursor back to column zero.
+            let mut line_start = start;
+            let mut line_end = i;
+            if line_end > line_start && self.buffer[line_end - 1] == b'\r' {
+                line_end -= 1;
+            }
+            if line_start < line_end && self.buffer[line_start] == b'\r' {
+                line_start += 1;
+            }
+            let line_bytes = self.buffer[line_start..line_end].to_vec();
             let clear_first = first_complete && prev_displayed > 0;
             ops.push(ChunkOp::LineComplete {
                 bytes: line_bytes,
@@ -216,5 +225,35 @@ mod tests {
         a.reset();
         let ops = a.feed(b"new\n");
         assert_eq!(ops, vec![line(b"new", false)]);
+    }
+
+    #[test]
+    fn rom_style_lf_cr_terminator() {
+        // Aabahran / ROM 2.4 terminates lines with `\n\r` rather than
+        // standard `\r\n`. Splitting on `\n` leaves a `\r` glued to the
+        // start of the next line, which used to break `^`-anchored
+        // trigger patterns. The accumulator now strips a leading `\r`
+        // off each line so triggers see clean text.
+        let mut a = LineAccumulator::new();
+        let ops = a.feed(b"first\n\rsecond\n\rthird\n\r");
+        assert_eq!(
+            ops,
+            vec![
+                line(b"first", false),
+                line(b"second", false),
+                line(b"third", false),
+                raw(b"\r"),
+            ]
+        );
+    }
+
+    #[test]
+    fn lf_cr_split_across_chunks() {
+        // The `\r` that prefixes the next line might arrive in the next
+        // network chunk. The accumulator should still strip it.
+        let mut a = LineAccumulator::new();
+        let _ = a.feed(b"first\n");
+        let ops = a.feed(b"\rsecond\n\r");
+        assert_eq!(ops, vec![line(b"second", false), raw(b"\r")]);
     }
 }
