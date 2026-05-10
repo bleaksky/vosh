@@ -5,9 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 
 import '@xterm/xterm/css/xterm.css';
-import { loadScrollback, onGmcp, onOutput } from '../lib/session';
-import { decorateCombat } from '../lib/combat';
-import { combatOverlayStore } from '../lib/combatOverlay';
+import { loadScrollback, onOutput } from '../lib/session';
 
 export interface TerminalHandle {
   write: (data: Uint8Array | string) => void;
@@ -22,35 +20,32 @@ interface Props {
   fontSize: number;
 }
 
-// Kanso Zen palette, matching the user's Ghostty config so the terminal
-// inside the app looks the same as the one outside it. ANSI 7 (white)
-// in the published Kanso Zen palette is `#c8c093` — a warm tan that the
-// MUD's plain "white" labels render as a yellow-gold. We keep every
-// other slot faithful to the theme but pin 7 to the cool fg gray so
-// "white" reads as the user expects.
+// Kanso Zen palette, exact mirror of the user's Ghostty config so the
+// terminal inside the app renders ANSI colors identically to the one
+// outside it.
 const KANSO_ZEN_THEME: ITheme = {
   background: '#090e13',
   foreground: '#c5c9c7',
   cursor: '#c5c9c7',
   cursorAccent: '#090e13',
-  selectionBackground: '#393b44',
+  selectionBackground: '#22262d',
   selectionForeground: '#c5c9c7',
-  black: '#0d0c0c',
+  black: '#585858',
   red: '#c4746e',
   green: '#8a9a7b',
   yellow: '#c4b28a',
   blue: '#8ba4b0',
   magenta: '#a292a3',
   cyan: '#8ea4a2',
-  white: '#c5c9c7',
-  brightBlack: '#a4a7a4',
+  white: '#a4a7a4',
+  brightBlack: '#5c6066',
   brightRed: '#e46876',
   brightGreen: '#87a987',
   brightYellow: '#e6c384',
   brightBlue: '#7fb4ca',
   brightMagenta: '#938aa9',
   brightCyan: '#7aa89f',
-  brightWhite: '#f0f3f1',
+  brightWhite: '#c5c9c7',
 };
 
 export function Terminal({ onReady, fontFamily, fontSize }: Props) {
@@ -157,7 +152,6 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
     rafId = requestAnimationFrame(pollLoop);
 
     let unsubOutput: (() => void) | undefined;
-    let unsubGmcp: (() => void) | undefined;
     // Replay persisted scrollback before any live output lands so the
     // user opens the app to the tail of their last session.
     loadScrollback()
@@ -171,31 +165,9 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
         // No scrollback yet, or backend not ready; ignore.
       });
     onOutput((bytes) => {
-      const opts = combatOverlayStore.effective();
-      term.write(decorateCombat(bytes, opts));
+      term.write(bytes);
     }).then((unlisten) => {
       unsubOutput = unlisten;
-    });
-
-    // Track player level so the auto-hide threshold can suppress
-    // labels for veterans. Per the Aabahran GMCP wiki, level only
-    // appears in Char.Status (name/level/race/class), not Char.Vitals.
-    onGmcp((payload) => {
-      if (
-        payload.package === 'Char.Status' &&
-        payload.data &&
-        typeof payload.data === 'object'
-      ) {
-        const data = payload.data as Record<string, unknown>;
-        const raw = data.level;
-        const lvl =
-          typeof raw === 'number' ? raw : raw !== undefined ? Number(raw) : NaN;
-        if (Number.isFinite(lvl)) {
-          combatOverlayStore.setLevel(lvl);
-        }
-      }
-    }).then((unlisten) => {
-      unsubGmcp = unlisten;
     });
 
     const handle: TerminalHandle = {
@@ -211,7 +183,6 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
       observer.disconnect();
       window.removeEventListener('resize', handleWindowResize);
       unsubOutput?.();
-      unsubGmcp?.();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { CombatPanel } from './components/CombatPanel';
 import { HighlightsDrawer } from './components/HighlightsDrawer';
 import { LayoutEditorPanel } from './components/LayoutEditorPanel';
 import { PluginsPanel } from './components/PluginsPanel';
@@ -14,7 +13,6 @@ type TabId =
   | 'profile'
   | 'highlights'
   | 'triggers'
-  | 'combat'
   | 'plugins'
   | 'search'
   | 'layout';
@@ -28,7 +26,6 @@ const TABS: Tab[] = [
   { id: 'profile', label: 'Profile' },
   { id: 'highlights', label: 'Highlights' },
   { id: 'triggers', label: 'Triggers' },
-  { id: 'combat', label: 'Combat' },
   { id: 'plugins', label: 'Plugins' },
   { id: 'search', label: 'Search' },
   { id: 'layout', label: 'Layout' },
@@ -146,7 +143,6 @@ export function SettingsApp() {
             chromeless
           />
         )}
-        {active === 'combat' && <CombatPanel onError={handleError} />}
         {active === 'plugins' && <PluginsPanel onError={handleError} />}
         {active === 'search' && <SearchView onError={handleError} />}
         {active === 'layout' && <LayoutEditorPanel onError={handleError} />}

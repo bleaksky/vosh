@@ -85,8 +85,55 @@ function replace(
 // so using named colors here means presets pick up whatever theme is
 // active.
 const GREEN: HighlightStyle = { fg: 'bright_green' };
-const SOFT_GREEN: HighlightStyle = { fg: 'green' };
 const RED: HighlightStyle = { fg: 'bright_red', bold: true };
+
+// Damage verb alternation, lifted from the user's TinTin `CalcDam`
+// table. Pairs cover the conjugated form ("punch decimates") and
+// the bare form ("decimate") since some attack messages skip the s.
+const DAMAGE_VERBS = [
+  'scratches',
+  'scratch',
+  'grazes',
+  'graze',
+  'hits',
+  'hit',
+  'injures',
+  'injure',
+  'wounds',
+  'wound',
+  'mauls',
+  'maul',
+  'decimates',
+  'decimate',
+  'devastates',
+  'devastate',
+  'maims',
+  'maim',
+  'MUTILATES',
+  'MUTILATE',
+  'LACERATES',
+  'LACERATE',
+  'EVISCERATES',
+  'EVISCERATE',
+  'DISMEMBERS',
+  'DISMEMBER',
+  'MASSACRES',
+  'MASSACRE',
+  'MANGLES',
+  'MANGLE',
+  'DEMOLISHES',
+  'DEMOLISH',
+  'OBLITERATES',
+  'OBLITERATE',
+  'DISINTEGRATES',
+  'DISINTEGRATE',
+  'ANNIHILATES',
+  'ANNIHILATE',
+  'ERADICATES',
+  'ERADICATE',
+  'UNSPEAKABLE',
+];
+const DAMAGE_VERB_ALT = DAMAGE_VERBS.join('|');
 
 // Named-color templating for Replace actions. Authors write
 // `{bold_red}## {red}$0{reset}` instead of raw ANSI escape codes.
@@ -150,25 +197,122 @@ export const PRESETS: Preset[] = [
   },
 
   // ── Defensive Combat ──────────────────────────────────────────────
+  // Tintin-style. Routine defenses fade to dark grey (matches the
+  // user's `highlights.tin` <g08> so combat reads at a glance.
+  // Patterns anchor to a trailing period so dramatic outcomes ending
+  // in "!" (e.g., "You dodge X's attack and redirect the momentum!")
+  // stay full-bright.
   {
     id: 'defensive_combat',
     category: 'defensive',
     name: 'Parries, dodges, blocks',
     description:
-      'Tints your defensive saves green so you can read combat at a ' +
-      'glance instead of squinting at every line.',
+      'Greys out routine defensive saves (parry, dodge, block, etc.) ' +
+      'using the same dark-grey shade your tintin uses (<g08>).',
     defaultEnabled: true,
     triggers: [
-      highlight('def.parry', '^You parry .+ attack', SOFT_GREEN),
-      highlight('def.dodge', '^You dodge .+\\.$', SOFT_GREEN),
-      highlight('def.block_shield', '^You block .+ with your shield\\.$', SOFT_GREEN),
-      highlight('def.block_weapon', '^You block .+ attack with your weapon\\.$', SOFT_GREEN),
-      highlight('def.dual_parry', '^You dual parry .+ attack\\.$', SOFT_GREEN),
-      highlight('def.reverse', '^You reverse .+ attack', SOFT_GREEN),
-      highlight('def.swing_through', '^You swing right through .+ blurred image', SOFT_GREEN),
-      highlight('def.misses', '^.+ swings wildly and misses you by a mile\\.$', SOFT_GREEN),
-      highlight('def.shadows_envelop', '^Shadows envelop .+\\.$', SOFT_GREEN),
-      highlight('def.terra_shield', '^Your Terra shield deflects the attack\\.$', SOFT_GREEN),
+      // Generic "You dodge X." / "You parry X." — matches the bare
+      // form in highlights.tin line 97. Lower priority so the more
+      // specific "block / dual parry / reverse" replacements below
+      // can win on lines they uniquely identify.
+      replace(
+        'def.dodge_or_parry',
+        '^You (?:dodge|parry) .+\\.$',
+        '{fg:240}$0{reset}',
+      ),
+      // Redirect-momentum counter (ends in `!` so it's not caught by
+      // the generic period-anchored pattern above). Same dim treatment
+      // as a normal dodge.
+      replace(
+        'def.redirect_momentum',
+        '^You .+ and redirect the momentum!$',
+        '{fg:240}$0{reset}',
+      ),
+      // Shadow-blend evade — assassin/thief flavor defense, ends in
+      // `!` like the redirect.
+      replace(
+        'def.shadows_evade',
+        '^You blend into the shadows, evading .+!$',
+        '{fg:240}$0{reset}',
+      ),
+      // Parry with hand specified (highlights.tin line 93).
+      replace(
+        'def.parry_hand',
+        '^You parry .+ attack with your (?:first|second) hand\\.$',
+        '{fg:240}$0{reset}',
+        6,
+      ),
+      replace(
+        'def.block_shield',
+        '^You block .+ with your shield\\.$',
+        '{fg:240}$0{reset}',
+        6,
+      ),
+      replace(
+        'def.block_weapon',
+        '^You block .+ attack with your weapon\\.$',
+        '{fg:240}$0{reset}',
+        6,
+      ),
+      // Block and attempt to strike (highlights.tin line 89).
+      replace(
+        'def.block_attempt',
+        '^You block .+ attack and attempt to strike at the brief opening\\.$',
+        '{fg:240}$0{reset}',
+        6,
+      ),
+      replace(
+        'def.dual_parry',
+        '^You dual parry .+ attack\\.$',
+        '{fg:240}$0{reset}',
+        6,
+      ),
+      replace(
+        'def.reverse',
+        '^You reverse .+ attack.*\\.$',
+        '{fg:240}$0{reset}',
+        6,
+      ),
+      // Stagger out of attack (highlights.tin line 95).
+      replace(
+        'def.stagger',
+        '^You stagger wildly out of .+ attack\\.$',
+        '{fg:240}$0{reset}',
+        6,
+      ),
+      replace(
+        'def.swing_through',
+        '^You swing right through .+ blurred image\\.$',
+        '{fg:240}$0{reset}',
+        6,
+      ),
+      replace(
+        'def.misses',
+        '^.+ swings wildly and misses you by a mile\\.$',
+        '{fg:240}$0{reset}',
+      ),
+      replace(
+        'def.shadows_envelop',
+        '^Shadows envelop .+\\.$',
+        '{fg:253}$0{reset}',
+      ),
+      replace(
+        'def.terra_shield',
+        '^Your Terra shield deflects the attack\\.$',
+        '{fg:240}$0{reset}',
+      ),
+      // Faith save (highlights.tin line 99).
+      replace(
+        'def.faith',
+        '^Your faith holding fast, you stop the blow with .+ power\\.$',
+        '{fg:240}$0{reset}',
+      ),
+      // Giant blade deflect (highlights.tin line 88).
+      replace(
+        'def.giant_blade',
+        '^The giant blade deflects .+ attack\\.$',
+        '{fg:240}$0{reset}',
+      ),
     ],
   },
 
@@ -296,6 +440,65 @@ export const PRESETS: Preset[] = [
         'terror.drop',
         '^Filled with terror, your weapon slips through your slippery fingers\\.$',
         RED,
+      ),
+    ],
+  },
+
+  // ── Outgoing damage ───────────────────────────────────────────────
+  // Every "Your <attack> <VERB> <target><.|!>" line gets the verb
+  // recolored to a burnt-amber tone. Matches both lowercase verbs
+  // (hits, scratches) and uppercase ones (LACERATES, DISINTEGRATES).
+  {
+    id: 'combat_outgoing',
+    category: 'events',
+    name: 'Your damage verbs (amber)',
+    description:
+      "Highlights damage verbs in lines that start with 'Your ...' " +
+      'so outgoing hits stand out without recoloring the rest of the line.',
+    defaultEnabled: true,
+    triggers: [
+      replace(
+        'combat.outgoing',
+        `^(Your .+? )(${DAMAGE_VERB_ALT})( .+[!.])$`,
+        '{fg:253}$1{reset}{fg:214}$2{reset}{fg:253}$3{reset}',
+        7,
+      ),
+      // Outgoing miss — `<aee>` pale cyan on the verb, `<g21>` body
+      // (matching the damage-hit body color).
+      replace(
+        'combat.outgoing_miss',
+        '^(Your .+? )(misses|miss)( .+[!.])$',
+        '{fg:253}$1{reset}{fg:152}$2{reset}{fg:253}$3{reset}',
+        7,
+      ),
+    ],
+  },
+
+  // ── Incoming damage ───────────────────────────────────────────────
+  // Lines like "<Enemy>'s <attack> <VERB> you[!.]" get the whole line
+  // toned to grey 244 (TinTin's <g12>) with the verb in pink-red 217
+  // (TinTin's <fbb>). Misses get pale cyan 152 (TinTin's <aee>).
+  {
+    id: 'combat_incoming',
+    category: 'events',
+    name: 'Damage to you (grey line, red verb)',
+    description:
+      'Tones lines where something hits you to grey, with the damage ' +
+      'verb in red and missed swings in pale cyan.',
+    defaultEnabled: true,
+    triggers: [
+      replace(
+        'combat.incoming',
+        `^(.+? )(${DAMAGE_VERB_ALT})( you[!.])$`,
+        '{fg:244}$1{reset}{fg:210}$2{reset}{fg:244}$3{reset}',
+        7,
+      ),
+      // Incoming miss — `<aee>` pale cyan on the verb, `<g12>` body.
+      replace(
+        'combat.incoming_miss',
+        '^(.+? )(misses|miss)( you[!.])$',
+        '{fg:244}$1{reset}{fg:152}$2{reset}{fg:244}$3{reset}',
+        7,
       ),
     ],
   },
