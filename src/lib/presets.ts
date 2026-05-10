@@ -462,9 +462,13 @@ export const PRESETS: Preset[] = [
       'so outgoing hits stand out without recoloring the rest of the line.',
     defaultEnabled: true,
     triggers: [
+      // Mirrors the TinTin `You%1` form so both "Your kick LACERATES
+      // X" and "You LACERATE X" / "You miss X" lines fire — the
+      // optional `(?:r .+?)?` lets group 1 capture "You " or "Your
+      // <attack> ".
       replace(
         'combat.outgoing',
-        `^(Your .+? )(${DAMAGE_VERB_WRAPPED})( .+[!.])$`,
+        `^(You(?:r .+?)? )(${DAMAGE_VERB_WRAPPED})( .+[!.])$`,
         '{fg:253}$1{reset}{fg:214}$2{reset}{fg:253}$3{reset}',
         7,
       ),
@@ -472,7 +476,7 @@ export const PRESETS: Preset[] = [
       // (matching the damage-hit body color).
       replace(
         'combat.outgoing_miss',
-        '^(Your .+? )(misses|miss)( .+[!.])$',
+        '^(You(?:r .+?)? )(misses|miss)( .+[!.])$',
         '{fg:253}$1{reset}{fg:152}$2{reset}{fg:253}$3{reset}',
         7,
       ),
