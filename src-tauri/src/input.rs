@@ -8,7 +8,7 @@ use mudclient_trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
 use mudclient_vars::Scope;
 use tokio::time::Instant;
 
-use crate::profile::Profile;
+use crate::profile::{MacroRecorder, Profile};
 use crate::profile_config::ProfileConfig;
 use crate::script_state;
 use crate::tintin_import;
@@ -57,6 +57,10 @@ slash commands:
   #profile load                        replace state with the saved profile
   #profile reset                       wipe aliases, vars, triggers, tick
   #import-tintin <path>                import #alias and #variable from a .tin
+  #record <name>                       start recording typed commands into a macro
+  #record                              show current recording status
+  #record cancel                       discard the in-progress recording
+  #endrec                              stop recording and save as alias <name>
   #help                                show this list
 trigger actions:
   highlight <color> [bold] [underline] [inverse] [bg:<color>]
@@ -86,6 +90,14 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
             bytes: b"\r\n".to_vec(),
             echo: Vec::new(),
         };
+    }
+
+    // Capture into the macro recorder if one is active. Pre-expansion
+    // so the recorded macro stays high-level: a recorded `fb dragon`
+    // re-expands through the alias engine on replay rather than
+    // freezing the alias definition at record time.
+    if let Some(recorder) = profile.recording_macro.as_mut() {
+        recorder.commands.push(trimmed.to_string());
     }
 
     // Plain input. Interpolate variables, then expand aliases, then encode.
@@ -126,6 +138,8 @@ fn handle_slash(profile: &mut Profile, rest: &str) -> InputResult {
         "lua" => slash_lua(profile, args),
         "profile" => slash_profile(profile, args),
         "import-tintin" => slash_import_tintin(profile, args),
+        "record" => slash_record(profile, args),
+        "endrec" => slash_endrec(profile),
         "help" => echo_lines(HELP_TEXT.lines()),
         "" => error_echo("missing slash command. try #help".to_string()),
         other => error_echo(format!("unknown slash command #{other}. try #help")),
@@ -142,6 +156,67 @@ fn slash_alias(profile: &mut Profile, args: &str) -> InputResult {
     }
     profile.aliases.set(Alias::new(name, expansion));
     echo_one(format!("alias {name} set"))
+}
+
+fn slash_record(profile: &mut Profile, args: &str) -> InputResult {
+    let trimmed = args.trim();
+    // `#record` with no args prints status.
+    if trimmed.is_empty() {
+        return match &profile.recording_macro {
+            Some(r) => echo_one(format!(
+                "recording `{}` ({} command(s) captured) — `#endrec` to save, `#record cancel` to discard",
+                r.name,
+                r.commands.len(),
+            )),
+            None => echo_one("not recording. usage: #record <name>".to_string()),
+        };
+    }
+    // `#record cancel` aborts an in-progress recording.
+    if trimmed == "cancel" {
+        return match profile.recording_macro.take() {
+            Some(r) => echo_one(format!(
+                "recording cancelled — `{}` was at {} command(s)",
+                r.name,
+                r.commands.len(),
+            )),
+            None => error_echo("not recording — nothing to cancel".to_string()),
+        };
+    }
+    if profile.recording_macro.is_some() {
+        return error_echo(
+            "already recording — `#endrec` to save or `#record cancel` to discard".to_string(),
+        );
+    }
+    let name = trimmed.split_whitespace().next().unwrap_or("");
+    if name.is_empty() {
+        return error_echo("usage #record <name>".to_string());
+    }
+    profile.recording_macro = Some(MacroRecorder {
+        name: name.to_string(),
+        commands: Vec::new(),
+    });
+    echo_one(format!(
+        "recording `{name}` — every command you type is captured until `#endrec`"
+    ))
+}
+
+fn slash_endrec(profile: &mut Profile) -> InputResult {
+    let Some(recorder) = profile.recording_macro.take() else {
+        return error_echo("not recording. start with `#record <name>`".to_string());
+    };
+    if recorder.commands.is_empty() {
+        return error_echo(format!(
+            "recording `{}` had no commands — discarded",
+            recorder.name
+        ));
+    }
+    let expansion = recorder.commands.join(";");
+    let name = recorder.name.clone();
+    let count = recorder.commands.len();
+    profile.aliases.set(Alias::new(name.clone(), expansion));
+    echo_one(format!(
+        "saved macro `{name}` ({count} command(s)) — invoke by typing `{name}`"
+    ))
 }
 
 fn slash_unalias(profile: &mut Profile, args: &str) -> InputResult {
@@ -888,6 +963,50 @@ mod tests {
         let _ = process(&mut p, "#alias greet wave;bow");
         let r = process(&mut p, "#aliases");
         assert!(r.echo.iter().any(|l| l.contains("greet -> wave;bow")));
+    }
+
+    #[test]
+    fn record_captures_then_saves_alias() {
+        let mut p = Profile::default();
+        let _ = process(&mut p, "#record buff");
+        let _ = process(&mut p, "cast 'sanctuary' self");
+        let _ = process(&mut p, "cast 'haste' self");
+        let _ = process(&mut p, "cast 'bless' self");
+        let _ = process(&mut p, "#endrec");
+        let alias = p.aliases.list();
+        let buff = alias.iter().find(|a| a.name == "buff").expect("alias saved");
+        assert_eq!(
+            buff.expansion,
+            "cast 'sanctuary' self;cast 'haste' self;cast 'bless' self"
+        );
+    }
+
+    #[test]
+    fn record_skips_slash_lines() {
+        let mut p = Profile::default();
+        let _ = process(&mut p, "#record probe");
+        let _ = process(&mut p, "look");
+        // A slash command shouldn't be captured.
+        let _ = process(&mut p, "#aliases");
+        let _ = process(&mut p, "score");
+        let _ = process(&mut p, "#endrec");
+        let buff = p
+            .aliases
+            .list()
+            .into_iter()
+            .find(|a| a.name == "probe")
+            .expect("alias saved");
+        assert_eq!(buff.expansion, "look;score");
+    }
+
+    #[test]
+    fn record_cancel_discards() {
+        let mut p = Profile::default();
+        let _ = process(&mut p, "#record nope");
+        let _ = process(&mut p, "kill rabbit");
+        let _ = process(&mut p, "#record cancel");
+        assert!(p.recording_macro.is_none());
+        assert!(p.aliases.list().iter().all(|a| a.name != "nope"));
     }
 
     #[test]

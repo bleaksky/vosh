@@ -19,4 +19,15 @@ pub(crate) struct Profile {
     pub(crate) script: ScriptEngine,
     pub(crate) ui: UiConfig,
     pub(crate) plugins: PluginsPersist,
+    /// Active macro recorder. `Some` between `#record <name>` and
+    /// `#endrec`; commands typed in that window get captured into the
+    /// buffer and on stop saved as an alias whose expansion is the
+    /// `;`-joined sequence.
+    pub(crate) recording_macro: Option<MacroRecorder>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct MacroRecorder {
+    pub(crate) name: String,
+    pub(crate) commands: Vec<String>,
 }
