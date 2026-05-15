@@ -3,11 +3,13 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Terminal, type TerminalHandle } from './components/Terminal';
-import { Input, type InputHandle } from './components/Input';
+import { type InputHandle } from './components/Input';
 import { Connect, type ConnectionStatus } from './components/Connect';
 import { SidePanel } from './components/SidePanel';
-import { AffectsBar } from './components/AffectsBar';
 import { Resizable } from './components/Resizable';
+import { BottomHUD } from './components/BottomHUD';
+import { RoomStrip } from './components/RoomStrip';
+import { AuxDrawer } from './components/AuxDrawer';
 import { PRESETS, presetTriggers } from './lib/presets';
 import { dockLayoutStore } from './lib/docking';
 import {
@@ -22,8 +24,6 @@ import {
   type StatePayload,
 } from './lib/session';
 import type { SnapZone } from './lib/docking';
-import { StatusBar } from './components/StatusBar';
-import { TargetBar } from './components/TargetBar';
 import { applyTheme } from './lib/theme';
 
 const SIDE_PANEL_STORAGE_KEY = 'mudclient.layout.sidePanelOpen';
@@ -47,8 +47,24 @@ function App() {
   const [sidePanelOpen, setSidePanelOpen] = useState(loadSidePanelOpen);
   const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
   const [fontSize, setFontSize] = useState(14);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const termRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
+
+  // F2 toggles the AuxDrawer (chat / wealth / group / affects). Kept
+  // global so the user can summon it from anywhere — even while the
+  // terminal has focus. Repeated F2 closes; Escape also closes (handled
+  // inside the drawer).
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'F2') {
+        event.preventDefault();
+        setDrawerOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   // One-time migration: drag-to-dock has been removed from the main
   // window so finicky leftover dock state from prior sessions would
@@ -255,6 +271,7 @@ function App() {
         sidePanelOpen={sidePanelOpen}
         onOpenSettings={openSettingsWindow}
       />
+      <RoomStrip />
       <div className="middle" onMouseUp={handleMiddleMouseDown}>
         <div className="terminal-column">
           <Terminal
@@ -277,17 +294,14 @@ function App() {
           </Resizable>
         )}
       </div>
-      <div className="bottom-rail" aria-label="bottom rail">
-        <TargetBar />
-        <Input
-          ref={inputRef}
-          enabled
-          onError={handleError}
-          onLocalEcho={(text) => termRef.current?.write(text)}
-        />
-        <StatusBar />
-        <AffectsBar />
-      </div>
+      <BottomHUD
+        inputRef={inputRef}
+        enabled
+        onError={handleError}
+        onLocalEcho={(text) => termRef.current?.write(text)}
+        onRequestDrawer={() => setDrawerOpen((v) => !v)}
+      />
+      <AuxDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </main>
   );
 }

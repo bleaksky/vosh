@@ -1,48 +1,15 @@
-import { useEffect, useState, type ReactNode } from 'react';
 import { MapPane } from './MapPane';
-import { AffectsPane } from './AffectsPane';
-import { InfoTabsPane } from './InfoTabsPane';
-import {
-  loadSidebarOrder,
-  subscribeSidebarOrder,
-  type SidebarPanelId,
-} from '../lib/sidebarOrder';
 
-const PANE_RENDERERS: Record<SidebarPanelId, () => ReactNode> = {
-  'affects-pane': () => <AffectsPane />,
-  'map-pane': () => <MapPane />,
-  'info-tabs-pane': () => <InfoTabsPane />,
-};
-
+// Side panel now hosts only the map. Chat / Wealth / Group moved to
+// the AuxDrawer (F2), and Affects collapses into the BottomHUD's
+// tracked pills plus the drawer's full list. The pluggable
+// sortable-panes machinery is gone — there's only one pane.
 export function SidePanel() {
-  const [order, setOrder] = useState<SidebarPanelId[]>(loadSidebarOrder);
-
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    subscribeSidebarOrder((next) => {
-      setOrder(next);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
   return (
     <aside className="side-panel" aria-label="side panel">
-      {order.map((id) => {
-        const render = PANE_RENDERERS[id];
-        if (!render) return null;
-        return (
-          <div key={id} className="sidebar-section" data-panel-id={id}>
-            {render()}
-          </div>
-        );
-      })}
+      <div className="sidebar-section" data-panel-id="map-pane">
+        <MapPane />
+      </div>
     </aside>
   );
 }
