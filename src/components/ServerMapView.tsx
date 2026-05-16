@@ -74,8 +74,8 @@ interface MapTilesPayload {
 
 type Style = 'squares' | 'glyphs' | 'tileset';
 
-const STYLE_KEY = 'mudclient.layout.serverMapStyle';
-const TILESET_KEY = 'mudclient.layout.serverMapTileset';
+const STYLE_KEY = 'vosh.layout.serverMapStyle';
+const TILESET_KEY = 'vosh.layout.serverMapTileset';
 
 function loadStyle(): Style {
   try {
@@ -737,6 +737,106 @@ function depthAlphaForRing(d: number): number {
   return 0.28;
 }
 
+// Sector → ASCII glyph, lifted verbatim from tintin's
+// ~/tintin/map_panel.tin `ui_sector_glyph` function so the Vosh
+// glyphs view reads identically to my TinTin++ client.
+const SECTOR_GLYPHS: Record<string, string> = {
+  '0': '#', // inside
+  '1': '+', // city
+  '2': '.', // field
+  '3': '*', // forest
+  '4': '^', // hills
+  '5': '^', // mountain
+  '6': '~', // water
+  '7': '~', // deep water
+  '8': ',', // air / swamp
+  '9': ':', // desert
+  a: '.', // underwater
+  b: '!', // lava / cave
+  c: '=', // road
+};
+
+// xterm-256 color ladder per sector × dim tier (0=full, 1=mid, 2=faint).
+// Indices come straight from tintin's `ui_sector_color` function.
+// Tier 0 in tintin is rendered with the bold attribute; the canvas
+// renderer fakes that by using the same color (the bold flag isn't
+// available on Canvas2D text without weight switching, which would
+// change metrics).
+const SECTOR_COLOR_LADDER: Record<string, [number, number, number]> = {
+  '0': [253, 249, 244],
+  '1': [216, 180, 137],
+  '2': [155, 119, 113],
+  '3': [120, 84, 78],
+  '4': [215, 179, 143],
+  '5': [253, 250, 246],
+  '6': [123, 117, 111],
+  '7': [111, 75, 69],
+  '8': [149, 143, 107],
+  '9': [195, 153, 117],
+  a: [230, 228, 221],
+  b: [209, 203, 167],
+  c: [255, 252, 248],
+};
+
+// Canonical 6×6×6 xterm cube + 24-step grayscale + 16 named ANSI slots.
+// Same conversion used inside RoomStrip; kept inline here to avoid
+// expanding the public surface of mapPalette for one call site.
+const ANSI_256_CUBE = [0, 95, 135, 175, 215, 255];
+function ansi256ToHex(idx: number): string {
+  if (idx < 0 || idx > 255) return '#c5c9c7';
+  if (idx >= 232) {
+    const v = 8 + (idx - 232) * 10;
+    const h = v.toString(16).padStart(2, '0');
+    return `#${h}${h}${h}`;
+  }
+  if (idx < 16) {
+    const named = [
+      '#585858', '#c4746e', '#8a9a7b', '#c4b28a',
+      '#8ba4b0', '#a292a3', '#8ea4a2', '#a4a7a4',
+      '#5c6066', '#e46876', '#87a987', '#e6c384',
+      '#7fb4ca', '#938aa9', '#7aa89f', '#c5c9c7',
+    ];
+    return named[idx] ?? '#c5c9c7';
+  }
+  const c = idx - 16;
+  const r = Math.floor(c / 36);
+  const g = Math.floor((c % 36) / 6);
+  const b = c % 6;
+  const toHex = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${toHex(ANSI_256_CUBE[r])}${toHex(ANSI_256_CUBE[g])}${toHex(ANSI_256_CUBE[b])}`;
+}
+
+function glyphColor(sectorCode: string, lvl: number): string {
+  const ladder = SECTOR_COLOR_LADDER[sectorCode] ?? [250, 247, 244];
+  const idx = ladder[Math.max(0, Math.min(2, lvl))] ?? ladder[2];
+  return ansi256ToHex(idx);
+}
+
+// Connect-glyph override: rooms with vertical exits get a marker
+// instead of the sector glyph. Matches tintin's ui_connect_glyph
+// behavior for up/down only — N/S/E/W connectivity reads from the
+// neighboring cells, not from a glyph swap.
+function connectGlyph(exits: string | undefined): string | null {
+  const e = (exits ?? '').toLowerCase();
+  const hasU = e.includes('u');
+  const hasD = e.includes('d');
+  if (hasU && hasD) return '%';
+  if (hasU) return '/';
+  if (hasD) return 'v';
+  return null;
+}
+
+// Tintin dim ladder: 0 (full) within 2 cells of player, 1 (mid)
+// within 5, 2 (faint) beyond. Dark rooms (light ≤ 1) bump one tier
+// to communicate "you can barely see in here."
+function dimLevel(dr: number, dc: number, light: number | string | undefined): number {
+  const dist = Math.abs(dr) + Math.abs(dc);
+  let lvl = dist <= 2 ? 0 : dist <= 5 ? 1 : 2;
+  const l = typeof light === 'number' ? light : Number(light);
+  if (Number.isFinite(l) && l <= 1) lvl = Math.min(2, lvl + 1);
+  return lvl;
+}
+
 function drawGlyphs(
   ctx: CanvasRenderingContext2D,
   cssWidth: number,
@@ -748,8 +848,9 @@ function drawGlyphs(
   centerC: number,
   anchor: Anchor,
 ) {
-  const text = parseTextGrid(payload.t);
-  if (text.length === 0) {
+  const textFallback = parseTextGrid(payload.t);
+  const hasGrid = !!payload.g;
+  if (!hasGrid && textFallback.length === 0) {
     ctx.fillStyle = '#6e7681';
     ctx.font = '12px monospace';
     ctx.fillText('no glyph data in payload', 10, 22);
@@ -757,24 +858,68 @@ function drawGlyphs(
   }
   const pitchX = Math.max(8, Math.min(20, Math.floor(cssWidth / (cols * 1.6))));
   const pitchY = Math.max(10, Math.min(22, Math.floor(cssHeight / rows)));
-  // Anchor on the player cell whose canvas position holds steady across
-  // walks (locked to world coords when the mapping store knows the
-  // player's room).
-  const ox = Math.floor(anchor.playerX - (centerC - 0.5) * pitchX);
-  const oy = Math.floor(anchor.playerY - (centerR - 0.5) * pitchY);
+  // Match drawSquares' anchoring so off-floor entries (which share
+  // the same 1-indexed coordinate space as `g`) land on the same
+  // visual cells in both modes.
+  const ox = Math.floor(anchor.playerX - centerC * pitchX);
+  const oy = Math.floor(anchor.playerY - centerR * pitchY);
   ctx.font = `${Math.floor(pitchY * 0.85)}px "JetBrains Mono", "Menlo", monospace`;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
 
-  for (let r = 0; r < rows; r++) {
-    const row = text[r] ?? '';
-    for (let c = 0; c < cols; c++) {
-      const ch = row[c] ?? ' ';
-      if (ch === ' ') continue;
-      const isCenter = r + 1 === centerR && c + 1 === centerC;
-      const glyphSector = sectorForCode(ch);
-      ctx.fillStyle = isCenter ? MAP_COLORS.origin : glyphSector.halo;
-      ctx.fillText(isCenter ? '@' : ch, ox + (c + 0.5) * pitchX, oy + (r + 0.5) * pitchY);
+  // Pass 1: off-floor rooms first so same-floor glyphs paint on top.
+  // Tintin doesn't render off-floor at all; Vosh's squares mode does,
+  // and we mirror that behavior here at low alpha so the user sees
+  // multi-floor structure without losing the current floor.
+  const drawOffFloor = (entries: OffFloorEntry[] | undefined) => {
+    if (!Array.isArray(entries) || entries.length === 0) return;
+    ctx.save();
+    ctx.globalAlpha = 0.28;
+    for (const entry of entries) {
+      const sectorCode = entry.s ?? '';
+      const glyph = SECTOR_GLYPHS[sectorCode] ?? '?';
+      ctx.fillStyle = glyphColor(sectorCode, 2);
+      ctx.fillText(glyph, ox + entry.x * pitchX, oy + entry.y * pitchY);
+    }
+    ctx.restore();
+  };
+  drawOffFloor(payload.a);
+  drawOffFloor(payload.b);
+  drawOffFloor(payload.zr);
+
+  // Pass 2: same-floor grid via `g` (richer data — has exits + light
+  // so we can compute connect-glyph and dark-room dimming). Fall
+  // back to the text grid for cells that aren't in `g`.
+  for (let r = 1; r <= rows; r++) {
+    for (let c = 1; c <= cols; c++) {
+      const cell = hasGrid ? getCell(payload, r, c) : null;
+      const sectorFromGrid = cell?.s ?? '';
+      const sectorFromText = textFallback[r - 1]?.[c - 1] ?? '';
+      const sectorCode = sectorFromGrid || sectorFromText;
+      if (!sectorCode || sectorCode === ' ') continue;
+
+      const cx = ox + c * pitchX;
+      const cy = oy + r * pitchY;
+
+      // Player cell wins over everything else. Bold yellow `@` per
+      // tintin's `\e[1;38;5;220m@\e[0m` marker (xterm 220 = #ffd700).
+      if (r === centerR && c === centerC) {
+        ctx.fillStyle = ansi256ToHex(220);
+        ctx.fillText('@', cx, cy);
+        continue;
+      }
+
+      const dr = r - centerR;
+      const dc = c - centerC;
+      const lvl = dimLevel(dr, dc, cell?.l);
+
+      // Z-exit override takes priority over the sector glyph so the
+      // player sees which rooms lead up/down at a glance.
+      const cg = cell ? connectGlyph(cell.e) : null;
+      const glyph = cg ?? SECTOR_GLYPHS[sectorCode] ?? '?';
+
+      ctx.fillStyle = glyphColor(sectorCode, lvl);
+      ctx.fillText(glyph, cx, cy);
     }
   }
 }

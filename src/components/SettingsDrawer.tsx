@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  broadcastTrackedAffects,
   checkForUpdate,
   exportProfile,
   getUiConfig,
@@ -7,7 +8,8 @@ import {
   setUiConfig,
   type ThemeChoice,
 } from '../lib/session';
-import { applyTheme } from '../lib/theme';
+import { applyAndBroadcastTheme } from '../lib/theme';
+import { THEMES } from '../lib/themes';
 import { dockLayoutStore } from '../lib/docking';
 
 interface Props {
@@ -29,6 +31,12 @@ export function SettingsDrawer({ open, onClose, onError, chromeless }: Props) {
   const [fontSize, setFontSize] = useState(14);
   const [trackedAffectsText, setTrackedAffectsText] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Debounce timer for the tracked-affects textarea auto-save. onBlur
+  // alone isn't reliable: closing the settings window with the
+  // textarea focused tears the webview down before the blur fires,
+  // so the persist invoke never queues. A 500ms idle-save covers
+  // that case while staying cheap during typing.
+  const trackedAffectsTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -93,7 +101,7 @@ export function SettingsDrawer({ open, onClose, onError, chromeless }: Props) {
 
   const handleThemeChange = async (next: ThemeChoice) => {
     setTheme(next);
-    applyTheme(next);
+    void applyAndBroadcastTheme(next);
     try {
       await persist({ theme: next });
       setStatus(`theme set to ${next}`);
@@ -114,7 +122,7 @@ export function SettingsDrawer({ open, onClose, onError, chromeless }: Props) {
 
   const broadcastFont = (family: string, size: number) => {
     window.dispatchEvent(
-      new CustomEvent('mudclient:font-changed', { detail: { family, size } }),
+      new CustomEvent('vosh:font-changed', { detail: { family, size } }),
     );
   };
 
@@ -140,13 +148,35 @@ export function SettingsDrawer({ open, onClose, onError, chromeless }: Props) {
     }
   };
 
+  const handleTrackedAffectsChange = (next: string) => {
+    setTrackedAffectsText(next);
+    if (trackedAffectsTimerRef.current !== null) {
+      window.clearTimeout(trackedAffectsTimerRef.current);
+    }
+    trackedAffectsTimerRef.current = window.setTimeout(() => {
+      trackedAffectsTimerRef.current = null;
+      void handleTrackedAffectsBlur();
+    }, 500);
+  };
+
   const handleTrackedAffectsBlur = async () => {
+    // Cancel any pending debounce so the explicit blur save isn't
+    // immediately followed by a duplicate timer-fired save.
+    if (trackedAffectsTimerRef.current !== null) {
+      window.clearTimeout(trackedAffectsTimerRef.current);
+      trackedAffectsTimerRef.current = null;
+    }
     const list = currentTrackedAffects();
     try {
       await persist({ tracked_affects: list });
+      // Local CustomEvent for in-window consumers (the chromeless
+      // embed inside SettingsHub). Tauri emit for the main window's
+      // BottomHUD, which runs in a separate webview and never
+      // hears DOM events from settings.
       window.dispatchEvent(
-        new CustomEvent('mudclient:tracked-affects-changed', { detail: list }),
+        new CustomEvent('vosh:tracked-affects-changed', { detail: list }),
       );
+      await broadcastTrackedAffects(list);
       setStatus(`tracked affects saved (${list.length})`);
     } catch (e) {
       setStatus(`tracked affects save failed ${String(e)}`);
@@ -210,7 +240,7 @@ export function SettingsDrawer({ open, onClose, onError, chromeless }: Props) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'mudclient-profile.toml';
+    a.download = 'vosh-profile.toml';
     a.click();
     URL.revokeObjectURL(url);
     setStatus('download started');
@@ -233,16 +263,56 @@ export function SettingsDrawer({ open, onClose, onError, chromeless }: Props) {
     <>
       <fieldset className="drawer-fieldset">
         <legend>Appearance</legend>
+        <div className="theme-picker">
+          {THEMES.map((t) => {
+            const isActive = theme === t.id || (theme === 'default' && t.id === 'kanso-zen');
+            return (
+              <button
+                key={t.id}
+                type="button"
+                className={`theme-swatch${isActive ? ' is-active' : ''}`}
+                onClick={() => void handleThemeChange(t.id)}
+                aria-pressed={isActive}
+                title={t.description}
+              >
+                <div
+                  className="theme-swatch-preview"
+                  style={
+                    {
+                      '--preview-bg': t.chrome.surface,
+                      '--preview-deep': t.chrome.surfaceDeep,
+                      '--preview-accent': t.chrome.accent,
+                      '--preview-text': t.chrome.textStrong,
+                      '--preview-warn': t.chrome.warn,
+                      '--preview-danger': t.chrome.danger,
+                    } as React.CSSProperties
+                  }
+                >
+                  <span className="theme-swatch-side" />
+                  <span className="theme-swatch-dots">
+                    <span style={{ background: t.chrome.danger }} />
+                    <span style={{ background: t.chrome.warn }} />
+                    <span style={{ background: t.chrome.success }} />
+                    <span style={{ background: t.chrome.info }} />
+                  </span>
+                </div>
+                <div className="theme-swatch-meta">
+                  <span className="theme-swatch-name">{t.label}</span>
+                  <span className="theme-swatch-desc">{t.description}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
         <label>
-          <span>theme</span>
-          <select
-            value={theme}
-            onChange={(e) => void handleThemeChange(e.target.value as ThemeChoice)}
-          >
-            <option value="default">default</option>
-            <option value="high-contrast">high contrast</option>
-            <option value="system">match system contrast</option>
-          </select>
+          <input
+            type="checkbox"
+            checked={theme === 'system'}
+            onChange={(e) =>
+              void handleThemeChange(e.target.checked ? 'system' : 'kanso-zen')
+            }
+          />
+          follow system contrast preference
         </label>
         <label>
           <span>font</span>
@@ -305,9 +375,9 @@ export function SettingsDrawer({ open, onClose, onError, chromeless }: Props) {
           value={trackedAffectsText}
           spellCheck={false}
           rows={6}
-          onChange={(e) => setTrackedAffectsText(e.target.value)}
+          onChange={(e) => handleTrackedAffectsChange(e.target.value)}
           onBlur={() => void handleTrackedAffectsBlur()}
-          placeholder={'haste\nstoneskin\nblade barrier\nsanctuary'}
+          placeholder="one affect name per line"
         />
       </fieldset>
       <textarea

@@ -1,5 +1,29 @@
 import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
+
+/// Cross-window broadcast for tracked-affect changes. The settings
+/// window is a separate Tauri webview, so `window.dispatchEvent`
+/// only reaches its own DOM; the main window's BottomHUD listens
+/// via this Tauri channel and via the legacy window event (still
+/// emitted for in-window consumers like AuxDrawer).
+const TRACKED_AFFECTS_EVENT = 'vosh://tracked-affects-changed';
+
+export async function broadcastTrackedAffects(list: string[]): Promise<void> {
+  try {
+    await emit(TRACKED_AFFECTS_EVENT, list);
+  } catch {
+    // Tauri unavailable in dev preview; the same-window CustomEvent
+    // dispatched by the caller still covers the in-window path.
+  }
+}
+
+export async function subscribeTrackedAffectsChanged(
+  cb: (list: string[]) => void,
+): Promise<UnlistenFn> {
+  return listen<string[]>(TRACKED_AFFECTS_EVENT, (event) => {
+    if (Array.isArray(event.payload)) cb(event.payload);
+  });
+}
 
 export interface OutputPayload {
   bytes: number[];
@@ -117,6 +141,32 @@ export interface RoutedPayload {
 
 export async function onRouted(cb: (payload: RoutedPayload) => void): Promise<UnlistenFn> {
   return listen<RoutedPayload>('session://routed', (event) => {
+    cb(event.payload);
+  });
+}
+
+export interface QuickKey {
+  name: string;
+  verb: string;
+}
+
+export interface TargetPayload {
+  name: string | null;
+  /// 1-based position in the latest Room.Chars push that the
+  /// backend resolved as the targeted char. `null` when the target
+  /// isn't in the current room or no target is set.
+  room_idx: number | null;
+  /// Current quick-key bindings (name → verb). Includes empty-verb
+  /// entries; the TargetBar filters them for display.
+  quick_keys: QuickKey[];
+}
+
+export async function getTarget(): Promise<TargetPayload> {
+  return invoke('target_get');
+}
+
+export async function onTarget(cb: (payload: TargetPayload) => void): Promise<UnlistenFn> {
+  return listen<TargetPayload>('session://target', (event) => {
     cb(event.payload);
   });
 }
@@ -270,7 +320,11 @@ export async function loadScrollback(): Promise<Uint8Array> {
   return new Uint8Array(bytes);
 }
 
-export type ThemeChoice = 'default' | 'high-contrast' | 'system';
+// ThemeChoice is now a free-form string keyed against THEMES in
+// src/lib/themes.ts plus the legacy `system` sentinel for tracking the
+// OS contrast preference. The settings UI populates options from the
+// theme registry.
+export type ThemeChoice = string;
 
 export interface UiConfig {
   theme: ThemeChoice;
@@ -290,10 +344,8 @@ export async function getUiConfig(): Promise<UiConfig> {
     tracked_affects: string[];
     enabled_presets: string[];
   }>('ui_get_config');
-  const theme: ThemeChoice =
-    cfg.theme === 'high-contrast' || cfg.theme === 'system' ? cfg.theme : 'default';
   return {
-    theme,
+    theme: typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : 'kanso-zen',
     auto_update: cfg.auto_update,
     font_family: cfg.font_family,
     font_size: cfg.font_size,

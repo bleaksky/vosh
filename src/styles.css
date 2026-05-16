@@ -37,6 +37,12 @@
   --c-danger: #e46876;
   --c-info: #7fb4ca;
   --c-success: #87a987;
+
+  /* Chrome strip tokens, lifted from my tmux + tokyo-night-tmux
+     kanso-zen theme so Vosh chrome reads like my actual tmux
+     status line over a ghostty pane. */
+  --chrome-strip-bg: #14191f;       /* tmux status-bg, THEME[background] */
+  --chrome-input-border: #5c6066;   /* tmux pane-border-style, THEME[bblack] */
 }
 
 html,
@@ -85,8 +91,7 @@ body,
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  background: var(--c-surface-pane);
-  border-bottom: 1px solid var(--c-border-strong);
+  background: var(--chrome-strip-bg);
   font-size: 13px;
 }
 
@@ -94,7 +99,7 @@ body,
 .connect input[type='number'] {
   background: var(--c-surface);
   color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
+  border: 1px solid var(--chrome-input-border);
   border-radius: 4px;
   padding: 0.25rem 0.5rem;
   font: inherit;
@@ -113,7 +118,7 @@ body,
    tint when idle and a red one when live so the state still reads
    without the bar shouting about it. */
 .connect button[type='submit'] {
-  background: var(--c-surface-lift);
+  background: var(--c-surface);
   color: #87a987;
   border: 0;
   border-radius: 999px;
@@ -350,7 +355,6 @@ body,
   display: flex;
   flex-direction: column;
   background: var(--c-surface);
-  border-left: 1px solid var(--c-border-strong);
 }
 
 /* Each side-panel section is wrapped so SidePanel can render reorder
@@ -562,6 +566,8 @@ body,
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  border-bottom: 0;
+  background: var(--chrome-strip-bg);
 }
 
 /* All .map-mode-toggle styling lives in the pill block lower down so
@@ -1248,7 +1254,7 @@ body,
 }
 
 .pill {
-  background: var(--c-surface-lift);
+  background: var(--c-surface);
   border: 0;
   border-radius: 999px;
   color: var(--c-text-faint);
@@ -1304,7 +1310,7 @@ body,
 }
 
 .map-mode-toggle button {
-  background: var(--c-surface-lift);
+  background: var(--c-surface);
   border: 0;
   border-radius: 999px;
   color: var(--c-text-faint);
@@ -2926,7 +2932,6 @@ body,
   gap: 0.4rem;
   padding: 0.32rem 0.85rem;
   background: var(--c-surface-pane);
-  border-bottom: 1px solid var(--c-border);
   font-size: 12.5px;
   min-height: 1.85rem;
   color: var(--c-text-muted);
@@ -3021,8 +3026,14 @@ body,
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  background: var(--c-surface);
-  border-top: 1px solid var(--c-border-strong);
+  background: var(--chrome-strip-bg);
+  /* 6px buffer above the strip in the TERMINAL color, not the
+     strip color. This gives xterm's last cell clearance from the
+     strip and hides the seam: terminal-host above is var(--c-surface),
+     this border is var(--c-surface), so the eye reads a continuous
+     terminal surface. The strip's own bg paints below the border
+     and produces the tmux-style color step from #090e13 to #14191f. */
+  border-top: 6px solid var(--c-surface);
 }
 
 .bhud-input-row {
@@ -3037,6 +3048,7 @@ body,
   flex: 1 1 auto;
   min-width: 0;
   border-top: 0;
+  background: var(--chrome-strip-bg);
 }
 
 .bhud-world {
@@ -3053,7 +3065,7 @@ body,
 .bhud-world-tick {
   font-variant-numeric: tabular-nums;
   color: var(--c-text-muted);
-  background: var(--c-surface-lift);
+  background: var(--c-surface);
   border-radius: 999px;
   padding: 0.05rem 0.45rem;
   font-size: 11px;
@@ -3123,7 +3135,7 @@ body,
 .bhud-drawer-button {
   background: transparent;
   color: var(--c-text-faint);
-  border: 1px solid var(--c-border-strong);
+  border: 1px solid var(--chrome-input-border);
   border-radius: 999px;
   width: 1.55rem;
   height: 1.4rem;

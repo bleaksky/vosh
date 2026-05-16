@@ -6,7 +6,13 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
-import { onInputMode, sendInput } from '../lib/session';
+import {
+  getTarget,
+  onInputMode,
+  onTarget,
+  sendInput,
+  type QuickKey,
+} from '../lib/session';
 
 export interface InputHandle {
   focus: () => void;
@@ -41,6 +47,31 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     let cancelled = false;
     onInputMode((payload) => {
       setPasswordMode(payload.password);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+
+  // Track configured quick-keys so we can skip the local echo when
+  // the user types one. The backend echoes the expansion (`bash
+  // blah`) via session://output, so the shortcut itself never lands
+  // in xterm — only the resolved command does.
+  const quickKeysRef = useRef<QuickKey[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    getTarget()
+      .then((snap) => {
+        if (!cancelled) quickKeysRef.current = snap.quick_keys;
+      })
+      .catch(() => {});
+    onTarget((payload) => {
+      quickKeysRef.current = payload.quick_keys;
     }).then((fn) => {
       if (cancelled) fn();
       else unsub = fn;
@@ -104,9 +135,18 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       // trailing \r\n moves the cursor to the row where the server
       // response will print. In password mode, only echo a newline so
       // the password itself never lands in the terminal scrollback.
+      //
+      // Quick-keys are a third case: skip the local echo entirely so
+      // the shortcut name doesn't appear. The backend pushes the
+      // expansion via session://output, which lands inline at the
+      // same cursor position the shortcut would have occupied.
+      const firstWord = line.split(/\s+/)[0] ?? '';
+      const isQuickKey = quickKeysRef.current.some(
+        (q) => q.name === firstWord && q.verb.length > 0,
+      );
       if (passwordMode) {
         onLocalEcho?.('\r\n');
-      } else {
+      } else if (!isQuickKey) {
         onLocalEcho?.(`${line}\r\n`);
       }
       try {
@@ -163,9 +203,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         autoCapitalize="off"
         autoCorrect="off"
         autoComplete={passwordMode ? 'current-password' : 'off'}
-        placeholder={
-          passwordMode ? 'password' : enabled ? 'type a command, or #help' : 'input disabled'
-        }
+        placeholder={passwordMode ? 'password' : ''}
         aria-label={passwordMode ? 'password input' : 'command input'}
         onChange={(e) => handleChange(e.target.value)}
         onKeyDown={handleKeyDown}

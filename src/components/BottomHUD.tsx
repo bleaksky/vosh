@@ -6,6 +6,7 @@ import {
   onState,
   onTarget,
   onTick,
+  subscribeTrackedAffectsChanged,
   type QuickKey,
   type TickPayload,
 } from '../lib/session';
@@ -173,32 +174,63 @@ export function BottomHUD({
   const [world, setWorld] = useState<WorldTime>({});
   const [moons, setMoons] = useState<MoonsState>({ moons: [] });
   const [tick, setTick] = useState<TickPayload | null>(null);
+  // Tintin-style tick display: count up real seconds since the last
+  // World.Time hour change. Resets only on hour change, not on the
+  // backend's local-interval auto-fire (which can fire ahead of or
+  // behind the MUD's actual tick). Matches ~/tintin/prompt.tin's
+  // ui_tick_secs behavior.
+  const [tickSecs, setTickSecs] = useState(0);
+  const tickResetAtRef = useRef<number>(Date.now());
+  const prevHourRef = useRef<number | string | null>(null);
   const [combat, setCombat] = useState<CombatState | null>(null);
   const [userTarget, setUserTarget] = useState<string | null>(null);
   const [quickKeys, setQuickKeys] = useState<QuickKey[]>([]);
   const [affects, setAffects] = useState<Affect[]>([]);
   const [tracked, setTracked] = useState<string[]>([]);
-  const lastFiredRef = useRef<number>(0);
 
   useEffect(() => {
     let cancelled = false;
+    let unsubTauri: (() => void) | undefined;
     getUiConfig()
       .then((cfg) => {
         if (!cancelled) setTracked(cfg.tracked_affects ?? []);
       })
       .catch(() => {});
+    // Local window event for in-window edits (chromeless settings).
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<string[]>).detail;
       if (Array.isArray(detail)) setTracked(detail);
     };
-    window.addEventListener('mudclient:tracked-affects-changed', handler as EventListener);
+    window.addEventListener('vosh:tracked-affects-changed', handler as EventListener);
+    // Cross-window Tauri event for the standalone settings window.
+    // Without this, the BottomHUD doesn't see tracked-affect edits
+    // until the next launch.
+    subscribeTrackedAffectsChanged((list) => {
+      if (!cancelled) setTracked(list);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsubTauri = fn;
+    });
     return () => {
       cancelled = true;
       window.removeEventListener(
-        'mudclient:tracked-affects-changed',
+        'vosh:tracked-affects-changed',
         handler as EventListener,
       );
+      unsubTauri?.();
     };
+  }, []);
+
+  // Real-time local counter for the tick display. Mirrors tintin's
+  // 1-second ticker: every wall-clock second, recompute elapsed
+  // seconds since the last hour-change reset. setInterval runs at
+  // 250ms to keep the display responsive even if the browser
+  // throttles longer timers under tab inactivity.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setTickSecs(Math.floor((Date.now() - tickResetAtRef.current) / 1000));
+    }, 250);
+    return () => window.clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -225,7 +257,19 @@ export function BottomHUD({
         return;
       }
       if (pkg === 'World.Time' && payload.data && typeof payload.data === 'object') {
-        setWorld((prev) => ({ ...prev, ...(payload.data as WorldTime) }));
+        const incoming = payload.data as WorldTime;
+        setWorld((prev) => ({ ...prev, ...incoming }));
+        // Reset the tintin-style tick counter on every hour change.
+        // The first World.Time after connect just records the hour,
+        // subsequent ones with a different hour are the tick fires.
+        const hour = incoming.hour;
+        if (hour !== undefined && hour !== null) {
+          if (prevHourRef.current !== null && prevHourRef.current !== hour) {
+            tickResetAtRef.current = Date.now();
+            setTickSecs(0);
+          }
+          prevHourRef.current = hour;
+        }
         return;
       }
       if (pkg === 'World.Moons' && payload.data && typeof payload.data === 'object') {
@@ -269,6 +313,11 @@ export function BottomHUD({
         setCombat(null);
         setUserTarget(null);
         setAffects([]);
+        // Forget the last hour so the next connection's first
+        // World.Time push is treated as the seed, not a hour-change.
+        prevHourRef.current = null;
+        tickResetAtRef.current = Date.now();
+        setTickSecs(0);
       }
     }).then((fn) => {
       if (cancelled) fn();
@@ -285,34 +334,12 @@ export function BottomHUD({
 
     onTick((payload) => {
       setTick(payload);
-      if (payload.fired && payload.sound) {
-        const now = Date.now();
-        if (now - lastFiredRef.current > 500) {
-          lastFiredRef.current = now;
-          try {
-            type WindowWithWebkit = Window & { webkitAudioContext?: typeof AudioContext };
-            const w = window as WindowWithWebkit;
-            const Ctx = window.AudioContext ?? w.webkitAudioContext;
-            if (!Ctx) return;
-            const ctx = new Ctx();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.frequency.value = 880;
-            osc.type = 'sine';
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            const t = ctx.currentTime;
-            gain.gain.setValueAtTime(0.0001, t);
-            gain.gain.exponentialRampToValueAtTime(0.18, t + 0.01);
-            gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
-            osc.start(t);
-            osc.stop(t + 0.2);
-            osc.onended = () => ctx.close();
-          } catch {
-            // ignore
-          }
-        }
-      }
+      // Tick beep is intentionally disabled. The backend fires on a
+      // local-clock interval (default 30s) that drifts from the
+      // MUD's actual tick — the only canonical signal is the
+      // World.Time hour change, which the display already tracks.
+      // Beeping on the local-fire produced false alarms ahead of
+      // (or behind) every real tick.
     }).then((fn) => {
       if (cancelled) fn();
       else unsubTick = fn;
@@ -330,11 +357,20 @@ export function BottomHUD({
   const hourLabel = formatHour(world.hour);
   const skyLabel = pickFirst(world.sky, world.light);
   const weatherLabel = pickFirst(world.weather, world.precip);
-  const tickRemaining =
-    tick?.enabled && tick.remaining_ms !== undefined
-      ? Math.max(0, Math.ceil(tick.remaining_ms / 1000))
+  // Tintin-style display: tickSecs is incremented locally every
+  // second and reset only on World.Time hour change. Show the pill
+  // whenever the tick state is enabled — the actual counter doesn't
+  // depend on the backend's interval/remaining math anymore.
+  const tickDisplay = tick?.enabled ? tickSecs : null;
+  // Flash when we're approaching the expected tick interval. We
+  // don't know the MUD's real cadence here, so use the configured
+  // interval as the upper bound and warn during the last 5s.
+  const intervalSecs =
+    tick?.enabled && tick.interval_ms !== undefined
+      ? Math.max(1, Math.floor(tick.interval_ms / 1000))
       : null;
-  const tickFlash = tick?.enabled && tick.remaining_ms <= 5000;
+  const tickFlash =
+    intervalSecs !== null && tickDisplay !== null && tickDisplay >= intervalSecs - 5;
 
   const liveByKey = new Map<string, Affect>();
   for (const a of affects) liveByKey.set(normalizeAffectName(a.name), a);
@@ -359,9 +395,9 @@ export function BottomHUD({
           onLocalEcho={onLocalEcho}
         />
         <div className="bhud-world" aria-label="world conditions">
-          {tickRemaining !== null && (
+          {tickDisplay !== null && (
             <span className={`bhud-world-tick${tickFlash ? ' is-flashing' : ''}`}>
-              {tickRemaining}s
+              {tickDisplay}s
             </span>
           )}
           {hourLabel && <span className="bhud-world-hour">{hourLabel}</span>}
