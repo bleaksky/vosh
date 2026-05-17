@@ -59,7 +59,7 @@ function highlight(
     pattern,
     priority,
     enabled: true,
-    action: { kind: 'highlight', style },
+    actions: [{ kind: 'highlight', style }],
   };
 }
 
@@ -78,7 +78,7 @@ function replace(
     pattern,
     priority,
     enabled: true,
-    action: { kind: 'replace', template: colorize(template) },
+    actions: [{ kind: 'replace', template: colorize(template) }],
   };
 }
 
@@ -307,16 +307,42 @@ export const PRESETS: Preset[] = [
     description: 'Disarms and buff drops from highlights.tin 105-134.',
     defaultEnabled: true,
     triggers: [
-      replace(
-        'disarm.secondary',
-        '^(.+) disarms you and sends your secondary weapon flying!$',
-        '{bold_red}##{reset} {fg:178}$1 disarms you and sends your SECONDARY weapon flying!{reset}',
-      ),
-      replace(
-        'disarm.primary',
-        '^(.+) disarms you and sends your weapon flying!$',
-        '{bold_red}##{reset} {fg:178}$1 disarms you and sends your PRIMARY weapon flying!{reset}',
-      ),
+      // Visual recolor + auto-rearm send, demonstrating the
+      // multi-action support. Mirrors the user's tintin #ACTION at
+      // line 109 that does `get 1.;wield 1.` on disarm. Fires
+      // unconditionally — when the attacker is "Someone" (blinded)
+      // it still tries, which can pick up junk; that edge case is
+      // the cost of not having lookarounds in the trigger regex.
+      {
+        name: 'disarm.secondary',
+        pattern: '^(.+) disarms you and sends your secondary weapon flying!$',
+        priority: 5,
+        enabled: true,
+        actions: [
+          {
+            kind: 'replace',
+            template: colorize(
+              '{bold_red}##{reset} {fg:178}$1 disarms you and sends your SECONDARY weapon flying!{reset}',
+            ),
+          },
+          { kind: 'send', template: 'get 1.;wield 1.' },
+        ],
+      },
+      {
+        name: 'disarm.primary',
+        pattern: '^(.+) disarms you and sends your weapon flying!$',
+        priority: 5,
+        enabled: true,
+        actions: [
+          {
+            kind: 'replace',
+            template: colorize(
+              '{bold_red}##{reset} {fg:178}$1 disarms you and sends your PRIMARY weapon flying!{reset}',
+            ),
+          },
+          { kind: 'send', template: 'get 1.;wield 1.' },
+        ],
+      },
       replace(
         'buff.protective_shield',
         '^(.+) protective shield dissipates\\.$',
@@ -346,21 +372,26 @@ export const PRESETS: Preset[] = [
   },
 
   // ── Terror weapon drop ────────────────────────────────────────────
-  // tintin line 124 is an #ACTION (auto-rearm) and the line itself
-  // is not auto-highlighted by tintin, but the user wants it
-  // visually flagged anyway. Bold bright red.
+  // Highlight the line bold-bright-red AND fire the same auto-rearm
+  // the user's tintin #ACTION (line 124) does. Both run on the same
+  // trigger via the multi-actions support.
   {
     id: 'terror_events',
     category: 'events',
     name: 'Terror weapon drop',
-    description: 'Bold red on the terror-induced weapon drop line.',
+    description: 'Bold red on the line + auto get/wield from highlights.tin 124.',
     defaultEnabled: true,
     triggers: [
-      highlight(
-        'terror.drop',
-        '^Filled with terror, your weapon slips through your slippery fingers\\.$',
-        RED,
-      ),
+      {
+        name: 'terror.drop',
+        pattern: '^Filled with terror, your weapon slips through your slippery fingers\\.$',
+        priority: 5,
+        enabled: true,
+        actions: [
+          { kind: 'highlight', style: RED },
+          { kind: 'send', template: 'get 1.;wield 1.' },
+        ],
+      },
     ],
   },
 

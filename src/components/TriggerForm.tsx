@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { HighlightStyle, NamedColor, TriggerRecord } from '../lib/session';
+import type {
+  HighlightStyle,
+  NamedColor,
+  TriggerAction,
+  TriggerRecord,
+} from '../lib/session';
+import { normalizeActions } from '../lib/session';
 import { colorize, decolorize } from '../lib/colorTokens';
 
 interface Props {
@@ -8,7 +14,8 @@ interface Props {
   onError: (e: string | null) => void;
 }
 
-type ActionKind = 'highlight' | 'gag' | 'replace' | 'send' | 'route';
+type VisualKind = 'none' | 'highlight' | 'replace' | 'gag';
+type EffectKind = 'send' | 'route';
 
 const COLORS: NamedColor[] = [
   'black',
@@ -35,33 +42,80 @@ function blankTrigger(): TriggerRecord {
     pattern: '',
     priority: 5,
     enabled: true,
-    action: { kind: 'highlight', style: { fg: 'yellow' } },
+    actions: [{ kind: 'highlight', style: { fg: 'yellow' } }],
   };
 }
 
-// Walk a trigger's action and translate template text between raw
-// ANSI escapes (what the backend stores) and the friendly token grammar
-// the form displays. Highlight + gag + route actions have no templates
-// so they pass through.
-function decolorizeTemplates(t: TriggerRecord): TriggerRecord {
-  if (t.action.kind === 'replace' || t.action.kind === 'send') {
-    return { ...t, action: { ...t.action, template: decolorize(t.action.template) } };
+// Split a Vec<TriggerAction> into the (at most) one Visual entry
+// and zero-or-more Effects entries. Mirrors the form's two
+// sections; reverse on save reconstitutes the vec.
+function splitActions(actions: TriggerAction[]): {
+  visual: Exclude<TriggerAction, { kind: 'send' } | { kind: 'route' }> | null;
+  effects: Extract<TriggerAction, { kind: 'send' } | { kind: 'route' }>[];
+} {
+  let visual: ReturnType<typeof splitActions>['visual'] = null;
+  const effects: ReturnType<typeof splitActions>['effects'] = [];
+  for (const a of actions) {
+    if (a.kind === 'send' || a.kind === 'route') {
+      effects.push(a);
+    } else if (visual === null) {
+      visual = a;
+    }
   }
-  return t;
+  return { visual, effects };
+}
+
+function joinActions(
+  visual: ReturnType<typeof splitActions>['visual'],
+  effects: ReturnType<typeof splitActions>['effects'],
+): TriggerAction[] {
+  const out: TriggerAction[] = [];
+  if (visual) out.push(visual);
+  out.push(...effects);
+  return out;
+}
+
+function blankVisual(kind: VisualKind): ReturnType<typeof splitActions>['visual'] {
+  switch (kind) {
+    case 'none':
+      return null;
+    case 'highlight':
+      return { kind: 'highlight', style: { fg: 'yellow' } };
+    case 'replace':
+      return { kind: 'replace', template: '' };
+    case 'gag':
+      return { kind: 'gag' };
+  }
+}
+
+function blankEffect(kind: EffectKind): TriggerAction {
+  return kind === 'send'
+    ? { kind: 'send', template: '' }
+    : { kind: 'route', pane: 'chat' };
+}
+
+function decolorizeTemplates(t: TriggerRecord): TriggerRecord {
+  return {
+    ...t,
+    actions: t.actions.map((a) =>
+      a.kind === 'replace' || a.kind === 'send'
+        ? { ...a, template: decolorize(a.template) }
+        : a,
+    ),
+  };
 }
 
 function colorizeTemplates(t: TriggerRecord): TriggerRecord {
-  if (t.action.kind === 'replace' || t.action.kind === 'send') {
-    return { ...t, action: { ...t.action, template: colorize(t.action.template) } };
-  }
-  return t;
+  return {
+    ...t,
+    actions: t.actions.map((a) =>
+      a.kind === 'replace' || a.kind === 'send'
+        ? { ...a, template: colorize(a.template) }
+        : a,
+    ),
+  };
 }
 
-// Structured editor for triggers. Cards stacked vertically; each card
-// is one trigger with field controls. Preset-installed triggers
-// (those carrying a non-empty `preset` tag) are still listed but
-// marked and edit-disabled, since they get re-applied from
-// src/lib/presets.ts on every startup.
 export function TriggerForm({ load, save, onError }: Props) {
   const [list, setList] = useState<TriggerRecord[] | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -73,9 +127,20 @@ export function TriggerForm({ load, save, onError }: Props) {
         if (cancelled) return;
         try {
           const parsed = JSON.parse(json);
-          const arr: TriggerRecord[] = Array.isArray(parsed) ? parsed : [];
-          // Inverse-colorize templates so the form shows readable
-          // tokens like {red} and {fg:244} instead of raw escapes.
+          const arr: TriggerRecord[] = Array.isArray(parsed)
+            ? (parsed as unknown[]).map((row) => {
+                const r = row as Record<string, unknown>;
+                const out: TriggerRecord = {
+                  name: String(r.name ?? ''),
+                  pattern: String(r.pattern ?? ''),
+                  priority: typeof r.priority === 'number' ? r.priority : 0,
+                  enabled: r.enabled !== false,
+                  actions: normalizeActions(row),
+                };
+                if (typeof r.preset === 'string') out.preset = r.preset;
+                return out;
+              })
+            : [];
           setList(arr.map(decolorizeTemplates));
         } catch {
           setList([]);
@@ -96,25 +161,24 @@ export function TriggerForm({ load, save, onError }: Props) {
     [list],
   );
 
-  const update = (idx: number, patch: Partial<TriggerRecord>) => {
-    if (!list) return;
-    const real = idxInList(list, idx, false);
-    if (real < 0) return;
+  const updateAt = (realIdx: number, patch: Partial<TriggerRecord>) => {
+    if (!list || realIdx < 0) return;
     const next = list.slice();
-    next[real] = { ...next[real], ...patch };
+    next[realIdx] = { ...next[realIdx], ...patch };
     setList(next);
   };
 
-  const updateAction = (idx: number, action: TriggerRecord['action']) => {
-    update(idx, { action });
+  const updateUser = (slot: number, patch: Partial<TriggerRecord>) => {
+    if (!list) return;
+    updateAt(indexInList(list, slot, false), patch);
   };
 
-  const remove = (idx: number) => {
+  const removeUser = (slot: number) => {
     if (!list) return;
-    const real = idxInList(list, idx, false);
-    if (real < 0) return;
+    const idx = indexInList(list, slot, false);
+    if (idx < 0) return;
     const next = list.slice();
-    next.splice(real, 1);
+    next.splice(idx, 1);
     setList(next);
   };
 
@@ -126,8 +190,6 @@ export function TriggerForm({ load, save, onError }: Props) {
   const doSave = async () => {
     if (!list) return;
     try {
-      // Forward-colorize templates back to raw ANSI before posting
-      // so the backend stores what the trigger engine expects.
       const out = list.map(colorizeTemplates);
       await save(JSON.stringify(out, null, 2));
       setSavedAt(Date.now());
@@ -145,7 +207,7 @@ export function TriggerForm({ load, save, onError }: Props) {
           {userTriggers.length} user · {presetTriggers.length} preset
         </span>
         <span className="settings-triggers-hint">
-          form edits the live trigger store; save replaces it atomically
+          a trigger can pair one visual with any number of effects (send/route)
         </span>
       </div>
 
@@ -154,22 +216,23 @@ export function TriggerForm({ load, save, onError }: Props) {
           <TriggerCard
             key={`u-${i}`}
             trigger={t}
-            onChange={(patch) => update(i, patch)}
-            onActionChange={(action) => updateAction(i, action)}
-            onRemove={() => remove(i)}
+            onChange={(patch) => updateUser(i, patch)}
+            onRemove={() => removeUser(i)}
+            readOnly={false}
           />
         ))}
         {presetTriggers.length > 0 && (
           <div className="trigger-form-preset-group">
-            <div className="trigger-form-preset-heading">presets (auto-installed, edit through code)</div>
+            <div className="trigger-form-preset-heading">
+              presets (auto-installed, edit through code)
+            </div>
             {presetTriggers.map((t, i) => (
               <TriggerCard
                 key={`p-${i}`}
                 trigger={t}
                 onChange={() => undefined}
-                onActionChange={() => undefined}
                 onRemove={() => undefined}
-                readOnly
+                readOnly={true}
               />
             ))}
           </div>
@@ -189,10 +252,7 @@ export function TriggerForm({ load, save, onError }: Props) {
   );
 }
 
-// Translate "the i-th user trigger" into the real index in the full
-// list (which interleaves user + preset). preset == true is the
-// preset slice; preset == false is the user slice.
-function idxInList(list: TriggerRecord[], slot: number, preset: boolean): number {
+function indexInList(list: TriggerRecord[], slot: number, preset: boolean): number {
   let seen = -1;
   for (let i = 0; i < list.length; i++) {
     const isPreset = !!list[i].preset;
@@ -207,13 +267,38 @@ function idxInList(list: TriggerRecord[], slot: number, preset: boolean): number
 interface CardProps {
   trigger: TriggerRecord;
   onChange: (patch: Partial<TriggerRecord>) => void;
-  onActionChange: (action: TriggerRecord['action']) => void;
   onRemove: () => void;
-  readOnly?: boolean;
+  readOnly: boolean;
 }
 
-function TriggerCard({ trigger, onChange, onActionChange, onRemove, readOnly }: CardProps) {
-  const kind = trigger.action.kind;
+function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
+  const { visual, effects } = splitActions(trigger.actions);
+  const visualKind: VisualKind = visual?.kind ?? 'none';
+
+  const setVisual = (next: ReturnType<typeof splitActions>['visual']) => {
+    onChange({ actions: joinActions(next, effects) });
+  };
+
+  const setEffectAt = (idx: number, next: TriggerAction) => {
+    const nextEffects = effects.slice();
+    nextEffects[idx] = next as (typeof nextEffects)[number];
+    onChange({ actions: joinActions(visual, nextEffects) });
+  };
+
+  const removeEffectAt = (idx: number) => {
+    const nextEffects = effects.slice();
+    nextEffects.splice(idx, 1);
+    onChange({ actions: joinActions(visual, nextEffects) });
+  };
+
+  const addEffect = (kind: EffectKind) => {
+    const nextEffects = [
+      ...effects,
+      blankEffect(kind) as (typeof effects)[number],
+    ];
+    onChange({ actions: joinActions(visual, nextEffects) });
+  };
+
   return (
     <div className={`trigger-card${readOnly ? ' is-readonly' : ''}`}>
       <div className="trigger-card-head">
@@ -266,100 +351,127 @@ function TriggerCard({ trigger, onChange, onActionChange, onRemove, readOnly }: 
           onChange={(e) => onChange({ pattern: e.target.value })}
         />
       </div>
+
       <div className="trigger-card-row">
-        <span className="trigger-card-label">action</span>
-        <div className="trigger-card-action">
-          <select
-            value={kind}
-            disabled={readOnly}
-            onChange={(e) => onActionChange(blankAction(e.target.value as ActionKind))}
-          >
-            <option value="highlight">highlight</option>
-            <option value="gag">gag</option>
-            <option value="replace">replace</option>
-            <option value="send">send</option>
-            <option value="route">route</option>
-          </select>
-          <ActionFields
-            action={trigger.action}
-            onChange={onActionChange}
-            readOnly={readOnly ?? false}
-          />
+        <span className="trigger-card-label">visual</span>
+        <div className="trigger-card-visual">
+          <div className="trigger-card-visual-radios">
+            {(['none', 'highlight', 'replace', 'gag'] as VisualKind[]).map((k) => (
+              <label key={k} className="trigger-card-radio">
+                <input
+                  type="radio"
+                  name={`visual-${trigger.name}-${trigger.pattern}`}
+                  checked={visualKind === k}
+                  disabled={readOnly}
+                  onChange={() => setVisual(blankVisual(k))}
+                />
+                {k}
+              </label>
+            ))}
+          </div>
+          {visual && (
+            <VisualFields
+              visual={visual}
+              onChange={(next) => setVisual(next)}
+              readOnly={readOnly}
+            />
+          )}
+        </div>
+      </div>
+
+      <div className="trigger-card-row">
+        <span className="trigger-card-label">effects</span>
+        <div className="trigger-card-effects">
+          {effects.length === 0 && (
+            <span className="trigger-card-help">no side effects</span>
+          )}
+          {effects.map((eff, i) => (
+            <div key={i} className="trigger-card-effect-row">
+              <span className="trigger-card-effect-label">{eff.kind}</span>
+              <input
+                type="text"
+                spellCheck={false}
+                placeholder={eff.kind === 'send' ? 'get 1.;wield 1.' : 'chat'}
+                value={eff.kind === 'send' ? eff.template : eff.pane}
+                disabled={readOnly}
+                onChange={(e) =>
+                  setEffectAt(
+                    i,
+                    eff.kind === 'send'
+                      ? { kind: 'send', template: e.target.value }
+                      : { kind: 'route', pane: e.target.value },
+                  )
+                }
+              />
+              {!readOnly && (
+                <button
+                  type="button"
+                  className="trigger-card-effect-remove"
+                  onClick={() => removeEffectAt(i)}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+          {!readOnly && (
+            <div className="trigger-card-effect-actions">
+              <button
+                type="button"
+                className="trigger-card-effect-add"
+                onClick={() => addEffect('send')}
+              >
+                [+ send]
+              </button>
+              <button
+                type="button"
+                className="trigger-card-effect-add"
+                onClick={() => addEffect('route')}
+              >
+                [+ route]
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function blankAction(kind: ActionKind): TriggerRecord['action'] {
-  switch (kind) {
-    case 'highlight':
-      return { kind: 'highlight', style: { fg: 'yellow' } };
-    case 'gag':
-      return { kind: 'gag' };
-    case 'replace':
-      return { kind: 'replace', template: '' };
-    case 'send':
-      return { kind: 'send', template: '' };
-    case 'route':
-      return { kind: 'route', pane: 'chat' };
-  }
-}
-
-interface ActionFieldsProps {
-  action: TriggerRecord['action'];
-  onChange: (action: TriggerRecord['action']) => void;
+interface VisualFieldsProps {
+  visual: NonNullable<ReturnType<typeof splitActions>['visual']>;
+  onChange: (next: ReturnType<typeof splitActions>['visual']) => void;
   readOnly: boolean;
 }
 
-function ActionFields({ action, onChange, readOnly }: ActionFieldsProps) {
-  if (action.kind === 'highlight') {
-    return (
-      <HighlightStyleEditor
-        style={action.style}
-        onChange={(style) => onChange({ kind: 'highlight', style })}
-        readOnly={readOnly ?? false}
-      />
-    );
-  }
-  if (action.kind === 'gag') {
+function VisualFields({ visual, onChange, readOnly }: VisualFieldsProps) {
+  if (visual.kind === 'gag') {
     return <span className="trigger-card-help">drop the matched line entirely</span>;
   }
-  if (action.kind === 'replace' || action.kind === 'send') {
+  if (visual.kind === 'replace') {
     return (
       <div className="trigger-card-template">
         <input
           type="text"
           spellCheck={false}
-          placeholder={
-            action.kind === 'replace'
-              ? '{fg:244}$1{reset}{fg:210}$2{reset}'
-              : 'flee'
-          }
-          value={action.template}
+          placeholder="{fg:244}$1{reset}{fg:210}$2{reset}"
+          value={visual.template}
           disabled={readOnly}
-          onChange={(e) =>
-            onChange({ ...action, template: e.target.value } as TriggerRecord['action'])
-          }
+          onChange={(e) => onChange({ kind: 'replace', template: e.target.value })}
         />
-        {action.kind === 'replace' && (
-          <span className="trigger-card-hint">
-            tokens: {'{red}'} {'{bold_red}'} {'{fg:244}'} {'{#ff3399}'} {'{reset}'}; $1 $2 …
-            reference capture groups
-          </span>
-        )}
+        <span className="trigger-card-hint">
+          tokens: {'{red}'} {'{bold_red}'} {'{fg:244}'} {'{#ff3399}'} {'{reset}'}; $1 $2 …
+          reference capture groups
+        </span>
       </div>
     );
   }
-  // route
+  // highlight
   return (
-    <input
-      type="text"
-      spellCheck={false}
-      placeholder="chat"
-      value={action.pane}
-      disabled={readOnly}
-      onChange={(e) => onChange({ kind: 'route', pane: e.target.value })}
+    <HighlightStyleEditor
+      style={visual.style}
+      onChange={(style) => onChange({ kind: 'highlight', style })}
+      readOnly={readOnly}
     />
   );
 }
@@ -371,8 +483,6 @@ interface HSProps {
 }
 
 function HighlightStyleEditor({ style, onChange, readOnly }: HSProps) {
-  // exactOptionalPropertyTypes refuses `{ key: undefined }`; build the
-  // next style by omitting falsy keys instead.
   const setKey = <K extends keyof HighlightStyle>(
     key: K,
     value: HighlightStyle[K] | undefined,
