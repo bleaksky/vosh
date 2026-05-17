@@ -8,7 +8,7 @@ import { StatusBar } from './components/StatusBar';
 import { Resizable } from './components/Resizable';
 import { MapPane } from './components/MapPane';
 import { getUiConfig, onState, type StatePayload } from './lib/session';
-import { applyTheme } from './lib/theme';
+import { applyAndBroadcastTheme } from './lib/theme';
 
 const MAP_OPEN_KEY = 'vosh.layout.mapOpen';
 
@@ -101,11 +101,15 @@ function App() {
     const onUnmount = () => window.clearTimeout(fallback);
     getUiConfig()
       .then((cfg) => {
-        applyTheme(cfg.theme);
+        // applyAndBroadcastTheme also fires the cross-window event so
+        // the Terminal's subscriber updates its xterm palette to the
+        // saved theme instead of staying on the kanso-zen default it
+        // had to use during initial mount.
+        void applyAndBroadcastTheme(cfg.theme);
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
       })
-      .catch(() => applyTheme('system'))
+      .catch(() => void applyAndBroadcastTheme('system'))
       .finally(reveal);
     return onUnmount;
   }, []);

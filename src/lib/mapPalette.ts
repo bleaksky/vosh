@@ -26,18 +26,39 @@ export const SECTORS: Record<number, SectorTheme> = {
   12: { name: 'Snow', fill: '#222428', border: '#9a9aa0', halo: '#c0c0c8' },
 };
 
+// Theme-dependent slots (bg, origin, originFill, text) are exposed as
+// getters that read from --c-* custom properties at access time so the
+// canvas tracks the active app theme. Terrain-meaningful slots stay
+// fixed regardless of theme. Fallbacks match the Kanso Zen palette
+// for the first paint before applyTheme has installed CSS vars.
+
+function readCssVar(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+
 export const MAP_COLORS = {
-  bg: '#07090f',
+  get bg(): string {
+    return readCssVar('--c-surface', '#090e13');
+  },
   /// Player's room cell uses a sector-style fill+border pair: a dim
-  /// pink interior with a bright pink outline so it reads the same
-  /// way as a regular sector tile, just in pink.
-  origin: '#ff3399',
-  originFill: '#3a1424',
+  /// tint of the accent inside with the bright accent as the outline,
+  /// so the player tile reads the same shape as a regular sector tile,
+  /// just in the user's chosen accent color.
+  get origin(): string {
+    return readCssVar('--c-accent', '#ff3399');
+  },
+  get originFill(): string {
+    return readCssVar('--c-accent-soft', 'rgba(255, 51, 153, 0.09)');
+  },
+  get text(): string {
+    return readCssVar('--c-text-faint', '#6e7681');
+  },
   dest: '#c83030',
   destGlow: 'rgba(200,48,48,0.15)',
   corridor: 'rgba(140,145,160,0.45)',
   xarea: 'rgba(120,120,130,0.20)',
-  text: '#888',
   pathLine: 'rgba(196,168,114,0.7)',
 };
 

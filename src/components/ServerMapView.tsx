@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'reac
 import { getAreaSnapshot, onGmcp, onMap, onState, type AreaSnapshot } from '../lib/session';
 import { MAP_COLORS, SECTORS, hexToRgba, sectorForCode } from '../lib/mapPalette';
 import { drawTerrainDecorations } from '../lib/terrainDecor';
+import { subscribeThemeChanges } from '../lib/theme';
 
 /// One cell of the server-side map grid (player's floor only).
 /// Per the Aabahran GMCP wiki:
@@ -152,7 +153,26 @@ export function ServerMapView() {
   // player-centric Map.Tiles grid into stable world coordinates so cells
   // do not shift on canvas as the player walks.
   const [snapshot, setSnapshot] = useState<AreaSnapshot | null>(null);
+  // Bumps when the theme changes so the draw effect re-runs and the
+  // canvas picks up the new --c-surface / --c-accent CSS vars that
+  // MAP_COLORS reads through its getters.
+  const [themeVersion, setThemeVersion] = useState(0);
   const lastRefreshRef = useRef<number>(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    subscribeThemeChanges(() => {
+      setThemeVersion((v) => v + 1);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   const refreshSnapshot = useCallback(async () => {
     try {
@@ -371,7 +391,7 @@ export function ServerMapView() {
       observer.disconnect();
       window.removeEventListener('resize', draw);
     };
-  }, [tiles, style, tilesetImage, snapshot]);
+  }, [tiles, style, tilesetImage, snapshot, themeVersion]);
 
   const handleLoadTileset = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

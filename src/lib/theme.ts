@@ -58,10 +58,13 @@ export async function subscribeThemeChanges(
   callback: (themeId: string) => void,
 ): Promise<UnlistenFn> {
   return listen<string>(SYNC_EVENT, (event) => {
-    if (typeof event.payload === 'string' && event.payload !== currentThemeId) {
-      applyTheme(event.payload);
-      callback(event.payload);
-    }
+    if (typeof event.payload !== 'string') return;
+    // No same-id guard. applyTheme is idempotent, and on startup the
+    // local applyTheme runs before the broadcast lands, so the guard
+    // would skip the only chance the Terminal has to pick up its
+    // initial xterm palette.
+    applyTheme(event.payload);
+    callback(event.payload);
   });
 }
 
