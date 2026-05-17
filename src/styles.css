@@ -1665,6 +1665,12 @@ body {
   padding: 1px 0;
 }
 
+/* When a single session is active in the left list, the per-row
+   host:port cell is redundant. Collapse the layout to ts + text. */
+.logs-results-scoped .logs-hit {
+  grid-template-columns: 64px 1fr;
+}
+
 .logs-hit-ts {
   color: var(--c-text-dim);
   font-variant-numeric: tabular-nums;
