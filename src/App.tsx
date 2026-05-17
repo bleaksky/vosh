@@ -10,6 +10,7 @@ import { Resizable } from './components/Resizable';
 import { MapPane } from './components/MapPane';
 import { ChatPane } from './components/ChatPane';
 import { RoomStrip } from './components/RoomStrip';
+import { AffectsBar } from './components/AffectsBar';
 import {
   getUiConfig,
   listTriggers,
@@ -271,6 +272,7 @@ function App() {
           <ChatPane />
         </Resizable>
       )}
+      <AffectsBar />
       <Input
         ref={inputRef}
         enabled={connected}
