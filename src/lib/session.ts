@@ -59,21 +59,36 @@ export async function sendInput(line: string): Promise<void> {
   await invoke('session_send_input', { line });
 }
 
+export type TriggerAction =
+  | { kind: 'highlight'; style: HighlightStyle }
+  | { kind: 'gag' }
+  | { kind: 'replace'; template: string }
+  | { kind: 'send'; template: string }
+  | { kind: 'route'; pane: string };
+
 export interface TriggerRecord {
   name: string;
   pattern: string;
   priority: number;
   enabled: boolean;
-  action:
-    | { kind: 'highlight'; style: HighlightStyle }
-    | { kind: 'gag' }
-    | { kind: 'replace'; template: string }
-    | { kind: 'send'; template: string }
-    | { kind: 'route'; pane: string };
+  /** One or more actions. The trigger engine fires every action in
+   *  order on each match. */
+  actions: TriggerAction[];
   /** Set when this trigger was installed by the Highlights preset
    *  library. Toggling a preset off removes everything tagged with
    *  the preset's id; user-authored triggers leave this empty. */
   preset?: string | null;
+}
+
+/** Normalize the legacy `action: {...}` single shape that older
+ *  profile.toml entries still produce on first load. Accepts either
+ *  shape and returns the canonical actions array. */
+export function normalizeActions(raw: unknown): TriggerAction[] {
+  if (!raw || typeof raw !== 'object') return [];
+  const r = raw as Record<string, unknown>;
+  if (Array.isArray(r.actions)) return r.actions as TriggerAction[];
+  if (r.action && typeof r.action === 'object') return [r.action as TriggerAction];
+  return [];
 }
 
 export type NamedColor =

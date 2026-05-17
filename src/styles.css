@@ -1066,6 +1066,94 @@ body {
   min-width: 0;
 }
 
+.trigger-card-visual,
+.trigger-card-effects {
+  flex: 1 1 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.trigger-card-visual-radios {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.trigger-card-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--c-text-muted);
+}
+
+.trigger-card-radio input[type='radio'] {
+  accent-color: var(--c-accent);
+}
+
+.trigger-card-effect-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trigger-card-effect-label {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  min-width: 48px;
+}
+
+.trigger-card-effect-row input[type='text'] {
+  flex: 1 1 auto;
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  padding: 3px 6px;
+  font-family: inherit;
+  border-radius: 2px;
+}
+
+.trigger-card-effect-row input[type='text']:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+.trigger-card-effect-remove {
+  background: transparent;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  color: var(--c-text-faint);
+  padding: 1px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.trigger-card-effect-remove:hover {
+  border-color: var(--c-danger);
+  color: var(--c-danger);
+}
+
+.trigger-card-effect-actions {
+  display: inline-flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.trigger-card-effect-add {
+  background: transparent;
+  border: none;
+  color: var(--c-accent);
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+
+.trigger-card-effect-add:hover {
+  color: var(--c-text-strong);
+}
+
 .trigger-card-template input[type='text'] {
   flex: 0 0 auto;
   min-width: 0;
