@@ -4,10 +4,16 @@ import {
   colorForDuration,
   formatDuration,
   groupAffects,
+  normalizeAffectName,
   type Affect,
   type GroupedAffect,
 } from '../lib/affects';
-import { onGmcp, onState } from '../lib/session';
+import {
+  getUiConfig,
+  onGmcp,
+  onState,
+  subscribeTrackedAffectsChanged,
+} from '../lib/session';
 
 // Thin row above the input that renders every active Char.Affects
 // entry as a pill chip. Duration color tracks urgency (red imminent,
@@ -18,6 +24,28 @@ import { onGmcp, onState } from '../lib/session';
 // does not reserve a slot during cleared/disconnected states.
 export function AffectsBar() {
   const [groups, setGroups] = useState<GroupedAffect[]>([]);
+  const [tracked, setTracked] = useState<string[]>([]);
+
+  // Seed + subscribe to tracked-affects list from the settings window.
+  useEffect(() => {
+    let cancelled = false;
+    let unsubTracked: (() => void) | undefined;
+    getUiConfig()
+      .then((cfg) => {
+        if (!cancelled) setTracked(cfg.tracked_affects ?? []);
+      })
+      .catch(() => undefined);
+    subscribeTrackedAffectsChanged((list) => {
+      if (!cancelled) setTracked(list);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsubTracked = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsubTracked?.();
+    };
+  }, []);
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
@@ -55,23 +83,39 @@ export function AffectsBar() {
     };
   }, []);
 
-  if (groups.length === 0) return null;
+  // Hidden until the user picks at least one affect to track. Each
+  // tracked entry renders as a pill — live one shows the duration, a
+  // missing one renders dim as "absent" so the user can see at a
+  // glance which of their tracked buffs are NOT up.
+  if (tracked.length === 0) return null;
+
+  const liveByKey = new Map<string, GroupedAffect>();
+  for (const g of groups) liveByKey.set(normalizeAffectName(g.name), g);
 
   return (
-    <div className="affects-bar" aria-label="active affects">
-      {groups.map((g) => {
-        const title = [g.name, affectDescription(g as Affect)]
-          .filter(Boolean)
-          .join(' — ');
-        return (
-          <span key={g.name} className="affect-pill" title={title}>
-            <span className="affect-pill-name">{g.name}</span>
-            <span
-              className="affect-pill-duration"
-              style={{ color: colorForDuration(g.duration) }}
-            >
-              {formatDuration(g.duration)}
+    <div className="affects-bar" aria-label="tracked affects">
+      {tracked.map((name) => {
+        const live = liveByKey.get(normalizeAffectName(name));
+        if (live) {
+          const title = [live.name, affectDescription(live as Affect)]
+            .filter(Boolean)
+            .join(' — ');
+          return (
+            <span key={name} className="affect-pill" title={title}>
+              <span className="affect-pill-name">{live.name}</span>
+              <span
+                className="affect-pill-duration"
+                style={{ color: colorForDuration(live.duration) }}
+              >
+                {formatDuration(live.duration)}
+              </span>
             </span>
+          );
+        }
+        return (
+          <span key={name} className="affect-pill affect-pill-absent" title={`${name} not active`}>
+            <span className="affect-pill-name">{name}</span>
+            <span className="affect-pill-duration">—</span>
           </span>
         );
       })}

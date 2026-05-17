@@ -5,6 +5,7 @@ import { TopBar } from './components/TopBar';
 import { TriggerForm } from './components/TriggerForm';
 import { AliasForm } from './components/AliasForm';
 import {
+  broadcastTrackedAffects,
   exportAliases,
   exportTriggers,
   getUiConfig,
@@ -144,6 +145,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
   const [systemFonts, setSystemFonts] = useState<SystemFontEntry[]>([]);
   const [fontFilter, setFontFilter] = useState('');
   const [showOnlyMono, setShowOnlyMono] = useState(true);
+  const [trackedDraft, setTrackedDraft] = useState('');
 
   // Pull the system font catalog from the backend (font-kit) once on
   // mount. Sorted + deduped server-side; we just filter client-side.
@@ -184,6 +186,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
         family: config.font_family,
         size: config.font_size,
       });
+      await broadcastTrackedAffects(config.tracked_affects);
       setSavedAt(Date.now());
     } catch (e) {
       onError(String(e));
@@ -300,6 +303,63 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
         />
         <span className="settings-unit">px</span>
       </Row>
+      <div className="settings-row">
+        <span className="settings-row-label">tracked affects</span>
+        <div className="settings-tracked">
+          <div className="settings-tracked-chips">
+            {config.tracked_affects.length === 0 && (
+              <span className="settings-font-empty">no affects tracked yet</span>
+            )}
+            {config.tracked_affects.map((name) => (
+              <span key={name} className="settings-tracked-chip">
+                <span>{name}</span>
+                <button
+                  type="button"
+                  className="settings-tracked-remove"
+                  aria-label={`remove ${name}`}
+                  onClick={() =>
+                    update({
+                      tracked_affects: config.tracked_affects.filter((n) => n !== name),
+                    })
+                  }
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="settings-tracked-add">
+            <input
+              type="text"
+              spellCheck={false}
+              placeholder="affect name + enter (or comma)"
+              value={trackedDraft}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v.endsWith(',')) {
+                  const name = v.slice(0, -1).trim();
+                  if (name && !config.tracked_affects.includes(name)) {
+                    update({ tracked_affects: [...config.tracked_affects, name] });
+                  }
+                  setTrackedDraft('');
+                } else {
+                  setTrackedDraft(v);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const name = trackedDraft.trim();
+                  if (name && !config.tracked_affects.includes(name)) {
+                    update({ tracked_affects: [...config.tracked_affects, name] });
+                  }
+                  setTrackedDraft('');
+                }
+              }}
+            />
+          </div>
+        </div>
+      </div>
       <div className="settings-actions">
         <button type="button" className="settings-btn" onClick={() => void save()}>
           [save]
