@@ -234,6 +234,36 @@ pub(crate) async fn triggers_import(
     p.triggers.import_json(&json).map_err(|e| e.to_string())
 }
 
+/// Dump every alias to a pretty JSON array. Mirrors triggers_export
+/// so the settings window can treat triggers and aliases with the
+/// same JsonTab component.
+#[tauri::command]
+pub(crate) async fn aliases_export(state: State<'_, SharedState>) -> Result<String, String> {
+    let p = state.profile.lock().await;
+    let aliases: Vec<vosh_alias::Alias> = p.aliases.list().into_iter().cloned().collect();
+    serde_json::to_string_pretty(&aliases).map_err(|e| e.to_string())
+}
+
+/// Replace the entire alias store with the JSON-decoded list. Returns
+/// the count installed. Invalid JSON or wrong shape rejects without
+/// touching the store.
+#[tauri::command]
+pub(crate) async fn aliases_import(
+    state: State<'_, SharedState>,
+    json: String,
+) -> Result<usize, String> {
+    let parsed: Vec<vosh_alias::Alias> =
+        serde_json::from_str(&json).map_err(|e| e.to_string())?;
+    let count = parsed.len();
+    let mut p = state.profile.lock().await;
+    let mut store = vosh_alias::AliasStore::new();
+    for alias in parsed {
+        store.set(alias);
+    }
+    p.aliases = store;
+    Ok(count)
+}
+
 #[tauri::command]
 pub(crate) fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()

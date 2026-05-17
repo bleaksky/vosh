@@ -114,6 +114,14 @@ export async function listTriggers(): Promise<TriggerRecord[]> {
   return invoke('triggers_list');
 }
 
+export async function exportAliases(): Promise<string> {
+  return invoke('aliases_export');
+}
+
+export async function importAliases(json: string): Promise<number> {
+  return invoke('aliases_import', { json });
+}
+
 export async function presetsInstall(triggers: TriggerRecord[]): Promise<number> {
   return invoke('presets_install', { triggers });
 }

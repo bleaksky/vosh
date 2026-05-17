@@ -3,8 +3,10 @@ import { emit } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TopBar } from './components/TopBar';
 import {
+  exportAliases,
   exportTriggers,
   getUiConfig,
+  importAliases,
   importTriggers,
   setUiConfig,
   type UiConfig,
@@ -19,10 +21,11 @@ const FONT_PRESETS = [
   'Menlo, Consolas, monospace',
 ];
 
-type TabId = 'general' | 'triggers';
+type TabId = 'general' | 'triggers' | 'aliases';
 const TABS: { id: TabId; label: string }[] = [
   { id: 'general', label: 'general' },
   { id: 'triggers', label: 'triggers' },
+  { id: 'aliases', label: 'aliases' },
 ];
 
 // Settings window. Frameless Ghostty chrome via the shared TopBar;
@@ -75,7 +78,25 @@ export function SettingsApp() {
         {tab === 'general' && (
           <GeneralTab config={config} setConfig={setConfig} onError={setError} />
         )}
-        {tab === 'triggers' && <TriggersTab onError={setError} />}
+        {tab === 'triggers' && (
+          <JsonTab
+            kind="triggers"
+            singular="trigger"
+            load={exportTriggers}
+            save={importTriggers}
+            onError={setError}
+          />
+        )}
+        {tab === 'aliases' && (
+          <JsonTab
+            kind="aliases"
+            singular="alias"
+            plural="aliases"
+            load={exportAliases}
+            save={importAliases}
+            onError={setError}
+          />
+        )}
       </div>
     </main>
   );
@@ -169,19 +190,32 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
   );
 }
 
-interface TriggersProps {
+interface JsonTabProps {
+  // Used for storage key + the loading message ("loading triggers...").
+  kind: string;
+  // Singular noun for "1 trigger" / "1 alias".
+  singular: string;
+  // Plural noun for the count + hint. Defaults to `kind`.
+  plural?: string;
+  load: () => Promise<string>;
+  save: (json: string) => Promise<number>;
   onError: (e: string | null) => void;
 }
 
-function TriggersTab({ onError }: TriggersProps) {
+// Shared editor for triggers + aliases. Loads JSON from the backend on
+// mount, lets you edit it in a textarea, and posts it back on save.
+// Save replaces the whole store for both kinds — matches backend
+// semantics.
+function JsonTab({ kind, singular, plural, load, save, onError }: JsonTabProps) {
   const [text, setText] = useState<string>('');
   const [count, setCount] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const noun = plural ?? kind;
 
   const reload = async () => {
     try {
-      const json = await exportTriggers();
+      const json = await load();
       setText(json);
       try {
         const parsed = JSON.parse(json);
@@ -196,14 +230,17 @@ function TriggersTab({ onError }: TriggersProps) {
   };
 
   useEffect(() => {
+    setLoaded(false);
+    setText('');
+    setSavedAt(null);
     void reload();
-    // reload is stable for this scope; no need to add to deps.
+    // reload closes over load/save which are stable per tab.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [kind]);
 
-  const save = async () => {
+  const doSave = async () => {
     try {
-      const installed = await importTriggers(text);
+      const installed = await save(text);
       setSavedAt(Date.now());
       setCount(installed);
     } catch (e) {
@@ -211,16 +248,16 @@ function TriggersTab({ onError }: TriggersProps) {
     }
   };
 
-  if (!loaded) return <div className="settings-loading">loading triggers…</div>;
+  if (!loaded) return <div className="settings-loading">loading {noun}…</div>;
 
   return (
     <div className="settings-triggers">
       <div className="settings-triggers-meta">
         <span className="settings-triggers-count">
-          {count === null ? 'unknown' : `${count} trigger${count === 1 ? '' : 's'}`}
+          {count === null ? 'unknown' : `${count} ${count === 1 ? singular : noun}`}
         </span>
         <span className="settings-triggers-hint">
-          json edit; save replaces the whole trigger store
+          json edit; save replaces the whole {singular} store
         </span>
       </div>
       <textarea
@@ -230,7 +267,7 @@ function TriggersTab({ onError }: TriggersProps) {
         onChange={(e) => setText(e.target.value)}
       />
       <div className="settings-actions">
-        <button type="button" className="settings-btn" onClick={() => void save()}>
+        <button type="button" className="settings-btn" onClick={() => void doSave()}>
           [save]
         </button>
         <button

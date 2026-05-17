@@ -22,12 +22,13 @@ mod tick;
 mod tintin_import;
 
 use commands::{
-    app_version, dock_layout_get, dock_layout_set, logs_export, logs_list_sessions, logs_search,
-    map_area_snapshot, map_set_avoid, map_set_note, map_walk_to, open_settings_window,
-    presets_install, presets_remove, profile_export, profile_import, scrollback_load,
-    session_connect, session_disconnect, session_send, session_send_input, triggers_export,
-    target_get, triggers_import, plugins_list, plugins_reload, plugins_set_enabled,
-    triggers_list, ui_get_config, ui_set_config, updater_check, AppState, SharedState,
+    aliases_export, aliases_import, app_version, dock_layout_get, dock_layout_set, logs_export,
+    logs_list_sessions, logs_search, map_area_snapshot, map_set_avoid, map_set_note, map_walk_to,
+    open_settings_window, presets_install, presets_remove, profile_export, profile_import,
+    scrollback_load, session_connect, session_disconnect, session_send, session_send_input,
+    target_get, triggers_export, triggers_import, plugins_list, plugins_reload,
+    plugins_set_enabled, triggers_list, ui_get_config, ui_set_config, updater_check, AppState,
+    SharedState,
 };
 use map_state::MapState;
 use profile_config::ProfileConfig;
@@ -166,6 +167,8 @@ pub fn run() {
             target_get,
             triggers_export,
             triggers_import,
+            aliases_export,
+            aliases_import,
             presets_install,
             presets_remove,
             map_area_snapshot,
