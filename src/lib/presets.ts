@@ -22,9 +22,10 @@ import { colorize } from './colorTokens';
 export type PresetCategory =
   | 'healing'
   | 'defensive'
-  | 'buff_falls_self'
-  | 'buff_falls_others'
-  | 'events';
+  | 'disarm_buff'
+  | 'events'
+  | 'loot'
+  | 'labels';
 
 export interface Preset {
   id: string;
@@ -38,9 +39,10 @@ export interface Preset {
 export const PRESET_CATEGORIES: Record<PresetCategory, string> = {
   healing: 'Healing & Cure',
   defensive: 'Defensive Combat',
-  buff_falls_self: 'Your Buffs Fading',
-  buff_falls_others: "Others' Buffs Fading",
+  disarm_buff: 'Disarm & Buff Fade',
   events: 'Combat & Spell Events',
+  loot: 'Loot & Progression',
+  labels: 'Potion & Herb Labels',
 };
 
 // Helper to build a highlight trigger compactly. Default priority of 5
@@ -86,7 +88,6 @@ function replace(
 // so using named colors here means presets pick up whatever theme is
 // active.
 const GREEN: HighlightStyle = { fg: 'bright_green' };
-const RED: HighlightStyle = { fg: 'bright_red', bold: true };
 
 // Damage verb alternation, lifted from the user's TinTin `CalcDam`
 // table. Pairs cover the conjugated form ("punch decimates") and
@@ -294,130 +295,52 @@ export const PRESETS: Preset[] = [
     ],
   },
 
-  // ── Your Buffs Fading ─────────────────────────────────────────────
-  // Patterns lifted verbatim from ~/tintin/highlights.tin lines
-  // 130-134 (the SUBSTITUTE block), so these match Aabahran's actual
-  // wording. Each one prefixes the line with a `##` banner like
-  // Magick / TinTin do, plus dim red color for the rest.
+  // ── COMBAT — DISARM / BUFF FADE SUBSTITUTES ───────────────────────
+  // tintin lines 105–106 (disarms) + 130–134 (buff fades). Both
+  // groups share the same `<018>## <178>...<088>` styling in the
+  // user's TinTin so they live in one preset here. Disarms reword
+  // PRIMARY/SECONDARY explicitly.
   {
-    id: 'buff_falls_self',
-    category: 'buff_falls_self',
-    name: 'Your sanc / bless / haste etc. dropping',
-    description:
-      'Magick-style `## ` banner + dim red on YOUR buffs falling. Pulled ' +
-      'from your highlights.tin so the patterns match Aabahran exactly.',
-    defaultEnabled: true,
-    triggers: [
-      // Sanctuary on yourself.
-      replace(
-        'buff_self.sanc',
-        '^The white aura around your body fades\\.$',
-        '{bold_red}## {red}$0{reset}',
-        10,
-      ),
-      // Protection.
-      replace(
-        'buff_self.protection',
-        '^The protective aura around your body fades\\.$',
-        '{bold_red}## {red}$0{reset}',
-      ),
-      // Stone skin (shards of metal).
-      replace(
-        'buff_self.stoneskin',
-        '^The shards of metal protecting you fall to the ground\\.$',
-        '{bold_red}## {red}$0{reset}',
-      ),
-      // Spell turning.
-      replace(
-        'buff_self.spell_turning',
-        '^Your shield of spell turning collapses\\.$',
-        '{bold_red}## {red}$0{reset}',
-      ),
-    ],
-  },
-
-  // ── Others' Buffs Fading ──────────────────────────────────────────
-  // The same patterns but with %1 / capture-group wildcards so other
-  // players' buffs trigger too. Off by default; in groups this fires
-  // every couple ticks and gets noisy fast.
-  {
-    id: 'buff_falls_others',
-    category: 'buff_falls_others',
-    name: "Others' buffs fading",
-    description:
-      "Same `## ` banner for OTHER characters' buffs (sanc, protection, " +
-      'stoneskin, shield). Off by default since group play floods this.',
-    defaultEnabled: false,
-    triggers: [
-      // Sanctuary on anyone — captures whatever sits between
-      // "around" and "fades". Runs at lower priority than the
-      // self-only sanc trigger above; once the self trigger replaces
-      // its match with "## ..." (ANSI prefix), this pattern's `^`
-      // anchor no longer matches the modified line, so the self
-      // version wins for "your body" and this one only fires on
-      // others.
-      replace(
-        'buff_other.sanc',
-        '^The white aura around (.+) fades\\.$',
-        '{bold_yellow}## {yellow}$0{reset}',
-        4,
-      ),
-      // Generic protective shield drop on another character.
-      replace(
-        'buff_other.shield',
-        '^([A-Z][a-z]+) protective shield dissipates\\.$',
-        '{bold_yellow}## {yellow}$0{reset}',
-        4,
-      ),
-    ],
-  },
-
-  // ── Debuffs wearing off ───────────────────────────────────────────
-  // (debuff_falls removed: every pattern was a guess from generic ROM
-  // 2.4 conventions, not lifted from your highlights.tin. Add back
-  // once we have actual Aabahran wording captured.)
-
-  // (recall_events removed: all 3 patterns were guessed from
-  // generic ROM 2.4 wording, not lifted from your highlights.tin.
-  // Capture actual Aabahran recall messages in-game to restore.)
-
-  // ── Combat & Spell Events ─────────────────────────────────────────
-  // Disarm patterns from highlights.tin lines 105-106 — they tell you
-  // exactly which weapon (primary vs secondary) flew off.
-  {
-    id: 'disarm_events',
-    category: 'events',
-    name: 'You got disarmed',
-    description:
-      "Calls out which weapon (primary vs secondary) you just lost. " +
-      'Pulled from your highlights.tin so the match is exact.',
+    id: 'disarm_buff_fade',
+    category: 'disarm_buff',
+    name: 'Disarm & buff fade',
+    description: 'Disarms and buff drops from highlights.tin 105-134.',
     defaultEnabled: true,
     triggers: [
       replace(
         'disarm.secondary',
-        '^([A-Z][a-z]+) disarms you and sends your secondary weapon flying!$',
-        '{bold_red}## {yellow}$1 disarms you and sends your SECONDARY weapon flying!{reset}',
+        '^(.+) disarms you and sends your secondary weapon flying!$',
+        '{bold_red}##{reset} {fg:178}$1 disarms you and sends your SECONDARY weapon flying!{reset}',
       ),
       replace(
         'disarm.primary',
-        '^([A-Z][a-z]+) disarms you and sends your weapon flying!$',
-        '{bold_red}## {yellow}$1 disarms you and sends your PRIMARY weapon flying!{reset}',
+        '^(.+) disarms you and sends your weapon flying!$',
+        '{bold_red}##{reset} {fg:178}$1 disarms you and sends your PRIMARY weapon flying!{reset}',
       ),
-    ],
-  },
-  {
-    id: 'terror_events',
-    category: 'events',
-    name: 'Fear / terror weapon drops',
-    description:
-      'Highlights when fear makes you drop your weapon. From ' +
-      'highlights.tin line 124.',
-    defaultEnabled: true,
-    triggers: [
-      highlight(
-        'terror.drop',
-        '^Filled with terror, your weapon slips through your slippery fingers\\.$',
-        RED,
+      replace(
+        'buff.protective_shield',
+        '^(.+) protective shield dissipates\\.$',
+        '{bold_red}##{reset} {fg:178}$1 protective shield dissipates.{reset}',
+      ),
+      replace(
+        'buff.protective_aura',
+        '^The protective aura around your body fades\\.$',
+        '{bold_red}##{reset} {fg:178}The protective aura around your body fades.{reset}',
+      ),
+      replace(
+        'buff.stoneskin',
+        '^The shards of metal protecting you fall to the ground\\.$',
+        '{bold_red}##{reset} {fg:178}The shards of metal protecting you fall to the ground.{reset}',
+      ),
+      replace(
+        'buff.sanctuary',
+        '^The white aura around (.+) fades\\.$',
+        '{bold_red}##{reset} {fg:178}The white aura around $1 fades.{reset}',
+      ),
+      replace(
+        'buff.spell_turning',
+        '^Your shield of spell turning collapses\\.$',
+        '{bold_red}##{reset} {fg:178}Your shield of spell turning collapses.{reset}',
       ),
     ],
   },
@@ -482,6 +405,88 @@ export const PRESETS: Preset[] = [
         '{fg:244}$1{reset}{fg:152}$2{reset}{fg:244}$3{reset}',
         7,
       ),
+    ],
+  },
+
+  // ── LOOT & PROGRESSION ────────────────────────────────────────────
+  // tintin lines 170-174. Numbers in near-white, body in mid grey.
+  {
+    id: 'loot_progression',
+    category: 'loot',
+    name: 'Gold / xp / level / skill-up',
+    description: 'Loot and progression lines from highlights.tin 170-174.',
+    defaultEnabled: true,
+    triggers: [
+      replace(
+        'loot.gold',
+        '^You get (\\d+) gold coins from (.+)\\.$',
+        '{fg:249}You get {fg:230}$1 {fg:249}gold coins from $2.{reset}',
+      ),
+      replace(
+        'loot.skill_up',
+        '^You have become better at (.+)!$',
+        '{fg:120}You have become better at {fg:230}$1{fg:120}!{reset}',
+      ),
+      replace(
+        'loot.level',
+        '^You raise a level!!  You gain:  (\\d+)/\\d+ hit points, (\\d+)/\\d+ mana, (\\d+)/\\d+ move, and (\\d+) practices\\.$',
+        '{fg:120}You raise a level!! You gain {fg:230}$1 hp{fg:120}, {fg:230}$2 mn{fg:120}, {fg:230}$3 mv{fg:120} and {fg:230}$4 practices.{reset}',
+      ),
+      replace(
+        'loot.xp',
+        '^You receive (\\d+) experience points\\.$',
+        '{fg:248}You receive {fg:230}$1 {fg:248}experience points.{reset}',
+      ),
+    ],
+  },
+
+  // ── POTION LABELS ────────────────────────────────────────────────
+  // tintin lines 180-186. Appends a grey `(spell)` parenthetical
+  // to each potion description.
+  {
+    id: 'potion_labels',
+    category: 'labels',
+    name: 'Potion labels',
+    description: 'Spell-name annotations for potions from highlights.tin 180-186.',
+    defaultEnabled: true,
+    triggers: [
+      replace('potion.brown', 'a bubbly brown potion', 'a bubbly brown potion {fg:248}(cure serious){reset}'),
+      replace('potion.clear', 'a bubbly clear potion', 'a bubbly clear potion {fg:248}(invisibility){reset}'),
+      replace('potion.crimson', 'a bubbly crimson potion', 'a bubbly crimson potion {fg:248}(fireball){reset}'),
+      replace('potion.green', 'a bubbly green potion', 'a bubbly green potion {fg:248}(haste){reset}'),
+      replace('potion.grey', 'a bubbly grey potion', 'a bubbly grey potion {fg:248}(flesh armor){reset}'),
+      replace('potion.red', 'a bubbly red potion', 'a bubbly red potion {fg:248}(cure blind){reset}'),
+      replace('potion.white', 'a bubbly white potion', 'a bubbly white potion {fg:248}(sanctuary){reset}'),
+    ],
+  },
+
+  // ── HERB LABELS ──────────────────────────────────────────────────
+  // tintin lines 192-209.
+  {
+    id: 'herb_labels',
+    category: 'labels',
+    name: 'Herb labels',
+    description: 'Spell-name annotations for herbs from highlights.tin 192-209.',
+    defaultEnabled: true,
+    triggers: [
+      replace('herb.purple_seaweed', 'a dried purple seaweed', 'a dried purple seaweed {fg:248}(fly){reset}'),
+      replace('herb.mandrake', 'a mandrake root', 'a mandrake root {fg:248}(stone skin){reset}'),
+      replace('herb.red_herb', 'a small red herb', 'a small red herb {fg:248}(detect invis){reset}'),
+      replace('herb.magenta', 'some Magenta Leaves', 'some Magenta Leaves {fg:248}(frenzy){reset}'),
+      replace('herb.cinnamon', 'some cinnamon', 'some cinnamon {fg:248}(armor){reset}'),
+      replace('herb.damiana', 'some damiana leaves', 'some damiana leaves {fg:248}(cure serious){reset}'),
+      replace('herb.dark_black', 'some dark black leaves', 'some dark black leaves {fg:248}(sanctuary){reset}'),
+      replace('herb.catnip', 'some dried catnip', 'some dried catnip {fg:248}(frenzy){reset}'),
+      replace('herb.raspberry', 'some fermenting raspberry leaves', 'some fermenting raspberry leaves {fg:248}(shield){reset}'),
+      replace('herb.opium', 'some finely cut opium', 'some finely cut opium {fg:248}(frenzy){reset}'),
+      replace('herb.ginger', 'some ginger', 'some ginger {fg:248}(faerie fog){reset}'),
+      replace('herb.greyish', 'some greyish herbs', 'some greyish herbs {fg:248}(bless){reset}'),
+      replace('herb.mugwort', 'some mugwort', 'some mugwort {fg:248}(slow){reset}'),
+      replace('herb.mullein', 'some mullein', 'some mullein {fg:248}(pass door){reset}'),
+      replace('herb.coca', 'some purified coca', 'some purified coca {fg:248}(endorphins){reset}'),
+      replace('herb.rosemary', 'some rosemary', 'some rosemary {fg:248}(protection){reset}'),
+      replace('herb.sand_leaves', 'some sand colored leaves', 'some sand colored leaves {fg:248}(stone skin){reset}'),
+      replace('herb.spearmint', 'some spearmint', 'some spearmint {fg:248}(giant strength){reset}'),
     ],
   },
 ];
