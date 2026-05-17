@@ -204,8 +204,21 @@ export function StatusBar() {
           maxmove: num(data.maxmove, 0),
         };
         setVitals(next);
-        if (vitalsSnapRef.current === null) {
+        // Live deltas: every Char.Vitals push updates the delta from
+        // the snapshot taken at the last tick. Damage and healing
+        // show up immediately rather than waiting for the next hour
+        // change. Snapshot itself rebases on tick (World.Time
+        // branch below) so the displayed value resets per tick.
+        const snap = vitalsSnapRef.current;
+        if (snap === null) {
           vitalsSnapRef.current = next;
+          setDeltas(NO_DELTAS);
+        } else {
+          setDeltas({
+            hp: next.hp - snap.hp,
+            mana: next.mana - snap.mana,
+            move: next.move - snap.move,
+          });
         }
       } else if (payload.package === 'Char.Combat') {
         setCombat(extractCombat(payload.data));
