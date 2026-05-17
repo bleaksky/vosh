@@ -6,6 +6,8 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 
 import '@xterm/xterm/css/xterm.css';
 import { loadScrollback, onOutput } from '../lib/session';
+import { findTheme, type AppTheme } from '../lib/themes';
+import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 
 export interface TerminalHandle {
   write: (data: Uint8Array | string) => void;
@@ -20,33 +22,9 @@ interface Props {
   fontSize: number;
 }
 
-// Kanso Zen palette, exact mirror of the user's Ghostty config so the
-// terminal inside the app renders ANSI colors identically to the one
-// outside it.
-const KANSO_ZEN_THEME: ITheme = {
-  background: '#090e13',
-  foreground: '#c5c9c7',
-  cursor: '#c5c9c7',
-  cursorAccent: '#090e13',
-  selectionBackground: '#22262d',
-  selectionForeground: '#c5c9c7',
-  black: '#585858',
-  red: '#c4746e',
-  green: '#8a9a7b',
-  yellow: '#c4b28a',
-  blue: '#8ba4b0',
-  magenta: '#a292a3',
-  cyan: '#8ea4a2',
-  white: '#a4a7a4',
-  brightBlack: '#5c6066',
-  brightRed: '#e46876',
-  brightGreen: '#87a987',
-  brightYellow: '#e6c384',
-  brightBlue: '#7fb4ca',
-  brightMagenta: '#938aa9',
-  brightCyan: '#7aa89f',
-  brightWhite: '#c5c9c7',
-};
+function xtermThemeFor(theme: AppTheme): ITheme {
+  return { ...theme.xterm };
+}
 
 export function Terminal({ onReady, fontFamily, fontSize }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -78,7 +56,7 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
       scrollback: 10000,
       allowProposedApi: true,
       convertEol: false,
-      theme: KANSO_ZEN_THEME,
+      theme: xtermThemeFor(findTheme(getCurrentThemeId())),
     });
 
     const fit = new FitAddon();
@@ -207,6 +185,25 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
       // ignore
     }
   }, [fontFamily, fontSize]);
+
+  // Live-refresh the xterm palette when the user switches themes from
+  // the settings window. Listens on the cross-window theme event.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    subscribeThemeChanges((themeId) => {
+      const term = termRef.current;
+      if (!term) return;
+      term.options.theme = xtermThemeFor(findTheme(themeId));
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   return (
     <div ref={sizingRef} className="terminal-sizer">

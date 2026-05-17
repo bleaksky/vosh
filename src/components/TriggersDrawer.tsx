@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import Editor from 'react-simple-code-editor';
+import { highlight, languages } from 'prismjs';
+import 'prismjs/components/prism-json';
 import { exportTriggers, importTriggers } from '../lib/session';
 
 interface Props {
@@ -85,7 +88,7 @@ export function TriggersDrawer({ open, onClose, onError, chromeless }: Props) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'mudclient-triggers.json';
+    a.download = 'vosh-triggers.json';
     a.click();
     URL.revokeObjectURL(url);
     setStatus('download started');
@@ -106,14 +109,22 @@ export function TriggersDrawer({ open, onClose, onError, chromeless }: Props) {
 
   const body = (
     <>
-      <textarea
-        className="drawer-textarea"
-        value={json}
-        spellCheck={false}
-        onChange={(e) => setJson(e.target.value)}
-        disabled={loading}
-        rows={20}
-      />
+      <div className={`code-editor${loading ? ' is-disabled' : ''}`}>
+        <Editor
+          value={json}
+          onValueChange={(value) => setJson(value)}
+          highlight={(code) => highlight(code, languages.json, 'json')}
+          padding={12}
+          textareaClassName="code-editor-textarea"
+          preClassName="code-editor-pre"
+          disabled={loading}
+          style={{
+            fontFamily: 'var(--app-font-family)',
+            fontSize: 12,
+            minHeight: '20rem',
+          }}
+        />
+      </div>
       <div className="drawer-actions">
         <button type="button" onClick={handleApply}>
           apply
