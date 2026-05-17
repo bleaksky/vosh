@@ -40,6 +40,8 @@ vosh-script = { path = "../crates/script" }
 vosh-log = { path = "../crates/log" }
 regex = "1"
 toml = "0.8"
+font-kit = "0.14"
+urlencoding = "2"
 
 [dev-dependencies]
 tempfile = "3"

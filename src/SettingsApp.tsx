@@ -8,11 +8,14 @@ import {
   getUiConfig,
   importAliases,
   importTriggers,
+  listSystemFonts,
   setUiConfig,
+  type SystemFontEntry,
   type UiConfig,
 } from './lib/session';
 import { applyTheme } from './lib/theme';
 import { THEMES } from './lib/themes';
+import { loadFontStack, loadSystemFont } from './lib/fontLoader';
 
 // Quick-pick chips. The first two are bundled with the app via
 // @font-face in styles.css so they always render regardless of what
@@ -120,6 +123,31 @@ interface GeneralProps {
 
 function GeneralTab({ config, setConfig, onError }: GeneralProps) {
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [systemFonts, setSystemFonts] = useState<SystemFontEntry[]>([]);
+  const [fontFilter, setFontFilter] = useState('');
+  const [showOnlyMono, setShowOnlyMono] = useState(true);
+
+  // Pull the system font catalog from the backend (font-kit) once on
+  // mount. Sorted + deduped server-side; we just filter client-side.
+  useEffect(() => {
+    void listSystemFonts().then(setSystemFonts);
+  }, []);
+
+  // Whenever the live font_family value mentions a system family,
+  // inject its @font-face so the preview block actually renders it.
+  useEffect(() => {
+    if (config?.font_family) loadFontStack(config.font_family);
+  }, [config?.font_family]);
+
+  const filteredFonts = systemFonts
+    .filter((f) => !showOnlyMono || f.monospace)
+    .filter((f) => f.family.toLowerCase().includes(fontFilter.toLowerCase()))
+    .slice(0, 200);
+
+  const pickSystemFont = (family: string) => {
+    loadSystemFont(family);
+    update({ font_family: `"${family}", Menlo, monospace` });
+  };
 
   const update = (patch: Partial<UiConfig>) => {
     setConfig((prev) => (prev ? { ...prev, ...patch } : prev));
@@ -171,7 +199,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           className="settings-font-input"
           spellCheck={false}
           value={config.font_family}
-          placeholder="JetBrains Mono, Menlo, monospace"
+          placeholder='"BerkeleyMono Bundled", Menlo, monospace'
           onChange={(e) => update({ font_family: e.target.value })}
         />
       </Row>
@@ -188,6 +216,49 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
               {pick.label}
             </button>
           ))}
+        </div>
+      </div>
+      <div className="settings-row settings-row-picks">
+        <span className="settings-row-label">system</span>
+        <div className="settings-font-system">
+          <div className="settings-font-system-controls">
+            <input
+              type="search"
+              className="settings-font-input"
+              spellCheck={false}
+              placeholder={`filter ${systemFonts.length} installed fonts`}
+              value={fontFilter}
+              onChange={(e) => setFontFilter(e.target.value)}
+            />
+            <label className="settings-font-mono">
+              <input
+                type="checkbox"
+                checked={showOnlyMono}
+                onChange={(e) => setShowOnlyMono(e.target.checked)}
+              />
+              monospace only
+            </label>
+          </div>
+          <div className="settings-font-list">
+            {systemFonts.length === 0 ? (
+              <span className="settings-font-empty">loading installed fonts…</span>
+            ) : (
+              filteredFonts.map((f) => (
+                <button
+                  key={f.family}
+                  type="button"
+                  className="settings-font-list-item"
+                  style={{ fontFamily: `"${f.family}", Menlo, monospace` }}
+                  onMouseEnter={() => loadSystemFont(f.family)}
+                  onFocus={() => loadSystemFont(f.family)}
+                  onClick={() => pickSystemFont(f.family)}
+                  title={f.family}
+                >
+                  {f.family}
+                </button>
+              ))
+            )}
+          </div>
         </div>
       </div>
       <div className="settings-row">

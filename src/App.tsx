@@ -11,6 +11,7 @@ import { MapPane } from './components/MapPane';
 import { ChatPane } from './components/ChatPane';
 import { getUiConfig, onState, type StatePayload } from './lib/session';
 import { applyAndBroadcastTheme } from './lib/theme';
+import { loadFontStack } from './lib/fontLoader';
 
 const MAP_OPEN_KEY = 'vosh.layout.mapOpen';
 const CHAT_OPEN_KEY = 'vosh.layout.chatOpen';
@@ -128,6 +129,9 @@ function App() {
 
   useEffect(() => {
     const root = document.documentElement;
+    // Inject @font-face blocks for every named family in the stack so
+    // WKWebView can render fonts it would otherwise refuse to match.
+    loadFontStack(fontFamily);
     root.style.setProperty('--app-font-family', fontFamily);
     root.style.setProperty('--app-font-size', `${fontSize}px`);
   }, [fontFamily, fontSize]);

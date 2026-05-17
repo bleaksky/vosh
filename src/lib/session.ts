@@ -122,6 +122,20 @@ export async function importAliases(json: string): Promise<number> {
   return invoke('aliases_import', { json });
 }
 
+export interface SystemFontEntry {
+  family: string;
+  monospace: boolean;
+}
+
+export async function listSystemFonts(): Promise<SystemFontEntry[]> {
+  try {
+    const entries = await invoke<SystemFontEntry[]>('fonts_list');
+    return Array.isArray(entries) ? entries : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function presetsInstall(triggers: TriggerRecord[]): Promise<number> {
   return invoke('presets_install', { triggers });
 }
