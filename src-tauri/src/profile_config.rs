@@ -360,12 +360,12 @@ mod tests {
             pattern: r"\w+ tells you".into(),
             priority: 0,
             enabled: true,
-            action: TriggerAction::Highlight {
+            actions: vec![TriggerAction::Highlight {
                 style: HighlightStyle {
                     fg: Some(NamedColor::Cyan),
                     ..Default::default()
                 },
-            },
+            }],
             preset: None,
         });
         let text = config.to_toml().unwrap();
@@ -400,7 +400,7 @@ mod tests {
             pattern: "[unclosed".into(),
             priority: 0,
             enabled: true,
-            action: TriggerAction::Gag,
+            actions: vec![TriggerAction::Gag],
             preset: None,
         });
         let mut profile = Profile::default();

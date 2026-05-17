@@ -54,30 +54,35 @@ pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
         }
         any_match = true;
 
-        match &compiled.trigger.action {
-            TriggerAction::Gag => {
-                gagged = true;
-            }
-            TriggerAction::Replace { template } => {
-                text = compiled
-                    .regex
-                    .replace_all(&text, template.as_str())
-                    .into_owned();
-            }
-            TriggerAction::Highlight { style } => {
-                if !style.is_empty() {
-                    highlights.push((compiled.regex.clone(), style.clone()));
+        // Every action on the trigger fires on each match — a single
+        // trigger can recolor a line AND send commands AND route it,
+        // all in one pass.
+        for action in &compiled.trigger.actions {
+            match action {
+                TriggerAction::Gag => {
+                    gagged = true;
                 }
-            }
-            TriggerAction::Send { template } => {
-                for caps in compiled.regex.captures_iter(&plain) {
-                    let mut buf = String::new();
-                    caps.expand(template, &mut buf);
-                    sends.push(buf);
+                TriggerAction::Replace { template } => {
+                    text = compiled
+                        .regex
+                        .replace_all(&text, template.as_str())
+                        .into_owned();
                 }
-            }
-            TriggerAction::Route { pane } => {
-                routes.push(pane.clone());
+                TriggerAction::Highlight { style } => {
+                    if !style.is_empty() {
+                        highlights.push((compiled.regex.clone(), style.clone()));
+                    }
+                }
+                TriggerAction::Send { template } => {
+                    for caps in compiled.regex.captures_iter(&plain) {
+                        let mut buf = String::new();
+                        caps.expand(template, &mut buf);
+                        sends.push(buf);
+                    }
+                }
+                TriggerAction::Route { pane } => {
+                    routes.push(pane.clone());
+                }
             }
         }
     }
@@ -153,12 +158,12 @@ mod tests {
             pattern: pattern.to_string(),
             priority: 0,
             enabled: true,
-            action: TriggerAction::Highlight {
+            actions: vec![TriggerAction::Highlight {
                 style: HighlightStyle {
                     fg: Some(fg),
                     ..Default::default()
                 },
-            },
+            }],
             preset: None,
         }
     }
@@ -195,7 +200,7 @@ mod tests {
             pattern: "tingle".into(),
             priority: 0,
             enabled: true,
-            action: TriggerAction::Gag,
+            actions: vec![TriggerAction::Gag],
             preset: None,
         }]);
         let r = process(&s, b"You feel a tingle.");
@@ -209,9 +214,9 @@ mod tests {
             pattern: r"goblin".into(),
             priority: 0,
             enabled: true,
-            action: TriggerAction::Replace {
+            actions: vec![TriggerAction::Replace {
                 template: "wolf".into(),
-            },
+            }],
             preset: None,
         }]);
         let r = process(&s, b"You see a goblin.");
@@ -225,9 +230,9 @@ mod tests {
             pattern: r"(?<who>\w+) yells".into(),
             priority: 0,
             enabled: true,
-            action: TriggerAction::Replace {
+            actions: vec![TriggerAction::Replace {
                 template: "$who calmly says".into(),
-            },
+            }],
             preset: None,
         }]);
         let r = process(&s, b"Bob yells");
@@ -241,9 +246,9 @@ mod tests {
             pattern: r"The (\w+) is DEAD".into(),
             priority: 0,
             enabled: true,
-            action: TriggerAction::Send {
+            actions: vec![TriggerAction::Send {
                 template: "loot $1".into(),
-            },
+            }],
             preset: None,
         }]);
         let r = process(&s, b"The goblin is DEAD!");
@@ -257,9 +262,9 @@ mod tests {
             pattern: r"tells you".into(),
             priority: 0,
             enabled: true,
-            action: TriggerAction::Route {
+            actions: vec![TriggerAction::Route {
                 pane: "chat".into(),
-            },
+            }],
             preset: None,
         }]);
         let r = process(&s, b"Bob tells you 'hi'");
@@ -274,9 +279,9 @@ mod tests {
             pattern: "x".into(),
             priority: -10,
             enabled: true,
-            action: TriggerAction::Replace {
+            actions: vec![TriggerAction::Replace {
                 template: "L".into(),
-            },
+            }],
             preset: None,
         })
         .unwrap();
@@ -285,9 +290,9 @@ mod tests {
             pattern: "x".into(),
             priority: 100,
             enabled: true,
-            action: TriggerAction::Replace {
+            actions: vec![TriggerAction::Replace {
                 template: "H".into(),
-            },
+            }],
             preset: None,
         })
         .unwrap();
@@ -329,7 +334,7 @@ mod tests {
             pattern: "[unclosed".into(),
             priority: 0,
             enabled: true,
-            action: TriggerAction::Gag,
+            actions: vec![TriggerAction::Gag],
             preset: None,
         };
         assert!(s.set(bad).is_err());
@@ -345,7 +350,7 @@ mod tests {
             pattern: "tingle".into(),
             priority: 50,
             enabled: true,
-            action: TriggerAction::Gag,
+            actions: vec![TriggerAction::Gag],
             preset: None,
         })
         .unwrap();
