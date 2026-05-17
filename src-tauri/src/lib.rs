@@ -8,6 +8,7 @@ use tracing_subscriber::EnvFilter;
 
 mod commands;
 mod connection;
+mod fonts;
 mod gmcp_bind;
 mod input;
 mod line_accumulator;
@@ -30,6 +31,7 @@ use commands::{
     plugins_set_enabled, triggers_list, ui_get_config, ui_set_config, updater_check, AppState,
     SharedState,
 };
+use fonts::{fonts_list, handle_font_uri};
 use map_state::MapState;
 use profile_config::ProfileConfig;
 
@@ -44,6 +46,12 @@ pub fn run() {
     let state: SharedState = Arc::new(AppState::default());
 
     tauri::Builder::default()
+        // Serves font files by family name. Frontend mints @font-face
+        // blocks pointing at font://<family> so the webview can render
+        // user-installed fonts WebKit otherwise refuses to match.
+        .register_uri_scheme_protocol("font", |_ctx, request| {
+            handle_font_uri(request.uri())
+        })
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
@@ -190,6 +198,7 @@ pub fn run() {
             open_settings_window,
             dock_layout_get,
             dock_layout_set,
+            fonts_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

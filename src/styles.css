@@ -656,6 +656,74 @@ body {
   white-space: nowrap;
 }
 
+/* System-font picker. Sits under the bundled chips; lists every
+   installed font family the backend enumerated via font-kit. Each
+   item renders in its own family so the user sees the glyph shape
+   before picking. */
+
+.settings-font-system {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-font-system-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-font-mono {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--c-text-faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.settings-font-mono input[type='checkbox'] {
+  accent-color: var(--c-accent);
+}
+
+.settings-font-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  padding: 4px;
+  background: var(--c-surface);
+}
+
+.settings-font-list-item {
+  background: transparent;
+  border: none;
+  color: var(--c-text);
+  text-align: left;
+  padding: 3px 8px;
+  border-radius: 2px;
+  font-size: 12px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-font-list-item:hover {
+  background: var(--c-surface-emphasis);
+  color: var(--c-text-strong);
+}
+
+.settings-font-empty {
+  color: var(--c-text-faint);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
 .settings-unit {
   color: var(--c-text-faint);
   font-size: 12px;
