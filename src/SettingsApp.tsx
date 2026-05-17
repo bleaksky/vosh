@@ -14,19 +14,19 @@ import {
 import { applyTheme } from './lib/theme';
 import { THEMES } from './lib/themes';
 
-// Quick-pick chips for common monospace families. Clicking one writes
-// the name into the free-text input; user can keep typing to refine
-// or specify a custom fallback chain. The preview block under the
-// input uses the live value so you can confirm the font actually
-// loaded before saving.
-const FONT_PICKS = [
-  'BerkeleyMono Nerd Font',
-  'JetBrains Mono',
-  'Fira Code',
-  'SF Mono',
-  'Menlo',
-  'Monaco',
-  'Courier New',
+// Quick-pick chips. The first two are bundled with the app via
+// @font-face in styles.css so they always render regardless of what
+// is or is not installed on the OS — WKWebView refuses to match user-
+// installed fonts by name on recent macOS. The rest are macOS system
+// fonts guaranteed to be present. Adding more bundled fonts is a
+// matter of dropping a .ttf into src/assets/fonts/, adding a matching
+// @font-face block in styles.css, and adding a chip here.
+const FONT_PICKS: { label: string; value: string }[] = [
+  { label: 'BerkeleyMono', value: '"BerkeleyMono Bundled", Menlo, monospace' },
+  { label: 'JetBrainsMono', value: '"JetBrainsMono Bundled", Menlo, monospace' },
+  { label: 'Menlo', value: 'Menlo, monospace' },
+  { label: 'Monaco', value: 'Monaco, monospace' },
+  { label: 'Courier New', value: '"Courier New", monospace' },
 ];
 
 const PREVIEW_TEXT = 'The quick brown fox 0123456789  |  hp 850/1000  IlOo1';
@@ -178,14 +178,14 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
       <div className="settings-row settings-row-picks">
         <span className="settings-row-label" />
         <div className="settings-font-picks">
-          {FONT_PICKS.map((name) => (
+          {FONT_PICKS.map((pick) => (
             <button
-              key={name}
+              key={pick.label}
               type="button"
               className="settings-font-pick"
-              onClick={() => update({ font_family: name })}
+              onClick={() => update({ font_family: pick.value })}
             >
-              {name}
+              {pick.label}
             </button>
           ))}
         </div>
