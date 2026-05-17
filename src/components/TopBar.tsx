@@ -7,13 +7,22 @@ interface Props {
   showAuxButtons?: boolean;
   // Label rendered inside the brand block. Defaults to "[vosh]".
   brand?: string;
+  // Map pane toggle. When provided, a `map` button renders next to
+  // settings and reflects pressed state.
+  mapOpen?: boolean;
+  onToggleMap?: () => void;
 }
 
 // Frameless-window top strip. Drag region across most of its width
 // with text-style chrome buttons on the right (settings, map, then
 // the window controls). Cross-platform substitute for native
 // traffic lights.
-export function TopBar({ showAuxButtons = true, brand = '[vosh]' }: Props) {
+export function TopBar({
+  showAuxButtons = true,
+  brand = '[vosh]',
+  mapOpen,
+  onToggleMap,
+}: Props) {
   const win = () => getCurrentWindow();
 
   const openSettings = () => {
@@ -30,6 +39,16 @@ export function TopBar({ showAuxButtons = true, brand = '[vosh]' }: Props) {
       <span className="topbar-spacer" data-tauri-drag-region />
       {showAuxButtons && (
         <div className="topbar-aux">
+          {onToggleMap && (
+            <button
+              type="button"
+              className={`topbar-aux-btn${mapOpen ? ' topbar-aux-btn-pressed' : ''}`}
+              aria-pressed={mapOpen}
+              onClick={onToggleMap}
+            >
+              map
+            </button>
+          )}
           <button
             type="button"
             className="topbar-aux-btn"

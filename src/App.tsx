@@ -5,8 +5,12 @@ import { Input, type InputHandle } from './components/Input';
 import { Connect, type ConnectionStatus } from './components/Connect';
 import { TopBar } from './components/TopBar';
 import { StatusBar } from './components/StatusBar';
+import { Resizable } from './components/Resizable';
+import { MapPane } from './components/MapPane';
 import { getUiConfig, onState, type StatePayload } from './lib/session';
 import { applyTheme } from './lib/theme';
+
+const MAP_OPEN_KEY = 'vosh.layout.mapOpen';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
@@ -44,12 +48,29 @@ migrateMudclientKeys();
 const DEFAULT_FONT_FAMILY =
   'BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace';
 
+function loadMapOpen(): boolean {
+  try {
+    return localStorage.getItem(MAP_OPEN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 function App() {
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
   const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
   const [fontSize, setFontSize] = useState(14);
+  const [mapOpen, setMapOpen] = useState(loadMapOpen);
   const termRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MAP_OPEN_KEY, mapOpen ? '1' : '0');
+    } catch {
+      // ignore storage failures
+    }
+  }, [mapOpen]);
 
   // Click anywhere in the terminal area focuses the input. Skip when
   // the user is selecting text (so copy still works) or clicking an
@@ -137,16 +158,30 @@ function App() {
 
   return (
     <main className="app">
-      <TopBar />
+      <TopBar mapOpen={mapOpen} onToggleMap={() => setMapOpen((v) => !v)} />
       <Connect status={status} onError={handleError} />
-      <div className="terminal-area" onMouseUp={handleTerminalMouseUp}>
-        <Terminal
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          onReady={(handle) => {
-            termRef.current = handle;
-          }}
-        />
+      <div className="main-row">
+        <div className="terminal-area" onMouseUp={handleTerminalMouseUp}>
+          <Terminal
+            fontFamily={fontFamily}
+            fontSize={fontSize}
+            onReady={(handle) => {
+              termRef.current = handle;
+            }}
+          />
+        </div>
+        {mapOpen && (
+          <Resizable
+            storageKey="vosh.layout.mapWidth"
+            defaultWidth={360}
+            minWidth={240}
+            maxWidth={720}
+            className="map-resizable"
+            handleLabel="resize map"
+          >
+            <MapPane />
+          </Resizable>
+        )}
       </div>
       <Input
         ref={inputRef}

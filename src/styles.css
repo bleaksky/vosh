@@ -230,11 +230,21 @@ body {
   color: var(--c-warn);
 }
 
-/* Terminal — the main multiplexer cell; the .app outer frame and the
-   border-top/bottom on neighboring bars supply its borders. */
+/* Central row: terminal on the left, optional map pane on the right.
+   Sits between Connect and Input and absorbs all remaining vertical
+   space. */
+.main-row {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+/* Terminal area absorbs whatever width the map pane leaves behind. */
 
 .terminal-area {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   background: var(--c-surface);
   position: relative;
@@ -427,4 +437,178 @@ body {
 .settings-loading {
   color: var(--c-text-faint);
   font-size: 12px;
+}
+
+/* Map pane — sits on the right side of the main row, separated from
+   the terminal by a 1px divider that doubles as the drag handle. The
+   pane shares the main surface so it reads as part of the same
+   window. */
+
+.resizable {
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
+.resizable-handle {
+  flex: 0 0 4px;
+  cursor: col-resize;
+  background: var(--c-border);
+  transition: background-color 80ms ease-out;
+}
+
+.resizable-handle:hover,
+.resizable-handle:focus {
+  background: var(--c-accent);
+  outline: none;
+}
+
+.resizable-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+}
+
+.map-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-surface);
+}
+
+.map-pane-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--c-border-soft);
+  font-size: 11px;
+  color: var(--c-text-faint);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.map-pane-title {
+  color: var(--c-text-muted);
+}
+
+.map-pane-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+}
+
+/* ServerMapView internals, lifted from the pre-T0 styles so the
+   resurrected canvas renderer has the layout it expects. */
+
+.server-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-subhead {
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--c-text-faint);
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.map-subhead .map-mode-toggle button {
+  padding: 0 6px;
+  font-size: 10px;
+}
+
+.tileset-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border-soft);
+  font-size: 11px;
+}
+
+.tileset-bar button {
+  background: transparent;
+  color: var(--c-text-muted);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  padding: 1px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tileset-bar button:hover {
+  color: var(--c-text-strong);
+  border-color: var(--c-accent);
+}
+
+.tileset-status {
+  color: var(--c-text-faint);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-canvas-host {
+  flex: 1 1 auto;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-canvas-host canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.map-hover {
+  position: absolute;
+  bottom: 4px;
+  left: 6px;
+  right: 6px;
+  padding: 2px 6px;
+  background: rgba(13, 17, 23, 0.85);
+  color: var(--c-text);
+  font-size: 11px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.map-mode-toggle {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.map-mode-toggle button {
+  background: transparent;
+  color: var(--c-text-muted);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  padding: 0 6px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.map-mode-toggle button[aria-pressed='true'] {
+  background: var(--c-accent);
+  color: var(--c-surface-deep);
+  border-color: var(--c-accent);
 }
