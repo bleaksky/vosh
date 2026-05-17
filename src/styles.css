@@ -271,15 +271,20 @@ body {
 
 /* Central row: terminal on the left, optional map pane on the right.
    Sits between Connect and Input and absorbs all remaining vertical
-   space. */
+   space. overflow:hidden so xterm's canvas (or anything inside) can
+   never paint past the row's edges into the input/status bar area. */
 .main-row {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: row;
+  overflow: hidden;
 }
 
-/* Terminal area absorbs whatever width the map pane leaves behind. */
+/* Terminal area absorbs whatever width the map pane leaves behind.
+   overflow:hidden + min-height:0 are both load-bearing — without
+   either, xterm bleeds past the bottom of its slot during the frame
+   between a chat-pane open/close and its own refit. */
 
 .terminal-area {
   flex: 1 1 auto;
@@ -287,6 +292,7 @@ body {
   min-height: 0;
   background: var(--c-surface);
   position: relative;
+  overflow: hidden;
 }
 
 /* xterm's FitAddon reads the host's computed height to compute the
@@ -308,7 +314,11 @@ body {
   top: 0;
   left: 0;
   overflow: hidden;
-  padding: 8px 12px 0 12px;
+  /* Equal padding top + bottom so the bottom row of xterm output has
+     visible breathing room from the input bar. Without bottom
+     padding, even a perfectly fit canvas can visually butt up against
+     the input border and look "cut off". */
+  padding: 8px 12px;
   background: var(--c-surface);
 }
 
