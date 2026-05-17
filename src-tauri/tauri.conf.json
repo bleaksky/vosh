@@ -19,9 +19,9 @@
         "minHeight": 360,
         "resizable": true,
         "decorations": false,
+        "transparent": true,
         "fullscreen": false,
         "visible": false,
-        "backgroundColor": "#090e13",
         "dragDropEnabled": false
       }
     ],

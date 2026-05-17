@@ -40,7 +40,7 @@ body,
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--c-surface);
+  background: transparent;
   color: var(--c-text);
   font-family: var(--app-font-family);
   font-size: var(--app-font-size);
@@ -50,6 +50,10 @@ body {
   overflow: hidden;
 }
 
+/* Rounded, single-surface Ghostty-style window. body is transparent so
+   the corners outside the radius are clipped from the OS window; .app
+   carries the only visible surface color, with a hairline outer border
+   reading as the window frame. */
 .app {
   display: flex;
   flex-direction: column;
@@ -57,6 +61,8 @@ body {
   width: 100vw;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 /* Shared inverted-video brand block (tmux session-label convention).
@@ -82,7 +88,7 @@ body {
   align-items: stretch;
   height: 24px;
   flex: 0 0 auto;
-  background: var(--c-surface-deep);
+  background: var(--c-surface);
   border-bottom: 1px solid var(--c-border);
   user-select: none;
   font-size: 12px;
@@ -129,7 +135,7 @@ body {
   align-items: center;
   gap: 10px;
   padding: 6px 14px;
-  background: var(--c-surface-pane);
+  background: var(--c-surface);
   border-bottom: 1px solid var(--c-border);
   font-size: 12px;
   color: var(--c-text-muted);
@@ -227,7 +233,7 @@ body {
   align-items: center;
   gap: 8px;
   padding: 6px 14px;
-  background: var(--c-surface-pane);
+  background: var(--c-surface);
   border-top: 1px solid var(--c-border);
   border-bottom: 1px solid var(--c-border);
   font-size: 13px;
@@ -261,7 +267,7 @@ body {
   justify-content: space-between;
   height: 24px;
   flex: 0 0 auto;
-  background: var(--c-surface-deep);
+  background: var(--c-surface);
   font-size: 12px;
   color: var(--c-text-muted);
   user-select: none;
