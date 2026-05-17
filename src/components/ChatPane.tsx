@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { onGmcp, onRouted, onState, type GmcpPayload, type RoutedPayload } from '../lib/session';
 
 interface ChatLine {
-  ts: number;
   pane: string;
   text: string;
 }
@@ -19,7 +18,7 @@ function stripAnsi(text: string): string {
 // Convert a Comm.Channel(.Text) GMCP payload to a ChatLine. Aabahran
 // and other ROM-derived servers vary the field names; fall back through
 // the common alternates.
-function commToChatLine(data: unknown, ts: number): ChatLine | null {
+function commToChatLine(data: unknown): ChatLine | null {
   if (!data || typeof data !== 'object') return null;
   const obj = data as Record<string, unknown>;
   const pane = String(obj.channel ?? obj.chan ?? 'chat');
@@ -31,15 +30,7 @@ function commToChatLine(data: unknown, ts: number): ChatLine | null {
   const raw = String(obj.text ?? obj.msg ?? obj.message ?? '');
   if (!raw) return null;
   const cleaned = stripAnsi(raw);
-  return { ts, pane, text: speaker ? `${speaker}: ${cleaned}` : cleaned };
-}
-
-function formatTime(ts: number): string {
-  const d = new Date(ts);
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  const ss = String(d.getSeconds()).padStart(2, '0');
-  return `${hh}:${mm}:${ss}`;
+  return { pane, text: speaker ? `${speaker}: ${cleaned}` : cleaned };
 }
 
 // Embedded bottom pane that collects routed channel text from
@@ -71,7 +62,7 @@ export function ChatPane() {
       if (payload.package !== 'Comm.Channel' && payload.package !== 'Comm.Channel.Text') {
         return;
       }
-      const line = commToChatLine(payload.data, Date.now());
+      const line = commToChatLine(payload.data);
       if (line) append(line);
     }).then((fn) => {
       if (cancelled) fn();
@@ -82,7 +73,7 @@ export function ChatPane() {
     // terminal lines here. Useful for capturing patterns the server
     // does not surface through Comm.Channel.
     onRouted((payload: RoutedPayload) => {
-      append({ ts: Date.now(), pane: payload.pane, text: stripAnsi(payload.text) });
+      append({ pane: payload.pane, text: stripAnsi(payload.text) });
     }).then((fn) => {
       if (cancelled) fn();
       else unsubRouted = fn;
@@ -155,8 +146,7 @@ export function ChatPane() {
         ) : (
           visible.map((l, i) => (
             <div key={i} className="chat-pane-line">
-              <span className="chat-pane-ts">{formatTime(l.ts)}</span>
-              <span className="chat-pane-tag">{l.pane}</span>
+              <span className="chat-pane-tag">[{l.pane}]</span>
               <span className="chat-pane-text">{l.text}</span>
             </div>
           ))

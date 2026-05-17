@@ -1239,24 +1239,14 @@ body {
 }
 
 .chat-pane-line {
-  display: grid;
-  grid-template-columns: 64px 80px 1fr;
-  gap: 8px;
-  align-items: baseline;
-}
-
-.chat-pane-ts {
-  color: var(--c-text-dim);
-  font-variant-numeric: tabular-nums;
+  display: block;
 }
 
 .chat-pane-tag {
   color: var(--c-accent);
   font-weight: 600;
   letter-spacing: 0.02em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-right: 6px;
 }
 
 .chat-pane-text {
