@@ -17,6 +17,7 @@
 // buffs falling, your own recall).
 
 import type { HighlightStyle, TriggerRecord } from './session';
+import { colorize } from './colorTokens';
 
 export type PresetCategory =
   | 'healing'
@@ -148,44 +149,8 @@ const DAMAGE_VERB_ALT = DAMAGE_VERBS.join('|');
 // failed entirely on `<<< VERB >>>`).
 const DAMAGE_VERB_WRAPPED = `(?:(?:[*=><]{3}|does|do) )?(?:${DAMAGE_VERB_ALT})(?: (?:[*=><]{3}|things))?`;
 
-// Named-color templating for Replace actions. Authors write
-// `{bold_red}## {red}$0{reset}` instead of raw ANSI escape codes.
-// `{fg:N}` and `{bg:N}` cover 256-color.
-const COLOR_TOKENS: Record<string, string> = {
-  reset: '\x1b[0m',
-  bold: '\x1b[1m',
-  dim: '\x1b[2m',
-  underline: '\x1b[4m',
-  black: '\x1b[30m',
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  magenta: '\x1b[35m',
-  cyan: '\x1b[36m',
-  white: '\x1b[37m',
-  bright_black: '\x1b[90m',
-  bright_red: '\x1b[91m',
-  bright_green: '\x1b[92m',
-  bright_yellow: '\x1b[93m',
-  bright_blue: '\x1b[94m',
-  bright_magenta: '\x1b[95m',
-  bright_cyan: '\x1b[96m',
-  bright_white: '\x1b[97m',
-  bold_red: '\x1b[1;31m',
-  bold_green: '\x1b[1;32m',
-  bold_yellow: '\x1b[1;33m',
-  bold_blue: '\x1b[1;34m',
-  bold_magenta: '\x1b[1;35m',
-  bold_cyan: '\x1b[1;36m',
-  bold_white: '\x1b[1;37m',
-};
-
-function colorize(template: string): string {
-  let out = template.replace(/\{fg:(\d+)\}/g, (_, n) => `\x1b[38;5;${n}m`);
-  out = out.replace(/\{bg:(\d+)\}/g, (_, n) => `\x1b[48;5;${n}m`);
-  return out.replace(/\{([a-z_]+)\}/g, (m, name) => COLOR_TOKENS[name] ?? m);
-}
+// Token table now lives in src/lib/colorTokens.ts so the trigger form
+// editor can use the same grammar (and the inverse).
 
 export const PRESETS: Preset[] = [
   // ── Healing & Cure ────────────────────────────────────────────────
