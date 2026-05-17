@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { getTarget, onGmcp, onState, onTarget, onTick } from '../lib/session';
+import {
+  getTarget,
+  onGmcp,
+  onState,
+  onTarget,
+  onTick,
+  type TickPayload,
+} from '../lib/session';
 
 interface Vitals {
   hp: number;
@@ -143,13 +150,13 @@ export function StatusBar() {
   const [userTarget, setUserTarget] = useState<string | null>(null);
   const [room, setRoom] = useState<RoomInfo | null>(null);
   // Tintin-style tick display: counts UP real seconds since the last
-  // tick fire reported by the backend. The backend handles the
-  // World.Time hour-advance detection AND the interval auto-fire, so
-  // we just listen to session://tick and reset on payload.fired.
+  // World.Time hour change. Resets only on hour change, not on the
+  // backend's local-interval auto-fire (which drifts ahead of or
+  // behind the MUD's actual tick). Matches main's behavior verbatim.
+  const [tick, setTick] = useState<TickPayload | null>(null);
   const [tickSecs, setTickSecs] = useState(0);
-  const [tickActive, setTickActive] = useState(false);
-  const [tickIntervalSec, setTickIntervalSec] = useState(30);
   const tickResetAtRef = useRef<number>(Date.now());
+  const prevHourRef = useRef<number | string | null>(null);
   // Snapshot of the most-recent vitals; used to compute deltas on
   // tick fires. Kept in a ref so the GMCP handler that updates
   // vitals doesn't need to depend on it.
@@ -197,8 +204,6 @@ export function StatusBar() {
           maxmove: num(data.maxmove, 0),
         };
         setVitals(next);
-        // Seed the snapshot so the first tick has something to diff
-        // against; subsequent ticks rebase via the onTick handler.
         if (vitalsSnapRef.current === null) {
           vitalsSnapRef.current = next;
         }
@@ -206,6 +211,39 @@ export function StatusBar() {
         setCombat(extractCombat(payload.data));
       } else if (payload.package === 'Room.Info') {
         setRoom(parseRoomInfo(payload.data));
+      } else if (
+        payload.package === 'World.Time' &&
+        payload.data &&
+        typeof payload.data === 'object'
+      ) {
+        // Direct port of main's reset logic: first World.Time after
+        // connect just seeds the hour; any subsequent push with a
+        // DIFFERENT hour value is a real tick and resets the counter.
+        const incoming = payload.data as Record<string, unknown>;
+        const hour = incoming.hour as number | string | undefined | null;
+        if (hour !== undefined && hour !== null) {
+          if (prevHourRef.current !== null && prevHourRef.current !== hour) {
+            // Rebase the vitals snapshot too so the delta column
+            // reflects per-tick movement.
+            setVitals((curr) => {
+              const prevSnap = vitalsSnapRef.current;
+              if (curr) {
+                if (prevSnap) {
+                  setDeltas({
+                    hp: curr.hp - prevSnap.hp,
+                    mana: curr.mana - prevSnap.mana,
+                    move: curr.move - prevSnap.move,
+                  });
+                }
+                vitalsSnapRef.current = curr;
+              }
+              return curr;
+            });
+            tickResetAtRef.current = Date.now();
+            setTickSecs(0);
+          }
+          prevHourRef.current = hour;
+        }
       }
     }).then((fn) => {
       if (cancelled) fn();
@@ -220,33 +258,10 @@ export function StatusBar() {
     });
 
     onTick((payload) => {
-      setTickActive(payload.enabled);
-      if (payload.interval_ms > 0) {
-        setTickIntervalSec(Math.max(1, Math.round(payload.interval_ms / 1000)));
-      }
-      // The backend emits a tick payload whenever the runtime is
-      // reset OR the interval auto-fire pops. `payload.fired` is true
-      // only for the auto-fire; World.Time-driven resets ship
-      // fired:false. Treat ANY tick payload as a reset moment so the
-      // counter zeroes regardless of which path the backend took.
-      const prev = vitalsSnapRef.current;
-      setVitals((curr) => {
-        if (curr) {
-          if (prev) {
-            setDeltas({
-              hp: curr.hp - prev.hp,
-              mana: curr.mana - prev.mana,
-              move: curr.move - prev.move,
-            });
-          } else {
-            setDeltas(NO_DELTAS);
-          }
-          vitalsSnapRef.current = curr;
-        }
-        return curr;
-      });
-      tickResetAtRef.current = Date.now();
-      setTickSecs(0);
+      // Backend tick state only — drives the enabled flag and the
+      // interval used for the warn band. Reset of the counter
+      // happens in the World.Time branch above (matches main).
+      setTick(payload);
     }).then((fn) => {
       if (cancelled) fn();
       else unsubTick = fn;
@@ -259,8 +274,13 @@ export function StatusBar() {
         setCombat(null);
         setUserTarget(null);
         setRoom(null);
-        setTickActive(false);
+        setTick(null);
         vitalsSnapRef.current = null;
+        // Forget the last hour so the next connection's first
+        // World.Time push is treated as the seed, not a hour-change.
+        prevHourRef.current = null;
+        tickResetAtRef.current = Date.now();
+        setTickSecs(0);
       } else if (payload.kind === 'connected') {
         tickResetAtRef.current = Date.now();
         setTickSecs(0);
@@ -280,8 +300,13 @@ export function StatusBar() {
   }, []);
 
   // Tick is "warning" when within 5 seconds of the configured
-  // interval (or already past it because the backend tick fired
-  // late). Drives a yellow tint + a CSS pulse animation.
+  // interval (or already past it because the MUD's tick fired late
+  // or was missed). Drives a yellow tint + a CSS pulse animation.
+  const tickActive = !!tick?.enabled;
+  const tickIntervalSec =
+    tick?.interval_ms && tick.interval_ms > 0
+      ? Math.max(1, Math.round(tick.interval_ms / 1000))
+      : 30;
   const tickWarn = tickActive && tickSecs >= Math.max(0, tickIntervalSec - 5);
 
   return (
