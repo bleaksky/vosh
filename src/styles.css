@@ -99,6 +99,30 @@ body {
   flex: 1 1 auto;
 }
 
+.topbar-aux {
+  display: flex;
+  align-items: stretch;
+  margin-right: 6px;
+}
+
+.topbar-aux-btn {
+  background: transparent;
+  border: none;
+  color: var(--c-text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  letter-spacing: 0.02em;
+}
+
+.topbar-aux-btn:hover {
+  color: var(--c-accent);
+}
+
 .topbar-controls {
   display: flex;
   align-items: stretch;
@@ -305,4 +329,102 @@ body {
 .statusbar-clock {
   color: var(--c-text);
   font-variant-numeric: tabular-nums;
+}
+
+/* Settings window. Shares .app + TopBar chrome with the main window;
+   the body is a single column of label/control rows. */
+
+.settings-app .settings-body {
+  flex: 1 1 auto;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.settings-row-label {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+}
+
+.settings-row-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-row select,
+.settings-row input[type='number'] {
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 13px;
+  border-radius: 2px;
+}
+
+.settings-row select:focus,
+.settings-row input[type='number']:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+.settings-row input[type='number'] {
+  width: 72px;
+}
+
+.settings-unit {
+  color: var(--c-text-faint);
+  font-size: 12px;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.settings-btn {
+  background: transparent;
+  color: var(--c-accent);
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+
+.settings-btn:hover {
+  color: var(--c-text-strong);
+}
+
+.settings-btn-mute {
+  color: var(--c-text-faint);
+}
+
+.settings-saved {
+  color: var(--c-success);
+  font-size: 12px;
+}
+
+.settings-error {
+  color: var(--c-danger);
+  font-size: 12px;
+}
+
+.settings-loading {
+  color: var(--c-text-faint);
+  font-size: 12px;
 }

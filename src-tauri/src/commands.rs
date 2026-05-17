@@ -285,19 +285,19 @@ pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
     }
     WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("index.html?view=settings".into()))
         .title("Vosh · settings")
-        .inner_size(900.0, 720.0)
-        .min_inner_size(560.0, 420.0)
+        .inner_size(640.0, 480.0)
+        .min_inner_size(420.0, 320.0)
         .resizable(true)
-        // Match the app's dark background so the OS doesn't flash a
-        // default-white window for the few frames between window
-        // creation and the webview painting its first frame.
-        .background_color(tauri::webview::Color(9, 14, 19, 255))
+        // Frameless + transparent so the React side can draw the same
+        // rounded Ghostty-style chrome the main window uses.
+        .decorations(false)
+        .transparent(true)
         // Stay hidden until the React app calls show() on first render
         // so the user never sees the unstyled default state.
         .visible(false)
         // Disable Tauri's OS file-drop handler. When enabled it
         // intercepts HTML5 drag-and-drop inside the webview, which
-        // breaks the layout editor's panel drag interactions.
+        // can break overlay drag interactions.
         .disable_drag_drop_handler()
         .build()
         .map_err(|e| e.to_string())?;
