@@ -179,7 +179,12 @@ impl LogStore {
         Ok(rows)
     }
 
-    /// Run a regex search over log lines. Returns matches newest first.
+    /// Run a regex search over log lines. The most recent
+    /// `max_results` matches are returned, in chronological (oldest
+    /// first) order — that way a UI rendering top-to-bottom reads
+    /// like the original conversation. Internally the SQL walks the
+    /// table id-descending so the cap selects the newest matches;
+    /// the gathered slice is reversed before return.
     pub fn search(&self, pattern: &str, options: &SearchOptions) -> Result<Vec<SearchHit>> {
         let regex: Regex = RegexBuilder::new(pattern)
             .case_insensitive(!options.case_sensitive)
@@ -231,6 +236,7 @@ impl LogStore {
                 });
             }
         }
+        hits.reverse();
         Ok(hits)
     }
 
@@ -376,6 +382,26 @@ mod tests {
         assert_eq!(plain, "red\nplain\n");
         let ansi = s.export_session(id, true).unwrap();
         assert_eq!(ansi, "\x1b[31mred\x1b[0m\nplain\n");
+    }
+
+    #[test]
+    fn search_returns_oldest_first_within_cap() {
+        let mut s = store();
+        let id = s.start_session("h", 1, 0).unwrap();
+        s.append(id, 1, "match one", None).unwrap();
+        s.append(id, 2, "match two", None).unwrap();
+        s.append(id, 3, "match three", None).unwrap();
+        s.append(id, 4, "match four", None).unwrap();
+        // Cap to the 3 most-recent matches. Results should be those
+        // three, ordered oldest to newest: two, three, four.
+        let opts = SearchOptions {
+            case_sensitive: false,
+            max_results: 3,
+            session_id: None,
+        };
+        let hits = s.search("match", &opts).unwrap();
+        let texts: Vec<_> = hits.iter().map(|h| h.text.clone()).collect();
+        assert_eq!(texts, vec!["match two", "match three", "match four"]);
     }
 
     #[test]

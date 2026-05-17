@@ -6,6 +6,7 @@ import {
   type LogSearchHit,
   type LogSession,
 } from '../lib/session';
+import { parseAnsi, styleToCss } from '../lib/ansi';
 
 interface Props {
   onError: (e: string | null) => void;
@@ -27,6 +28,22 @@ function formatHit(ms: number): string {
   const mm = String(d.getMinutes()).padStart(2, '0');
   const ss = String(d.getSeconds()).padStart(2, '0');
   return `${hh}:${mm}:${ss}`;
+}
+
+// Render a hit's line text. If the backend shipped raw bytes (the
+// server's ANSI-coded line), parse them and emit colored spans;
+// otherwise fall back to the plain stripped text.
+function renderHitText(h: LogSearchHit) {
+  if (h.raw && h.raw.length > 0) {
+    const bytes = new Uint8Array(h.raw);
+    const chunks = parseAnsi(bytes);
+    return chunks.map((c, i) => (
+      <span key={i} style={styleToCss(c.style)}>
+        {c.text}
+      </span>
+    ));
+  }
+  return h.text;
 }
 
 // Full-text search across every persisted session log. Backend pipes
@@ -74,6 +91,38 @@ export function LogsTab({ onError }: Props) {
       setSearching(false);
     }
   };
+
+  // Re-run the current search whenever the user picks a different
+  // session scope or flips case-sensitive. Skipped while pattern is
+  // empty (nothing to search). Debounced via the effect itself so
+  // double-clicks do not stack.
+  useEffect(() => {
+    if (!pattern.trim()) return;
+    let cancelled = false;
+    setSearching(true);
+    const opts: {
+      caseSensitive?: boolean;
+      maxResults?: number;
+      sessionId?: number | null;
+    } = { caseSensitive, maxResults: 500 };
+    if (sessionFilter !== null) opts.sessionId = sessionFilter;
+    searchLogs(pattern, opts)
+      .then((rows) => {
+        if (!cancelled) setHits(rows);
+      })
+      .catch((e) => {
+        if (!cancelled) onError(String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setSearching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // pattern stays out of the deps; the form submit handles
+    // typing. Only the scope toggles re-fire automatically.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionFilter, caseSensitive]);
 
   const exportSession = async (id: number, withAnsi: boolean) => {
     try {
@@ -166,7 +215,9 @@ export function LogsTab({ onError }: Props) {
             {searching ? 'searching…' : `${hits.length} hit${hits.length === 1 ? '' : 's'}`}
           </span>
         </form>
-        <div className="logs-results">
+        <div
+          className={`logs-results${sessionFilter !== null ? ' logs-results-scoped' : ''}`}
+        >
           {hits.length === 0 && !searching && (
             <div className="settings-font-empty">
               {pattern ? 'no matches' : 'enter a pattern and hit search'}
@@ -175,10 +226,12 @@ export function LogsTab({ onError }: Props) {
           {hits.map((h) => (
             <div key={`${h.session_id}-${h.line_id}`} className="logs-hit">
               <span className="logs-hit-ts">{formatHit(h.ts_ms)}</span>
-              <span className="logs-hit-session">
-                {h.host}:{h.port}
-              </span>
-              <span className="logs-hit-text">{h.text}</span>
+              {sessionFilter === null && (
+                <span className="logs-hit-session">
+                  {h.host}:{h.port}
+                </span>
+              )}
+              <span className="logs-hit-text">{renderHitText(h)}</span>
             </div>
           ))}
         </div>
