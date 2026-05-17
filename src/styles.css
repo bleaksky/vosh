@@ -347,6 +347,11 @@ body {
   font-size: 13px;
   position: relative;
   z-index: 1;
+  /* Lock to content height; never shrink. Without explicit
+     `flex: 0 0 auto` the column flex container can hand part of this
+     row's slot to main-row when xterm hasn't refit yet, which paints
+     the input ON TOP of the terminal output. */
+  flex: 0 0 auto;
 }
 
 .input-row .prompt {
@@ -376,7 +381,8 @@ body {
   align-items: stretch;
   justify-content: space-between;
   height: 24px;
-  flex: 0 0 auto;
+  min-height: 24px;
+  flex: 0 0 24px;
   padding: 0 14px;
   background: var(--c-surface);
   font-size: 12px;
