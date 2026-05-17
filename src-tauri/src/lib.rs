@@ -45,7 +45,20 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                // Persist only geometry. DECORATIONS would override the
+                // frameless setting in tauri.conf on every restart, and
+                // VISIBLE conflicts with our deliberate "open hidden, show
+                // after first paint" reveal in App.tsx.
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED
+                        | tauri_plugin_window_state::StateFlags::FULLSCREEN,
+                )
+                .build(),
+        )
         .manage(state.clone())
         .setup(move |app| {
             match open_map_store(app) {
