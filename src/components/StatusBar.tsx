@@ -40,6 +40,18 @@ function colorForPct(value: number): string {
   return '#7d1d1d';
 }
 
+// Dark, tinted variant of the fill color for the overlaid numbers.
+// Multiplies the rgb channels so the text reads as the same hue family
+// as its bar (green text on green fill, red text on red fill, etc.)
+// but dark enough to stay legible against the bright fill.
+function tintForFill(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const k = 0.25;
+  return `rgb(${Math.round(r * k)}, ${Math.round(g * k)}, ${Math.round(b * k)})`;
+}
+
 // Bottom status bar. Lives under the input row. Carries the live
 // vitals (hp / mana / move from GMCP Char.Vitals) on the left and a
 // clock on the right. Each vital reads as: LABEL  PCT% [fill bar with
@@ -113,6 +125,7 @@ export function StatusBar() {
 function VitalBar({ label, cur, max }: { label: string; cur: number; max: number }) {
   const value = pct(cur, max);
   const fill = colorForPct(value);
+  const textColor = tintForFill(fill);
   return (
     <div className="statusbar-bar">
       <span className="statusbar-bar-label">{label}</span>
@@ -125,7 +138,7 @@ function VitalBar({ label, cur, max }: { label: string; cur: number; max: number
           style={{ width: `${value}%`, background: fill }}
           aria-hidden="true"
         />
-        <span className="statusbar-bar-text">
+        <span className="statusbar-bar-text" style={{ color: textColor }}>
           {cur}/{max}
         </span>
       </span>
