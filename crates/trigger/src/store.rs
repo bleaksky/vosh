@@ -2,32 +2,103 @@
 //! insert, and exposes them in priority order.
 
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::ser::SerializeStruct;
 use thiserror::Error;
 
 use crate::action::TriggerAction;
 
 /// User-visible trigger record. Serializes cleanly to JSON for the editor UI
-/// and for import or export.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// and for import or export. A trigger fires every action in `actions` in
+/// order whenever its regex matches.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Trigger {
     pub name: String,
     pub pattern: String,
-    #[serde(default)]
     pub priority: i32,
-    #[serde(default = "default_enabled")]
     pub enabled: bool,
-    pub action: TriggerAction,
+    /// One or more actions; the engine fires each on every match.
+    pub actions: Vec<TriggerAction>,
     /// Optional preset identifier. Triggers installed by the
     /// "Highlights" preset library tag themselves with the preset's
     /// id so the UI can list/remove them as a group. User-authored
     /// triggers leave this empty.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset: Option<String>,
 }
 
 fn default_enabled() -> bool {
     true
+}
+
+/// Wire format for [`Trigger`] that accepts both the legacy
+/// `action: { ... }` shape and the new `actions: [ ... ]` shape on
+/// deserialize. Serializes only the new shape.
+#[derive(Deserialize)]
+struct TriggerRaw {
+    name: String,
+    pattern: String,
+    #[serde(default)]
+    priority: i32,
+    #[serde(default = "default_enabled")]
+    enabled: bool,
+    #[serde(default)]
+    action: Option<TriggerAction>,
+    #[serde(default)]
+    actions: Option<Vec<TriggerAction>>,
+    #[serde(default)]
+    preset: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for Trigger {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = TriggerRaw::deserialize(deserializer)?;
+        let actions = match (raw.action, raw.actions) {
+            (Some(single), None) => vec![single],
+            (None, Some(many)) => many,
+            (Some(single), Some(mut many)) => {
+                // If both fields are present (unlikely outside hand-
+                // edited profiles), keep the legacy singular at the
+                // front and append the array.
+                many.insert(0, single);
+                many
+            }
+            (None, None) => {
+                return Err(serde::de::Error::custom(
+                    "trigger needs either `action` or `actions`",
+                ));
+            }
+        };
+        Ok(Trigger {
+            name: raw.name,
+            pattern: raw.pattern,
+            priority: raw.priority,
+            enabled: raw.enabled,
+            actions,
+            preset: raw.preset,
+        })
+    }
+}
+
+impl Serialize for Trigger {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let field_count = 5 + usize::from(self.preset.is_some());
+        let mut state = serializer.serialize_struct("Trigger", field_count)?;
+        state.serialize_field("name", &self.name)?;
+        state.serialize_field("pattern", &self.pattern)?;
+        state.serialize_field("priority", &self.priority)?;
+        state.serialize_field("enabled", &self.enabled)?;
+        state.serialize_field("actions", &self.actions)?;
+        if let Some(preset) = &self.preset {
+            state.serialize_field("preset", preset)?;
+        }
+        state.end()
+    }
 }
 
 #[derive(Debug, Error)]

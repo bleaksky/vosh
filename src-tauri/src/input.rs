@@ -594,7 +594,7 @@ fn slash_trigger(profile: &mut Profile, args: &str) -> InputResult {
         pattern,
         priority: 0,
         enabled: true,
-        action,
+        actions: vec![action],
         preset: None,
     };
     match profile.triggers.set(trigger) {
@@ -624,7 +624,12 @@ fn slash_triggers_list(profile: &Profile) -> InputResult {
     lines.push(format!("{} trigger(s) by priority:", triggers.len()));
     for t in triggers {
         let mark = if t.enabled { ' ' } else { '*' };
-        let action = describe_action(&t.action);
+        let action = t
+            .actions
+            .iter()
+            .map(describe_action)
+            .collect::<Vec<_>>()
+            .join(" + ");
         lines.push(format!(
             "  {mark} [{:>3}] {} /{}/ -> {action}",
             t.priority, t.name, t.pattern,
@@ -1505,8 +1510,8 @@ mod tests {
         assert!(r.echo.iter().any(|l| l == "trigger tells set"));
         assert_eq!(p.triggers.len(), 1);
         let trig = p.triggers.get("tells").unwrap();
-        match &trig.action {
-            TriggerAction::Highlight { style } => {
+        match trig.actions.first() {
+            Some(TriggerAction::Highlight { style }) => {
                 assert_eq!(style.fg, Some(NamedColor::Cyan));
                 assert!(style.bold);
             }
@@ -1520,8 +1525,8 @@ mod tests {
         let r = process(&mut p, "#trigger spam {tingle} gag");
         assert!(r.echo.iter().any(|l| l == "trigger spam set"));
         assert!(matches!(
-            p.triggers.get("spam").unwrap().action,
-            TriggerAction::Gag
+            p.triggers.get("spam").unwrap().actions.first(),
+            Some(TriggerAction::Gag)
         ));
     }
 
@@ -1533,8 +1538,8 @@ mod tests {
             r"#trigger loot {The (\w+) is DEAD} send loot $1 from corpse",
         );
         assert!(r.echo.iter().any(|l| l == "trigger loot set"));
-        match &p.triggers.get("loot").unwrap().action {
-            TriggerAction::Send { template } => {
+        match p.triggers.get("loot").unwrap().actions.first() {
+            Some(TriggerAction::Send { template }) => {
                 assert_eq!(template, "loot $1 from corpse");
             }
             _ => panic!("expected send action"),
