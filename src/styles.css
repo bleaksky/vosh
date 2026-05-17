@@ -56,20 +56,12 @@ body {
   height: 100vh;
   width: 100vw;
   background: var(--c-surface);
-}
-
-/* Invisible drag strip beneath the macOS overlay titlebar. Holds 28px
-   of space so traffic lights have a clean band to live in without
-   colliding with the Connect row, and acts as the drag region so the
-   user can grab the window from anywhere in this band. */
-.titlebar-overlay {
-  height: 28px;
-  flex: 0 0 auto;
-  background: transparent;
+  border: 1px solid var(--c-border);
 }
 
 /* Shared inverted-video brand block (tmux session-label convention).
-   Used by the StatusBar so the eye reads it as a tmux-style label. */
+   Used by both TopBar and StatusBar so the eye reads them as the
+   same frame. */
 
 .brand-block {
   display: inline-flex;
@@ -81,6 +73,53 @@ body {
   font-weight: 700;
   font-size: 12px;
   letter-spacing: 0.02em;
+}
+
+/* TopBar — frameless drag region with text-style window controls */
+
+.topbar {
+  display: flex;
+  align-items: stretch;
+  height: 24px;
+  flex: 0 0 auto;
+  background: var(--c-surface-deep);
+  border-bottom: 1px solid var(--c-border);
+  user-select: none;
+  font-size: 12px;
+}
+
+.topbar-spacer {
+  flex: 1 1 auto;
+}
+
+.topbar-controls {
+  display: flex;
+  align-items: stretch;
+}
+
+.topbar-btn {
+  background: transparent;
+  border: none;
+  color: var(--c-text-faint);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+}
+
+.topbar-btn:hover {
+  background: var(--c-surface-lift);
+  color: var(--c-text);
+}
+
+.topbar-btn-close:hover {
+  background: var(--c-danger);
+  color: var(--c-surface-deep);
 }
 
 /* Connect — single command row, terminal-styled */
