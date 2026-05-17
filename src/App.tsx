@@ -10,9 +10,17 @@ import { Resizable } from './components/Resizable';
 import { MapPane } from './components/MapPane';
 import { ChatPane } from './components/ChatPane';
 import { RoomStrip } from './components/RoomStrip';
-import { getUiConfig, onState, type StatePayload } from './lib/session';
+import {
+  getUiConfig,
+  listTriggers,
+  onState,
+  presetsInstall,
+  presetsRemove,
+  type StatePayload,
+} from './lib/session';
 import { applyAndBroadcastTheme } from './lib/theme';
 import { loadFontStack } from './lib/fontLoader';
+import { defaultEnabledIds, PRESETS, presetTriggers } from './lib/presets';
 
 const MAP_OPEN_KEY = 'vosh.layout.mapOpen';
 const CHAT_OPEN_KEY = 'vosh.layout.chatOpen';
@@ -114,14 +122,46 @@ function App() {
     const fallback = window.setTimeout(reveal, 500);
     const onUnmount = () => window.clearTimeout(fallback);
     getUiConfig()
-      .then((cfg) => {
-        // applyAndBroadcastTheme also fires the cross-window event so
-        // the Terminal's subscriber updates its xterm palette to the
-        // saved theme instead of staying on the kanso-zen default it
-        // had to use during initial mount.
+      .then(async (cfg) => {
         void applyAndBroadcastTheme(cfg.theme);
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
+
+        // Sweep orphan preset triggers — anything tagged with a
+        // preset id that no longer exists in code (renamed or
+        // removed). Triggers persist in profile.toml so without this
+        // they'd linger forever after a preset is dropped.
+        try {
+          const validPresetIds = new Set(PRESETS.map((p) => p.id));
+          const allTriggers = await listTriggers();
+          const orphanIds = new Set<string>();
+          for (const t of allTriggers) {
+            if (t.preset && !validPresetIds.has(t.preset)) {
+              orphanIds.add(t.preset);
+            }
+          }
+          for (const id of orphanIds) {
+            await presetsRemove(id);
+          }
+        } catch (e) {
+          console.error('[presets] orphan sweep failed:', e);
+        }
+
+        // Re-install enabled presets so pattern/template changes in
+        // the current build overwrite older versions persisted in
+        // profile.toml. Defaults to all default-enabled if the user
+        // hasn't customized their enabled list yet.
+        const enabled = new Set(
+          cfg.enabled_presets.length > 0 ? cfg.enabled_presets : defaultEnabledIds(),
+        );
+        const toInstall = PRESETS.filter((p) => enabled.has(p.id)).flatMap(presetTriggers);
+        if (toInstall.length > 0) {
+          try {
+            await presetsInstall(toInstall);
+          } catch (e) {
+            console.error('[presets] startup install failed:', e);
+          }
+        }
       })
       .catch(() => void applyAndBroadcastTheme('system'))
       .finally(reveal);
