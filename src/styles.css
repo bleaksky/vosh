@@ -518,6 +518,9 @@ body {
   align-items: baseline;
   gap: 4px;
   font-variant-numeric: tabular-nums;
+  padding: 0 2px;
+  border-radius: 2px;
+  transition: color 120ms ease-out, background 120ms ease-out;
 }
 
 .statusbar-tick-label {
@@ -532,6 +535,40 @@ body {
   font-size: 12px;
   color: var(--c-text);
   font-variant-numeric: tabular-nums;
+}
+
+/* Within ~5s of the configured tick interval, paint the counter
+   yellow and pulse to draw the eye. The pulse uses transform+opacity
+   only so it does not retrigger layout. */
+.statusbar-tick-warn .statusbar-tick-label,
+.statusbar-tick-warn .statusbar-tick-value {
+  color: var(--c-warn);
+}
+
+.statusbar-tick-warn {
+  animation: vosh-tick-pulse 700ms ease-in-out infinite;
+}
+
+@keyframes vosh-tick-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+/* Per-tick vital deltas. Rendered to the right of the value bar.
+   Up arrow + green for regen, down arrow + red for loss. */
+.statusbar-bar-delta {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 0 2px;
+}
+
+.statusbar-bar-delta-up {
+  color: var(--c-success);
+}
+
+.statusbar-bar-delta-down {
+  color: var(--c-danger);
 }
 
 /* Combat segment. Sits in the vitals row when Char.Combat is active.

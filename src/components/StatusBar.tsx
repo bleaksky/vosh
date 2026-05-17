@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { getTarget, onGmcp, onState, onTarget } from '../lib/session';
+import { getTarget, onGmcp, onState, onTarget, onTick } from '../lib/session';
 
 interface Vitals {
   hp: number;
@@ -8,6 +8,12 @@ interface Vitals {
   maxmana: number;
   move: number;
   maxmove: number;
+}
+
+interface VitalDeltas {
+  hp: number | null;
+  mana: number | null;
+  move: number | null;
 }
 
 interface RoomInfo {
@@ -66,8 +72,6 @@ function tintForFill(hex: string): string {
   return `rgb(${Math.round(r * k)}, ${Math.round(g * k)}, ${Math.round(b * k)})`;
 }
 
-// Aabahran's Char.Combat payload: { target, hp_pct, condition }. An
-// empty object signals the target is gone.
 function extractCombat(data: unknown): CombatState | null {
   if (!data || typeof data !== 'object') return null;
   const obj = data as Record<string, unknown>;
@@ -129,20 +133,27 @@ function compactExits(exits: string[]): string {
     .join('');
 }
 
+const NO_DELTAS: VitalDeltas = { hp: null, mana: null, move: null };
+
 export function StatusBar() {
   const [now, setNow] = useState(() => new Date());
   const [vitals, setVitals] = useState<Vitals | null>(null);
+  const [deltas, setDeltas] = useState<VitalDeltas>(NO_DELTAS);
   const [combat, setCombat] = useState<CombatState | null>(null);
   const [userTarget, setUserTarget] = useState<string | null>(null);
   const [room, setRoom] = useState<RoomInfo | null>(null);
   // Tintin-style tick display: counts UP real seconds since the last
-  // World.Time hour change. Reset only on hour change, not on the
-  // backend's interval-based auto-fire (which drifts ahead of or
-  // behind the MUD's actual tick). Matches the prior build's behavior.
+  // tick fire reported by the backend. The backend handles the
+  // World.Time hour-advance detection AND the interval auto-fire, so
+  // we just listen to session://tick and reset on payload.fired.
   const [tickSecs, setTickSecs] = useState(0);
   const [tickActive, setTickActive] = useState(false);
+  const [tickIntervalSec, setTickIntervalSec] = useState(30);
   const tickResetAtRef = useRef<number>(Date.now());
-  const prevHourRef = useRef<number | string | null>(null);
+  // Snapshot of the most-recent vitals; used to compute deltas on
+  // tick fires. Kept in a ref so the GMCP handler that updates
+  // vitals doesn't need to depend on it.
+  const vitalsSnapRef = useRef<Vitals | null>(null);
 
   useEffect(() => {
     const wallTick = () => setNow(new Date());
@@ -151,9 +162,8 @@ export function StatusBar() {
     return () => window.clearInterval(id);
   }, []);
 
-  // 4Hz ticker for the tick-seconds counter. setInterval at 250ms so
-  // the display stays responsive even when the browser throttles
-  // longer timers under inactive-tab heuristics.
+  // 4Hz tick-seconds ticker — keeps the display smooth even when the
+  // browser throttles longer timers under inactive-tab heuristics.
   useEffect(() => {
     const id = window.setInterval(() => {
       setTickSecs(Math.floor((Date.now() - tickResetAtRef.current) / 1000));
@@ -165,9 +175,9 @@ export function StatusBar() {
     let unsubGmcp: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
     let unsubTarget: (() => void) | undefined;
+    let unsubTick: (() => void) | undefined;
     let cancelled = false;
 
-    // Seed tar selection from the backend on mount.
     void getTarget()
       .then((snap) => {
         if (cancelled) return;
@@ -178,32 +188,24 @@ export function StatusBar() {
     onGmcp((payload) => {
       if (payload.package === 'Char.Vitals') {
         const data = payload.data ?? {};
-        setVitals({
+        const next: Vitals = {
           hp: num(data.hp, 0),
           maxhp: num(data.maxhp, 0),
           mana: num(data.mana, 0),
           maxmana: num(data.maxmana, 0),
           move: num(data.move, 0),
           maxmove: num(data.maxmove, 0),
-        });
+        };
+        setVitals(next);
+        // Seed the snapshot so the first tick has something to diff
+        // against; subsequent ticks rebase via the onTick handler.
+        if (vitalsSnapRef.current === null) {
+          vitalsSnapRef.current = next;
+        }
       } else if (payload.package === 'Char.Combat') {
         setCombat(extractCombat(payload.data));
       } else if (payload.package === 'Room.Info') {
         setRoom(parseRoomInfo(payload.data));
-      } else if (payload.package === 'World.Time' && payload.data && typeof payload.data === 'object') {
-        // First World.Time after connect just seeds the hour. Each
-        // subsequent push with a different hour value is the tick
-        // fire — that's the canonical reset signal.
-        const incoming = payload.data as Record<string, unknown>;
-        const hour = incoming.hour;
-        setTickActive(true);
-        if (hour !== undefined && hour !== null) {
-          if (prevHourRef.current !== null && prevHourRef.current !== hour) {
-            tickResetAtRef.current = Date.now();
-            setTickSecs(0);
-          }
-          prevHourRef.current = hour as number | string;
-        }
       }
     }).then((fn) => {
       if (cancelled) fn();
@@ -217,14 +219,49 @@ export function StatusBar() {
       else unsubTarget = fn;
     });
 
+    onTick((payload) => {
+      setTickActive(payload.enabled);
+      if (payload.interval_ms > 0) {
+        setTickIntervalSec(Math.max(1, Math.round(payload.interval_ms / 1000)));
+      }
+      if (payload.fired) {
+        // Compute deltas against the snapshot taken at the previous
+        // tick, then rebase the snapshot.
+        const prev = vitalsSnapRef.current;
+        // We use the latest vitals from state via a setter-passthrough
+        // since the closure can't directly read fresh state.
+        setVitals((curr) => {
+          if (curr) {
+            if (prev) {
+              setDeltas({
+                hp: curr.hp - prev.hp,
+                mana: curr.mana - prev.mana,
+                move: curr.move - prev.move,
+              });
+            } else {
+              setDeltas(NO_DELTAS);
+            }
+            vitalsSnapRef.current = curr;
+          }
+          return curr;
+        });
+        tickResetAtRef.current = Date.now();
+        setTickSecs(0);
+      }
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsubTick = fn;
+    });
+
     onState((payload) => {
       if (payload.kind === 'disconnected') {
         setVitals(null);
+        setDeltas(NO_DELTAS);
         setCombat(null);
         setUserTarget(null);
         setRoom(null);
         setTickActive(false);
-        prevHourRef.current = null;
+        vitalsSnapRef.current = null;
       } else if (payload.kind === 'connected') {
         tickResetAtRef.current = Date.now();
         setTickSecs(0);
@@ -239,20 +276,32 @@ export function StatusBar() {
       unsubGmcp?.();
       unsubState?.();
       unsubTarget?.();
+      unsubTick?.();
     };
   }, []);
+
+  // Tick is "warning" when within 5 seconds of the configured
+  // interval (or already past it because the backend tick fired
+  // late). Drives a yellow tint + a CSS pulse animation.
+  const tickWarn = tickActive && tickSecs >= Math.max(0, tickIntervalSec - 5);
 
   return (
     <div className="statusbar">
       <div className="statusbar-left">
         {vitals && vitals.maxhp > 0 && (
-          <VitalBar label="hp" cur={vitals.hp} max={vitals.maxhp} />
+          <VitalBar label="hp" cur={vitals.hp} max={vitals.maxhp} delta={deltas.hp} />
         )}
         {vitals && vitals.maxmana > 0 && (
-          <VitalBar label="mana" cur={vitals.mana} max={vitals.maxmana} />
+          <VitalBar label="mana" cur={vitals.mana} max={vitals.maxmana} delta={deltas.mana} />
         )}
         {vitals && vitals.maxmove > 0 && (
-          <VitalBar label="move" cur={vitals.move} max={vitals.maxmove} />
+          <VitalBar label="move" cur={vitals.move} max={vitals.maxmove} delta={deltas.move} />
+        )}
+        {tickActive && (
+          <span className={`statusbar-tick${tickWarn ? ' statusbar-tick-warn' : ''}`}>
+            <span className="statusbar-tick-label">tick</span>
+            <span className="statusbar-tick-value">{tickSecs}s</span>
+          </span>
         )}
         {combat && <CombatSeg combat={combat} />}
         {userTarget && !combat && (
@@ -273,22 +322,28 @@ export function StatusBar() {
         )}
       </div>
       <div className="statusbar-right">
-        {tickActive && (
-          <span className="statusbar-tick">
-            <span className="statusbar-tick-label">tick</span>
-            <span className="statusbar-tick-value">{tickSecs}s</span>
-          </span>
-        )}
         <span className="statusbar-clock">{formatClock(now)}</span>
       </div>
     </div>
   );
 }
 
-function VitalBar({ label, cur, max }: { label: string; cur: number; max: number }) {
+function VitalBar({
+  label,
+  cur,
+  max,
+  delta,
+}: {
+  label: string;
+  cur: number;
+  max: number;
+  delta: number | null;
+}) {
   const value = pct(cur, max);
   const fill = colorForPct(value);
   const textColor = tintForFill(fill);
+  const showDelta = delta !== null && delta !== 0;
+  const deltaPositive = (delta ?? 0) > 0;
   return (
     <div className="statusbar-bar">
       <span className="statusbar-bar-label">{label}</span>
@@ -305,6 +360,14 @@ function VitalBar({ label, cur, max }: { label: string; cur: number; max: number
           {cur}/{max}
         </span>
       </span>
+      {showDelta && (
+        <span
+          className={`statusbar-bar-delta${deltaPositive ? ' statusbar-bar-delta-up' : ' statusbar-bar-delta-down'}`}
+        >
+          {deltaPositive ? '+' : ''}
+          {delta}
+        </span>
+      )}
     </div>
   );
 }
