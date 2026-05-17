@@ -193,7 +193,7 @@ function App() {
         onError={handleError}
         onLocalEcho={(text) => termRef.current?.write(text)}
       />
-      <StatusBar status={status} />
+      <StatusBar />
     </main>
   );
 }

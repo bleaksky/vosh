@@ -302,7 +302,7 @@ body {
   justify-content: space-between;
   height: 24px;
   flex: 0 0 auto;
-  padding: 0 10px;
+  padding: 0 14px;
   background: var(--c-surface);
   font-size: 12px;
   color: var(--c-text-muted);
@@ -324,29 +324,55 @@ body {
   overflow: hidden;
 }
 
-.statusbar-vital {
+.statusbar-bar {
   display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-.statusbar-vital-label {
+.statusbar-bar-label {
   color: var(--c-text-faint);
   text-transform: lowercase;
   letter-spacing: 0.04em;
   font-size: 11px;
 }
 
-.statusbar-vital-value {
+.statusbar-bar-percent {
   font-weight: 600;
+  font-size: 11px;
+  min-width: 32px;
+  text-align: right;
 }
 
-.statusbar-vital-sep {
-  color: var(--c-text-dim);
-  padding: 0 1px;
-  font-weight: 400;
+.statusbar-bar-track {
+  position: relative;
+  display: inline-block;
+  height: 14px;
+  width: 110px;
+  background: var(--c-surface-emphasis);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.statusbar-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  /* width + background set inline by VitalBar via colorForPct */
+}
+
+.statusbar-bar-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--c-text-strong);
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
 }
 
 .statusbar-seg {
@@ -384,6 +410,89 @@ body {
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
+  min-height: 0;
+}
+
+/* Tab strip just below the TopBar */
+
+.settings-tabs {
+  display: flex;
+  align-items: stretch;
+  height: 26px;
+  flex: 0 0 auto;
+  padding: 0 10px;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  gap: 4px;
+}
+
+.settings-tab {
+  background: transparent;
+  border: none;
+  color: var(--c-text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 0 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid transparent;
+  margin-bottom: -1px;
+}
+
+.settings-tab:hover {
+  color: var(--c-text-strong);
+}
+
+.settings-tab-active {
+  color: var(--c-accent);
+  border-bottom-color: var(--c-accent);
+}
+
+/* Triggers tab */
+
+.settings-triggers {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-triggers-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  font-size: 12px;
+}
+
+.settings-triggers-count {
+  color: var(--c-text-strong);
+}
+
+.settings-triggers-hint {
+  color: var(--c-text-faint);
+}
+
+.settings-triggers-text {
+  flex: 1 1 auto;
+  min-height: 200px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  resize: none;
+  outline: none;
+  tab-size: 2;
+}
+
+.settings-triggers-text:focus {
+  border-color: var(--c-accent);
 }
 
 .settings-row {
