@@ -122,6 +122,7 @@ body {
   color: var(--c-surface-deep);
   font-weight: 700;
   letter-spacing: 0.02em;
+  border-radius: 4px;
 }
 
 /* TopBar — frameless drag region with text-style window controls */
@@ -1059,7 +1060,10 @@ body {
 }
 
 .trigger-card-template {
-  flex: 1 1 240px;
+  /* flex: 0 0 auto so it sizes to content. The earlier `flex: 1 1 240px`
+     was being interpreted by the column-flex parent as a 240px basis
+     height, leaving a huge empty space below the template field. */
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -1068,7 +1072,9 @@ body {
 
 .trigger-card-visual,
 .trigger-card-effects {
-  flex: 1 1 240px;
+  /* Same fix as .trigger-card-template — content-sized in the grid
+     cell, no implicit basis height from flex shorthand. */
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
