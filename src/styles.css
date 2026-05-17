@@ -1,3 +1,42 @@
+/* Bundled @font-face declarations. macOS WKWebView refuses to match
+   user-installed fonts by CSS family name (anti-fingerprinting since
+   Sonoma); the only way to render a custom font is to ship it with
+   the app and load it via @font-face. The bundled families take a
+   "Bundled" suffix in their CSS family name so they cannot be
+   shadowed by a partially-matching system font on other platforms. */
+
+@font-face {
+  font-family: 'BerkeleyMono Bundled';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('./assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'BerkeleyMono Bundled';
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url('./assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'JetBrainsMono Bundled';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('./assets/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'JetBrainsMono Bundled';
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url('./assets/fonts/JetBrainsMonoNerdFont-Bold.ttf') format('truetype');
+}
+
 /* T0 baseline. Connect bar across the top, terminal fills the middle,
    input row at the bottom. Theme palette is supplied at runtime by
    src/lib/theme.ts via `--c-*` CSS custom properties; the defaults
@@ -25,8 +64,8 @@
   --c-info: #7fb4ca;
   --c-success: #87a987;
 
-  --app-font-family: 'BerkeleyMono Nerd Font', 'JetBrains Mono', 'Fira Code',
-    Menlo, Consolas, ui-monospace, monospace;
+  --app-font-family: 'BerkeleyMono Bundled', 'JetBrainsMono Bundled', Menlo,
+    Consolas, ui-monospace, monospace;
   --app-font-size: 14px;
 }
 

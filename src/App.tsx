@@ -49,7 +49,7 @@ function migrateMudclientKeys(): void {
 migrateMudclientKeys();
 
 const DEFAULT_FONT_FAMILY =
-  'BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace';
+  '"BerkeleyMono Bundled", "JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace';
 
 function loadFlag(key: string): boolean {
   try {
