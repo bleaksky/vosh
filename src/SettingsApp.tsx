@@ -14,12 +14,22 @@ import {
 import { applyTheme } from './lib/theme';
 import { THEMES } from './lib/themes';
 
-const FONT_PRESETS = [
-  'BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, monospace',
-  'JetBrains Mono, Menlo, monospace',
-  'Fira Code, Menlo, monospace',
-  'Menlo, Consolas, monospace',
+// Quick-pick chips for common monospace families. Clicking one writes
+// the name into the free-text input; user can keep typing to refine
+// or specify a custom fallback chain. The preview block under the
+// input uses the live value so you can confirm the font actually
+// loaded before saving.
+const FONT_PICKS = [
+  'BerkeleyMono Nerd Font',
+  'JetBrains Mono',
+  'Fira Code',
+  'SF Mono',
+  'Menlo',
+  'Monaco',
+  'Courier New',
 ];
+
+const PREVIEW_TEXT = 'The quick brown fox 0123456789  |  hp 850/1000  IlOo1';
 
 type TabId = 'general' | 'triggers' | 'aliases';
 const TABS: { id: TabId; label: string }[] = [
@@ -156,17 +166,39 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
         </select>
       </Row>
       <Row label="font">
-        <select
+        <input
+          type="text"
+          className="settings-font-input"
+          spellCheck={false}
           value={config.font_family}
+          placeholder="JetBrains Mono, Menlo, monospace"
           onChange={(e) => update({ font_family: e.target.value })}
-        >
-          {FONT_PRESETS.map((f) => (
-            <option key={f} value={f}>
-              {f.split(',')[0]}
-            </option>
-          ))}
-        </select>
+        />
       </Row>
+      <div className="settings-row settings-row-picks">
+        <span className="settings-row-label" />
+        <div className="settings-font-picks">
+          {FONT_PICKS.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className="settings-font-pick"
+              onClick={() => update({ font_family: name })}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="settings-row">
+        <span className="settings-row-label">preview</span>
+        <div
+          className="settings-font-preview"
+          style={{ fontFamily: config.font_family, fontSize: config.font_size }}
+        >
+          {PREVIEW_TEXT}
+        </div>
+      </div>
       <Row label="size">
         <input
           type="number"

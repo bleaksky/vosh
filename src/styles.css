@@ -535,6 +535,48 @@ body {
   width: 72px;
 }
 
+.settings-row input.settings-font-input {
+  width: 100%;
+  max-width: 360px;
+}
+
+.settings-row-picks {
+  align-items: start;
+}
+
+.settings-font-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.settings-font-pick {
+  background: transparent;
+  color: var(--c-text-muted);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  padding: 1px 8px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.settings-font-pick:hover {
+  color: var(--c-text-strong);
+  border-color: var(--c-accent);
+}
+
+.settings-font-preview {
+  border: 1px dashed var(--c-border-strong);
+  border-radius: 2px;
+  padding: 8px 10px;
+  color: var(--c-text);
+  background: var(--c-surface-pane);
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
 .settings-unit {
   color: var(--c-text-faint);
   font-size: 12px;
