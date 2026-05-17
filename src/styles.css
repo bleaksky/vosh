@@ -461,6 +461,43 @@ body {
   overflow: hidden;
 }
 
+/* Affects bar — thin row above the input row that lists every
+   active Char.Affects pill. Hides itself entirely when there are no
+   active affects so layout does not reserve a slot. */
+.affects-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+  position: relative;
+  z-index: 1;
+}
+
+.affect-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 8px;
+  background: var(--c-surface-emphasis);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  color: var(--c-text);
+  white-space: nowrap;
+}
+
+.affect-pill-name {
+  color: var(--c-text);
+}
+
+.affect-pill-duration {
+  font-variant-numeric: tabular-nums;
+  /* color set inline by colorForDuration */
+}
+
 /* Input row — Input.tsx owns the .input-row class. position+z-index
    guarantee the input row paints above the terminal even when xterm's
    canvas is one frame behind a container shrink (that lag was what
