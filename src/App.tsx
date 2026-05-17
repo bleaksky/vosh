@@ -9,6 +9,7 @@ import { StatusBar } from './components/StatusBar';
 import { Resizable } from './components/Resizable';
 import { MapPane } from './components/MapPane';
 import { ChatPane } from './components/ChatPane';
+import { RoomStrip } from './components/RoomStrip';
 import { getUiConfig, onState, type StatePayload } from './lib/session';
 import { applyAndBroadcastTheme } from './lib/theme';
 import { loadFontStack } from './lib/fontLoader';
@@ -193,6 +194,7 @@ function App() {
         onToggleChat={() => setChatOpen((v) => !v)}
       />
       <Connect status={status} onError={handleError} />
+      <RoomStrip />
       <div className="main-row">
         <div className="terminal-area" onMouseUp={handleTerminalMouseUp}>
           <Terminal

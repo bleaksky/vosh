@@ -365,7 +365,11 @@ function VitalBar({
 }) {
   const value = pct(cur, max);
   const fill = colorForPct(value);
-  const textColor = tintForFill(fill);
+  // Text sits centered horizontally; once the fill drops below 50%,
+  // the numbers are no longer over the colored bar and the dark tint
+  // disappears into the dark track. Flip to the bright theme text
+  // color in that range so the numbers stay readable.
+  const textColor = value >= 50 ? tintForFill(fill) : 'var(--c-text-strong)';
   const showDelta = delta !== null && delta !== 0;
   const deltaPositive = (delta ?? 0) > 0;
   return (

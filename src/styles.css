@@ -192,6 +192,110 @@ body {
   color: var(--c-surface-deep);
 }
 
+/* Room strip — thin row between Connect and the terminal showing
+   area · room · #vnum · terrain · [exits] · here chips · items.
+   Ported verbatim from main. Stays at fixed flex slot so xterm
+   does not reflow when room data first arrives. */
+
+.room-strip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  gap: 6px;
+  padding: 4px 14px;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  font-size: 12.5px;
+  min-height: 28px;
+  color: var(--c-text-muted);
+  white-space: nowrap;
+}
+
+.room-strip::-webkit-scrollbar { height: 4px; }
+.room-strip::-webkit-scrollbar-thumb {
+  background: var(--c-border-strong);
+  border-radius: 2px;
+}
+
+.room-strip.is-empty {
+  /* Reserved slot so the terminal does not reflow when the first
+     Room.Info push lands. */
+}
+
+.room-strip-area {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.room-strip-name {
+  color: var(--c-text-strong);
+  font-weight: 600;
+}
+
+.room-strip-vnum {
+  color: var(--c-text-faint);
+  font-size: 11px;
+  margin-left: 2px;
+}
+
+.room-strip-bullet {
+  color: var(--c-text-dim);
+  user-select: none;
+}
+
+.room-strip-terrain {
+  font-style: italic;
+}
+
+.room-strip-exits {
+  color: var(--c-text-muted);
+  letter-spacing: 0.06em;
+}
+
+.room-strip-list-label {
+  color: var(--c-text-faint);
+  font-size: 11px;
+  text-transform: lowercase;
+}
+
+.room-strip-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: nowrap;
+}
+
+.room-strip-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.room-strip-list-sep {
+  color: var(--c-text-dim);
+  margin-right: 2px;
+}
+
+.room-strip-count {
+  color: var(--c-text-faint);
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  margin-right: 3px;
+}
+
+.room-strip-chip.is-target {
+  font-weight: 700;
+}
+
+.room-strip-chip-mark {
+  color: var(--c-accent);
+  margin-right: 2px;
+  font-size: 10px;
+}
+
 /* Connect — single command row, terminal-styled */
 
 .connect {
