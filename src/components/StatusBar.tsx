@@ -1,12 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  getTarget,
-  onGmcp,
-  onState,
-  onTarget,
-  onTick,
-  type TickPayload,
-} from '../lib/session';
+import { getTarget, onGmcp, onState, onTarget } from '../lib/session';
 
 interface Vitals {
   hp: number;
@@ -15,6 +8,17 @@ interface Vitals {
   maxmana: number;
   move: number;
   maxmove: number;
+}
+
+interface RoomInfo {
+  name: string;
+  exits: string[];
+}
+
+interface CombatState {
+  name: string;
+  hp?: number;
+  condition?: string;
 }
 
 function formatClock(date: Date): string {
@@ -32,13 +36,20 @@ function num(value: unknown, fallback: number): number {
   return fallback;
 }
 
+function asNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value === 'string') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+
 function pct(current: number, max: number): number {
   if (max <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((current / max) * 100)));
 }
 
-// Multi-stop ramp matching the prior StatusBar fill colors so the bar
-// shifts through green / yellow / orange / red as the vital depletes.
 function colorForPct(value: number): string {
   if (value >= 80) return '#87a987';
   if (value >= 60) return '#e6c384';
@@ -47,10 +58,6 @@ function colorForPct(value: number): string {
   return '#7d1d1d';
 }
 
-// Dark, tinted variant of the fill color for the overlaid numbers.
-// Multiplies the rgb channels so the text reads as the same hue family
-// as its bar (green text on green fill, red text on red fill, etc.)
-// but dark enough to stay legible against the bright fill.
 function tintForFill(hex: string): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -59,13 +66,20 @@ function tintForFill(hex: string): string {
   return `rgb(${Math.round(r * k)}, ${Math.round(g * k)}, ${Math.round(b * k)})`;
 }
 
-// Bottom status bar. Lives under the input row. Carries the live
-// vitals (hp / mana / move from GMCP Char.Vitals) on the left and a
-// clock on the right. Each vital reads as: LABEL  PCT% [fill bar with
-// current/max numbers overlaid].
-interface RoomInfo {
-  name: string;
-  exits: string[];
+// Aabahran's Char.Combat payload: { target, hp_pct, condition }. An
+// empty object signals the target is gone.
+function extractCombat(data: unknown): CombatState | null {
+  if (!data || typeof data !== 'object') return null;
+  const obj = data as Record<string, unknown>;
+  const name = typeof obj.target === 'string' ? obj.target.trim() : '';
+  if (!name) return null;
+  const out: CombatState = { name };
+  const hp = asNumber(obj.hp_pct);
+  if (hp !== undefined) out.hp = Math.max(0, Math.min(100, Math.round(hp)));
+  if (typeof obj.condition === 'string' && obj.condition.trim()) {
+    out.condition = obj.condition.trim();
+  }
+  return out;
 }
 
 function parseRoomInfo(data: unknown): RoomInfo | null {
@@ -102,7 +116,7 @@ const COMPASS_ORDER: Record<string, number> = {
 
 function compactExits(exits: string[]): string {
   const seen = new Set<string>();
-  const initials = exits
+  return exits
     .map((e) => e.trim().toLowerCase())
     .filter((e) => e.length > 0)
     .map((e) => e[0])
@@ -111,23 +125,24 @@ function compactExits(exits: string[]): string {
       seen.add(c);
       return true;
     })
-    .sort((a, b) => (COMPASS_ORDER[a] ?? 99) - (COMPASS_ORDER[b] ?? 99));
-  return initials.join('');
+    .sort((a, b) => (COMPASS_ORDER[a] ?? 99) - (COMPASS_ORDER[b] ?? 99))
+    .join('');
 }
 
 export function StatusBar() {
   const [now, setNow] = useState(() => new Date());
   const [vitals, setVitals] = useState<Vitals | null>(null);
-  const [target, setTarget] = useState<string | null>(null);
+  const [combat, setCombat] = useState<CombatState | null>(null);
+  const [userTarget, setUserTarget] = useState<string | null>(null);
   const [room, setRoom] = useState<RoomInfo | null>(null);
-  // Snapshot of the most recent tick payload + the wall-clock instant
-  // we received it. Lets us interpolate remaining_ms between backend
-  // pushes without waiting on the next event.
-  const tickAnchorRef = useRef<{ payload: TickPayload; receivedAt: number } | null>(null);
-  // Re-render counter; bumped every 250ms so the interpolated tick
-  // countdown ticks down smoothly. We do not store the computed seconds
-  // in state because the value derives from refs at render time.
-  const [, setNowMs] = useState(() => Date.now());
+  // Tintin-style tick display: counts UP real seconds since the last
+  // World.Time hour change. Reset only on hour change, not on the
+  // backend's interval-based auto-fire (which drifts ahead of or
+  // behind the MUD's actual tick). Matches the prior build's behavior.
+  const [tickSecs, setTickSecs] = useState(0);
+  const [tickActive, setTickActive] = useState(false);
+  const tickResetAtRef = useRef<number>(Date.now());
+  const prevHourRef = useRef<number | string | null>(null);
 
   useEffect(() => {
     const wallTick = () => setNow(new Date());
@@ -136,15 +151,29 @@ export function StatusBar() {
     return () => window.clearInterval(id);
   }, []);
 
+  // 4Hz ticker for the tick-seconds counter. setInterval at 250ms so
+  // the display stays responsive even when the browser throttles
+  // longer timers under inactive-tab heuristics.
   useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 250);
+    const id = window.setInterval(() => {
+      setTickSecs(Math.floor((Date.now() - tickResetAtRef.current) / 1000));
+    }, 250);
     return () => window.clearInterval(id);
   }, []);
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
+    let unsubTarget: (() => void) | undefined;
     let cancelled = false;
+
+    // Seed tar selection from the backend on mount.
+    void getTarget()
+      .then((snap) => {
+        if (cancelled) return;
+        setUserTarget(snap.name);
+      })
+      .catch(() => undefined);
 
     onGmcp((payload) => {
       if (payload.package === 'Char.Vitals') {
@@ -157,22 +186,32 @@ export function StatusBar() {
           move: num(data.move, 0),
           maxmove: num(data.maxmove, 0),
         });
+      } else if (payload.package === 'Char.Combat') {
+        setCombat(extractCombat(payload.data));
       } else if (payload.package === 'Room.Info') {
         setRoom(parseRoomInfo(payload.data));
+      } else if (payload.package === 'World.Time' && payload.data && typeof payload.data === 'object') {
+        // First World.Time after connect just seeds the hour. Each
+        // subsequent push with a different hour value is the tick
+        // fire — that's the canonical reset signal.
+        const incoming = payload.data as Record<string, unknown>;
+        const hour = incoming.hour;
+        setTickActive(true);
+        if (hour !== undefined && hour !== null) {
+          if (prevHourRef.current !== null && prevHourRef.current !== hour) {
+            tickResetAtRef.current = Date.now();
+            setTickSecs(0);
+          }
+          prevHourRef.current = hour as number | string;
+        }
       }
     }).then((fn) => {
       if (cancelled) fn();
       else unsubGmcp = fn;
     });
 
-    let unsubTarget: (() => void) | undefined;
-    // Seed the target name on mount so the segment renders even if
-    // the user opened the app already targeting someone.
-    void getTarget()
-      .then((payload) => setTarget(payload.name ?? null))
-      .catch(() => undefined);
     onTarget((payload) => {
-      setTarget(payload.name ?? null);
+      setUserTarget(payload.name);
     }).then((fn) => {
       if (cancelled) fn();
       else unsubTarget = fn;
@@ -181,50 +220,27 @@ export function StatusBar() {
     onState((payload) => {
       if (payload.kind === 'disconnected') {
         setVitals(null);
-        setTarget(null);
+        setCombat(null);
+        setUserTarget(null);
         setRoom(null);
-        tickAnchorRef.current = null;
+        setTickActive(false);
+        prevHourRef.current = null;
+      } else if (payload.kind === 'connected') {
+        tickResetAtRef.current = Date.now();
+        setTickSecs(0);
       }
     }).then((fn) => {
       if (cancelled) fn();
       else unsubState = fn;
     });
 
-    let unsubTick: (() => void) | undefined;
-    onTick((payload) => {
-      tickAnchorRef.current = { payload, receivedAt: Date.now() };
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsubTick = fn;
-    });
-
     return () => {
       cancelled = true;
       unsubGmcp?.();
       unsubState?.();
-      unsubTick?.();
       unsubTarget?.();
     };
   }, []);
-
-  const tickRemainingSec = (): number | null => {
-    const anchor = tickAnchorRef.current;
-    if (!anchor || !anchor.payload.enabled) return null;
-    const elapsed = Date.now() - anchor.receivedAt;
-    const remaining = Math.max(0, anchor.payload.remaining_ms - elapsed);
-    return Math.ceil(remaining / 1000);
-  };
-
-  const tickToneFor = (sec: number, intervalMs: number): string => {
-    const intervalSec = Math.max(1, Math.round(intervalMs / 1000));
-    if (sec <= 3) return 'err';
-    if (sec <= Math.max(5, Math.round(intervalSec * 0.25))) return 'warn';
-    return 'ok';
-  };
-
-  const tickSec = tickRemainingSec();
-  const anchor = tickAnchorRef.current;
-  const tickTone = tickSec !== null && anchor ? tickToneFor(tickSec, anchor.payload.interval_ms) : null;
 
   return (
     <div className="statusbar">
@@ -238,10 +254,11 @@ export function StatusBar() {
         {vitals && vitals.maxmove > 0 && (
           <VitalBar label="move" cur={vitals.move} max={vitals.maxmove} />
         )}
-        {target && (
+        {combat && <CombatSeg combat={combat} />}
+        {userTarget && !combat && (
           <span className="statusbar-target">
-            <span className="statusbar-target-label">target</span>
-            <span className="statusbar-target-value">{target}</span>
+            <span className="statusbar-target-label">tar</span>
+            <span className="statusbar-target-value">{userTarget}</span>
           </span>
         )}
       </div>
@@ -256,10 +273,10 @@ export function StatusBar() {
         )}
       </div>
       <div className="statusbar-right">
-        {tickSec !== null && tickTone && (
-          <span className={`statusbar-tick statusbar-tone-${tickTone}`}>
+        {tickActive && (
+          <span className="statusbar-tick">
             <span className="statusbar-tick-label">tick</span>
-            <span className="statusbar-tick-value">{tickSec}s</span>
+            <span className="statusbar-tick-value">{tickSecs}s</span>
           </span>
         )}
         <span className="statusbar-clock">{formatClock(now)}</span>
@@ -288,6 +305,36 @@ function VitalBar({ label, cur, max }: { label: string; cur: number; max: number
           {cur}/{max}
         </span>
       </span>
+    </div>
+  );
+}
+
+function CombatSeg({ combat }: { combat: CombatState }) {
+  const hp = combat.hp;
+  const fill = hp !== undefined ? colorForPct(hp) : '#7aa89f';
+  return (
+    <div className="statusbar-combat">
+      <span className="statusbar-combat-swords" aria-hidden="true">
+        ⚔
+      </span>
+      <span className="statusbar-combat-name">{combat.name}</span>
+      {hp !== undefined ? (
+        <span className="statusbar-bar-track" style={{ width: 80 }}>
+          <span
+            className="statusbar-bar-fill"
+            style={{ width: `${hp}%`, background: fill }}
+            aria-hidden="true"
+          />
+          <span className="statusbar-bar-text" style={{ color: tintForFill(fill) }}>
+            {hp}%
+          </span>
+        </span>
+      ) : (
+        <span className="statusbar-combat-unknown">--</span>
+      )}
+      {combat.condition && (
+        <span className="statusbar-combat-condition">{combat.condition}</span>
+      )}
     </div>
   );
 }

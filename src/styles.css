@@ -321,7 +321,10 @@ body {
   overflow: hidden;
 }
 
-/* Input row — Input.tsx owns the .input-row class */
+/* Input row — Input.tsx owns the .input-row class. position+z-index
+   guarantee the input row paints above the terminal even when xterm's
+   canvas is one frame behind a container shrink (that lag was what
+   put xterm visually under the command bar previously). */
 
 .input-row {
   display: flex;
@@ -332,6 +335,8 @@ body {
   border-top: 1px solid var(--c-border);
   border-bottom: 1px solid var(--c-border);
   font-size: 13px;
+  position: relative;
+  z-index: 1;
 }
 
 .input-row .prompt {
@@ -367,6 +372,8 @@ body {
   font-size: 12px;
   color: var(--c-text-muted);
   user-select: none;
+  position: relative;
+  z-index: 1;
 }
 
 .statusbar-left,
@@ -477,6 +484,44 @@ body {
 .statusbar-tick-value {
   font-weight: 700;
   font-size: 12px;
+  color: var(--c-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Combat segment. Sits in the vitals row when Char.Combat is active.
+   Includes the crossed swords glyph, target name, an inline HP track,
+   and an optional condition phrase. */
+.statusbar-combat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  max-width: 360px;
+  overflow: hidden;
+}
+
+.statusbar-combat-swords {
+  color: var(--c-danger);
+  font-size: 13px;
+}
+
+.statusbar-combat-name {
+  color: var(--c-text-strong);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statusbar-combat-unknown {
+  color: var(--c-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.statusbar-combat-condition {
+  color: var(--c-text-muted);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Target name segment. Sits on the left after vitals; only shown
