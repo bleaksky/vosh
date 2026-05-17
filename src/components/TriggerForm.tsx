@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { HighlightStyle, NamedColor, TriggerRecord } from '../lib/session';
+import { colorize, decolorize } from '../lib/colorTokens';
 
 interface Props {
   load: () => Promise<string>;
@@ -38,6 +39,24 @@ function blankTrigger(): TriggerRecord {
   };
 }
 
+// Walk a trigger's action and translate template text between raw
+// ANSI escapes (what the backend stores) and the friendly token grammar
+// the form displays. Highlight + gag + route actions have no templates
+// so they pass through.
+function decolorizeTemplates(t: TriggerRecord): TriggerRecord {
+  if (t.action.kind === 'replace' || t.action.kind === 'send') {
+    return { ...t, action: { ...t.action, template: decolorize(t.action.template) } };
+  }
+  return t;
+}
+
+function colorizeTemplates(t: TriggerRecord): TriggerRecord {
+  if (t.action.kind === 'replace' || t.action.kind === 'send') {
+    return { ...t, action: { ...t.action, template: colorize(t.action.template) } };
+  }
+  return t;
+}
+
 // Structured editor for triggers. Cards stacked vertically; each card
 // is one trigger with field controls. Preset-installed triggers
 // (those carrying a non-empty `preset` tag) are still listed but
@@ -54,7 +73,10 @@ export function TriggerForm({ load, save, onError }: Props) {
         if (cancelled) return;
         try {
           const parsed = JSON.parse(json);
-          setList(Array.isArray(parsed) ? parsed : []);
+          const arr: TriggerRecord[] = Array.isArray(parsed) ? parsed : [];
+          // Inverse-colorize templates so the form shows readable
+          // tokens like {red} and {fg:244} instead of raw escapes.
+          setList(arr.map(decolorizeTemplates));
         } catch {
           setList([]);
         }
@@ -104,7 +126,10 @@ export function TriggerForm({ load, save, onError }: Props) {
   const doSave = async () => {
     if (!list) return;
     try {
-      await save(JSON.stringify(list, null, 2));
+      // Forward-colorize templates back to raw ANSI before posting
+      // so the backend stores what the trigger engine expects.
+      const out = list.map(colorizeTemplates);
+      await save(JSON.stringify(out, null, 2));
       setSavedAt(Date.now());
     } catch (e) {
       onError(String(e));
@@ -302,20 +327,28 @@ function ActionFields({ action, onChange, readOnly }: ActionFieldsProps) {
   }
   if (action.kind === 'replace' || action.kind === 'send') {
     return (
-      <input
-        type="text"
-        spellCheck={false}
-        placeholder={
-          action.kind === 'replace'
-            ? '{fg:244}$1{reset}{fg:210}$2{reset}{fg:244}$3{reset}'
-            : 'flee'
-        }
-        value={action.template}
-        disabled={readOnly}
-        onChange={(e) =>
-          onChange({ ...action, template: e.target.value } as TriggerRecord['action'])
-        }
-      />
+      <div className="trigger-card-template">
+        <input
+          type="text"
+          spellCheck={false}
+          placeholder={
+            action.kind === 'replace'
+              ? '{fg:244}$1{reset}{fg:210}$2{reset}'
+              : 'flee'
+          }
+          value={action.template}
+          disabled={readOnly}
+          onChange={(e) =>
+            onChange({ ...action, template: e.target.value } as TriggerRecord['action'])
+          }
+        />
+        {action.kind === 'replace' && (
+          <span className="trigger-card-hint">
+            tokens: {'{red}'} {'{bold_red}'} {'{fg:244}'} {'{#ff3399}'} {'{reset}'}; $1 $2 …
+            reference capture groups
+          </span>
+        )}
+      </div>
     );
   }
   // route

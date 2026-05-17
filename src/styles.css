@@ -1053,6 +1053,24 @@ body {
   flex: 1 1 240px;
 }
 
+.trigger-card-template {
+  flex: 1 1 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.trigger-card-template input[type='text'] {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.trigger-card-hint {
+  color: var(--c-text-faint);
+  font-style: italic;
+}
+
 .trigger-card-help {
   color: var(--c-text-faint);
   font-style: italic;
