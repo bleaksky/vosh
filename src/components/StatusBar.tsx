@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { onGmcp, onState } from '../lib/session';
+import { useEffect, useRef, useState } from 'react';
+import { onGmcp, onState, onTick, type TickPayload } from '../lib/session';
 
 interface Vitals {
   hp: number;
@@ -59,11 +59,24 @@ function tintForFill(hex: string): string {
 export function StatusBar() {
   const [now, setNow] = useState(() => new Date());
   const [vitals, setVitals] = useState<Vitals | null>(null);
+  // Snapshot of the most recent tick payload + the wall-clock instant
+  // we received it. Lets us interpolate remaining_ms between backend
+  // pushes without waiting on the next event.
+  const tickAnchorRef = useRef<{ payload: TickPayload; receivedAt: number } | null>(null);
+  // Re-render counter; bumped every 250ms so the interpolated tick
+  // countdown ticks down smoothly. We do not store the computed seconds
+  // in state because the value derives from refs at render time.
+  const [, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
-    const tick = () => setNow(new Date());
-    tick();
-    const id = window.setInterval(tick, 15_000);
+    const wallTick = () => setNow(new Date());
+    wallTick();
+    const id = window.setInterval(wallTick, 15_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 250);
     return () => window.clearInterval(id);
   }, []);
 
@@ -89,18 +102,49 @@ export function StatusBar() {
     });
 
     onState((payload) => {
-      if (payload.kind === 'disconnected') setVitals(null);
+      if (payload.kind === 'disconnected') {
+        setVitals(null);
+        tickAnchorRef.current = null;
+      }
     }).then((fn) => {
       if (cancelled) fn();
       else unsubState = fn;
+    });
+
+    let unsubTick: (() => void) | undefined;
+    onTick((payload) => {
+      tickAnchorRef.current = { payload, receivedAt: Date.now() };
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsubTick = fn;
     });
 
     return () => {
       cancelled = true;
       unsubGmcp?.();
       unsubState?.();
+      unsubTick?.();
     };
   }, []);
+
+  const tickRemainingSec = (): number | null => {
+    const anchor = tickAnchorRef.current;
+    if (!anchor || !anchor.payload.enabled) return null;
+    const elapsed = Date.now() - anchor.receivedAt;
+    const remaining = Math.max(0, anchor.payload.remaining_ms - elapsed);
+    return Math.ceil(remaining / 1000);
+  };
+
+  const tickToneFor = (sec: number, intervalMs: number): string => {
+    const intervalSec = Math.max(1, Math.round(intervalMs / 1000));
+    if (sec <= 3) return 'err';
+    if (sec <= Math.max(5, Math.round(intervalSec * 0.25))) return 'warn';
+    return 'ok';
+  };
+
+  const tickSec = tickRemainingSec();
+  const anchor = tickAnchorRef.current;
+  const tickTone = tickSec !== null && anchor ? tickToneFor(tickSec, anchor.payload.interval_ms) : null;
 
   return (
     <div className="statusbar">
@@ -116,6 +160,12 @@ export function StatusBar() {
         )}
       </div>
       <div className="statusbar-right">
+        {tickSec !== null && tickTone && (
+          <span className={`statusbar-tick statusbar-tone-${tickTone}`}>
+            <span className="statusbar-tick-label">tick</span>
+            <span className="statusbar-tick-value">{tickSec}s</span>
+          </span>
+        )}
         <span className="statusbar-clock">{formatClock(now)}</span>
       </div>
     </div>

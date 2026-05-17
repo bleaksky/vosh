@@ -250,15 +250,27 @@ body {
   position: relative;
 }
 
+/* xterm's FitAddon reads the host's computed height to compute the
+   row count, and Terminal.tsx writes width/height in pixels onto the
+   host every frame. Host is position:absolute so flex/box-model never
+   re-flows it; sizer just provides the bounding rect JS reads.
+   Padding lives on the host so xterm renders inside it. Departing
+   from this shape (e.g. width:100% on the host) led to xterm
+   measuring cells against one box and rendering inside another,
+   which shows up as doubled character spacing. */
 .terminal-sizer {
   position: absolute;
   inset: 0;
-  padding: 10px 14px 6px 14px;
+  overflow: hidden;
 }
 
 .terminal-host {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  padding: 8px 12px 0 12px;
+  background: var(--c-surface);
 }
 
 /* Input row — Input.tsx owns the .input-row class */
@@ -398,6 +410,25 @@ body {
 .statusbar-clock {
   color: var(--c-text);
   font-variant-numeric: tabular-nums;
+}
+
+.statusbar-tick {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusbar-tick-label {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+}
+
+.statusbar-tick-value {
+  font-weight: 700;
+  font-size: 12px;
 }
 
 /* Settings window. Shares .app + TopBar chrome with the main window;
