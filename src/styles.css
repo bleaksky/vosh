@@ -293,19 +293,27 @@ body {
 }
 
 /* Terminal area absorbs whatever width the map pane leaves behind.
-   `flex: 1 1 0` mirrors .main-row — basis ZERO so the column never
-   reports a content-derived height that exceeds the slot.
-   overflow:hidden + min-height:0 are both load-bearing — without
-   either, xterm bleeds past the bottom of its slot during the frame
-   between a chat-pane open/close and its own refit. */
+   Structure matches main exactly: terminal-area is a flex COLUMN
+   container whose only flex item is terminal-sizer; the sizer is a
+   flex 1 1 0 item with position relative, providing the positioning
+   context for the absolute-positioned terminal-host. This shape
+   keeps xterm strictly inside terminal-area no matter how the flex
+   math resolves elsewhere. */
 
 .terminal-area {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
   background: var(--c-surface);
-  position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+  /* Padding lives HERE, not on host or .xterm. Sizer (flex:1 inside)
+     fills the post-padding content area; JS writes its bounding rect
+     to host; FitAddon then sees the correct available space and rows
+     do not get lost to a padding subtraction the way they did when
+     padding lived on host or xterm.element. */
+  padding: 8px 14px 10px 14px;
 }
 
 /* xterm's FitAddon reads the host's computed height to compute the
@@ -316,9 +324,14 @@ body {
    from this shape (e.g. width:100% on the host) led to xterm
    measuring cells against one box and rendering inside another,
    which shows up as doubled character spacing. */
+/* Flex item inside terminal-area (which is now flex column). Its
+   bounding rect is the truth source for the terminal-host pixel
+   dimensions that Terminal.tsx writes every frame. */
 .terminal-sizer {
-  position: absolute;
-  inset: 0;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
   overflow: hidden;
 }
 
@@ -327,17 +340,21 @@ body {
   top: 0;
   left: 0;
   overflow: hidden;
-  /* Equal padding top + bottom so the bottom row of xterm output has
-     visible breathing room from the input bar. Without bottom
-     padding, even a perfectly fit canvas can visually butt up against
-     the input border and look "cut off". */
-  padding: 8px 12px;
   background: var(--c-surface);
+  /* Padding deliberately NOT here. xterm-addon-fit reads the host
+     clientHeight (includes parent padding) but subtracts only the
+     padding of xterm.element itself when computing available rows.
+     If padding lives on the host, FitAddon overshoots by that
+     padding and renders one extra row that bleeds past the visible
+     area into the input bar. Padding must live on .xterm below so
+     FitAddon sees and subtracts it. */
 }
 
-/* xterm creates a .xterm wrapper inside the host on open. Without an
-   explicit 100%/100% it gets intrinsic sizing and FitAddon measures
-   against the wrong box, which shows up as doubled character cells. */
+/* xterm.element (the .xterm div xterm creates inside the host).
+   Padding is intentionally zero — the visible padding lives on
+   .terminal-area where FitAddon is not affected by it. Explicit 100%
+   sizing here also stops the doubled-character-cell bug when no
+   inline size has been written yet. */
 .terminal-host .xterm {
   width: 100%;
   height: 100%;
