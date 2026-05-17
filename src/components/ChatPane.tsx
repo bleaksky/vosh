@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { onRouted, onState, type RoutedPayload } from '../lib/session';
+import { onGmcp, onRouted, onState, type GmcpPayload, type RoutedPayload } from '../lib/session';
 
 interface ChatLine {
   ts: number;
@@ -8,6 +8,31 @@ interface ChatLine {
 }
 
 const MAX_LINES = 500;
+
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
+
+function stripAnsi(text: string): string {
+  return text.replace(ANSI_RE, '');
+}
+
+// Convert a Comm.Channel(.Text) GMCP payload to a ChatLine. Aabahran
+// and other ROM-derived servers vary the field names; fall back through
+// the common alternates.
+function commToChatLine(data: unknown, ts: number): ChatLine | null {
+  if (!data || typeof data !== 'object') return null;
+  const obj = data as Record<string, unknown>;
+  const pane = String(obj.channel ?? obj.chan ?? 'chat');
+  const speaker = obj.speaker
+    ? String(obj.speaker)
+    : obj.talker
+      ? String(obj.talker)
+      : '';
+  const raw = String(obj.text ?? obj.msg ?? obj.message ?? '');
+  if (!raw) return null;
+  const cleaned = stripAnsi(raw);
+  return { ts, pane, text: speaker ? `${speaker}: ${cleaned}` : cleaned };
+}
 
 function formatTime(ts: number): string {
   const d = new Date(ts);
@@ -28,15 +53,36 @@ export function ChatPane() {
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    let unsubGmcp: (() => void) | undefined;
     let unsubRouted: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
     let cancelled = false;
 
-    onRouted((payload: RoutedPayload) => {
+    const append = (line: ChatLine) => {
       setLines((prev) => {
-        const next = [...prev, { ts: Date.now(), pane: payload.pane, text: payload.text }];
+        const next = [...prev, line];
         return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next;
       });
+    };
+
+    // Primary feed: Comm.Channel.Text GMCP from the server. Aabahran
+    // pushes channel chat here automatically; no trigger setup needed.
+    onGmcp((payload: GmcpPayload) => {
+      if (payload.package !== 'Comm.Channel' && payload.package !== 'Comm.Channel.Text') {
+        return;
+      }
+      const line = commToChatLine(payload.data, Date.now());
+      if (line) append(line);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsubGmcp = fn;
+    });
+
+    // Secondary feed: trigger actions of kind `route` push hand-picked
+    // terminal lines here. Useful for capturing patterns the server
+    // does not surface through Comm.Channel.
+    onRouted((payload: RoutedPayload) => {
+      append({ ts: Date.now(), pane: payload.pane, text: stripAnsi(payload.text) });
     }).then((fn) => {
       if (cancelled) fn();
       else unsubRouted = fn;
@@ -51,6 +97,7 @@ export function ChatPane() {
 
     return () => {
       cancelled = true;
+      unsubGmcp?.();
       unsubRouted?.();
       unsubState?.();
     };
@@ -102,7 +149,8 @@ export function ChatPane() {
       <div ref={bodyRef} className="chat-pane-body">
         {visible.length === 0 ? (
           <div className="chat-pane-empty">
-            no routed lines yet — wire a trigger with `route &lt;pane&gt;` to send text here
+            no channel chat yet — Comm.Channel GMCP arrives here automatically; trigger
+            actions of kind `route &lt;pane&gt;` route here too
           </div>
         ) : (
           visible.map((l, i) => (

@@ -120,12 +120,14 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
     try {
       await setUiConfig(config);
       applyTheme(config.theme);
+      // Cross-window emits so the running main window picks up both
+      // changes without a relaunch. A window CustomEvent only fires
+      // within the settings window; main is a separate webview.
       await emit('vosh://theme-changed', config.theme);
-      window.dispatchEvent(
-        new CustomEvent('vosh:font-changed', {
-          detail: { family: config.font_family, size: config.font_size },
-        }),
-      );
+      await emit('vosh://font-changed', {
+        family: config.font_family,
+        size: config.font_size,
+      });
       setSavedAt(Date.now());
     } catch (e) {
       onError(String(e));

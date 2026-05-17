@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Terminal, type TerminalHandle } from './components/Terminal';
 import { Input, type InputHandle } from './components/Input';
@@ -132,14 +133,22 @@ function App() {
   }, [fontFamily, fontSize]);
 
   useEffect(() => {
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ family: string; size: number }>).detail;
+    // Cross-window emit from the settings save path. window CustomEvents
+    // do not cross webviews, so we listen via the Tauri event bus here.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    listen<{ family: string; size: number }>('vosh://font-changed', (event) => {
+      const detail = event.payload;
       setFontFamily(detail.family || DEFAULT_FONT_FAMILY);
       setFontSize(detail.size || 14);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
     };
-    window.addEventListener('vosh:font-changed', handler as EventListener);
-    return () =>
-      window.removeEventListener('vosh:font-changed', handler as EventListener);
   }, []);
 
   useEffect(() => {
