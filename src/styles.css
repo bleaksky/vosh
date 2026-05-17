@@ -479,6 +479,58 @@ body {
   font-size: 12px;
 }
 
+/* Target name segment. Sits on the left after vitals; only shown
+   when a target is set. Accent value makes the active target read
+   at a glance against the muted vitals row. */
+.statusbar-target {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statusbar-target-label {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+}
+
+.statusbar-target-value {
+  color: var(--c-accent);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Room name + compact exit initials. Centered between the vitals/
+   target block and the right-side tick + clock. */
+.statusbar-room {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.statusbar-room-name {
+  color: var(--c-text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusbar-room-exits {
+  color: var(--c-text-faint);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Settings window. Shares .app + TopBar chrome with the main window;
    the body is a single column of label/control rows. */
 

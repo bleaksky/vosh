@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { onGmcp, onState, onTick, type TickPayload } from '../lib/session';
+import {
+  getTarget,
+  onGmcp,
+  onState,
+  onTarget,
+  onTick,
+  type TickPayload,
+} from '../lib/session';
 
 interface Vitals {
   hp: number;
@@ -56,9 +63,63 @@ function tintForFill(hex: string): string {
 // vitals (hp / mana / move from GMCP Char.Vitals) on the left and a
 // clock on the right. Each vital reads as: LABEL  PCT% [fill bar with
 // current/max numbers overlaid].
+interface RoomInfo {
+  name: string;
+  exits: string[];
+}
+
+function parseRoomInfo(data: unknown): RoomInfo | null {
+  if (!data || typeof data !== 'object') return null;
+  const obj = data as Record<string, unknown>;
+  const name = typeof obj.name === 'string' ? obj.name : '';
+  if (!name) return null;
+  const exitsRaw = obj.exits;
+  let exits: string[] = [];
+  if (exitsRaw && typeof exitsRaw === 'object' && !Array.isArray(exitsRaw)) {
+    exits = Object.keys(exitsRaw as Record<string, unknown>);
+  } else if (Array.isArray(exitsRaw)) {
+    exits = exitsRaw.filter((e): e is string => typeof e === 'string');
+  } else if (typeof exitsRaw === 'string') {
+    exits = exitsRaw.split(/[\s,]+/).filter(Boolean);
+  }
+  return { name, exits };
+}
+
+const COMPASS_ORDER: Record<string, number> = {
+  n: 0,
+  north: 0,
+  e: 1,
+  east: 1,
+  s: 2,
+  south: 2,
+  w: 3,
+  west: 3,
+  u: 4,
+  up: 4,
+  d: 5,
+  down: 5,
+};
+
+function compactExits(exits: string[]): string {
+  const seen = new Set<string>();
+  const initials = exits
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.length > 0)
+    .map((e) => e[0])
+    .filter((c) => {
+      if (seen.has(c)) return false;
+      seen.add(c);
+      return true;
+    })
+    .sort((a, b) => (COMPASS_ORDER[a] ?? 99) - (COMPASS_ORDER[b] ?? 99));
+  return initials.join('');
+}
+
 export function StatusBar() {
   const [now, setNow] = useState(() => new Date());
   const [vitals, setVitals] = useState<Vitals | null>(null);
+  const [target, setTarget] = useState<string | null>(null);
+  const [room, setRoom] = useState<RoomInfo | null>(null);
   // Snapshot of the most recent tick payload + the wall-clock instant
   // we received it. Lets us interpolate remaining_ms between backend
   // pushes without waiting on the next event.
@@ -86,24 +147,42 @@ export function StatusBar() {
     let cancelled = false;
 
     onGmcp((payload) => {
-      if (payload.package !== 'Char.Vitals') return;
-      const data = payload.data ?? {};
-      setVitals({
-        hp: num(data.hp, 0),
-        maxhp: num(data.maxhp, 0),
-        mana: num(data.mana, 0),
-        maxmana: num(data.maxmana, 0),
-        move: num(data.move, 0),
-        maxmove: num(data.maxmove, 0),
-      });
+      if (payload.package === 'Char.Vitals') {
+        const data = payload.data ?? {};
+        setVitals({
+          hp: num(data.hp, 0),
+          maxhp: num(data.maxhp, 0),
+          mana: num(data.mana, 0),
+          maxmana: num(data.maxmana, 0),
+          move: num(data.move, 0),
+          maxmove: num(data.maxmove, 0),
+        });
+      } else if (payload.package === 'Room.Info') {
+        setRoom(parseRoomInfo(payload.data));
+      }
     }).then((fn) => {
       if (cancelled) fn();
       else unsubGmcp = fn;
     });
 
+    let unsubTarget: (() => void) | undefined;
+    // Seed the target name on mount so the segment renders even if
+    // the user opened the app already targeting someone.
+    void getTarget()
+      .then((payload) => setTarget(payload.name ?? null))
+      .catch(() => undefined);
+    onTarget((payload) => {
+      setTarget(payload.name ?? null);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsubTarget = fn;
+    });
+
     onState((payload) => {
       if (payload.kind === 'disconnected') {
         setVitals(null);
+        setTarget(null);
+        setRoom(null);
         tickAnchorRef.current = null;
       }
     }).then((fn) => {
@@ -124,6 +203,7 @@ export function StatusBar() {
       unsubGmcp?.();
       unsubState?.();
       unsubTick?.();
+      unsubTarget?.();
     };
   }, []);
 
@@ -157,6 +237,22 @@ export function StatusBar() {
         )}
         {vitals && vitals.maxmove > 0 && (
           <VitalBar label="move" cur={vitals.move} max={vitals.maxmove} />
+        )}
+        {target && (
+          <span className="statusbar-target">
+            <span className="statusbar-target-label">target</span>
+            <span className="statusbar-target-value">{target}</span>
+          </span>
+        )}
+      </div>
+      <div className="statusbar-center">
+        {room && (
+          <span className="statusbar-room">
+            <span className="statusbar-room-name">{room.name}</span>
+            {room.exits.length > 0 && (
+              <span className="statusbar-room-exits">[{compactExits(room.exits)}]</span>
+            )}
+          </span>
         )}
       </div>
       <div className="statusbar-right">
