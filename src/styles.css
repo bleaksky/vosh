@@ -594,7 +594,9 @@ body {
 }
 
 .settings-row select,
-.settings-row input[type='number'] {
+.settings-row input[type='number'],
+.settings-row input[type='text'],
+.settings-row input[type='search'] {
   background: var(--c-surface);
   color: var(--c-text);
   border: 1px solid var(--c-border-strong);
@@ -602,12 +604,31 @@ body {
   font-family: inherit;
   font-size: 13px;
   border-radius: 2px;
+  /* Strip default macOS search-input chrome (rounded pill, magnifier,
+     etc.) so search inputs render with the same flat dark surface as
+     every other input on the page. */
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .settings-row select:focus,
-.settings-row input[type='number']:focus {
+.settings-row input[type='number']:focus,
+.settings-row input[type='text']:focus,
+.settings-row input[type='search']:focus {
   outline: none;
   border-color: var(--c-accent);
+}
+
+.settings-row input[type='search']::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-left: 4px;
+  background: var(--c-text-faint);
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 2 L10 10 M10 2 L2 10' stroke='black' stroke-width='2' fill='none' stroke-linecap='round'/></svg>") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 2 L10 10 M10 2 L2 10' stroke='black' stroke-width='2' fill='none' stroke-linecap='round'/></svg>") center / contain no-repeat;
+  cursor: pointer;
 }
 
 .settings-row input[type='number'] {
