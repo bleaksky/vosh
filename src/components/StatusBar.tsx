@@ -1,27 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   getTarget,
   onGmcp,
   onState,
   onTarget,
-  onTick,
-  type TickPayload,
+  type QuickKey,
 } from '../lib/session';
-
-interface Vitals {
-  hp: number;
-  maxhp: number;
-  mana: number;
-  maxmana: number;
-  move: number;
-  maxmove: number;
-}
-
-interface VitalDeltas {
-  hp: number | null;
-  mana: number | null;
-  move: number | null;
-}
+import { AffectsBar } from './AffectsBar';
 
 interface CombatState {
   name: string;
@@ -29,19 +14,24 @@ interface CombatState {
   condition?: string;
 }
 
+interface MoonInfo {
+  name?: string;
+  active?: boolean;
+  phase?: number;
+  phase_name?: string;
+}
+
+interface MoonsState {
+  moons: MoonInfo[];
+  eclipse?: boolean;
+  triad?: boolean;
+  near_alignment?: boolean;
+}
+
 function formatClock(date: Date): string {
   const hh = String(date.getHours()).padStart(2, '0');
   const mm = String(date.getMinutes()).padStart(2, '0');
   return `${hh}:${mm}`;
-}
-
-function num(value: unknown, fallback: number): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return fallback;
 }
 
 function asNumber(value: unknown): number | undefined {
@@ -51,11 +41,6 @@ function asNumber(value: unknown): number | undefined {
     return Number.isFinite(n) ? n : undefined;
   }
   return undefined;
-}
-
-function pct(current: number, max: number): number {
-  if (max <= 0) return 0;
-  return Math.max(0, Math.min(100, Math.round((current / max) * 100)));
 }
 
 function colorForPct(value: number): string {
@@ -74,6 +59,18 @@ function tintForFill(hex: string): string {
   return `rgb(${Math.round(r * k)}, ${Math.round(g * k)}, ${Math.round(b * k)})`;
 }
 
+// Aabahran's World.Moons GMCP uses 0=full, 4=new, with 1-3 waning
+// and 5-7 waxing. The four geometric circles cover the cardinal
+// phases legibly; intermediate phases collapse to the nearest
+// neighbour (waxing vs waning is preserved).
+function moonGlyphFromIndex(phase: number): string {
+  const n = ((Math.round(phase) % 8) + 8) % 8;
+  if (n === 0) return '○';                 // full
+  if (n >= 1 && n <= 3) return '◑';        // waning (right side dark)
+  if (n === 4) return '●';                 // new
+  return '◐';                              // waxing (left side dark)
+}
+
 function extractCombat(data: unknown): CombatState | null {
   if (!data || typeof data !== 'object') return null;
   const obj = data as Record<string, unknown>;
@@ -88,28 +85,12 @@ function extractCombat(data: unknown): CombatState | null {
   return out;
 }
 
-const NO_DELTAS: VitalDeltas = { hp: null, mana: null, move: null };
-
 export function StatusBar() {
   const [now, setNow] = useState(() => new Date());
-  const [vitals, setVitals] = useState<Vitals | null>(null);
-  const [deltas, setDeltas] = useState<VitalDeltas>(NO_DELTAS);
   const [combat, setCombat] = useState<CombatState | null>(null);
   const [userTarget, setUserTarget] = useState<string | null>(null);
-  // Room info is rendered by the RoomStrip at the top now; nothing in
-  // the status bar needs it.
-  // Tintin-style tick display: counts UP real seconds since the last
-  // World.Time hour change. Resets only on hour change, not on the
-  // backend's local-interval auto-fire (which drifts ahead of or
-  // behind the MUD's actual tick). Matches main's behavior verbatim.
-  const [tick, setTick] = useState<TickPayload | null>(null);
-  const [tickSecs, setTickSecs] = useState(0);
-  const tickResetAtRef = useRef<number>(Date.now());
-  const prevHourRef = useRef<number | string | null>(null);
-  // Snapshot of the most-recent vitals; used to compute deltas on
-  // tick fires. Kept in a ref so the GMCP handler that updates
-  // vitals doesn't need to depend on it.
-  const vitalsSnapRef = useRef<Vitals | null>(null);
+  const [quickKeys, setQuickKeys] = useState<QuickKey[]>([]);
+  const [moons, setMoons] = useState<MoonsState>({ moons: [] });
 
   useEffect(() => {
     const wallTick = () => setNow(new Date());
@@ -118,92 +99,36 @@ export function StatusBar() {
     return () => window.clearInterval(id);
   }, []);
 
-  // 4Hz tick-seconds ticker — keeps the display smooth even when the
-  // browser throttles longer timers under inactive-tab heuristics.
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setTickSecs(Math.floor((Date.now() - tickResetAtRef.current) / 1000));
-    }, 250);
-    return () => window.clearInterval(id);
-  }, []);
-
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
     let unsubTarget: (() => void) | undefined;
-    let unsubTick: (() => void) | undefined;
     let cancelled = false;
 
     void getTarget()
       .then((snap) => {
         if (cancelled) return;
         setUserTarget(snap.name);
+        setQuickKeys(snap.quick_keys);
       })
       .catch(() => undefined);
 
     onGmcp((payload) => {
-      if (payload.package === 'Char.Vitals') {
-        const data = payload.data ?? {};
-        const next: Vitals = {
-          hp: num(data.hp, 0),
-          maxhp: num(data.maxhp, 0),
-          mana: num(data.mana, 0),
-          maxmana: num(data.maxmana, 0),
-          move: num(data.move, 0),
-          maxmove: num(data.maxmove, 0),
-        };
-        setVitals(next);
-        // Live deltas: every Char.Vitals push updates the delta from
-        // the snapshot taken at the last tick. Damage and healing
-        // show up immediately rather than waiting for the next hour
-        // change. Snapshot itself rebases on tick (World.Time
-        // branch below) so the displayed value resets per tick.
-        const snap = vitalsSnapRef.current;
-        if (snap === null) {
-          vitalsSnapRef.current = next;
-          setDeltas(NO_DELTAS);
-        } else {
-          setDeltas({
-            hp: next.hp - snap.hp,
-            mana: next.mana - snap.mana,
-            move: next.move - snap.move,
-          });
-        }
-      } else if (payload.package === 'Char.Combat') {
+      if (payload.package === 'Char.Combat') {
         setCombat(extractCombat(payload.data));
       } else if (
-        payload.package === 'World.Time' &&
+        payload.package === 'World.Moons' &&
         payload.data &&
         typeof payload.data === 'object'
       ) {
-        // Direct port of main's reset logic: first World.Time after
-        // connect just seeds the hour; any subsequent push with a
-        // DIFFERENT hour value is a real tick and resets the counter.
-        const incoming = payload.data as Record<string, unknown>;
-        const hour = incoming.hour as number | string | undefined | null;
-        if (hour !== undefined && hour !== null) {
-          if (prevHourRef.current !== null && prevHourRef.current !== hour) {
-            // Rebase the vitals snapshot too so the delta column
-            // reflects per-tick movement.
-            setVitals((curr) => {
-              const prevSnap = vitalsSnapRef.current;
-              if (curr) {
-                if (prevSnap) {
-                  setDeltas({
-                    hp: curr.hp - prevSnap.hp,
-                    mana: curr.mana - prevSnap.mana,
-                    move: curr.move - prevSnap.move,
-                  });
-                }
-                vitalsSnapRef.current = curr;
-              }
-              return curr;
-            });
-            tickResetAtRef.current = Date.now();
-            setTickSecs(0);
-          }
-          prevHourRef.current = hour;
-        }
+        const data = payload.data as Partial<MoonsState>;
+        const next: MoonsState = {
+          moons: Array.isArray(data.moons) ? data.moons : [],
+        };
+        if (data.eclipse !== undefined) next.eclipse = data.eclipse;
+        if (data.triad !== undefined) next.triad = data.triad;
+        if (data.near_alignment !== undefined) next.near_alignment = data.near_alignment;
+        setMoons(next);
       }
     }).then((fn) => {
       if (cancelled) fn();
@@ -212,37 +137,18 @@ export function StatusBar() {
 
     onTarget((payload) => {
       setUserTarget(payload.name);
+      setQuickKeys(payload.quick_keys);
     }).then((fn) => {
       if (cancelled) fn();
       else unsubTarget = fn;
     });
 
-    onTick((payload) => {
-      // Backend tick state only — drives the enabled flag and the
-      // interval used for the warn band. Reset of the counter
-      // happens in the World.Time branch above (matches main).
-      setTick(payload);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsubTick = fn;
-    });
-
     onState((payload) => {
       if (payload.kind === 'disconnected') {
-        setVitals(null);
-        setDeltas(NO_DELTAS);
         setCombat(null);
         setUserTarget(null);
-        setTick(null);
-        vitalsSnapRef.current = null;
-        // Forget the last hour so the next connection's first
-        // World.Time push is treated as the seed, not a hour-change.
-        prevHourRef.current = null;
-        tickResetAtRef.current = Date.now();
-        setTickSecs(0);
-      } else if (payload.kind === 'connected') {
-        tickResetAtRef.current = Date.now();
-        setTickSecs(0);
+        setQuickKeys([]);
+        setMoons({ moons: [] });
       }
     }).then((fn) => {
       if (cancelled) fn();
@@ -254,106 +160,70 @@ export function StatusBar() {
       unsubGmcp?.();
       unsubState?.();
       unsubTarget?.();
-      unsubTick?.();
     };
   }, []);
 
-  // Tick is "warning" when within 5 seconds of the configured
-  // interval (or already past it because the MUD's tick fired late
-  // or was missed). Drives a yellow tint + a CSS pulse animation.
-  const tickActive = !!tick?.enabled;
-  const tickIntervalSec =
-    tick?.interval_ms && tick.interval_ms > 0
-      ? Math.max(1, Math.round(tick.interval_ms / 1000))
-      : 30;
-  const tickWarn = tickActive && tickSecs >= Math.max(0, tickIntervalSec - 5);
+  const configuredKeys = quickKeys.filter((q) => q.verb.length > 0);
 
   return (
     <div className="statusbar">
       <div className="statusbar-left">
-        {vitals && vitals.maxhp > 0 && (
-          <VitalBar label="hp" cur={vitals.hp} max={vitals.maxhp} delta={deltas.hp} />
-        )}
-        {vitals && vitals.maxmana > 0 && (
-          <VitalBar label="mana" cur={vitals.mana} max={vitals.maxmana} delta={deltas.mana} />
-        )}
-        {vitals && vitals.maxmove > 0 && (
-          <VitalBar label="move" cur={vitals.move} max={vitals.maxmove} delta={deltas.move} />
-        )}
-        {tickActive && (
-          <span className={`statusbar-tick${tickWarn ? ' statusbar-tick-warn' : ''}`}>
-            <span className="statusbar-tick-label">tick</span>
-            <span className="statusbar-tick-value">{tickSecs}s</span>
-          </span>
-        )}
+        <AffectsBar />
         {combat && <CombatSeg combat={combat} />}
-        {userTarget && !combat && (
+        {(userTarget || configuredKeys.length > 0) && (
           <span className="statusbar-target">
-            <span className="statusbar-target-label">tar</span>
-            <span className="statusbar-target-value">{userTarget}</span>
+            {userTarget && (
+              <>
+                <span className="statusbar-target-label">tar</span>
+                <span className="statusbar-target-value">{userTarget}</span>
+              </>
+            )}
+            {configuredKeys.length > 0 && (
+              <ul className="statusbar-qkeys" aria-label="quick keys">
+                {configuredKeys.map((qk, i) => (
+                  <li key={qk.name} className="statusbar-qkey">
+                    {i > 0 && (
+                      <span className="statusbar-qkey-sep" aria-hidden="true">
+                        ·
+                      </span>
+                    )}
+                    <span className="statusbar-qkey-name">{qk.name}</span>
+                    <span className="statusbar-qkey-verb">{qk.verb}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </span>
         )}
       </div>
       <div className="statusbar-right">
+        {moons.moons.length > 0 && (
+          <span className="statusbar-moons">
+            {moons.moons.map((m, i) => (
+              <span
+                key={m.name ?? i}
+                className={`statusbar-moon${m.active ? ' is-active' : ''}`}
+                data-tooltip={
+                  `${m.name ?? 'moon'}: ${m.phase_name ?? `phase ${m.phase ?? '?'}`}` +
+                  (m.active ? ' (active)' : '')
+                }
+              >
+                {moonGlyphFromIndex(m.phase ?? -1)}
+              </span>
+            ))}
+            {moons.eclipse && (
+              <span className="statusbar-moon-badge is-eclipse">eclipse</span>
+            )}
+            {!moons.eclipse && moons.triad && (
+              <span className="statusbar-moon-badge is-triad">triad</span>
+            )}
+            {!moons.eclipse && !moons.triad && moons.near_alignment && (
+              <span className="statusbar-moon-badge is-near">near</span>
+            )}
+          </span>
+        )}
         <span className="statusbar-clock">{formatClock(now)}</span>
       </div>
-    </div>
-  );
-}
-
-function VitalBar({
-  label,
-  cur,
-  max,
-  delta,
-}: {
-  label: string;
-  cur: number;
-  max: number;
-  delta: number | null;
-}) {
-  const value = pct(cur, max);
-  const fill = colorForPct(value);
-  const darkText = tintForFill(fill);
-  const text = `${cur}/${max}`;
-  // Render the digits twice. The light copy is always visible — it
-  // shows through wherever the fill bar does NOT reach. The dark
-  // copy paints on top but is clipped to the fill width, so it only
-  // covers the portion of the digits that sit over the colored bar.
-  // Result: dark digits on colored fill, light digits on dark track,
-  // even when the boundary cuts across a single digit.
-  const darkClip = `inset(0 ${100 - value}% 0 0)`;
-  const showDelta = delta !== null && delta !== 0;
-  const deltaPositive = (delta ?? 0) > 0;
-  return (
-    <div className="statusbar-bar">
-      <span className="statusbar-bar-label">{label}</span>
-      <span className="statusbar-bar-percent" style={{ color: fill }}>
-        {value}%
-      </span>
-      <span className="statusbar-bar-track">
-        <span
-          className="statusbar-bar-fill"
-          style={{ width: `${value}%`, background: fill }}
-          aria-hidden="true"
-        />
-        <span className="statusbar-bar-text statusbar-bar-text-light">{text}</span>
-        <span
-          className="statusbar-bar-text statusbar-bar-text-dark"
-          style={{ color: darkText, clipPath: darkClip }}
-          aria-hidden="true"
-        >
-          {text}
-        </span>
-      </span>
-      {showDelta && (
-        <span
-          className={`statusbar-bar-delta${deltaPositive ? ' statusbar-bar-delta-up' : ' statusbar-bar-delta-down'}`}
-        >
-          {deltaPositive ? '+' : ''}
-          {delta}
-        </span>
-      )}
     </div>
   );
 }
