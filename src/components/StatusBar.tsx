@@ -365,11 +365,15 @@ function VitalBar({
 }) {
   const value = pct(cur, max);
   const fill = colorForPct(value);
-  // Text sits centered horizontally; once the fill drops below 50%,
-  // the numbers are no longer over the colored bar and the dark tint
-  // disappears into the dark track. Flip to the bright theme text
-  // color in that range so the numbers stay readable.
-  const textColor = value >= 50 ? tintForFill(fill) : 'var(--c-text-strong)';
+  const darkText = tintForFill(fill);
+  const text = `${cur}/${max}`;
+  // Render the digits twice. The light copy is always visible — it
+  // shows through wherever the fill bar does NOT reach. The dark
+  // copy paints on top but is clipped to the fill width, so it only
+  // covers the portion of the digits that sit over the colored bar.
+  // Result: dark digits on colored fill, light digits on dark track,
+  // even when the boundary cuts across a single digit.
+  const darkClip = `inset(0 ${100 - value}% 0 0)`;
   const showDelta = delta !== null && delta !== 0;
   const deltaPositive = (delta ?? 0) > 0;
   return (
@@ -384,8 +388,13 @@ function VitalBar({
           style={{ width: `${value}%`, background: fill }}
           aria-hidden="true"
         />
-        <span className="statusbar-bar-text" style={{ color: textColor }}>
-          {cur}/{max}
+        <span className="statusbar-bar-text statusbar-bar-text-light">{text}</span>
+        <span
+          className="statusbar-bar-text statusbar-bar-text-dark"
+          style={{ color: darkText, clipPath: darkClip }}
+          aria-hidden="true"
+        >
+          {text}
         </span>
       </span>
       {showDelta && (

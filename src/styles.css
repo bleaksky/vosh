@@ -588,8 +588,19 @@ body {
   justify-content: center;
   font-size: 11px;
   font-weight: 700;
-  color: var(--c-surface);
   pointer-events: none;
+}
+
+/* Bright copy sits behind and shows through wherever the fill bar
+   does not cover. */
+.statusbar-bar-text-light {
+  color: var(--c-text-strong);
+}
+
+/* Dark copy paints on top, clipped via inline clip-path to only the
+   portion of the bar the fill actually covers. */
+.statusbar-bar-text-dark {
+  /* color + clip-path set inline by VitalBar */
 }
 
 .statusbar-seg {
