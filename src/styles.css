@@ -55,36 +55,45 @@ body {
   flex-direction: column;
   height: 100vh;
   width: 100vw;
+  border: 1px solid var(--c-border);
 }
 
-/* TopBar — thin frameless drag region with text-style window controls */
+/* Shared inverted-video brand block (tmux session-label convention).
+   Used by both TopBar and StatusBar so the eye reads them as the
+   same frame. */
+
+.brand-block {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 8px;
+  background: var(--c-accent);
+  color: var(--c-surface-deep);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+/* TopBar — frameless drag region with text-style window controls */
 
 .topbar {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   height: 24px;
   flex: 0 0 auto;
   background: var(--c-surface-deep);
   border-bottom: 1px solid var(--c-border);
   user-select: none;
-}
-
-.topbar-brand {
-  padding: 0 10px;
-  color: var(--c-text-muted);
   font-size: 12px;
-  letter-spacing: 0.04em;
 }
 
 .topbar-spacer {
   flex: 1 1 auto;
-  height: 100%;
 }
 
 .topbar-controls {
   display: flex;
   align-items: stretch;
-  height: 100%;
 }
 
 .topbar-btn {
@@ -92,10 +101,14 @@ body {
   border: none;
   color: var(--c-text-faint);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1;
   padding: 0 12px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
 }
 
 .topbar-btn:hover {
@@ -105,26 +118,25 @@ body {
 
 .topbar-btn-close:hover {
   background: var(--c-danger);
-  color: var(--c-surface);
+  color: var(--c-surface-deep);
 }
 
-/* Connect — thin terminal-style command row */
+/* Connect — single command row, terminal-styled */
 
 .connect {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 3px 10px;
-  background: var(--c-surface);
-  border-bottom: 1px solid var(--c-border-soft);
-  font-size: 12.5px;
+  gap: 10px;
+  padding: 4px 10px;
+  background: var(--c-surface-pane);
+  border-bottom: 1px solid var(--c-border);
+  font-size: 12px;
   color: var(--c-text-muted);
   flex: 0 0 auto;
 }
 
 .connect-label {
   color: var(--c-text-faint);
-  text-transform: lowercase;
 }
 
 .connect input[type='text'],
@@ -160,7 +172,10 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--c-text-faint);
+}
+
+.connect-tls input[type='checkbox'] {
+  accent-color: var(--c-accent);
 }
 
 .connect-action {
@@ -172,6 +187,7 @@ body {
   font-family: inherit;
   font-size: inherit;
   cursor: pointer;
+  letter-spacing: 0.02em;
 }
 
 .connect-action:hover {
@@ -182,7 +198,8 @@ body {
   color: var(--c-warn);
 }
 
-/* Terminal fills the middle */
+/* Terminal — the main multiplexer cell; the .app outer frame and the
+   border-top/bottom on neighboring bars supply its borders. */
 
 .terminal-area {
   flex: 1 1 auto;
@@ -202,20 +219,22 @@ body {
   height: 100%;
 }
 
-/* Input row across the bottom — Input.tsx owns the .input-row class */
+/* Input row — Input.tsx owns the .input-row class */
 
 .input-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px 6px 10px;
+  padding: 4px 10px;
   background: var(--c-surface-pane);
   border-top: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--c-border);
+  font-size: 13px;
 }
 
 .input-row .prompt {
   color: var(--c-accent);
-  font-weight: bold;
+  font-weight: 700;
 }
 
 .input-row input {
@@ -237,13 +256,11 @@ body {
 
 .statusbar {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
-  height: 22px;
+  height: 24px;
   flex: 0 0 auto;
-  padding: 0 8px;
   background: var(--c-surface-deep);
-  border-top: 1px solid var(--c-border);
   font-size: 12px;
   color: var(--c-text-muted);
   user-select: none;
@@ -253,21 +270,19 @@ body {
 .statusbar-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+
+.statusbar-right {
+  padding-right: 10px;
+}
+
+.statusbar-left .statusbar-seg {
+  padding-left: 2px;
 }
 
 .statusbar-seg {
   white-space: nowrap;
-}
-
-.statusbar-seg-name {
-  color: var(--c-accent);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.statusbar-sep {
-  color: var(--c-border-strong);
 }
 
 .statusbar-tone-muted {

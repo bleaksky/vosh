@@ -9,8 +9,8 @@ export function TopBar() {
 
   return (
     <div className="topbar" data-tauri-drag-region>
-      <span className="topbar-brand" data-tauri-drag-region>
-        vosh
+      <span className="brand-block" data-tauri-drag-region>
+        [vosh]
       </span>
       <span className="topbar-spacer" data-tauri-drag-region />
       <div className="topbar-controls">
@@ -20,7 +20,7 @@ export function TopBar() {
           aria-label="minimize"
           onClick={() => void win().minimize()}
         >
-          _
+          –
         </button>
         <button
           type="button"
@@ -28,7 +28,7 @@ export function TopBar() {
           aria-label="maximize"
           onClick={() => void win().toggleMaximize()}
         >
-          □
+          ▢
         </button>
         <button
           type="button"
@@ -36,7 +36,7 @@ export function TopBar() {
           aria-label="close"
           onClick={() => void win().close()}
         >
-          ×
+          ✕
         </button>
       </div>
     </div>

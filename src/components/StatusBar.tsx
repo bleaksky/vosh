@@ -43,8 +43,7 @@ export function StatusBar({ status }: Props) {
   return (
     <div className="statusbar">
       <div className="statusbar-left">
-        <span className="statusbar-seg statusbar-seg-name">vosh</span>
-        <span className="statusbar-sep">│</span>
+        <span className="brand-block">[vosh]</span>
         <span className={`statusbar-seg statusbar-tone-${s.tone}`}>{s.label}</span>
       </div>
       <div className="statusbar-right">

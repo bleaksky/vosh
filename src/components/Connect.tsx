@@ -36,7 +36,7 @@ export function Connect({ status, onError }: Props) {
 
   return (
     <form className={`connect${isLive ? ' is-live' : ''}`} onSubmit={handleSubmit}>
-      <span className="connect-label">host</span>
+      <span className="connect-label">host:</span>
       <input
         type="text"
         value={host}
@@ -45,7 +45,7 @@ export function Connect({ status, onError }: Props) {
         onChange={(e) => setHost(e.target.value)}
         aria-label="host"
       />
-      <span className="connect-label">port</span>
+      <span className="connect-label">port:</span>
       <input
         type="number"
         value={port}
@@ -56,13 +56,13 @@ export function Connect({ status, onError }: Props) {
         aria-label="port"
       />
       <label className="connect-tls">
+        <span className="connect-label">tls:</span>
         <input
           type="checkbox"
           checked={tls}
           disabled={isLive}
           onChange={(e) => setTls(e.target.checked)}
         />
-        tls
       </label>
       <button type="submit" className="connect-action">
         {isLive ? '[disconnect]' : '[connect]'}
