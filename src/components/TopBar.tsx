@@ -2,15 +2,18 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 interface Props {
-  // When true, the auxiliary chrome buttons (settings/map) render.
+  // When true, the auxiliary chrome buttons (settings/map/chat) render.
   // Set false on auxiliary windows so they only show window controls.
   showAuxButtons?: boolean;
   // Label rendered inside the brand block. Defaults to "[vosh]".
   brand?: string;
-  // Map pane toggle. When provided, a `map` button renders next to
-  // settings and reflects pressed state.
+  // Map pane toggle. When provided, a `map` button renders and reflects
+  // pressed state.
   mapOpen?: boolean;
   onToggleMap?: () => void;
+  // Chat pane toggle. Same shape as map.
+  chatOpen?: boolean;
+  onToggleChat?: () => void;
 }
 
 // Frameless-window top strip. Drag region across most of its width
@@ -22,6 +25,8 @@ export function TopBar({
   brand = '[vosh]',
   mapOpen,
   onToggleMap,
+  chatOpen,
+  onToggleChat,
 }: Props) {
   const win = () => getCurrentWindow();
 
@@ -39,6 +44,16 @@ export function TopBar({
       <span className="topbar-spacer" data-tauri-drag-region />
       {showAuxButtons && (
         <div className="topbar-aux">
+          {onToggleChat && (
+            <button
+              type="button"
+              className={`topbar-aux-btn${chatOpen ? ' topbar-aux-btn-pressed' : ''}`}
+              aria-pressed={chatOpen}
+              onClick={onToggleChat}
+            >
+              chat
+            </button>
+          )}
           {onToggleMap && (
             <button
               type="button"

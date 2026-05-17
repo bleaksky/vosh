@@ -7,10 +7,12 @@ import { TopBar } from './components/TopBar';
 import { StatusBar } from './components/StatusBar';
 import { Resizable } from './components/Resizable';
 import { MapPane } from './components/MapPane';
+import { ChatPane } from './components/ChatPane';
 import { getUiConfig, onState, type StatePayload } from './lib/session';
 import { applyAndBroadcastTheme } from './lib/theme';
 
 const MAP_OPEN_KEY = 'vosh.layout.mapOpen';
+const CHAT_OPEN_KEY = 'vosh.layout.chatOpen';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
@@ -48,9 +50,9 @@ migrateMudclientKeys();
 const DEFAULT_FONT_FAMILY =
   'BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace';
 
-function loadMapOpen(): boolean {
+function loadFlag(key: string): boolean {
   try {
-    return localStorage.getItem(MAP_OPEN_KEY) === '1';
+    return localStorage.getItem(key) === '1';
   } catch {
     return false;
   }
@@ -60,7 +62,8 @@ function App() {
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
   const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
   const [fontSize, setFontSize] = useState(14);
-  const [mapOpen, setMapOpen] = useState(loadMapOpen);
+  const [mapOpen, setMapOpen] = useState(() => loadFlag(MAP_OPEN_KEY));
+  const [chatOpen, setChatOpen] = useState(() => loadFlag(CHAT_OPEN_KEY));
   const termRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
 
@@ -71,6 +74,14 @@ function App() {
       // ignore storage failures
     }
   }, [mapOpen]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_OPEN_KEY, chatOpen ? '1' : '0');
+    } catch {
+      // ignore storage failures
+    }
+  }, [chatOpen]);
 
   // Click anywhere in the terminal area focuses the input. Skip when
   // the user is selecting text (so copy still works) or clicking an
@@ -162,7 +173,12 @@ function App() {
 
   return (
     <main className="app">
-      <TopBar mapOpen={mapOpen} onToggleMap={() => setMapOpen((v) => !v)} />
+      <TopBar
+        mapOpen={mapOpen}
+        onToggleMap={() => setMapOpen((v) => !v)}
+        chatOpen={chatOpen}
+        onToggleChat={() => setChatOpen((v) => !v)}
+      />
       <Connect status={status} onError={handleError} />
       <div className="main-row">
         <div className="terminal-area" onMouseUp={handleTerminalMouseUp}>
@@ -177,9 +193,9 @@ function App() {
         {mapOpen && (
           <Resizable
             storageKey="vosh.layout.mapWidth"
-            defaultWidth={360}
-            minWidth={240}
-            maxWidth={720}
+            defaultSize={360}
+            minSize={240}
+            maxSize={720}
             className="map-resizable"
             handleLabel="resize map"
           >
@@ -187,6 +203,19 @@ function App() {
           </Resizable>
         )}
       </div>
+      {chatOpen && (
+        <Resizable
+          storageKey="vosh.layout.chatHeight"
+          direction="vertical"
+          defaultSize={180}
+          minSize={100}
+          maxSize={500}
+          className="chat-resizable"
+          handleLabel="resize chat"
+        >
+          <ChatPane />
+        </Resizable>
+      )}
       <Input
         ref={inputRef}
         enabled={connected}

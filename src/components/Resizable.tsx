@@ -1,29 +1,35 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
+type Direction = 'horizontal' | 'vertical';
+
 interface Props {
   children: ReactNode;
-  /** Stable key used to persist the width in localStorage. */
+  /** Stable key used to persist the size in localStorage. */
   storageKey: string;
-  defaultWidth: number;
-  minWidth?: number;
-  maxWidth?: number;
+  /** Horizontal panes resize width; vertical panes resize height. */
+  direction?: Direction;
+  defaultSize: number;
+  minSize?: number;
+  maxSize?: number;
   /** Extra class for the wrapper. */
   className?: string;
   /** ARIA label for the drag handle. */
   handleLabel?: string;
 }
 
-const DEFAULT_MIN = 220;
+const DEFAULT_MIN = 80;
 const DEFAULT_MAX = 1200;
 
-// Reserve at least this many pixels of width for the terminal column —
-// roughly 75 monospace columns at 14px BerkeleyMono Nerd Font plus the
-// terminal pane's own padding. The Resizable wrappers honor this when
-// computing their effective max so a stale persisted width can't push
-// the MUD output below 75 columns.
+// Reserve at least this many pixels of width for the terminal column
+// when used in horizontal mode — roughly 75 monospace columns at 14px
+// BerkeleyMono Nerd Font plus the terminal pane's own padding.
 const RESERVE_FOR_TERMINAL = 700;
+// Reserve at least this many pixels of vertical space for the terminal
+// area when used in vertical mode. Smaller than the horizontal reserve
+// since chat panes are usually shorter than they are tall.
+const RESERVE_VERTICAL = 220;
 
-function loadWidth(key: string, fallback: number): number {
+function loadSize(key: string, fallback: number): number {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
@@ -34,69 +40,70 @@ function loadWidth(key: string, fallback: number): number {
   }
 }
 
-function viewportWidth(): number {
-  return typeof window === 'undefined' ? 1280 : window.innerWidth;
+function viewportDim(direction: Direction): number {
+  if (typeof window === 'undefined') return 1280;
+  return direction === 'horizontal' ? window.innerWidth : window.innerHeight;
 }
 
 /**
- * Wraps a panel that lives on the right side of the layout. Renders a
- * 4 px drag handle on the left edge that lets the user widen or
- * narrow the panel by dragging. Width persists per `storageKey` so the
- * choice survives reloads.
+ * Resizable panel wrapper. In `horizontal` mode (default) the panel
+ * sits at the right edge of its parent and a 4px handle on its left
+ * widens/narrows it. In `vertical` mode the panel sits at the bottom
+ * of its parent and a 4px handle on its top grows/shrinks its height.
+ * Size persists per `storageKey` so the choice survives reloads.
  */
 export function Resizable({
   children,
   storageKey,
-  defaultWidth,
-  minWidth = DEFAULT_MIN,
-  maxWidth = DEFAULT_MAX,
+  direction = 'horizontal',
+  defaultSize,
+  minSize = DEFAULT_MIN,
+  maxSize = DEFAULT_MAX,
   className,
   handleLabel = 'resize panel',
 }: Props) {
-  const [width, setWidth] = useState<number>(() => loadWidth(storageKey, defaultWidth));
-  const [viewportW, setViewportW] = useState<number>(() => viewportWidth());
-  const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const [size, setSize] = useState<number>(() => loadSize(storageKey, defaultSize));
+  const [viewport, setViewport] = useState<number>(() => viewportDim(direction));
+  const dragStateRef = useRef<{ start: number; startSize: number } | null>(null);
 
   useEffect(() => {
     try {
-      localStorage.setItem(storageKey, String(width));
+      localStorage.setItem(storageKey, String(size));
     } catch {
       // ignore
     }
-  }, [storageKey, width]);
+  }, [storageKey, size]);
 
-  // Recompute the cap whenever the OS window resizes so the user
-  // can't drag past the 75-char terminal floor on a smaller window.
   useEffect(() => {
-    const handler = () => setViewportW(viewportWidth());
+    const handler = () => setViewport(viewportDim(direction));
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
-  }, []);
+  }, [direction]);
 
-  // Cap so the terminal column always has at least 75 monospace cells
-  // of width to render game text into.
-  const effectiveMax = Math.max(
-    minWidth,
-    Math.min(maxWidth, viewportW - RESERVE_FOR_TERMINAL),
-  );
-  const clamped = Math.max(minWidth, Math.min(effectiveMax, width));
+  // Cap so the terminal column/row always has room to render.
+  const reserve = direction === 'horizontal' ? RESERVE_FOR_TERMINAL : RESERVE_VERTICAL;
+  const effectiveMax = Math.max(minSize, Math.min(maxSize, viewport - reserve));
+  const clamped = Math.max(minSize, Math.min(effectiveMax, size));
+  const isVertical = direction === 'vertical';
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
-    dragStateRef.current = { startX: event.clientX, startWidth: clamped };
-    document.body.style.cursor = 'col-resize';
+    const start = isVertical ? event.clientY : event.clientX;
+    dragStateRef.current = { start, startSize: clamped };
+    document.body.style.cursor = isVertical ? 'row-resize' : 'col-resize';
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragStateRef.current;
     if (!drag) return;
-    // Panel is on the right edge; dragging right shrinks it, left
-    // widens it, so subtract the delta.
-    const next = drag.startWidth - (event.clientX - drag.startX);
-    const bounded = Math.max(minWidth, Math.min(effectiveMax, next));
-    setWidth(bounded);
+    // Panel sits at the right (horizontal) or bottom (vertical) edge,
+    // so moving the cursor toward the trailing edge shrinks it.
+    const current = isVertical ? event.clientY : event.clientX;
+    const next = drag.startSize - (current - drag.start);
+    const bounded = Math.max(minSize, Math.min(effectiveMax, next));
+    setSize(bounded);
   };
 
   const endDrag = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -110,21 +117,30 @@ export function Resizable({
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? 64 : 16;
-    if (event.key === 'ArrowLeft') {
+    const shrinkKeys = isVertical ? ['ArrowDown'] : ['ArrowRight'];
+    const growKeys = isVertical ? ['ArrowUp'] : ['ArrowLeft'];
+    if (growKeys.includes(event.key)) {
       event.preventDefault();
-      setWidth((w) => Math.min(effectiveMax, w + step));
-    } else if (event.key === 'ArrowRight') {
+      setSize((w) => Math.min(effectiveMax, w + step));
+    } else if (shrinkKeys.includes(event.key)) {
       event.preventDefault();
-      setWidth((w) => Math.max(minWidth, w - step));
+      setSize((w) => Math.max(minSize, w - step));
     }
   };
 
+  const wrapperStyle: React.CSSProperties = isVertical
+    ? { height: clamped }
+    : { width: clamped };
+
   return (
-    <div className={`resizable ${className ?? ''}`} style={{ width: clamped }}>
+    <div
+      className={`resizable resizable-${direction} ${className ?? ''}`}
+      style={wrapperStyle}
+    >
       <div
-        className="resizable-handle"
+        className={`resizable-handle resizable-handle-${direction}`}
         role="separator"
-        aria-orientation="vertical"
+        aria-orientation={isVertical ? 'horizontal' : 'vertical'}
         aria-label={handleLabel}
         tabIndex={0}
         onPointerDown={handlePointerDown}
