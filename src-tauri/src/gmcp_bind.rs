@@ -4,8 +4,8 @@
 //! `Char.Combat` was wired in as part of the deferred GMCP follow-ups so
 //! current target name and HP show up in the prompt-area HUD.
 
-use mudclient_gmcp::Message;
-use mudclient_vars::{Scope, VariableStore};
+use vosh_gmcp::Message;
+use vosh_vars::{Scope, VariableStore};
 use serde_json::Value;
 
 /// Push fields from a known GMCP package into the session variable store.

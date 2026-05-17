@@ -1,4 +1,4 @@
-//! Shared log store state. Wraps `mudclient_log::LogStore` in an async
+//! Shared log store state. Wraps `vosh_log::LogStore` in an async
 //! mutex so the session `io_loop`, the search commands, and the scrollback
 //! flush path can all reach the same `SQLite` handle.
 //!
@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
-pub(crate) type SharedLogStore = Arc<Mutex<Option<mudclient_log::LogStore>>>;
+pub(crate) type SharedLogStore = Arc<Mutex<Option<vosh_log::LogStore>>>;
 
 /// Maximum number of terminal lines kept in the persistent scrollback.
 const SCROLLBACK_CAP: usize = 10_000;
