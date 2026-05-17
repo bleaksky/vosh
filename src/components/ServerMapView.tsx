@@ -259,11 +259,16 @@ export function ServerMapView() {
       const dpr = window.devicePixelRatio || 1;
       const cssWidth = container.clientWidth;
       const cssHeight = container.clientHeight;
-      if (canvas.width !== cssWidth * dpr || canvas.height !== cssHeight * dpr) {
-        canvas.width = Math.max(1, cssWidth * dpr);
-        canvas.height = Math.max(1, cssHeight * dpr);
-        canvas.style.width = `${cssWidth}px`;
-        canvas.style.height = `${cssHeight}px`;
+      // Only resize the backing buffer. CSS keeps the display size
+      // pinned to the container via width:100%/height:100% so the
+      // canvas tracks layout reflows (e.g. the tileset-bar appearing
+      // when style flips) without needing the inline style to be
+      // refreshed in lockstep.
+      const targetW = Math.max(1, cssWidth * dpr);
+      const targetH = Math.max(1, cssHeight * dpr);
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
       }
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
@@ -384,10 +389,20 @@ export function ServerMapView() {
     };
 
     draw();
+    // Layout for the mode-toggle case (e.g. squares -> tileset adds
+    // the tileset-bar above the canvas-host) can take a frame or two
+    // to settle. Schedule a couple of follow-up draws across short
+    // deadlines so at least one lands on the post-reflow size.
+    const raf = requestAnimationFrame(draw);
+    const t1 = window.setTimeout(draw, 80);
+    const t2 = window.setTimeout(draw, 240);
     const observer = new ResizeObserver(draw);
     observer.observe(container);
     window.addEventListener('resize', draw);
     return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
       observer.disconnect();
       window.removeEventListener('resize', draw);
     };
