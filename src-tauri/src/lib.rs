@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use mudclient_log::LogStore;
-use mudclient_map::MapStore;
+use vosh_log::LogStore;
+use vosh_map::MapStore;
 use tauri::Manager;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
@@ -26,8 +26,8 @@ use commands::{
     map_area_snapshot, map_set_avoid, map_set_note, map_walk_to, open_settings_window,
     presets_install, presets_remove, profile_export, profile_import, scrollback_load,
     session_connect, session_disconnect, session_send, session_send_input, triggers_export,
-    triggers_import, plugins_list, plugins_reload, plugins_set_enabled, triggers_list,
-    ui_get_config, ui_set_config, updater_check, AppState, SharedState,
+    target_get, triggers_import, plugins_list, plugins_reload, plugins_set_enabled,
+    triggers_list, ui_get_config, ui_set_config, updater_check, AppState, SharedState,
 };
 use map_state::MapState;
 use profile_config::ProfileConfig;
@@ -61,6 +61,7 @@ pub fn run() {
                 }
             }
             if let Ok(path) = app.path().app_data_dir() {
+                migrate_from_mudclient_dir(&path);
                 let toml_path = path.join("profile.toml");
                 if toml_path.exists() {
                     match ProfileConfig::load(&toml_path) {
@@ -149,6 +150,7 @@ pub fn run() {
             session_send_input,
             session_disconnect,
             triggers_list,
+            target_get,
             triggers_export,
             triggers_import,
             presets_install,
@@ -175,6 +177,89 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// One-shot rename migration: when the bundle identifier flipped from
+/// `com.aabahran.mudclient` to `com.aabahran.vosh`, the macOS/Windows/Linux
+/// app-data directory moved with it. On first run after the rename, find
+/// the old directory next to the new one and recursively copy its
+/// contents over so saved profile, scrollback, maps, logs, and plugins
+/// survive the rebrand. Skips if the new directory already has its own
+/// data (so we never clobber a real fresh install).
+fn migrate_from_mudclient_dir(new_dir: &std::path::Path) {
+    let parent = match new_dir.parent() {
+        Some(p) => p,
+        None => return,
+    };
+    let new_name = match new_dir.file_name().and_then(|s| s.to_str()) {
+        Some(s) => s,
+        None => return,
+    };
+    // Replace the trailing "vosh" segment with "mudclient". The
+    // identifier change is the only diff between the two paths.
+    let Some(old_name) = new_name.strip_suffix("vosh").map(|prefix| format!("{prefix}mudclient")) else {
+        return;
+    };
+    let old_dir = parent.join(&old_name);
+    if !old_dir.exists() {
+        return;
+    }
+    let migrated_flag = new_dir.join(".migrated-from-mudclient");
+    if migrated_flag.exists() {
+        return;
+    }
+    // Don't overwrite a real install. If the new dir already has a
+    // profile or any of the core data files, the user has already used
+    // the renamed build — leave them alone.
+    let occupied = ["profile.toml", "scrollback.bin", "maps.sqlite", "logs.sqlite"]
+        .iter()
+        .any(|name| new_dir.join(name).exists());
+    if occupied {
+        let _ = std::fs::create_dir_all(new_dir);
+        let _ = std::fs::write(&migrated_flag, "skipped: new dir already populated\n");
+        return;
+    }
+    if let Err(e) = std::fs::create_dir_all(new_dir) {
+        error!(error = %e, "failed to create new app data dir for migration");
+        return;
+    }
+    match copy_dir_recursive(&old_dir, new_dir) {
+        Ok(count) => {
+            info!(
+                from = %old_dir.display(),
+                to = %new_dir.display(),
+                files = count,
+                "migrated app data from prior mudclient install",
+            );
+            let _ = std::fs::write(&migrated_flag, format!("copied {count} files\n"));
+        }
+        Err(e) => {
+            error!(error = %e, "app data migration failed");
+        }
+    }
+}
+
+fn copy_dir_recursive(
+    src: &std::path::Path,
+    dst: &std::path::Path,
+) -> std::io::Result<usize> {
+    let mut count = 0;
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            count += copy_dir_recursive(&from, &to)?;
+        } else if file_type.is_file() {
+            std::fs::copy(&from, &to)?;
+            count += 1;
+        }
+        // Skip symlinks and other special entries; the mudclient app
+        // data dir never contained any.
+    }
+    Ok(count)
 }
 
 fn open_map_store(app: &tauri::App) -> Result<MapStore, Box<dyn std::error::Error>> {

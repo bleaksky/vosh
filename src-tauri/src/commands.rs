@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use mudclient_log::{SearchHit, SearchOptions, SessionRow};
-use mudclient_map::Room;
-use mudclient_trigger::Trigger;
+use vosh_log::{SearchHit, SearchOptions, SessionRow};
+use vosh_map::Room;
+use vosh_trigger::Trigger;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::Mutex;
 use tracing::warn;
@@ -16,7 +16,7 @@ use crate::plugins::{PluginRecord, SharedPluginManager};
 use crate::profile::Profile;
 use crate::profile_config::{DockEntryPersist, ProfileConfig};
 use crate::script_state::SharedTimers;
-use crate::session::{self, OutputPayload, SessionHandle};
+use crate::session::{self, OutputPayload, SessionHandle, TargetPayload};
 
 /// Application-wide state. Phase 1 carries a single optional session and one
 /// profile. Phase 5 widens this to a session map; Phase 9 widens to multiple
@@ -134,10 +134,33 @@ pub(crate) async fn session_send_input(
     state: State<'_, SharedState>,
     line: String,
 ) -> Result<(), String> {
-    let result = {
+    let (result, target_after) = {
         let mut profile = state.profile.lock().await;
-        input::process(&mut profile, &line)
+        let before_name = profile.target.name.clone();
+        let before_idx = profile.target.room_idx;
+        let before_keys = profile.target.quick_keys.clone();
+        let result = input::process(&mut profile, &line);
+        let after_name = profile.target.name.clone();
+        let after_idx = profile.target.room_idx;
+        let after_keys = profile.target.quick_keys.clone();
+        let changed = before_name != after_name
+            || before_idx != after_idx
+            || before_keys != after_keys;
+        let payload = if changed {
+            Some(TargetPayload {
+                name: after_name,
+                room_idx: after_idx,
+                quick_keys: after_keys,
+            })
+        } else {
+            None
+        };
+        (result, payload)
     };
+
+    if let Some(payload) = target_after {
+        let _ = app.emit("session://target", payload);
+    }
 
     if !result.echo.is_empty() {
         let mut buf = Vec::new();
@@ -183,6 +206,19 @@ pub(crate) async fn triggers_list(state: State<'_, SharedState>) -> Result<Vec<T
     Ok(p.triggers.list())
 }
 
+/// Snapshot of the current target state + configured quick-keys.
+/// Frontend uses this to seed the TargetBar on mount before any
+/// `session://target` events fire.
+#[tauri::command]
+pub(crate) async fn target_get(state: State<'_, SharedState>) -> Result<TargetPayload, String> {
+    let p = state.profile.lock().await;
+    Ok(TargetPayload {
+        name: p.target.name.clone(),
+        room_idx: p.target.room_idx,
+        quick_keys: p.target.quick_keys.clone(),
+    })
+}
+
 #[tauri::command]
 pub(crate) async fn triggers_export(state: State<'_, SharedState>) -> Result<String, String> {
     let p = state.profile.lock().await;
@@ -215,7 +251,7 @@ pub(crate) async fn dock_layout_get(
 }
 
 /// Replace the persistent dock layout. Persists to profile.toml and
-/// broadcasts `mudclient://dock-layout-changed` so other open windows
+/// broadcasts `vosh://dock-layout-changed` so other open windows
 /// (specifically the main window) can re-apply without a relaunch.
 #[tauri::command]
 pub(crate) async fn dock_layout_set(
@@ -229,7 +265,7 @@ pub(crate) async fn dock_layout_set(
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    if let Err(e) = app.emit("mudclient://dock-layout-changed", &entries) {
+    if let Err(e) = app.emit("vosh://dock-layout-changed", &entries) {
         warn!(error = %e, "failed to broadcast dock-layout-changed");
     }
     Ok(())
@@ -248,7 +284,7 @@ pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
     WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("index.html?view=settings".into()))
-        .title("mudclient · settings")
+        .title("Vosh · settings")
         .inner_size(900.0, 720.0)
         .min_inner_size(560.0, 420.0)
         .resizable(true)
@@ -290,7 +326,7 @@ pub(crate) struct AreaSnapshot {
     pub current_room_id: Option<i64>,
     pub area: String,
     pub rooms: Vec<Room>,
-    pub exits: Vec<mudclient_map::Exit>,
+    pub exits: Vec<vosh_map::Exit>,
 }
 
 #[tauri::command]

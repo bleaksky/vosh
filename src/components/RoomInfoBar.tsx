@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { onGmcp, onState } from '../lib/session';
+import { onGmcp, onState, onTarget } from '../lib/session';
 import { sectorForTerrain } from '../lib/mapPalette';
 
 interface RoomInfo {
@@ -117,6 +117,10 @@ export function RoomInfoBar() {
   const [areas, setAreas] = useState<AreaMap | null>(null);
   const [chars, setChars] = useState<RoomChar[]>([]);
   const [items, setItems] = useState<RoomItem[]>([]);
+  // Backend resolves which room-chars row the user's target points
+  // at (substring match) and we mark that chip. The user-target name
+  // itself is rendered by TargetBar, not here.
+  const [targetIdx, setTargetIdx] = useState<number | null>(null);
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
@@ -163,16 +167,26 @@ export function RoomInfoBar() {
         setAreas(null);
         setChars([]);
         setItems([]);
+        setTargetIdx(null);
       }
     }).then((fn) => {
       if (cancelled) fn();
       else unsubState = fn;
     });
 
+    let unsubTarget: (() => void) | undefined;
+    onTarget((payload) => {
+      setTargetIdx(payload.room_idx);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsubTarget = fn;
+    });
+
     return () => {
       cancelled = true;
       unsubGmcp?.();
       unsubState?.();
+      unsubTarget?.();
     };
   }, []);
 
@@ -213,15 +227,26 @@ export function RoomInfoBar() {
       {namedChars.length > 0 && (
         <div className="room-info-list" aria-label="here">
           <span className="room-info-list-label">here</span>
-          {namedChars.map((c, i) => (
-            <span
-              key={`${c.name}-${i}`}
-              className="room-info-chip"
-              style={{ color: isNpc(c.npc) ? NPC_COLOR : PLAYER_COLOR }}
-            >
-              {c.name}
-            </span>
-          ))}
+          {namedChars.map((c, i) => {
+            // Backend resolved which char position is targeted (via
+            // substring match) so a short keyword like "helg" still
+            // marks "The Baron Helgardium".
+            const isTarget = targetIdx !== null && targetIdx === i + 1;
+            return (
+              <span
+                key={`${c.name}-${i}`}
+                className={`room-info-chip${isTarget ? ' is-target' : ''}`}
+                style={{ color: isNpc(c.npc) ? NPC_COLOR : PLAYER_COLOR }}
+              >
+                {isTarget && (
+                  <span className="room-info-chip-mark" aria-hidden="true">
+                    ▶
+                  </span>
+                )}
+                {c.name}
+              </span>
+            );
+          })}
         </div>
       )}
       {namedItems.length > 0 && (

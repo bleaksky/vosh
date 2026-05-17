@@ -3,12 +3,12 @@
 //! server. Recognizes a small set of slash commands that target the local
 //! profile rather than the connection.
 
-use mudclient_alias::{Alias, ExpandError};
-use mudclient_trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
-use mudclient_vars::Scope;
+use vosh_alias::{Alias, ExpandError};
+use vosh_trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
+use vosh_vars::Scope;
 use tokio::time::Instant;
 
-use crate::profile::{MacroRecorder, Profile};
+use crate::profile::{MacroRecorder, Profile, QuickKey, RoomChar};
 use crate::profile_config::ProfileConfig;
 use crate::script_state;
 use crate::tintin_import;
@@ -61,6 +61,13 @@ slash commands:
   #record                              show current recording status
   #record cancel                       discard the in-progress recording
   #endrec                              stop recording and save as alias <name>
+  tar                                  list current target and chars in room
+  tar <N> | tar <substr>               set target by index or partial name
+  tarn / tarp                          cycle to next/previous char in room
+  tarclear                             clear the current target
+  #qkey <name> <verb>                  configure a quick-key (gg/xx/zz/tt by default)
+  #qkey clear <name>                   remove a quick-key
+  #qkeys                               list quick-key bindings
   #help                                show this list
 trigger actions:
   highlight <color> [bold] [underline] [inverse] [bg:<color>]
@@ -90,6 +97,45 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
             bytes: b"\r\n".to_vec(),
             echo: Vec::new(),
         };
+    }
+
+    // Target keywords work bare (no `#` prefix) so they feel like
+    // commands rather than slash builtins. `tar`/`tarn`/`tarp`/
+    // `tarclear` are reserved at registration time so they can't be
+    // shadowed by aliases or quick-keys.
+    let (head, rest) = split_first_word(trimmed);
+    match head {
+        "tar" => return run_target_set(profile, rest),
+        "tarn" => return run_target_cycle(profile, 1),
+        "tarp" => return run_target_cycle(profile, -1),
+        "tarclear" => return run_target_clear(profile),
+        _ => {}
+    }
+
+    // Quick-keys expand BEFORE alias expansion, BEFORE var
+    // interpolation, so `gg` becomes `<verb> <target>` and then runs
+    // through the normal pipeline (so aliases inside the verb still
+    // expand, vars inside still interpolate).
+    if let Some(qk) = profile.target.quick_keys.iter().find(|q| q.name == head) {
+        if qk.verb.is_empty() {
+            return error_echo(format!(
+                "quick-key `{}` has no verb yet — set with `#qkey {} <verb>`",
+                qk.name, qk.name,
+            ));
+        }
+        let target = profile.target.name.clone().unwrap_or_default();
+        if target.is_empty() {
+            return error_echo(
+                "no target — set one with `tar <name|index>` first".to_string(),
+            );
+        }
+        let expansion = format!("{} {}", qk.verb, target);
+        let mut inner = process(profile, &expansion);
+        // Echo the resolved line like any other typed command. The
+        // frontend suppresses its own echo for quick-keys, so this is
+        // the only echo that lands.
+        inner.echo.insert(0, expansion);
+        return inner;
     }
 
     // Capture into the macro recorder if one is active. Pre-expansion
@@ -140,6 +186,12 @@ fn handle_slash(profile: &mut Profile, rest: &str) -> InputResult {
         "import-tintin" => slash_import_tintin(profile, args),
         "record" => slash_record(profile, args),
         "endrec" => slash_endrec(profile),
+        "target" => slash_target(profile, args),
+        "tarn" => run_target_cycle(profile, 1),
+        "tarp" => run_target_cycle(profile, -1),
+        "tarclear" => run_target_clear(profile),
+        "qkey" => slash_qkey(profile, args),
+        "qkeys" => slash_qkeys_list(profile),
         "help" => echo_lines(HELP_TEXT.lines()),
         "" => error_echo("missing slash command. try #help".to_string()),
         other => error_echo(format!("unknown slash command #{other}. try #help")),
@@ -153,6 +205,20 @@ fn slash_alias(profile: &mut Profile, args: &str) -> InputResult {
     }
     if expansion.is_empty() {
         return error_echo("usage #alias <name> <expansion>".to_string());
+    }
+    // Reserved target keywords and existing quick-keys can't be
+    // shadowed — the input pipeline checks both before alias
+    // expansion, so an alias with the same name would silently never
+    // fire.
+    if is_target_keyword(name) {
+        return error_echo(format!(
+            "`{name}` is a target keyword — pick another alias name"
+        ));
+    }
+    if profile.target.quick_keys.iter().any(|q| q.name == name) {
+        return error_echo(format!(
+            "quick-key `{name}` exists — `#qkey clear {name}` first if you want this name"
+        ));
     }
     profile.aliases.set(Alias::new(name, expansion));
     echo_one(format!("alias {name} set"))
@@ -217,6 +283,242 @@ fn slash_endrec(profile: &mut Profile) -> InputResult {
     echo_one(format!(
         "saved macro `{name}` ({count} command(s)) — invoke by typing `{name}`"
     ))
+}
+
+// ── Target system ────────────────────────────────────────────────
+
+const TARGET_KEYWORDS: &[&str] = &["tar", "tarn", "tarp", "tarclear"];
+
+fn is_target_keyword(name: &str) -> bool {
+    TARGET_KEYWORDS.iter().any(|k| *k == name)
+}
+
+/// Recompute `room_idx` from the current room snapshot. Called whenever
+/// the target name changes or the room chars push refreshes the list.
+///
+/// Matching is **substring, case-insensitive**: typing `tar helg`
+/// stores "helg" as the name (so commands use the user's keyword)
+/// but resolves `room_idx` to whichever char contains "helg" so the
+/// `>` marker shows on the right chip. First match wins.
+pub(crate) fn refresh_target_idx(profile: &mut Profile) {
+    profile.target.room_idx = match &profile.target.name {
+        None => None,
+        Some(name) => {
+            let lower = name.to_ascii_lowercase();
+            profile
+                .room_chars
+                .iter()
+                .position(|c| c.name.to_ascii_lowercase().contains(&lower))
+                .map(|i| i + 1)
+        }
+    };
+    // Mirror the user target into the variable store so `${target}`
+    // works in alias expansions. Char.Combat's `target_name` stays
+    // separate (it's the server-confirmed combat target).
+    if let Some(name) = &profile.target.name {
+        profile
+            .vars
+            .set(Scope::Session, "target", name.clone());
+    } else {
+        profile.vars.remove("target");
+    }
+}
+
+pub(crate) fn set_room_chars(profile: &mut Profile, chars: Vec<RoomChar>) {
+    profile.room_chars = chars;
+    refresh_target_idx(profile);
+}
+
+fn run_target_set(profile: &mut Profile, args: &str) -> InputResult {
+    let arg = args.trim();
+    if arg.is_empty() {
+        return list_targets(profile);
+    }
+    // Numeric → pick from room chars by 1-based index. This is the
+    // one path that resolves to the full server-supplied name, since
+    // an index alone isn't usable as a command keyword.
+    if let Ok(n) = arg.parse::<usize>() {
+        if n == 0 || n > profile.room_chars.len() {
+            return error_echo(format!(
+                "no char #{n} in room (have {})",
+                profile.room_chars.len()
+            ));
+        }
+        let name = profile.room_chars[n - 1].name.clone();
+        profile.target.name = Some(name.clone());
+        refresh_target_idx(profile);
+        return echo_one(format!("target: {name}"));
+    }
+    // Non-numeric → use the literal string the user typed. The MUD
+    // parses commands with its own keyword matching, so short forms
+    // like `tar helg` are what the user actually wants to send back
+    // as `kill helg` rather than the full `The Baron Helgardium`.
+    // We still look for a containing room char to drive the `>`
+    // marker on the room chip but don't substitute the name.
+    profile.target.name = Some(arg.to_string());
+    refresh_target_idx(profile);
+    if profile.target.room_idx.is_some() {
+        echo_one(format!("target: {arg}"))
+    } else {
+        echo_one(format!("target: {arg} (not in room)"))
+    }
+}
+
+fn run_target_cycle(profile: &mut Profile, step: i32) -> InputResult {
+    let n = profile.room_chars.len();
+    if n == 0 {
+        return error_echo("no chars in room to cycle through".to_string());
+    }
+    let current = profile.target.room_idx.unwrap_or(0) as i32;
+    let count = n as i32;
+    // 1-based wraparound. step=+1 goes forward, -1 backward.
+    let next = if current == 0 {
+        if step >= 0 {
+            1
+        } else {
+            count
+        }
+    } else {
+        let raw = current + step;
+        if raw < 1 {
+            count
+        } else if raw > count {
+            1
+        } else {
+            raw
+        }
+    };
+    let name = profile.room_chars[(next - 1) as usize].name.clone();
+    profile.target.name = Some(name.clone());
+    refresh_target_idx(profile);
+    echo_one(format!("target: {name} (#{next}/{count})"))
+}
+
+fn run_target_clear(profile: &mut Profile) -> InputResult {
+    if profile.target.name.is_none() {
+        return echo_one("no target to clear".to_string());
+    }
+    profile.target.name = None;
+    refresh_target_idx(profile);
+    echo_one("target cleared".to_string())
+}
+
+fn list_targets(profile: &Profile) -> InputResult {
+    let mut lines: Vec<String> = Vec::new();
+    match &profile.target.name {
+        Some(t) => lines.push(format!("current target: {t}")),
+        None => lines.push("no target set".to_string()),
+    }
+    if profile.room_chars.is_empty() {
+        lines.push("(no Room.Chars data yet)".to_string());
+    } else {
+        lines.push(format!("{} char(s) in room:", profile.room_chars.len()));
+        for (i, c) in profile.room_chars.iter().enumerate() {
+            let marker = if Some(i + 1) == profile.target.room_idx {
+                ">"
+            } else {
+                " "
+            };
+            let kind = if c.npc { "npc" } else { "pc" };
+            lines.push(format!(
+                "  {marker} {:>2}. {} [{kind}]",
+                i + 1,
+                c.name
+            ));
+        }
+        lines.push("usage: tar <N> | tar <substring> | tarn | tarp | tarclear".to_string());
+    }
+    InputResult {
+        bytes: Vec::new(),
+        echo: lines,
+    }
+}
+
+/// `#target <args>` mirrors the bare `tar` shortcut.
+fn slash_target(profile: &mut Profile, args: &str) -> InputResult {
+    let trimmed = args.trim();
+    if trimmed == "clear" {
+        return run_target_clear(profile);
+    }
+    if trimmed == "next" {
+        return run_target_cycle(profile, 1);
+    }
+    if trimmed == "prev" {
+        return run_target_cycle(profile, -1);
+    }
+    run_target_set(profile, args)
+}
+
+fn slash_qkey(profile: &mut Profile, args: &str) -> InputResult {
+    let (name, rest) = split_first_word(args);
+    if name.is_empty() {
+        return error_echo(
+            "usage: #qkey <name> <verb>  |  #qkey clear <name>".to_string(),
+        );
+    }
+    if name == "clear" {
+        let target = rest.trim();
+        if target.is_empty() {
+            return error_echo("usage: #qkey clear <name>".to_string());
+        }
+        let before = profile.target.quick_keys.len();
+        profile.target.quick_keys.retain(|q| q.name != target);
+        if profile.target.quick_keys.len() == before {
+            return error_echo(format!("quick-key `{target}` not found"));
+        }
+        return echo_one(format!("quick-key `{target}` removed"));
+    }
+    // Reserved keywords and existing aliases can't be shadowed.
+    if is_target_keyword(name) {
+        return error_echo(format!(
+            "`{name}` is a target keyword — pick another quick-key name"
+        ));
+    }
+    if profile.aliases.get(name).is_some() {
+        return error_echo(format!(
+            "alias `{name}` exists — `#unalias {name}` first if you want this name"
+        ));
+    }
+    let verb = rest.trim();
+    if verb.is_empty() {
+        return error_echo(format!("usage: #qkey {name} <verb>"));
+    }
+    // Update in place if it exists, otherwise append.
+    match profile
+        .target
+        .quick_keys
+        .iter_mut()
+        .find(|q| q.name == name)
+    {
+        Some(qk) => qk.verb = verb.to_string(),
+        None => profile.target.quick_keys.push(QuickKey {
+            name: name.to_string(),
+            verb: verb.to_string(),
+        }),
+    }
+    echo_one(format!("quick-key `{name}` -> {verb}"))
+}
+
+fn slash_qkeys_list(profile: &Profile) -> InputResult {
+    if profile.target.quick_keys.is_empty() {
+        return echo_one("no quick-keys defined".to_string());
+    }
+    let mut lines = vec![format!(
+        "{} quick-key(s):",
+        profile.target.quick_keys.len()
+    )];
+    for qk in &profile.target.quick_keys {
+        let verb = if qk.verb.is_empty() {
+            "(unset)"
+        } else {
+            qk.verb.as_str()
+        };
+        lines.push(format!("  {:>4}  ->  {verb}", qk.name));
+    }
+    InputResult {
+        bytes: Vec::new(),
+        echo: lines,
+    }
 }
 
 fn slash_unalias(profile: &mut Profile, args: &str) -> InputResult {
@@ -553,7 +855,7 @@ fn profile_path() -> Option<std::path::PathBuf> {
     Some(
         base.join("Library")
             .join("Application Support")
-            .join("com.aabahran.mudclient")
+            .join("com.aabahran.vosh")
             .join("profile.toml"),
     )
 }
@@ -671,7 +973,7 @@ fn script_path_for(name: &str) -> Option<std::path::PathBuf> {
     let dir = base
         .join("Library")
         .join("Application Support")
-        .join("com.aabahran.mudclient")
+        .join("com.aabahran.vosh")
         .join("scripts");
     let with_lua = if std::path::Path::new(name)
         .extension()
@@ -963,6 +1265,150 @@ mod tests {
         let _ = process(&mut p, "#alias greet wave;bow");
         let r = process(&mut p, "#aliases");
         assert!(r.echo.iter().any(|l| l.contains("greet -> wave;bow")));
+    }
+
+    fn rc(name: &str, npc: bool) -> RoomChar {
+        RoomChar {
+            name: name.to_string(),
+            npc,
+        }
+    }
+
+    #[test]
+    fn tar_by_index_sets_target_and_idx() {
+        let mut p = Profile::default();
+        set_room_chars(&mut p, vec![rc("Bob", false), rc("ogre", true)]);
+        let r = process(&mut p, "tar 2");
+        assert_eq!(p.target.name.as_deref(), Some("ogre"));
+        assert_eq!(p.target.room_idx, Some(2));
+        assert!(r.echo.iter().any(|l| l.contains("ogre")));
+    }
+
+    #[test]
+    fn tar_string_keeps_literal_resolves_idx_via_substring() {
+        // Non-numeric `tar <string>` stores the user's literal keyword
+        // (so `kill ${target}` sends `kill helg`, which the MUD's
+        // keyword matcher handles), but still resolves room_idx via
+        // case-insensitive substring so the `>` marker lands on the
+        // matching chip.
+        let mut p = Profile::default();
+        set_room_chars(
+            &mut p,
+            vec![rc("The Baron Helgardium", true), rc("ogre", true)],
+        );
+        let _ = process(&mut p, "tar helg");
+        assert_eq!(p.target.name.as_deref(), Some("helg"));
+        assert_eq!(p.target.room_idx, Some(1));
+    }
+
+    #[test]
+    fn tar_unknown_keeps_literal_with_no_idx() {
+        let mut p = Profile::default();
+        set_room_chars(&mut p, vec![rc("Bob", false)]);
+        let _ = process(&mut p, "tar Alice");
+        assert_eq!(p.target.name.as_deref(), Some("Alice"));
+        assert_eq!(p.target.room_idx, None);
+    }
+
+    #[test]
+    fn target_syncs_to_var_store_for_interpolation() {
+        let mut p = Profile::default();
+        set_room_chars(&mut p, vec![rc("Bob", false)]);
+        let _ = process(&mut p, "tar 1");
+        // `${target}` should now interpolate to "Bob".
+        let r = process(&mut p, "cast 'bless' ${target}");
+        assert_eq!(r.bytes, b"cast 'bless' Bob\r\n");
+    }
+
+    #[test]
+    fn tarn_cycles_forward_and_wraps() {
+        let mut p = Profile::default();
+        set_room_chars(&mut p, vec![rc("A", true), rc("B", true), rc("C", true)]);
+        let _ = process(&mut p, "tarn");
+        assert_eq!(p.target.name.as_deref(), Some("A"));
+        let _ = process(&mut p, "tarn");
+        assert_eq!(p.target.name.as_deref(), Some("B"));
+        let _ = process(&mut p, "tarn");
+        let _ = process(&mut p, "tarn");
+        assert_eq!(p.target.name.as_deref(), Some("A"));
+    }
+
+    #[test]
+    fn tarclear_drops_target_and_var() {
+        let mut p = Profile::default();
+        set_room_chars(&mut p, vec![rc("Bob", false)]);
+        let _ = process(&mut p, "tar 1");
+        let _ = process(&mut p, "tarclear");
+        assert!(p.target.name.is_none());
+        assert!(p.vars.get("target").is_none());
+    }
+
+    #[test]
+    fn quick_key_expands_to_verb_plus_target() {
+        let mut p = Profile::default();
+        set_room_chars(&mut p, vec![rc("ogre", true)]);
+        let _ = process(&mut p, "tar 1");
+        let _ = process(&mut p, "#qkey gg kick");
+        let r = process(&mut p, "gg");
+        assert_eq!(r.bytes, b"kick ogre\r\n");
+    }
+
+    #[test]
+    fn quick_key_uses_literal_keyword_not_full_name() {
+        // `tar helg` keeps "helg" as the target. Quick-keys should
+        // expand to `<verb> helg` so the MUD's keyword matcher
+        // resolves it on its side rather than getting the full
+        // descriptor "The Baron Helgardium".
+        let mut p = Profile::default();
+        set_room_chars(&mut p, vec![rc("The Baron Helgardium", true)]);
+        let _ = process(&mut p, "tar helg");
+        let _ = process(&mut p, "#qkey gg cast 'fireball'");
+        let r = process(&mut p, "gg");
+        assert_eq!(r.bytes, b"cast 'fireball' helg\r\n");
+    }
+
+    #[test]
+    fn quick_key_without_target_errors() {
+        let mut p = Profile::default();
+        let _ = process(&mut p, "#qkey gg kick");
+        let r = process(&mut p, "gg");
+        assert!(r.bytes.is_empty());
+        assert!(r.echo.iter().any(|l| l.contains("no target")));
+    }
+
+    #[test]
+    fn alias_cannot_shadow_quick_key() {
+        let mut p = Profile::default();
+        let _ = process(&mut p, "#qkey gg kick");
+        let r = process(&mut p, "#alias gg cast 'fireball'");
+        assert!(r.echo.iter().any(|l| l.contains("quick-key")));
+        assert!(p.aliases.get("gg").is_none());
+    }
+
+    #[test]
+    fn qkey_cannot_shadow_alias() {
+        // Use a name that isn't a default quick-key slot so the alias
+        // can register first, then verify qkey refuses to shadow it.
+        let mut p = Profile::default();
+        let _ = process(&mut p, "#alias kk kick");
+        let r = process(&mut p, "#qkey kk kick");
+        assert!(r.echo.iter().any(|l| l.contains("alias")));
+        assert!(p.target.quick_keys.iter().all(|q| q.name != "kk"));
+    }
+
+    #[test]
+    fn qkey_cannot_use_reserved_target_keyword() {
+        let mut p = Profile::default();
+        let r = process(&mut p, "#qkey tar foo");
+        assert!(r.echo.iter().any(|l| l.contains("target keyword")));
+    }
+
+    #[test]
+    fn default_quick_keys_are_present_but_empty() {
+        let p = Profile::default();
+        let names: Vec<&str> = p.target.quick_keys.iter().map(|q| q.name.as_str()).collect();
+        assert_eq!(names, ["gg", "xx", "zz", "tt"]);
+        assert!(p.target.quick_keys.iter().all(|q| q.verb.is_empty()));
     }
 
     #[test]

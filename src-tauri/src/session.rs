@@ -4,10 +4,10 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use mudclient_telnet::{
+use vosh_telnet::{
     codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator, Parser,
 };
-use mudclient_trigger::LineResult;
+use vosh_trigger::LineResult;
 use serde::Serialize;
 use serde_json::json;
 use tauri::{AppHandle, Emitter};
@@ -46,6 +46,28 @@ pub(crate) enum StatePayload {
 pub(crate) struct GmcpPayload {
     pub package: String,
     pub data: serde_json::Value,
+}
+
+/// Emitted on `session://target` whenever the active user target
+/// changes (set, cycled, cleared, or wiped by disconnect). The
+/// frontend uses this to mark the targeted char in the room info
+/// chips and to drive the TargetBar when no Char.Combat is active.
+///
+/// `room_idx` is the 1-based position in the latest `Room.Chars`
+/// push that matches the user's target string (substring,
+/// case-insensitive). It exists so the frontend doesn't have to
+/// re-implement the matching logic for the chip `>` marker —
+/// short keywords like "helg" won't equality-match
+/// "The Baron Helgardium" but the backend already resolved the
+/// pointer via substring.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct TargetPayload {
+    pub name: Option<String>,
+    pub room_idx: Option<usize>,
+    /// Snapshot of the current quick-key bindings (name + verb).
+    /// Frontend renders them next to the target name on the
+    /// TargetBar so the user always sees which slots are armed.
+    pub quick_keys: Vec<crate::profile::QuickKey>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -125,7 +147,7 @@ pub(crate) async fn spawn(
     // Without this, ROM derivatives that gate EOR on negotiation never
     // send the byte, and we have to merge the prompt with the next room
     // line. Other negotiations stay reactive in handle_event.
-    let initial = [mudclient_telnet::IAC, telnet_codes::DO, telnet_option::EOR];
+    let initial = [vosh_telnet::IAC, telnet_codes::DO, telnet_option::EOR];
     if let Err(e) = stream.write_all(&initial).await {
         warn!(error = %e, "failed to send initial DO EOR");
     }
@@ -300,6 +322,28 @@ async fn io_loop(
     }
 
     accumulator.reset();
+    // Session-only target state and the cached Room.Chars list clear
+    // on disconnect — quick-key verb bindings persist via the profile
+    // config but the active target and room snapshot are ephemeral.
+    let target_after = {
+        let mut p = profile.lock().await;
+        let had = p.target.name.is_some();
+        p.target.name = None;
+        p.target.room_idx = None;
+        p.room_chars.clear();
+        p.vars.remove("target");
+        had.then(|| p.target.quick_keys.clone())
+    };
+    if let Some(quick_keys) = target_after {
+        let _ = app.emit(
+            "session://target",
+            TargetPayload {
+                name: None,
+                room_idx: None,
+                quick_keys,
+            },
+        );
+    }
     let _ = stream.shutdown().await;
     // Reset password mode on disconnect so the next session starts with
     // a normal-text input even if the server bailed mid-password-prompt.
@@ -405,10 +449,10 @@ async fn handle_event(
                         emit_output(app, b);
                     }
                     ChunkOp::LineComplete { bytes, clear_first } => {
-                        let plain = mudclient_ansi::plain_text(&bytes);
+                        let plain = vosh_ansi::plain_text(&bytes);
                         let (result, tick_reset, script_apply) = {
                             let mut p = profile.lock().await;
-                            let result = mudclient_trigger::process(&p.triggers, &bytes);
+                            let result = vosh_trigger::process(&p.triggers, &bytes);
                             let ticked = if p.tick.check_reset_match(&plain) {
                                 p.tick.reset(Instant::now());
                                 true
@@ -423,7 +467,7 @@ async fn handle_event(
                                 Ok(o) => o,
                                 Err(err) => {
                                     warn!(error = %err, "lua match_line failed");
-                                    mudclient_script::ScriptOutcome::default()
+                                    vosh_script::ScriptOutcome::default()
                                 }
                             };
                             let apply = script_state::apply_actions(&mut p, outcome);
@@ -525,7 +569,7 @@ async fn handle_gmcp(
     stream: &mut Stream,
     payload: &[u8],
 ) -> std::io::Result<()> {
-    let msg = match mudclient_gmcp::parse(payload) {
+    let msg = match vosh_gmcp::parse(payload) {
         Ok(m) => m,
         Err(e) => {
             warn!(error = %e, "failed to parse GMCP payload");
@@ -536,13 +580,43 @@ async fn handle_gmcp(
     let (tick_reset, script_apply) = {
         let mut p = profile.lock().await;
         gmcp_bind::apply(&mut p.vars, &msg);
+        // Cache the latest Room.Chars snapshot in the profile so
+        // bare `tar <index>` / `tarn` / `tarp` commands can resolve
+        // against the current room without round-tripping to the
+        // frontend.
+        if msg.package == "Room.Chars" {
+            if let Some(arr) = msg.data.as_array() {
+                let chars: Vec<crate::profile::RoomChar> = arr
+                    .iter()
+                    .filter_map(|v| {
+                        let obj = v.as_object()?;
+                        let name = obj.get("name").and_then(|n| n.as_str())?.to_string();
+                        if name.is_empty() {
+                            return None;
+                        }
+                        let npc = match obj.get("npc") {
+                            Some(serde_json::Value::Bool(b)) => *b,
+                            Some(serde_json::Value::String(s)) => {
+                                s == "1" || s == "true"
+                            }
+                            Some(serde_json::Value::Number(n)) => {
+                                n.as_i64().is_some_and(|x| x != 0)
+                            }
+                            _ => false,
+                        };
+                        Some(crate::profile::RoomChar { name, npc })
+                    })
+                    .collect();
+                crate::input::set_room_chars(&mut p, chars);
+            }
+        }
         let ticked = observe_world_time_for_tick(&mut p.tick, &msg);
         script_state::snapshot_vars(&p.script, &p.vars);
         let outcome = match p.script.dispatch_gmcp(&msg.package, &msg.data) {
             Ok(o) => o,
             Err(err) => {
                 warn!(error = %err, "lua dispatch_gmcp failed");
-                mudclient_script::ScriptOutcome::default()
+                vosh_script::ScriptOutcome::default()
             }
         };
         let apply = script_state::apply_actions(&mut p, outcome);
@@ -577,7 +651,7 @@ async fn handle_gmcp(
 /// derivatives that ship World.Time) advance the `hour` field every server
 /// tick, so an hour change is the natural reset signal. Returns true when
 /// the tick was reset.
-fn observe_world_time_for_tick(tick: &mut TickRuntime, msg: &mudclient_gmcp::Message) -> bool {
+fn observe_world_time_for_tick(tick: &mut TickRuntime, msg: &vosh_gmcp::Message) -> bool {
     if msg.package != "World.Time" {
         return false;
     }
@@ -601,10 +675,10 @@ fn observe_world_time_for_tick(tick: &mut TickRuntime, msg: &mudclient_gmcp::Mes
 }
 
 fn hello_subnegotiation() -> Vec<u8> {
-    let body = mudclient_gmcp::build(
+    let body = vosh_gmcp::build(
         "Core.Hello",
         &json!({
-            "client": "mudclient",
+            "client": "vosh",
             "version": env!("CARGO_PKG_VERSION"),
         }),
     )
@@ -613,7 +687,7 @@ fn hello_subnegotiation() -> Vec<u8> {
 }
 
 fn supports_subnegotiation() -> Vec<u8> {
-    let body = mudclient_gmcp::build("Core.Supports.Set", &REQUESTED_GMCP_PACKAGES.to_vec())
+    let body = vosh_gmcp::build("Core.Supports.Set", &REQUESTED_GMCP_PACKAGES.to_vec())
         .unwrap_or_default();
     Negotiator::build_gmcp_subnegotiation(&body)
 }
@@ -728,7 +802,7 @@ async fn fire_due_script_timers(
     let apply = {
         let mut p = profile.lock().await;
         script_state::snapshot_vars(&p.script, &p.vars);
-        let mut outcome = mudclient_script::ScriptOutcome::default();
+        let mut outcome = vosh_script::ScriptOutcome::default();
         for t in due {
             match p.script.fire_timer(t.callback_id) {
                 Ok(o) => outcome.actions.extend(o.actions),
