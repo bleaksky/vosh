@@ -4,6 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TopBar } from './components/TopBar';
 import { TriggerForm } from './components/TriggerForm';
 import { AliasForm } from './components/AliasForm';
+import { LogsTab } from './components/LogsTab';
 import {
   broadcastTrackedAffects,
   exportAliases,
@@ -37,11 +38,12 @@ const FONT_PICKS: { label: string; value: string }[] = [
 
 const PREVIEW_TEXT = 'The quick brown fox 0123456789  |  hp 850/1000  IlOo1';
 
-type TabId = 'general' | 'triggers' | 'aliases';
+type TabId = 'general' | 'triggers' | 'aliases' | 'logs';
 const TABS: { id: TabId; label: string }[] = [
   { id: 'general', label: 'general' },
   { id: 'triggers', label: 'triggers' },
   { id: 'aliases', label: 'aliases' },
+  { id: 'logs', label: 'logs' },
 ];
 
 // Settings window. Frameless Ghostty chrome via the shared TopBar;
@@ -129,6 +131,7 @@ export function SettingsApp() {
             )}
           />
         )}
+        {tab === 'logs' && <LogsTab onError={setError} />}
       </div>
     </main>
   );
