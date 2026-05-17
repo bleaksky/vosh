@@ -1,41 +1,18 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Terminal, type TerminalHandle } from './components/Terminal';
-import { type InputHandle } from './components/Input';
+import { Input, type InputHandle } from './components/Input';
 import { Connect, type ConnectionStatus } from './components/Connect';
-import { SidePanel } from './components/SidePanel';
-import { Resizable } from './components/Resizable';
-import { BottomHUD } from './components/BottomHUD';
-import { RoomStrip } from './components/RoomStrip';
-import { AuxDrawer } from './components/AuxDrawer';
-import { PRESETS, presetTriggers } from './lib/presets';
-import { dockLayoutStore } from './lib/docking';
-import {
-  checkForUpdate,
-  dockLayoutGet,
-  getUiConfig,
-  listTriggers,
-  onState,
-  presetsInstall,
-  presetsRemove,
-  type DockEntryPersist,
-  type StatePayload,
-} from './lib/session';
-import type { SnapZone } from './lib/docking';
+import { getUiConfig, onState, type StatePayload } from './lib/session';
 import { applyTheme } from './lib/theme';
 
-const SIDE_PANEL_STORAGE_KEY = 'vosh.layout.sidePanelOpen';
-const DOCK_MIGRATION_KEY = 'vosh.docking.migrated_phase1_settings_hub';
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
 // One-shot rename migration: when the project was renamed from
 // "mudclient" to "vosh" the localStorage namespace changed too. On
 // first run after the rename, copy every `mudclient.*` key to its
 // `vosh.*` counterpart (only if the new key doesn't already exist)
-// and delete the originals. Runs synchronously before any state
-// reads so the rest of App.tsx sees the migrated values.
+// and delete the originals.
 function migrateMudclientKeys(): void {
   try {
     if (localStorage.getItem(RENAME_MIGRATION_KEY)) return;
@@ -62,92 +39,22 @@ function migrateMudclientKeys(): void {
 
 migrateMudclientKeys();
 
-function loadSidePanelOpen(): boolean {
-  try {
-    const value = localStorage.getItem(SIDE_PANEL_STORAGE_KEY);
-    if (value === null) return true;
-    return value === '1';
-  } catch {
-    return true;
-  }
-}
-
 const DEFAULT_FONT_FAMILY =
   'BerkeleyMono Nerd Font, JetBrains Mono, Fira Code, Menlo, Consolas, ui-monospace, monospace';
 
 function App() {
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
-  const [sidePanelOpen, setSidePanelOpen] = useState(loadSidePanelOpen);
   const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
   const [fontSize, setFontSize] = useState(14);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const termRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
 
-  // F2 toggles the AuxDrawer (chat / wealth / group / affects). Kept
-  // global so the user can summon it from anywhere — even while the
-  // terminal has focus. Repeated F2 closes; Escape also closes (handled
-  // inside the drawer).
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === 'F2') {
-        event.preventDefault();
-        setDrawerOpen((v) => !v);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
-
-  // One-time migration: drag-to-dock has been removed from the main
-  // window so finicky leftover dock state from prior sessions would
-  // keep panels misplaced with no way to drag them back. Wipe the
-  // dock store the first time this build runs, then mark the
-  // migration so it doesn't fire again.
-  useEffect(() => {
-    try {
-      if (!localStorage.getItem(DOCK_MIGRATION_KEY)) {
-        dockLayoutStore.reset();
-        localStorage.setItem(DOCK_MIGRATION_KEY, '1');
-      }
-    } catch {
-      // ignore storage failures
-    }
-  }, []);
-
-  // Pull the persisted dock layout from the backend on startup, then
-  // listen for cross-window broadcasts so edits made in the Layout
-  // Editor window apply here without a relaunch.
-  useEffect(() => {
-    const isValidZone = (z: string): z is SnapZone =>
-      ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right'].includes(z);
-    const apply = (entries: DockEntryPersist[]) => {
-      const valid = entries
-        .filter((e) => typeof e.id === 'string' && isValidZone(e.zone))
-        .map((e) => ({ id: e.id, zone: e.zone as SnapZone }));
-      dockLayoutStore.applyExternal(valid);
-    };
-    dockLayoutGet().then(apply).catch((e) => console.error('dock_layout_get failed', e));
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    listen<DockEntryPersist[]>('vosh://dock-layout-changed', (event) => {
-      apply(event.payload);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
-  // Click anywhere in the middle area focuses the input. Skip if the user
-  // is in the middle of selecting text (so they can still copy from the
-  // terminal pane), or if they clicked an actual interactive element.
-  const handleMiddleMouseDown = (event: MouseEvent<HTMLDivElement>) => {
+  // Click anywhere in the terminal area focuses the input. Skip when
+  // the user is selecting text (so copy still works) or clicking an
+  // actual interactive element.
+  const handleTerminalMouseUp = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
-    if (target.closest('button, input, textarea, select, .drawer')) return;
+    if (target.closest('button, input, textarea, select')) return;
     const selection = window.getSelection?.();
     if (selection && selection.toString().length > 0) return;
     inputRef.current?.focus();
@@ -155,8 +62,8 @@ function App() {
 
   useEffect(() => {
     // Tauri creates the main window with visible=false so the user
-    // doesn't see a default-styled white flash. Call show() once the
-    // theme + font have applied so the window appears already-painted.
+    // doesn't see a default-styled white flash. Reveal once theme and
+    // font have applied.
     let revealed = false;
     const reveal = () => {
       if (revealed) return;
@@ -167,70 +74,13 @@ function App() {
         .then(() => win.setFocus())
         .catch((e) => console.error('[main] window show failed', e));
     };
-    // Backstop: even if every promise rejects, reveal after a short
-    // timeout so the window never stays hidden indefinitely.
     const fallback = window.setTimeout(reveal, 500);
     const onUnmount = () => window.clearTimeout(fallback);
-    // Pick up the persisted theme + font on first render. If the backend
-    // isn't ready (early dev mode), fall back to whatever the OS suggests.
     getUiConfig()
-      .then(async (cfg) => {
+      .then((cfg) => {
         applyTheme(cfg.theme);
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
-        if (cfg.auto_update) {
-          checkForUpdate().catch(() => undefined);
-        }
-        // Sweep orphan preset triggers — anything tagged with a
-        // preset id that no longer exists in code (because the preset
-        // was renamed or removed in a newer build). Triggers persist
-        // in profile.toml across launches, so without this they'd
-        // linger forever even after we deleted the preset definition
-        // they came from.
-        try {
-          const validPresetIds = new Set(PRESETS.map((p) => p.id));
-          const allTriggers = await listTriggers();
-          const orphanIds = new Set<string>();
-          for (const t of allTriggers) {
-            if (t.preset && !validPresetIds.has(t.preset)) {
-              orphanIds.add(t.preset);
-            }
-          }
-          let removed = 0;
-          for (const id of orphanIds) {
-            removed += await presetsRemove(id);
-          }
-          if (removed > 0) {
-            console.log(
-              `[highlights] swept ${removed} orphan trigger(s) from retired preset(s):`,
-              Array.from(orphanIds),
-            );
-          }
-        } catch (e) {
-          console.error('[highlights] orphan sweep failed:', e);
-        }
-
-        // Re-install enabled presets so any pattern/template changes
-        // in the current build overwrite older versions stored in
-        // profile.toml. Triggers persist across launches, but their
-        // patterns/actions only refresh when the preset is re-pushed.
-        const enabled = new Set(cfg.enabled_presets);
-        const toInstall = PRESETS.filter((p) => enabled.has(p.id)).flatMap(
-          presetTriggers,
-        );
-        if (toInstall.length > 0) {
-          try {
-            const installed = await presetsInstall(toInstall);
-            console.log(
-              `[highlights] startup install: ${installed} preset triggers from ${enabled.size} preset(s)`,
-            );
-          } catch (e) {
-            console.error(
-              '[highlights] startup install FAILED — open Settings → Highlights and click "reset to defaults":',
-              e,
-            );
-          }
-        }
       })
       .catch(() => applyTheme('system'))
       .finally(reveal);
@@ -276,65 +126,31 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(SIDE_PANEL_STORAGE_KEY, sidePanelOpen ? '1' : '0');
-    } catch {
-      // ignore storage failures (private mode, quota)
-    }
-  }, [sidePanelOpen]);
-
   const handleError = (message: string) => {
     setStatus({ kind: 'error', message });
     termRef.current?.write(`\r\n\x1b[31m[${message}]\x1b[0m\r\n`);
   };
 
-  const openSettingsWindow = () => {
-    invoke('open_settings_window').catch((e) => {
-      handleError(`failed to open settings window: ${String(e)}`);
-    });
-  };
+  const connected = status.kind === 'connected' || status.kind === 'connecting';
 
   return (
     <main className="app">
-      <Connect
-        status={status}
-        onError={handleError}
-        onToggleSidePanel={() => setSidePanelOpen((v) => !v)}
-        sidePanelOpen={sidePanelOpen}
-        onOpenSettings={openSettingsWindow}
-      />
-      <RoomStrip />
-      <div className="middle" onMouseUp={handleMiddleMouseDown}>
-        <div className="terminal-column">
-          <Terminal
-            fontFamily={fontFamily}
-            fontSize={fontSize}
-            onReady={(handle) => {
-              termRef.current = handle;
-            }}
-          />
-        </div>
-        {sidePanelOpen && (
-          <Resizable
-            storageKey="vosh.layout.sidePanelWidth"
-            defaultWidth={320}
-            minWidth={220}
-            maxWidth={1400}
-            handleLabel="resize side panel"
-          >
-            <SidePanel />
-          </Resizable>
-        )}
+      <Connect status={status} onError={handleError} />
+      <div className="terminal-area" onMouseUp={handleTerminalMouseUp}>
+        <Terminal
+          fontFamily={fontFamily}
+          fontSize={fontSize}
+          onReady={(handle) => {
+            termRef.current = handle;
+          }}
+        />
       </div>
-      <BottomHUD
-        inputRef={inputRef}
-        enabled
+      <Input
+        ref={inputRef}
+        enabled={connected}
         onError={handleError}
         onLocalEcho={(text) => termRef.current?.write(text)}
-        onRequestDrawer={() => setDrawerOpen((v) => !v)}
       />
-      <AuxDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </main>
   );
 }
