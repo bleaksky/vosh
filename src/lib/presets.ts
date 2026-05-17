@@ -135,10 +135,18 @@ const DAMAGE_VERBS = [
 ];
 const DAMAGE_VERB_ALT = DAMAGE_VERBS.join('|');
 
-// Top-tier ROM hits wrap the verb in a 3-char crit indicator: `*** verb
-// ***`, `=== verb ===`, or `>>> verb <<<`. Capture the optional wrapper
-// so the whole "*** ANNIHILATES ***" reads as one colored token.
-const DAMAGE_VERB_WRAPPED = `(?:[*=>]{3} )?(?:${DAMAGE_VERB_ALT})(?: [*=<]{3})?`;
+// Top-tier ROM hits wrap the verb in one of:
+//   *** verb ***
+//   === verb ===
+//   >>> verb <<<
+//   <<< verb >>>
+//   does verb things        Aabahran's top-tier spell phrasing
+//   do verb things          ...same form when you cause it (You do
+//                           UNSPEAKABLE things to him!)
+// Both wrapper slots accept any of *, =, >, < so all four bracket
+// combinations match (previous version had asymmetric classes and
+// failed entirely on `<<< VERB >>>`).
+const DAMAGE_VERB_WRAPPED = `(?:(?:[*=><]{3}|does|do) )?(?:${DAMAGE_VERB_ALT})(?: (?:[*=><]{3}|things))?`;
 
 // Named-color templating for Replace actions. Authors write
 // `{bold_red}## {red}$0{reset}` instead of raw ANSI escape codes.
