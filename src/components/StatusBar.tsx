@@ -23,11 +23,6 @@ interface VitalDeltas {
   move: number | null;
 }
 
-interface RoomInfo {
-  name: string;
-  exits: string[];
-}
-
 interface CombatState {
   name: string;
   hp?: number;
@@ -93,53 +88,6 @@ function extractCombat(data: unknown): CombatState | null {
   return out;
 }
 
-function parseRoomInfo(data: unknown): RoomInfo | null {
-  if (!data || typeof data !== 'object') return null;
-  const obj = data as Record<string, unknown>;
-  const name = typeof obj.name === 'string' ? obj.name : '';
-  if (!name) return null;
-  const exitsRaw = obj.exits;
-  let exits: string[] = [];
-  if (exitsRaw && typeof exitsRaw === 'object' && !Array.isArray(exitsRaw)) {
-    exits = Object.keys(exitsRaw as Record<string, unknown>);
-  } else if (Array.isArray(exitsRaw)) {
-    exits = exitsRaw.filter((e): e is string => typeof e === 'string');
-  } else if (typeof exitsRaw === 'string') {
-    exits = exitsRaw.split(/[\s,]+/).filter(Boolean);
-  }
-  return { name, exits };
-}
-
-const COMPASS_ORDER: Record<string, number> = {
-  n: 0,
-  north: 0,
-  e: 1,
-  east: 1,
-  s: 2,
-  south: 2,
-  w: 3,
-  west: 3,
-  u: 4,
-  up: 4,
-  d: 5,
-  down: 5,
-};
-
-function compactExits(exits: string[]): string {
-  const seen = new Set<string>();
-  return exits
-    .map((e) => e.trim().toLowerCase())
-    .filter((e) => e.length > 0)
-    .map((e) => e[0])
-    .filter((c) => {
-      if (seen.has(c)) return false;
-      seen.add(c);
-      return true;
-    })
-    .sort((a, b) => (COMPASS_ORDER[a] ?? 99) - (COMPASS_ORDER[b] ?? 99))
-    .join('');
-}
-
 const NO_DELTAS: VitalDeltas = { hp: null, mana: null, move: null };
 
 export function StatusBar() {
@@ -148,7 +96,8 @@ export function StatusBar() {
   const [deltas, setDeltas] = useState<VitalDeltas>(NO_DELTAS);
   const [combat, setCombat] = useState<CombatState | null>(null);
   const [userTarget, setUserTarget] = useState<string | null>(null);
-  const [room, setRoom] = useState<RoomInfo | null>(null);
+  // Room info is rendered by the RoomStrip at the top now; nothing in
+  // the status bar needs it.
   // Tintin-style tick display: counts UP real seconds since the last
   // World.Time hour change. Resets only on hour change, not on the
   // backend's local-interval auto-fire (which drifts ahead of or
@@ -222,8 +171,6 @@ export function StatusBar() {
         }
       } else if (payload.package === 'Char.Combat') {
         setCombat(extractCombat(payload.data));
-      } else if (payload.package === 'Room.Info') {
-        setRoom(parseRoomInfo(payload.data));
       } else if (
         payload.package === 'World.Time' &&
         payload.data &&
@@ -286,7 +233,6 @@ export function StatusBar() {
         setDeltas(NO_DELTAS);
         setCombat(null);
         setUserTarget(null);
-        setRoom(null);
         setTick(null);
         vitalsSnapRef.current = null;
         // Forget the last hour so the next connection's first
@@ -345,16 +291,6 @@ export function StatusBar() {
           <span className="statusbar-target">
             <span className="statusbar-target-label">tar</span>
             <span className="statusbar-target-value">{userTarget}</span>
-          </span>
-        )}
-      </div>
-      <div className="statusbar-center">
-        {room && (
-          <span className="statusbar-room">
-            <span className="statusbar-room-name">{room.name}</span>
-            {room.exits.length > 0 && (
-              <span className="statusbar-room-exits">[{compactExits(room.exits)}]</span>
-            )}
           </span>
         )}
       </div>
