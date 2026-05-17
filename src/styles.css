@@ -102,6 +102,11 @@ body {
   border: 1px solid var(--c-border);
   border-radius: 10px;
   overflow: hidden;
+  /* Breathing room above the TopBar so the brand block sits inside
+     the window with the rounded corner area visible above, matching
+     how tmux at the top of a Ghostty window has padding before its
+     status bar. */
+  padding-top: 6px;
 }
 
 /* Shared inverted-video brand block (tmux session-label convention).
