@@ -116,7 +116,6 @@ body {
   background: var(--c-accent);
   color: var(--c-surface-deep);
   font-weight: 700;
-  font-size: 12px;
   letter-spacing: 0.02em;
 }
 
@@ -131,7 +130,6 @@ body {
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-border);
   user-select: none;
-  font-size: 12px;
 }
 
 .topbar-spacer {
@@ -149,7 +147,6 @@ body {
   border: none;
   color: var(--c-text-muted);
   font-family: inherit;
-  font-size: 12px;
   line-height: 1;
   padding: 0 10px;
   cursor: pointer;
@@ -172,7 +169,6 @@ body {
   border: none;
   color: var(--c-text-faint);
   font-family: inherit;
-  font-size: 12px;
   line-height: 1;
   padding: 0 12px;
   cursor: pointer;
@@ -208,7 +204,6 @@ body {
   padding: 4px 14px;
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-border);
-  font-size: 12.5px;
   min-height: 28px;
   color: var(--c-text-muted);
   white-space: nowrap;
@@ -237,7 +232,6 @@ body {
 
 .room-strip-vnum {
   color: var(--c-text-faint);
-  font-size: 11px;
   margin-left: 2px;
 }
 
@@ -257,7 +251,6 @@ body {
 
 .room-strip-list-label {
   color: var(--c-text-faint);
-  font-size: 11px;
   text-transform: lowercase;
 }
 
@@ -282,7 +275,6 @@ body {
 .room-strip-count {
   color: var(--c-text-faint);
   font-variant-numeric: tabular-nums;
-  font-size: 10.5px;
   margin-right: 3px;
 }
 
@@ -293,7 +285,6 @@ body {
 .room-strip-chip-mark {
   color: var(--c-accent);
   margin-right: 2px;
-  font-size: 10px;
 }
 
 /* Connect — single command row, terminal-styled */
@@ -305,7 +296,6 @@ body {
   padding: 6px 14px;
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-border);
-  font-size: 12px;
   color: var(--c-text-muted);
   flex: 0 0 auto;
 }
@@ -478,7 +468,6 @@ body {
   background: var(--c-surface);
   border-top: 1px solid var(--c-border);
   border-bottom: 1px solid var(--c-border);
-  font-size: 13px;
   position: relative;
   z-index: 1;
   /* Lock to content height; never shrink. Without explicit
@@ -519,7 +508,6 @@ body {
   flex: 0 0 24px;
   padding: 0 14px;
   background: var(--c-surface);
-  font-size: 12px;
   color: var(--c-text-muted);
   user-select: none;
   position: relative;
@@ -553,12 +541,10 @@ body {
   color: var(--c-text-faint);
   text-transform: lowercase;
   letter-spacing: 0.04em;
-  font-size: 11px;
 }
 
 .statusbar-bar-percent {
   font-weight: 600;
-  font-size: 11px;
   min-width: 32px;
   text-align: right;
 }
@@ -586,7 +572,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
   font-weight: 700;
   pointer-events: none;
 }
@@ -642,12 +627,10 @@ body {
   color: var(--c-text-faint);
   text-transform: lowercase;
   letter-spacing: 0.04em;
-  font-size: 11px;
 }
 
 .statusbar-tick-value {
   font-weight: 700;
-  font-size: 12px;
   color: var(--c-text);
   font-variant-numeric: tabular-nums;
 }
@@ -672,7 +655,6 @@ body {
 /* Per-tick vital deltas. Rendered to the right of the value bar.
    Up arrow + green for regen, down arrow + red for loss. */
 .statusbar-bar-delta {
-  font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   padding: 0 2px;
@@ -700,7 +682,6 @@ body {
 
 .statusbar-combat-swords {
   color: var(--c-danger);
-  font-size: 13px;
 }
 
 .statusbar-combat-name {
@@ -739,7 +720,6 @@ body {
   color: var(--c-text-faint);
   text-transform: lowercase;
   letter-spacing: 0.04em;
-  font-size: 11px;
 }
 
 .statusbar-target-value {
@@ -769,7 +749,6 @@ body {
 
 .statusbar-room-exits {
   color: var(--c-text-faint);
-  font-size: 11px;
   letter-spacing: 0.08em;
   font-variant-numeric: tabular-nums;
 }
@@ -805,7 +784,6 @@ body {
   border: none;
   color: var(--c-text-muted);
   font-family: inherit;
-  font-size: 12px;
   padding: 0 10px;
   cursor: pointer;
   display: inline-flex;
@@ -838,7 +816,6 @@ body {
   display: flex;
   align-items: baseline;
   gap: 14px;
-  font-size: 12px;
 }
 
 .settings-triggers-count {
@@ -858,7 +835,6 @@ body {
   border-radius: 2px;
   padding: 8px 10px;
   font-family: inherit;
-  font-size: 12px;
   line-height: 1.4;
   resize: none;
   outline: none;
@@ -874,7 +850,6 @@ body {
   grid-template-columns: 80px 1fr;
   align-items: center;
   gap: 12px;
-  font-size: 13px;
 }
 
 .settings-row-label {
@@ -897,7 +872,6 @@ body {
   border: 1px solid var(--c-border-strong);
   padding: 4px 8px;
   font-family: inherit;
-  font-size: 13px;
   border-radius: 2px;
   /* Strip default macOS search-input chrome (rounded pill, magnifier,
      etc.) so search inputs render with the same flat dark surface as
@@ -952,7 +926,6 @@ body {
   border-radius: 2px;
   padding: 1px 8px;
   font: inherit;
-  font-size: 11px;
   cursor: pointer;
 }
 
@@ -995,7 +968,6 @@ body {
   align-items: center;
   gap: 4px;
   color: var(--c-text-faint);
-  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -1022,7 +994,6 @@ body {
   text-align: left;
   padding: 3px 8px;
   border-radius: 2px;
-  font-size: 12px;
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1036,13 +1007,11 @@ body {
 
 .settings-font-empty {
   color: var(--c-text-faint);
-  font-size: 12px;
   padding: 4px 8px;
 }
 
 .settings-unit {
   color: var(--c-text-faint);
-  font-size: 12px;
 }
 
 .settings-actions {
@@ -1058,7 +1027,6 @@ body {
   border: none;
   padding: 0;
   font-family: inherit;
-  font-size: 13px;
   cursor: pointer;
   letter-spacing: 0.02em;
 }
@@ -1073,17 +1041,14 @@ body {
 
 .settings-saved {
   color: var(--c-success);
-  font-size: 12px;
 }
 
 .settings-error {
   color: var(--c-danger);
-  font-size: 12px;
 }
 
 .settings-loading {
   color: var(--c-text-faint);
-  font-size: 12px;
 }
 
 /* Map pane — sits on the right side of the main row, separated from
@@ -1148,7 +1113,6 @@ body {
   align-items: center;
   padding: 4px 12px;
   border-bottom: 1px solid var(--c-border-soft);
-  font-size: 11px;
   color: var(--c-text-faint);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1178,7 +1142,6 @@ body {
 
 .map-subhead {
   padding: 4px 12px;
-  font-size: 11px;
   color: var(--c-text-faint);
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-border-soft);
@@ -1190,7 +1153,6 @@ body {
 
 .map-subhead .map-mode-toggle button {
   padding: 0 6px;
-  font-size: 10px;
 }
 
 .tileset-bar {
@@ -1200,7 +1162,6 @@ body {
   padding: 4px 12px;
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-border-soft);
-  font-size: 11px;
 }
 
 .tileset-bar button {
@@ -1250,7 +1211,6 @@ body {
   padding: 2px 6px;
   background: rgba(13, 17, 23, 0.85);
   color: var(--c-text);
-  font-size: 11px;
   border: 1px solid var(--c-border-strong);
   border-radius: 2px;
   pointer-events: none;
@@ -1294,7 +1254,6 @@ body {
   gap: 10px;
   padding: 4px 12px;
   border-bottom: 1px solid var(--c-border-soft);
-  font-size: 11px;
   color: var(--c-text-faint);
 }
 
@@ -1317,7 +1276,6 @@ body {
   border-radius: 2px;
   padding: 0 6px;
   font: inherit;
-  font-size: 11px;
   cursor: pointer;
 }
 
@@ -1343,13 +1301,11 @@ body {
   min-height: 0;
   overflow-y: auto;
   padding: 4px 12px 6px 12px;
-  font-size: 12px;
   line-height: 1.45;
 }
 
 .chat-pane-empty {
   color: var(--c-text-dim);
-  font-size: 12px;
   padding: 8px 0;
 }
 
