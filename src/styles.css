@@ -498,6 +498,17 @@ body {
   /* color set inline by colorForDuration */
 }
 
+/* Absent (tracked but not currently active). Dim styling so the user
+   knows at a glance which buffs are missing. */
+.affect-pill-absent {
+  opacity: 0.5;
+  border-style: dashed;
+}
+
+.affect-pill-absent .affect-pill-duration {
+  color: var(--c-text-dim);
+}
+
 /* Input row — Input.tsx owns the .input-row class. position+z-index
    guarantee the input row paints above the terminal even when xterm's
    canvas is one frame behind a container shrink (that lag was what
@@ -1447,6 +1458,62 @@ body {
 .settings-font-empty {
   color: var(--c-text-faint);
   padding: 4px 8px;
+}
+
+/* Tracked affects: chip list + add input. */
+
+.settings-tracked {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-tracked-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.settings-tracked-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 2px 1px 8px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  color: var(--c-text);
+}
+
+.settings-tracked-remove {
+  background: transparent;
+  border: none;
+  color: var(--c-text-faint);
+  padding: 0 6px;
+  font: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.settings-tracked-remove:hover {
+  color: var(--c-danger);
+}
+
+.settings-tracked-add input[type='text'] {
+  width: 100%;
+  max-width: 360px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  padding: 3px 8px;
+  font: inherit;
+  border-radius: 2px;
+}
+
+.settings-tracked-add input[type='text']:focus {
+  outline: none;
+  border-color: var(--c-accent);
 }
 
 .settings-unit {
