@@ -477,6 +477,147 @@ body {
   z-index: 1;
 }
 
+/* Vitals bar — single-line row of slanted glyph progress bars
+   (hp/mana/move) plus the tick counter. Pattern lifted from the
+   compaction progress display: filled ▰ in the vital color, empty
+   ▱ dim, with letter-spacing for the clear gaps between glyphs. */
+.vitals-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 4px 14px 5px;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Two-row grid:
+   - row 1: label | 「 | glyphs | 」 | percent | delta
+   - row 2: numeric centered in the glyphs column
+   Brackets and edge items span both rows so they sit vertically
+   centered against the two-row glyphs+numeric stack. */
+.vitals-seg {
+  display: inline-grid;
+  grid-template-columns: auto auto auto auto auto;
+  grid-template-rows: auto auto;
+  column-gap: 4px;
+  row-gap: 0;
+  align-items: baseline;
+  white-space: nowrap;
+  line-height: 1.1;
+}
+
+.vitals-seg-label {
+  grid-row: 1 / span 2;
+  grid-column: 1;
+  align-self: center;
+}
+
+.vitals-seg-bracket {
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--c-text-faint);
+}
+
+.vitals-seg-bracket-l {
+  grid-column: 2;
+}
+
+.vitals-seg-bracket-r {
+  grid-column: 4;
+}
+
+.vitals-seg-glyphs {
+  grid-row: 1;
+  grid-column: 3;
+}
+
+.vitals-seg-percent {
+  grid-row: 1 / span 2;
+  grid-column: 5;
+  align-self: center;
+}
+
+.vitals-seg-numeric {
+  grid-row: 2;
+  grid-column: 3;
+  text-align: center;
+  font-size: 0.85em;
+  color: var(--c-text);
+  letter-spacing: 0.02em;
+}
+
+/* Delta tucked inline at the end of the cur/max line so it shares
+   the existing row-2 space instead of needing its own column. */
+.vitals-seg-delta-inline {
+  font-weight: 700;
+}
+
+/* Tick seg has no numeric subrow — keep it inline-flex so its
+   label + seconds value sit side-by-side, and center it vertically
+   against the two-row vital segs. */
+.vitals-seg.vitals-seg-tick {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  align-self: center;
+}
+
+.vitals-seg-tick .vitals-seg-top {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.vitals-seg-label {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.vitals-seg-glyphs {
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+.vitals-seg-empty {
+  color: var(--c-text-dim);
+}
+
+.vitals-seg-percent {
+  font-weight: 700;
+  min-width: 30px;
+  text-align: right;
+}
+
+.vitals-seg-delta {
+  font-weight: 700;
+}
+
+.vitals-seg-delta-up {
+  color: var(--c-success);
+}
+
+.vitals-seg-delta-down {
+  color: var(--c-danger);
+}
+
+.vitals-seg-tick-value {
+  font-weight: 700;
+  color: var(--c-text);
+}
+
+.vitals-seg-tick-value.is-warn {
+  color: var(--c-warn);
+  animation: vosh-tick-pulse 700ms ease-in-out infinite;
+}
+
 .affect-pill {
   display: inline-flex;
   align-items: baseline;
@@ -555,17 +696,30 @@ body {
 
 .statusbar {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: space-between;
-  height: 24px;
   min-height: 24px;
-  flex: 0 0 24px;
-  padding: 0 14px;
+  flex: 0 0 auto;
+  padding: 2px 14px;
   background: var(--c-surface);
   color: var(--c-text-muted);
   user-select: none;
   position: relative;
   z-index: 1;
+  gap: 12px;
+}
+
+/* AffectsBar nested in the statusbar strips its standalone wrapper
+   styling (padding, border-top, background) so it runs inline with
+   the rest of the bar. */
+.statusbar-left .affects-bar,
+.statusbar-right .affects-bar {
+  padding: 0;
+  background: transparent;
+  border-top: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .statusbar-left,
@@ -665,6 +819,79 @@ body {
 .statusbar-clock {
   color: var(--c-text);
   font-variant-numeric: tabular-nums;
+}
+
+/* Moon group sits immediately left of the wall clock. Aabahran has
+   multiple moons; each renders as a geometric phase glyph, bumped
+   font-size so the small circle is clearly legible. Active moons
+   read in accent color; inactive dim out. Alignment events (eclipse
+   / triad / near) get a pill badge. */
+.statusbar-moons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1;
+}
+
+.statusbar-moon {
+  font-size: 1.35em;
+  color: var(--c-text-dim);
+  line-height: 1;
+  position: relative;
+  cursor: default;
+}
+
+.statusbar-moon.is-active {
+  color: var(--c-warn);
+  text-shadow: 0 0 4px rgba(230, 195, 132, 0.45);
+}
+
+/* CSS-driven tooltip — WKWebView's native title tooltip is flaky in
+   Tauri. Show our own pill above the glyph immediately on hover. */
+.statusbar-moon[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  background: var(--c-surface-emphasis);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.statusbar-moon-badge {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.8em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+}
+
+.statusbar-moon-badge.is-eclipse {
+  background: rgba(228, 104, 118, 0.18);
+  color: #e46876;
+}
+
+.statusbar-moon-badge.is-triad {
+  background: rgba(147, 138, 169, 0.2);
+  color: #d2a8ff;
+}
+
+.statusbar-moon-badge.is-near {
+  background: rgba(230, 195, 132, 0.16);
+  color: #e6c384;
 }
 
 .statusbar-tick {
@@ -781,6 +1008,41 @@ body {
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Quick-key bindings rendered inline next to the tar value. Each
+   entry is "name verb", separated by middle dots. Ported from
+   main's TargetBar layout. */
+.statusbar-qkeys {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusbar-qkey {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.statusbar-qkey-sep {
+  color: var(--c-text-dim);
+  margin-right: 0.15rem;
+}
+
+.statusbar-qkey-name {
+  color: var(--c-text-faint);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
+.statusbar-qkey-verb {
+  color: var(--c-text);
 }
 
 /* Room name + compact exit initials. Centered between the vitals/
