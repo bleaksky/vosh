@@ -310,10 +310,43 @@ body {
 }
 
 .statusbar-left,
+.statusbar-center,
 .statusbar-right {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.statusbar-center {
+  flex: 1 1 auto;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.statusbar-vital {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.statusbar-vital-label {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+}
+
+.statusbar-vital-value {
+  font-weight: 600;
+}
+
+.statusbar-vital-sep {
+  color: var(--c-text-dim);
+  padding: 0 1px;
+  font-weight: 400;
 }
 
 .statusbar-seg {
