@@ -224,30 +224,29 @@ export function StatusBar() {
       if (payload.interval_ms > 0) {
         setTickIntervalSec(Math.max(1, Math.round(payload.interval_ms / 1000)));
       }
-      if (payload.fired) {
-        // Compute deltas against the snapshot taken at the previous
-        // tick, then rebase the snapshot.
-        const prev = vitalsSnapRef.current;
-        // We use the latest vitals from state via a setter-passthrough
-        // since the closure can't directly read fresh state.
-        setVitals((curr) => {
-          if (curr) {
-            if (prev) {
-              setDeltas({
-                hp: curr.hp - prev.hp,
-                mana: curr.mana - prev.mana,
-                move: curr.move - prev.move,
-              });
-            } else {
-              setDeltas(NO_DELTAS);
-            }
-            vitalsSnapRef.current = curr;
+      // The backend emits a tick payload whenever the runtime is
+      // reset OR the interval auto-fire pops. `payload.fired` is true
+      // only for the auto-fire; World.Time-driven resets ship
+      // fired:false. Treat ANY tick payload as a reset moment so the
+      // counter zeroes regardless of which path the backend took.
+      const prev = vitalsSnapRef.current;
+      setVitals((curr) => {
+        if (curr) {
+          if (prev) {
+            setDeltas({
+              hp: curr.hp - prev.hp,
+              mana: curr.mana - prev.mana,
+              move: curr.move - prev.move,
+            });
+          } else {
+            setDeltas(NO_DELTAS);
           }
-          return curr;
-        });
-        tickResetAtRef.current = Date.now();
-        setTickSecs(0);
-      }
+          vitalsSnapRef.current = curr;
+        }
+        return curr;
+      });
+      tickResetAtRef.current = Date.now();
+      setTickSecs(0);
     }).then((fn) => {
       if (cancelled) fn();
       else unsubTick = fn;
