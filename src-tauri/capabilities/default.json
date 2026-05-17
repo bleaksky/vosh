@@ -1,14 +1,17 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability set for the main and settings windows.",
-  "windows": ["main", "settings"],
+  "description": "Default capability set for the main window.",
+  "windows": ["main"],
   "permissions": [
     "core:default",
     "core:window:allow-show",
     "core:window:allow-hide",
     "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
     "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
     "window-state:default"
   ]
 }

@@ -3,6 +3,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Terminal, type TerminalHandle } from './components/Terminal';
 import { Input, type InputHandle } from './components/Input';
 import { Connect, type ConnectionStatus } from './components/Connect';
+import { TopBar } from './components/TopBar';
+import { StatusBar } from './components/StatusBar';
 import { getUiConfig, onState, type StatePayload } from './lib/session';
 import { applyTheme } from './lib/theme';
 
@@ -135,6 +137,7 @@ function App() {
 
   return (
     <main className="app">
+      <TopBar />
       <Connect status={status} onError={handleError} />
       <div className="terminal-area" onMouseUp={handleTerminalMouseUp}>
         <Terminal
@@ -151,6 +154,7 @@ function App() {
         onError={handleError}
         onLocalEcho={(text) => termRef.current?.write(text)}
       />
+      <StatusBar status={status} />
     </main>
   );
 }
