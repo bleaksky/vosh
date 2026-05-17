@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { emit } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TopBar } from './components/TopBar';
+import { TriggerForm } from './components/TriggerForm';
+import { AliasForm } from './components/AliasForm';
 import {
   exportAliases,
   exportTriggers,
@@ -92,22 +94,38 @@ export function SettingsApp() {
           <GeneralTab config={config} setConfig={setConfig} onError={setError} />
         )}
         {tab === 'triggers' && (
-          <JsonTab
-            kind="triggers"
-            singular="trigger"
-            load={exportTriggers}
-            save={importTriggers}
-            onError={setError}
+          <EditorModeSwitcher
+            modeKey="triggers"
+            formRender={() => (
+              <TriggerForm load={exportTriggers} save={importTriggers} onError={setError} />
+            )}
+            jsonRender={() => (
+              <JsonTab
+                kind="triggers"
+                singular="trigger"
+                load={exportTriggers}
+                save={importTriggers}
+                onError={setError}
+              />
+            )}
           />
         )}
         {tab === 'aliases' && (
-          <JsonTab
-            kind="aliases"
-            singular="alias"
-            plural="aliases"
-            load={exportAliases}
-            save={importAliases}
-            onError={setError}
+          <EditorModeSwitcher
+            modeKey="aliases"
+            formRender={() => (
+              <AliasForm load={exportAliases} save={importAliases} onError={setError} />
+            )}
+            jsonRender={() => (
+              <JsonTab
+                kind="aliases"
+                singular="alias"
+                plural="aliases"
+                load={exportAliases}
+                save={importAliases}
+                onError={setError}
+              />
+            )}
           />
         )}
       </div>
@@ -394,5 +412,55 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <span className="settings-row-label">{label}</span>
       <span className="settings-row-control">{children}</span>
     </label>
+  );
+}
+
+interface SwitcherProps {
+  modeKey: string;
+  formRender: () => React.ReactNode;
+  jsonRender: () => React.ReactNode;
+}
+
+// Pill toggle at the top of triggers/aliases tabs that swaps between
+// the structured form editor and the raw JSON editor. modeKey is the
+// localStorage namespace so each tab remembers its own preference.
+function EditorModeSwitcher({ modeKey, formRender, jsonRender }: SwitcherProps) {
+  const storageKey = `vosh.settings.${modeKey}.mode`;
+  const [mode, setMode] = useState<'form' | 'json'>(() => {
+    try {
+      return (localStorage.getItem(storageKey) as 'form' | 'json') || 'form';
+    } catch {
+      return 'form';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, mode);
+    } catch {
+      // ignore
+    }
+  }, [storageKey, mode]);
+
+  return (
+    <div className="editor-mode-wrap">
+      <div className="editor-mode-toggle">
+        <button
+          type="button"
+          className={`editor-mode-pill${mode === 'form' ? ' is-active' : ''}`}
+          onClick={() => setMode('form')}
+        >
+          form
+        </button>
+        <button
+          type="button"
+          className={`editor-mode-pill${mode === 'json' ? ' is-active' : ''}`}
+          onClick={() => setMode('json')}
+        >
+          json
+        </button>
+      </div>
+      {mode === 'form' ? formRender() : jsonRender()}
+    </div>
   );
 }

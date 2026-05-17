@@ -845,6 +845,291 @@ body {
   border-color: var(--c-accent);
 }
 
+/* Form / JSON view toggle at the top of triggers + aliases tabs */
+
+.editor-mode-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.editor-mode-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  overflow: hidden;
+  align-self: flex-start;
+}
+
+.editor-mode-pill {
+  background: transparent;
+  color: var(--c-text-muted);
+  border: none;
+  padding: 3px 12px;
+  font: inherit;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
+.editor-mode-pill:hover {
+  color: var(--c-text-strong);
+}
+
+.editor-mode-pill.is-active {
+  background: var(--c-accent);
+  color: var(--c-surface-deep);
+  font-weight: 700;
+}
+
+/* Trigger form cards */
+
+.trigger-form,
+.alias-form {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trigger-form-list,
+.alias-form-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.trigger-form-preset-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--c-border-strong);
+}
+
+.trigger-form-preset-heading {
+  color: var(--c-text-faint);
+  letter-spacing: 0.04em;
+}
+
+.trigger-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--c-surface-pane);
+  border: 1px solid var(--c-border);
+  border-radius: 3px;
+}
+
+.trigger-card.is-readonly {
+  opacity: 0.7;
+}
+
+.trigger-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trigger-card-enabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--c-text-faint);
+}
+
+.trigger-card-enabled input[type='checkbox'] {
+  accent-color: var(--c-accent);
+}
+
+.trigger-card-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: inherit;
+  border-radius: 2px;
+}
+
+.trigger-card-name:focus,
+.trigger-card input[type='text']:focus,
+.trigger-card input[type='number']:focus,
+.trigger-card select:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+.trigger-card-priority {
+  width: 52px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: inherit;
+  border-radius: 2px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.trigger-card-preset {
+  color: var(--c-text-faint);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  padding: 1px 6px;
+  letter-spacing: 0.02em;
+}
+
+.trigger-card-remove {
+  background: transparent;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  color: var(--c-text-faint);
+  padding: 1px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.trigger-card-remove:hover {
+  border-color: var(--c-danger);
+  color: var(--c-danger);
+}
+
+.trigger-card-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.trigger-card-label {
+  color: var(--c-text-faint);
+  padding-top: 4px;
+}
+
+.trigger-card-row input[type='text'] {
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: inherit;
+  border-radius: 2px;
+}
+
+.trigger-card-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.trigger-card-action select {
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: inherit;
+  border-radius: 2px;
+}
+
+.trigger-card-action input[type='text'] {
+  flex: 1 1 240px;
+}
+
+.trigger-card-help {
+  color: var(--c-text-faint);
+  font-style: italic;
+}
+
+.trigger-card-style {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.trigger-card-style label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--c-text-faint);
+}
+
+.trigger-card-style input[type='checkbox'] {
+  accent-color: var(--c-accent);
+}
+
+/* Alias rows */
+
+.alias-row {
+  display: grid;
+  grid-template-columns: auto 160px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--c-surface-pane);
+  border: 1px solid var(--c-border);
+  border-radius: 3px;
+}
+
+.alias-row-enabled {
+  display: inline-flex;
+}
+
+.alias-row-enabled input[type='checkbox'] {
+  accent-color: var(--c-accent);
+}
+
+.alias-row-name,
+.alias-row-expansion {
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: inherit;
+  border-radius: 2px;
+  min-width: 0;
+}
+
+.alias-row-name:focus,
+.alias-row-expansion:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+.alias-row-remove {
+  background: transparent;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  color: var(--c-text-faint);
+  padding: 1px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.alias-row-remove:hover {
+  border-color: var(--c-danger);
+  color: var(--c-danger);
+}
+
 .settings-row {
   display: grid;
   grid-template-columns: 80px 1fr;
