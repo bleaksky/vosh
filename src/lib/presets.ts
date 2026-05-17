@@ -88,6 +88,7 @@ function replace(
 // so using named colors here means presets pick up whatever theme is
 // active.
 const GREEN: HighlightStyle = { fg: 'bright_green' };
+const RED: HighlightStyle = { fg: 'bright_red', bold: true };
 
 // Damage verb alternation, lifted from the user's TinTin `CalcDam`
 // table. Pairs cover the conjugated form ("punch decimates") and
@@ -167,7 +168,6 @@ export const PRESETS: Preset[] = [
       highlight('cure.feel_lot_better', 'You feel a lot better!$', GREEN),
       highlight('cure.feel_better', 'You feel better\\.$', GREEN),
       highlight('cure.feel_much_better', 'You feel much better!$', GREEN),
-      highlight('cure.warm_fuzzy', 'You feel warm and fuzzy\\.$', GREEN),
       highlight('cure.righteous', 'You feel righteous\\.$', GREEN),
       highlight('cure.less_sick', 'You feel less sick\\.$', GREEN),
       highlight('cure.no_longer_poisoned', 'You are no longer poisoned\\.$', GREEN),
@@ -341,6 +341,25 @@ export const PRESETS: Preset[] = [
         'buff.spell_turning',
         '^Your shield of spell turning collapses\\.$',
         '{bold_red}##{reset} {fg:178}Your shield of spell turning collapses.{reset}',
+      ),
+    ],
+  },
+
+  // ── Terror weapon drop ────────────────────────────────────────────
+  // tintin line 124 is an #ACTION (auto-rearm) and the line itself
+  // is not auto-highlighted by tintin, but the user wants it
+  // visually flagged anyway. Bold bright red.
+  {
+    id: 'terror_events',
+    category: 'events',
+    name: 'Terror weapon drop',
+    description: 'Bold red on the terror-induced weapon drop line.',
+    defaultEnabled: true,
+    triggers: [
+      highlight(
+        'terror.drop',
+        '^Filled with terror, your weapon slips through your slippery fingers\\.$',
+        RED,
       ),
     ],
   },
