@@ -49,7 +49,7 @@ impl Negotiator {
     }
 
     /// Wrap a GMCP wire payload (`package <json>` bytes from
-    /// `mudclient_gmcp::build`) in `IAC SB GMCP ... IAC SE`. Any literal
+    /// `vosh_gmcp::build`) in `IAC SB GMCP ... IAC SE`. Any literal
     /// 0xFF inside the payload is doubled per the telnet escape rule.
     pub fn build_gmcp_subnegotiation(payload: &[u8]) -> Vec<u8> {
         let mut out = vec![IAC, SB, option::GMCP];

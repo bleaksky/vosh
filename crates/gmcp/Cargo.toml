@@ -1,10 +1,10 @@
 [package]
-name = "mudclient-gmcp"
+name = "vosh-gmcp"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "GMCP message parsing and serialization for mudclient."
+description = "GMCP message parsing and serialization for Vosh."
 rust-version.workspace = true
 
 [dependencies]

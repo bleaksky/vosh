@@ -1,5 +1,5 @@
 [package]
-name = "mudclient-alias"
+name = "vosh-alias"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

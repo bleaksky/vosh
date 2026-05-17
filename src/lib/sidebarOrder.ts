@@ -6,8 +6,8 @@
 
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 
-const STORAGE_KEY = 'mudclient.sidebar.order';
-const SYNC_EVENT = 'mudclient://sidebar-order-changed';
+const STORAGE_KEY = 'vosh.sidebar.order';
+const SYNC_EVENT = 'vosh://sidebar-order-changed';
 
 export const SIDEBAR_PANEL_IDS = ['affects-pane', 'map-pane', 'info-tabs-pane'] as const;
 

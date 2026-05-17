@@ -1,5 +1,5 @@
 [package]
-name = "mudclient-trigger"
+name = "vosh-trigger"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ regex = "1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-mudclient-ansi = { path = "../ansi" }
+vosh-ansi = { path = "../ansi" }
 
 [lints]
 workspace = true

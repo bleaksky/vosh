@@ -1,4 +1,4 @@
-//! SQLite-backed map storage and BFS pathfinding for mudclient.
+//! SQLite-backed map storage and BFS pathfinding for Vosh.
 //!
 //! Phase 7 keeps the schema narrow: rooms hold identity, coordinates, and a
 //! note plus avoid flag; exits are directed edges with a string direction.

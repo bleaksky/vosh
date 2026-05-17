@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use mudclient_alias::Alias;
+use vosh_alias::Alias;
 
 #[derive(Debug, Default)]
 pub(crate) struct ImportReport {

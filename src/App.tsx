@@ -26,8 +26,41 @@ import {
 import type { SnapZone } from './lib/docking';
 import { applyTheme } from './lib/theme';
 
-const SIDE_PANEL_STORAGE_KEY = 'mudclient.layout.sidePanelOpen';
-const DOCK_MIGRATION_KEY = 'mudclient.docking.migrated_phase1_settings_hub';
+const SIDE_PANEL_STORAGE_KEY = 'vosh.layout.sidePanelOpen';
+const DOCK_MIGRATION_KEY = 'vosh.docking.migrated_phase1_settings_hub';
+const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
+
+// One-shot rename migration: when the project was renamed from
+// "mudclient" to "vosh" the localStorage namespace changed too. On
+// first run after the rename, copy every `mudclient.*` key to its
+// `vosh.*` counterpart (only if the new key doesn't already exist)
+// and delete the originals. Runs synchronously before any state
+// reads so the rest of App.tsx sees the migrated values.
+function migrateMudclientKeys(): void {
+  try {
+    if (localStorage.getItem(RENAME_MIGRATION_KEY)) return;
+    const toMove: [string, string][] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith('mudclient.')) continue;
+      const newKey = `vosh.${key.slice('mudclient.'.length)}`;
+      toMove.push([key, newKey]);
+    }
+    for (const [oldKey, newKey] of toMove) {
+      const value = localStorage.getItem(oldKey);
+      if (value === null) continue;
+      if (localStorage.getItem(newKey) === null) {
+        localStorage.setItem(newKey, value);
+      }
+      localStorage.removeItem(oldKey);
+    }
+    localStorage.setItem(RENAME_MIGRATION_KEY, '1');
+  } catch {
+    // ignore storage failures (private mode, quota)
+  }
+}
+
+migrateMudclientKeys();
 
 function loadSidePanelOpen(): boolean {
   try {
@@ -97,7 +130,7 @@ function App() {
     dockLayoutGet().then(apply).catch((e) => console.error('dock_layout_get failed', e));
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    listen<DockEntryPersist[]>('mudclient://dock-layout-changed', (event) => {
+    listen<DockEntryPersist[]>('vosh://dock-layout-changed', (event) => {
       apply(event.payload);
     }).then((fn) => {
       if (cancelled) fn();
@@ -216,9 +249,9 @@ function App() {
       setFontFamily(detail.family || DEFAULT_FONT_FAMILY);
       setFontSize(detail.size || 14);
     };
-    window.addEventListener('mudclient:font-changed', handler as EventListener);
+    window.addEventListener('vosh:font-changed', handler as EventListener);
     return () =>
-      window.removeEventListener('mudclient:font-changed', handler as EventListener);
+      window.removeEventListener('vosh:font-changed', handler as EventListener);
   }, []);
 
   useEffect(() => {
@@ -284,7 +317,7 @@ function App() {
         </div>
         {sidePanelOpen && (
           <Resizable
-            storageKey="mudclient.layout.sidePanelWidth"
+            storageKey="vosh.layout.sidePanelWidth"
             defaultWidth={320}
             minWidth={220}
             maxWidth={1400}

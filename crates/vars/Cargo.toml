@@ -1,5 +1,5 @@
 [package]
-name = "mudclient-vars"
+name = "vosh-vars"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

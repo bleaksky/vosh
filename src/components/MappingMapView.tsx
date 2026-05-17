@@ -19,10 +19,10 @@ const PADDING = 10;
 
 type Style = 'squares' | 'tileset';
 
-const STYLE_KEY = 'mudclient.layout.mappingMapStyle';
+const STYLE_KEY = 'vosh.layout.mappingMapStyle';
 // Same key as ServerMapView so loading a tileset in either mode makes it
 // available in both.
-const TILESET_KEY = 'mudclient.layout.serverMapTileset';
+const TILESET_KEY = 'vosh.layout.serverMapTileset';
 
 // Order used by the tileset PNG: one tile per sector index in this slot
 // position. Matches the SECTORS table in the palette module.

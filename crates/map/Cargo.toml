@@ -1,10 +1,10 @@
 [package]
-name = "mudclient-map"
+name = "vosh-map"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "SQLite-backed room and exit storage for the mudclient map."
+description = "SQLite-backed room and exit storage for the Vosh map."
 rust-version.workspace = true
 
 [dependencies]

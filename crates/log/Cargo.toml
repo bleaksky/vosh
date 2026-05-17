@@ -1,5 +1,5 @@
 [package]
-name = "mudclient-log"
+name = "vosh-log"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 rusqlite = { version = "0.32", features = ["bundled"] }
-mudclient-ansi = { path = "../ansi" }
+vosh-ansi = { path = "../ansi" }
 regex = "1"
 serde = { workspace = true }
 thiserror = { workspace = true }

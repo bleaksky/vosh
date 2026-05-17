@@ -6,8 +6,8 @@
 
 use std::sync::Arc;
 
-use mudclient_gmcp::Message;
-use mudclient_map::{direction, MapError, MapStore, Room};
+use vosh_gmcp::Message;
+use vosh_map::{direction, MapError, MapStore, Room};
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};

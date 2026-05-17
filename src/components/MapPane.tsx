@@ -5,7 +5,7 @@ import { useDockTarget } from '../lib/docking';
 
 type Mode = 'mapping' | 'server';
 
-const STORAGE_KEY = 'mudclient.layout.mapMode';
+const STORAGE_KEY = 'vosh.layout.mapMode';
 
 function loadMode(): Mode {
   try {

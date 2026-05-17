@@ -1,4 +1,4 @@
-//! Regex trigger engine for mudclient.
+//! Regex trigger engine for Vosh.
 //!
 //! Triggers match against the plain text of a server line (ANSI escapes
 //! stripped) and take one of five actions: highlight, gag, replace, send, or

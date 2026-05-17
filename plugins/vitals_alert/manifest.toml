@@ -2,5 +2,5 @@
 name = "vitals_alert"
 version = "0.1.0"
 description = "Echo a warning to the terminal when HP drops below a configurable threshold."
-author = "mudclient"
+author = "Vosh"
 entry = "main.lua"

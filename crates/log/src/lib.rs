@@ -1,4 +1,4 @@
-//! SQLite-backed log store for mudclient sessions.
+//! SQLite-backed log store for Vosh sessions.
 //!
 //! Each connection opens a `sessions` row, every server line lands in
 //! `log_lines` with both its plain-text form (ANSI stripped) and the
@@ -8,7 +8,7 @@
 
 use std::path::Path;
 
-use mudclient_ansi::plain_text;
+use vosh_ansi::plain_text;
 use regex::{Regex, RegexBuilder};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};

@@ -1,16 +1,16 @@
-//! Glue between [`mudclient_script::ScriptEngine`] and the rest of the app.
+//! Glue between [`vosh_script::ScriptEngine`] and the rest of the app.
 //!
-//! Lua callbacks return [`mudclient_script::Action`] values; this module
+//! Lua callbacks return [`vosh_script::Action`] values; this module
 //! applies them to the profile (vars, aliases, triggers), forwards
 //! send/echo to the session, and tracks pending one-shot timers so the
 //! session loop can fire them at the right time.
 
 use std::sync::Arc;
 
-use mudclient_alias::Alias;
-use mudclient_script::{Action, ScriptEngine, ScriptOutcome, VarScope};
-use mudclient_trigger::{Trigger, TriggerAction};
-use mudclient_vars::{Scope, VariableStore};
+use vosh_alias::Alias;
+use vosh_script::{Action, ScriptEngine, ScriptOutcome, VarScope};
+use vosh_trigger::{Trigger, TriggerAction};
+use vosh_vars::{Scope, VariableStore};
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 

@@ -134,7 +134,7 @@ mod tests {
     fn build_with_value() {
         let bytes = build(
             "Core.Hello",
-            &json!({"client": "mudclient", "version": "0.0.1"}),
+            &json!({"client": "vosh", "version": "0.0.1"}),
         )
         .unwrap();
         let s = std::str::from_utf8(&bytes).unwrap();
@@ -142,7 +142,7 @@ mod tests {
         let json_part = s.strip_prefix("Core.Hello ").unwrap();
         assert_eq!(
             serde_json::from_str::<Value>(json_part).unwrap(),
-            json!({ "client": "mudclient", "version": "0.0.1" })
+            json!({ "client": "vosh", "version": "0.0.1" })
         );
     }
 

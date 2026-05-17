@@ -2086,116 +2086,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mudclient-alias"
-version = "0.0.1"
-dependencies = [
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "mudclient-ansi"
-version = "0.0.1"
-dependencies = [
- "vte",
-]
-
-[[package]]
-name = "mudclient-app"
-version = "0.0.1"
-dependencies = [
- "mudclient-alias",
- "mudclient-ansi",
- "mudclient-gmcp",
- "mudclient-log",
- "mudclient-map",
- "mudclient-script",
- "mudclient-telnet",
- "mudclient-trigger",
- "mudclient-vars",
- "regex",
- "rustls",
- "rustls-pki-types",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-shell",
- "tauri-plugin-updater",
- "tauri-plugin-window-state",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tokio-rustls",
- "toml 0.8.2",
- "tracing",
- "tracing-subscriber",
- "webpki-roots 0.26.11",
-]
-
-[[package]]
-name = "mudclient-gmcp"
-version = "0.0.1"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "mudclient-log"
-version = "0.0.1"
-dependencies = [
- "mudclient-ansi",
- "regex",
- "rusqlite",
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "mudclient-map"
-version = "0.0.1"
-dependencies = [
- "rusqlite",
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "mudclient-script"
-version = "0.0.1"
-dependencies = [
- "mlua",
- "regex",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "mudclient-telnet"
-version = "0.0.1"
-dependencies = [
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "mudclient-trigger"
-version = "0.0.1"
-dependencies = [
- "mudclient-ansi",
- "regex",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "mudclient-vars"
-version = "0.0.1"
-
-[[package]]
 name = "ndk"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4581,6 +4471,116 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "vosh-alias"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "vosh-ansi"
+version = "0.0.1"
+dependencies = [
+ "vte",
+]
+
+[[package]]
+name = "vosh-app"
+version = "0.0.1"
+dependencies = [
+ "regex",
+ "rustls",
+ "rustls-pki-types",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-shell",
+ "tauri-plugin-updater",
+ "tauri-plugin-window-state",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-rustls",
+ "toml 0.8.2",
+ "tracing",
+ "tracing-subscriber",
+ "vosh-alias",
+ "vosh-ansi",
+ "vosh-gmcp",
+ "vosh-log",
+ "vosh-map",
+ "vosh-script",
+ "vosh-telnet",
+ "vosh-trigger",
+ "vosh-vars",
+ "webpki-roots 0.26.11",
+]
+
+[[package]]
+name = "vosh-gmcp"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "vosh-log"
+version = "0.0.1"
+dependencies = [
+ "regex",
+ "rusqlite",
+ "serde",
+ "thiserror 1.0.69",
+ "vosh-ansi",
+]
+
+[[package]]
+name = "vosh-map"
+version = "0.0.1"
+dependencies = [
+ "rusqlite",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "vosh-script"
+version = "0.0.1"
+dependencies = [
+ "mlua",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "vosh-telnet"
+version = "0.0.1"
+dependencies = [
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "vosh-trigger"
+version = "0.0.1"
+dependencies = [
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "vosh-ansi",
+]
+
+[[package]]
+name = "vosh-vars"
+version = "0.0.1"
 
 [[package]]
 name = "vswhom"

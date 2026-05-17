@@ -1,10 +1,10 @@
 [package]
-name = "mudclient-ansi"
+name = "vosh-ansi"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "ANSI escape sequence parser for mudclient triggers and tests."
+description = "ANSI escape sequence parser for Vosh triggers and tests."
 rust-version.workspace = true
 
 [dependencies]

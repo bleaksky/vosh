@@ -1,4 +1,4 @@
-# mudclient
+# Vosh
 
 A desktop MUD client for macOS, Windows, and Linux. Built for power users who want a connected map window, clean split panes, a tick timer, and the full alias and trigger toolkit they expect from TinTin++.
 

@@ -1,4 +1,4 @@
-//! Embedded Lua scripting for mudclient. Phase 8.
+//! Embedded Lua scripting for Vosh. Phase 8.
 //!
 //! The engine wraps a sandboxed `mlua::Lua` and exposes a `mud.*` API to
 //! Lua scripts. Side effects (sends, echoes, alias edits, trigger
@@ -30,7 +30,7 @@ struct LuaTrigger {
     enabled: bool,
 }
 
-/// Public Lua-trigger record (mirrors `mudclient_trigger::Trigger` for the
+/// Public Lua-trigger record (mirrors `vosh_trigger::Trigger` for the
 /// listing UI but holds the Lua callback id rather than a structured
 /// action).
 #[derive(Debug, Clone, PartialEq, Eq)]

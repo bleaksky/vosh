@@ -9,9 +9,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Duration;
 
-use mudclient_alias::Alias;
-use mudclient_trigger::Trigger;
-use mudclient_vars::Scope;
+use vosh_alias::Alias;
+use vosh_trigger::Trigger;
+use vosh_vars::Scope;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -85,7 +85,7 @@ pub(crate) struct UiConfig {
     pub enabled_presets: Vec<String>,
     /// Persistent dock layout for the side-panel sections. Authored
     /// in the standalone Layout Editor window; the main window reads
-    /// this at startup and listens for `mudclient://dock-layout-changed`
+    /// this at startup and listens for `vosh://dock-layout-changed`
     /// to pick up live edits without a relaunch.
     #[serde(default)]
     pub dock_layout: Vec<DockEntryPersist>,
@@ -180,12 +180,12 @@ impl Default for TickPersistConfig {
     }
 }
 
-fn default_true() -> bool {
-    true
-}
-
 fn default_interval() -> u64 {
     30
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl ProfileConfig {
@@ -245,7 +245,7 @@ impl ProfileConfig {
         let mut warnings = Vec::new();
 
         // Aliases: replace the store entirely.
-        let mut aliases = mudclient_alias::AliasStore::new();
+        let mut aliases = vosh_alias::AliasStore::new();
         for alias in &self.aliases {
             aliases.set(alias.clone());
         }
@@ -264,7 +264,7 @@ impl ProfileConfig {
                 }
             })
             .collect();
-        let mut vars = mudclient_vars::VariableStore::new();
+        let mut vars = vosh_vars::VariableStore::new();
         for (k, v) in &self.profile_vars {
             vars.set(Scope::Profile, k.clone(), v.clone());
         }
@@ -274,7 +274,7 @@ impl ProfileConfig {
         profile.vars = vars;
 
         // Triggers: replace, surfacing invalid regex.
-        let mut triggers = mudclient_trigger::TriggerStore::new();
+        let mut triggers = vosh_trigger::TriggerStore::new();
         for t in &self.triggers {
             if let Err(e) = triggers.set(t.clone()) {
                 warnings.push(format!("trigger `{}` rejected: {e}", t.name));
@@ -348,7 +348,7 @@ impl ProfileConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mudclient_trigger::{HighlightStyle, NamedColor, TriggerAction};
+    use vosh_trigger::{HighlightStyle, NamedColor, TriggerAction};
 
     #[test]
     fn round_trip_through_toml() {

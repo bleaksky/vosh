@@ -23,11 +23,11 @@ export function AffectsBar() {
       const detail = (event as CustomEvent<string[]>).detail;
       if (Array.isArray(detail)) setTracked(detail);
     };
-    window.addEventListener('mudclient:tracked-affects-changed', handler as EventListener);
+    window.addEventListener('vosh:tracked-affects-changed', handler as EventListener);
     return () => {
       cancelled = true;
       window.removeEventListener(
-        'mudclient:tracked-affects-changed',
+        'vosh:tracked-affects-changed',
         handler as EventListener,
       );
     };

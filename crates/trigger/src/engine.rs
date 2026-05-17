@@ -1,7 +1,7 @@
 //! Match the trigger store against a single line and produce the resulting
 //! display text plus any side effects.
 
-use mudclient_ansi::plain_text;
+use vosh_ansi::plain_text;
 use regex::Regex;
 
 use crate::action::{HighlightStyle, TriggerAction};
