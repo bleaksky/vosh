@@ -13,7 +13,7 @@ use crate::input;
 use crate::log_state::{SharedLogStore, SharedScrollback};
 use crate::map_state::SharedMap;
 use crate::plugins::{PluginRecord, SharedPluginManager};
-use crate::profile::Profile;
+use crate::profile::{Macro, Profile};
 use crate::profile_config::{DockEntryPersist, ProfileConfig};
 use crate::script_state::SharedTimers;
 use crate::session::{self, OutputPayload, SessionHandle, TargetPayload};
@@ -217,6 +217,71 @@ pub(crate) async fn target_get(state: State<'_, SharedState>) -> Result<TargetPa
         room_idx: p.target.room_idx,
         quick_keys: p.target.quick_keys.clone(),
     })
+}
+
+/// Snapshot of every keyboard macro binding. Used by the Settings
+/// macros tab to render the existing list and by Input.tsx (via the
+/// same payload) to seed its in-memory binding lookup before any
+/// `vosh://macros-changed` event fires.
+#[tauri::command]
+pub(crate) async fn macros_list(state: State<'_, SharedState>) -> Result<Vec<Macro>, String> {
+    let p = state.profile.lock().await;
+    Ok(p.macros.clone())
+}
+
+/// Set or replace a binding by key. Empty `command` is rejected;
+/// callers that want to unbind should use `macros_delete`.
+/// Re-binding an existing key overwrites the prior command.
+#[tauri::command]
+pub(crate) async fn macros_set(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    key: String,
+    command: String,
+) -> Result<Vec<Macro>, String> {
+    let key = key.trim().to_string();
+    let command = command.trim().to_string();
+    if key.is_empty() {
+        return Err("key cannot be empty".into());
+    }
+    if command.is_empty() {
+        return Err("command cannot be empty".into());
+    }
+    let updated = {
+        let mut p = state.profile.lock().await;
+        if let Some(existing) = p.macros.iter_mut().find(|m| m.key == key) {
+            existing.command = command;
+        } else {
+            p.macros.push(Macro { key, command });
+        }
+        p.macros.clone()
+    };
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    if let Err(e) = app.emit("vosh://macros-changed", &updated) {
+        warn!(error = %e, "failed to broadcast macros-changed");
+    }
+    Ok(updated)
+}
+
+/// Remove a binding by key. No-op when the key is not bound.
+#[tauri::command]
+pub(crate) async fn macros_delete(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    key: String,
+) -> Result<Vec<Macro>, String> {
+    let updated = {
+        let mut p = state.profile.lock().await;
+        p.macros.retain(|m| m.key != key);
+        p.macros.clone()
+    };
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    if let Err(e) = app.emit("vosh://macros-changed", &updated) {
+        warn!(error = %e, "failed to broadcast macros-changed");
+    }
+    Ok(updated)
 }
 
 #[tauri::command]

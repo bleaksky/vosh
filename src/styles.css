@@ -1980,6 +1980,95 @@ body {
   color: var(--c-text-faint);
 }
 
+.settings-btn-danger {
+  color: var(--c-danger);
+}
+
+.settings-btn-danger:hover {
+  color: var(--c-text-strong);
+}
+
+.settings-btn:disabled {
+  color: var(--c-text-dim);
+  cursor: not-allowed;
+}
+
+/* Macros tab — list of key -> command rows. Key column is fixed
+   width so chains of bindings line up visually. */
+.macros-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.macros-help {
+  color: var(--c-text-faint);
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+.macros-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.macros-row {
+  display: grid;
+  grid-template-columns: 160px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+
+.macros-row-new {
+  border-bottom: none;
+  border-top: 1px dashed var(--c-border);
+  padding-top: 10px;
+  margin-top: 6px;
+}
+
+.macros-key,
+.macros-command {
+  background: var(--c-surface-emphasis);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.macros-key {
+  text-align: center;
+  font-weight: 700;
+  color: var(--c-accent);
+  cursor: pointer;
+  outline: none;
+}
+
+.macros-key:focus {
+  border-color: var(--c-accent);
+  color: var(--c-text-strong);
+}
+
+.macros-command {
+  outline: none;
+}
+
+.macros-command:focus {
+  border-color: var(--c-accent);
+}
+
+.macros-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .settings-saved {
   color: var(--c-success);
 }

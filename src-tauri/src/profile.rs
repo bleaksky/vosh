@@ -32,6 +32,21 @@ pub(crate) struct Profile {
     /// commands can resolve a numeric index or partial name without
     /// round-tripping through the frontend.
     pub(crate) room_chars: Vec<RoomChar>,
+    /// Keyboard macro bindings. Each entry maps a canonical key
+    /// string (e.g. "F1", "Ctrl+N", "Numpad7") to a command line
+    /// (which may itself contain `;`-separated subcommands).
+    pub(crate) macros: Vec<Macro>,
+}
+
+/// One keyboard binding: a canonical key string mapped to a
+/// command line. Both halves are user-supplied via the Settings
+/// macros tab; the canonical key string is produced by the
+/// frontend (KeyboardEvent -> normalized identifier) so the
+/// backend never has to know about browser key codes.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct Macro {
+    pub(crate) key: String,
+    pub(crate) command: String,
 }
 
 #[derive(Debug, Clone)]

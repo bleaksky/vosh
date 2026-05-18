@@ -15,7 +15,7 @@ use vosh_vars::Scope;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::profile::Profile;
+use crate::profile::{Macro, Profile};
 use crate::tick::{TickConfig, TickRuntime};
 
 #[derive(Debug, Error)]
@@ -48,6 +48,9 @@ pub(crate) struct ProfileConfig {
     pub ui: UiConfig,
     #[serde(default)]
     pub plugins: PluginsPersist,
+    /// Keyboard macro bindings.
+    #[serde(default)]
+    pub macros: Vec<Macro>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -236,6 +239,7 @@ impl ProfileConfig {
             autoload_scripts: Vec::new(),
             ui,
             plugins,
+            macros: profile.macros.clone(),
         }
     }
 
@@ -317,6 +321,9 @@ impl ProfileConfig {
         profile.plugins = PluginsPersist {
             enabled: self.plugins.enabled.clone(),
         };
+
+        // Macros round-trip whole.
+        profile.macros = self.macros.clone();
 
         warnings
     }
