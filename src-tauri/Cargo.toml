@@ -42,6 +42,7 @@ regex = "1"
 toml = "0.8"
 font-kit = "0.14"
 urlencoding = "2"
+quick-xml = "0.36"
 
 [dev-dependencies]
 tempfile = "3"

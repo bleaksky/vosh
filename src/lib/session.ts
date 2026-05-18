@@ -250,6 +250,32 @@ export async function subscribeMacrosChanged(
   });
 }
 
+// Multi-format config importer. `format` is "mushclient", "mudlet",
+// "gmud", or "" to auto-detect. Returns counts + the unsupported
+// items the backend could not model.
+export type ImportFormat = 'mushclient' | 'mudlet' | 'gmud' | '';
+
+export interface ImportSummary {
+  aliases: number;
+  triggers: number;
+  macros: number;
+  vars: number;
+  unsupported: [string, string][];
+  unparsed: string[];
+  rejected: string[];
+}
+
+export async function detectImportFormat(text: string): Promise<string | null> {
+  return invoke('import_detect', { text });
+}
+
+export async function applyImport(
+  format: ImportFormat,
+  text: string,
+): Promise<ImportSummary> {
+  return invoke('import_apply', { format, text });
+}
+
 export async function exportProfile(): Promise<string> {
   return invoke('profile_export');
 }
