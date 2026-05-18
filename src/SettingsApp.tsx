@@ -6,6 +6,7 @@ import { TriggerForm } from './components/TriggerForm';
 import { AliasForm } from './components/AliasForm';
 import { LogsTab } from './components/LogsTab';
 import { MacrosTab } from './components/MacrosTab';
+import { ImportTab } from './components/ImportTab';
 import {
   broadcastTrackedAffects,
   exportAliases,
@@ -39,12 +40,13 @@ const FONT_PICKS: { label: string; value: string }[] = [
 
 const PREVIEW_TEXT = 'The quick brown fox 0123456789  |  hp 850/1000  IlOo1';
 
-type TabId = 'general' | 'triggers' | 'aliases' | 'macros' | 'logs';
+type TabId = 'general' | 'triggers' | 'aliases' | 'macros' | 'import' | 'logs';
 const TABS: { id: TabId; label: string }[] = [
   { id: 'general', label: 'general' },
   { id: 'triggers', label: 'triggers' },
   { id: 'aliases', label: 'aliases' },
   { id: 'macros', label: 'macros' },
+  { id: 'import', label: 'import' },
   { id: 'logs', label: 'logs' },
 ];
 
@@ -134,6 +136,7 @@ export function SettingsApp() {
           />
         )}
         {tab === 'macros' && <MacrosTab onError={setError} />}
+        {tab === 'import' && <ImportTab onError={setError} />}
         {tab === 'logs' && <LogsTab onError={setError} />}
       </div>
     </main>

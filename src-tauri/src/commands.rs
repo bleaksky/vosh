@@ -223,6 +223,94 @@ pub(crate) async fn target_get(state: State<'_, SharedState>) -> Result<TargetPa
 /// macros tab to render the existing list and by Input.tsx (via the
 /// same payload) to seed its in-memory binding lookup before any
 /// `vosh://macros-changed` event fires.
+/// Detect which import format a file uses, based on content sniffing.
+/// Frontend extension-checks first; this is the fallback. Returns
+/// `null` when nothing recognized so the UI can ask the user.
+#[tauri::command]
+pub(crate) async fn import_detect(text: String) -> Result<Option<String>, String> {
+    Ok(crate::import::detect_format(&text).map(|f| match f {
+        crate::import::ImportFormat::Mushclient => "mushclient".to_string(),
+        crate::import::ImportFormat::Mudlet => "mudlet".to_string(),
+        crate::import::ImportFormat::Gmud => "gmud".to_string(),
+    }))
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct ImportSummary {
+    pub aliases: usize,
+    pub triggers: usize,
+    pub macros: usize,
+    pub vars: usize,
+    pub unsupported: Vec<(String, String)>,
+    pub unparsed: Vec<String>,
+    pub rejected: Vec<String>,
+}
+
+/// Parse + apply an import file to the live profile. The format
+/// string is one of `mushclient` / `mudlet` / `gmud`; pass an
+/// empty string to auto-detect. Aliases / triggers / macros / vars
+/// merge into the existing stores (overwrite on name collision).
+/// Returns a summary so the UI can report what landed and what
+/// did not.
+#[tauri::command]
+pub(crate) async fn import_apply(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    format: String,
+    text: String,
+) -> Result<ImportSummary, String> {
+    let fmt = match format.as_str() {
+        "mushclient" => crate::import::ImportFormat::Mushclient,
+        "mudlet" => crate::import::ImportFormat::Mudlet,
+        "gmud" => crate::import::ImportFormat::Gmud,
+        "" => crate::import::detect_format(&text)
+            .ok_or_else(|| "could not detect import format".to_string())?,
+        other => return Err(format!("unknown import format: {other}")),
+    };
+    let report = crate::import::parse(fmt, &text);
+    let mut rejected: Vec<String> = Vec::new();
+    let mut macros_changed = false;
+    let macros_snapshot: Vec<Macro>;
+    {
+        let mut p = state.profile.lock().await;
+        for alias in &report.aliases {
+            p.aliases.set(alias.clone());
+        }
+        for trigger in &report.triggers {
+            if let Err(e) = p.triggers.set(trigger.clone()) {
+                rejected.push(format!("trigger `{}` rejected: {e}", trigger.name));
+            }
+        }
+        for m in &report.macros {
+            if let Some(existing) = p.macros.iter_mut().find(|x| x.key == m.key) {
+                existing.command = m.command.clone();
+            } else {
+                p.macros.push(m.clone());
+            }
+            macros_changed = true;
+        }
+        for (k, v) in &report.vars {
+            p.vars
+                .set(vosh_vars::Scope::Profile, k.clone(), v.clone());
+        }
+        macros_snapshot = p.macros.clone();
+    }
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    if macros_changed {
+        let _ = app.emit("vosh://macros-changed", &macros_snapshot);
+    }
+    Ok(ImportSummary {
+        aliases: report.aliases.len(),
+        triggers: report.triggers.len() - rejected.len(),
+        macros: report.macros.len(),
+        vars: report.vars.len(),
+        unsupported: report.unsupported,
+        unparsed: report.unparsed,
+        rejected,
+    })
+}
+
 #[tauri::command]
 pub(crate) async fn macros_list(state: State<'_, SharedState>) -> Result<Vec<Macro>, String> {
     let p = state.profile.lock().await;

@@ -2069,6 +2069,105 @@ body {
   gap: 12px;
 }
 
+/* Import tab — file picker + paste-in textarea + apply, with a
+   per-format radio row and a post-apply summary that lists counts
+   plus details panels for rejected / unsupported / unparsed. */
+.import-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.import-help {
+  color: var(--c-text-faint);
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+.import-format-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.import-format-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--c-text-muted);
+  cursor: pointer;
+}
+
+.import-format-opt input[type='radio'] {
+  accent-color: var(--c-accent);
+}
+
+.import-source-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.import-source-row .settings-btn {
+  cursor: pointer;
+}
+
+.import-textarea {
+  flex: 1 1 auto;
+  min-height: 200px;
+  background: var(--c-surface-emphasis);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  padding: 8px;
+  font-family: inherit;
+  font-size: inherit;
+  resize: vertical;
+  outline: none;
+}
+
+.import-textarea:focus {
+  border-color: var(--c-accent);
+}
+
+.import-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--c-surface-emphasis);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+}
+
+.import-summary-headline {
+  color: var(--c-success);
+  font-weight: 700;
+}
+
+.import-summary-counts {
+  display: flex;
+  gap: 18px;
+  color: var(--c-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.import-summary-section summary {
+  cursor: pointer;
+  color: var(--c-warn);
+  padding: 2px 0;
+}
+
+.import-summary-section ul {
+  margin: 4px 0 0 16px;
+  padding: 0;
+  color: var(--c-text-muted);
+  font-size: 0.9em;
+}
+
 .settings-saved {
   color: var(--c-success);
 }
