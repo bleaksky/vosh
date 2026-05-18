@@ -8,11 +8,15 @@ import {
 } from 'react';
 import {
   getTarget,
+  listMacros,
   onInputMode,
   onTarget,
   sendInput,
+  subscribeMacrosChanged,
+  type Macro,
   type QuickKey,
 } from '../lib/session';
+import { canonicalKeyFromEvent } from '../lib/macroKeys';
 
 export interface InputHandle {
   focus: () => void;
@@ -82,6 +86,37 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     };
   }, []);
 
+  // Keyboard macro bindings — keyed by canonical key string
+  // ("F1", "Ctrl+N", "Numpad7"). Seeded from the backend and
+  // refreshed on every macros-changed broadcast.
+  const macroMapRef = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    const apply = (list: Macro[]) => {
+      const m = new Map<string, string>();
+      for (const entry of list) {
+        if (entry.key && entry.command) m.set(entry.key, entry.command);
+      }
+      macroMapRef.current = m;
+    };
+    listMacros()
+      .then((list) => {
+        if (!cancelled) apply(list);
+      })
+      .catch(() => {});
+    subscribeMacrosChanged((list) => {
+      if (!cancelled) apply(list);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -117,6 +152,24 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   };
 
   const handleKeyDown = async (event: KeyboardEvent<HTMLInputElement>) => {
+    // Macro lookup runs first so a bound key (F1, Ctrl+N, etc) fires
+    // its command regardless of any other handler. canonicalKeyFromEvent
+    // returns null for plain printable keys without a modifier, so this
+    // never eats normal typing.
+    const canonical = canonicalKeyFromEvent(event);
+    if (canonical) {
+      const command = macroMapRef.current.get(canonical);
+      if (command) {
+        event.preventDefault();
+        try {
+          await sendInput(command);
+        } catch (e) {
+          onError?.(String(e));
+        }
+        return;
+      }
+    }
+
     if (event.key === 'Enter') {
       event.preventDefault();
       const line = value;

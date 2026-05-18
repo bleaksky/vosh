@@ -222,6 +222,34 @@ export async function onTick(cb: (payload: TickPayload) => void): Promise<Unlist
   });
 }
 
+// Keyboard macro bindings. A Macro maps a canonical key string
+// (produced by canonicalKeyFromEvent below) to a command line that
+// the input layer will fire when that key combo is pressed.
+export interface Macro {
+  key: string;
+  command: string;
+}
+
+export async function listMacros(): Promise<Macro[]> {
+  return invoke('macros_list');
+}
+
+export async function setMacro(key: string, command: string): Promise<Macro[]> {
+  return invoke('macros_set', { key, command });
+}
+
+export async function deleteMacro(key: string): Promise<Macro[]> {
+  return invoke('macros_delete', { key });
+}
+
+export async function subscribeMacrosChanged(
+  cb: (macros: Macro[]) => void,
+): Promise<UnlistenFn> {
+  return listen<Macro[]>('vosh://macros-changed', (event) => {
+    cb(event.payload);
+  });
+}
+
 export async function exportProfile(): Promise<string> {
   return invoke('profile_export');
 }
