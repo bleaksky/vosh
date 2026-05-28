@@ -360,6 +360,104 @@ impl ProfileConfig {
     }
 }
 
+// ============================================================
+// Global config — UI preferences that survive profile switches.
+//
+// Each profile has its own aliases / triggers / macros / vars
+// (those live in `profiles/<name>.toml`), but the user does not
+// want their theme / font / dock layout to reset every time they
+// switch to a different character or MUD. Those fields live in
+// a single global.toml that is applied AFTER the per-profile
+// config at load time, so it always wins for the global set.
+//
+// Stage 3 v1 ships with a fixed default split (the categories
+// listed below are global; everything else is profile-scoped).
+// A future pass can add per-category Settings toggles.
+// ============================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub(crate) struct GlobalConfig {
+    #[serde(default)]
+    pub theme: Option<String>,
+    #[serde(default)]
+    pub auto_update: Option<bool>,
+    #[serde(default)]
+    pub keep_last_command: Option<bool>,
+    #[serde(default)]
+    pub font_family: Option<String>,
+    #[serde(default)]
+    pub font_size: Option<u32>,
+    #[serde(default)]
+    pub dock_layout: Option<Vec<DockEntryPersist>>,
+}
+
+impl GlobalConfig {
+    /// Pull the global-scoped UI fields out of a live Profile.
+    pub(crate) fn from_profile(profile: &Profile) -> Self {
+        Self {
+            theme: Some(profile.ui.theme.clone()),
+            auto_update: Some(profile.ui.auto_update),
+            keep_last_command: Some(profile.ui.keep_last_command),
+            font_family: Some(profile.ui.font_family.clone()),
+            font_size: Some(profile.ui.font_size),
+            dock_layout: Some(profile.ui.dock_layout.clone()),
+        }
+    }
+
+    /// Apply the global fields onto a live Profile. Only writes the
+    /// fields that are Some — missing values leave the existing
+    /// per-profile value in place.
+    pub(crate) fn apply_to(&self, profile: &mut Profile) {
+        if let Some(v) = &self.theme {
+            profile.ui.theme.clone_from(v);
+        }
+        if let Some(v) = self.auto_update {
+            profile.ui.auto_update = v;
+        }
+        if let Some(v) = self.keep_last_command {
+            profile.ui.keep_last_command = v;
+        }
+        if let Some(v) = &self.font_family {
+            profile.ui.font_family.clone_from(v);
+        }
+        if let Some(v) = self.font_size {
+            profile.ui.font_size = v;
+        }
+        if let Some(v) = &self.dock_layout {
+            profile.ui.dock_layout.clone_from(v);
+        }
+    }
+
+    pub(crate) fn save(&self, path: &Path) -> Result<(), ConfigError> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let toml_str = toml::to_string_pretty(self)?;
+        std::fs::write(path, toml_str)?;
+        Ok(())
+    }
+
+    pub(crate) fn load(path: &Path) -> Result<Self, ConfigError> {
+        let toml_str = std::fs::read_to_string(path)?;
+        let config: GlobalConfig = toml::from_str(&toml_str)?;
+        Ok(config)
+    }
+}
+
+/// Zero out the global-scoped fields on a `ProfileConfig` so the
+/// per-profile file does not store stale duplicates of the values
+/// that actually live in `global.toml`. Called right before saving
+/// the per-profile file.
+pub(crate) fn strip_global_fields(config: &mut ProfileConfig) {
+    let defaults = UiConfig::default();
+    config.ui.theme = defaults.theme;
+    config.ui.auto_update = defaults.auto_update;
+    config.ui.keep_last_command = defaults.keep_last_command;
+    config.ui.font_family = defaults.font_family;
+    config.ui.font_size = defaults.font_size;
+    config.ui.dock_layout = defaults.dock_layout;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -393,6 +491,47 @@ mod tests {
         );
         assert_eq!(parsed.triggers.len(), 1);
         assert_eq!(parsed.triggers[0].name, "tells");
+    }
+
+    #[test]
+    fn global_split_round_trip() {
+        // Set up a profile with both per-profile and global fields.
+        let mut profile = Profile::default();
+        profile.ui.theme = "tokyo-night".into();
+        profile.ui.font_size = 18;
+        profile.ui.keep_last_command = true;
+        profile.ui.tracked_affects = vec!["sanc".into(), "haste".into()];
+        profile.aliases.set(Alias::new("greet", "wave"));
+
+        // Snapshot both halves, strip the per-profile of global fields
+        // (what persist_profile does before writing per-profile file).
+        let mut per_profile = ProfileConfig::from_profile(&profile);
+        let global = GlobalConfig::from_profile(&profile);
+        strip_global_fields(&mut per_profile);
+
+        // Per-profile lost the global fields back to defaults.
+        let defaults = UiConfig::default();
+        assert_eq!(per_profile.ui.theme, defaults.theme);
+        assert_eq!(per_profile.ui.font_size, defaults.font_size);
+        // But kept the per-profile UI fields.
+        assert_eq!(per_profile.ui.tracked_affects.len(), 2);
+
+        // Round-trip through TOML and re-apply in load order:
+        // per-profile first, then global overlay.
+        let per_profile_text = per_profile.to_toml().unwrap();
+        let global_text = toml::to_string_pretty(&global).unwrap();
+        let parsed_per = ProfileConfig::from_toml(&per_profile_text).unwrap();
+        let parsed_global: GlobalConfig = toml::from_str(&global_text).unwrap();
+
+        let mut restored = Profile::default();
+        parsed_per.apply_to(&mut restored);
+        parsed_global.apply_to(&mut restored);
+
+        assert_eq!(restored.ui.theme, "tokyo-night");
+        assert_eq!(restored.ui.font_size, 18);
+        assert!(restored.ui.keep_last_command);
+        assert_eq!(restored.ui.tracked_affects.len(), 2);
+        assert!(restored.aliases.list().iter().any(|a| a.name == "greet"));
     }
 
     #[test]

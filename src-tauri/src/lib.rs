@@ -92,10 +92,14 @@ pub fn run() {
                 // Load (or migrate from the legacy single-file layout)
                 // the named-profile collection. Then load whichever
                 // profile the index marks as active and apply it to
-                // the live in-memory state.
+                // the live in-memory state, finally overlaying the
+                // shared global.toml (theme / font / dock_layout /
+                // keep_last / auto_update) so those UI prefs are
+                // consistent across all profiles.
                 match profile_set::ProfileSet::load_or_migrate(path.clone()) {
                     Ok(set) => {
                         let active_path = set.active_path();
+                        let global_path = set.global_path();
                         if active_path.exists() {
                             match ProfileConfig::load(&active_path) {
                                 Ok(snapshot) => {
@@ -115,6 +119,21 @@ pub fn run() {
                                 }
                                 Err(e) => {
                                     error!(error = %e, "failed to load active profile at startup");
+                                }
+                            }
+                        }
+                        if global_path.exists() {
+                            match profile_config::GlobalConfig::load(&global_path) {
+                                Ok(global) => {
+                                    let profile = state.profile.clone();
+                                    tauri::async_runtime::block_on(async move {
+                                        let mut p = profile.lock().await;
+                                        global.apply_to(&mut p);
+                                    });
+                                    info!(path = %global_path.display(), "loaded global config");
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "failed to load global.toml at startup");
                                 }
                             }
                         }

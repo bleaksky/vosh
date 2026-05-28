@@ -14,7 +14,7 @@ use crate::log_state::{SharedLogStore, SharedScrollback};
 use crate::map_state::SharedMap;
 use crate::plugins::{PluginRecord, SharedPluginManager};
 use crate::profile::{Macro, Profile};
-use crate::profile_config::{DockEntryPersist, ProfileConfig};
+use crate::profile_config::{strip_global_fields, DockEntryPersist, GlobalConfig, ProfileConfig};
 use crate::script_state::SharedTimers;
 use crate::session::{self, OutputPayload, SessionHandle, TargetPayload};
 
@@ -44,27 +44,48 @@ pub(crate) type SharedState = Arc<AppState>;
 /// the disk is full mid-flight, and the in-memory state is still
 /// correct for the rest of the session.
 async fn persist_profile(app: &AppHandle, state: &SharedState) {
-    // Resolve the active profile's path via ProfileSet if it's been
-    // loaded; fall back to the legacy single-file path if ProfileSet
-    // is somehow missing (shouldn't happen post-startup; defensive
-    // path for very early calls before setup() finishes).
-    let path = {
+    // Resolve the active profile's path + global path via ProfileSet
+    // if it's been loaded; fall back to the legacy single-file path
+    // if ProfileSet is somehow missing (shouldn't happen post-
+    // startup; defensive path for very early calls before setup()
+    // finishes).
+    let (per_profile_path, global_path) = {
         let guard = state.profile_set.lock().await;
         if let Some(set) = guard.as_ref() {
-            set.active_path()
+            (Some(set.active_path()), Some(set.global_path()))
         } else {
             let Ok(dir) = app.path().app_data_dir() else {
                 return;
             };
-            dir.join("profile.toml")
+            (Some(dir.join("profile.toml")), None)
         }
     };
-    let snapshot = {
+
+    let (mut per_profile_snapshot, global_snapshot) = {
         let p = state.profile.lock().await;
-        ProfileConfig::from_profile(&p)
+        (
+            ProfileConfig::from_profile(&p),
+            GlobalConfig::from_profile(&p),
+        )
     };
-    if let Err(e) = snapshot.save(&path) {
-        warn!(error = %e, path = %path.display(), "auto-save profile failed");
+
+    // Strip the global UI fields out of the per-profile snapshot so
+    // theme/font/etc. don't get duplicated into every profile file.
+    // The load path applies global on top of per-profile to fill
+    // them back in.
+    if global_path.is_some() {
+        strip_global_fields(&mut per_profile_snapshot);
+    }
+
+    if let Some(p) = per_profile_path.as_ref() {
+        if let Err(e) = per_profile_snapshot.save(p) {
+            warn!(error = %e, path = %p.display(), "auto-save per-profile failed");
+        }
+    }
+    if let Some(g) = global_path.as_ref() {
+        if let Err(e) = global_snapshot.save(g) {
+            warn!(error = %e, path = %g.display(), "auto-save global failed");
+        }
     }
 }
 
@@ -711,33 +732,41 @@ pub(crate) async fn profile_switch(
     persist_profile(&app, &shared).await;
 
     // Step 2: flip the active pointer in the index.
-    let new_path = {
+    let (new_path, global_path) = {
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
             return Err("profile set not initialized".into());
         };
         set.switch(&name).map_err(|e| e.to_string())?;
-        set.active_path()
+        (set.active_path(), set.global_path())
     };
 
-    // Step 3: load the newly-active profile from disk and apply to
-    // the in-memory Profile. Missing file = fresh empty profile.
-    let snapshot = if new_path.exists() {
+    // Step 3: load per-profile file (or seed defaults) and then
+    // overlay global.toml so theme/font/keep-last/auto-update/
+    // dock_layout survive the switch.
+    let per_profile = if new_path.exists() {
         Some(ProfileConfig::load(&new_path).map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+    let global = if global_path.exists() {
+        Some(GlobalConfig::load(&global_path).map_err(|e| e.to_string())?)
     } else {
         None
     };
     {
         let mut p = state.profile.lock().await;
-        match snapshot {
+        match per_profile {
             Some(snap) => {
                 snap.apply_to(&mut p);
             }
             None => {
-                // Fresh profile: reset to defaults.
                 let default = ProfileConfig::default();
                 default.apply_to(&mut p);
             }
+        }
+        if let Some(g) = global {
+            g.apply_to(&mut p);
         }
     }
 
