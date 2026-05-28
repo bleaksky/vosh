@@ -11,6 +11,19 @@ use vosh_trigger::Trigger;
 
 use crate::input;
 use crate::log_state::{SharedLogStore, SharedScrollback};
+
+/// Send an event to every webview window. `AppHandle::emit` routes via
+/// the global listener pool, which has been observed to skip late-attached
+/// listeners in sibling webviews (the main window misses settings-window
+/// updates). Iterating the live window map and emitting to each one
+/// guarantees delivery to both the main and settings webviews.
+fn broadcast<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: &S) {
+    for win in app.webview_windows().values() {
+        if let Err(e) = win.emit(event, payload.clone()) {
+            warn!(error = %e, window = %win.label(), event, "broadcast failed");
+        }
+    }
+}
 use crate::map_state::SharedMap;
 use crate::plugins::{PluginRecord, SharedPluginManager};
 use crate::profile::{Macro, Profile};
@@ -338,7 +351,7 @@ pub(crate) async fn import_apply(
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
     if macros_changed {
-        let _ = app.emit("vosh://macros-changed", &macros_snapshot);
+        broadcast(&app, "vosh://macros-changed", &macros_snapshot);
     }
     Ok(ImportSummary {
         aliases: report.aliases.len(),
@@ -386,9 +399,7 @@ pub(crate) async fn macros_set(
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    if let Err(e) = app.emit("vosh://macros-changed", &updated) {
-        warn!(error = %e, "failed to broadcast macros-changed");
-    }
+    broadcast(&app, "vosh://macros-changed", &updated);
     Ok(updated)
 }
 
@@ -406,9 +417,7 @@ pub(crate) async fn macros_delete(
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    if let Err(e) = app.emit("vosh://macros-changed", &updated) {
-        warn!(error = %e, "failed to broadcast macros-changed");
-    }
+    broadcast(&app, "vosh://macros-changed", &updated);
     Ok(updated)
 }
 

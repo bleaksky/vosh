@@ -43,7 +43,8 @@ export function canonicalKeyFromEvent(
   const base = canonicalBase(keyCode, keyName);
   if (!base) return null;
 
-  const hasModifier = native.ctrlKey || native.altKey || native.metaKey;
+  const hasModifier =
+    native.ctrlKey || native.altKey || native.metaKey || native.shiftKey;
   // Plain printable letters/digits without a modifier are typing,
   // not a macro press. The Settings tab passes allowPlainPrintable
   // when capturing a binding so the user CAN bind to "a" if they
