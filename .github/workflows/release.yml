@@ -88,11 +88,27 @@ jobs:
           # itself succeeded. Workflow-level `permissions: contents:
           # write` covers the scope.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # When you generate a minisign keypair, set these two secrets.
-          # Until they exist the bundler still produces installers but
-          # the updater signature step is skipped.
+          # Minisign keypair for the auto-updater. tauri-action signs
+          # the update bundles + generates latest.json when both are
+          # present; skipped silently when absent.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Apple Developer ID signing + notarization. tauri-action
+          # auto-detects all six vars; when present, the macOS build
+          # runs codesign with the hardened runtime, submits to
+          # Apple's notary service via notarytool, and staples the
+          # ticket onto the .dmg + .app so Gatekeeper accepts them
+          # offline. Without notarization a signed app still gets
+          # "App is damaged and can't be opened" on macOS 10.15+
+          # when downloaded via a browser (the quarantine xattr
+          # triggers Gatekeeper). The Apple ID password must be an
+          # app-specific password minted at appleid.apple.com.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'vosh ${{ github.ref_name }}'
