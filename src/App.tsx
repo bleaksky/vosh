@@ -161,7 +161,11 @@ function App() {
   const togglePanelVisibility = (id: PanelId) => {
     const current = panelPlacements[id].zone;
     if (current === 'hidden') {
-      const restore = lastVisibleZoneRef.current[id] ?? PANELS[id].defaultZone;
+      // Fall back to homeZone (never 'hidden') so the topbar toggle
+      // actually shows the panel somewhere even when defaultZone is
+      // 'hidden' (e.g., chat is opt-in but lives at the bottom when
+      // visible).
+      const restore = lastVisibleZoneRef.current[id] ?? PANELS[id].homeZone;
       setPanelZone(id, restore);
     } else {
       lastVisibleZoneRef.current[id] = current;

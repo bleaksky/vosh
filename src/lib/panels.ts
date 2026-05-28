@@ -38,7 +38,14 @@ export interface PanelMeta {
   /** Zones this panel can be assigned to. The map is left/right/hidden
    *  only because a horizontal map at full width is unusable. */
   allowedZones: Zone[];
+  /** Initial zone on a brand-new install. Can be `'hidden'` for opt-in
+   *  panels like chat. */
   defaultZone: Zone;
+  /** Where the panel goes when restored from hidden via the topbar
+   *  toggle (and no previous visible zone is remembered for the
+   *  session). Must be a non-hidden zone so toggling visibility
+   *  actually shows the panel somewhere. */
+  homeZone: Exclude<Zone, 'hidden'>;
   defaultAlign: Align;
 }
 
@@ -49,6 +56,7 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     description: 'Auto-mapped rooms from GMCP. Vertical pane.',
     allowedZones: ['left', 'right', 'hidden'],
     defaultZone: 'right',
+    homeZone: 'right',
     defaultAlign: 'top',
   },
   group: {
@@ -57,6 +65,7 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     description: 'Group member vitals from Group.Info.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
     defaultZone: 'right',
+    homeZone: 'right',
     defaultAlign: 'top',
   },
   vitals: {
@@ -65,6 +74,7 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     description: 'Your hp / mn / mv bars and tick countdown.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
     defaultZone: 'bottom',
+    homeZone: 'bottom',
     defaultAlign: 'bottom',
   },
   roomstrip: {
@@ -73,6 +83,7 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     description: 'Area name, current room, exits.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
     defaultZone: 'top',
+    homeZone: 'top',
     defaultAlign: 'top',
   },
   chat: {
@@ -81,6 +92,7 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     description: 'Channel + tell history.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
     defaultZone: 'hidden',
+    homeZone: 'bottom',
     defaultAlign: 'bottom',
   },
 };
