@@ -245,9 +245,7 @@ export function Terminal({ onReady, fontFamily, fontSize, themeTerminalColors }:
       if (!selection) return;
       const active = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
       const activeHasSelection =
-        active &&
-        'selectionStart' in active &&
-        active.selectionStart !== active.selectionEnd;
+        active && 'selectionStart' in active && active.selectionStart !== active.selectionEnd;
       const domSelection = window.getSelection();
       const domHasSelection = domSelection !== null && domSelection.toString().length > 0;
       if (activeHasSelection || domHasSelection) return;

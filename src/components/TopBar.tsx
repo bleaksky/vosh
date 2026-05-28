@@ -55,11 +55,7 @@ export function TopBar({
 
   return (
     <div className="topbar" data-tauri-drag-region>
-      <span
-        className="brand-block"
-        data-tauri-drag-region
-        title={`Vosh ${__APP_VERSION__}`}
-      >
+      <span className="brand-block" data-tauri-drag-region title={`Vosh ${__APP_VERSION__}`}>
         {brand}
       </span>
       <span className="topbar-spacer" data-tauri-drag-region />
