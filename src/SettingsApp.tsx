@@ -11,6 +11,8 @@ import { ProfilesTab } from './components/ProfilesTab';
 import { ThemesTab } from './components/ThemesTab';
 import {
   broadcastTrackedAffects,
+  dockLayoutGet,
+  dockLayoutSet,
   exportAliases,
   exportTriggers,
   getUiConfig,
@@ -18,12 +20,22 @@ import {
   importTriggers,
   listSystemFonts,
   setUiConfig,
+  subscribeDockLayoutChanged,
   type SystemFontEntry,
   type UiConfig,
 } from './lib/session';
 import { applyTheme } from './lib/theme';
 import { customToAppTheme, setCustomThemes, THEMES } from './lib/themes';
 import { loadFontStack, loadSystemFont } from './lib/fontLoader';
+import {
+  ALL_PANEL_IDS,
+  DEFAULT_PANEL_ZONES,
+  PANELS,
+  panelZonesFromDock,
+  panelZonesToDock,
+  type PanelId,
+  type Zone,
+} from './lib/panels';
 
 // Quick-pick chips. The first two are bundled with the app via
 // @font-face in styles.css so they always render regardless of what
@@ -62,6 +74,7 @@ function normalizeForColorInput(color: string | null): string {
 type TabId =
   | 'general'
   | 'themes'
+  | 'panels'
   | 'profiles'
   | 'triggers'
   | 'aliases'
@@ -71,6 +84,7 @@ type TabId =
 const TABS: { id: TabId; label: string }[] = [
   { id: 'general', label: 'general' },
   { id: 'themes', label: 'themes' },
+  { id: 'panels', label: 'panels' },
   { id: 'profiles', label: 'profiles' },
   { id: 'triggers', label: 'triggers' },
   { id: 'aliases', label: 'aliases' },
@@ -166,6 +180,7 @@ export function SettingsApp() {
           />
         )}
         {tab === 'themes' && <ThemesTab config={config} setConfig={setConfig} onError={setError} />}
+        {tab === 'panels' && <PanelsTab onError={setError} />}
         {tab === 'profiles' && <ProfilesTab onError={setError} />}
         {tab === 'macros' && <MacrosTab onError={setError} />}
         {tab === 'import' && <ImportTab onError={setError} />}
@@ -573,6 +588,82 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <span className="settings-row-label">{label}</span>
       <span className="settings-row-control">{children}</span>
     </label>
+  );
+}
+
+interface PanelsTabProps {
+  onError: (e: string | null) => void;
+}
+
+function PanelsTab({ onError }: PanelsTabProps) {
+  const [zones, setZones] = useState<Record<PanelId, Zone>>(DEFAULT_PANEL_ZONES);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    dockLayoutGet()
+      .then((entries) => {
+        if (cancelled) return;
+        setZones(panelZonesFromDock(entries));
+        setLoaded(true);
+      })
+      .catch((e) => onError(String(e)));
+    subscribeDockLayoutChanged((entries) => {
+      if (cancelled) return;
+      setZones(panelZonesFromDock(entries));
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [onError]);
+
+  const update = (id: PanelId, zone: Zone) => {
+    setZones((prev) => {
+      const next = { ...prev, [id]: zone };
+      void dockLayoutSet(panelZonesToDock(next)).catch((e) => onError(String(e)));
+      return next;
+    });
+  };
+
+  const resetDefaults = () => {
+    setZones(DEFAULT_PANEL_ZONES);
+    void dockLayoutSet(panelZonesToDock(DEFAULT_PANEL_ZONES)).catch((e) => onError(String(e)));
+  };
+
+  if (!loaded) return <div className="settings-loading">loading panels…</div>;
+
+  return (
+    <>
+      <p className="settings-hint">
+        Each panel lives in one zone around the terminal. Map is limited to left or right because a
+        horizontal map at full width is unusable.
+      </p>
+      {ALL_PANEL_IDS.map((id) => {
+        const meta = PANELS[id];
+        return (
+          <Row key={id} label={meta.label}>
+            <select value={zones[id]} onChange={(e) => update(id, e.target.value as Zone)}>
+              {meta.allowedZones.map((z) => (
+                <option key={z} value={z}>
+                  {z}
+                </option>
+              ))}
+            </select>
+            <span className="settings-hint-inline">{meta.description}</span>
+          </Row>
+        );
+      })}
+      <div className="settings-actions">
+        <button type="button" className="settings-btn settings-btn-mute" onClick={resetDefaults}>
+          [reset to defaults]
+        </button>
+      </div>
+    </>
   );
 }
 

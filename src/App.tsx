@@ -14,12 +14,15 @@ import { RoomStrip } from './components/RoomStrip';
 import { VitalsBar } from './components/VitalsBar';
 import { UpdateNotice } from './components/UpdateNotice';
 import {
+  dockLayoutGet,
+  dockLayoutSet,
   getUiConfig,
   listTriggers,
   onState,
   presetsInstall,
   presetsRemove,
   subscribeCustomThemesChanged,
+  subscribeDockLayoutChanged,
   subscribeSplitDividerChanged,
   type StatePayload,
 } from './lib/session';
@@ -29,10 +32,15 @@ import { defaultEnabledIds, PRESETS, presetTriggers } from './lib/presets';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
 import { startChatStore } from './lib/chatStore';
 import { startGroupStore } from './lib/groupStore';
-
-const MAP_OPEN_KEY = 'vosh.layout.mapOpen';
-const CHAT_OPEN_KEY = 'vosh.layout.chatOpen';
-const GROUP_PINNED_KEY = 'vosh.layout.groupPinned';
+import {
+  DEFAULT_PANEL_ZONES,
+  groupPanelsByZone,
+  PANELS,
+  panelZonesFromDock,
+  panelZonesToDock,
+  type PanelId,
+  type Zone,
+} from './lib/panels';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
@@ -81,22 +89,15 @@ migrateMudclientKeys();
 const DEFAULT_FONT_FAMILY =
   '"BerkeleyMono Bundled", "JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace';
 
-function loadFlag(key: string): boolean {
-  try {
-    return localStorage.getItem(key) === '1';
-  } catch {
-    return false;
-  }
-}
-
 function App() {
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
   const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
   const [fontSize, setFontSize] = useState(14);
   const [themeTerminalColors, setThemeTerminalColors] = useState(false);
-  const [mapOpen, setMapOpen] = useState(() => loadFlag(MAP_OPEN_KEY));
-  const [chatOpen, setChatOpen] = useState(() => loadFlag(CHAT_OPEN_KEY));
-  const [groupPinned, setGroupPinned] = useState(() => loadFlag(GROUP_PINNED_KEY));
+  // Panel layout. Each panel id maps to the zone it should render
+  // in (or "hidden"). Seeded from the backend dock_layout on mount
+  // and kept in sync via the dock-layout-changed broadcast.
+  const [panelZones, setPanelZones] = useState<Record<PanelId, Zone>>(DEFAULT_PANEL_ZONES);
   const termRef = useRef<TerminalHandle | null>(null);
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
@@ -112,29 +113,55 @@ function App() {
     max: number;
   } | null>(null);
 
+  // Load persisted panel layout once on mount and re-apply when any
+  // other window broadcasts a change (Settings → Panels save).
   useEffect(() => {
-    try {
-      localStorage.setItem(MAP_OPEN_KEY, mapOpen ? '1' : '0');
-    } catch {
-      // ignore storage failures
-    }
-  }, [mapOpen]);
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    dockLayoutGet()
+      .then((entries) => {
+        if (!cancelled) setPanelZones(panelZonesFromDock(entries));
+      })
+      .catch(() => {});
+    subscribeDockLayoutChanged((entries) => {
+      if (!cancelled) setPanelZones(panelZonesFromDock(entries));
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(CHAT_OPEN_KEY, chatOpen ? '1' : '0');
-    } catch {
-      // ignore storage failures
-    }
-  }, [chatOpen]);
+  // Persist a single panel's zone change and broadcast to other windows.
+  // The TopBar map/chat toggle buttons go through this so a quick
+  // hide/show stays synced with the Settings UI.
+  const setPanelZone = (id: PanelId, zone: Zone) => {
+    setPanelZones((prev) => {
+      if (!PANELS[id].allowedZones.includes(zone)) return prev;
+      const next = { ...prev, [id]: zone };
+      void dockLayoutSet(panelZonesToDock(next)).catch(() => {});
+      return next;
+    });
+  };
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(GROUP_PINNED_KEY, groupPinned ? '1' : '0');
-    } catch {
-      // ignore storage failures
+  // Map/chat topbar buttons toggle a panel between hidden and its
+  // default zone. Preserves the user's last non-hidden choice via
+  // a session-scoped memory so repeated hides + unhides land where
+  // the panel was last visible.
+  const lastVisibleZoneRef = useRef<Partial<Record<PanelId, Zone>>>({});
+  const togglePanelVisibility = (id: PanelId) => {
+    const current = panelZones[id];
+    if (current === 'hidden') {
+      const restore = lastVisibleZoneRef.current[id] ?? PANELS[id].defaultZone;
+      setPanelZone(id, restore);
+    } else {
+      lastVisibleZoneRef.current[id] = current;
+      setPanelZone(id, 'hidden');
     }
-  }, [groupPinned]);
+  };
 
   // Reset the history-pane scroll-depth indicator whenever the split
   // closes. The history Terminal unmounts and the next mount will fire
@@ -343,17 +370,47 @@ function App() {
 
   const connected = status.kind === 'connected' || status.kind === 'connecting';
 
+  const grouped = groupPanelsByZone(panelZones);
+  const renderPanel = (id: PanelId) => {
+    switch (id) {
+      case 'map':
+        return <MapPane key="map" />;
+      case 'group':
+        return <GroupPane key="group" pinned onTogglePin={() => setPanelZone('group', 'hidden')} />;
+      case 'vitals':
+        return <VitalsBar key="vitals" />;
+      case 'roomstrip':
+        return <RoomStrip key="roomstrip" />;
+      case 'chat':
+        return <ChatPane key="chat" onClose={() => setPanelZone('chat', 'hidden')} />;
+    }
+  };
+
   return (
     <main className="app">
       <TopBar
-        mapOpen={mapOpen}
-        onToggleMap={() => setMapOpen((v) => !v)}
-        chatOpen={chatOpen}
-        onToggleChat={() => setChatOpen((v) => !v)}
+        mapOpen={panelZones.map !== 'hidden'}
+        onToggleMap={() => togglePanelVisibility('map')}
+        chatOpen={panelZones.chat !== 'hidden'}
+        onToggleChat={() => togglePanelVisibility('chat')}
       />
       <Connect status={status} onError={handleError} />
-      <RoomStrip />
+      {grouped.top.length > 0 && (
+        <div className="panel-zone panel-zone-top">{grouped.top.map(renderPanel)}</div>
+      )}
       <div className="main-row">
+        {grouped.left.length > 0 && (
+          <Resizable
+            storageKey="vosh.layout.leftZoneWidth"
+            defaultSize={360}
+            minSize={200}
+            maxSize={720}
+            className="panel-zone panel-zone-left"
+            handleLabel="resize left panel zone"
+          >
+            <div className="panel-zone-stack">{grouped.left.map(renderPanel)}</div>
+          </Resizable>
+        )}
         <div
           className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}`}
           onMouseUp={handleTerminalMouseUp}
@@ -406,56 +463,22 @@ function App() {
             />
           </div>
         </div>
-        {(mapOpen || groupPinned) && (
+        {grouped.right.length > 0 && (
           <Resizable
-            storageKey="vosh.layout.mapWidth"
+            storageKey="vosh.layout.rightZoneWidth"
             defaultSize={360}
-            minSize={240}
+            minSize={200}
             maxSize={720}
-            className="map-resizable"
-            handleLabel="resize map"
+            className="panel-zone panel-zone-right"
+            handleLabel="resize right panel zone"
           >
-            <div className="right-column">
-              {mapOpen && <MapPane />}
-              {groupPinned &&
-                (mapOpen ? (
-                  <Resizable
-                    storageKey="vosh.layout.groupPinnedHeight"
-                    direction="vertical"
-                    defaultSize={220}
-                    minSize={80}
-                    /* Right column shares vertical space with map +
-                       (when open) chat row. Cap conservatively so
-                       the user cannot drag it past the available
-                       height and clip out of the right column. */
-                    maxSize={400}
-                    reservePx={200}
-                    className="group-pinned-resizable"
-                    handleLabel="resize pinned group"
-                  >
-                    <GroupPane pinned onTogglePin={() => setGroupPinned(false)} />
-                  </Resizable>
-                ) : (
-                  <GroupPane pinned onTogglePin={() => setGroupPinned(false)} />
-                ))}
-            </div>
+            <div className="panel-zone-stack">{grouped.right.map(renderPanel)}</div>
           </Resizable>
         )}
       </div>
-      {chatOpen && (
-        <Resizable
-          storageKey="vosh.layout.chatHeight"
-          direction="vertical"
-          defaultSize={180}
-          minSize={100}
-          maxSize={500}
-          className="chat-resizable"
-          handleLabel="resize chat"
-        >
-          <ChatPane groupPinned={groupPinned} onToggleGroupPin={() => setGroupPinned(true)} />
-        </Resizable>
+      {grouped.bottom.length > 0 && (
+        <div className="panel-zone panel-zone-bottom">{grouped.bottom.map(renderPanel)}</div>
       )}
-      <VitalsBar />
       <Input
         ref={inputRef}
         enabled={connected}
