@@ -26,6 +26,11 @@ const FORMATS: { id: Exclude<ImportFormat, ''>; label: string; hint: string }[] 
     label: 'GMUD',
     hint: 'gmud.cfg-style plain text directives.',
   },
+  {
+    id: 'cmud',
+    label: 'CMUD / zMUD',
+    hint: '.xml export rooted at <cmud>. Classes flattened, wildcards translated.',
+  },
 ];
 
 // Import config files from other MUD clients into vosh. Drop a file
