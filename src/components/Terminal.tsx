@@ -20,17 +20,84 @@ interface Props {
   onReady?: (handle: TerminalHandle) => void;
   fontFamily: string;
   fontSize: number;
+  /// When true the chrome theme tints server output too. When false
+  /// (the default) server output uses the canonical xterm-256
+  /// palette regardless of theme.
+  themeTerminalColors: boolean;
 }
 
-function xtermThemeFor(theme: AppTheme): ITheme {
-  return { ...theme.xterm };
+// Canonical xterm-256 palette for ANSI codes 0-15. Used when the
+// terminal renders in "independent palette" mode (the default) so
+// the server's 16-color and 256-color output looks the same
+// regardless of which chrome theme the user picked. The 6x6x6
+// cube (codes 16-231) and 24-step grayscale ramp (232-255) are
+// already theme-independent inside xterm.js; this fixes the 0-15
+// slice that the theme used to tint.
+//
+// Values match the SVG chart at
+// https://upload.wikimedia.org/wikipedia/commons/1/15/Xterm_256color_chart.svg
+const CANONICAL_ANSI_16: Pick<
+  ITheme,
+  | 'black'
+  | 'red'
+  | 'green'
+  | 'yellow'
+  | 'blue'
+  | 'magenta'
+  | 'cyan'
+  | 'white'
+  | 'brightBlack'
+  | 'brightRed'
+  | 'brightGreen'
+  | 'brightYellow'
+  | 'brightBlue'
+  | 'brightMagenta'
+  | 'brightCyan'
+  | 'brightWhite'
+> = {
+  black: '#000000',
+  red: '#800000',
+  green: '#008000',
+  yellow: '#808000',
+  blue: '#000080',
+  magenta: '#800080',
+  cyan: '#008080',
+  white: '#c0c0c0',
+  brightBlack: '#808080',
+  brightRed: '#ff0000',
+  brightGreen: '#00ff00',
+  brightYellow: '#ffff00',
+  brightBlue: '#0000ff',
+  brightMagenta: '#ff00ff',
+  brightCyan: '#00ffff',
+  brightWhite: '#ffffff',
+};
+
+function xtermThemeFor(theme: AppTheme, themeTerminalColors: boolean): ITheme {
+  if (themeTerminalColors) {
+    // Legacy behavior: the chrome theme also colors server output.
+    return { ...theme.xterm };
+  }
+  // Default: chrome theme controls the surfaces (background, default
+  // foreground, cursor, selection) but the 16 ANSI palette stays at
+  // the canonical xterm-256 values so server output reads identically
+  // to a stock xterm.
+  return {
+    ...theme.xterm,
+    ...CANONICAL_ANSI_16,
+  };
 }
 
-export function Terminal({ onReady, fontFamily, fontSize }: Props) {
+export function Terminal({ onReady, fontFamily, fontSize, themeTerminalColors }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const sizingRef = useRef<HTMLDivElement | null>(null);
+  // Mirror the flag in a ref so the long-lived effect (which creates
+  // the XTerm instance once) doesn't re-create the terminal every
+  // time the user toggles the setting.
+  const themeTerminalColorsRef = useRef(themeTerminalColors);
+  themeTerminalColorsRef.current = themeTerminalColors;
   // Hold the latest onReady in a ref so the setup effect can call it without
   // listing it as a dependency. Without this, every parent re-render passes
   // a fresh arrow function, the effect re-runs, and the xterm instance is
@@ -56,7 +123,7 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
       scrollback: 10000,
       allowProposedApi: true,
       convertEol: false,
-      theme: xtermThemeFor(findTheme(getCurrentThemeId())),
+      theme: xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColorsRef.current),
     });
 
     const fit = new FitAddon();
@@ -186,6 +253,14 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
     }
   }, [fontFamily, fontSize]);
 
+  // Re-apply the palette when the canonical-vs-themed toggle flips
+  // without needing to recreate the XTerm instance.
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.theme = xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColors);
+  }, [themeTerminalColors]);
+
   // Live-refresh the xterm palette when the user switches themes from
   // the settings window. Listens on the cross-window theme event.
   useEffect(() => {
@@ -194,7 +269,7 @@ export function Terminal({ onReady, fontFamily, fontSize }: Props) {
     subscribeThemeChanges((themeId) => {
       const term = termRef.current;
       if (!term) return;
-      term.options.theme = xtermThemeFor(findTheme(themeId));
+      term.options.theme = xtermThemeFor(findTheme(themeId), themeTerminalColorsRef.current);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
