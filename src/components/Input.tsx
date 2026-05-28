@@ -182,11 +182,13 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   };
 
   const handleKeyDown = async (event: KeyboardEvent<HTMLInputElement>) => {
-    // Macro lookup runs first so a bound key (F1, Ctrl+N, etc) fires
-    // its command regardless of any other handler. canonicalKeyFromEvent
-    // returns null for plain printable keys without a modifier, so this
-    // never eats normal typing.
-    const canonical = canonicalKeyFromEvent(event);
+    // Macro lookup runs first so a bound key fires its command
+    // regardless of any other handler. allowPlainPrintable matches
+    // what the Settings capture path uses, so a binding to a bare
+    // character (e.g. "\") fires here too. The lookup is gated by
+    // macroMapRef.current.get(canonical), so unbound printable keys
+    // still fall through to normal typing.
+    const canonical = canonicalKeyFromEvent(event, { allowPlainPrintable: true });
     if (canonical) {
       const command = macroMapRef.current.get(canonical);
       if (command) {
