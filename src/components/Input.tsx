@@ -28,10 +28,13 @@ interface Props {
   enabled: boolean;
   onError?: (message: string) => void;
   onLocalEcho?: (text: string) => void;
+  /** Scroll the terminal scrollback by N pages. Called from
+   *  PageUp/PageDown handling (which on macOS is Fn+Up/Fn+Down). */
+  onScrollTerminal?: (pages: number) => void;
 }
 
 export const Input = forwardRef<InputHandle, Props>(function Input(
-  { enabled, onError, onLocalEcho }: Props,
+  { enabled, onError, onLocalEcho, onScrollTerminal }: Props,
   ref,
 ) {
   const [value, setValue] = useState('');
@@ -195,6 +198,32 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         }
         return;
       }
+    }
+
+    // Page-scroll the terminal scrollback. macOS sends PageUp/PageDown
+    // when the user presses Fn+Up/Fn+Down. Other platforms: PageUp/
+    // PageDown directly.
+    if (event.key === 'PageUp' || event.key === 'PageDown') {
+      event.preventDefault();
+      onScrollTerminal?.(event.key === 'PageUp' ? -1 : 1);
+      return;
+    }
+
+    // Move to start/end of the input line. macOS conventions:
+    //   Cmd+Left / Cmd+Right — start / end of line
+    //   Fn+Left / Fn+Right   — generate Home / End in browsers
+    // Cross-platform Home/End still works.
+    if (event.key === 'Home' || (event.metaKey && event.key === 'ArrowLeft')) {
+      event.preventDefault();
+      const el = inputRef.current;
+      if (el) el.setSelectionRange(0, 0);
+      return;
+    }
+    if (event.key === 'End' || (event.metaKey && event.key === 'ArrowRight')) {
+      event.preventDefault();
+      const el = inputRef.current;
+      if (el) el.setSelectionRange(el.value.length, el.value.length);
+      return;
     }
 
     if (event.key === 'Enter') {

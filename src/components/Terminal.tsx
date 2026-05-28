@@ -14,6 +14,10 @@ export interface TerminalHandle {
   fit: () => void;
   focus: () => void;
   clear: () => void;
+  /** Scroll the xterm scrollback by N pages. Negative N scrolls up. */
+  scrollPages: (n: number) => void;
+  /** Scroll the xterm scrollback by N lines. Negative N scrolls up. */
+  scrollLines: (n: number) => void;
 }
 
 interface Props {
@@ -220,8 +224,35 @@ export function Terminal({ onReady, fontFamily, fontSize, themeTerminalColors }:
       fit: () => fit.fit(),
       focus: () => term.focus(),
       clear: () => term.clear(),
+      scrollPages: (n) => term.scrollPages(n),
+      scrollLines: (n) => term.scrollLines(n),
     };
     onReadyRef.current?.(handle);
+
+    // Intercept Cmd+C (macOS) / Ctrl+Shift+C (Linux/Win) when there's
+    // an xterm selection so the user can copy highlighted output to
+    // the clipboard. Canvas-rendered terminals do not expose the
+    // selection to the browser the same way DOM text does, so the
+    // browser-native Cmd+C shortcut would just copy whatever is in
+    // the focused input. attachCustomKeyEventHandler lets us swallow
+    // the keystroke and write the selection ourselves.
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown') return true;
+      const key = event.key.toLowerCase();
+      const isMacCopy = event.metaKey && !event.ctrlKey && !event.altKey && key === 'c';
+      const isNonMacCopy = event.ctrlKey && event.shiftKey && key === 'c';
+      if (isMacCopy || isNonMacCopy) {
+        const selection = term.getSelection();
+        if (selection) {
+          void navigator.clipboard.writeText(selection).catch(() => {
+            /* ignore — clipboard may be unavailable in some webviews */
+          });
+          event.preventDefault();
+          return false;
+        }
+      }
+      return true;
+    });
 
     return () => {
       cancelAnimationFrame(rafId);

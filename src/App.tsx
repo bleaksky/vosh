@@ -346,6 +346,7 @@ function App() {
         enabled={connected}
         onError={handleError}
         onLocalEcho={(text) => termRef.current?.write(text)}
+        onScrollTerminal={(pages) => termRef.current?.scrollPages(pages)}
       />
       <StatusBar />
       <UpdateNotice />
