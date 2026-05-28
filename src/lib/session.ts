@@ -414,6 +414,7 @@ export interface UiConfig {
   font_size: number;
   tracked_affects: string[];
   enabled_presets: string[];
+  keep_last_command: boolean;
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -424,6 +425,7 @@ export async function getUiConfig(): Promise<UiConfig> {
     font_size: number;
     tracked_affects: string[];
     enabled_presets: string[];
+    keep_last_command?: boolean;
   }>('ui_get_config');
   return {
     theme: typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : 'kanso-zen',
@@ -432,6 +434,7 @@ export async function getUiConfig(): Promise<UiConfig> {
     font_size: cfg.font_size,
     tracked_affects: Array.isArray(cfg.tracked_affects) ? cfg.tracked_affects : [],
     enabled_presets: Array.isArray(cfg.enabled_presets) ? cfg.enabled_presets : [],
+    keep_last_command: Boolean(cfg.keep_last_command),
   };
 }
 
@@ -443,6 +446,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     fontSize: config.font_size,
     trackedAffects: config.tracked_affects,
     enabledPresets: config.enabled_presets,
+    keepLastCommand: config.keep_last_command,
   });
 }
 

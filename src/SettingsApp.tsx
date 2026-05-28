@@ -195,6 +195,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
         family: config.font_family,
         size: config.font_size,
       });
+      await emit('vosh://keep-last-changed', config.keep_last_command);
       await broadcastTrackedAffects(config.tracked_affects);
       setSavedAt(Date.now());
     } catch (e) {
@@ -231,6 +232,16 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
             onChange={(e) => update({ auto_update: e.target.checked })}
           />
           <span>auto-check on launch</span>
+        </label>
+      </Row>
+      <Row label="input">
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={config.keep_last_command}
+            onChange={(e) => update({ keep_last_command: e.target.checked })}
+          />
+          <span>keep last command (press enter to repeat)</span>
         </label>
       </Row>
       <Row label="font">

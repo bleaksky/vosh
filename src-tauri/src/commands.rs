@@ -661,6 +661,7 @@ pub(crate) struct UiConfigPayload {
     pub font_size: u32,
     pub tracked_affects: Vec<String>,
     pub enabled_presets: Vec<String>,
+    pub keep_last_command: bool,
 }
 
 #[tauri::command]
@@ -675,10 +676,12 @@ pub(crate) async fn ui_get_config(
         font_size: p.ui.font_size,
         tracked_affects: p.ui.tracked_affects.clone(),
         enabled_presets: p.ui.enabled_presets.clone(),
+        keep_last_command: p.ui.keep_last_command,
     })
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn ui_set_config(
     app: AppHandle,
     state: State<'_, SharedState>,
@@ -688,6 +691,7 @@ pub(crate) async fn ui_set_config(
     font_size: u32,
     tracked_affects: Vec<String>,
     enabled_presets: Vec<String>,
+    keep_last_command: bool,
 ) -> Result<(), String> {
     {
         let mut p = state.profile.lock().await;
@@ -707,6 +711,7 @@ pub(crate) async fn ui_set_config(
             .collect();
         p.ui.enabled_presets.sort();
         p.ui.enabled_presets.dedup();
+        p.ui.keep_last_command = keep_last_command;
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
