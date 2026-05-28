@@ -447,7 +447,7 @@ body {
 }
 .terminal-area-split .terminal-pane-history {
   flex: 1 1 0;
-  border-bottom: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--c-split-divider, var(--c-border));
   margin-bottom: 4px;
   position: relative;
 }
@@ -1934,6 +1934,36 @@ body {
 .logs-case input[type='checkbox'],
 .settings-checkbox input[type='checkbox'] {
   accent-color: var(--c-accent);
+}
+
+.settings-color-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-color-row input[type='color'] {
+  width: 32px;
+  height: 24px;
+  border: 1px solid var(--c-border);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.settings-color-text {
+  width: 220px;
+  background: var(--c-surface-deep);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  padding: 3px 7px;
+  font-family: var(--app-font-family, ui-monospace, monospace);
+  font-size: 0.85em;
+}
+
+.settings-color-text:focus {
+  outline: none;
+  border-color: var(--c-accent);
 }
 
 .logs-status {

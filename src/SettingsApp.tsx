@@ -42,6 +42,23 @@ const FONT_PICKS: { label: string; value: string }[] = [
 
 const PREVIEW_TEXT = 'The quick brown fox 0123456789  |  hp 850/1000  IlOo1';
 
+// Coerce a freeform color string to the #rrggbb form `<input type=color>`
+// requires. Returns a sane default for empty/unparseable input so the
+// picker still opens at something.
+function normalizeForColorInput(color: string | null): string {
+  if (!color) return '#888888';
+  const trimmed = color.trim();
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed;
+  if (/^#[0-9a-f]{3}$/i.test(trimmed)) {
+    return `#${trimmed
+      .slice(1)
+      .split('')
+      .map((c) => c + c)
+      .join('')}`;
+  }
+  return '#888888';
+}
+
 type TabId =
   | 'general'
   | 'themes'
@@ -270,6 +287,33 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           />
           <span>keep last command (press enter to repeat)</span>
         </label>
+      </Row>
+      <Row label="split divider">
+        <span className="settings-color-row">
+          <input
+            type="color"
+            // input type=color requires a 7-char #rrggbb; fall back to
+            // the theme border read off the CSS var when nothing is set.
+            value={normalizeForColorInput(config.split_divider_color)}
+            onChange={(e) => update({ split_divider_color: e.target.value })}
+            aria-label="split divider color"
+          />
+          <input
+            type="text"
+            className="settings-color-text"
+            spellCheck={false}
+            placeholder="theme default (#rrggbb, rgba, named)"
+            value={config.split_divider_color ?? ''}
+            onChange={(e) => update({ split_divider_color: e.target.value || null })}
+          />
+          <button
+            type="button"
+            className="settings-btn settings-btn-mute"
+            onClick={() => update({ split_divider_color: null })}
+          >
+            [clear]
+          </button>
+        </span>
       </Row>
       <Row label="font">
         <input

@@ -428,6 +428,9 @@ export interface UiConfig {
   keep_last_command: boolean;
   theme_terminal_colors: boolean;
   custom_themes: CustomTheme[];
+  /** Override color for the split-scrollback divider. Empty/undefined
+   *  means use the theme default (--c-border). */
+  split_divider_color: string | null;
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -441,6 +444,7 @@ export async function getUiConfig(): Promise<UiConfig> {
     keep_last_command?: boolean;
     theme_terminal_colors?: boolean;
     custom_themes?: CustomTheme[];
+    split_divider_color?: string | null;
   }>('ui_get_config');
   return {
     theme: typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : 'kanso-zen',
@@ -452,6 +456,10 @@ export async function getUiConfig(): Promise<UiConfig> {
     keep_last_command: Boolean(cfg.keep_last_command),
     theme_terminal_colors: Boolean(cfg.theme_terminal_colors),
     custom_themes: Array.isArray(cfg.custom_themes) ? cfg.custom_themes : [],
+    split_divider_color:
+      typeof cfg.split_divider_color === 'string' && cfg.split_divider_color.length > 0
+        ? cfg.split_divider_color
+        : null,
   };
 }
 
@@ -466,6 +474,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     keepLastCommand: config.keep_last_command,
     themeTerminalColors: config.theme_terminal_colors,
     customThemes: config.custom_themes,
+    splitDividerColor: config.split_divider_color,
   });
   // Broadcast the live custom_themes list so other webviews update
   // their in-memory registry BEFORE any theme-changed event lands.
@@ -478,6 +487,19 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     // Tauri event bus unavailable; in-app listeners cover the same
     // window.
   }
+  try {
+    await emit('vosh://split-divider-changed', config.split_divider_color);
+  } catch {
+    // ignore — main window also re-reads on focus
+  }
+}
+
+export async function subscribeSplitDividerChanged(
+  cb: (color: string | null) => void,
+): Promise<UnlistenFn> {
+  return listen<string | null>('vosh://split-divider-changed', (event) => {
+    cb(typeof event.payload === 'string' && event.payload.length > 0 ? event.payload : null);
+  });
 }
 
 export async function subscribeCustomThemesChanged(

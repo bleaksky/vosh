@@ -987,6 +987,7 @@ pub(crate) struct UiConfigPayload {
     pub keep_last_command: bool,
     pub theme_terminal_colors: bool,
     pub custom_themes: Vec<crate::profile_config::CustomTheme>,
+    pub split_divider_color: Option<String>,
 }
 
 #[tauri::command]
@@ -1004,6 +1005,7 @@ pub(crate) async fn ui_get_config(
         keep_last_command: p.ui.keep_last_command,
         theme_terminal_colors: p.ui.theme_terminal_colors,
         custom_themes: p.ui.custom_themes.clone(),
+        split_divider_color: p.ui.split_divider_color.clone(),
     })
 }
 
@@ -1021,6 +1023,7 @@ pub(crate) async fn ui_set_config(
     keep_last_command: bool,
     theme_terminal_colors: bool,
     custom_themes: Vec<crate::profile_config::CustomTheme>,
+    split_divider_color: Option<String>,
 ) -> Result<(), String> {
     {
         let mut p = state.profile.lock().await;
@@ -1043,6 +1046,16 @@ pub(crate) async fn ui_set_config(
         p.ui.keep_last_command = keep_last_command;
         p.ui.theme_terminal_colors = theme_terminal_colors;
         p.ui.custom_themes = custom_themes;
+        // Empty strings get normalized to None so the picker can clear
+        // back to the theme default by submitting "".
+        p.ui.split_divider_color = split_divider_color.and_then(|s| {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        });
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
