@@ -1,6 +1,23 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
+// Platform sniff. The square button means "make the window as big as
+// possible." On macOS that idiom maps to native full-screen mode (the
+// green traffic-light button since 10.10), not the toggle-maximize
+// call that just enlarges within the desktop. We flip behavior here
+// so the button does what the user expects on each OS.
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform);
+
+async function handleMaximize() {
+  const w = getCurrentWindow();
+  if (IS_MAC) {
+    const fs = await w.isFullscreen();
+    await w.setFullscreen(!fs);
+  } else {
+    await w.toggleMaximize();
+  }
+}
+
 interface Props {
   // When true, the auxiliary chrome buttons (settings/map/chat) render.
   // Set false on auxiliary windows so they only show window controls.
@@ -81,8 +98,8 @@ export function TopBar({
         <button
           type="button"
           className="topbar-btn"
-          aria-label="maximize"
-          onClick={() => void win().toggleMaximize()}
+          aria-label={IS_MAC ? 'enter full screen' : 'maximize'}
+          onClick={() => void handleMaximize()}
         >
           ▢
         </button>
