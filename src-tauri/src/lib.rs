@@ -30,10 +30,10 @@ use commands::{
     macros_set, map_area_snapshot, map_set_avoid, map_set_note, map_walk_to, open_settings_window,
     plugins_list, plugins_reload, plugins_set_enabled, presets_install, presets_remove,
     profile_create, profile_delete, profile_duplicate, profile_export, profile_import,
-    profile_rename, profile_switch, profiles_list, scrollback_load, session_connect,
-    session_disconnect, session_send, session_send_input, target_get, triggers_export,
-    triggers_import, triggers_list, ui_get_config, ui_set_config, updater_check,
-    updater_install_and_relaunch, AppState, SharedState,
+    profile_rename, profile_resolve_match, profile_set_metadata, profile_switch, profiles_list,
+    scrollback_load, session_connect, session_disconnect, session_send, session_send_input,
+    target_get, triggers_export, triggers_import, triggers_list, ui_get_config, ui_set_config,
+    updater_check, updater_install_and_relaunch, AppState, SharedState,
 };
 use fonts::{fonts_list, handle_font_uri};
 use map_state::MapState;
@@ -224,6 +224,8 @@ pub fn run() {
             profile_rename,
             profile_duplicate,
             profile_switch,
+            profile_set_metadata,
+            profile_resolve_match,
             plugins_list,
             plugins_set_enabled,
             plugins_reload,

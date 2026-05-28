@@ -1,5 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import { connectSession, disconnectSession } from '../lib/session';
+import {
+  connectSession,
+  disconnectSession,
+  profileResolveMatch,
+  profileSwitch,
+  profilesList,
+} from '../lib/session';
 
 interface Props {
   status: ConnectionStatus;
@@ -26,9 +32,28 @@ export function Connect({ status, onError }: Props) {
     try {
       if (isLive) {
         await disconnectSession();
-      } else {
-        await connectSession(host, port, tls);
+        return;
       }
+      // Auto-switch to a matching profile before opening the
+      // connection. Match is by host (required) + port (when
+      // pinned by the profile) + character (when pinned). Falling
+      // back to the currently-active profile when nothing matches
+      // is the natural behavior: existing connections keep using
+      // whatever profile is loaded today.
+      try {
+        const matchName = await profileResolveMatch(host, port, null);
+        if (matchName) {
+          const current = await profilesList();
+          if (matchName !== current.active) {
+            await profileSwitch(matchName);
+          }
+        }
+      } catch (matchErr) {
+        // Profile resolve is best-effort — never block a connect on
+        // a transient profile-system error.
+        console.warn('[profile match]', matchErr);
+      }
+      await connectSession(host, port, tls);
     } catch (e) {
       onError(String(e));
     }

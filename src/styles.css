@@ -2116,6 +2116,156 @@ body {
   flex: 1 1 auto;
 }
 
+/* Profiles tab — named-profile catalog. Active profile marked by a
+   filled dot in the active accent color. Each row collapses an
+   "auto-match" detail panel for the host/port/character pin used
+   by the connect flow's auto-pick. */
+.profiles-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.profiles-help {
+  color: var(--c-text-faint);
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+.profiles-create-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profiles-create-row input[type='text'] {
+  flex: 1 1 auto;
+  background: var(--c-surface-emphasis);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+}
+
+.profiles-create-row input[type='text']:focus {
+  border-color: var(--c-accent);
+}
+
+.profiles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-row {
+  border: 1px solid var(--c-border-soft);
+  border-radius: 3px;
+  background: var(--c-surface-lift);
+  padding: 6px 10px;
+}
+
+.profile-row.is-active {
+  border-color: var(--c-accent);
+}
+
+.profile-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-row-marker {
+  color: var(--c-text-dim);
+  font-size: 0.9em;
+}
+
+.profile-row.is-active .profile-row-marker {
+  color: var(--c-accent);
+}
+
+.profile-row-name {
+  color: var(--c-text-strong);
+  font-weight: 700;
+}
+
+.profile-row.is-active .profile-row-name {
+  color: var(--c-accent);
+}
+
+.profile-row-desc {
+  color: var(--c-text-faint);
+  font-size: 0.9em;
+}
+
+.profile-row-rename {
+  background: var(--c-surface-emphasis);
+  color: var(--c-text-strong);
+  border: 1px solid var(--c-accent);
+  border-radius: 2px;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: inherit;
+  outline: none;
+  font-weight: 700;
+}
+
+.profile-row-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.profile-row-detail {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--c-border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile-row-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--c-text-faint);
+  font-size: 0.9em;
+}
+
+.profile-row-field input[type='text'] {
+  background: var(--c-surface-emphasis);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 1em;
+  outline: none;
+}
+
+.profile-row-field input[type='text']:focus {
+  border-color: var(--c-accent);
+}
+
+.profile-row-match-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.profile-row-detail-actions {
+  display: flex;
+  gap: 14px;
+}
+
 /* Import tab — file picker + paste-in textarea + apply, with a
    per-format radio row and a post-apply summary that lists counts
    plus details panels for rejected / unsupported / unparsed. */

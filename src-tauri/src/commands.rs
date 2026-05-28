@@ -617,6 +617,89 @@ pub(crate) async fn profile_duplicate(
 }
 
 #[tauri::command]
+pub(crate) async fn profile_set_metadata(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    name: String,
+    description: Option<String>,
+    auto_match: Option<crate::profile_set::AutoMatch>,
+) -> Result<(), String> {
+    {
+        let mut guard = state.profile_set.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Err("profile set not initialized".into());
+        };
+        set.set_metadata(&name, description, auto_match)
+            .map_err(|e| e.to_string())?;
+    }
+    let _ = app.emit("vosh://profiles-changed", &name);
+    Ok(())
+}
+
+/// Given a connect target, find the first profile whose `auto_match`
+/// claims it. Returns the profile name or null. The frontend calls
+/// this right before invoking `session_connect` so a matching
+/// profile can be switched to ahead of the connection.
+#[tauri::command]
+pub(crate) async fn profile_resolve_match(
+    state: State<'_, SharedState>,
+    host: String,
+    port: u16,
+    character: Option<String>,
+) -> Result<Option<String>, String> {
+    let guard = state.profile_set.lock().await;
+    let Some(set) = guard.as_ref() else {
+        return Ok(None);
+    };
+    let host_l = host.trim().to_ascii_lowercase();
+    let character_l = character.as_deref().map(str::to_ascii_lowercase);
+    let mut best: Option<(&str, u8)> = None;
+    for entry in set.list() {
+        let Some(am) = &entry.auto_match else {
+            continue;
+        };
+        // Host is required to be set AND match (case-insensitive).
+        let Some(am_host) = &am.host else { continue };
+        if am_host.trim().to_ascii_lowercase() != host_l {
+            continue;
+        }
+        // Port: if specified, must equal.
+        if let Some(p) = am.port {
+            if p != port {
+                continue;
+            }
+        }
+        // Character: if both specified, must equal (case-insensitive).
+        // A profile with a character pinned scores higher than one
+        // matching on host:port alone so multi-character setups
+        // resolve to the right one.
+        let mut score: u8 = 1; // host match
+        if am.port.is_some() {
+            score += 1;
+        }
+        match (&am.character, &character_l) {
+            (Some(profile_char), Some(connect_char)) => {
+                if profile_char.trim().to_ascii_lowercase() != *connect_char {
+                    continue;
+                }
+                score += 2;
+            }
+            (Some(_), None) => {
+                // Profile pins a character but the connect call did
+                // not supply one — soft skip rather than match (the
+                // user may not know which character they are).
+                continue;
+            }
+            _ => {}
+        }
+        if best.map_or(true, |(_, b)| score > b) {
+            best = Some((entry.name.as_str(), score));
+        }
+    }
+    Ok(best.map(|(name, _)| name.to_string()))
+}
+
+#[tauri::command]
 pub(crate) async fn profile_switch(
     app: AppHandle,
     state: State<'_, SharedState>,

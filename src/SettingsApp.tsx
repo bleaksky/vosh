@@ -7,6 +7,7 @@ import { AliasForm } from './components/AliasForm';
 import { LogsTab } from './components/LogsTab';
 import { MacrosTab } from './components/MacrosTab';
 import { ImportTab } from './components/ImportTab';
+import { ProfilesTab } from './components/ProfilesTab';
 import {
   broadcastTrackedAffects,
   exportAliases,
@@ -40,9 +41,10 @@ const FONT_PICKS: { label: string; value: string }[] = [
 
 const PREVIEW_TEXT = 'The quick brown fox 0123456789  |  hp 850/1000  IlOo1';
 
-type TabId = 'general' | 'triggers' | 'aliases' | 'macros' | 'import' | 'logs';
+type TabId = 'general' | 'profiles' | 'triggers' | 'aliases' | 'macros' | 'import' | 'logs';
 const TABS: { id: TabId; label: string }[] = [
   { id: 'general', label: 'general' },
+  { id: 'profiles', label: 'profiles' },
   { id: 'triggers', label: 'triggers' },
   { id: 'aliases', label: 'aliases' },
   { id: 'macros', label: 'macros' },
@@ -135,6 +137,7 @@ export function SettingsApp() {
             )}
           />
         )}
+        {tab === 'profiles' && <ProfilesTab onError={setError} />}
         {tab === 'macros' && <MacrosTab onError={setError} />}
         {tab === 'import' && <ImportTab onError={setError} />}
         {tab === 'logs' && <LogsTab onError={setError} />}
