@@ -977,6 +977,7 @@ pub(crate) struct UiConfigPayload {
     pub enabled_presets: Vec<String>,
     pub keep_last_command: bool,
     pub theme_terminal_colors: bool,
+    pub custom_themes: Vec<crate::profile_config::CustomTheme>,
 }
 
 #[tauri::command]
@@ -993,6 +994,7 @@ pub(crate) async fn ui_get_config(
         enabled_presets: p.ui.enabled_presets.clone(),
         keep_last_command: p.ui.keep_last_command,
         theme_terminal_colors: p.ui.theme_terminal_colors,
+        custom_themes: p.ui.custom_themes.clone(),
     })
 }
 
@@ -1009,6 +1011,7 @@ pub(crate) async fn ui_set_config(
     enabled_presets: Vec<String>,
     keep_last_command: bool,
     theme_terminal_colors: bool,
+    custom_themes: Vec<crate::profile_config::CustomTheme>,
 ) -> Result<(), String> {
     {
         let mut p = state.profile.lock().await;
@@ -1030,6 +1033,7 @@ pub(crate) async fn ui_set_config(
         p.ui.enabled_presets.dedup();
         p.ui.keep_last_command = keep_last_command;
         p.ui.theme_terminal_colors = theme_terminal_colors;
+        p.ui.custom_themes = custom_themes;
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;

@@ -104,6 +104,43 @@ pub(crate) struct UiConfig {
     /// server output reads identically across themes.
     #[serde(default)]
     pub theme_terminal_colors: bool,
+    /// User-authored themes. Each entry mirrors the `AppTheme`
+    /// shape the frontend ships built-in themes as; on app load
+    /// these get appended to the built-in list so the user can
+    /// pick them from the theme dropdown like any other theme.
+    #[serde(default)]
+    pub custom_themes: Vec<CustomTheme>,
+}
+
+/// User-authored theme. All fields are colors (or strings, for
+/// metadata) that round-trip through serde to the frontend's
+/// `AppTheme` shape verbatim. The frontend is the canonical
+/// owner of which fields exist; this struct just stores them as
+/// a flat map so adding a new color slot only touches the
+/// frontend.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub(crate) struct CustomTheme {
+    /// Stable identifier. Treated as a key when the user picks
+    /// this theme in the settings dropdown.
+    pub id: String,
+    /// Display label for the picker.
+    pub label: String,
+    /// Optional one-line description.
+    #[serde(default)]
+    pub description: String,
+    /// xterm palette. Keys: background, foreground, cursor,
+    /// cursorAccent, selectionBackground, selectionForeground,
+    /// black .. brightWhite. The Rust side just round-trips a
+    /// string-to-string map so the schema stays anchored on the
+    /// frontend.
+    #[serde(default)]
+    pub xterm: std::collections::BTreeMap<String, String>,
+    /// Chrome palette. Keys: surfaceDeep, surface, surfacePane,
+    /// surfaceLift, surfaceEmphasis, textStrong, text, textMuted,
+    /// textFaint, textDim, borderSoft, border, borderStrong,
+    /// borderHover, accent, accentSoft, warn, danger, info, success.
+    #[serde(default)]
+    pub chrome: std::collections::BTreeMap<String, String>,
 }
 
 /// On-disk representation of a single docked bar.
@@ -125,6 +162,7 @@ impl Default for UiConfig {
             dock_layout: Vec::new(),
             keep_last_command: false,
             theme_terminal_colors: false,
+            custom_themes: Vec::new(),
         }
     }
 }
@@ -240,6 +278,7 @@ impl ProfileConfig {
             dock_layout: profile.ui.dock_layout.clone(),
             keep_last_command: profile.ui.keep_last_command,
             theme_terminal_colors: profile.ui.theme_terminal_colors,
+            custom_themes: profile.ui.custom_themes.clone(),
         };
 
         let plugins = PluginsPersist {
@@ -332,6 +371,7 @@ impl ProfileConfig {
             dock_layout: self.ui.dock_layout.clone(),
             keep_last_command: self.ui.keep_last_command,
             theme_terminal_colors: self.ui.theme_terminal_colors,
+            custom_themes: self.ui.custom_themes.clone(),
         };
 
         // Plugin enabled-set is persisted; the actual load happens in the

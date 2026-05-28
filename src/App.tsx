@@ -24,6 +24,7 @@ import {
 import { applyAndBroadcastTheme } from './lib/theme';
 import { loadFontStack } from './lib/fontLoader';
 import { defaultEnabledIds, PRESETS, presetTriggers } from './lib/presets';
+import { customToAppTheme, setCustomThemes } from './lib/themes';
 import { startChatStore } from './lib/chatStore';
 import { startGroupStore } from './lib/groupStore';
 
@@ -149,6 +150,9 @@ function App() {
     const onUnmount = () => window.clearTimeout(fallback);
     getUiConfig()
       .then(async (cfg) => {
+        // Register user-authored themes BEFORE the theme apply so
+        // the picked theme can actually be a custom entry.
+        setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
         void applyAndBroadcastTheme(cfg.theme);
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);

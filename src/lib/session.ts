@@ -407,6 +407,17 @@ export async function loadScrollback(): Promise<Uint8Array> {
 // theme registry.
 export type ThemeChoice = string;
 
+// User-authored theme. Mirrors AppTheme on the lib/themes side
+// but with the two palette objects exposed as bare records so
+// adding a slot only needs to touch themes.ts + the editor UI.
+export interface CustomTheme {
+  id: string;
+  label: string;
+  description: string;
+  xterm: Record<string, string>;
+  chrome: Record<string, string>;
+}
+
 export interface UiConfig {
   theme: ThemeChoice;
   auto_update: boolean;
@@ -416,6 +427,7 @@ export interface UiConfig {
   enabled_presets: string[];
   keep_last_command: boolean;
   theme_terminal_colors: boolean;
+  custom_themes: CustomTheme[];
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -428,6 +440,7 @@ export async function getUiConfig(): Promise<UiConfig> {
     enabled_presets: string[];
     keep_last_command?: boolean;
     theme_terminal_colors?: boolean;
+    custom_themes?: CustomTheme[];
   }>('ui_get_config');
   return {
     theme: typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : 'kanso-zen',
@@ -438,6 +451,7 @@ export async function getUiConfig(): Promise<UiConfig> {
     enabled_presets: Array.isArray(cfg.enabled_presets) ? cfg.enabled_presets : [],
     keep_last_command: Boolean(cfg.keep_last_command),
     theme_terminal_colors: Boolean(cfg.theme_terminal_colors),
+    custom_themes: Array.isArray(cfg.custom_themes) ? cfg.custom_themes : [],
   };
 }
 
@@ -451,6 +465,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     enabledPresets: config.enabled_presets,
     keepLastCommand: config.keep_last_command,
     themeTerminalColors: config.theme_terminal_colors,
+    customThemes: config.custom_themes,
   });
 }
 

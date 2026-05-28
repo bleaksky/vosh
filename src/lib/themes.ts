@@ -479,7 +479,7 @@ const highContrast: AppTheme = {
   },
 };
 
-export const THEMES: AppTheme[] = [
+export const BUILTIN_THEMES: AppTheme[] = [
   kansoZen,
   tokyoNight,
   nord,
@@ -489,10 +489,67 @@ export const THEMES: AppTheme[] = [
   highContrast,
 ];
 
+// User-authored themes, set by the Settings UI on load. Merged into
+// THEMES via a Proxy so callers that iterate THEMES (the picker
+// dropdown, findTheme) see custom entries without changes.
+let CUSTOM_THEMES: AppTheme[] = [];
+
+/** Replace the registered custom themes. The settings save path
+ *  calls this whenever the user-authored list changes; subsequent
+ *  iterations of THEMES include the new entries. */
+export function setCustomThemes(themes: AppTheme[]): void {
+  CUSTOM_THEMES = themes.slice();
+}
+
+/** Convert a CustomTheme record (the on-disk shape with bare maps)
+ *  into a full AppTheme by overlaying it on a Kanso-Zen base, so
+ *  missing color slots fall back to a sensible default rather than
+ *  rendering as undefined. */
+export function customToAppTheme(custom: {
+  id: string;
+  label: string;
+  description: string;
+  xterm: Record<string, string>;
+  chrome: Record<string, string>;
+}): AppTheme {
+  return {
+    id: custom.id,
+    label: custom.label,
+    description: custom.description,
+    xterm: { ...kansoZen.xterm, ...(custom.xterm as Partial<XtermPalette>) },
+    chrome: { ...kansoZen.chrome, ...(custom.chrome as Partial<ChromePalette>) },
+  };
+}
+
+/** Live, read-through list of every theme available to the user
+ *  (built-in + custom). Iteration order is built-ins first, custom
+ *  appended. Re-evaluates on every iteration so changes via
+ *  setCustomThemes are reflected without subscribing. */
+export const THEMES: AppTheme[] = new Proxy([] as AppTheme[], {
+  get(_target, prop, receiver) {
+    const merged = [...BUILTIN_THEMES, ...CUSTOM_THEMES];
+    const value = Reflect.get(merged, prop, receiver);
+    return typeof value === 'function' ? value.bind(merged) : value;
+  },
+  has(_target, prop) {
+    const merged = [...BUILTIN_THEMES, ...CUSTOM_THEMES];
+    return Reflect.has(merged, prop);
+  },
+  ownKeys() {
+    const merged = [...BUILTIN_THEMES, ...CUSTOM_THEMES];
+    return Reflect.ownKeys(merged);
+  },
+  getOwnPropertyDescriptor(_target, prop) {
+    const merged = [...BUILTIN_THEMES, ...CUSTOM_THEMES];
+    return Reflect.getOwnPropertyDescriptor(merged, prop);
+  },
+});
+
 export const DEFAULT_THEME_ID = 'kanso-zen';
 
 export function findTheme(id: string | undefined): AppTheme {
-  return THEMES.find((t) => t.id === id) ?? THEMES[0];
+  const all = [...BUILTIN_THEMES, ...CUSTOM_THEMES];
+  return all.find((t) => t.id === id) ?? all[0];
 }
 
 // Map a ChromePalette to CSS custom property pairs that styles.css
