@@ -4,9 +4,9 @@
 //! `Char.Combat` was wired in as part of the deferred GMCP follow-ups so
 //! current target name and HP show up in the prompt-area HUD.
 
+use serde_json::Value;
 use vosh_gmcp::Message;
 use vosh_vars::{Scope, VariableStore};
-use serde_json::Value;
 
 /// Push fields from a known GMCP package into the session variable store.
 /// Unknown packages are ignored so the auto-bind stays opt-in.
@@ -44,7 +44,11 @@ fn apply_char_combat(vars: &mut VariableStore, data: &Value) {
     if obj.is_empty() {
         vars.set(Scope::Session, "target_name".to_string(), String::new());
         vars.set(Scope::Session, "target_hp".to_string(), String::new());
-        vars.set(Scope::Session, "target_condition".to_string(), String::new());
+        vars.set(
+            Scope::Session,
+            "target_condition".to_string(),
+            String::new(),
+        );
         return;
     }
     if let Some(name) = obj.get("target").and_then(Value::as_str) {

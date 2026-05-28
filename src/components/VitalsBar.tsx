@@ -255,12 +255,8 @@ function VitalRow({
     <>
       <span className="vitals-label">{label}</span>
       <span className="vitals-glyphs" aria-hidden="true">
-        {filledCount > 0 && (
-          <span style={{ color: fill }}>{FILLED.repeat(filledCount)}</span>
-        )}
-        {emptyCount > 0 && (
-          <span className="vitals-empty">{EMPTY.repeat(emptyCount)}</span>
-        )}
+        {filledCount > 0 && <span style={{ color: fill }}>{FILLED.repeat(filledCount)}</span>}
+        {emptyCount > 0 && <span className="vitals-empty">{EMPTY.repeat(emptyCount)}</span>}
       </span>
       <span className="vitals-percent" style={{ color: fill }}>
         {value}%

@@ -322,9 +322,9 @@ export function drawTerrainDecorations(
       alpha *= edgeFade;
       if (alpha < 0.02) continue;
 
-      const jx = ((h >> 8) & 0xff) / 255 * step * 0.7 - step * 0.35;
-      const jy = ((h >> 16) & 0xff) / 255 * step * 0.7 - step * 0.35;
-      const sizeVar = 0.7 + ((h >> 24) & 0x7f) / 127 * 0.6;
+      const jx = (((h >> 8) & 0xff) / 255) * step * 0.7 - step * 0.35;
+      const jy = (((h >> 16) & 0xff) / 255) * step * 0.7 - step * 0.35;
+      const sizeVar = 0.7 + (((h >> 24) & 0x7f) / 127) * 0.6;
 
       const drawer = DRAWERS[nearest.sector] ?? DRAWERS[2];
       drawer(ctx, gx + jx, gy + jy, featureSize * sizeVar, alpha, nearest.haloColor);

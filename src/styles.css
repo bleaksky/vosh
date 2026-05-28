@@ -64,8 +64,8 @@
   --c-info: #7fb4ca;
   --c-success: #87a987;
 
-  --app-font-family: 'BerkeleyMono Bundled', 'JetBrainsMono Bundled', Menlo,
-    Consolas, ui-monospace, monospace;
+  --app-font-family:
+    'BerkeleyMono Bundled', 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
   --app-font-size: 14px;
 }
 
@@ -215,7 +215,9 @@ body {
   white-space: nowrap;
 }
 
-.room-strip::-webkit-scrollbar { height: 4px; }
+.room-strip::-webkit-scrollbar {
+  height: 4px;
+}
 .room-strip::-webkit-scrollbar-thumb {
   background: var(--c-border-strong);
   border-radius: 2px;
@@ -860,7 +862,9 @@ body {
   font-variant-numeric: tabular-nums;
   padding: 0 2px;
   border-radius: 2px;
-  transition: color 120ms ease-out, background 120ms ease-out;
+  transition:
+    color 120ms ease-out,
+    background 120ms ease-out;
 }
 
 .statusbar-tick-label {
@@ -888,8 +892,13 @@ body {
 }
 
 @keyframes vosh-tick-pulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.55; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 
 /* Per-tick vital deltas. Rendered to the right of the value bar.
@@ -1566,8 +1575,10 @@ body {
   height: 12px;
   margin-left: 4px;
   background: var(--c-text-faint);
-  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 2 L10 10 M10 2 L2 10' stroke='black' stroke-width='2' fill='none' stroke-linecap='round'/></svg>") center / contain no-repeat;
-  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 2 L10 10 M10 2 L2 10' stroke='black' stroke-width='2' fill='none' stroke-linecap='round'/></svg>") center / contain no-repeat;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 2 L10 10 M10 2 L2 10' stroke='black' stroke-width='2' fill='none' stroke-linecap='round'/></svg>")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2 2 L10 10 M10 2 L2 10' stroke='black' stroke-width='2' fill='none' stroke-linecap='round'/></svg>")
+    center / contain no-repeat;
   cursor: pointer;
 }
 

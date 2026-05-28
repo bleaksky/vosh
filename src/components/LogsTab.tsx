@@ -228,9 +228,7 @@ export function LogsTab({ onError }: Props) {
             {searching ? 'searching…' : `${hits.length} hit${hits.length === 1 ? '' : 's'}`}
           </span>
         </form>
-        <div
-          className={`logs-results${sessionFilter !== null ? ' logs-results-scoped' : ''}`}
-        >
+        <div className={`logs-results${sessionFilter !== null ? ' logs-results-scoped' : ''}`}>
           {hits.length === 0 && !searching && (
             <div className="settings-font-empty">
               {pattern ? 'no matches' : 'enter a pattern and hit search'}

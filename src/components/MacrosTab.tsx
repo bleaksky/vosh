@@ -70,18 +70,15 @@ export function MacrosTab({ onError }: Props) {
   return (
     <div className="macros-tab">
       <div className="macros-help">
-        Press a key in the &quot;key&quot; field below to capture it
-        (e.g. F1, Ctrl+N, Numpad7). The command fires when that key
-        is pressed while the input bar is focused. Commands may
-        contain `;` to chain multiple actions.
+        Press a key in the &quot;key&quot; field below to capture it (e.g. F1, Ctrl+N, Numpad7). The
+        command fires when that key is pressed while the input bar is focused. Commands may contain
+        `;` to chain multiple actions.
       </div>
       {loading ? (
         <div className="settings-font-empty">loading...</div>
       ) : (
         <div className="macros-list">
-          {macros.length === 0 && (
-            <div className="settings-font-empty">no macros bound yet</div>
-          )}
+          {macros.length === 0 && <div className="settings-font-empty">no macros bound yet</div>}
           {macros.map((m) => (
             <MacroRow
               key={m.key}
@@ -91,13 +88,7 @@ export function MacrosTab({ onError }: Props) {
               onDelete={() => handleDelete(m.key)}
             />
           ))}
-          <MacroRow
-            key="__new"
-            initialKey=""
-            initialCommand=""
-            onSave={handleSave}
-            isNew
-          />
+          <MacroRow key="__new" initialKey="" initialCommand="" onSave={handleSave} isNew />
         </div>
       )}
     </div>
@@ -192,11 +183,7 @@ function MacroRow({ initialKey, initialCommand, onSave, onDelete, isNew }: RowPr
           {isNew ? '[add]' : '[save]'}
         </button>
         {!isNew && onDelete && (
-          <button
-            type="button"
-            className="settings-btn settings-btn-danger"
-            onClick={onDelete}
-          >
+          <button type="button" className="settings-btn settings-btn-danger" onClick={onDelete}>
             [delete]
           </button>
         )}

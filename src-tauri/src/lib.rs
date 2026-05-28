@@ -1,15 +1,16 @@
 use std::sync::Arc;
 
-use vosh_log::LogStore;
-use vosh_map::MapStore;
 use tauri::Manager;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
+use vosh_log::LogStore;
+use vosh_map::MapStore;
 
 mod commands;
 mod connection;
 mod fonts;
 mod gmcp_bind;
+mod import;
 mod input;
 mod line_accumulator;
 mod log_state;
@@ -21,17 +22,16 @@ mod script_state;
 mod session;
 mod tick;
 mod tintin_import;
-mod import;
 
 use commands::{
     aliases_export, aliases_import, app_version, dock_layout_get, dock_layout_set, import_apply,
     import_detect, logs_export, logs_list_sessions, logs_search, macros_delete, macros_list,
     macros_set, map_area_snapshot, map_set_avoid, map_set_note, map_walk_to, open_settings_window,
-    presets_install, presets_remove, profile_export, profile_import, scrollback_load,
-    session_connect, session_disconnect, session_send, session_send_input, target_get,
-    triggers_export, triggers_import, plugins_list, plugins_reload, plugins_set_enabled,
-    triggers_list, ui_get_config, ui_set_config, updater_check, updater_install_and_relaunch,
-    AppState, SharedState,
+    plugins_list, plugins_reload, plugins_set_enabled, presets_install, presets_remove,
+    profile_export, profile_import, scrollback_load, session_connect, session_disconnect,
+    session_send, session_send_input, target_get, triggers_export, triggers_import, triggers_list,
+    ui_get_config, ui_set_config, updater_check, updater_install_and_relaunch, AppState,
+    SharedState,
 };
 use fonts::{fonts_list, handle_font_uri};
 use map_state::MapState;
@@ -220,17 +220,18 @@ pub fn run() {
 /// survive the rebrand. Skips if the new directory already has its own
 /// data (so we never clobber a real fresh install).
 fn migrate_from_mudclient_dir(new_dir: &std::path::Path) {
-    let parent = match new_dir.parent() {
-        Some(p) => p,
-        None => return,
+    let Some(parent) = new_dir.parent() else {
+        return;
     };
-    let new_name = match new_dir.file_name().and_then(|s| s.to_str()) {
-        Some(s) => s,
-        None => return,
+    let Some(new_name) = new_dir.file_name().and_then(|s| s.to_str()) else {
+        return;
     };
     // Replace the trailing "vosh" segment with "mudclient". The
     // identifier change is the only diff between the two paths.
-    let Some(old_name) = new_name.strip_suffix("vosh").map(|prefix| format!("{prefix}mudclient")) else {
+    let Some(old_name) = new_name
+        .strip_suffix("vosh")
+        .map(|prefix| format!("{prefix}mudclient"))
+    else {
         return;
     };
     let old_dir = parent.join(&old_name);
@@ -244,9 +245,14 @@ fn migrate_from_mudclient_dir(new_dir: &std::path::Path) {
     // Don't overwrite a real install. If the new dir already has a
     // profile or any of the core data files, the user has already used
     // the renamed build — leave them alone.
-    let occupied = ["profile.toml", "scrollback.bin", "maps.sqlite", "logs.sqlite"]
-        .iter()
-        .any(|name| new_dir.join(name).exists());
+    let occupied = [
+        "profile.toml",
+        "scrollback.bin",
+        "maps.sqlite",
+        "logs.sqlite",
+    ]
+    .iter()
+    .any(|name| new_dir.join(name).exists());
     if occupied {
         let _ = std::fs::create_dir_all(new_dir);
         let _ = std::fs::write(&migrated_flag, "skipped: new dir already populated\n");
@@ -272,10 +278,7 @@ fn migrate_from_mudclient_dir(new_dir: &std::path::Path) {
     }
 }
 
-fn copy_dir_recursive(
-    src: &std::path::Path,
-    dst: &std::path::Path,
-) -> std::io::Result<usize> {
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<usize> {
     let mut count = 0;
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {

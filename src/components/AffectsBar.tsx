@@ -8,12 +8,7 @@ import {
   type Affect,
   type GroupedAffect,
 } from '../lib/affects';
-import {
-  getUiConfig,
-  onGmcp,
-  onState,
-  subscribeTrackedAffectsChanged,
-} from '../lib/session';
+import { getUiConfig, onGmcp, onState, subscribeTrackedAffectsChanged } from '../lib/session';
 
 // Thin row above the input that renders every active Char.Affects
 // entry as a pill chip. Duration color tracks urgency (red imminent,
@@ -53,11 +48,7 @@ export function AffectsBar() {
     let cancelled = false;
 
     onGmcp((payload) => {
-      if (
-        payload.package === 'Char.Affects' &&
-        payload.data &&
-        typeof payload.data === 'object'
-      ) {
+      if (payload.package === 'Char.Affects' && payload.data && typeof payload.data === 'object') {
         const data = payload.data as { affects?: Affect[] };
         const list = Array.isArray(data.affects) ? data.affects : [];
         const grouped = groupAffects(list);
@@ -97,9 +88,7 @@ export function AffectsBar() {
       {tracked.map((name) => {
         const live = liveByKey.get(normalizeAffectName(name));
         if (live) {
-          const title = [live.name, affectDescription(live as Affect)]
-            .filter(Boolean)
-            .join(' — ');
+          const title = [live.name, affectDescription(live as Affect)].filter(Boolean).join(' — ');
           return (
             <span key={name} className="affect-pill" title={title}>
               <span className="affect-pill-name">{live.name}</span>

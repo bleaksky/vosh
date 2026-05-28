@@ -745,7 +745,6 @@ function drawSquares(
       }
     }
   }
-
 }
 
 // Pass A: only the dim cell fills. Drawn under everything;
@@ -843,7 +842,6 @@ function drawOffFloorOverlay(
   // them is redundant and visually noisy.
 }
 
-
 // Same fade table as the mapping view's BFS distance, but keyed to a
 // ring index since the server payload doesn't ship full graph data.
 function depthAlphaForRing(d: number): number {
@@ -909,10 +907,22 @@ function ansi256ToHex(idx: number): string {
   }
   if (idx < 16) {
     const named = [
-      '#585858', '#c4746e', '#8a9a7b', '#c4b28a',
-      '#8ba4b0', '#a292a3', '#8ea4a2', '#a4a7a4',
-      '#5c6066', '#e46876', '#87a987', '#e6c384',
-      '#7fb4ca', '#938aa9', '#7aa89f', '#c5c9c7',
+      '#585858',
+      '#c4746e',
+      '#8a9a7b',
+      '#c4b28a',
+      '#8ba4b0',
+      '#a292a3',
+      '#8ea4a2',
+      '#a4a7a4',
+      '#5c6066',
+      '#e46876',
+      '#87a987',
+      '#e6c384',
+      '#7fb4ca',
+      '#938aa9',
+      '#7aa89f',
+      '#c5c9c7',
     ];
     return named[idx] ?? '#c5c9c7';
   }

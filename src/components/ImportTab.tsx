@@ -73,12 +73,10 @@ export function ImportTab({ onError }: Props) {
   return (
     <div className="import-tab">
       <div className="import-help">
-        Import aliases, triggers, keyboard macros, and variables
-        from another MUD client. Drop a file in or paste its
-        contents below, pick a format (or leave on auto-detect),
-        and hit apply. Existing entries with the same name get
-        overwritten; anything that cannot be modeled is listed in
-        the summary so you can port it by hand.
+        Import aliases, triggers, keyboard macros, and variables from another MUD client. Drop a
+        file in or paste its contents below, pick a format (or leave on auto-detect), and hit apply.
+        Existing entries with the same name get overwritten; anything that cannot be modeled is
+        listed in the summary so you can port it by hand.
       </div>
 
       <div className="import-format-row">
@@ -156,8 +154,7 @@ export function ImportTab({ onError }: Props) {
 }
 
 function ImportSummaryView({ summary }: { summary: ImportSummary }) {
-  const total =
-    summary.aliases + summary.triggers + summary.macros + summary.vars;
+  const total = summary.aliases + summary.triggers + summary.macros + summary.vars;
   return (
     <div className="import-summary">
       <div className="import-summary-headline">
@@ -169,9 +166,7 @@ function ImportSummaryView({ summary }: { summary: ImportSummary }) {
         <span>macros: {summary.macros}</span>
         <span>vars: {summary.vars}</span>
       </div>
-      {summary.rejected.length > 0 && (
-        <ImportSection label="rejected" items={summary.rejected} />
-      )}
+      {summary.rejected.length > 0 && <ImportSection label="rejected" items={summary.rejected} />}
       {summary.unsupported.length > 0 && (
         <ImportSection
           label="unsupported"

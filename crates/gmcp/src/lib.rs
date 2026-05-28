@@ -132,11 +132,7 @@ mod tests {
 
     #[test]
     fn build_with_value() {
-        let bytes = build(
-            "Core.Hello",
-            &json!({"client": "vosh", "version": "0.0.1"}),
-        )
-        .unwrap();
+        let bytes = build("Core.Hello", &json!({"client": "vosh", "version": "0.0.1"})).unwrap();
         let s = std::str::from_utf8(&bytes).unwrap();
         assert!(s.starts_with("Core.Hello "));
         let json_part = s.strip_prefix("Core.Hello ").unwrap();

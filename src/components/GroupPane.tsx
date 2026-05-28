@@ -21,25 +21,18 @@ interface Props {
 // state survives close/reopen and pin/unpin. Renders one line per
 // member as a 6-column grid (display:contents per row).
 export function GroupPane({ pinned, onTogglePin }: Props) {
-  const [state, setState] = useState<{ group: GroupInfo; worth: Worth }>(() =>
-    getGroupState(),
-  );
+  const [state, setState] = useState<{ group: GroupInfo; worth: Worth }>(() => getGroupState());
 
   useEffect(() => subscribeGroupState(setState), []);
 
   const { group, worth } = state;
-  const grouped =
-    !!group.leader && Array.isArray(group.members) && group.members.length > 0;
+  const grouped = !!group.leader && Array.isArray(group.members) && group.members.length > 0;
 
   return (
-    <div
-      className={`group-pane${pinned ? ' group-pane-pinned' : ' chat-pane-half'}`}
-    >
+    <div className={`group-pane${pinned ? ' group-pane-pinned' : ' chat-pane-half'}`}>
       <div className="chat-pane-header">
         <span className="chat-pane-title">group</span>
-        <span className="chat-pane-count">
-          {grouped ? `${group.members!.length}` : 'solo'}
-        </span>
+        <span className="chat-pane-count">{grouped ? `${group.members!.length}` : 'solo'}</span>
         <button
           type="button"
           className="chat-pane-tab"

@@ -242,9 +242,7 @@ export async function deleteMacro(key: string): Promise<Macro[]> {
   return invoke('macros_delete', { key });
 }
 
-export async function subscribeMacrosChanged(
-  cb: (macros: Macro[]) => void,
-): Promise<UnlistenFn> {
+export async function subscribeMacrosChanged(cb: (macros: Macro[]) => void): Promise<UnlistenFn> {
   return listen<Macro[]>('vosh://macros-changed', (event) => {
     cb(event.payload);
   });
@@ -269,10 +267,7 @@ export async function detectImportFormat(text: string): Promise<string | null> {
   return invoke('import_detect', { text });
 }
 
-export async function applyImport(
-  format: ImportFormat,
-  text: string,
-): Promise<ImportSummary> {
+export async function applyImport(format: ImportFormat, text: string): Promise<ImportSummary> {
   return invoke('import_apply', { format, text });
 }
 
@@ -352,9 +347,7 @@ export interface InputModePayload {
   password: boolean;
 }
 
-export async function onInputMode(
-  cb: (payload: InputModePayload) => void,
-): Promise<UnlistenFn> {
+export async function onInputMode(cb: (payload: InputModePayload) => void): Promise<UnlistenFn> {
   return listen<InputModePayload>('session://input-mode', (event) => {
     cb(event.payload);
   });
@@ -399,10 +392,7 @@ export async function searchLogs(
   });
 }
 
-export async function exportLogSession(
-  sessionId: number,
-  withAnsi: boolean,
-): Promise<string> {
+export async function exportLogSession(sessionId: number, withAnsi: boolean): Promise<string> {
   return invoke('logs_export', { sessionId, withAnsi });
 }
 

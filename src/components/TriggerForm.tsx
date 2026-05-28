@@ -1,10 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type {
-  HighlightStyle,
-  NamedColor,
-  TriggerAction,
-  TriggerRecord,
-} from '../lib/session';
+import type { HighlightStyle, NamedColor, TriggerAction, TriggerRecord } from '../lib/session';
 import { normalizeActions } from '../lib/session';
 import { colorize, decolorize } from '../lib/colorTokens';
 
@@ -89,18 +84,14 @@ function blankVisual(kind: VisualKind): ReturnType<typeof splitActions>['visual'
 }
 
 function blankEffect(kind: EffectKind): TriggerAction {
-  return kind === 'send'
-    ? { kind: 'send', template: '' }
-    : { kind: 'route', pane: 'chat' };
+  return kind === 'send' ? { kind: 'send', template: '' } : { kind: 'route', pane: 'chat' };
 }
 
 function decolorizeTemplates(t: TriggerRecord): TriggerRecord {
   return {
     ...t,
     actions: t.actions.map((a) =>
-      a.kind === 'replace' || a.kind === 'send'
-        ? { ...a, template: decolorize(a.template) }
-        : a,
+      a.kind === 'replace' || a.kind === 'send' ? { ...a, template: decolorize(a.template) } : a,
     ),
   };
 }
@@ -109,9 +100,7 @@ function colorizeTemplates(t: TriggerRecord): TriggerRecord {
   return {
     ...t,
     actions: t.actions.map((a) =>
-      a.kind === 'replace' || a.kind === 'send'
-        ? { ...a, template: colorize(a.template) }
-        : a,
+      a.kind === 'replace' || a.kind === 'send' ? { ...a, template: colorize(a.template) } : a,
     ),
   };
 }
@@ -152,14 +141,8 @@ export function TriggerForm({ load, save, onError }: Props) {
     };
   }, [load, onError]);
 
-  const userTriggers = useMemo(
-    () => (list ?? []).filter((t) => !t.preset),
-    [list],
-  );
-  const presetTriggers = useMemo(
-    () => (list ?? []).filter((t) => !!t.preset),
-    [list],
-  );
+  const userTriggers = useMemo(() => (list ?? []).filter((t) => !t.preset), [list]);
+  const presetTriggers = useMemo(() => (list ?? []).filter((t) => !!t.preset), [list]);
 
   const updateAt = (realIdx: number, patch: Partial<TriggerRecord>) => {
     if (!list || realIdx < 0) return;
@@ -292,10 +275,7 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
   };
 
   const addEffect = (kind: EffectKind) => {
-    const nextEffects = [
-      ...effects,
-      blankEffect(kind) as (typeof effects)[number],
-    ];
+    const nextEffects = [...effects, blankEffect(kind) as (typeof effects)[number]];
     onChange({ actions: joinActions(visual, nextEffects) });
   };
 
@@ -382,9 +362,7 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
       <div className="trigger-card-row">
         <span className="trigger-card-label">effects</span>
         <div className="trigger-card-effects">
-          {effects.length === 0 && (
-            <span className="trigger-card-help">no side effects</span>
-          )}
+          {effects.length === 0 && <span className="trigger-card-help">no side effects</span>}
           {effects.map((eff, i) => (
             <div key={i} className="trigger-card-effect-row">
               <span className="trigger-card-effect-label">{eff.kind}</span>
@@ -460,8 +438,8 @@ function VisualFields({ visual, onChange, readOnly }: VisualFieldsProps) {
           onChange={(e) => onChange({ kind: 'replace', template: e.target.value })}
         />
         <span className="trigger-card-hint">
-          tokens: {'{red}'} {'{bold_red}'} {'{fg:244}'} {'{#ff3399}'} {'{reset}'}; $1 $2 …
-          reference capture groups
+          tokens: {'{red}'} {'{bold_red}'} {'{fg:244}'} {'{#ff3399}'} {'{reset}'}; $1 $2 … reference
+          capture groups
         </span>
       </div>
     );
@@ -483,10 +461,7 @@ interface HSProps {
 }
 
 function HighlightStyleEditor({ style, onChange, readOnly }: HSProps) {
-  const setKey = <K extends keyof HighlightStyle>(
-    key: K,
-    value: HighlightStyle[K] | undefined,
-  ) => {
+  const setKey = <K extends keyof HighlightStyle>(key: K, value: HighlightStyle[K] | undefined) => {
     const next: HighlightStyle = { ...style };
     if (value === undefined || value === false) {
       delete next[key];

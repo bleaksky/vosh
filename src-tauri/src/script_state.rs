@@ -7,12 +7,12 @@
 
 use std::sync::Arc;
 
+use tokio::sync::Mutex;
+use tokio::time::Instant;
 use vosh_alias::Alias;
 use vosh_script::{Action, ScriptEngine, ScriptOutcome, VarScope};
 use vosh_trigger::{Trigger, TriggerAction};
 use vosh_vars::{Scope, VariableStore};
-use tokio::sync::Mutex;
-use tokio::time::Instant;
 
 use crate::profile::Profile;
 
