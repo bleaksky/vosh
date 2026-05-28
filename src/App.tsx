@@ -7,6 +7,7 @@ import { Connect, type ConnectionStatus } from './components/Connect';
 import { TopBar } from './components/TopBar';
 import { StatusBar } from './components/StatusBar';
 import { Resizable } from './components/Resizable';
+import { AffectsBar } from './components/AffectsBar';
 import { MapPane } from './components/MapPane';
 import { ChatPane } from './components/ChatPane';
 import { GroupPane } from './components/GroupPane';
@@ -393,6 +394,8 @@ function App() {
         return <RoomStrip key="roomstrip" />;
       case 'chat':
         return <ChatPane key="chat" onClose={() => setPanelZone('chat', 'hidden')} />;
+      case 'affects':
+        return <AffectsBar key="affects" />;
     }
   };
 
