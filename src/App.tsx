@@ -319,9 +319,10 @@ function App() {
             // 0x0) so writes wrap at 1-3 columns and the scrollback
             // arrives mangled. Mounting on open guarantees the xterm
             // sizes itself against the visible split layout before
-            // any bytes land. onReady fires the user's initial
-            // PageUp gesture inside the callback so the very first
-            // keystroke lands at one page above the live tail.
+            // any bytes land. The initial scroll runs in
+            // onScrollbackLoaded — onReady fires before loadScrollback
+            // resolves, and a scrollPages call on an empty terminal
+            // is a no-op that the next write would override anyway.
             <div className="terminal-pane terminal-pane-history">
               <Terminal
                 fontFamily={fontFamily}
@@ -330,7 +331,15 @@ function App() {
                 quiet
                 onReady={(handle) => {
                   historyTermRef.current = handle;
-                  handle.scrollPages(-1);
+                }}
+                onScrollbackLoaded={() => {
+                  // Position the history viewport so its bottom line
+                  // sits one row above what the live pane currently
+                  // shows at its top. scrollPages(-1) shifts up by
+                  // exactly one viewport, which is the history pane
+                  // height after the split opens — so the two panes
+                  // no longer show overlapping content.
+                  historyTermRef.current?.scrollPages(-1);
                 }}
               />
             </div>

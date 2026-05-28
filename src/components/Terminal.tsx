@@ -37,6 +37,12 @@ interface Props {
   /// that load scrollback on every open and would otherwise show
   /// the banner repeatedly.
   quiet?: boolean;
+  /// Fires once after the initial scrollback has been written into the
+  /// terminal (or when the backend reports none). Use this to apply an
+  /// initial viewport position; doing the same work inside onReady is
+  /// too early — the terminal has no content at that point and any
+  /// scrollPages call is a no-op that the next write would override.
+  onScrollbackLoaded?: () => void;
 }
 
 // Canonical xterm-256 palette for ANSI codes 0-15. Used when the
@@ -107,9 +113,12 @@ export function Terminal({
   fontSize,
   themeTerminalColors,
   quiet = false,
+  onScrollbackLoaded,
 }: Props) {
   const quietRef = useRef(quiet);
   quietRef.current = quiet;
+  const onScrollbackLoadedRef = useRef(onScrollbackLoaded);
+  onScrollbackLoadedRef.current = onScrollbackLoaded;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -228,9 +237,22 @@ export function Terminal({
             term.write('\r\n\x1b[2m[scrollback restored]\x1b[0m\r\n');
           }
         }
+        // xterm.write batches into an internal queue; flush before
+        // notifying so any onScrollbackLoaded handler that adjusts
+        // the viewport sees the final row count, not the count
+        // before the buffered bytes were rendered.
+        const notify = () => onScrollbackLoadedRef.current?.();
+        if (bytes.length > 0) {
+          term.write('', notify);
+        } else {
+          notify();
+        }
       })
       .catch(() => {
-        // No scrollback yet, or backend not ready; ignore.
+        // No scrollback yet, or backend not ready; still notify so
+        // the host can apply its initial scroll gesture (no-op on
+        // an empty terminal, but does not lose the user intent).
+        onScrollbackLoadedRef.current?.();
       });
     onOutput((bytes) => {
       term.write(bytes);
