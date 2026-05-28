@@ -8,6 +8,7 @@ import {
 } from 'react';
 import {
   getTarget,
+  getUiConfig,
   listMacros,
   onInputMode,
   onTarget,
@@ -17,6 +18,7 @@ import {
   type QuickKey,
 } from '../lib/session';
 import { canonicalKeyFromEvent } from '../lib/macroKeys';
+import { listen } from '@tauri-apps/api/event';
 
 export interface InputHandle {
   focus: () => void;
@@ -83,6 +85,31 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     return () => {
       cancelled = true;
       unsub?.();
+    };
+  }, []);
+
+  // Keep-last-command preference. When true, after submitting a
+  // line the input retains the value and selects the text so
+  // pressing Enter resends. Read once on mount, refreshed via the
+  // vosh://keep-last-changed event the settings save fires.
+  const keepLastRef = useRef<boolean>(false);
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    getUiConfig()
+      .then((cfg) => {
+        if (!cancelled) keepLastRef.current = cfg.keep_last_command;
+      })
+      .catch(() => {});
+    listen<boolean>('vosh://keep-last-changed', (event) => {
+      keepLastRef.current = Boolean(event.payload);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
     };
   }, []);
 
@@ -173,7 +200,21 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     if (event.key === 'Enter') {
       event.preventDefault();
       const line = value;
-      setValue('');
+      const keepLast = keepLastRef.current && line.length > 0 && !passwordMode;
+      if (keepLast) {
+        // Restore the line and select it after React commits so the
+        // user can press Enter to resend. setSelectionRange selects
+        // the whole value; the OS will paint the standard text-
+        // selection highlight (overridden by .input-row input::
+        // selection in styles.css to use the theme accent).
+        setValue(line);
+        requestAnimationFrame(() => {
+          const el = inputRef.current;
+          if (el) el.setSelectionRange(0, line.length);
+        });
+      } else {
+        setValue('');
+      }
       setSearchPrefix(null);
       setHistoryIndex(null);
       if (line.length > 0 && !passwordMode) {

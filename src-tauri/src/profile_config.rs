@@ -92,6 +92,11 @@ pub(crate) struct UiConfig {
     /// to pick up live edits without a relaunch.
     #[serde(default)]
     pub dock_layout: Vec<DockEntryPersist>,
+    /// When true, the input bar restores the last submitted line and
+    /// selects it so pressing Enter resends. Useful for grinding the
+    /// same command (e.g. `kill orc`) repeatedly. Off by default.
+    #[serde(default)]
+    pub keep_last_command: bool,
 }
 
 /// On-disk representation of a single docked bar.
@@ -111,6 +116,7 @@ impl Default for UiConfig {
             tracked_affects: Vec::new(),
             enabled_presets: Vec::new(),
             dock_layout: Vec::new(),
+            keep_last_command: false,
         }
     }
 }
@@ -224,6 +230,7 @@ impl ProfileConfig {
             tracked_affects: profile.ui.tracked_affects.clone(),
             enabled_presets: profile.ui.enabled_presets.clone(),
             dock_layout: profile.ui.dock_layout.clone(),
+            keep_last_command: profile.ui.keep_last_command,
         };
 
         let plugins = PluginsPersist {
@@ -314,6 +321,7 @@ impl ProfileConfig {
             tracked_affects: self.ui.tracked_affects.clone(),
             enabled_presets: self.ui.enabled_presets.clone(),
             dock_layout: self.ui.dock_layout.clone(),
+            keep_last_command: self.ui.keep_last_command,
         };
 
         // Plugin enabled-set is persisted; the actual load happens in the

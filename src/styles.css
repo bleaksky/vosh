@@ -651,6 +651,14 @@ body {
   color: var(--c-text-dim);
 }
 
+/* Selection highlight inside the input bar uses the theme accent
+   so the keep-last-command restored line reads clearly against the
+   surface, instead of falling back to the OS blue. */
+.input-row input::selection {
+  background: var(--c-accent-soft);
+  color: var(--c-text-strong);
+}
+
 /* StatusBar — tmux-style single-row bottom band */
 
 .statusbar {
