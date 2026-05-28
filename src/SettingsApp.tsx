@@ -154,6 +154,7 @@ export function SettingsApp() {
         {tab === 'import' && <ImportTab onError={setError} />}
         {tab === 'logs' && <LogsTab onError={setError} />}
       </div>
+      <footer className="settings-version">Vosh {__APP_VERSION__}</footer>
     </main>
   );
 }

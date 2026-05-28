@@ -31,6 +31,7 @@ export default tseslint.config(
   {
     files: ['vite.config.ts'],
     languageOptions: {
+      parser: tseslint.parser,
       globals: globals.node,
     },
   },
