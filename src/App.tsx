@@ -9,6 +9,7 @@ import { StatusBar } from './components/StatusBar';
 import { Resizable } from './components/Resizable';
 import { MapPane } from './components/MapPane';
 import { ChatPane } from './components/ChatPane';
+import { GroupPane } from './components/GroupPane';
 import { RoomStrip } from './components/RoomStrip';
 import { VitalsBar } from './components/VitalsBar';
 import {
@@ -22,9 +23,12 @@ import {
 import { applyAndBroadcastTheme } from './lib/theme';
 import { loadFontStack } from './lib/fontLoader';
 import { defaultEnabledIds, PRESETS, presetTriggers } from './lib/presets';
+import { startChatStore } from './lib/chatStore';
+import { startGroupStore } from './lib/groupStore';
 
 const MAP_OPEN_KEY = 'vosh.layout.mapOpen';
 const CHAT_OPEN_KEY = 'vosh.layout.chatOpen';
+const GROUP_PINNED_KEY = 'vosh.layout.groupPinned';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
@@ -76,6 +80,7 @@ function App() {
   const [fontSize, setFontSize] = useState(14);
   const [mapOpen, setMapOpen] = useState(() => loadFlag(MAP_OPEN_KEY));
   const [chatOpen, setChatOpen] = useState(() => loadFlag(CHAT_OPEN_KEY));
+  const [groupPinned, setGroupPinned] = useState(() => loadFlag(GROUP_PINNED_KEY));
   const termRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
 
@@ -95,6 +100,14 @@ function App() {
     }
   }, [chatOpen]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(GROUP_PINNED_KEY, groupPinned ? '1' : '0');
+    } catch {
+      // ignore storage failures
+    }
+  }, [groupPinned]);
+
   // Click anywhere in the terminal area focuses the input. Skip when
   // the user is selecting text (so copy still works) or clicking an
   // actual interactive element.
@@ -105,6 +118,16 @@ function App() {
     if (selection && selection.toString().length > 0) return;
     inputRef.current?.focus();
   };
+
+  // Bootstrap the chat + group buffers at app launch so any
+  // Comm.Channel / routed / Group.Info / Char.Worth pushes that
+  // arrive while the chat-group pane is closed (or has not yet
+  // been opened) still land in the stores and are visible on
+  // first open.
+  useEffect(() => {
+    startChatStore();
+    startGroupStore();
+  }, []);
 
   useEffect(() => {
     // Tauri creates the main window with visible=false so the user
@@ -246,7 +269,7 @@ function App() {
             }}
           />
         </div>
-        {mapOpen && (
+        {(mapOpen || groupPinned) && (
           <Resizable
             storageKey="vosh.layout.mapWidth"
             defaultSize={360}
@@ -255,7 +278,36 @@ function App() {
             className="map-resizable"
             handleLabel="resize map"
           >
-            <MapPane />
+            <div className="right-column">
+              {mapOpen && <MapPane />}
+              {groupPinned &&
+                (mapOpen ? (
+                  <Resizable
+                    storageKey="vosh.layout.groupPinnedHeight"
+                    direction="vertical"
+                    defaultSize={220}
+                    minSize={80}
+                    /* Right column shares vertical space with map +
+                       (when open) chat row. Cap conservatively so
+                       the user cannot drag it past the available
+                       height and clip out of the right column. */
+                    maxSize={400}
+                    reservePx={200}
+                    className="group-pinned-resizable"
+                    handleLabel="resize pinned group"
+                  >
+                    <GroupPane
+                      pinned
+                      onTogglePin={() => setGroupPinned(false)}
+                    />
+                  </Resizable>
+                ) : (
+                  <GroupPane
+                    pinned
+                    onTogglePin={() => setGroupPinned(false)}
+                  />
+                ))}
+            </div>
           </Resizable>
         )}
       </div>
@@ -269,7 +321,10 @@ function App() {
           className="chat-resizable"
           handleLabel="resize chat"
         >
-          <ChatPane />
+          <ChatPane
+            groupPinned={groupPinned}
+            onToggleGroupPin={() => setGroupPinned(true)}
+          />
         </Resizable>
       )}
       <VitalsBar />

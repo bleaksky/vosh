@@ -1,102 +1,53 @@
 import { useEffect, useRef, useState } from 'react';
-import { onGmcp, onRouted, onState, type GmcpPayload, type RoutedPayload } from '../lib/session';
+import {
+  getChatLines,
+  subscribeChatLines,
+  type ChatLine,
+} from '../lib/chatStore';
+import { GroupPane } from './GroupPane';
+import { Resizable } from './Resizable';
 
-interface ChatLine {
-  pane: string;
-  text: string;
+interface Props {
+  /** When true the group pane is rendered elsewhere (right column
+   *  under the map), so the chat pane only shows the chat half. */
+  groupPinned: boolean;
+  onToggleGroupPin: () => void;
 }
 
-const MAX_LINES = 500;
-
-// eslint-disable-next-line no-control-regex
-const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
-
-function stripAnsi(text: string): string {
-  return text.replace(ANSI_RE, '');
+// Embedded bottom pane. By default it splits into two columns:
+// chat backlog on the left, party roster on the right. When the
+// user pins the group panel to the right column (under the map),
+// the chat pane drops the split and shows chat only.
+export function ChatPane({ groupPinned, onToggleGroupPin }: Props) {
+  return (
+    <div className="chat-pane">
+      <div className="chat-pane-cols">
+        <ChatColumn />
+        {!groupPinned && (
+          <Resizable
+            storageKey="vosh.layout.groupWidth"
+            defaultSize={260}
+            minSize={120}
+            maxSize={1600}
+            reservePx={140}
+            className="chat-pane-group-resizable"
+            handleLabel="resize group column"
+          >
+            <GroupPane pinned={false} onTogglePin={onToggleGroupPin} />
+          </Resizable>
+        )}
+      </div>
+    </div>
+  );
 }
 
-// Convert a Comm.Channel(.Text) GMCP payload to a ChatLine. Aabahran
-// and other ROM-derived servers vary the field names; fall back through
-// the common alternates.
-function commToChatLine(data: unknown): ChatLine | null {
-  if (!data || typeof data !== 'object') return null;
-  const obj = data as Record<string, unknown>;
-  const pane = String(obj.channel ?? obj.chan ?? 'chat');
-  const speaker = obj.speaker
-    ? String(obj.speaker)
-    : obj.talker
-      ? String(obj.talker)
-      : '';
-  const raw = String(obj.text ?? obj.msg ?? obj.message ?? '');
-  if (!raw) return null;
-  const cleaned = stripAnsi(raw);
-  return { pane, text: speaker ? `${speaker}: ${cleaned}` : cleaned };
-}
-
-// Embedded bottom pane that collects routed channel text from
-// session://routed. Trigger actions of kind `route` send their match
-// text to a named pane; we buffer the most recent MAX_LINES entries
-// across all panes so the user can keep one eye on chat without
-// scrolling the terminal.
-export function ChatPane() {
-  const [lines, setLines] = useState<ChatLine[]>([]);
+function ChatColumn() {
+  const [lines, setLines] = useState<ChatLine[]>(() => getChatLines());
   const [filter, setFilter] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    let unsubGmcp: (() => void) | undefined;
-    let unsubRouted: (() => void) | undefined;
-    let unsubState: (() => void) | undefined;
-    let cancelled = false;
+  useEffect(() => subscribeChatLines(setLines), []);
 
-    const append = (line: ChatLine) => {
-      setLines((prev) => {
-        const next = [...prev, line];
-        return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next;
-      });
-    };
-
-    // Primary feed: Comm.Channel.Text GMCP from the server. Aabahran
-    // pushes channel chat here automatically; no trigger setup needed.
-    onGmcp((payload: GmcpPayload) => {
-      if (payload.package !== 'Comm.Channel' && payload.package !== 'Comm.Channel.Text') {
-        return;
-      }
-      const line = commToChatLine(payload.data);
-      if (line) append(line);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsubGmcp = fn;
-    });
-
-    // Secondary feed: trigger actions of kind `route` push hand-picked
-    // terminal lines here. Useful for capturing patterns the server
-    // does not surface through Comm.Channel.
-    onRouted((payload: RoutedPayload) => {
-      append({ pane: payload.pane, text: stripAnsi(payload.text) });
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsubRouted = fn;
-    });
-
-    onState((payload) => {
-      if (payload.kind === 'disconnected') setLines([]);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsubState = fn;
-    });
-
-    return () => {
-      cancelled = true;
-      unsubGmcp?.();
-      unsubRouted?.();
-      unsubState?.();
-    };
-  }, []);
-
-  // Auto-scroll to the bottom on new lines unless the user has
-  // scrolled up. We treat "near the bottom" as within 24px since exact
-  // equality is fragile with sub-pixel scroll positions.
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
@@ -110,7 +61,7 @@ export function ChatPane() {
   const visible = filter ? lines.filter((l) => l.pane === filter) : lines;
 
   return (
-    <div className="chat-pane">
+    <div className="chat-pane-half chat-pane-chat">
       <div className="chat-pane-header">
         <span className="chat-pane-title">chat</span>
         <div className="chat-pane-filter">

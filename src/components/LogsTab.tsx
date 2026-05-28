@@ -55,6 +55,7 @@ export function LogsTab({ onError }: Props) {
   const [sessionFilter, setSessionFilter] = useState<number | null>(null);
   const [pattern, setPattern] = useState('');
   const [caseSensitive, setCaseSensitive] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const [hits, setHits] = useState<LogSearchHit[]>([]);
   const [searching, setSearching] = useState(false);
 
@@ -77,11 +78,15 @@ export function LogsTab({ onError }: Props) {
     }
     setSearching(true);
     try {
+      // maxResults of 0 tells the backend to return every match.
+      // The default cap of 500 keeps the UI snappy for casual
+      // searches; "show all" lifts it when the user wants the
+      // full picture.
       const opts: {
         caseSensitive?: boolean;
         maxResults?: number;
         sessionId?: number | null;
-      } = { caseSensitive, maxResults: 500 };
+      } = { caseSensitive, maxResults: showAll ? 0 : 500 };
       if (sessionFilter !== null) opts.sessionId = sessionFilter;
       const rows = await searchLogs(pattern, opts);
       setHits(rows);
@@ -104,7 +109,7 @@ export function LogsTab({ onError }: Props) {
       caseSensitive?: boolean;
       maxResults?: number;
       sessionId?: number | null;
-    } = { caseSensitive, maxResults: 500 };
+    } = { caseSensitive, maxResults: showAll ? 0 : 500 };
     if (sessionFilter !== null) opts.sessionId = sessionFilter;
     searchLogs(pattern, opts)
       .then((rows) => {
@@ -122,7 +127,7 @@ export function LogsTab({ onError }: Props) {
     // pattern stays out of the deps; the form submit handles
     // typing. Only the scope toggles re-fire automatically.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionFilter, caseSensitive]);
+  }, [sessionFilter, caseSensitive, showAll]);
 
   const exportSession = async (id: number, withAnsi: boolean) => {
     try {
@@ -207,6 +212,14 @@ export function LogsTab({ onError }: Props) {
               onChange={(e) => setCaseSensitive(e.target.checked)}
             />
             case
+          </label>
+          <label className="logs-case" title="return every match, not just the most recent 500">
+            <input
+              type="checkbox"
+              checked={showAll}
+              onChange={(e) => setShowAll(e.target.checked)}
+            />
+            show all
           </label>
           <button type="submit" className="settings-btn">
             [search]
