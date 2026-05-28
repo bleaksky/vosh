@@ -483,6 +483,13 @@ body {
 .panel-zone-substack-grow {
   flex: 1 1 0;
 }
+/* Empty middle slot rendered when no fill panel is in the zone.
+   Absorbs the slack so the top cluster sticks to the top edge and
+   the bottom cluster sticks to the bottom edge. */
+.panel-zone-spacer {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
 /* Split-scrollback layout. The history pane is lazy-mounted only when
    the split opens, because a hidden Terminal cannot be measured by
