@@ -329,6 +329,16 @@ body {
 
 .connect input[type='number'] {
   width: 60px;
+  /* Suppress WKWebView native spin-buttons; they render as black
+     glyphs on the dark surface and just look like cruft. */
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.connect input[type='number']::-webkit-inner-spin-button,
+.connect input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .connect input[type='text'] {
@@ -481,12 +491,15 @@ body {
    tick row. Whole bar is one grid so columns line up across rows
    without per-row sizing drift. Each row: label · bar · % ·
    cur/max · delta. Bar uses slanted parallelogram glyphs (▰/▱);
-   filled ones take the vital's interpolated fill color, empty
-   dims down. A 1fr filler column absorbs leftover horizontal
-   space so the five real columns pack tight on the left. */
+   filled ones take the vital's fill color, empty dims down. */
 .vitals-bar {
   flex: 0 0 auto;
   display: grid;
+  /* Five real columns (label / glyphs / % / numeric / delta) then
+     a 1fr filler. Without the filler, the grid stretches to the
+     parent flex width and the columns visually spread out; the
+     1fr absorbs the extra space so content packs tight on the
+     left while the bar background still paints full-width. */
   grid-template-columns: auto auto auto auto auto 1fr;
   column-gap: 12px;
   row-gap: 1px;
@@ -499,6 +512,9 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Each row contributes 5 flat children to the parent .vitals-bar
+   grid (no per-row wrapper), so all columns line up across hp / mn
+   / mv / tick rows without per-row sizing drift. */
 .vitals-label {
   grid-column: 1;
   color: var(--c-text-faint);
@@ -545,6 +561,9 @@ body {
   color: var(--c-danger);
 }
 
+/* Tick row reuses the label column. Value pinned to column 2 so
+   it sits flush with the bars above and does not stretch into the
+   1fr filler column. */
 .vitals-tick-value {
   grid-column: 2;
   font-weight: 700;
@@ -2169,9 +2188,44 @@ body {
 .map-pane {
   flex: 1 1 auto;
   min-width: 0;
+  /* min-height: 0 lets the map shrink when the chat pane opens and
+     squeezes the right column. Without it, the map refuses to give
+     up space and the pinned group below it gets clipped. */
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--c-surface);
+}
+
+/* Right column hosts map + optional pinned group panel stacked
+   vertically. The horizontal Resizable wrapper sets the column
+   width; this inner flex column splits the height. */
+.right-column {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-surface);
+}
+
+/* Pinned group pane — standalone variant of GroupPane that sits in
+   the right column under the map. Reuses chat-pane-header /
+   chat-pane-body styling for visual consistency. */
+.group-pane-pinned {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+}
+
+/* The vertical resize handle between map and pinned group must sit
+   above its siblings so its row-resize cursor catches drags, even
+   if the chat row below has its own z-index stack. */
+.group-pinned-resizable .resizable-handle {
+  z-index: 3;
 }
 
 .map-pane-header {
@@ -2391,4 +2445,103 @@ body {
   color: var(--c-text);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Split layout — chat column on the left, group column on the
+   right, divider in the middle. Each column is its own flex
+   stack with its own header + body so they scroll independently. */
+.chat-pane-cols {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.chat-pane-half {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Chat absorbs remaining horizontal space; group column width is
+   pinned by the Resizable wrapper (with its own drag handle). */
+.chat-pane-chat {
+  flex: 1 1 auto;
+}
+
+.chat-pane-group-resizable {
+  border-left: 1px solid var(--c-border-soft);
+}
+
+/* Group roster — one line per party member. The list is a 6-column
+   grid; each row is `display: contents` so its 6 cells participate
+   directly in the grid for perfect cross-row column alignment.
+   Columns: name (flex+ellipsis) | class+level | hp% | mn% | mv% | tnl. */
+.group-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
+  column-gap: 10px;
+  row-gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.group-row {
+  display: contents;
+}
+
+.group-name {
+  color: var(--c-text-strong);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.group-row.is-leader .group-name {
+  color: var(--c-accent);
+}
+
+.group-row.is-leader .group-name::before {
+  content: '\2605 ';
+  margin-right: 2px;
+}
+
+.group-meta {
+  color: var(--c-text-faint);
+  white-space: nowrap;
+}
+
+.group-vital {
+  font-weight: 700;
+  text-align: right;
+  min-width: 38px;
+}
+
+.group-tnl {
+  color: var(--c-text-faint);
+  text-align: right;
+}
+
+/* Solo state — your own worth instead of a roster. */
+.group-worth {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  row-gap: 2px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.group-worth dt {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.group-worth dd {
+  margin: 0;
+  color: var(--c-text);
 }

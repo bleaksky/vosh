@@ -11,6 +11,15 @@ interface Props {
   defaultSize: number;
   minSize?: number;
   maxSize?: number;
+  /**
+   * Viewport pixels reserved for whatever sits on the OTHER side
+   * of this panel. The panel's effective max is capped to
+   * `viewport - reservePx` so the sibling content always has room.
+   * Defaults to a value tuned for the map-pane case (sibling = the
+   * terminal); pass a smaller value when used in a nested split
+   * (chat/group divider, etc) so the panel can grow further.
+   */
+  reservePx?: number;
   /** Extra class for the wrapper. */
   className?: string;
   /** ARIA label for the drag handle. */
@@ -59,6 +68,7 @@ export function Resizable({
   defaultSize,
   minSize = DEFAULT_MIN,
   maxSize = DEFAULT_MAX,
+  reservePx,
   className,
   handleLabel = 'resize panel',
 }: Props) {
@@ -80,8 +90,13 @@ export function Resizable({
     return () => window.removeEventListener('resize', handler);
   }, [direction]);
 
-  // Cap so the terminal column/row always has room to render.
-  const reserve = direction === 'horizontal' ? RESERVE_FOR_TERMINAL : RESERVE_VERTICAL;
+  // Cap so the sibling side always has room to render. Callers
+  // sitting next to the terminal use the default reserve; nested
+  // splits (chat / group) override via reservePx with a smaller
+  // floor since they share width with the chat half, not the
+  // whole window.
+  const reserve =
+    reservePx ?? (direction === 'horizontal' ? RESERVE_FOR_TERMINAL : RESERVE_VERTICAL);
   const effectiveMax = Math.max(minSize, Math.min(maxSize, viewport - reserve));
   const clamped = Math.max(minSize, Math.min(effectiveMax, size));
   const isVertical = direction === 'vertical';
