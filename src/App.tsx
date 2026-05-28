@@ -396,20 +396,36 @@ function App() {
     }
   };
 
-  // Top substack at the top, spacer fills the middle, bottom substack
-  // at the bottom. Always render all three so the spacer keeps doing
-  // its job when one side is empty — previously the spacer landed
-  // after an only-bottom substack, leaving the panel sitting at the
-  // top of the column even when the user picked align=bottom.
-  const renderSideZoneInner = (top: PanelId[], bottom: PanelId[]) => (
-    <div className="panel-zone-stack">
-      <div className="panel-zone-substack panel-zone-substack-top">{top.map(renderPanel)}</div>
-      <div className="panel-zone-spacer" />
-      <div className="panel-zone-substack panel-zone-substack-bottom">
-        {bottom.map(renderPanel)}
+  // When both top and bottom substacks are populated, render them at
+  // their natural sizes with a flex spacer between so each anchors to
+  // its edge. When only one is populated, that substack fills the
+  // whole column so the panel inside (e.g. MapPane has its own
+  // flex: 1 1 auto) gets the room it needs and does not clip.
+  const renderSideZoneInner = (top: PanelId[], bottom: PanelId[]) => {
+    const hasTop = top.length > 0;
+    const hasBottom = bottom.length > 0;
+    if (!hasTop && !hasBottom) return null;
+    if (hasTop && hasBottom) {
+      return (
+        <div className="panel-zone-stack">
+          <div className="panel-zone-substack">{top.map(renderPanel)}</div>
+          <div className="panel-zone-spacer" />
+          <div className="panel-zone-substack">{bottom.map(renderPanel)}</div>
+        </div>
+      );
+    }
+    const alignClass = hasBottom
+      ? 'panel-zone-substack-align-bottom'
+      : 'panel-zone-substack-align-top';
+    const ids = hasTop ? top : bottom;
+    return (
+      <div className="panel-zone-stack">
+        <div className={`panel-zone-substack panel-zone-substack-fill ${alignClass}`}>
+          {ids.map(renderPanel)}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const leftHasAny = grouped.leftTop.length > 0 || grouped.leftBottom.length > 0;
   const rightHasAny = grouped.rightTop.length > 0 || grouped.rightBottom.length > 0;

@@ -471,10 +471,23 @@ body {
   flex: 0 0 auto;
   min-height: 0;
 }
-/* The spacer pushes any bottom-aligned substack against the bottom
-   edge of its column. Two substacks both present = top and bottom
-   each grow naturally and the spacer fills the middle. Only one
-   substack on either side fills its space normally. */
+/* When only one substack is present in a side zone it expands to
+   fill the whole column so its panel can grow into the available
+   space (the map and group panes both have flex: 1 1 auto and need
+   a parent that gives them height). */
+.panel-zone-substack-fill {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+}
+.panel-zone-substack-align-top {
+  justify-content: flex-start;
+}
+.panel-zone-substack-align-bottom {
+  justify-content: flex-end;
+}
+/* The spacer separates the top and bottom substacks when both have
+   content. Pushed to a 1:1 share so each substack anchors to its
+   edge with the spacer eating the slack between them. */
 .panel-zone-spacer {
   flex: 1 1 auto;
   min-height: 0;
