@@ -467,6 +467,25 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     themeTerminalColors: config.theme_terminal_colors,
     customThemes: config.custom_themes,
   });
+  // Broadcast the live custom_themes list so other webviews update
+  // their in-memory registry BEFORE any theme-changed event lands.
+  // Otherwise the main window receives `theme-changed: custom-1`
+  // and findTheme falls back to the default because its CUSTOM_THEMES
+  // is stale.
+  try {
+    await emit('vosh://custom-themes-changed', config.custom_themes);
+  } catch {
+    // Tauri event bus unavailable; in-app listeners cover the same
+    // window.
+  }
+}
+
+export async function subscribeCustomThemesChanged(
+  cb: (themes: CustomTheme[]) => void,
+): Promise<UnlistenFn> {
+  return listen<CustomTheme[]>('vosh://custom-themes-changed', (event) => {
+    cb(Array.isArray(event.payload) ? event.payload : []);
+  });
 }
 
 export interface UpdateCheckResult {
