@@ -392,19 +392,18 @@ function App() {
     }
   };
 
+  // Top substack at the top, spacer fills the middle, bottom substack
+  // at the bottom. Always render all three so the spacer keeps doing
+  // its job when one side is empty — previously the spacer landed
+  // after an only-bottom substack, leaving the panel sitting at the
+  // top of the column even when the user picked align=bottom.
   const renderSideZoneInner = (top: PanelId[], bottom: PanelId[]) => (
     <div className="panel-zone-stack">
-      {top.length > 0 && (
-        <div className="panel-zone-substack panel-zone-substack-top">{top.map(renderPanel)}</div>
-      )}
-      {top.length > 0 && bottom.length > 0 && <div className="panel-zone-spacer" />}
-      {bottom.length === 0 && top.length === 0 ? null : null}
-      {bottom.length > 0 && (
-        <div className="panel-zone-substack panel-zone-substack-bottom">
-          {bottom.map(renderPanel)}
-        </div>
-      )}
-      {top.length === 0 && bottom.length > 0 && <div className="panel-zone-spacer" />}
+      <div className="panel-zone-substack panel-zone-substack-top">{top.map(renderPanel)}</div>
+      <div className="panel-zone-spacer" />
+      <div className="panel-zone-substack panel-zone-substack-bottom">
+        {bottom.map(renderPanel)}
+      </div>
     </div>
   );
 
