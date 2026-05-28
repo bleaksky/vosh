@@ -135,8 +135,8 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
     <div className="themes-tab">
       <div className="themes-help">
         Built-in themes ship with the app and are read-only. Custom themes can be created from any
-        starting point, then every chrome and terminal color slot can be tuned to taste. Changes
-        preview live; remember to hit save to persist them.
+        starting point, then every chrome and terminal color slot can be tuned to taste. Every
+        change saves automatically.
       </div>
 
       <div className="themes-section-title">built-in</div>
