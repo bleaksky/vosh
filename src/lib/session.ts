@@ -655,3 +655,11 @@ export async function dockLayoutGet(): Promise<DockEntryPersist[]> {
 export async function dockLayoutSet(entries: DockEntryPersist[]): Promise<void> {
   await invoke('dock_layout_set', { entries });
 }
+
+export async function subscribeDockLayoutChanged(
+  cb: (entries: DockEntryPersist[]) => void,
+): Promise<UnlistenFn> {
+  return listen<DockEntryPersist[]>('vosh://dock-layout-changed', (event) => {
+    cb(Array.isArray(event.payload) ? event.payload : []);
+  });
+}

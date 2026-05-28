@@ -1,43 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { getChatLines, subscribeChatLines, type ChatLine } from '../lib/chatStore';
-import { GroupPane } from './GroupPane';
-import { Resizable } from './Resizable';
 
 interface Props {
-  /** When true the group pane is rendered elsewhere (right column
-   *  under the map), so the chat pane only shows the chat half. */
-  groupPinned: boolean;
-  onToggleGroupPin: () => void;
+  /** Hide the chat panel. The host re-renders with the panel in
+   *  the `hidden` zone so the close button is the canonical way
+   *  to dismiss the pane from inside its own chrome. */
+  onClose?: () => void;
 }
 
-// Embedded bottom pane. By default it splits into two columns:
-// chat backlog on the left, party roster on the right. When the
-// user pins the group panel to the right column (under the map),
-// the chat pane drops the split and shows chat only.
-export function ChatPane({ groupPinned, onToggleGroupPin }: Props) {
+// Chat backlog panel. Renders into whichever zone the user has
+// assigned via Settings → Panels. The group roster is no longer
+// embedded here — it lives as its own panel.
+export function ChatPane({ onClose }: Props) {
   return (
-    <div className="chat-pane">
-      <div className="chat-pane-cols">
-        <ChatColumn />
-        {!groupPinned && (
-          <Resizable
-            storageKey="vosh.layout.groupWidth"
-            defaultSize={260}
-            minSize={120}
-            maxSize={1600}
-            reservePx={140}
-            className="chat-pane-group-resizable"
-            handleLabel="resize group column"
-          >
-            <GroupPane pinned={false} onTogglePin={onToggleGroupPin} />
-          </Resizable>
-        )}
-      </div>
-    </div>
+    <div className="chat-pane">{onClose ? <ChatColumn onClose={onClose} /> : <ChatColumn />}</div>
   );
 }
 
-function ChatColumn() {
+function ChatColumn({ onClose }: { onClose?: () => void }) {
   const [lines, setLines] = useState<ChatLine[]>(() => getChatLines());
   const [filter, setFilter] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -83,6 +63,17 @@ function ChatColumn() {
           {visible.length}
           {filter && `/${lines.length}`}
         </span>
+        {onClose && (
+          <button
+            type="button"
+            className="chat-pane-close"
+            onClick={onClose}
+            aria-label="hide chat"
+            title="hide chat"
+          >
+            ×
+          </button>
+        )}
       </div>
       <div ref={bodyRef} className="chat-pane-body">
         {visible.length === 0 ? (

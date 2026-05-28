@@ -432,6 +432,40 @@ body {
   padding: 8px 14px 10px 14px;
 }
 
+/* Panel zones. The four configurable edges around the terminal where
+   user-movable panels (map, group, vitals, roomstrip, chat) land.
+   Top/bottom zones are full-width strips; left/right zones share the
+   main-row with the terminal-area and get a Resizable width handle. */
+.panel-zone {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--c-surface);
+}
+.panel-zone-top,
+.panel-zone-bottom {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--c-border);
+}
+.panel-zone-bottom {
+  border-bottom: none;
+  border-top: 1px solid var(--c-border);
+}
+.panel-zone-left {
+  border-right: 1px solid var(--c-border);
+}
+.panel-zone-right {
+  border-left: 1px solid var(--c-border);
+}
+.panel-zone-stack {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* Split-scrollback layout. The history pane is lazy-mounted only when
    the split opens, because a hidden Terminal cannot be measured by
    FitAddon and would write its scrollback at 1-3 columns wide. When
