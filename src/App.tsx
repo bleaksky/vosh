@@ -396,33 +396,28 @@ function App() {
     }
   };
 
-  // When both top and bottom substacks are populated, render them at
-  // their natural sizes with a flex spacer between so each anchors to
-  // its edge. When only one is populated, that substack fills the
-  // whole column so the panel inside (e.g. MapPane has its own
-  // flex: 1 1 auto) gets the room it needs and does not clip.
+  // Top substack stays at its natural size; bottom substack grows to
+  // fill all remaining height in the column. So a vitals strip pinned
+  // to the top hugs the top edge, and the map below it expands into
+  // the rest of the space (its internal flex: 1 1 auto finally has a
+  // parent that provides height). When only one substack is populated
+  // it fills the whole column either way.
   const renderSideZoneInner = (top: PanelId[], bottom: PanelId[]) => {
     const hasTop = top.length > 0;
     const hasBottom = bottom.length > 0;
     if (!hasTop && !hasBottom) return null;
-    if (hasTop && hasBottom) {
-      return (
-        <div className="panel-zone-stack">
-          <div className="panel-zone-substack">{top.map(renderPanel)}</div>
-          <div className="panel-zone-spacer" />
-          <div className="panel-zone-substack">{bottom.map(renderPanel)}</div>
-        </div>
-      );
-    }
-    const alignClass = hasBottom
-      ? 'panel-zone-substack-align-bottom'
-      : 'panel-zone-substack-align-top';
-    const ids = hasTop ? top : bottom;
     return (
       <div className="panel-zone-stack">
-        <div className={`panel-zone-substack panel-zone-substack-fill ${alignClass}`}>
-          {ids.map(renderPanel)}
-        </div>
+        {hasTop && (
+          <div className="panel-zone-substack panel-zone-substack-fixed">
+            {top.map(renderPanel)}
+          </div>
+        )}
+        {hasBottom && (
+          <div className="panel-zone-substack panel-zone-substack-grow">
+            {bottom.map(renderPanel)}
+          </div>
+        )}
       </div>
     );
   };
