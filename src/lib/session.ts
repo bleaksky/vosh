@@ -460,6 +460,84 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
   return invoke('updater_check');
 }
 
+// Named profile catalog.
+export interface ProfileAutoMatch {
+  host?: string | null;
+  port?: number | null;
+  character?: string | null;
+}
+
+export interface ProfileEntry {
+  name: string;
+  description?: string | null;
+  auto_match?: ProfileAutoMatch | null;
+}
+
+export interface ProfilesList {
+  active: string;
+  profiles: ProfileEntry[];
+}
+
+export async function profilesList(): Promise<ProfilesList> {
+  return invoke('profiles_list');
+}
+
+export async function profileCreate(name: string): Promise<void> {
+  return invoke('profile_create', { name });
+}
+
+export async function profileDelete(name: string): Promise<void> {
+  return invoke('profile_delete', { name });
+}
+
+export async function profileRename(oldName: string, newName: string): Promise<void> {
+  return invoke('profile_rename', { old: oldName, new: newName });
+}
+
+export async function profileDuplicate(source: string, newName: string): Promise<void> {
+  return invoke('profile_duplicate', { source, new: newName });
+}
+
+export async function profileSwitch(name: string): Promise<void> {
+  return invoke('profile_switch', { name });
+}
+
+export async function profileSetMetadata(
+  name: string,
+  description: string | null,
+  autoMatch: ProfileAutoMatch | null,
+): Promise<void> {
+  return invoke('profile_set_metadata', {
+    name,
+    description,
+    autoMatch,
+  });
+}
+
+export async function profileResolveMatch(
+  host: string,
+  port: number,
+  character: string | null,
+): Promise<string | null> {
+  return invoke('profile_resolve_match', { host, port, character });
+}
+
+export async function subscribeProfilesChanged(
+  cb: (changedName: string) => void,
+): Promise<UnlistenFn> {
+  return listen<string>('vosh://profiles-changed', (event) => {
+    cb(event.payload);
+  });
+}
+
+export async function subscribeProfileSwitched(
+  cb: (newActive: string) => void,
+): Promise<UnlistenFn> {
+  return listen<string>('vosh://profile-switched', (event) => {
+    cb(event.payload);
+  });
+}
+
 export async function installUpdateAndRelaunch(): Promise<void> {
   return invoke('updater_install_and_relaunch');
 }
