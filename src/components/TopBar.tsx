@@ -68,7 +68,7 @@ export function TopBar({
               aria-pressed={chatOpen}
               onClick={onToggleChat}
             >
-              chat | group
+              chat
             </button>
           )}
           {onToggleMap && (
