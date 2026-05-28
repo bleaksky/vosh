@@ -32,6 +32,11 @@ interface Props {
   /// (the default) server output uses the canonical xterm-256
   /// palette regardless of theme.
   themeTerminalColors: boolean;
+  /// Suppress the dim "[scrollback restored]" banner. Useful for
+  /// secondary terminals (e.g. the split-scrollback history pane)
+  /// that load scrollback on every open and would otherwise show
+  /// the banner repeatedly.
+  quiet?: boolean;
 }
 
 // Canonical xterm-256 palette for ANSI codes 0-15. Used when the
@@ -96,7 +101,15 @@ function xtermThemeFor(theme: AppTheme, themeTerminalColors: boolean): ITheme {
   };
 }
 
-export function Terminal({ onReady, fontFamily, fontSize, themeTerminalColors }: Props) {
+export function Terminal({
+  onReady,
+  fontFamily,
+  fontSize,
+  themeTerminalColors,
+  quiet = false,
+}: Props) {
+  const quietRef = useRef(quiet);
+  quietRef.current = quiet;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -211,7 +224,9 @@ export function Terminal({ onReady, fontFamily, fontSize, themeTerminalColors }:
       .then((bytes) => {
         if (bytes.length > 0) {
           term.write(bytes);
-          term.write('\r\n\x1b[2m[scrollback restored]\x1b[0m\r\n');
+          if (!quietRef.current) {
+            term.write('\r\n\x1b[2m[scrollback restored]\x1b[0m\r\n');
+          }
         }
       })
       .catch(() => {

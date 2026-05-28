@@ -313,16 +313,28 @@ function App() {
           className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}`}
           onMouseUp={handleTerminalMouseUp}
         >
-          <div className="terminal-pane terminal-pane-history" aria-hidden={!splitOpen}>
-            <Terminal
-              fontFamily={fontFamily}
-              fontSize={fontSize}
-              themeTerminalColors={themeTerminalColors}
-              onReady={(handle) => {
-                historyTermRef.current = handle;
-              }}
-            />
-          </div>
+          {splitOpen && (
+            // Lazy mount. A hidden Terminal cannot be measured by
+            // FitAddon (its container is display:none, bounding rect
+            // 0x0) so writes wrap at 1-3 columns and the scrollback
+            // arrives mangled. Mounting on open guarantees the xterm
+            // sizes itself against the visible split layout before
+            // any bytes land. onReady fires the user's initial
+            // PageUp gesture inside the callback so the very first
+            // keystroke lands at one page above the live tail.
+            <div className="terminal-pane terminal-pane-history">
+              <Terminal
+                fontFamily={fontFamily}
+                fontSize={fontSize}
+                themeTerminalColors={themeTerminalColors}
+                quiet
+                onReady={(handle) => {
+                  historyTermRef.current = handle;
+                  handle.scrollPages(-1);
+                }}
+              />
+            </div>
+          )}
           <div className="terminal-pane terminal-pane-live">
             <Terminal
               fontFamily={fontFamily}
@@ -391,28 +403,28 @@ function App() {
         onLocalEcho={(text) => termRef.current?.write(text)}
         onScrollTerminal={(pages) => {
           // Split-scrollback gesture. The live pane (termRef) stays
-          // anchored to the tail. PageUp opens the split (if closed)
-          // and pages the history pane up; PageDown pages the history
-          // pane down and closes the split once it reaches the tail.
-          const history = historyTermRef.current;
-          if (!history) return;
+          // anchored to the tail. PageUp opens the split if closed;
+          // the history Terminal mounts on that state change and its
+          // onReady does the initial scroll, so we don't touch the
+          // ref here (it is null until the mount completes).
           if (pages < 0) {
-            if (!splitOpen) setSplitOpen(true);
-            history.scrollPages(pages);
+            if (!splitOpen) {
+              setSplitOpen(true);
+              return;
+            }
+            historyTermRef.current?.scrollPages(pages);
             return;
           }
           if (!splitOpen) return;
-          history.scrollPages(pages);
-          // A microtask after scrollPages, xterm has updated its
-          // viewport; close the split if we paged back to the tail.
+          historyTermRef.current?.scrollPages(pages);
+          // After the page-down lands, close the split if we paged
+          // all the way back to the live tail.
           queueMicrotask(() => {
-            if (history.isAtBottom()) setSplitOpen(false);
+            if (historyTermRef.current?.isAtBottom()) setSplitOpen(false);
           });
         }}
         onExitSplit={() => {
-          if (!splitOpen) return;
-          historyTermRef.current?.scrollToBottom();
-          setSplitOpen(false);
+          if (splitOpen) setSplitOpen(false);
         }}
       />
       <StatusBar />
