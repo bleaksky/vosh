@@ -432,11 +432,10 @@ body {
   padding: 8px 14px 10px 14px;
 }
 
-/* Split-scrollback layout. Both panes stay mounted (the history one
-   keeps its own xterm subscribed to live output so it always has
-   fresh context to show when the split opens). When the split is
-   closed, the history pane is removed from layout entirely so the
-   live pane fills the area exactly as before. */
+/* Split-scrollback layout. The history pane is lazy-mounted only when
+   the split opens, because a hidden Terminal cannot be measured by
+   FitAddon and would write its scrollback at 1-3 columns wide. When
+   the split is closed the history pane is not in the DOM at all. */
 .terminal-pane {
   display: flex;
   flex-direction: column;
@@ -446,11 +445,7 @@ body {
 .terminal-pane-live {
   flex: 1 1 0;
 }
-.terminal-pane-history {
-  display: none;
-}
 .terminal-area-split .terminal-pane-history {
-  display: flex;
   flex: 1 1 0;
   border-bottom: 1px solid var(--c-border);
   margin-bottom: 4px;
