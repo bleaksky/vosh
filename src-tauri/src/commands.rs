@@ -30,19 +30,35 @@ pub(crate) struct AppState {
     pub(crate) logs: SharedLogStore,
     pub(crate) scrollback: SharedScrollback,
     pub(crate) plugins: SharedPluginManager,
+    /// Catalog of named profiles. Loaded (or migrated from the legacy
+    /// single-file layout) once at startup; commands mutate it under
+    /// this mutex.
+    pub(crate) profile_set: Arc<Mutex<Option<crate::profile_set::ProfileSet>>>,
 }
 
 pub(crate) type SharedState = Arc<AppState>;
 
-/// Snapshot the live profile and write it to `<app_data_dir>/profile.toml`.
-/// Failures are logged but not surfaced — callers don't want a UI toggle
-/// to fail because the disk is full mid-flight, and the in-memory state
-/// is still correct for the rest of the session.
+/// Snapshot the live profile and write it to the active profile's file
+/// under `<app_data_dir>/profiles/<active>.toml`. Failures are logged
+/// but not surfaced — callers don't want a UI toggle to fail because
+/// the disk is full mid-flight, and the in-memory state is still
+/// correct for the rest of the session.
 async fn persist_profile(app: &AppHandle, state: &SharedState) {
-    let Ok(dir) = app.path().app_data_dir() else {
-        return;
+    // Resolve the active profile's path via ProfileSet if it's been
+    // loaded; fall back to the legacy single-file path if ProfileSet
+    // is somehow missing (shouldn't happen post-startup; defensive
+    // path for very early calls before setup() finishes).
+    let path = {
+        let guard = state.profile_set.lock().await;
+        if let Some(set) = guard.as_ref() {
+            set.active_path()
+        } else {
+            let Ok(dir) = app.path().app_data_dir() else {
+                return;
+            };
+            dir.join("profile.toml")
+        }
     };
-    let path = dir.join("profile.toml");
     let snapshot = {
         let p = state.profile.lock().await;
         ProfileConfig::from_profile(&p)
@@ -499,6 +515,151 @@ pub(crate) async fn profile_import(
     let snapshot = ProfileConfig::from_toml(&toml).map_err(|e| e.to_string())?;
     let mut p = state.profile.lock().await;
     Ok(snapshot.apply_to(&mut p))
+}
+
+// ============================================================
+// Named profile collection (multi-profile support, Stage 1).
+//
+// Persistent layout under <app_data_dir>:
+//     profiles.toml        — index (active + entries)
+//     profiles/<name>.toml — per-profile snapshot
+// AppState.profile_set holds the live ProfileSet behind a Mutex.
+// ============================================================
+
+#[derive(serde::Serialize)]
+pub(crate) struct ProfilesListPayload {
+    pub active: String,
+    pub profiles: Vec<crate::profile_set::ProfileEntry>,
+}
+
+#[tauri::command]
+pub(crate) async fn profiles_list(
+    state: State<'_, SharedState>,
+) -> Result<ProfilesListPayload, String> {
+    let guard = state.profile_set.lock().await;
+    let Some(set) = guard.as_ref() else {
+        return Err("profile set not initialized".into());
+    };
+    Ok(ProfilesListPayload {
+        active: set.active_name().to_string(),
+        profiles: set.list().to_vec(),
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn profile_create(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    name: String,
+) -> Result<(), String> {
+    {
+        let mut guard = state.profile_set.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Err("profile set not initialized".into());
+        };
+        set.create(&name).map_err(|e| e.to_string())?;
+    }
+    let _ = app.emit("vosh://profiles-changed", &name);
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn profile_delete(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    name: String,
+) -> Result<(), String> {
+    {
+        let mut guard = state.profile_set.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Err("profile set not initialized".into());
+        };
+        set.delete(&name).map_err(|e| e.to_string())?;
+    }
+    let _ = app.emit("vosh://profiles-changed", &name);
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn profile_rename(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    old: String,
+    new: String,
+) -> Result<(), String> {
+    {
+        let mut guard = state.profile_set.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Err("profile set not initialized".into());
+        };
+        set.rename(&old, &new).map_err(|e| e.to_string())?;
+    }
+    let _ = app.emit("vosh://profiles-changed", &new);
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn profile_duplicate(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    source: String,
+    new: String,
+) -> Result<(), String> {
+    {
+        let mut guard = state.profile_set.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Err("profile set not initialized".into());
+        };
+        set.duplicate(&source, &new).map_err(|e| e.to_string())?;
+    }
+    let _ = app.emit("vosh://profiles-changed", &new);
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn profile_switch(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    name: String,
+) -> Result<(), String> {
+    // Step 1: snapshot + write the CURRENT active profile so user
+    // changes since the last persist are not lost on switch.
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+
+    // Step 2: flip the active pointer in the index.
+    let new_path = {
+        let mut guard = state.profile_set.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Err("profile set not initialized".into());
+        };
+        set.switch(&name).map_err(|e| e.to_string())?;
+        set.active_path()
+    };
+
+    // Step 3: load the newly-active profile from disk and apply to
+    // the in-memory Profile. Missing file = fresh empty profile.
+    let snapshot = if new_path.exists() {
+        Some(ProfileConfig::load(&new_path).map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+    {
+        let mut p = state.profile.lock().await;
+        match snapshot {
+            Some(snap) => {
+                snap.apply_to(&mut p);
+            }
+            None => {
+                // Fresh profile: reset to defaults.
+                let default = ProfileConfig::default();
+                default.apply_to(&mut p);
+            }
+        }
+    }
+
+    let _ = app.emit("vosh://profile-switched", &name);
+    Ok(())
 }
 
 #[derive(serde::Serialize)]

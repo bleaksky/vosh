@@ -18,6 +18,7 @@ mod map_state;
 mod plugins;
 mod profile;
 mod profile_config;
+mod profile_set;
 mod script_state;
 mod session;
 mod tick;
@@ -28,10 +29,11 @@ use commands::{
     import_detect, logs_export, logs_list_sessions, logs_search, macros_delete, macros_list,
     macros_set, map_area_snapshot, map_set_avoid, map_set_note, map_walk_to, open_settings_window,
     plugins_list, plugins_reload, plugins_set_enabled, presets_install, presets_remove,
-    profile_export, profile_import, scrollback_load, session_connect, session_disconnect,
-    session_send, session_send_input, target_get, triggers_export, triggers_import, triggers_list,
-    ui_get_config, ui_set_config, updater_check, updater_install_and_relaunch, AppState,
-    SharedState,
+    profile_create, profile_delete, profile_duplicate, profile_export, profile_import,
+    profile_rename, profile_switch, profiles_list, scrollback_load, session_connect,
+    session_disconnect, session_send, session_send_input, target_get, triggers_export,
+    triggers_import, triggers_list, ui_get_config, ui_set_config, updater_check,
+    updater_install_and_relaunch, AppState, SharedState,
 };
 use fonts::{fonts_list, handle_font_uri};
 use map_state::MapState;
@@ -86,23 +88,44 @@ pub fn run() {
             }
             if let Ok(path) = app.path().app_data_dir() {
                 migrate_from_mudclient_dir(&path);
-                let toml_path = path.join("profile.toml");
-                if toml_path.exists() {
-                    match ProfileConfig::load(&toml_path) {
-                        Ok(snapshot) => {
-                            let profile = state.profile.clone();
-                            tauri::async_runtime::block_on(async move {
-                                let mut p = profile.lock().await;
-                                let warnings = snapshot.apply_to(&mut p);
-                                for w in warnings {
-                                    info!(warning = %w, "profile apply warning");
+
+                // Load (or migrate from the legacy single-file layout)
+                // the named-profile collection. Then load whichever
+                // profile the index marks as active and apply it to
+                // the live in-memory state.
+                match profile_set::ProfileSet::load_or_migrate(path.clone()) {
+                    Ok(set) => {
+                        let active_path = set.active_path();
+                        if active_path.exists() {
+                            match ProfileConfig::load(&active_path) {
+                                Ok(snapshot) => {
+                                    let profile = state.profile.clone();
+                                    tauri::async_runtime::block_on(async move {
+                                        let mut p = profile.lock().await;
+                                        let warnings = snapshot.apply_to(&mut p);
+                                        for w in warnings {
+                                            info!(warning = %w, "profile apply warning");
+                                        }
+                                    });
+                                    info!(
+                                        path = %active_path.display(),
+                                        active = %set.active_name(),
+                                        "loaded profile",
+                                    );
                                 }
-                            });
-                            info!(path = %toml_path.display(), "loaded profile");
+                                Err(e) => {
+                                    error!(error = %e, "failed to load active profile at startup");
+                                }
+                            }
                         }
-                        Err(e) => {
-                            error!(error = %e, "failed to load profile.toml at startup");
-                        }
+                        let profile_set = state.profile_set.clone();
+                        tauri::async_runtime::block_on(async move {
+                            let mut guard = profile_set.lock().await;
+                            *guard = Some(set);
+                        });
+                    }
+                    Err(e) => {
+                        error!(error = %e, "failed to load profile set; using in-memory defaults");
                     }
                 }
                 match open_log_store(&path) {
@@ -195,6 +218,12 @@ pub fn run() {
             ui_set_config,
             updater_check,
             updater_install_and_relaunch,
+            profiles_list,
+            profile_create,
+            profile_delete,
+            profile_rename,
+            profile_duplicate,
+            profile_switch,
             plugins_list,
             plugins_set_enabled,
             plugins_reload,
