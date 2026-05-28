@@ -2134,6 +2134,78 @@ body {
   line-height: 1.4;
 }
 
+/* Scope toggle section. Lists each UI category with two
+   bracketed pill buttons (global / profile). The active pill
+   takes the accent color so the user reads the current state at
+   a glance; the inactive one stays in muted text. */
+.scope-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--c-surface-emphasis);
+  border: 1px solid var(--c-border);
+  border-radius: 3px;
+}
+
+.scope-section-title {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.06em;
+  font-size: 0.85em;
+}
+
+.scope-section-help {
+  color: var(--c-text-dim);
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.scope-grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 18px;
+  row-gap: 4px;
+  align-items: center;
+}
+
+.scope-row {
+  display: contents;
+}
+
+.scope-row-label {
+  color: var(--c-text-muted);
+}
+
+.scope-row-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scope-pill {
+  background: transparent;
+  color: var(--c-text-dim);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  padding: 0 8px;
+  font: inherit;
+  cursor: pointer;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.scope-pill:hover {
+  color: var(--c-text-strong);
+  border-color: var(--c-accent);
+}
+
+.scope-pill.is-active {
+  background: var(--c-accent);
+  color: var(--c-surface-deep);
+  border-color: var(--c-accent);
+}
+
 .profiles-create-row {
   display: flex;
   align-items: center;

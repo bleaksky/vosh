@@ -522,6 +522,25 @@ export async function profileResolveMatch(
   return invoke('profile_resolve_match', { host, port, character });
 }
 
+// Per-category scope toggle (Profile vs Global).
+export type ProfileScope = 'profile' | 'global';
+
+export interface ScopeConfig {
+  theme: ProfileScope;
+  font: ProfileScope;
+  dock_layout: ProfileScope;
+  keep_last_command: ProfileScope;
+  auto_update: ProfileScope;
+}
+
+export async function profileGetScope(): Promise<ScopeConfig> {
+  return invoke('profile_get_scope');
+}
+
+export async function profileSetScope(scope: ScopeConfig): Promise<void> {
+  return invoke('profile_set_scope', { scope });
+}
+
 export async function subscribeProfilesChanged(
   cb: (changedName: string) => void,
 ): Promise<UnlistenFn> {

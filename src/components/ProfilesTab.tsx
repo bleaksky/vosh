@@ -3,14 +3,18 @@ import {
   profileCreate,
   profileDelete,
   profileDuplicate,
+  profileGetScope,
   profileRename,
   profileSetMetadata,
+  profileSetScope,
   profileSwitch,
   profilesList,
   subscribeProfilesChanged,
   subscribeProfileSwitched,
   type ProfileEntry,
+  type ProfileScope,
   type ProfilesList,
+  type ScopeConfig,
 } from '../lib/session';
 
 interface Props {
@@ -23,13 +27,16 @@ interface Props {
 // (host + port + optional character) for the connect-time auto-pick.
 export function ProfilesTab({ onError }: Props) {
   const [data, setData] = useState<ProfilesList | null>(null);
+  const [scope, setScope] = useState<ScopeConfig | null>(null);
   const [createDraft, setCreateDraft] = useState('');
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
 
   const reload = async () => {
     try {
-      setData(await profilesList());
+      const [list, scopeCfg] = await Promise.all([profilesList(), profileGetScope()]);
+      setData(list);
+      setScope(scopeCfg);
     } catch (e) {
       onError(String(e));
     }
@@ -129,6 +136,18 @@ export function ProfilesTab({ onError }: Props) {
     }
   };
 
+  const handleScopeChange = async (field: keyof ScopeConfig, next: ProfileScope) => {
+    if (!scope) return;
+    const updated = { ...scope, [field]: next };
+    setScope(updated);
+    try {
+      await profileSetScope(updated);
+      onError(null);
+    } catch (e) {
+      onError(String(e));
+    }
+  };
+
   return (
     <div className="profiles-tab">
       <div className="profiles-help">
@@ -136,6 +155,43 @@ export function ProfilesTab({ onError }: Props) {
         + port (and optionally character) below and the matching profile auto-loads when you
         connect.
       </div>
+
+      {scope && (
+        <div className="scope-section">
+          <div className="scope-section-title">scope</div>
+          <div className="scope-section-help">
+            global = the same value applies across every profile. profile = the value moves with the
+            active profile. font covers font-family + font-size as one toggle.
+          </div>
+          <div className="scope-grid">
+            <ScopeRow
+              label="theme"
+              value={scope.theme}
+              onChange={(v) => void handleScopeChange('theme', v)}
+            />
+            <ScopeRow
+              label="font"
+              value={scope.font}
+              onChange={(v) => void handleScopeChange('font', v)}
+            />
+            <ScopeRow
+              label="dock layout"
+              value={scope.dock_layout}
+              onChange={(v) => void handleScopeChange('dock_layout', v)}
+            />
+            <ScopeRow
+              label="keep last command"
+              value={scope.keep_last_command}
+              onChange={(v) => void handleScopeChange('keep_last_command', v)}
+            />
+            <ScopeRow
+              label="auto check updates"
+              value={scope.auto_update}
+              onChange={(v) => void handleScopeChange('auto_update', v)}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="profiles-create-row">
         <input
@@ -353,6 +409,40 @@ function ProfileRow({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ScopeRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: ProfileScope;
+  onChange: (v: ProfileScope) => void;
+}) {
+  return (
+    <div className="scope-row">
+      <span className="scope-row-label">{label}</span>
+      <div className="scope-row-toggle">
+        <button
+          type="button"
+          className={`scope-pill${value === 'global' ? ' is-active' : ''}`}
+          aria-pressed={value === 'global'}
+          onClick={() => onChange('global')}
+        >
+          global
+        </button>
+        <button
+          type="button"
+          className={`scope-pill${value === 'profile' ? ' is-active' : ''}`}
+          aria-pressed={value === 'profile'}
+          onClick={() => onChange('profile')}
+        >
+          profile
+        </button>
+      </div>
     </div>
   );
 }

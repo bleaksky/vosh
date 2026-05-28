@@ -85,6 +85,58 @@ pub(crate) struct ProfilesIndex {
     /// is what gets saved on every `persist_profile` call.
     #[serde(default, rename = "profile")]
     pub profiles: Vec<ProfileEntry>,
+    /// Per-category scope map. Decides which UI categories survive
+    /// profile switches (Global) and which travel with the active
+    /// profile (Profile). Defaults match v1: all five UI categories
+    /// global, everything else profile-scoped.
+    #[serde(default)]
+    pub scope: ScopeConfig,
+}
+
+/// Per-category scope choice. Per-profile fields move with the
+/// active profile; global fields are shared across every profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Scope {
+    /// Lives in `profiles/<active>.toml`. Changes when the active
+    /// profile changes.
+    #[default]
+    Profile,
+    /// Lives in `global.toml`. Identical across every profile.
+    Global,
+}
+
+/// User-controllable mapping of UI categories to scope. `font`
+/// covers both `font_family` and `font_size` since they always
+/// move together visually.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub(crate) struct ScopeConfig {
+    #[serde(default = "scope_default_global")]
+    pub theme: Scope,
+    #[serde(default = "scope_default_global")]
+    pub font: Scope,
+    #[serde(default = "scope_default_global")]
+    pub dock_layout: Scope,
+    #[serde(default = "scope_default_global")]
+    pub keep_last_command: Scope,
+    #[serde(default = "scope_default_global")]
+    pub auto_update: Scope,
+}
+
+fn scope_default_global() -> Scope {
+    Scope::Global
+}
+
+impl Default for ScopeConfig {
+    fn default() -> Self {
+        Self {
+            theme: Scope::Global,
+            font: Scope::Global,
+            dock_layout: Scope::Global,
+            keep_last_command: Scope::Global,
+            auto_update: Scope::Global,
+        }
+    }
 }
 
 const INDEX_FILENAME: &str = "profiles.toml";
@@ -148,6 +200,7 @@ impl ProfileSet {
                 description: None,
                 auto_match: None,
             }],
+            scope: ScopeConfig::default(),
         };
         let set = Self { root, index };
         set.save_index()?;
@@ -283,6 +336,21 @@ impl ProfileSet {
             return Err(ProfileSetError::NotFound(name.to_string()));
         }
         self.index.active = name.to_string();
+        self.save_index()?;
+        Ok(())
+    }
+
+    /// Read the per-category scope map.
+    pub(crate) fn scope(&self) -> &ScopeConfig {
+        &self.index.scope
+    }
+
+    /// Replace the scope map and persist the index. Caller is
+    /// responsible for re-persisting the active profile right after
+    /// so values get re-written to the correct file (global vs
+    /// per-profile).
+    pub(crate) fn set_scope(&mut self, scope: ScopeConfig) -> Result<(), ProfileSetError> {
+        self.index.scope = scope;
         self.save_index()?;
         Ok(())
     }

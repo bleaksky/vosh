@@ -16,6 +16,7 @@ use vosh_trigger::Trigger;
 use vosh_vars::Scope;
 
 use crate::profile::{Macro, Profile};
+use crate::profile_set::ScopeConfig;
 use crate::tick::{TickConfig, TickRuntime};
 
 #[derive(Debug, Error)]
@@ -392,15 +393,23 @@ pub(crate) struct GlobalConfig {
 }
 
 impl GlobalConfig {
-    /// Pull the global-scoped UI fields out of a live Profile.
-    pub(crate) fn from_profile(profile: &Profile) -> Self {
+    /// Pull the global-scoped UI fields out of a live Profile,
+    /// honoring the user's scope map: a field is written here only
+    /// when its scope is `Scope::Global`. Fields marked Profile-
+    /// scoped show up as `None`, so global.toml stays clean.
+    pub(crate) fn from_profile(profile: &Profile, scope: &ScopeConfig) -> Self {
+        use crate::profile_set::Scope;
         Self {
-            theme: Some(profile.ui.theme.clone()),
-            auto_update: Some(profile.ui.auto_update),
-            keep_last_command: Some(profile.ui.keep_last_command),
-            font_family: Some(profile.ui.font_family.clone()),
-            font_size: Some(profile.ui.font_size),
-            dock_layout: Some(profile.ui.dock_layout.clone()),
+            theme: matches!(scope.theme, Scope::Global).then(|| profile.ui.theme.clone()),
+            auto_update: matches!(scope.auto_update, Scope::Global)
+                .then_some(profile.ui.auto_update),
+            keep_last_command: matches!(scope.keep_last_command, Scope::Global)
+                .then_some(profile.ui.keep_last_command),
+            font_family: matches!(scope.font, Scope::Global)
+                .then(|| profile.ui.font_family.clone()),
+            font_size: matches!(scope.font, Scope::Global).then_some(profile.ui.font_size),
+            dock_layout: matches!(scope.dock_layout, Scope::Global)
+                .then(|| profile.ui.dock_layout.clone()),
         }
     }
 
@@ -444,18 +453,30 @@ impl GlobalConfig {
     }
 }
 
-/// Zero out the global-scoped fields on a `ProfileConfig` so the
-/// per-profile file does not store stale duplicates of the values
-/// that actually live in `global.toml`. Called right before saving
-/// the per-profile file.
-pub(crate) fn strip_global_fields(config: &mut ProfileConfig) {
+/// Zero out the fields whose scope is `Global` on a
+/// `ProfileConfig` so the per-profile file does not duplicate
+/// values that actually live in `global.toml`. Profile-scoped
+/// fields are left in place. Called right before saving the per-
+/// profile file.
+pub(crate) fn strip_global_fields(config: &mut ProfileConfig, scope: &ScopeConfig) {
+    use crate::profile_set::Scope;
     let defaults = UiConfig::default();
-    config.ui.theme = defaults.theme;
-    config.ui.auto_update = defaults.auto_update;
-    config.ui.keep_last_command = defaults.keep_last_command;
-    config.ui.font_family = defaults.font_family;
-    config.ui.font_size = defaults.font_size;
-    config.ui.dock_layout = defaults.dock_layout;
+    if matches!(scope.theme, Scope::Global) {
+        config.ui.theme = defaults.theme;
+    }
+    if matches!(scope.auto_update, Scope::Global) {
+        config.ui.auto_update = defaults.auto_update;
+    }
+    if matches!(scope.keep_last_command, Scope::Global) {
+        config.ui.keep_last_command = defaults.keep_last_command;
+    }
+    if matches!(scope.font, Scope::Global) {
+        config.ui.font_family = defaults.font_family;
+        config.ui.font_size = defaults.font_size;
+    }
+    if matches!(scope.dock_layout, Scope::Global) {
+        config.ui.dock_layout = defaults.dock_layout;
+    }
 }
 
 #[cfg(test)]
@@ -505,9 +526,10 @@ mod tests {
 
         // Snapshot both halves, strip the per-profile of global fields
         // (what persist_profile does before writing per-profile file).
+        let scope = ScopeConfig::default();
         let mut per_profile = ProfileConfig::from_profile(&profile);
-        let global = GlobalConfig::from_profile(&profile);
-        strip_global_fields(&mut per_profile);
+        let global = GlobalConfig::from_profile(&profile, &scope);
+        strip_global_fields(&mut per_profile, &scope);
 
         // Per-profile lost the global fields back to defaults.
         let defaults = UiConfig::default();
