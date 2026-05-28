@@ -86,7 +86,12 @@ function App() {
   const [chatOpen, setChatOpen] = useState(() => loadFlag(CHAT_OPEN_KEY));
   const [groupPinned, setGroupPinned] = useState(() => loadFlag(GROUP_PINNED_KEY));
   const termRef = useRef<TerminalHandle | null>(null);
+  const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
+  // Split-scrollback state. When true, a second xterm appears above the
+  // live one and shows the same buffer scrolled back so you can read
+  // earlier output while live combat keeps streaming below.
+  const [splitOpen, setSplitOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -304,15 +309,30 @@ function App() {
       <Connect status={status} onError={handleError} />
       <RoomStrip />
       <div className="main-row">
-        <div className="terminal-area" onMouseUp={handleTerminalMouseUp}>
-          <Terminal
-            fontFamily={fontFamily}
-            fontSize={fontSize}
-            themeTerminalColors={themeTerminalColors}
-            onReady={(handle) => {
-              termRef.current = handle;
-            }}
-          />
+        <div
+          className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}`}
+          onMouseUp={handleTerminalMouseUp}
+        >
+          <div className="terminal-pane terminal-pane-history" aria-hidden={!splitOpen}>
+            <Terminal
+              fontFamily={fontFamily}
+              fontSize={fontSize}
+              themeTerminalColors={themeTerminalColors}
+              onReady={(handle) => {
+                historyTermRef.current = handle;
+              }}
+            />
+          </div>
+          <div className="terminal-pane terminal-pane-live">
+            <Terminal
+              fontFamily={fontFamily}
+              fontSize={fontSize}
+              themeTerminalColors={themeTerminalColors}
+              onReady={(handle) => {
+                termRef.current = handle;
+              }}
+            />
+          </div>
         </div>
         {(mapOpen || groupPinned) && (
           <Resizable
@@ -369,7 +389,31 @@ function App() {
         enabled={connected}
         onError={handleError}
         onLocalEcho={(text) => termRef.current?.write(text)}
-        onScrollTerminal={(pages) => termRef.current?.scrollPages(pages)}
+        onScrollTerminal={(pages) => {
+          // Split-scrollback gesture. The live pane (termRef) stays
+          // anchored to the tail. PageUp opens the split (if closed)
+          // and pages the history pane up; PageDown pages the history
+          // pane down and closes the split once it reaches the tail.
+          const history = historyTermRef.current;
+          if (!history) return;
+          if (pages < 0) {
+            if (!splitOpen) setSplitOpen(true);
+            history.scrollPages(pages);
+            return;
+          }
+          if (!splitOpen) return;
+          history.scrollPages(pages);
+          // A microtask after scrollPages, xterm has updated its
+          // viewport; close the split if we paged back to the tail.
+          queueMicrotask(() => {
+            if (history.isAtBottom()) setSplitOpen(false);
+          });
+        }}
+        onExitSplit={() => {
+          if (!splitOpen) return;
+          historyTermRef.current?.scrollToBottom();
+          setSplitOpen(false);
+        }}
       />
       <StatusBar />
       <UpdateNotice />
