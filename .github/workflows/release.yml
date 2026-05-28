@@ -76,6 +76,12 @@ jobs:
       - name: Build app
         uses: tauri-apps/tauri-action@v0
         env:
+          # tauri-action uploads built artifacts to the draft GitHub
+          # release; without GITHUB_TOKEN the upload step errors out
+          # with "GITHUB_TOKEN is required" even though the build
+          # itself succeeded. Workflow-level `permissions: contents:
+          # write` covers the scope.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # When you generate a minisign keypair, set these two secrets.
           # Until they exist the bundler still produces installers but
           # the updater signature step is skipped.
