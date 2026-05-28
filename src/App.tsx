@@ -92,6 +92,13 @@ function App() {
   // live one and shows the same buffer scrolled back so you can read
   // earlier output while live combat keeps streaming below.
   const [splitOpen, setSplitOpen] = useState(false);
+  // History pane scroll depth, driven by the Terminal's onScrollPosition
+  // callback. Drives the "↑ N / max" indicator in the top-right of the
+  // history pane.
+  const [historyScrollPos, setHistoryScrollPos] = useState<{
+    back: number;
+    max: number;
+  } | null>(null);
 
   useEffect(() => {
     try {
@@ -116,6 +123,14 @@ function App() {
       // ignore storage failures
     }
   }, [groupPinned]);
+
+  // Reset the history-pane scroll-depth indicator whenever the split
+  // closes. The history Terminal unmounts and the next mount will fire
+  // its own onScrollPosition; keeping the prior value here would flash
+  // stale numbers for one paint before being overwritten.
+  useEffect(() => {
+    if (!splitOpen) setHistoryScrollPos(null);
+  }, [splitOpen]);
 
   // Click anywhere in the terminal area focuses the input. Skip when
   // the user is selecting text (so copy still works) or clicking an
@@ -341,7 +356,13 @@ function App() {
                   // no longer show overlapping content.
                   historyTermRef.current?.scrollPages(-1);
                 }}
+                onScrollPosition={(back, max) => setHistoryScrollPos({ back, max })}
               />
+              {historyScrollPos && historyScrollPos.max > 0 && (
+                <div className="scrollback-indicator" aria-live="polite">
+                  ↑ {historyScrollPos.back} / {historyScrollPos.max}
+                </div>
+              )}
             </div>
           )}
           <div className="terminal-pane terminal-pane-live">
