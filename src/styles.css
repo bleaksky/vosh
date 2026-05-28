@@ -449,9 +449,28 @@ body {
   flex: 1 1 0;
   border-bottom: 1px solid var(--c-border);
   margin-bottom: 4px;
+  position: relative;
 }
 .terminal-area-split .terminal-pane-live {
   flex: 1 1 0;
+}
+
+/* Scroll-depth indicator in the top-right of the history pane.
+   Absolutely positioned so it overlays the xterm without affecting
+   the row count FitAddon calculates. */
+.scrollback-indicator {
+  position: absolute;
+  top: 4px;
+  right: 10px;
+  font-size: 0.78em;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--c-muted, #888);
+  background: rgba(0, 0, 0, 0.45);
+  padding: 2px 8px;
+  border-radius: 3px;
+  pointer-events: none;
+  user-select: none;
+  z-index: 5;
 }
 
 /* xterm's FitAddon reads the host's computed height to compute the

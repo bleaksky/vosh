@@ -43,6 +43,11 @@ interface Props {
   /// too early — the terminal has no content at that point and any
   /// scrollPages call is a no-op that the next write would override.
   onScrollbackLoaded?: () => void;
+  /// Fires on every viewport change. `back` is the number of lines
+  /// above the live tail the viewport is currently showing (0 when
+  /// anchored to the tail). `max` is the total scrollback above (the
+  /// largest possible `back`). Use to drive a scroll-depth indicator.
+  onScrollPosition?: (back: number, max: number) => void;
 }
 
 // Canonical xterm-256 palette for ANSI codes 0-15. Used when the
@@ -114,11 +119,14 @@ export function Terminal({
   themeTerminalColors,
   quiet = false,
   onScrollbackLoaded,
+  onScrollPosition,
 }: Props) {
   const quietRef = useRef(quiet);
   quietRef.current = quiet;
   const onScrollbackLoadedRef = useRef(onScrollbackLoaded);
   onScrollbackLoadedRef.current = onScrollbackLoaded;
+  const onScrollPositionRef = useRef(onScrollPosition);
+  onScrollPositionRef.current = onScrollPosition;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -229,6 +237,12 @@ export function Terminal({
     let unsubOutput: (() => void) | undefined;
     // Replay persisted scrollback before any live output lands so the
     // user opens the app to the tail of their last session.
+    const notifyPosition = () => {
+      const buf = term.buffer.active;
+      onScrollPositionRef.current?.(buf.baseY - buf.viewportY, buf.baseY);
+    };
+    term.onScroll(notifyPosition);
+
     loadScrollback()
       .then((bytes) => {
         if (bytes.length > 0) {
@@ -241,7 +255,10 @@ export function Terminal({
         // notifying so any onScrollbackLoaded handler that adjusts
         // the viewport sees the final row count, not the count
         // before the buffered bytes were rendered.
-        const notify = () => onScrollbackLoadedRef.current?.();
+        const notify = () => {
+          notifyPosition();
+          onScrollbackLoadedRef.current?.();
+        };
         if (bytes.length > 0) {
           term.write('', notify);
         } else {
@@ -252,6 +269,7 @@ export function Terminal({
         // No scrollback yet, or backend not ready; still notify so
         // the host can apply its initial scroll gesture (no-op on
         // an empty terminal, but does not lose the user intent).
+        notifyPosition();
         onScrollbackLoadedRef.current?.();
       });
     onOutput((bytes) => {
