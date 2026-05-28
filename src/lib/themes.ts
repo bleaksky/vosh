@@ -354,6 +354,69 @@ const catppuccin: AppTheme = {
   },
 };
 
+// ── Classic Vivid ───────────────────────────────────────────────────
+// Saturated CGA / VGA "high intensity" palette — the look CMUD,
+// zMUD, and the original Windows console shipped. Pure primaries
+// for the bright variants; standard half-intensity for the base
+// eight. Pick this if Kanso Zen feels too muted / pastel.
+const classicVivid: AppTheme = {
+  id: 'classic-vivid',
+  label: 'Classic Vivid',
+  description: 'Saturated CGA/VGA primaries. Bright reds, greens, blues.',
+  xterm: {
+    background: '#0a0a0a',
+    foreground: '#cccccc',
+    cursor: '#ffffff',
+    cursorAccent: '#0a0a0a',
+    selectionBackground: '#444444',
+    selectionForeground: '#ffffff',
+    black: '#000000',
+    red: '#aa0000',
+    green: '#00aa00',
+    yellow: '#aa5500',
+    blue: '#0000aa',
+    magenta: '#aa00aa',
+    cyan: '#00aaaa',
+    white: '#aaaaaa',
+    brightBlack: '#555555',
+    brightRed: '#ff0000',
+    brightGreen: '#00ff00',
+    brightYellow: '#ffff00',
+    // Pure #0000ff is unreadable on dark; use the high-intensity
+    // bluish-purple the legacy VGA "high-intensity blue" rendered as.
+    brightBlue: '#5555ff',
+    brightMagenta: '#ff00ff',
+    brightCyan: '#00ffff',
+    brightWhite: '#ffffff',
+  },
+  chrome: {
+    surfaceDeep: '#000000',
+    surface: '#0a0a0a',
+    surfacePane: '#050505',
+    surfaceLift: '#1a1a1a',
+    surfaceEmphasis: '#2a2a2a',
+    textStrong: '#ffffff',
+    text: '#cccccc',
+    textMuted: '#999999',
+    textFaint: '#777777',
+    textDim: '#555555',
+    borderSoft: '#1a1a1a',
+    border: '#2a2a2a',
+    borderStrong: '#444444',
+    borderHover: '#888888',
+    // Vivid amber for the accent. Pink belongs to Kanso Zen; here
+    // amber stays distinct from warn (yellow), success (green),
+    // info (cyan), and danger (red) — and reads as a CGA-era
+    // highlight color in keeping with the rest of the palette.
+    accent: '#ffaa00',
+    accentSoft: 'rgba(255, 170, 0, 0.12)',
+    warn: '#ffff00',
+    danger: '#ff0000',
+    info: '#00ffff',
+    success: '#00ff00',
+  },
+};
+
 // ── High Contrast ───────────────────────────────────────────────────
 // Re-thought from the original WCAG-AA stab: deeper blacks for chrome
 // (so it isn't a flat black void), pure white text, yellow + bright
@@ -362,9 +425,14 @@ const catppuccin: AppTheme = {
 const highContrast: AppTheme = {
   id: 'high-contrast',
   label: 'High Contrast',
-  description: 'Maximum readability. Pure black surfaces, white borders.',
+  description: 'Maximum readability. Off-black surfaces, white borders.',
   xterm: {
-    background: '#000000',
+    // Slight off-black instead of pure #000000. xterm.js can't be
+    // told to override the 256-color cube; ANSI 256 codes like 022
+    // (rgb 0,95,0) emit at their standard cube position, which is
+    // invisible on pure black. A small lift means dark cube entries
+    // are still readable while contrast stays high.
+    background: '#0d0d0d',
     foreground: '#ffffff',
     cursor: '#ffff00',
     cursorAccent: '#000000',
@@ -388,9 +456,9 @@ const highContrast: AppTheme = {
     brightWhite: '#ffffff',
   },
   chrome: {
-    surfaceDeep: '#000000',
-    surface: '#000000',
-    surfacePane: '#0a0a0a',
+    surfaceDeep: '#070707',
+    surface: '#0d0d0d',
+    surfacePane: '#101010',
     surfaceLift: '#1a1a1a',
     surfaceEmphasis: '#2a2a2a',
     textStrong: '#ffffff',
@@ -417,6 +485,7 @@ export const THEMES: AppTheme[] = [
   nord,
   gruvbox,
   catppuccin,
+  classicVivid,
   highContrast,
 ];
 

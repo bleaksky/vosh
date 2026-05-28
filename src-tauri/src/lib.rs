@@ -30,7 +30,8 @@ use commands::{
     presets_install, presets_remove, profile_export, profile_import, scrollback_load,
     session_connect, session_disconnect, session_send, session_send_input, target_get,
     triggers_export, triggers_import, plugins_list, plugins_reload, plugins_set_enabled,
-    triggers_list, ui_get_config, ui_set_config, updater_check, AppState, SharedState,
+    triggers_list, ui_get_config, ui_set_config, updater_check, updater_install_and_relaunch,
+    AppState, SharedState,
 };
 use fonts::{fonts_list, handle_font_uri};
 use map_state::MapState;
@@ -193,6 +194,7 @@ pub fn run() {
             ui_get_config,
             ui_set_config,
             updater_check,
+            updater_install_and_relaunch,
             plugins_list,
             plugins_set_enabled,
             plugins_reload,

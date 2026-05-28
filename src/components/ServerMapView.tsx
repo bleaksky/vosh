@@ -77,6 +77,14 @@ type Style = 'squares' | 'glyphs' | 'tileset';
 
 const STYLE_KEY = 'vosh.layout.serverMapStyle';
 const TILESET_KEY = 'vosh.layout.serverMapTileset';
+const ZOOM_KEY = 'vosh.layout.serverMapZoom';
+
+// Zoom multiplier applied to the base 20-pixel pitch. 1.0 = default
+// (20px cells), 2.0 = 40px, 0.5 = 10px. Stepping at 0.25 increments
+// keeps cell sizes on whole-pixel boundaries.
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3.0;
+const ZOOM_STEP = 0.25;
 
 function loadStyle(): Style {
   try {
@@ -94,6 +102,23 @@ function loadTileset(): string | null {
   } catch {
     return null;
   }
+}
+
+function loadZoom(): number {
+  try {
+    const v = Number(localStorage.getItem(ZOOM_KEY));
+    if (!Number.isFinite(v) || v <= 0) return 1.0;
+    return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v));
+  } catch {
+    return 1.0;
+  }
+}
+
+function clampZoom(z: number): number {
+  // Snap to the nearest step to avoid drift from arithmetic on
+  // wheel-delta increments accumulating sub-step fractions.
+  const snapped = Math.round(z / ZOOM_STEP) * ZOOM_STEP;
+  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, snapped));
 }
 
 // Default sector code order in a horizontal sprite strip. A tileset PNG
@@ -149,6 +174,7 @@ export function ServerMapView() {
   const [tilesetUrl, setTilesetUrl] = useState<string | null>(loadTileset);
   const [tilesetImage, setTilesetImage] = useState<HTMLImageElement | null>(null);
   const [tilesetError, setTilesetError] = useState<string | null>(null);
+  const [zoom, setZoom] = useState<number>(loadZoom);
   // Snapshot of the persistent mapping store. We use it to translate the
   // player-centric Map.Tiles grid into stable world coordinates so cells
   // do not shift on canvas as the player walks.
@@ -190,6 +216,30 @@ export function ServerMapView() {
       // ignore
     }
   }, [style]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ZOOM_KEY, String(zoom));
+    } catch {
+      // ignore
+    }
+  }, [zoom]);
+
+  // Ctrl/Cmd + wheel zooms in/out, mirroring the convention used by
+  // map apps. Attached non-passively so we can preventDefault and stop
+  // the browser from scrolling the surrounding pane in lieu of zooming.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const direction = e.deltaY < 0 ? 1 : -1;
+      setZoom((z) => clampZoom(z + direction * ZOOM_STEP));
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, []);
 
   useEffect(() => {
     if (!tilesetUrl) {
@@ -338,6 +388,7 @@ export function ServerMapView() {
           centerC,
           cssWidth,
           cssHeight,
+          zoom,
         );
         const halfW = (cols / 2) * anchorPitch.pitch;
         const halfH = (rows / 2) * anchorPitch.pitch;
@@ -366,6 +417,7 @@ export function ServerMapView() {
         centerC,
         cssWidth,
         cssHeight,
+        zoom,
       );
 
       if (style === 'glyphs') {
@@ -406,7 +458,7 @@ export function ServerMapView() {
       observer.disconnect();
       window.removeEventListener('resize', draw);
     };
-  }, [tiles, style, tilesetImage, snapshot, themeVersion]);
+  }, [tiles, style, tilesetImage, snapshot, themeVersion, zoom]);
 
   const handleLoadTileset = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -460,6 +512,34 @@ export function ServerMapView() {
             onClick={() => setStyle('tileset')}
           >
             tileset
+          </button>
+        </div>
+        <div className="map-zoom" title="Ctrl+wheel over the map also zooms">
+          <button
+            type="button"
+            aria-label="zoom out"
+            disabled={zoom <= ZOOM_MIN + 1e-6}
+            onClick={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
+          >
+            −
+          </button>
+          <span className="map-zoom-value">{Math.round(zoom * 100)}%</span>
+          <button
+            type="button"
+            aria-label="zoom in"
+            disabled={zoom >= ZOOM_MAX - 1e-6}
+            onClick={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            aria-label="reset zoom"
+            disabled={Math.abs(zoom - 1) < 1e-6}
+            onClick={() => setZoom(1)}
+            title="reset to 100%"
+          >
+            ⤺
           </button>
         </div>
       </div>
@@ -524,9 +604,12 @@ function computeAnchor(
   _centerC: number,
   cssWidth: number,
   cssHeight: number,
+  zoom: number = 1,
 ): Anchor {
-  // Same pitch as the mapping view so both modes render at the same scale.
-  const pitch = 20;
+  // Same base pitch as the mapping view so both modes render at the
+  // same scale; the user's zoom multiplier scales it up or down.
+  // Floored to integer pixels so cells stay on a clean grid.
+  const pitch = Math.max(4, Math.floor(20 * zoom));
   return {
     pitch,
     playerX: Math.floor(cssWidth / 2),
@@ -874,8 +957,8 @@ function dimLevel(dr: number, dc: number, light: number | string | undefined): n
 
 function drawGlyphs(
   ctx: CanvasRenderingContext2D,
-  cssWidth: number,
-  cssHeight: number,
+  _cssWidth: number,
+  _cssHeight: number,
   payload: MapTilesPayload,
   rows: number,
   cols: number,
@@ -891,8 +974,14 @@ function drawGlyphs(
     ctx.fillText('no glyph data in payload', 10, 22);
     return;
   }
-  const pitchX = Math.max(8, Math.min(20, Math.floor(cssWidth / (cols * 1.6))));
-  const pitchY = Math.max(10, Math.min(22, Math.floor(cssHeight / rows)));
+  // Anchor.pitch already includes the user's zoom multiplier, so
+  // glyphs scale with zoom the same way squares + tileset do. (The
+  // previous canvas-fit calculation ignored anchor.pitch entirely
+  // and capped glyphs at 20px regardless of zoom.)
+  const pitchX = anchor.pitch;
+  const pitchY = anchor.pitch;
+  void rows;
+  void cols;
   // Match drawSquares' anchoring so off-floor entries (which share
   // the same 1-indexed coordinate space as `g`) land on the same
   // visual cells in both modes.
