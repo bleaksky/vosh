@@ -49,32 +49,37 @@ async fn persist_profile(app: &AppHandle, state: &SharedState) {
     // if ProfileSet is somehow missing (shouldn't happen post-
     // startup; defensive path for very early calls before setup()
     // finishes).
-    let (per_profile_path, global_path) = {
+    let (per_profile_path, global_path, scope) = {
         let guard = state.profile_set.lock().await;
         if let Some(set) = guard.as_ref() {
-            (Some(set.active_path()), Some(set.global_path()))
+            (
+                Some(set.active_path()),
+                Some(set.global_path()),
+                Some(*set.scope()),
+            )
         } else {
             let Ok(dir) = app.path().app_data_dir() else {
                 return;
             };
-            (Some(dir.join("profile.toml")), None)
+            (Some(dir.join("profile.toml")), None, None)
         }
     };
 
     let (mut per_profile_snapshot, global_snapshot) = {
         let p = state.profile.lock().await;
+        let scope = scope.unwrap_or_default();
         (
             ProfileConfig::from_profile(&p),
-            GlobalConfig::from_profile(&p),
+            GlobalConfig::from_profile(&p, &scope),
         )
     };
 
-    // Strip the global UI fields out of the per-profile snapshot so
-    // theme/font/etc. don't get duplicated into every profile file.
-    // The load path applies global on top of per-profile to fill
-    // them back in.
-    if global_path.is_some() {
-        strip_global_fields(&mut per_profile_snapshot);
+    // Strip the global-scoped fields out of the per-profile snapshot
+    // so they don't get duplicated. Honors the per-category scope
+    // map (categories marked Profile-scoped stay in the per-profile
+    // file).
+    if let Some(scope) = scope.as_ref() {
+        strip_global_fields(&mut per_profile_snapshot, scope);
     }
 
     if let Some(p) = per_profile_path.as_ref() {
@@ -634,6 +639,42 @@ pub(crate) async fn profile_duplicate(
         set.duplicate(&source, &new).map_err(|e| e.to_string())?;
     }
     let _ = app.emit("vosh://profiles-changed", &new);
+    Ok(())
+}
+
+/// Read the per-category scope map. Frontend uses this to render
+/// the toggle row in the Profiles tab.
+#[tauri::command]
+pub(crate) async fn profile_get_scope(
+    state: State<'_, SharedState>,
+) -> Result<crate::profile_set::ScopeConfig, String> {
+    let guard = state.profile_set.lock().await;
+    let Some(set) = guard.as_ref() else {
+        return Err("profile set not initialized".into());
+    };
+    Ok(*set.scope())
+}
+
+/// Update the per-category scope map. After the index is updated,
+/// persist the active profile so values move to the correct file
+/// (a category flipped Global -> Profile lands in the per-profile
+/// file on next save; Profile -> Global lands in global.toml).
+#[tauri::command]
+pub(crate) async fn profile_set_scope(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    scope: crate::profile_set::ScopeConfig,
+) -> Result<(), String> {
+    {
+        let mut guard = state.profile_set.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Err("profile set not initialized".into());
+        };
+        set.set_scope(scope).map_err(|e| e.to_string())?;
+    }
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    let _ = app.emit("vosh://profiles-changed", "scope");
     Ok(())
 }
 
