@@ -25,7 +25,13 @@ jobs:
           - platform: macos-latest
             target: aarch64-apple-darwin
             label: macos-arm64
-          - platform: macos-13
+          # GitHub has been deprecating macos-13 (Intel) runners and
+          # the queue often never picks them up. Cross-compile to
+          # x86_64 from the arm64 macos-latest runner instead. The
+          # dtolnay/rust-toolchain step installs the target so cargo
+          # produces a native x86_64 binary that Tauri bundles into
+          # an x86_64 .dmg.
+          - platform: macos-latest
             target: x86_64-apple-darwin
             label: macos-x86_64
           - platform: ubuntu-22.04
