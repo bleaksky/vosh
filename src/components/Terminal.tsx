@@ -229,35 +229,41 @@ export function Terminal({ onReady, fontFamily, fontSize, themeTerminalColors }:
     };
     onReadyRef.current?.(handle);
 
-    // Intercept Cmd+C (macOS) / Ctrl+Shift+C (Linux/Win) when there's
-    // an xterm selection so the user can copy highlighted output to
-    // the clipboard. Canvas-rendered terminals do not expose the
-    // selection to the browser the same way DOM text does, so the
-    // browser-native Cmd+C shortcut would just copy whatever is in
-    // the focused input. attachCustomKeyEventHandler lets us swallow
-    // the keystroke and write the selection ourselves.
-    term.attachCustomKeyEventHandler((event) => {
-      if (event.type !== 'keydown') return true;
+    // Cmd+C / Ctrl+Shift+C copies the xterm selection. The keystroke
+    // almost always lands while focus is in the Input box (the user
+    // drag-selects xterm output, then hits the shortcut without
+    // clicking back into the terminal), so a keydown listener
+    // attached to xterm alone never fires. Listen at the window
+    // instead, and defer to the focused element's native selection
+    // when it actually has one of its own.
+    const onCopyKey = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
       const isMacCopy = event.metaKey && !event.ctrlKey && !event.altKey && key === 'c';
       const isNonMacCopy = event.ctrlKey && event.shiftKey && key === 'c';
-      if (isMacCopy || isNonMacCopy) {
-        const selection = term.getSelection();
-        if (selection) {
-          void navigator.clipboard.writeText(selection).catch(() => {
-            /* ignore — clipboard may be unavailable in some webviews */
-          });
-          event.preventDefault();
-          return false;
-        }
-      }
-      return true;
-    });
+      if (!isMacCopy && !isNonMacCopy) return;
+      const selection = term.getSelection();
+      if (!selection) return;
+      const active = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
+      const activeHasSelection =
+        active &&
+        'selectionStart' in active &&
+        active.selectionStart !== active.selectionEnd;
+      const domSelection = window.getSelection();
+      const domHasSelection = domSelection !== null && domSelection.toString().length > 0;
+      if (activeHasSelection || domHasSelection) return;
+      void navigator.clipboard.writeText(selection).catch(() => {
+        /* clipboard may be unavailable in some webviews */
+      });
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    window.addEventListener('keydown', onCopyKey, true);
 
     return () => {
       cancelAnimationFrame(rafId);
       observer.disconnect();
       window.removeEventListener('resize', handleWindowResize);
+      window.removeEventListener('keydown', onCopyKey, true);
       unsubOutput?.();
       term.dispose();
       termRef.current = null;
