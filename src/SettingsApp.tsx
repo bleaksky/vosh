@@ -8,6 +8,7 @@ import { LogsTab } from './components/LogsTab';
 import { MacrosTab } from './components/MacrosTab';
 import { ImportTab } from './components/ImportTab';
 import { ProfilesTab } from './components/ProfilesTab';
+import { ThemesTab } from './components/ThemesTab';
 import {
   broadcastTrackedAffects,
   exportAliases,
@@ -21,7 +22,7 @@ import {
   type UiConfig,
 } from './lib/session';
 import { applyTheme } from './lib/theme';
-import { THEMES } from './lib/themes';
+import { customToAppTheme, setCustomThemes, THEMES } from './lib/themes';
 import { loadFontStack, loadSystemFont } from './lib/fontLoader';
 
 // Quick-pick chips. The first two are bundled with the app via
@@ -41,9 +42,18 @@ const FONT_PICKS: { label: string; value: string }[] = [
 
 const PREVIEW_TEXT = 'The quick brown fox 0123456789  |  hp 850/1000  IlOo1';
 
-type TabId = 'general' | 'profiles' | 'triggers' | 'aliases' | 'macros' | 'import' | 'logs';
+type TabId =
+  | 'general'
+  | 'themes'
+  | 'profiles'
+  | 'triggers'
+  | 'aliases'
+  | 'macros'
+  | 'import'
+  | 'logs';
 const TABS: { id: TabId; label: string }[] = [
   { id: 'general', label: 'general' },
+  { id: 'themes', label: 'themes' },
   { id: 'profiles', label: 'profiles' },
   { id: 'triggers', label: 'triggers' },
   { id: 'aliases', label: 'aliases' },
@@ -73,6 +83,7 @@ export function SettingsApp() {
     const fallback = window.setTimeout(reveal, 500);
     getUiConfig()
       .then((cfg) => {
+        setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
         setConfig(cfg);
         applyTheme(cfg.theme);
       })
@@ -137,6 +148,7 @@ export function SettingsApp() {
             )}
           />
         )}
+        {tab === 'themes' && <ThemesTab config={config} setConfig={setConfig} onError={setError} />}
         {tab === 'profiles' && <ProfilesTab onError={setError} />}
         {tab === 'macros' && <MacrosTab onError={setError} />}
         {tab === 'import' && <ImportTab onError={setError} />}

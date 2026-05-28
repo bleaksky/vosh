@@ -2116,6 +2116,220 @@ body {
   flex: 1 1 auto;
 }
 
+/* Themes tab — read-only list of built-ins, mutable list of
+   user-authored ones below. Custom rows expand inline to a color-
+   picker grid grouped by role. Live edits emit the theme-changed
+   event so the running window previews the change immediately. */
+.themes-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.themes-help {
+  color: var(--c-text-faint);
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+.themes-section-title {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.06em;
+  font-size: 0.85em;
+  margin-top: 4px;
+}
+
+.themes-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.themes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.theme-row {
+  border: 1px solid var(--c-border-soft);
+  border-radius: 3px;
+  background: var(--c-surface-lift);
+  padding: 4px 8px;
+}
+
+.theme-row.is-active {
+  border-color: var(--c-accent);
+}
+
+.theme-row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.theme-row-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--c-text);
+  font: inherit;
+  cursor: pointer;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.theme-row-name:hover {
+  color: var(--c-text-strong);
+}
+
+.theme-row.is-active .theme-row-name {
+  color: var(--c-accent);
+}
+
+.theme-row-marker {
+  color: var(--c-text-dim);
+}
+
+.theme-row.is-active .theme-row-marker {
+  color: var(--c-accent);
+}
+
+.theme-row-id {
+  color: var(--c-text-faint);
+  font-size: 0.85em;
+  letter-spacing: 0.02em;
+}
+
+.theme-row-swatches {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.theme-row-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  border: 1px solid var(--c-border);
+}
+
+.theme-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.theme-editor {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--c-border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.theme-editor-meta {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 10px;
+}
+
+.theme-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--c-text-faint);
+  font-size: 0.85em;
+}
+
+.theme-editor-field input[type='text'] {
+  background: var(--c-surface-emphasis);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: 1em;
+  outline: none;
+}
+
+.theme-editor-field input[type='text']:focus {
+  border-color: var(--c-accent);
+}
+
+.theme-editor-section-title {
+  color: var(--c-text-muted);
+  text-transform: lowercase;
+  letter-spacing: 0.06em;
+  font-size: 0.85em;
+  margin-top: 4px;
+}
+
+.color-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.color-group-label {
+  color: var(--c-text-faint);
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+}
+
+.color-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 4px;
+}
+
+.color-slot {
+  display: inline-grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  background: var(--c-surface-emphasis);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 2px;
+}
+
+.color-slot input[type='color'] {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.color-slot-text {
+  background: transparent;
+  color: var(--c-text);
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 0.85em;
+  padding: 0;
+  width: 100%;
+}
+
+.color-slot-name {
+  color: var(--c-text-faint);
+  font-size: 0.8em;
+}
+
 /* Profiles tab — named-profile catalog. Active profile marked by a
    filled dot in the active accent color. Each row collapses an
    "auto-match" detail panel for the host/port/character pin used
