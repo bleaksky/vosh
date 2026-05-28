@@ -18,6 +18,10 @@ export interface TerminalHandle {
   scrollPages: (n: number) => void;
   /** Scroll the xterm scrollback by N lines. Negative N scrolls up. */
   scrollLines: (n: number) => void;
+  /** Jump the viewport to the live tail. */
+  scrollToBottom: () => void;
+  /** True when the viewport is anchored at the live tail (no scrollback offset). */
+  isAtBottom: () => boolean;
 }
 
 interface Props {
@@ -226,6 +230,11 @@ export function Terminal({ onReady, fontFamily, fontSize, themeTerminalColors }:
       clear: () => term.clear(),
       scrollPages: (n) => term.scrollPages(n),
       scrollLines: (n) => term.scrollLines(n),
+      scrollToBottom: () => term.scrollToBottom(),
+      // viewportY tracks the top of the viewport in scrollback coords;
+      // baseY tracks the top of the bottom page. Equal means the
+      // viewport is anchored to the live tail.
+      isAtBottom: () => term.buffer.active.viewportY === term.buffer.active.baseY,
     };
     onReadyRef.current?.(handle);
 

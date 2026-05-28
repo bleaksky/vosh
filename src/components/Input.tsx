@@ -31,10 +31,13 @@ interface Props {
   /** Scroll the terminal scrollback by N pages. Called from
    *  PageUp/PageDown handling (which on macOS is Fn+Up/Fn+Down). */
   onScrollTerminal?: (pages: number) => void;
+  /** Close the split-scrollback view. Fires on Esc; the host decides
+   *  whether anything is currently open. */
+  onExitSplit?: () => void;
 }
 
 export const Input = forwardRef<InputHandle, Props>(function Input(
-  { enabled, onError, onLocalEcho, onScrollTerminal }: Props,
+  { enabled, onError, onLocalEcho, onScrollTerminal, onExitSplit }: Props,
   ref,
 ) {
   const [value, setValue] = useState('');
@@ -208,6 +211,13 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     if (event.key === 'PageUp' || event.key === 'PageDown') {
       event.preventDefault();
       onScrollTerminal?.(event.key === 'PageUp' ? -1 : 1);
+      return;
+    }
+
+    // Esc closes the split-scrollback view if it is open. The host
+    // ignores the call when nothing is split, so a stray Esc is safe.
+    if (event.key === 'Escape') {
+      onExitSplit?.();
       return;
     }
 
