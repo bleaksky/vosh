@@ -11,5 +11,5 @@ pub mod negotiator;
 pub mod parser;
 
 pub use codes::{option, IAC};
-pub use negotiator::{Negotiator, DEFAULT_TERMINAL_TYPE};
+pub use negotiator::{Negotiator, DEFAULT_MTTS_BITS, DEFAULT_TERMINAL_TYPE};
 pub use parser::{Event, Parser};
