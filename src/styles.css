@@ -2116,7 +2116,7 @@ body {
 .panels-preview-cursor {
   position: absolute;
   bottom: 6px;
-  right: 10px;
+  left: 10px;
   color: var(--c-accent);
   animation: panels-cursor-blink 1s steps(2, end) infinite;
 }
