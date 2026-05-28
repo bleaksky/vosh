@@ -1,5 +1,5 @@
 import { emit } from '@tauri-apps/api/event';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   BUILTIN_THEMES,
   customToAppTheme,
@@ -8,7 +8,7 @@ import {
   type AppTheme,
 } from '../lib/themes';
 import { applyTheme } from '../lib/theme';
-import type { CustomTheme, UiConfig } from '../lib/session';
+import { setUiConfig, type CustomTheme, type UiConfig } from '../lib/session';
 
 interface Props {
   config: UiConfig | null;
@@ -27,8 +27,27 @@ interface Props {
 // debounced save path persists changes through ui_set_config.
 export function ThemesTab({ config, setConfig, onError }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
+  const debounceRef = useRef<number | null>(null);
 
   if (!config) return <div className="settings-loading">loading…</div>;
+
+  // Auto-persist theme actions so the live preview also becomes
+  // the saved state. Without this, clicking a theme flips the CSS
+  // but the backend keeps the old value — closing settings keeps
+  // the preview live, but reopening reads stale state and reverts.
+  const persist = (cfg: UiConfig) => {
+    setUiConfig(cfg).catch((e) => onError(String(e)));
+  };
+
+  const persistDebounced = (cfg: UiConfig, delayMs = 350) => {
+    if (debounceRef.current !== null) {
+      window.clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = window.setTimeout(() => {
+      debounceRef.current = null;
+      persist(cfg);
+    }, delayMs);
+  };
 
   const updateCustom = (id: string, patch: Partial<CustomTheme>) => {
     setConfig((prev) => {
@@ -43,7 +62,12 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
           void emit('vosh://theme-changed', merged.id);
         }
       }
-      return { ...prev, custom_themes: next };
+      const updatedConfig = { ...prev, custom_themes: next };
+      // Color slot changes can fire on every drag tick of the
+      // native color picker; debounce so we are not slamming the
+      // backend with redundant writes.
+      persistDebounced(updatedConfig);
+      return updatedConfig;
     });
   };
 
@@ -67,10 +91,13 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
       xterm: { ...base.xterm },
       chrome: { ...base.chrome },
     };
-    setConfig((prev) =>
-      prev ? { ...prev, custom_themes: [...prev.custom_themes, newTheme] } : prev,
-    );
-    setCustomThemes([...config.custom_themes, newTheme].map(customToAppTheme));
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, custom_themes: [...prev.custom_themes, newTheme] };
+      setCustomThemes(updated.custom_themes.map(customToAppTheme));
+      persist(updated);
+      return updated;
+    });
     setEditing(newId);
   };
 
@@ -85,16 +112,23 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
         applyTheme(nextTheme);
         void emit('vosh://theme-changed', nextTheme);
       }
-      return { ...prev, custom_themes: next, theme: nextTheme };
+      const updated = { ...prev, custom_themes: next, theme: nextTheme };
+      persist(updated);
+      return updated;
     });
     if (editing === id) setEditing(null);
     onError(null);
   };
 
   const handleSelect = (id: string) => {
-    setConfig((prev) => (prev ? { ...prev, theme: id } : prev));
-    applyTheme(id);
-    void emit('vosh://theme-changed', id);
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, theme: id };
+      applyTheme(id);
+      void emit('vosh://theme-changed', id);
+      persist(updated);
+      return updated;
+    });
   };
 
   return (
