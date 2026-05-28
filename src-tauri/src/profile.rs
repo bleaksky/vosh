@@ -26,7 +26,7 @@ pub(crate) struct Profile {
     pub(crate) recording_macro: Option<MacroRecorder>,
     /// User-controlled target state plus configured quick-key verbs.
     /// `name` clears on disconnect; `quick_keys` persist via
-    /// ProfileConfig so verb bindings survive restarts.
+    /// `ProfileConfig` so verb bindings survive restarts.
     pub(crate) target: TargetState,
     /// Latest `Room.Chars` snapshot — kept here so `tar` slash
     /// commands can resolve a numeric index or partial name without
@@ -41,7 +41,7 @@ pub(crate) struct Profile {
 /// One keyboard binding: a canonical key string mapped to a
 /// command line. Both halves are user-supplied via the Settings
 /// macros tab; the canonical key string is produced by the
-/// frontend (KeyboardEvent -> normalized identifier) so the
+/// frontend (`KeyboardEvent` -> normalized identifier) so the
 /// backend never has to know about browser key codes.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Macro {

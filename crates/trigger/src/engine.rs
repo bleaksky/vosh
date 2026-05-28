@@ -1,8 +1,8 @@
 //! Match the trigger store against a single line and produce the resulting
 //! display text plus any side effects.
 
-use vosh_ansi::plain_text;
 use regex::Regex;
+use vosh_ansi::plain_text;
 
 use crate::action::{HighlightStyle, TriggerAction};
 use crate::store::TriggerStore;

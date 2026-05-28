@@ -297,16 +297,10 @@ function App() {
                     className="group-pinned-resizable"
                     handleLabel="resize pinned group"
                   >
-                    <GroupPane
-                      pinned
-                      onTogglePin={() => setGroupPinned(false)}
-                    />
+                    <GroupPane pinned onTogglePin={() => setGroupPinned(false)} />
                   </Resizable>
                 ) : (
-                  <GroupPane
-                    pinned
-                    onTogglePin={() => setGroupPinned(false)}
-                  />
+                  <GroupPane pinned onTogglePin={() => setGroupPinned(false)} />
                 ))}
             </div>
           </Resizable>
@@ -322,10 +316,7 @@ function App() {
           className="chat-resizable"
           handleLabel="resize chat"
         >
-          <ChatPane
-            groupPinned={groupPinned}
-            onToggleGroupPin={() => setGroupPinned(true)}
-          />
+          <ChatPane groupPinned={groupPinned} onToggleGroupPin={() => setGroupPinned(true)} />
         </Resizable>
       )}
       <VitalsBar />

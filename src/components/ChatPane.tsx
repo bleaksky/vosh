@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  getChatLines,
-  subscribeChatLines,
-  type ChatLine,
-} from '../lib/chatStore';
+import { getChatLines, subscribeChatLines, type ChatLine } from '../lib/chatStore';
 import { GroupPane } from './GroupPane';
 import { Resizable } from './Resizable';
 
@@ -91,8 +87,8 @@ function ChatColumn() {
       <div ref={bodyRef} className="chat-pane-body">
         {visible.length === 0 ? (
           <div className="chat-pane-empty">
-            no channel chat yet — Comm.Channel GMCP arrives here automatically; trigger
-            actions of kind `route &lt;pane&gt;` route here too
+            no channel chat yet — Comm.Channel GMCP arrives here automatically; trigger actions of
+            kind `route &lt;pane&gt;` route here too
           </div>
         ) : (
           visible.map((l, i) => (

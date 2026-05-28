@@ -8,11 +8,11 @@
 
 use std::path::Path;
 
-use vosh_ansi::plain_text;
 use regex::{Regex, RegexBuilder};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use vosh_ansi::plain_text;
 
 #[derive(Debug, Error)]
 pub enum LogError {
@@ -331,9 +331,7 @@ mod tests {
         s.append(id, 1, "the dragon roars", None).unwrap();
         s.append(id, 2, "you draw a sword", None).unwrap();
         s.append(id, 3, "the dragon dies", None).unwrap();
-        let hits = s
-            .search("dragon", &SearchOptions::default())
-            .unwrap();
+        let hits = s.search("dragon", &SearchOptions::default()).unwrap();
         assert_eq!(hits.len(), 2);
         assert!(hits.iter().all(|h| h.text.contains("dragon")));
     }

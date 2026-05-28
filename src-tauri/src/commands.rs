@@ -2,12 +2,12 @@
 
 use std::sync::Arc;
 
-use vosh_log::{SearchHit, SearchOptions, SessionRow};
-use vosh_map::Room;
-use vosh_trigger::Trigger;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::Mutex;
 use tracing::warn;
+use vosh_log::{SearchHit, SearchOptions, SessionRow};
+use vosh_map::Room;
+use vosh_trigger::Trigger;
 
 use crate::input;
 use crate::log_state::{SharedLogStore, SharedScrollback};
@@ -143,9 +143,8 @@ pub(crate) async fn session_send_input(
         let after_name = profile.target.name.clone();
         let after_idx = profile.target.room_idx;
         let after_keys = profile.target.quick_keys.clone();
-        let changed = before_name != after_name
-            || before_idx != after_idx
-            || before_keys != after_keys;
+        let changed =
+            before_name != after_name || before_idx != after_idx || before_keys != after_keys;
         let payload = if changed {
             Some(TargetPayload {
                 name: after_name,
@@ -207,7 +206,7 @@ pub(crate) async fn triggers_list(state: State<'_, SharedState>) -> Result<Vec<T
 }
 
 /// Snapshot of the current target state + configured quick-keys.
-/// Frontend uses this to seed the TargetBar on mount before any
+/// Frontend uses this to seed the `TargetBar` on mount before any
 /// `session://target` events fire.
 #[tauri::command]
 pub(crate) async fn target_get(state: State<'_, SharedState>) -> Result<TargetPayload, String> {
@@ -283,15 +282,14 @@ pub(crate) async fn import_apply(
         }
         for m in &report.macros {
             if let Some(existing) = p.macros.iter_mut().find(|x| x.key == m.key) {
-                existing.command = m.command.clone();
+                existing.command.clone_from(&m.command);
             } else {
                 p.macros.push(m.clone());
             }
             macros_changed = true;
         }
         for (k, v) in &report.vars {
-            p.vars
-                .set(vosh_vars::Scope::Profile, k.clone(), v.clone());
+            p.vars.set(vosh_vars::Scope::Profile, k.clone(), v.clone());
         }
         macros_snapshot = p.macros.clone();
     }
@@ -387,9 +385,9 @@ pub(crate) async fn triggers_import(
     p.triggers.import_json(&json).map_err(|e| e.to_string())
 }
 
-/// Dump every alias to a pretty JSON array. Mirrors triggers_export
+/// Dump every alias to a pretty JSON array. Mirrors `triggers_export`
 /// so the settings window can treat triggers and aliases with the
-/// same JsonTab component.
+/// same `JsonTab` component.
 #[tauri::command]
 pub(crate) async fn aliases_export(state: State<'_, SharedState>) -> Result<String, String> {
     let p = state.profile.lock().await;
@@ -405,8 +403,7 @@ pub(crate) async fn aliases_import(
     state: State<'_, SharedState>,
     json: String,
 ) -> Result<usize, String> {
-    let parsed: Vec<vosh_alias::Alias> =
-        serde_json::from_str(&json).map_err(|e| e.to_string())?;
+    let parsed: Vec<vosh_alias::Alias> = serde_json::from_str(&json).map_err(|e| e.to_string())?;
     let count = parsed.len();
     let mut p = state.profile.lock().await;
     let mut store = vosh_alias::AliasStore::new();

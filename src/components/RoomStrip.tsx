@@ -38,10 +38,22 @@ function ansi256ToHex(idx: number): string {
   }
   if (idx < 16) {
     const named: string[] = [
-      '#585858', '#c4746e', '#8a9a7b', '#c4b28a',
-      '#8ba4b0', '#a292a3', '#8ea4a2', '#a4a7a4',
-      '#5c6066', '#e46876', '#87a987', '#e6c384',
-      '#7fb4ca', '#938aa9', '#7aa89f', '#c5c9c7',
+      '#585858',
+      '#c4746e',
+      '#8a9a7b',
+      '#c4b28a',
+      '#8ba4b0',
+      '#a292a3',
+      '#8ea4a2',
+      '#a4a7a4',
+      '#5c6066',
+      '#e46876',
+      '#87a987',
+      '#e6c384',
+      '#7fb4ca',
+      '#938aa9',
+      '#7aa89f',
+      '#c5c9c7',
     ];
     return named[idx] ?? '#c5c9c7';
   }
@@ -88,7 +100,12 @@ function resolveAreaColor(area: string, areas: AreaMap | null): string {
 
 const EXIT_ORDER = ['north', 'east', 'south', 'west', 'up', 'down'];
 const EXIT_LABELS: Record<string, string> = {
-  north: 'N', east: 'E', south: 'S', west: 'W', up: 'U', down: 'D',
+  north: 'N',
+  east: 'E',
+  south: 'S',
+  west: 'W',
+  up: 'U',
+  down: 'D',
 };
 
 // Collapse duplicate entries by name and emit `(N) name` for any
@@ -225,14 +242,18 @@ export function RoomStrip() {
           {room.area}
         </span>
       )}
-      <span className="room-strip-bullet" aria-hidden="true">·</span>
+      <span className="room-strip-bullet" aria-hidden="true">
+        ·
+      </span>
       <span className="room-strip-name">{room.name}</span>
       {room.num !== undefined && room.num !== null && (
         <span className="room-strip-vnum">#{room.num}</span>
       )}
       {room.terrain && (
         <>
-          <span className="room-strip-bullet" aria-hidden="true">·</span>
+          <span className="room-strip-bullet" aria-hidden="true">
+            ·
+          </span>
           <span className="room-strip-terrain" style={{ color: sectorColor }}>
             {room.terrain}
           </span>
@@ -240,18 +261,21 @@ export function RoomStrip() {
       )}
       {exits && (
         <>
-          <span className="room-strip-bullet" aria-hidden="true">·</span>
+          <span className="room-strip-bullet" aria-hidden="true">
+            ·
+          </span>
           <span className="room-strip-exits">[{exits}]</span>
         </>
       )}
       {charGroups.length > 0 && (
         <>
-          <span className="room-strip-bullet" aria-hidden="true">·</span>
+          <span className="room-strip-bullet" aria-hidden="true">
+            ·
+          </span>
           <span className="room-strip-list-label">here</span>
           <span className="room-strip-list">
             {charGroups.map((grp, i) => {
-              const isTarget =
-                targetIdx !== null && grp.positions.includes(targetIdx);
+              const isTarget = targetIdx !== null && grp.positions.includes(targetIdx);
               return (
                 <span
                   key={`${grp.name}-${i}`}
@@ -259,7 +283,9 @@ export function RoomStrip() {
                   style={{ color: isNpc(grp.sample.npc) ? NPC_COLOR : PLAYER_COLOR }}
                 >
                   {isTarget && (
-                    <span className="room-strip-chip-mark" aria-hidden="true">▶</span>
+                    <span className="room-strip-chip-mark" aria-hidden="true">
+                      ▶
+                    </span>
                   )}
                   {grp.count > 1 && (
                     <span className="room-strip-count" aria-hidden="true">
@@ -268,7 +294,9 @@ export function RoomStrip() {
                   )}
                   {grp.name}
                   {i < charGroups.length - 1 && (
-                    <span className="room-strip-list-sep" aria-hidden="true">,</span>
+                    <span className="room-strip-list-sep" aria-hidden="true">
+                      ,
+                    </span>
                   )}
                 </span>
               );
@@ -278,7 +306,9 @@ export function RoomStrip() {
       )}
       {itemGroups.length > 0 && (
         <>
-          <span className="room-strip-bullet" aria-hidden="true">·</span>
+          <span className="room-strip-bullet" aria-hidden="true">
+            ·
+          </span>
           <span className="room-strip-list-label">items</span>
           <span className="room-strip-list">
             {itemGroups.map((grp, i) => (
@@ -294,7 +324,9 @@ export function RoomStrip() {
                 )}
                 {grp.name}
                 {i < itemGroups.length - 1 && (
-                  <span className="room-strip-list-sep" aria-hidden="true">,</span>
+                  <span className="room-strip-list-sep" aria-hidden="true">
+                    ,
+                  </span>
                 )}
               </span>
             ))}

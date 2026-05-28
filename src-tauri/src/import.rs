@@ -7,11 +7,11 @@
 //! `unparsed` so the user can port them by hand.
 //!
 //! Supported formats:
-//!   - **MUSHclient** world files (`.mcl`, XML rooted at `<muclient>`)
+//!   - **`MUSHclient`** world files (`.mcl`, XML rooted at `<muclient>`)
 //!   - **Mudlet** package exports (`.xml`, rooted at `<MudletPackage>`)
 //!   - **GMUD** plain-text config (`gmud.cfg`-style line directives)
 //!
-//! TinTin++ already has its own importer in `tintin_import.rs`; that
+//! `TinTin`++ already has its own importer in `tintin_import.rs`; that
 //! module ships separately and is unaffected by this one.
 
 use quick_xml::events::{BytesStart, Event};
@@ -109,7 +109,7 @@ fn parse_mushclient(text: &str) -> ImportReport {
     loop {
         match reader.read_event() {
             Ok(Event::Eof) => break,
-            Ok(Event::Empty(e)) | Ok(Event::Start(e)) => match e.name().as_ref() {
+            Ok(Event::Empty(e) | Event::Start(e)) => match e.name().as_ref() {
                 b"alias" => {
                     if let Some(alias) = mushclient_alias_from(&e) {
                         report.aliases.push(alias);
@@ -135,15 +135,13 @@ fn parse_mushclient(text: &str) -> ImportReport {
                         report.vars.push((name, value));
                     }
                 }
-                b"timer" => report.unsupported.push((
-                    "timer".into(),
-                    attr(&e, b"name").unwrap_or_default(),
-                )),
+                b"timer" => report
+                    .unsupported
+                    .push(("timer".into(), attr(&e, b"name").unwrap_or_default())),
                 b"plugin_script" | b"script" => {
-                    report.unsupported.push((
-                        "script".into(),
-                        attr(&e, b"name").unwrap_or_default(),
-                    ));
+                    report
+                        .unsupported
+                        .push(("script".into(), attr(&e, b"name").unwrap_or_default()));
                 }
                 _ => {}
             },
@@ -164,9 +162,8 @@ fn mushclient_alias_from(e: &BytesStart) -> Option<Alias> {
         return None;
     }
     let name = attr(e, b"name").unwrap_or_else(|| pattern.clone());
-    let enabled = attr(e, b"enabled")
-        .map(|v| matches!(v.as_str(), "y" | "yes" | "true" | "1"))
-        .unwrap_or(true);
+    let enabled =
+        attr(e, b"enabled").map_or(true, |v| matches!(v.as_str(), "y" | "yes" | "true" | "1"));
     Some(Alias {
         name,
         expansion: send,
@@ -183,9 +180,8 @@ fn mushclient_trigger_from(e: &BytesStart, report: &mut ImportReport) -> Option<
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| format!("imported_{}", report.triggers.len() + 1));
     let send = attr(e, b"send").unwrap_or_default();
-    let enabled = attr(e, b"enabled")
-        .map(|v| matches!(v.as_str(), "y" | "yes" | "true" | "1"))
-        .unwrap_or(true);
+    let enabled =
+        attr(e, b"enabled").map_or(true, |v| matches!(v.as_str(), "y" | "yes" | "true" | "1"));
     let sequence = attr(e, b"sequence")
         .and_then(|s| s.parse::<i32>().ok())
         .unwrap_or(100);
@@ -197,7 +193,7 @@ fn mushclient_trigger_from(e: &BytesStart, report: &mut ImportReport) -> Option<
     if attr(e, b"colour").is_some_and(|s| !s.is_empty()) {
         report.unsupported.push((
             "trigger-colour".into(),
-            format!("{} (palette index dropped)", name),
+            format!("{name} (palette index dropped)"),
         ));
     }
     let mut actions: Vec<TriggerAction> = Vec::new();
@@ -244,21 +240,22 @@ fn mushclient_trigger_from(e: &BytesStart, report: &mut ImportReport) -> Option<
 // Keys map onto vosh Macros via the Qt key code -> canonical
 // string conversion.
 
+// Stack of in-progress items + the text-bearing child currently being
+// collected. Mudlet items are hierarchical (Trigger, Alias, Key contain
+// <name>, <script>, <regex>, etc.), so we accumulate text between
+// matching Start/End pairs.
+enum MudletStackItem {
+    Trigger(MudletItem),
+    Alias(MudletItem),
+    Key(MudletItem),
+}
+
 fn parse_mudlet(text: &str) -> ImportReport {
     let mut report = ImportReport::default();
     let mut reader = Reader::from_str(text);
     reader.config_mut().trim_text(true);
 
-    // Stack of in-progress items + the text-bearing child currently
-    // being collected. Mudlet items are hierarchical (Trigger,
-    // Alias, Key contain <name>, <script>, <regex>, etc.), so we
-    // accumulate text between matching Start/End pairs.
-    enum Item {
-        Trigger(MudletItem),
-        Alias(MudletItem),
-        Key(MudletItem),
-    }
-    let mut stack: Vec<Item> = Vec::new();
+    let mut stack: Vec<MudletStackItem> = Vec::new();
     let mut text_target: Option<String> = None;
     let mut current_text = String::new();
 
@@ -268,9 +265,9 @@ fn parse_mudlet(text: &str) -> ImportReport {
             Ok(Event::Start(e)) => {
                 let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
                 match name.as_str() {
-                    "Trigger" => stack.push(Item::Trigger(MudletItem::from_attrs(&e))),
-                    "Alias" => stack.push(Item::Alias(MudletItem::from_attrs(&e))),
-                    "Key" => stack.push(Item::Key(MudletItem::from_attrs(&e))),
+                    "Trigger" => stack.push(MudletStackItem::Trigger(MudletItem::from_attrs(&e))),
+                    "Alias" => stack.push(MudletStackItem::Alias(MudletItem::from_attrs(&e))),
+                    "Key" => stack.push(MudletStackItem::Key(MudletItem::from_attrs(&e))),
                     "name" | "script" | "regex" | "command" | "keyCode" | "keyModifier"
                     | "pattern" | "string" => {
                         text_target = Some(name);
@@ -310,7 +307,9 @@ fn parse_mudlet(text: &str) -> ImportReport {
                         if let Some(target) = text_target.take() {
                             if let Some(top) = stack.last_mut() {
                                 let item = match top {
-                                    Item::Trigger(i) | Item::Alias(i) | Item::Key(i) => i,
+                                    MudletStackItem::Trigger(i)
+                                    | MudletStackItem::Alias(i)
+                                    | MudletStackItem::Key(i) => i,
                                 };
                                 item.put(&target, current_text.clone());
                             }
@@ -318,17 +317,17 @@ fn parse_mudlet(text: &str) -> ImportReport {
                         }
                     }
                     "Trigger" => {
-                        if let Some(Item::Trigger(item)) = stack.pop() {
+                        if let Some(MudletStackItem::Trigger(item)) = stack.pop() {
                             commit_mudlet_trigger(item, &mut report);
                         }
                     }
                     "Alias" => {
-                        if let Some(Item::Alias(item)) = stack.pop() {
+                        if let Some(MudletStackItem::Alias(item)) = stack.pop() {
                             commit_mudlet_alias(item, &mut report);
                         }
                     }
                     "Key" => {
-                        if let Some(Item::Key(item)) = stack.pop() {
+                        if let Some(MudletStackItem::Key(item)) = stack.pop() {
                             commit_mudlet_key(item, &mut report);
                         }
                     }
@@ -364,8 +363,7 @@ impl MudletItem {
     fn from_attrs(e: &BytesStart) -> Self {
         Self {
             is_active: attr(e, b"isActive")
-                .map(|v| matches!(v.as_str(), "yes" | "true" | "1"))
-                .unwrap_or(true),
+                .map_or(true, |v| matches!(v.as_str(), "yes" | "true" | "1")),
             ..Self::default()
         }
     }
@@ -373,16 +371,17 @@ impl MudletItem {
     fn put(&mut self, field: &str, value: String) {
         match field {
             "name" => self.name = value,
-            "script" => self.script = value,
+            // Mudlet triggers/aliases use "script" for the Lua body;
+            // Mudlet keys use "command" for the same purpose. Treat
+            // them as one slot.
+            "script" | "command" => self.script = value,
             "regex" => self.pattern = value,
-            "pattern" | "string" => {
+            "pattern" | "string"
                 // Trigger has <regexCodeList><string>regex</string></regexCodeList>
                 // Take the first non-empty pattern.
-                if self.pattern.is_empty() {
+                if self.pattern.is_empty() => {
                     self.pattern = value;
                 }
-            }
-            "command" => self.script = value,
             "keyCode" => self.key_code = value,
             "keyModifier" => self.key_modifier = value,
             _ => {}
@@ -445,14 +444,12 @@ fn commit_mudlet_alias(item: MudletItem, report: &mut ImportReport) {
 }
 
 fn commit_mudlet_key(item: MudletItem, report: &mut ImportReport) {
-    let canonical = match qt_key_to_canonical(&item.key_code, &item.key_modifier) {
-        Some(k) => k,
-        None => {
-            report
-                .unsupported
-                .push(("key-binding".into(), format!("{} (Qt key {})", item.name, item.key_code)));
-            return;
-        }
+    let Some(canonical) = qt_key_to_canonical(&item.key_code, &item.key_modifier) else {
+        report.unsupported.push((
+            "key-binding".into(),
+            format!("{} (Qt key {})", item.name, item.key_code),
+        ));
+        return;
     };
     let command = extract_send_command(&item.script).unwrap_or_else(|| item.script.clone());
     if command.trim().is_empty() {
@@ -483,12 +480,9 @@ fn parse_gmud(text: &str) -> ImportReport {
         if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
             continue;
         }
-        let (directive, rest) = match line.split_once(' ') {
-            Some(pair) => pair,
-            None => {
-                report.unparsed.push(raw.to_string());
-                continue;
-            }
+        let Some((directive, rest)) = line.split_once(' ') else {
+            report.unparsed.push(raw.to_string());
+            continue;
         };
         let args = parse_bracketed(rest);
         match (directive.to_ascii_lowercase().as_str(), args.as_slice()) {
@@ -508,7 +502,7 @@ fn parse_gmud(text: &str) -> ImportReport {
                 } else {
                     report
                         .unsupported
-                        .push(("macro-key".into(), format!("{} -> {}", key, command)));
+                        .push(("macro-key".into(), format!("{key} -> {command}")));
                 }
             }
             ("variable", [name, value]) if !name.is_empty() => {
@@ -573,7 +567,11 @@ fn extract_send_command(script: &str) -> Option<String> {
             return Some(s);
         }
         // send [[blah]]
-        if let Some(inner) = rest.trim().strip_prefix("[[").and_then(|s| s.strip_suffix("]]")) {
+        if let Some(inner) = rest
+            .trim()
+            .strip_prefix("[[")
+            .and_then(|s| s.strip_suffix("]]"))
+        {
             return Some(inner.to_string());
         }
     }
@@ -581,10 +579,10 @@ fn extract_send_command(script: &str) -> Option<String> {
 }
 
 fn strip_quoted(s: &str) -> Option<String> {
-    if (s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')) {
-        if s.len() >= 2 {
-            return Some(s[1..s.len() - 1].to_string());
-        }
+    if ((s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')))
+        && s.len() >= 2
+    {
+        return Some(s[1..s.len() - 1].to_string());
     }
     None
 }
@@ -653,7 +651,7 @@ fn qt_key_base(code: i64) -> Option<String> {
         // Function keys F1..F35 = 0x01000030 ..
         c if (0x0100_0030..=0x0100_0052).contains(&c) => {
             let n = c - 0x0100_0030 + 1;
-            format!("F{}", n)
+            format!("F{n}")
         }
         0x0100_0000 => "Escape".into(),
         0x0100_0001 => "Tab".into(),
@@ -693,7 +691,7 @@ fn gmud_key_to_canonical(token: &str) -> Option<String> {
         }
         "kp0" | "kp1" | "kp2" | "kp3" | "kp4" | "kp5" | "kp6" | "kp7" | "kp8" | "kp9" => {
             let digit = &t[2..];
-            format!("Numpad{}", digit)
+            format!("Numpad{digit}")
         }
         s if s.len() == 1 => s.to_ascii_uppercase(),
         _ => return None,
@@ -768,7 +766,7 @@ mod tests {
         assert_eq!(r.aliases.len(), 1);
         assert_eq!(r.aliases[0].name, "g");
         assert_eq!(r.aliases[0].expansion, "get $1.gold");
-        assert_eq!(r.aliases[0].enabled, true);
+        assert!(r.aliases[0].enabled);
     }
 
     #[test]

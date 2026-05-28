@@ -36,12 +36,7 @@ export function canonicalKeyFromEvent(
   const keyName = native.key;
 
   // Reject pure modifier presses.
-  if (
-    keyName === 'Control' ||
-    keyName === 'Shift' ||
-    keyName === 'Alt' ||
-    keyName === 'Meta'
-  ) {
+  if (keyName === 'Control' || keyName === 'Shift' || keyName === 'Alt' || keyName === 'Meta') {
     return null;
   }
 

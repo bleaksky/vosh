@@ -45,10 +45,7 @@ export function startGroupStore(): void {
   started = true;
   void onGmcp((payload: GmcpPayload) => {
     if (payload.package === 'Group.Info') {
-      group =
-        payload.data && typeof payload.data === 'object'
-          ? (payload.data as GroupInfo)
-          : {};
+      group = payload.data && typeof payload.data === 'object' ? (payload.data as GroupInfo) : {};
       notify();
       return;
     }

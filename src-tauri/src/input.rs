@@ -3,10 +3,10 @@
 //! server. Recognizes a small set of slash commands that target the local
 //! profile rather than the connection.
 
+use tokio::time::Instant;
 use vosh_alias::{Alias, ExpandError};
 use vosh_trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
 use vosh_vars::Scope;
-use tokio::time::Instant;
 
 use crate::profile::{MacroRecorder, Profile, QuickKey, RoomChar};
 use crate::profile_config::ProfileConfig;
@@ -125,9 +125,7 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
         }
         let target = profile.target.name.clone().unwrap_or_default();
         if target.is_empty() {
-            return error_echo(
-                "no target — set one with `tar <name|index>` first".to_string(),
-            );
+            return error_echo("no target — set one with `tar <name|index>` first".to_string());
         }
         let expansion = format!("{} {}", qk.verb, target);
         let mut inner = process(profile, &expansion);
@@ -290,7 +288,7 @@ fn slash_endrec(profile: &mut Profile) -> InputResult {
 const TARGET_KEYWORDS: &[&str] = &["tar", "tarn", "tarp", "tarclear"];
 
 fn is_target_keyword(name: &str) -> bool {
-    TARGET_KEYWORDS.iter().any(|k| *k == name)
+    TARGET_KEYWORDS.contains(&name)
 }
 
 /// Recompute `room_idx` from the current room snapshot. Called whenever
@@ -316,9 +314,7 @@ pub(crate) fn refresh_target_idx(profile: &mut Profile) {
     // works in alias expansions. Char.Combat's `target_name` stays
     // separate (it's the server-confirmed combat target).
     if let Some(name) = &profile.target.name {
-        profile
-            .vars
-            .set(Scope::Session, "target", name.clone());
+        profile.vars.set(Scope::Session, "target", name.clone());
     } else {
         profile.vars.remove("target");
     }
@@ -420,11 +416,7 @@ fn list_targets(profile: &Profile) -> InputResult {
                 " "
             };
             let kind = if c.npc { "npc" } else { "pc" };
-            lines.push(format!(
-                "  {marker} {:>2}. {} [{kind}]",
-                i + 1,
-                c.name
-            ));
+            lines.push(format!("  {marker} {:>2}. {} [{kind}]", i + 1, c.name));
         }
         lines.push("usage: tar <N> | tar <substring> | tarn | tarp | tarclear".to_string());
     }
@@ -452,9 +444,7 @@ fn slash_target(profile: &mut Profile, args: &str) -> InputResult {
 fn slash_qkey(profile: &mut Profile, args: &str) -> InputResult {
     let (name, rest) = split_first_word(args);
     if name.is_empty() {
-        return error_echo(
-            "usage: #qkey <name> <verb>  |  #qkey clear <name>".to_string(),
-        );
+        return error_echo("usage: #qkey <name> <verb>  |  #qkey clear <name>".to_string());
     }
     if name == "clear" {
         let target = rest.trim();
@@ -503,10 +493,7 @@ fn slash_qkeys_list(profile: &Profile) -> InputResult {
     if profile.target.quick_keys.is_empty() {
         return echo_one("no quick-keys defined".to_string());
     }
-    let mut lines = vec![format!(
-        "{} quick-key(s):",
-        profile.target.quick_keys.len()
-    )];
+    let mut lines = vec![format!("{} quick-key(s):", profile.target.quick_keys.len())];
     for qk in &profile.target.quick_keys {
         let verb = if qk.verb.is_empty() {
             "(unset)"
@@ -1411,7 +1398,12 @@ mod tests {
     #[test]
     fn default_quick_keys_are_present_but_empty() {
         let p = Profile::default();
-        let names: Vec<&str> = p.target.quick_keys.iter().map(|q| q.name.as_str()).collect();
+        let names: Vec<&str> = p
+            .target
+            .quick_keys
+            .iter()
+            .map(|q| q.name.as_str())
+            .collect();
         assert_eq!(names, ["gg", "xx", "zz", "tt"]);
         assert!(p.target.quick_keys.iter().all(|q| q.verb.is_empty()));
     }
@@ -1425,7 +1417,10 @@ mod tests {
         let _ = process(&mut p, "cast 'bless' self");
         let _ = process(&mut p, "#endrec");
         let alias = p.aliases.list();
-        let buff = alias.iter().find(|a| a.name == "buff").expect("alias saved");
+        let buff = alias
+            .iter()
+            .find(|a| a.name == "buff")
+            .expect("alias saved");
         assert_eq!(
             buff.expansion,
             "cast 'sanctuary' self;cast 'haste' self;cast 'bless' self"

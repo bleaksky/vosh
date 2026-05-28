@@ -19,13 +19,7 @@
 import type { HighlightStyle, TriggerRecord } from './session';
 import { colorize } from './colorTokens';
 
-export type PresetCategory =
-  | 'healing'
-  | 'defensive'
-  | 'disarm_buff'
-  | 'events'
-  | 'loot'
-  | 'labels';
+export type PresetCategory = 'healing' | 'defensive' | 'disarm_buff' | 'events' | 'loot' | 'labels';
 
 export interface Preset {
   id: string;
@@ -194,19 +188,11 @@ export const PRESETS: Preset[] = [
       // form in highlights.tin line 97. Lower priority so the more
       // specific "block / dual parry / reverse" replacements below
       // can win on lines they uniquely identify.
-      replace(
-        'def.dodge_or_parry',
-        '^You (?:dodge|parry) .+\\.$',
-        '{fg:240}$0{reset}',
-      ),
+      replace('def.dodge_or_parry', '^You (?:dodge|parry) .+\\.$', '{fg:240}$0{reset}'),
       // Redirect-momentum counter (ends in `!` so it's not caught by
       // the generic period-anchored pattern above). Same dim treatment
       // as a normal dodge.
-      replace(
-        'def.redirect_momentum',
-        '^You .+ and redirect the momentum!$',
-        '{fg:240}$0{reset}',
-      ),
+      replace('def.redirect_momentum', '^You .+ and redirect the momentum!$', '{fg:240}$0{reset}'),
       // Shadow-blend evade — assassin/thief flavor defense, ends in
       // `!` like the redirect.
       replace(
@@ -221,12 +207,7 @@ export const PRESETS: Preset[] = [
         '{fg:240}$0{reset}',
         6,
       ),
-      replace(
-        'def.block_shield',
-        '^You block .+ with your shield\\.$',
-        '{fg:240}$0{reset}',
-        6,
-      ),
+      replace('def.block_shield', '^You block .+ with your shield\\.$', '{fg:240}$0{reset}', 6),
       replace(
         'def.block_weapon',
         '^You block .+ attack with your weapon\\.$',
@@ -240,41 +221,18 @@ export const PRESETS: Preset[] = [
         '{fg:240}$0{reset}',
         6,
       ),
-      replace(
-        'def.dual_parry',
-        '^You dual parry .+ attack\\.$',
-        '{fg:240}$0{reset}',
-        6,
-      ),
-      replace(
-        'def.reverse',
-        '^You reverse .+ attack.*\\.$',
-        '{fg:240}$0{reset}',
-        6,
-      ),
+      replace('def.dual_parry', '^You dual parry .+ attack\\.$', '{fg:240}$0{reset}', 6),
+      replace('def.reverse', '^You reverse .+ attack.*\\.$', '{fg:240}$0{reset}', 6),
       // Stagger out of attack (highlights.tin line 95).
-      replace(
-        'def.stagger',
-        '^You stagger wildly out of .+ attack\\.$',
-        '{fg:240}$0{reset}',
-        6,
-      ),
+      replace('def.stagger', '^You stagger wildly out of .+ attack\\.$', '{fg:240}$0{reset}', 6),
       replace(
         'def.swing_through',
         '^You swing right through .+ blurred image\\.$',
         '{fg:240}$0{reset}',
         6,
       ),
-      replace(
-        'def.misses',
-        '^.+ swings wildly and misses you by a mile\\.$',
-        '{fg:240}$0{reset}',
-      ),
-      replace(
-        'def.shadows_envelop',
-        '^Shadows envelop .+\\.$',
-        '{fg:253}$0{reset}',
-      ),
+      replace('def.misses', '^.+ swings wildly and misses you by a mile\\.$', '{fg:240}$0{reset}'),
+      replace('def.shadows_envelop', '^Shadows envelop .+\\.$', '{fg:253}$0{reset}'),
       replace(
         'def.terra_shield',
         '^Your Terra shield deflects the attack\\.$',
@@ -287,11 +245,7 @@ export const PRESETS: Preset[] = [
         '{fg:240}$0{reset}',
       ),
       // Giant blade deflect (highlights.tin line 88).
-      replace(
-        'def.giant_blade',
-        '^The giant blade deflects .+ attack\\.$',
-        '{fg:240}$0{reset}',
-      ),
+      replace('def.giant_blade', '^The giant blade deflects .+ attack\\.$', '{fg:240}$0{reset}'),
     ],
   },
 
@@ -500,13 +454,41 @@ export const PRESETS: Preset[] = [
     description: 'Spell-name annotations for potions from highlights.tin 180-186.',
     defaultEnabled: true,
     triggers: [
-      replace('potion.brown', 'a bubbly brown potion', 'a bubbly brown potion {fg:248}(cure serious){reset}'),
-      replace('potion.clear', 'a bubbly clear potion', 'a bubbly clear potion {fg:248}(invisibility){reset}'),
-      replace('potion.crimson', 'a bubbly crimson potion', 'a bubbly crimson potion {fg:248}(fireball){reset}'),
-      replace('potion.green', 'a bubbly green potion', 'a bubbly green potion {fg:248}(haste){reset}'),
-      replace('potion.grey', 'a bubbly grey potion', 'a bubbly grey potion {fg:248}(flesh armor){reset}'),
-      replace('potion.red', 'a bubbly red potion', 'a bubbly red potion {fg:248}(cure blind){reset}'),
-      replace('potion.white', 'a bubbly white potion', 'a bubbly white potion {fg:248}(sanctuary){reset}'),
+      replace(
+        'potion.brown',
+        'a bubbly brown potion',
+        'a bubbly brown potion {fg:248}(cure serious){reset}',
+      ),
+      replace(
+        'potion.clear',
+        'a bubbly clear potion',
+        'a bubbly clear potion {fg:248}(invisibility){reset}',
+      ),
+      replace(
+        'potion.crimson',
+        'a bubbly crimson potion',
+        'a bubbly crimson potion {fg:248}(fireball){reset}',
+      ),
+      replace(
+        'potion.green',
+        'a bubbly green potion',
+        'a bubbly green potion {fg:248}(haste){reset}',
+      ),
+      replace(
+        'potion.grey',
+        'a bubbly grey potion',
+        'a bubbly grey potion {fg:248}(flesh armor){reset}',
+      ),
+      replace(
+        'potion.red',
+        'a bubbly red potion',
+        'a bubbly red potion {fg:248}(cure blind){reset}',
+      ),
+      replace(
+        'potion.white',
+        'a bubbly white potion',
+        'a bubbly white potion {fg:248}(sanctuary){reset}',
+      ),
     ],
   },
 
@@ -519,23 +501,51 @@ export const PRESETS: Preset[] = [
     description: 'Spell-name annotations for herbs from highlights.tin 192-209.',
     defaultEnabled: true,
     triggers: [
-      replace('herb.purple_seaweed', 'a dried purple seaweed', 'a dried purple seaweed {fg:248}(fly){reset}'),
+      replace(
+        'herb.purple_seaweed',
+        'a dried purple seaweed',
+        'a dried purple seaweed {fg:248}(fly){reset}',
+      ),
       replace('herb.mandrake', 'a mandrake root', 'a mandrake root {fg:248}(stone skin){reset}'),
-      replace('herb.red_herb', 'a small red herb', 'a small red herb {fg:248}(detect invis){reset}'),
+      replace(
+        'herb.red_herb',
+        'a small red herb',
+        'a small red herb {fg:248}(detect invis){reset}',
+      ),
       replace('herb.magenta', 'some Magenta Leaves', 'some Magenta Leaves {fg:248}(frenzy){reset}'),
       replace('herb.cinnamon', 'some cinnamon', 'some cinnamon {fg:248}(armor){reset}'),
-      replace('herb.damiana', 'some damiana leaves', 'some damiana leaves {fg:248}(cure serious){reset}'),
-      replace('herb.dark_black', 'some dark black leaves', 'some dark black leaves {fg:248}(sanctuary){reset}'),
+      replace(
+        'herb.damiana',
+        'some damiana leaves',
+        'some damiana leaves {fg:248}(cure serious){reset}',
+      ),
+      replace(
+        'herb.dark_black',
+        'some dark black leaves',
+        'some dark black leaves {fg:248}(sanctuary){reset}',
+      ),
       replace('herb.catnip', 'some dried catnip', 'some dried catnip {fg:248}(frenzy){reset}'),
-      replace('herb.raspberry', 'some fermenting raspberry leaves', 'some fermenting raspberry leaves {fg:248}(shield){reset}'),
-      replace('herb.opium', 'some finely cut opium', 'some finely cut opium {fg:248}(frenzy){reset}'),
+      replace(
+        'herb.raspberry',
+        'some fermenting raspberry leaves',
+        'some fermenting raspberry leaves {fg:248}(shield){reset}',
+      ),
+      replace(
+        'herb.opium',
+        'some finely cut opium',
+        'some finely cut opium {fg:248}(frenzy){reset}',
+      ),
       replace('herb.ginger', 'some ginger', 'some ginger {fg:248}(faerie fog){reset}'),
       replace('herb.greyish', 'some greyish herbs', 'some greyish herbs {fg:248}(bless){reset}'),
       replace('herb.mugwort', 'some mugwort', 'some mugwort {fg:248}(slow){reset}'),
       replace('herb.mullein', 'some mullein', 'some mullein {fg:248}(pass door){reset}'),
       replace('herb.coca', 'some purified coca', 'some purified coca {fg:248}(endorphins){reset}'),
       replace('herb.rosemary', 'some rosemary', 'some rosemary {fg:248}(protection){reset}'),
-      replace('herb.sand_leaves', 'some sand colored leaves', 'some sand colored leaves {fg:248}(stone skin){reset}'),
+      replace(
+        'herb.sand_leaves',
+        'some sand colored leaves',
+        'some sand colored leaves {fg:248}(stone skin){reset}',
+      ),
       replace('herb.spearmint', 'some spearmint', 'some spearmint {fg:248}(giant strength){reset}'),
     ],
   },

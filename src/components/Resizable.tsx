@@ -143,15 +143,10 @@ export function Resizable({
     }
   };
 
-  const wrapperStyle: React.CSSProperties = isVertical
-    ? { height: clamped }
-    : { width: clamped };
+  const wrapperStyle: React.CSSProperties = isVertical ? { height: clamped } : { width: clamped };
 
   return (
-    <div
-      className={`resizable resizable-${direction} ${className ?? ''}`}
-      style={wrapperStyle}
-    >
+    <div className={`resizable resizable-${direction} ${className ?? ''}`} style={wrapperStyle}>
       <div
         className={`resizable-handle resizable-handle-${direction}`}
         role="separator"

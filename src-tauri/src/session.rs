@@ -4,10 +4,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use vosh_telnet::{
-    codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator, Parser,
-};
-use vosh_trigger::LineResult;
 use serde::Serialize;
 use serde_json::json;
 use tauri::{AppHandle, Emitter};
@@ -15,6 +11,10 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
+use vosh_telnet::{
+    codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator, Parser,
+};
+use vosh_trigger::LineResult;
 
 use crate::connection::{self, ConnectionError, Stream};
 use crate::gmcp_bind;
@@ -51,7 +51,7 @@ pub(crate) struct GmcpPayload {
 /// Emitted on `session://target` whenever the active user target
 /// changes (set, cycled, cleared, or wiped by disconnect). The
 /// frontend uses this to mark the targeted char in the room info
-/// chips and to drive the TargetBar when no Char.Combat is active.
+/// chips and to drive the `TargetBar` when no Char.Combat is active.
 ///
 /// `room_idx` is the 1-based position in the latest `Room.Chars`
 /// push that matches the user's target string (substring,
@@ -66,7 +66,7 @@ pub(crate) struct TargetPayload {
     pub room_idx: Option<usize>,
     /// Snapshot of the current quick-key bindings (name + verb).
     /// Frontend renders them next to the target name on the
-    /// TargetBar so the user always sees which slots are armed.
+    /// `TargetBar` so the user always sees which slots are armed.
     pub quick_keys: Vec<crate::profile::QuickKey>,
 }
 
@@ -376,15 +376,12 @@ async fn handle_tick(
             None
         };
         let warn_echo = if warned {
-            let message = p
-                .tick
-                .config
-                .warn_message
-                .clone()
-                .unwrap_or_else(|| match p.tick.config.warn_at_secs {
+            let message = p.tick.config.warn_message.clone().unwrap_or_else(|| {
+                match p.tick.config.warn_at_secs {
                     Some(s) => format!("TICK IN {s}s"),
                     None => "TICK INCOMING".to_string(),
-                });
+                }
+            });
             let color = crate::tick::warn_color_escape(p.tick.config.warn_color.as_deref());
             Some(format!("\r\n{color}{message}\x1b[0m\r\n"))
         } else {
@@ -596,9 +593,7 @@ async fn handle_gmcp(
                         }
                         let npc = match obj.get("npc") {
                             Some(serde_json::Value::Bool(b)) => *b,
-                            Some(serde_json::Value::String(s)) => {
-                                s == "1" || s == "true"
-                            }
+                            Some(serde_json::Value::String(s)) => s == "1" || s == "true",
                             Some(serde_json::Value::Number(n)) => {
                                 n.as_i64().is_some_and(|x| x != 0)
                             }
@@ -823,10 +818,7 @@ async fn fire_due_script_timers(
 ///
 /// Called both when the telnet parser reports a GA or EOR command and
 /// when the user submits typed input.
-fn flush_partial_prompt(
-    app: &AppHandle,
-    accumulator: &mut LineAccumulator,
-) {
+fn flush_partial_prompt(app: &AppHandle, accumulator: &mut LineAccumulator) {
     let Some((_bytes, already_shown)) = accumulator.flush_partial() else {
         return;
     };

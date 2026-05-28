@@ -2,8 +2,8 @@
 //! insert, and exposes them in priority order.
 
 use regex::Regex;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::ser::SerializeStruct;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
 use crate::action::TriggerAction;

@@ -53,9 +53,7 @@
   "plugins": {
     "updater": {
       "active": true,
-      "endpoints": [
-        "https://github.com/bleaksky/vosh/releases/latest/download/latest.json"
-      ],
+      "endpoints": ["https://github.com/bleaksky/vosh/releases/latest/download/latest.json"],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEzQ0VGRDkxOUUwOTkyMkEKUldRcWtnbWVrZjNPbzVBeThmZ0I4V0c3cUIxQjgwdklzdjU2NEwvSlh3bjVzRGVLa0RwMytlZ2QK",
       "windows": {
         "installMode": "passive"

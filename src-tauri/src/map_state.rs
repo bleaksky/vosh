@@ -6,13 +6,13 @@
 
 use std::sync::Arc;
 
-use vosh_gmcp::Message;
-use vosh_map::{direction, MapError, MapStore, Room};
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
 use tracing::warn;
+use vosh_gmcp::Message;
+use vosh_map::{direction, MapError, MapStore, Room};
 
 #[derive(Debug)]
 pub(crate) struct MapState {

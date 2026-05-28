@@ -1,6 +1,6 @@
 //! System font enumeration + `font://` URI scheme.
 //!
-//! WKWebView on recent macOS refuses to match user-installed fonts by
+//! `WKWebView` on recent macOS refuses to match user-installed fonts by
 //! CSS family name (anti-fingerprinting). The only path that still
 //! works is `@font-face` with an explicit `src` URL. We expose the
 //! system font catalog through a Tauri command and serve the actual
@@ -48,7 +48,7 @@ pub(crate) fn fonts_list() -> Vec<FontEntry> {
             FontEntry { family, monospace }
         })
         .collect();
-    entries.sort_by(|a, b| a.family.to_lowercase().cmp(&b.family.to_lowercase()));
+    entries.sort_by_key(|a| a.family.to_lowercase());
     entries.dedup_by(|a, b| a.family == b.family);
     entries
 }
@@ -61,8 +61,7 @@ fn is_family_monospace(source: &SystemSource, family: &str) -> bool {
         .fonts()
         .first()
         .and_then(|h| h.load().ok())
-        .map(|font| font.is_monospace())
-        .unwrap_or(false)
+        .is_some_and(|font| font.is_monospace())
 }
 
 /// Find the on-disk path of a font family's regular face. Returns
@@ -110,7 +109,7 @@ pub(crate) fn handle_font_uri(uri: &tauri::http::Uri) -> Response<Vec<u8>> {
     let mime = match path
         .extension()
         .and_then(|e| e.to_str())
-        .map(|s| s.to_lowercase())
+        .map(str::to_lowercase)
         .as_deref()
     {
         Some("otf") => "font/otf",

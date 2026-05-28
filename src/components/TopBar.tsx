@@ -64,11 +64,7 @@ export function TopBar({
               map
             </button>
           )}
-          <button
-            type="button"
-            className="topbar-aux-btn"
-            onClick={openSettings}
-          >
+          <button type="button" className="topbar-aux-btn" onClick={openSettings}>
             settings
           </button>
         </div>

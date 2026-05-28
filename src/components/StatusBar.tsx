@@ -1,11 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  getTarget,
-  onGmcp,
-  onState,
-  onTarget,
-  type QuickKey,
-} from '../lib/session';
+import { getTarget, onGmcp, onState, onTarget, type QuickKey } from '../lib/session';
 import { AffectsBar } from './AffectsBar';
 
 interface CombatState {
@@ -65,10 +59,10 @@ function tintForFill(hex: string): string {
 // neighbour (waxing vs waning is preserved).
 function moonGlyphFromIndex(phase: number): string {
   const n = ((Math.round(phase) % 8) + 8) % 8;
-  if (n === 0) return '○';                 // full
-  if (n >= 1 && n <= 3) return '◑';        // waning (right side dark)
-  if (n === 4) return '●';                 // new
-  return '◐';                              // waxing (left side dark)
+  if (n === 0) return '○'; // full
+  if (n >= 1 && n <= 3) return '◑'; // waning (right side dark)
+  if (n === 4) return '●'; // new
+  return '◐'; // waxing (left side dark)
 }
 
 function extractCombat(data: unknown): CombatState | null {
@@ -211,9 +205,7 @@ export function StatusBar() {
                 {moonGlyphFromIndex(m.phase ?? -1)}
               </span>
             ))}
-            {moons.eclipse && (
-              <span className="statusbar-moon-badge is-eclipse">eclipse</span>
-            )}
+            {moons.eclipse && <span className="statusbar-moon-badge is-eclipse">eclipse</span>}
             {!moons.eclipse && moons.triad && (
               <span className="statusbar-moon-badge is-triad">triad</span>
             )}
@@ -251,9 +243,7 @@ function CombatSeg({ combat }: { combat: CombatState }) {
       ) : (
         <span className="statusbar-combat-unknown">--</span>
       )}
-      {combat.condition && (
-        <span className="statusbar-combat-condition">{combat.condition}</span>
-      )}
+      {combat.condition && <span className="statusbar-combat-condition">{combat.condition}</span>}
     </div>
   );
 }

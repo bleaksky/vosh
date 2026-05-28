@@ -60,9 +60,7 @@ export function UpdateNotice() {
       <span className="update-notice-sep" aria-hidden="true">
         ·
       </span>
-      <span className="update-notice-msg">
-        {error ? error : 'new release available'}
-      </span>
+      <span className="update-notice-msg">{error ? error : 'new release available'}</span>
       <span className="update-notice-spacer" />
       <button
         type="button"

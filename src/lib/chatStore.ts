@@ -1,10 +1,4 @@
-import {
-  onGmcp,
-  onRouted,
-  onState,
-  type GmcpPayload,
-  type RoutedPayload,
-} from './session';
+import { onGmcp, onRouted, onState, type GmcpPayload, type RoutedPayload } from './session';
 
 export interface ChatLine {
   pane: string;
@@ -27,11 +21,7 @@ function commToChatLine(data: unknown): ChatLine | null {
   if (!data || typeof data !== 'object') return null;
   const obj = data as Record<string, unknown>;
   const pane = String(obj.channel ?? obj.chan ?? 'chat');
-  const speaker = obj.speaker
-    ? String(obj.speaker)
-    : obj.talker
-      ? String(obj.talker)
-      : '';
+  const speaker = obj.speaker ? String(obj.speaker) : obj.talker ? String(obj.talker) : '';
   const raw = String(obj.text ?? obj.msg ?? obj.message ?? '');
   if (!raw) return null;
   const cleaned = stripAnsi(raw);
@@ -83,9 +73,7 @@ export function getChatLines(): ChatLine[] {
   return lines;
 }
 
-export function subscribeChatLines(
-  cb: (lines: ChatLine[]) => void,
-): () => void {
+export function subscribeChatLines(cb: (lines: ChatLine[]) => void): () => void {
   startChatStore();
   listeners.push(cb);
   return () => {
