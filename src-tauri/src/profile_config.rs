@@ -154,6 +154,11 @@ pub(crate) struct CustomTheme {
 pub(crate) struct DockEntryPersist {
     pub id: String,
     pub zone: String,
+    /// Vertical alignment within a `left` or `right` zone: `"top"` or
+    /// `"bottom"`. Ignored for `top`, `bottom`, and `hidden` zones.
+    /// Missing means top (the default stacking behavior).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub align: Option<String>,
 }
 
 impl Default for UiConfig {

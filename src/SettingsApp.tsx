@@ -29,11 +29,14 @@ import { customToAppTheme, setCustomThemes, THEMES } from './lib/themes';
 import { loadFontStack, loadSystemFont } from './lib/fontLoader';
 import {
   ALL_PANEL_IDS,
-  DEFAULT_PANEL_ZONES,
+  DEFAULT_PANEL_PLACEMENTS,
+  groupPanels,
   PANELS,
-  panelZonesFromDock,
-  panelZonesToDock,
+  panelPlacementsFromDock,
+  panelPlacementsToDock,
+  type Align,
   type PanelId,
+  type PanelPlacement,
   type Zone,
 } from './lib/panels';
 
@@ -596,7 +599,9 @@ interface PanelsTabProps {
 }
 
 function PanelsTab({ onError }: PanelsTabProps) {
-  const [zones, setZones] = useState<Record<PanelId, Zone>>(DEFAULT_PANEL_ZONES);
+  const [placements, setPlacements] =
+    useState<Record<PanelId, PanelPlacement>>(DEFAULT_PANEL_PLACEMENTS);
+  const [highlightId, setHighlightId] = useState<PanelId | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -605,13 +610,13 @@ function PanelsTab({ onError }: PanelsTabProps) {
     dockLayoutGet()
       .then((entries) => {
         if (cancelled) return;
-        setZones(panelZonesFromDock(entries));
+        setPlacements(panelPlacementsFromDock(entries));
         setLoaded(true);
       })
       .catch((e) => onError(String(e)));
     subscribeDockLayoutChanged((entries) => {
       if (cancelled) return;
-      setZones(panelZonesFromDock(entries));
+      setPlacements(panelPlacementsFromDock(entries));
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -622,48 +627,178 @@ function PanelsTab({ onError }: PanelsTabProps) {
     };
   }, [onError]);
 
-  const update = (id: PanelId, zone: Zone) => {
-    setZones((prev) => {
-      const next = { ...prev, [id]: zone };
-      void dockLayoutSet(panelZonesToDock(next)).catch((e) => onError(String(e)));
-      return next;
+  const update = (id: PanelId, next: PanelPlacement) => {
+    setPlacements((prev) => {
+      const updated = { ...prev, [id]: next };
+      void dockLayoutSet(panelPlacementsToDock(updated)).catch((e) => onError(String(e)));
+      return updated;
     });
   };
 
   const resetDefaults = () => {
-    setZones(DEFAULT_PANEL_ZONES);
-    void dockLayoutSet(panelZonesToDock(DEFAULT_PANEL_ZONES)).catch((e) => onError(String(e)));
+    setPlacements(DEFAULT_PANEL_PLACEMENTS);
+    void dockLayoutSet(panelPlacementsToDock(DEFAULT_PANEL_PLACEMENTS)).catch((e) =>
+      onError(String(e)),
+    );
   };
 
   if (!loaded) return <div className="settings-loading">loading panels…</div>;
 
   return (
-    <>
-      <p className="settings-hint">
-        Each panel lives in one zone around the terminal. Map is limited to left or right because a
-        horizontal map at full width is unusable.
-      </p>
-      {ALL_PANEL_IDS.map((id) => {
-        const meta = PANELS[id];
-        return (
-          <Row key={id} label={meta.label}>
-            <select value={zones[id]} onChange={(e) => update(id, e.target.value as Zone)}>
-              {meta.allowedZones.map((z) => (
-                <option key={z} value={z}>
-                  {z}
-                </option>
-              ))}
-            </select>
-            <span className="settings-hint-inline">{meta.description}</span>
-          </Row>
-        );
-      })}
+    <div className="panels-tab">
+      <div className="panels-tab-header">
+        <span>layout map</span>
+        <span className="panels-tab-header-dim">live · changes save automatically</span>
+      </div>
+      <PanelsPreview placements={placements} highlightId={highlightId} />
+      <div className="panels-rows">
+        {ALL_PANEL_IDS.map((id) => (
+          <PanelRow
+            key={id}
+            id={id}
+            placement={placements[id]}
+            onChange={(next) => update(id, next)}
+            onFocus={() => setHighlightId(id)}
+            onBlur={() => setHighlightId(null)}
+          />
+        ))}
+      </div>
       <div className="settings-actions">
         <button type="button" className="settings-btn settings-btn-mute" onClick={resetDefaults}>
           [reset to defaults]
         </button>
       </div>
-    </>
+    </div>
+  );
+}
+
+function PanelsPreview({
+  placements,
+  highlightId,
+}: {
+  placements: Record<PanelId, PanelPlacement>;
+  highlightId: PanelId | null;
+}) {
+  const g = groupPanels(placements);
+  const chip = (id: PanelId, hidden = false) => (
+    <span
+      key={id}
+      className={[
+        'panels-preview-chip',
+        highlightId === id ? 'is-active' : '',
+        hidden ? 'is-hidden' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      {PANELS[id].label}
+    </span>
+  );
+  const stack = (ids: PanelId[]) =>
+    ids.length > 0 ? <div className="panels-preview-stack">{ids.map((id) => chip(id))}</div> : null;
+  return (
+    <div className="panels-preview" role="img" aria-label="panel layout preview">
+      <div className="panels-preview-zone panels-preview-zone-top">
+        {g.top.length === 0 ? (
+          <span className="panels-preview-empty">top</span>
+        ) : (
+          g.top.map((id) => chip(id))
+        )}
+      </div>
+      <div className="panels-preview-row">
+        <div className="panels-preview-zone panels-preview-zone-side">
+          {stack(g.leftTop)}
+          <div className="panels-preview-spacer" />
+          {stack(g.leftBottom)}
+          {g.leftTop.length === 0 && g.leftBottom.length === 0 && (
+            <span className="panels-preview-empty">left</span>
+          )}
+        </div>
+        <div className="panels-preview-center">
+          <span className="panels-preview-center-label">terminal</span>
+          <span className="panels-preview-cursor" aria-hidden>
+            ▎
+          </span>
+        </div>
+        <div className="panels-preview-zone panels-preview-zone-side">
+          {stack(g.rightTop)}
+          <div className="panels-preview-spacer" />
+          {stack(g.rightBottom)}
+          {g.rightTop.length === 0 && g.rightBottom.length === 0 && (
+            <span className="panels-preview-empty">right</span>
+          )}
+        </div>
+      </div>
+      <div className="panels-preview-zone panels-preview-zone-bottom">
+        {g.bottom.length === 0 ? (
+          <span className="panels-preview-empty">bottom</span>
+        ) : (
+          g.bottom.map((id) => chip(id))
+        )}
+      </div>
+      {g.hidden.length > 0 && (
+        <div className="panels-preview-tray">
+          <span className="panels-preview-tray-label">hidden</span>
+          {g.hidden.map((id) => chip(id, true))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PanelRow({
+  id,
+  placement,
+  onChange,
+  onFocus,
+  onBlur,
+}: {
+  id: PanelId;
+  placement: PanelPlacement;
+  onChange: (next: PanelPlacement) => void;
+  onFocus: () => void;
+  onBlur: () => void;
+}) {
+  const meta = PANELS[id];
+  const vertical = placement.zone === 'left' || placement.zone === 'right';
+  return (
+    <div
+      className="panels-row"
+      onFocusCapture={onFocus}
+      onBlurCapture={onBlur}
+      onMouseEnter={onFocus}
+      onMouseLeave={onBlur}
+    >
+      <span className="panels-row-name">[{meta.label}]</span>
+      <span className="panels-row-arrow" aria-hidden>
+        →
+      </span>
+      <label className="panels-row-control">
+        <span className="panels-row-control-label">zone</span>
+        <select
+          value={placement.zone}
+          onChange={(e) => onChange({ ...placement, zone: e.target.value as Zone })}
+        >
+          {meta.allowedZones.map((z) => (
+            <option key={z} value={z}>
+              {z}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className={`panels-row-control${vertical ? '' : ' is-disabled'}`}>
+        <span className="panels-row-control-label">align</span>
+        <select
+          value={placement.align}
+          disabled={!vertical}
+          onChange={(e) => onChange({ ...placement, align: e.target.value as Align })}
+        >
+          <option value="top">top</option>
+          <option value="bottom">bottom</option>
+        </select>
+      </label>
+      <span className="panels-row-hint">{meta.description}</span>
+    </div>
   );
 }
 

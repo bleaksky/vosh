@@ -465,6 +465,20 @@ body {
   min-height: 0;
   overflow: hidden;
 }
+.panel-zone-substack {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-height: 0;
+}
+/* The spacer pushes any bottom-aligned substack against the bottom
+   edge of its column. Two substacks both present = top and bottom
+   each grow naturally and the spacer fills the middle. Only one
+   substack on either side fills its space normally. */
+.panel-zone-spacer {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
 /* Split-scrollback layout. The history pane is lazy-mounted only when
    the split opens, because a hidden Terminal cannot be measured by
@@ -2000,6 +2014,254 @@ body {
   border-color: var(--c-accent);
 }
 
+/* ============ Panels tab ============ */
+.panels-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panels-tab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.72em;
+  color: var(--c-text-faint);
+}
+.panels-tab-header-dim {
+  text-transform: none;
+  letter-spacing: 0.04em;
+  opacity: 0.55;
+}
+
+/* Preview wireframe ------------------------------------------- */
+.panels-preview {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface-deep);
+  padding: 8px;
+  font-family: var(--app-font-family, ui-monospace, monospace);
+  font-size: 0.78em;
+  line-height: 1.2;
+  user-select: none;
+}
+
+.panels-preview-zone {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 22px;
+  padding: 4px 6px;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+.panels-preview-zone-top {
+  border-bottom: 0;
+}
+.panels-preview-zone-bottom {
+  border-top: 0;
+}
+
+.panels-preview-row {
+  display: flex;
+  align-items: stretch;
+  min-height: 96px;
+}
+
+.panels-preview-zone-side {
+  flex: 0 0 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px 4px;
+}
+.panels-preview-row > .panels-preview-zone-side:first-child {
+  border-right: 0;
+}
+.panels-preview-row > .panels-preview-zone-side:last-child {
+  border-left: 0;
+}
+
+.panels-preview-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.panels-preview-spacer {
+  flex: 1 1 auto;
+  min-height: 6px;
+}
+
+.panels-preview-center {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 4px;
+  background: var(--c-surface-deep);
+  border: 1px dashed var(--c-border);
+  color: var(--c-text-faint);
+  letter-spacing: 0.06em;
+  font-size: 0.85em;
+}
+.panels-preview-center-label {
+  opacity: 0.5;
+}
+.panels-preview-cursor {
+  position: absolute;
+  bottom: 6px;
+  right: 10px;
+  color: var(--c-accent);
+  animation: panels-cursor-blink 1s steps(2, end) infinite;
+}
+@keyframes panels-cursor-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Bracket chips ---------------------------------------------- */
+.panels-preview-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 2px;
+  background: transparent;
+  color: var(--c-text);
+  font-size: 0.95em;
+  white-space: nowrap;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
+}
+.panels-preview-chip::before {
+  content: '[';
+  color: var(--c-text-faint);
+  margin-right: 1px;
+}
+.panels-preview-chip::after {
+  content: ']';
+  color: var(--c-text-faint);
+  margin-left: 1px;
+}
+.panels-preview-chip.is-active,
+.panels-preview-chip.is-active::before,
+.panels-preview-chip.is-active::after {
+  color: var(--c-accent);
+}
+.panels-preview-chip.is-hidden {
+  opacity: 0.45;
+  text-decoration: line-through;
+  text-decoration-color: var(--c-text-faint);
+}
+
+.panels-preview-empty {
+  font-style: italic;
+  opacity: 0.35;
+  color: var(--c-text-faint);
+  font-size: 0.88em;
+}
+
+/* Hidden tray ------------------------------------------------ */
+.panels-preview-tray {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dotted var(--c-border);
+}
+.panels-preview-tray-label {
+  font-size: 0.7em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-text-faint);
+  opacity: 0.7;
+}
+
+/* Per-panel rows --------------------------------------------- */
+.panels-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panels-row {
+  display: grid;
+  grid-template-columns: 130px 14px 120px 120px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+.panels-row:hover,
+.panels-row:focus-within {
+  background: color-mix(in oklab, var(--c-accent) 5%, transparent);
+  border-color: var(--c-border);
+}
+
+.panels-row-name {
+  font-weight: 600;
+  color: var(--c-text);
+  font-family: var(--app-font-family, ui-monospace, monospace);
+}
+.panels-row-arrow {
+  text-align: center;
+  color: var(--c-text-faint);
+  opacity: 0.5;
+}
+.panels-row-control {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.panels-row-control-label {
+  font-size: 0.62em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-text-faint);
+  opacity: 0.7;
+  padding-left: 2px;
+}
+.panels-row-control select {
+  background: var(--c-surface-deep);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+.panels-row-control select:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+.panels-row-control.is-disabled {
+  opacity: 0.32;
+  pointer-events: none;
+}
+.panels-row-hint {
+  color: var(--c-text-faint);
+  font-size: 0.78em;
+  opacity: 0.55;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .logs-status {
   color: var(--c-text-faint);
   font-variant-numeric: tabular-nums;
@@ -2799,6 +3061,17 @@ body {
 
 .resizable-vertical {
   flex-direction: column;
+}
+
+/* Leading-anchor variants. The handle is the first DOM child in the
+   wrapper, so reversing flex direction renders the handle on the
+   anchor-opposite edge: anchor-left → handle on right, anchor-top →
+   handle on bottom. */
+.resizable-anchor-left {
+  flex-direction: row-reverse;
+}
+.resizable-anchor-top {
+  flex-direction: column-reverse;
 }
 
 .resizable-handle {

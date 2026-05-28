@@ -33,12 +33,13 @@ import { customToAppTheme, setCustomThemes } from './lib/themes';
 import { startChatStore } from './lib/chatStore';
 import { startGroupStore } from './lib/groupStore';
 import {
-  DEFAULT_PANEL_ZONES,
-  groupPanelsByZone,
+  DEFAULT_PANEL_PLACEMENTS,
+  groupPanels,
   PANELS,
-  panelZonesFromDock,
-  panelZonesToDock,
+  panelPlacementsFromDock,
+  panelPlacementsToDock,
   type PanelId,
+  type PanelPlacement,
   type Zone,
 } from './lib/panels';
 
@@ -94,10 +95,12 @@ function App() {
   const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
   const [fontSize, setFontSize] = useState(14);
   const [themeTerminalColors, setThemeTerminalColors] = useState(false);
-  // Panel layout. Each panel id maps to the zone it should render
-  // in (or "hidden"). Seeded from the backend dock_layout on mount
-  // and kept in sync via the dock-layout-changed broadcast.
-  const [panelZones, setPanelZones] = useState<Record<PanelId, Zone>>(DEFAULT_PANEL_ZONES);
+  // Panel layout. Each panel id maps to a placement: zone + (for
+  // left/right zones) vertical alignment. Seeded from the backend
+  // dock_layout on mount and kept in sync via the
+  // dock-layout-changed broadcast.
+  const [panelPlacements, setPanelPlacements] =
+    useState<Record<PanelId, PanelPlacement>>(DEFAULT_PANEL_PLACEMENTS);
   const termRef = useRef<TerminalHandle | null>(null);
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
@@ -120,11 +123,11 @@ function App() {
     let unlisten: (() => void) | undefined;
     dockLayoutGet()
       .then((entries) => {
-        if (!cancelled) setPanelZones(panelZonesFromDock(entries));
+        if (!cancelled) setPanelPlacements(panelPlacementsFromDock(entries));
       })
       .catch(() => {});
     subscribeDockLayoutChanged((entries) => {
-      if (!cancelled) setPanelZones(panelZonesFromDock(entries));
+      if (!cancelled) setPanelPlacements(panelPlacementsFromDock(entries));
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -135,25 +138,28 @@ function App() {
     };
   }, []);
 
-  // Persist a single panel's zone change and broadcast to other windows.
-  // The TopBar map/chat toggle buttons go through this so a quick
-  // hide/show stays synced with the Settings UI.
+  // Persist a single panel's placement change and broadcast to other
+  // windows. The TopBar map/chat toggle buttons go through this so a
+  // quick hide/show stays synced with the Settings UI.
   const setPanelZone = (id: PanelId, zone: Zone) => {
-    setPanelZones((prev) => {
+    setPanelPlacements((prev) => {
       if (!PANELS[id].allowedZones.includes(zone)) return prev;
-      const next = { ...prev, [id]: zone };
-      void dockLayoutSet(panelZonesToDock(next)).catch(() => {});
+      const next: Record<PanelId, PanelPlacement> = {
+        ...prev,
+        [id]: { ...prev[id], zone },
+      };
+      void dockLayoutSet(panelPlacementsToDock(next)).catch(() => {});
       return next;
     });
   };
 
   // Map/chat topbar buttons toggle a panel between hidden and its
-  // default zone. Preserves the user's last non-hidden choice via
-  // a session-scoped memory so repeated hides + unhides land where
-  // the panel was last visible.
+  // last-visible zone. Preserves the user's last non-hidden choice
+  // via a session-scoped memory so repeated hides + unhides land
+  // where the panel was last visible.
   const lastVisibleZoneRef = useRef<Partial<Record<PanelId, Zone>>>({});
   const togglePanelVisibility = (id: PanelId) => {
-    const current = panelZones[id];
+    const current = panelPlacements[id].zone;
     if (current === 'hidden') {
       const restore = lastVisibleZoneRef.current[id] ?? PANELS[id].defaultZone;
       setPanelZone(id, restore);
@@ -370,7 +376,7 @@ function App() {
 
   const connected = status.kind === 'connected' || status.kind === 'connecting';
 
-  const grouped = groupPanelsByZone(panelZones);
+  const grouped = groupPanels(panelPlacements);
   const renderPanel = (id: PanelId) => {
     switch (id) {
       case 'map':
@@ -386,12 +392,31 @@ function App() {
     }
   };
 
+  const renderSideZoneInner = (top: PanelId[], bottom: PanelId[]) => (
+    <div className="panel-zone-stack">
+      {top.length > 0 && (
+        <div className="panel-zone-substack panel-zone-substack-top">{top.map(renderPanel)}</div>
+      )}
+      {top.length > 0 && bottom.length > 0 && <div className="panel-zone-spacer" />}
+      {bottom.length === 0 && top.length === 0 ? null : null}
+      {bottom.length > 0 && (
+        <div className="panel-zone-substack panel-zone-substack-bottom">
+          {bottom.map(renderPanel)}
+        </div>
+      )}
+      {top.length === 0 && bottom.length > 0 && <div className="panel-zone-spacer" />}
+    </div>
+  );
+
+  const leftHasAny = grouped.leftTop.length > 0 || grouped.leftBottom.length > 0;
+  const rightHasAny = grouped.rightTop.length > 0 || grouped.rightBottom.length > 0;
+
   return (
     <main className="app">
       <TopBar
-        mapOpen={panelZones.map !== 'hidden'}
+        mapOpen={panelPlacements.map.zone !== 'hidden'}
         onToggleMap={() => togglePanelVisibility('map')}
-        chatOpen={panelZones.chat !== 'hidden'}
+        chatOpen={panelPlacements.chat.zone !== 'hidden'}
         onToggleChat={() => togglePanelVisibility('chat')}
       />
       <Connect status={status} onError={handleError} />
@@ -399,16 +424,17 @@ function App() {
         <div className="panel-zone panel-zone-top">{grouped.top.map(renderPanel)}</div>
       )}
       <div className="main-row">
-        {grouped.left.length > 0 && (
+        {leftHasAny && (
           <Resizable
             storageKey="vosh.layout.leftZoneWidth"
+            anchor="left"
             defaultSize={360}
             minSize={200}
             maxSize={720}
             className="panel-zone panel-zone-left"
             handleLabel="resize left panel zone"
           >
-            <div className="panel-zone-stack">{grouped.left.map(renderPanel)}</div>
+            {renderSideZoneInner(grouped.leftTop, grouped.leftBottom)}
           </Resizable>
         )}
         <div
@@ -463,16 +489,17 @@ function App() {
             />
           </div>
         </div>
-        {grouped.right.length > 0 && (
+        {rightHasAny && (
           <Resizable
             storageKey="vosh.layout.rightZoneWidth"
+            anchor="right"
             defaultSize={360}
             minSize={200}
             maxSize={720}
             className="panel-zone panel-zone-right"
             handleLabel="resize right panel zone"
           >
-            <div className="panel-zone-stack">{grouped.right.map(renderPanel)}</div>
+            {renderSideZoneInner(grouped.rightTop, grouped.rightBottom)}
           </Resizable>
         )}
       </div>

@@ -2,12 +2,19 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 type Direction = 'horizontal' | 'vertical';
 
+/** Which edge of the parent the panel anchors to. The drag handle sits
+ *  on the opposite edge (the edge facing the sibling content), and the
+ *  drag math flips sign so dragging toward the anchor always grows. */
+type Anchor = 'left' | 'right' | 'top' | 'bottom';
+
 interface Props {
   children: ReactNode;
   /** Stable key used to persist the size in localStorage. */
   storageKey: string;
-  /** Horizontal panes resize width; vertical panes resize height. */
-  direction?: Direction;
+  /** Which edge of the parent the panel sits against. Determines which
+   *  side the drag handle appears on and the direction. Defaults to
+   *  `right` (legacy behavior: panel on the right, handle on the left). */
+  anchor?: Anchor;
   defaultSize: number;
   minSize?: number;
   maxSize?: number;
@@ -24,6 +31,9 @@ interface Props {
   className?: string;
   /** ARIA label for the drag handle. */
   handleLabel?: string;
+  /** Direction. Optional — derived from `anchor` when present. Kept
+   *  for legacy callers that supplied direction without anchor. */
+  direction?: Direction;
 }
 
 const DEFAULT_MIN = 80;
@@ -64,7 +74,8 @@ function viewportDim(direction: Direction): number {
 export function Resizable({
   children,
   storageKey,
-  direction = 'horizontal',
+  anchor,
+  direction,
   defaultSize,
   minSize = DEFAULT_MIN,
   maxSize = DEFAULT_MAX,
@@ -72,8 +83,29 @@ export function Resizable({
   className,
   handleLabel = 'resize panel',
 }: Props) {
+  // Anchor is the source of truth. When omitted, derive from the
+  // legacy `direction` prop: horizontal -> right, vertical -> bottom.
+  const effectiveAnchor: Anchor = anchor ?? (direction === 'vertical' ? 'bottom' : 'right');
+  const effectiveDirection: Direction =
+    effectiveAnchor === 'top' || effectiveAnchor === 'bottom' ? 'vertical' : 'horizontal';
+  const isVertical = effectiveDirection === 'vertical';
+  // Trailing anchor (right or bottom): dragging the cursor away from
+  // the anchor (toward the leading edge) grows the panel. Leading
+  // anchor (left or top): dragging away from anchor (toward trailing
+  // edge) grows. So the sign is opposite for leading anchors.
+  const isLeadingAnchor = effectiveAnchor === 'left' || effectiveAnchor === 'top';
+  // Handle sits on the edge opposite the anchor.
+  const handleSide: 'left' | 'right' | 'top' | 'bottom' =
+    effectiveAnchor === 'left'
+      ? 'right'
+      : effectiveAnchor === 'right'
+        ? 'left'
+        : effectiveAnchor === 'top'
+          ? 'bottom'
+          : 'top';
+
   const [size, setSize] = useState<number>(() => loadSize(storageKey, defaultSize));
-  const [viewport, setViewport] = useState<number>(() => viewportDim(direction));
+  const [viewport, setViewport] = useState<number>(() => viewportDim(effectiveDirection));
   const dragStateRef = useRef<{ start: number; startSize: number } | null>(null);
 
   useEffect(() => {
@@ -85,21 +117,14 @@ export function Resizable({
   }, [storageKey, size]);
 
   useEffect(() => {
-    const handler = () => setViewport(viewportDim(direction));
+    const handler = () => setViewport(viewportDim(effectiveDirection));
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
-  }, [direction]);
+  }, [effectiveDirection]);
 
-  // Cap so the sibling side always has room to render. Callers
-  // sitting next to the terminal use the default reserve; nested
-  // splits (chat / group) override via reservePx with a smaller
-  // floor since they share width with the chat half, not the
-  // whole window.
-  const reserve =
-    reservePx ?? (direction === 'horizontal' ? RESERVE_FOR_TERMINAL : RESERVE_VERTICAL);
+  const reserve = reservePx ?? (isVertical ? RESERVE_VERTICAL : RESERVE_FOR_TERMINAL);
   const effectiveMax = Math.max(minSize, Math.min(maxSize, viewport - reserve));
   const clamped = Math.max(minSize, Math.min(effectiveMax, size));
-  const isVertical = direction === 'vertical';
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -113,10 +138,12 @@ export function Resizable({
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragStateRef.current;
     if (!drag) return;
-    // Panel sits at the right (horizontal) or bottom (vertical) edge,
-    // so moving the cursor toward the trailing edge shrinks it.
     const current = isVertical ? event.clientY : event.clientX;
-    const next = drag.startSize - (current - drag.start);
+    const delta = current - drag.start;
+    // Leading-anchor panel: cursor moves AWAY from anchor (positive
+    // delta on horizontal-left or vertical-top) grows the panel.
+    // Trailing-anchor: cursor moving INTO the panel shrinks it.
+    const next = isLeadingAnchor ? drag.startSize + delta : drag.startSize - delta;
     const bounded = Math.max(minSize, Math.min(effectiveMax, next));
     setSize(bounded);
   };
@@ -132,12 +159,26 @@ export function Resizable({
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? 64 : 16;
-    const shrinkKeys = isVertical ? ['ArrowDown'] : ['ArrowRight'];
-    const growKeys = isVertical ? ['ArrowUp'] : ['ArrowLeft'];
-    if (growKeys.includes(event.key)) {
+    // Grow keys point AWAY from anchor (toward the sibling content);
+    // shrink keys point INTO the panel.
+    const growKey = isVertical
+      ? isLeadingAnchor
+        ? 'ArrowDown'
+        : 'ArrowUp'
+      : isLeadingAnchor
+        ? 'ArrowRight'
+        : 'ArrowLeft';
+    const shrinkKey = isVertical
+      ? isLeadingAnchor
+        ? 'ArrowUp'
+        : 'ArrowDown'
+      : isLeadingAnchor
+        ? 'ArrowLeft'
+        : 'ArrowRight';
+    if (event.key === growKey) {
       event.preventDefault();
       setSize((w) => Math.min(effectiveMax, w + step));
-    } else if (shrinkKeys.includes(event.key)) {
+    } else if (event.key === shrinkKey) {
       event.preventDefault();
       setSize((w) => Math.max(minSize, w - step));
     }
@@ -146,9 +187,12 @@ export function Resizable({
   const wrapperStyle: React.CSSProperties = isVertical ? { height: clamped } : { width: clamped };
 
   return (
-    <div className={`resizable resizable-${direction} ${className ?? ''}`} style={wrapperStyle}>
+    <div
+      className={`resizable resizable-${effectiveDirection} resizable-anchor-${effectiveAnchor} ${className ?? ''}`}
+      style={wrapperStyle}
+    >
       <div
-        className={`resizable-handle resizable-handle-${direction}`}
+        className={`resizable-handle resizable-handle-${effectiveDirection} resizable-handle-${handleSide}`}
         role="separator"
         aria-orientation={isVertical ? 'horizontal' : 'vertical'}
         aria-label={handleLabel}
