@@ -14,6 +14,19 @@ export type Zone = 'top' | 'bottom' | 'left' | 'right' | 'hidden';
 
 export const ALL_ZONES: Zone[] = ['top', 'bottom', 'left', 'right', 'hidden'];
 
+/** Vertical alignment within a left or right zone. Top-aligned panels
+ *  stack downward from the top of the column; bottom-aligned panels
+ *  stack upward from the bottom. Ignored for the top/bottom zones,
+ *  which are full-width strips with no vertical anchor. */
+export type Align = 'top' | 'bottom';
+
+export const ALL_ALIGNS: Align[] = ['top', 'bottom'];
+
+export interface PanelPlacement {
+  zone: Zone;
+  align: Align;
+}
+
 export type PanelId = 'map' | 'group' | 'vitals' | 'roomstrip' | 'chat';
 
 export const ALL_PANEL_IDS: PanelId[] = ['map', 'group', 'vitals', 'roomstrip', 'chat'];
@@ -26,6 +39,7 @@ export interface PanelMeta {
    *  only because a horizontal map at full width is unusable. */
   allowedZones: Zone[];
   defaultZone: Zone;
+  defaultAlign: Align;
 }
 
 export const PANELS: Record<PanelId, PanelMeta> = {
@@ -35,6 +49,7 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     description: 'Auto-mapped rooms from GMCP. Vertical pane.',
     allowedZones: ['left', 'right', 'hidden'],
     defaultZone: 'right',
+    defaultAlign: 'top',
   },
   group: {
     id: 'group',
@@ -42,6 +57,7 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     description: 'Group member vitals from Group.Info.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
     defaultZone: 'right',
+    defaultAlign: 'top',
   },
   vitals: {
     id: 'vitals',
@@ -49,6 +65,7 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     description: 'Your hp / mn / mv bars and tick countdown.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
     defaultZone: 'bottom',
+    defaultAlign: 'bottom',
   },
   roomstrip: {
     id: 'roomstrip',
@@ -56,6 +73,7 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     description: 'Area name, current room, exits.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
     defaultZone: 'top',
+    defaultAlign: 'top',
   },
   chat: {
     id: 'chat',
@@ -63,49 +81,100 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     description: 'Channel + tell history.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
     defaultZone: 'hidden',
+    defaultAlign: 'bottom',
   },
 };
 
-export const DEFAULT_PANEL_ZONES: Record<PanelId, Zone> = ALL_PANEL_IDS.reduce(
+export const DEFAULT_PANEL_PLACEMENTS: Record<PanelId, PanelPlacement> = ALL_PANEL_IDS.reduce(
   (acc, id) => {
-    acc[id] = PANELS[id].defaultZone;
+    acc[id] = { zone: PANELS[id].defaultZone, align: PANELS[id].defaultAlign };
     return acc;
   },
-  {} as Record<PanelId, Zone>,
+  {} as Record<PanelId, PanelPlacement>,
 );
 
-/** Convert the persisted dock_layout array into a `{ panelId: zone }`
- *  lookup. Missing panels fall back to defaults. Unknown ids and
- *  disallowed zones are silently dropped. */
-export function panelZonesFromDock(entries: { id: string; zone: string }[]): Record<PanelId, Zone> {
-  const out: Record<PanelId, Zone> = { ...DEFAULT_PANEL_ZONES };
+/** Convert the persisted dock_layout array into a `{ panelId: placement }`
+ *  lookup. Missing panels fall back to defaults. Unknown ids, disallowed
+ *  zones, and invalid align values are silently dropped (the default
+ *  takes over). */
+export function panelPlacementsFromDock(
+  entries: { id: string; zone: string; align?: string }[],
+): Record<PanelId, PanelPlacement> {
+  const out: Record<PanelId, PanelPlacement> = { ...DEFAULT_PANEL_PLACEMENTS };
   for (const entry of entries) {
     if (!isPanelId(entry.id)) continue;
     if (!isZone(entry.zone)) continue;
     if (!PANELS[entry.id].allowedZones.includes(entry.zone)) continue;
-    out[entry.id] = entry.zone;
+    const align = isAlign(entry.align ?? '')
+      ? (entry.align as Align)
+      : PANELS[entry.id].defaultAlign;
+    out[entry.id] = { zone: entry.zone, align };
   }
   return out;
 }
 
-/** Serialize a `{ panelId: zone }` lookup back into the dock_layout
- *  array. Preserves the canonical panel ordering so the persisted
- *  TOML stays diff-friendly. */
-export function panelZonesToDock(zones: Record<PanelId, Zone>): { id: string; zone: string }[] {
-  return ALL_PANEL_IDS.map((id) => ({ id, zone: zones[id] }));
+/** Serialize a `{ panelId: placement }` lookup back into the dock_layout
+ *  array. Preserves canonical panel ordering so the persisted TOML stays
+ *  diff-friendly. Align is omitted when default to keep storage minimal. */
+export function panelPlacementsToDock(
+  placements: Record<PanelId, PanelPlacement>,
+): { id: string; zone: string; align?: string }[] {
+  return ALL_PANEL_IDS.map((id) => {
+    const p = placements[id];
+    // Align is only meaningful in vertical zones; top/bottom/hidden
+    // never read it. Persisting unconditionally keeps the file stable
+    // when the user moves panels across zones and back.
+    const entry: { id: string; zone: string; align?: string } = { id, zone: p.zone };
+    if (p.zone === 'left' || p.zone === 'right') {
+      entry.align = p.align;
+    }
+    return entry;
+  });
 }
 
-/** Group panels by zone, preserving canonical ordering inside each zone. */
-export function groupPanelsByZone(zones: Record<PanelId, Zone>): Record<Zone, PanelId[]> {
-  const out: Record<Zone, PanelId[]> = {
+/** Group panels by their (zone, align). Result has six lists: top,
+ *  bottom, and for each of left/right a top-aligned and bottom-aligned
+ *  list, plus hidden. Preserves canonical panel ordering inside each
+ *  list. */
+export interface GroupedPanels {
+  top: PanelId[];
+  bottom: PanelId[];
+  leftTop: PanelId[];
+  leftBottom: PanelId[];
+  rightTop: PanelId[];
+  rightBottom: PanelId[];
+  hidden: PanelId[];
+}
+
+export function groupPanels(placements: Record<PanelId, PanelPlacement>): GroupedPanels {
+  const out: GroupedPanels = {
     top: [],
     bottom: [],
-    left: [],
-    right: [],
+    leftTop: [],
+    leftBottom: [],
+    rightTop: [],
+    rightBottom: [],
     hidden: [],
   };
   for (const id of ALL_PANEL_IDS) {
-    out[zones[id]].push(id);
+    const p = placements[id];
+    switch (p.zone) {
+      case 'top':
+        out.top.push(id);
+        break;
+      case 'bottom':
+        out.bottom.push(id);
+        break;
+      case 'left':
+        (p.align === 'bottom' ? out.leftBottom : out.leftTop).push(id);
+        break;
+      case 'right':
+        (p.align === 'bottom' ? out.rightBottom : out.rightTop).push(id);
+        break;
+      case 'hidden':
+        out.hidden.push(id);
+        break;
+    }
   }
   return out;
 }
@@ -116,4 +185,8 @@ function isPanelId(s: string): s is PanelId {
 
 function isZone(s: string): s is Zone {
   return (ALL_ZONES as string[]).includes(s);
+}
+
+function isAlign(s: string): s is Align {
+  return s === 'top' || s === 'bottom';
 }

@@ -646,6 +646,9 @@ export async function reloadPlugin(name: string): Promise<void> {
 export interface DockEntryPersist {
   id: string;
   zone: string;
+  /** Vertical alignment within a left/right zone: 'top' or 'bottom'.
+   *  Missing means top. Ignored for full-width zones (top/bottom/hidden). */
+  align?: string;
 }
 
 export async function dockLayoutGet(): Promise<DockEntryPersist[]> {
