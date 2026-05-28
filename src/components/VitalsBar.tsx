@@ -18,10 +18,7 @@ interface VitalDeltas {
 
 const NO_DELTAS: VitalDeltas = { hp: null, mana: null, move: null };
 
-// Glyph cells per bar. Total width is tight so all three vitals plus
-// the tick fit on a single line. Slanted parallelograms (▰/▱) match
-// the compaction-progress aesthetic the user pointed at.
-const GLYPHS_TOTAL = 8;
+const GLYPHS_TOTAL = 20;
 const FILLED = '▰';
 const EMPTY = '▱';
 
@@ -39,19 +36,62 @@ function pct(current: number, max: number): number {
   return Math.max(0, Math.min(100, Math.round((current / max) * 100)));
 }
 
-function colorForPct(value: number): string {
-  if (value >= 80) return '#87a987';
-  if (value >= 60) return '#e6c384';
-  if (value >= 40) return '#d99a6c';
-  if (value >= 20) return '#e46876';
-  return '#7d1d1d';
+// Each vital has its own healthy-color identity (hp green, mn
+// blue, mv warm-orange) but every ramp converges on red as the
+// bar drains, so the eye picks up both "which vital" and "how
+// urgent" from the color alone. Intermediate stops avoid muddy
+// straight-line interpolation through unflattering midpoints.
+type Stop = [pct: number, rgb: [number, number, number]];
+
+const VITAL_RAMPS: Record<string, Stop[]> = {
+  // green -> yellow -> orange -> red
+  hp: [
+    [0, [228, 104, 118]],
+    [25, [217, 154, 108]],
+    [55, [230, 195, 132]],
+    [100, [135, 169, 135]],
+  ],
+  // blue -> teal -> purple -> red
+  mn: [
+    [0, [228, 104, 118]],
+    [30, [192, 130, 168]],
+    [65, [134, 153, 188]],
+    [100, [127, 180, 202]],
+  ],
+  // orange -> deep red
+  mv: [
+    [0, [228, 104, 118]],
+    [60, [220, 130, 100]],
+    [100, [217, 154, 108]],
+  ],
+};
+
+function colorForVital(label: string, value: number): string {
+  const ramp = VITAL_RAMPS[label] ?? VITAL_RAMPS.hp;
+  const v = Math.max(0, Math.min(100, value));
+  let lower = ramp[0];
+  let upper = ramp[ramp.length - 1];
+  for (let i = 0; i < ramp.length - 1; i++) {
+    if (v >= ramp[i][0] && v <= ramp[i + 1][0]) {
+      lower = ramp[i];
+      upper = ramp[i + 1];
+      break;
+    }
+  }
+  const range = upper[0] - lower[0];
+  const t = range > 0 ? (v - lower[0]) / range : 0;
+  const lerp = (a: number, b: number) => Math.round(a + (b - a) * t);
+  const r = lerp(lower[1][0], upper[1][0]);
+  const g = lerp(lower[1][1], upper[1][1]);
+  const b = lerp(lower[1][2], upper[1][2]);
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
-// Single-line vitals row: hp / mana / move as slanted glyph
-// progress bars side by side, plus the World.Time tick counter at
-// the end. Subscribes to Char.Vitals, World.Time, and the backend
-// tick stream; World.Time hour changes both rebase the per-tick
-// vitals snapshot AND reset the tick seconds counter.
+// Stacked vitals — one row per hp/mana/move, plus the tick. Each
+// row is `label · bar (20 cells) · % · cur/max · delta`. Columns
+// line up across all rows via grid auto-sizing. Subscribes to
+// Char.Vitals + World.Time + onTick; World.Time hour-change
+// rebases the per-tick delta snapshot and resets the tick counter.
 export function VitalsBar() {
   const [vitals, setVitals] = useState<Vitals | null>(null);
   const [deltas, setDeltas] = useState<VitalDeltas>(NO_DELTAS);
@@ -61,7 +101,6 @@ export function VitalsBar() {
   const prevHourRef = useRef<number | string | null>(null);
   const tickResetAtRef = useRef<number>(Date.now());
 
-  // 4Hz tick-seconds ticker for the on-row counter.
   useEffect(() => {
     const id = window.setInterval(() => {
       setTickSecs(Math.floor((Date.now() - tickResetAtRef.current) / 1000));
@@ -187,23 +226,14 @@ export function VitalsBar() {
   return (
     <div className="vitals-bar" aria-label="vitals">
       {segs.map((s) => (
-        <VitalSegment key={s.label} {...s} />
+        <VitalRow key={s.label} {...s} />
       ))}
-      {tickActive && (
-        <span className="vitals-seg vitals-seg-tick">
-          <span className="vitals-seg-top">
-            <span className="vitals-seg-label">tick</span>
-            <span className={`vitals-seg-tick-value${tickWarn ? ' is-warn' : ''}`}>
-              {tickSecs}s
-            </span>
-          </span>
-        </span>
-      )}
+      {tickActive && <TickRow tickSecs={tickSecs} warn={tickWarn} />}
     </div>
   );
 }
 
-function VitalSegment({
+function VitalRow({
   label,
   cur,
   max,
@@ -215,44 +245,48 @@ function VitalSegment({
   delta: number | null;
 }) {
   const value = pct(cur, max);
-  const fill = colorForPct(value);
+  const fill = colorForVital(label, value);
   const filledCount = Math.round((value / 100) * GLYPHS_TOTAL);
   const emptyCount = GLYPHS_TOTAL - filledCount;
   const showDelta = delta !== null && delta !== 0;
   const deltaPositive = (delta ?? 0) > 0;
 
   return (
-    <span className="vitals-seg">
-      <span className="vitals-seg-label">{label}</span>
-      <span className="vitals-seg-bracket vitals-seg-bracket-l" aria-hidden="true">
-        「
-      </span>
-      <span className="vitals-seg-glyphs" aria-hidden="true">
+    <>
+      <span className="vitals-label">{label}</span>
+      <span className="vitals-glyphs" aria-hidden="true">
         {filledCount > 0 && (
           <span style={{ color: fill }}>{FILLED.repeat(filledCount)}</span>
         )}
         {emptyCount > 0 && (
-          <span className="vitals-seg-empty">{EMPTY.repeat(emptyCount)}</span>
+          <span className="vitals-empty">{EMPTY.repeat(emptyCount)}</span>
         )}
       </span>
-      <span className="vitals-seg-bracket vitals-seg-bracket-r" aria-hidden="true">
-        」
-      </span>
-      <span className="vitals-seg-percent" style={{ color: fill }}>
+      <span className="vitals-percent" style={{ color: fill }}>
         {value}%
       </span>
-      <span className="vitals-seg-numeric">
+      <span className="vitals-numeric">
         {cur}/{max}
+      </span>
+      <span className="vitals-delta-slot">
         {showDelta && (
           <span
-            className={`vitals-seg-delta-inline${deltaPositive ? ' vitals-seg-delta-up' : ' vitals-seg-delta-down'}`}
+            className={`vitals-delta${deltaPositive ? ' vitals-delta-up' : ' vitals-delta-down'}`}
           >
-            {' '}
             {deltaPositive ? '+' : ''}
             {delta}
           </span>
         )}
       </span>
-    </span>
+    </>
+  );
+}
+
+function TickRow({ tickSecs, warn }: { tickSecs: number; warn: boolean }) {
+  return (
+    <>
+      <span className="vitals-label">tick</span>
+      <span className={`vitals-tick-value${warn ? ' is-warn' : ''}`}>{tickSecs}s</span>
+    </>
   );
 }

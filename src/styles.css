@@ -477,143 +477,81 @@ body {
   z-index: 1;
 }
 
-/* Vitals bar — single-line row of slanted glyph progress bars
-   (hp/mana/move) plus the tick counter. Pattern lifted from the
-   compaction progress display: filled ▰ in the vital color, empty
-   ▱ dim, with letter-spacing for the clear gaps between glyphs. */
+/* Vitals — three stacked rows (hp / mn / mv) plus an optional
+   tick row. Whole bar is one grid so columns line up across rows
+   without per-row sizing drift. Each row: label · bar · % ·
+   cur/max · delta. Bar uses slanted parallelogram glyphs (▰/▱);
+   filled ones take the vital's interpolated fill color, empty
+   dims down. A 1fr filler column absorbs leftover horizontal
+   space so the five real columns pack tight on the left. */
 .vitals-bar {
   flex: 0 0 auto;
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 4px 14px 5px;
+  display: grid;
+  grid-template-columns: auto auto auto auto auto 1fr;
+  column-gap: 12px;
+  row-gap: 1px;
+  align-items: baseline;
+  padding: 4px 14px;
   background: var(--c-surface);
   border-top: 1px solid var(--c-border);
   position: relative;
   z-index: 1;
-  white-space: nowrap;
-  overflow: hidden;
   font-variant-numeric: tabular-nums;
 }
 
-/* Two-row grid:
-   - row 1: label | 「 | glyphs | 」 | percent | delta
-   - row 2: numeric centered in the glyphs column
-   Brackets and edge items span both rows so they sit vertically
-   centered against the two-row glyphs+numeric stack. */
-.vitals-seg {
-  display: inline-grid;
-  grid-template-columns: auto auto auto auto auto;
-  grid-template-rows: auto auto;
-  column-gap: 4px;
-  row-gap: 0;
-  align-items: baseline;
-  white-space: nowrap;
-  line-height: 1.1;
-}
-
-.vitals-seg-label {
-  grid-row: 1 / span 2;
+.vitals-label {
   grid-column: 1;
-  align-self: center;
-}
-
-.vitals-seg-bracket {
-  grid-row: 1 / span 2;
-  align-self: center;
-  color: var(--c-text-faint);
-}
-
-.vitals-seg-bracket-l {
-  grid-column: 2;
-}
-
-.vitals-seg-bracket-r {
-  grid-column: 4;
-}
-
-.vitals-seg-glyphs {
-  grid-row: 1;
-  grid-column: 3;
-}
-
-.vitals-seg-percent {
-  grid-row: 1 / span 2;
-  grid-column: 5;
-  align-self: center;
-}
-
-.vitals-seg-numeric {
-  grid-row: 2;
-  grid-column: 3;
-  text-align: center;
-  font-size: 0.85em;
-  color: var(--c-text);
-  letter-spacing: 0.02em;
-}
-
-/* Delta tucked inline at the end of the cur/max line so it shares
-   the existing row-2 space instead of needing its own column. */
-.vitals-seg-delta-inline {
-  font-weight: 700;
-}
-
-/* Tick seg has no numeric subrow — keep it inline-flex so its
-   label + seconds value sit side-by-side, and center it vertically
-   against the two-row vital segs. */
-.vitals-seg.vitals-seg-tick {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  align-self: center;
-}
-
-.vitals-seg-tick .vitals-seg-top {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.vitals-seg-label {
   color: var(--c-text-faint);
   text-transform: lowercase;
   letter-spacing: 0.04em;
 }
 
-.vitals-seg-glyphs {
-  letter-spacing: 0.1em;
+.vitals-glyphs {
+  grid-column: 2;
+  letter-spacing: 0;
   font-weight: 700;
 }
 
-.vitals-seg-empty {
+.vitals-empty {
   color: var(--c-text-dim);
 }
 
-.vitals-seg-percent {
+.vitals-percent {
+  grid-column: 3;
   font-weight: 700;
-  min-width: 30px;
+  min-width: 36px;
   text-align: right;
 }
 
-.vitals-seg-delta {
+.vitals-numeric {
+  grid-column: 4;
+  color: var(--c-text);
+}
+
+.vitals-delta-slot {
+  grid-column: 5;
+  min-width: 40px;
+}
+
+.vitals-delta {
   font-weight: 700;
 }
 
-.vitals-seg-delta-up {
+.vitals-delta-up {
   color: var(--c-success);
 }
 
-.vitals-seg-delta-down {
+.vitals-delta-down {
   color: var(--c-danger);
 }
 
-.vitals-seg-tick-value {
+.vitals-tick-value {
+  grid-column: 2;
   font-weight: 700;
   color: var(--c-text);
 }
 
-.vitals-seg-tick-value.is-warn {
+.vitals-tick-value.is-warn {
   color: var(--c-warn);
   animation: vosh-tick-pulse 700ms ease-in-out infinite;
 }
