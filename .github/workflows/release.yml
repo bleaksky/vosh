@@ -83,7 +83,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'mudclient ${{ github.ref_name }}'
+          releaseName: 'vosh ${{ github.ref_name }}'
           releaseBody: |
             Cross platform builds. Artifacts are not yet code signed.
             macOS users may need to right-click and choose Open the first time.
