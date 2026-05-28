@@ -20,6 +20,7 @@ import {
   presetsInstall,
   presetsRemove,
   subscribeCustomThemesChanged,
+  subscribeSplitDividerChanged,
   type StatePayload,
 } from './lib/session';
 import { applyAndBroadcastTheme } from './lib/theme';
@@ -34,6 +35,17 @@ const CHAT_OPEN_KEY = 'vosh.layout.chatOpen';
 const GROUP_PINNED_KEY = 'vosh.layout.groupPinned';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
+
+// CSS variable applied to the split-scrollback divider. Empty value
+// removes the override so the rule falls back to the theme default.
+function applySplitDividerColor(color: string | null): void {
+  const root = document.documentElement;
+  if (color && color.length > 0) {
+    root.style.setProperty('--c-split-divider', color);
+  } else {
+    root.style.removeProperty('--c-split-divider');
+  }
+}
 
 // One-shot rename migration: when the project was renamed from
 // "mudclient" to "vosh" the localStorage namespace changed too. On
@@ -178,6 +190,7 @@ function App() {
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
         setThemeTerminalColors(cfg.theme_terminal_colors);
+        applySplitDividerColor(cfg.split_divider_color);
 
         // Sweep orphan preset triggers — anything tagged with a
         // preset id that no longer exists in code (renamed or
@@ -238,6 +251,23 @@ function App() {
       const detail = event.payload;
       setFontFamily(detail.family || DEFAULT_FONT_FAMILY);
       setFontSize(detail.size || 14);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Settings save broadcasts the new divider color. Apply it on the
+    // main window without a relaunch.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    subscribeSplitDividerChanged((color) => {
+      applySplitDividerColor(color);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;

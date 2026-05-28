@@ -110,6 +110,12 @@ pub(crate) struct UiConfig {
     /// pick them from the theme dropdown like any other theme.
     #[serde(default)]
     pub custom_themes: Vec<CustomTheme>,
+    /// CSS color string applied to the 1px border that separates the
+    /// split-scrollback history pane from the live pane. Empty or
+    /// missing means use the theme default (`--c-border`). Any valid
+    /// CSS color is accepted; e.g. `#ff00ff`, `rgb(255, 0, 0)`.
+    #[serde(default)]
+    pub split_divider_color: Option<String>,
 }
 
 /// User-authored theme. All fields are colors (or strings, for
@@ -163,6 +169,7 @@ impl Default for UiConfig {
             keep_last_command: false,
             theme_terminal_colors: false,
             custom_themes: Vec::new(),
+            split_divider_color: None,
         }
     }
 }
@@ -279,6 +286,7 @@ impl ProfileConfig {
             keep_last_command: profile.ui.keep_last_command,
             theme_terminal_colors: profile.ui.theme_terminal_colors,
             custom_themes: profile.ui.custom_themes.clone(),
+            split_divider_color: profile.ui.split_divider_color.clone(),
         };
 
         let plugins = PluginsPersist {
@@ -372,6 +380,7 @@ impl ProfileConfig {
             keep_last_command: self.ui.keep_last_command,
             theme_terminal_colors: self.ui.theme_terminal_colors,
             custom_themes: self.ui.custom_themes.clone(),
+            split_divider_color: self.ui.split_divider_color.clone(),
         };
 
         // Plugin enabled-set is persisted; the actual load happens in the
