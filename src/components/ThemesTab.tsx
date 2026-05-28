@@ -72,27 +72,34 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
   };
 
   const handleCreate = () => {
-    const baseId = config.theme;
-    const base = findTheme(baseId);
-    let counter = 1;
-    let newId = 'custom';
+    // Compute newId from the current snapshot; collisions are very
+    // unlikely in a settings UI but the updater below will re-check
+    // against fresh state.
     const existingIds = new Set([
       ...BUILTIN_THEMES.map((t) => t.id),
       ...config.custom_themes.map((t) => t.id),
     ]);
+    let counter = 1;
+    let newId = 'custom';
     while (existingIds.has(newId)) {
       counter += 1;
       newId = `custom-${counter}`;
     }
-    const newTheme: CustomTheme = {
-      id: newId,
-      label: `${base.label} (custom)`,
-      description: `Forked from ${base.label}`,
-      xterm: { ...base.xterm },
-      chrome: { ...base.chrome },
-    };
     setConfig((prev) => {
       if (!prev) return prev;
+      // Read the base theme from PREV — not the closure-captured
+      // config — so a theme switched seconds earlier in this same
+      // tab is honored even if React has not yet committed a
+      // re-render of ThemesTab.
+      const baseId = prev.theme;
+      const base = findTheme(baseId);
+      const newTheme: CustomTheme = {
+        id: newId,
+        label: `${base.label} (custom)`,
+        description: `Forked from ${base.label}`,
+        xterm: { ...(base.xterm as unknown as Record<string, string>) },
+        chrome: { ...(base.chrome as unknown as Record<string, string>) },
+      };
       const updated = { ...prev, custom_themes: [...prev.custom_themes, newTheme] };
       setCustomThemes(updated.custom_themes.map(customToAppTheme));
       persist(updated);
@@ -102,7 +109,9 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
   };
 
   const handleDelete = (id: string) => {
-    if (!confirm(`delete custom theme "${id}"?`)) return;
+    // No confirm dialog — WKWebView's `confirm()` is unreliable
+    // (sometimes returns undefined without showing) and the action
+    // is recoverable by recreating the theme from any base.
     setConfig((prev) => {
       if (!prev) return prev;
       const next = prev.custom_themes.filter((t) => t.id !== id);
