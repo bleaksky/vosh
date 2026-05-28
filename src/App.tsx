@@ -396,26 +396,57 @@ function App() {
     }
   };
 
-  // Top substack stays at its natural size; bottom substack grows to
-  // fill all remaining height in the column. So a vitals strip pinned
-  // to the top hugs the top edge, and the map below it expands into
-  // the rest of the space (its internal flex: 1 1 auto finally has a
-  // parent that provides height). When only one substack is populated
-  // it fills the whole column either way.
+  // Side-zone composition:
+  //   1. Panels with fillsSideZone (map) ignore their own align and
+  //      always render in the middle cluster, which grows to absorb
+  //      remaining height.
+  //   2. Non-fill panels with align=top render in a fixed cluster
+  //      above the fill panel.
+  //   3. Non-fill panels with align=bottom render in a fixed cluster
+  //      below the fill panel.
+  //   4. When there is no fill panel, the bottom cluster acts as the
+  //      grower so a single non-fill panel still expands to fill,
+  //      and a top + bottom mix anchors top to the top edge with the
+  //      bottom panel absorbing the slack.
   const renderSideZoneInner = (top: PanelId[], bottom: PanelId[]) => {
-    const hasTop = top.length > 0;
-    const hasBottom = bottom.length > 0;
-    if (!hasTop && !hasBottom) return null;
+    const isFill = (id: PanelId) => Boolean(PANELS[id].fillsSideZone);
+    const fillIds = [...top, ...bottom].filter(isFill);
+    const fixedTop = top.filter((id) => !isFill(id));
+    const fixedBottom = bottom.filter((id) => !isFill(id));
+    const hasAny = fillIds.length > 0 || fixedTop.length > 0 || fixedBottom.length > 0;
+    if (!hasAny) return null;
+    if (fillIds.length > 0) {
+      return (
+        <div className="panel-zone-stack">
+          {fixedTop.length > 0 && (
+            <div className="panel-zone-substack panel-zone-substack-fixed">
+              {fixedTop.map(renderPanel)}
+            </div>
+          )}
+          <div className="panel-zone-substack panel-zone-substack-grow">
+            {fillIds.map(renderPanel)}
+          </div>
+          {fixedBottom.length > 0 && (
+            <div className="panel-zone-substack panel-zone-substack-fixed">
+              {fixedBottom.map(renderPanel)}
+            </div>
+          )}
+        </div>
+      );
+    }
+    // No fill panel in this zone — keep the previous behavior so a
+    // small panel placed alone still expands and a top+bottom mix
+    // anchors both edges.
     return (
       <div className="panel-zone-stack">
-        {hasTop && (
+        {fixedTop.length > 0 && (
           <div className="panel-zone-substack panel-zone-substack-fixed">
-            {top.map(renderPanel)}
+            {fixedTop.map(renderPanel)}
           </div>
         )}
-        {hasBottom && (
+        {fixedBottom.length > 0 && (
           <div className="panel-zone-substack panel-zone-substack-grow">
-            {bottom.map(renderPanel)}
+            {fixedBottom.map(renderPanel)}
           </div>
         )}
       </div>

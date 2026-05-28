@@ -468,21 +468,20 @@ body {
 .panel-zone-substack {
   display: flex;
   flex-direction: column;
-  /* Both flex-shrink and overflow:hidden so a fat panel (map) cannot
-     draw outside its substack onto the sibling cluster below. The
-     previous version let the map render its full natural canvas
-     above the vitals bar, visually overlapping it. */
-  flex: 1 1 auto;
   min-height: 0;
+  /* Clip so a fat panel (map) cannot draw outside its substack onto
+     the sibling cluster above or below it. */
   overflow: hidden;
 }
-/* Both substacks share the column proportionally to their content's
-   natural size. When the map and a small panel (vitals) coexist, the
-   map's much larger natural canvas wins most of the shrink space,
-   while vitals keeps enough room to render its bars + tick line. */
-.panel-zone-substack-fixed,
+.panel-zone-substack-fixed {
+  /* Stays at its content size. Use min-content as the basis so
+     children can shrink slightly under pressure rather than
+     overflowing, but the cluster never expands beyond what its
+     content actually needs. */
+  flex: 0 0 auto;
+}
 .panel-zone-substack-grow {
-  flex: 1 1 auto;
+  flex: 1 1 0;
 }
 
 /* Split-scrollback layout. The history pane is lazy-mounted only when

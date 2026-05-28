@@ -47,17 +47,25 @@ export interface PanelMeta {
    *  actually shows the panel somewhere. */
   homeZone: Exclude<Zone, 'hidden'>;
   defaultAlign: Align;
+  /** When true the panel always takes all available height inside a
+   *  left/right zone and ignores its own align value. Other panels
+   *  in the same zone still respect their align (above when top,
+   *  below when bottom) and stack at their natural size around the
+   *  fill panel. The align dropdown is disabled in Settings for
+   *  panels with this flag. */
+  fillsSideZone?: boolean;
 }
 
 export const PANELS: Record<PanelId, PanelMeta> = {
   map: {
     id: 'map',
     label: 'map',
-    description: 'Auto-mapped rooms from GMCP. Vertical pane.',
+    description: 'Auto-mapped rooms from GMCP. Fills its column.',
     allowedZones: ['left', 'right', 'hidden'],
     defaultZone: 'right',
     homeZone: 'right',
     defaultAlign: 'top',
+    fillsSideZone: true,
   },
   group: {
     id: 'group',

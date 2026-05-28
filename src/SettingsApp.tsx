@@ -761,6 +761,9 @@ function PanelRow({
 }) {
   const meta = PANELS[id];
   const vertical = placement.zone === 'left' || placement.zone === 'right';
+  // Fill panels (map) ignore align — they always take the middle of a
+  // side zone with other panels stacking above or below.
+  const alignDisabled = !vertical || Boolean(meta.fillsSideZone);
   return (
     <div
       className="panels-row"
@@ -786,11 +789,11 @@ function PanelRow({
           ))}
         </select>
       </label>
-      <label className={`panels-row-control${vertical ? '' : ' is-disabled'}`}>
+      <label className={`panels-row-control${alignDisabled ? ' is-disabled' : ''}`}>
         <span className="panels-row-control-label">align</span>
         <select
           value={placement.align}
-          disabled={!vertical}
+          disabled={alignDisabled}
           onChange={(e) => onChange({ ...placement, align: e.target.value as Align })}
         >
           <option value="top">top</option>
