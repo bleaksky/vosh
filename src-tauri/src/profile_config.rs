@@ -98,6 +98,12 @@ pub(crate) struct UiConfig {
     /// same command (e.g. `kill orc`) repeatedly. Off by default.
     #[serde(default)]
     pub keep_last_command: bool,
+    /// When true, the chrome theme also tints the terminal's 16
+    /// ANSI palette (legacy behavior). When false (the default),
+    /// the terminal uses the canonical xterm-256 ANSI palette so
+    /// server output reads identically across themes.
+    #[serde(default)]
+    pub theme_terminal_colors: bool,
 }
 
 /// On-disk representation of a single docked bar.
@@ -118,6 +124,7 @@ impl Default for UiConfig {
             enabled_presets: Vec::new(),
             dock_layout: Vec::new(),
             keep_last_command: false,
+            theme_terminal_colors: false,
         }
     }
 }
@@ -232,6 +239,7 @@ impl ProfileConfig {
             enabled_presets: profile.ui.enabled_presets.clone(),
             dock_layout: profile.ui.dock_layout.clone(),
             keep_last_command: profile.ui.keep_last_command,
+            theme_terminal_colors: profile.ui.theme_terminal_colors,
         };
 
         let plugins = PluginsPersist {
@@ -323,6 +331,7 @@ impl ProfileConfig {
             enabled_presets: self.ui.enabled_presets.clone(),
             dock_layout: self.ui.dock_layout.clone(),
             keep_last_command: self.ui.keep_last_command,
+            theme_terminal_colors: self.ui.theme_terminal_colors,
         };
 
         // Plugin enabled-set is persisted; the actual load happens in the

@@ -199,6 +199,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
         size: config.font_size,
       });
       await emit('vosh://keep-last-changed', config.keep_last_command);
+      await emit('vosh://theme-terminal-colors-changed', config.theme_terminal_colors);
       await broadcastTrackedAffects(config.tracked_affects);
       setSavedAt(Date.now());
     } catch (e) {
@@ -226,6 +227,16 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
             </option>
           ))}
         </select>
+      </Row>
+      <Row label="terminal">
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={config.theme_terminal_colors}
+            onChange={(e) => update({ theme_terminal_colors: e.target.checked })}
+          />
+          <span>tint server output with theme palette</span>
+        </label>
       </Row>
       <Row label="updates">
         <label className="settings-checkbox">

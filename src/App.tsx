@@ -79,6 +79,7 @@ function App() {
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
   const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
   const [fontSize, setFontSize] = useState(14);
+  const [themeTerminalColors, setThemeTerminalColors] = useState(false);
   const [mapOpen, setMapOpen] = useState(() => loadFlag(MAP_OPEN_KEY));
   const [chatOpen, setChatOpen] = useState(() => loadFlag(CHAT_OPEN_KEY));
   const [groupPinned, setGroupPinned] = useState(() => loadFlag(GROUP_PINNED_KEY));
@@ -151,6 +152,7 @@ function App() {
         void applyAndBroadcastTheme(cfg.theme);
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
+        setThemeTerminalColors(cfg.theme_terminal_colors);
 
         // Sweep orphan preset triggers — anything tagged with a
         // preset id that no longer exists in code (renamed or
@@ -222,6 +224,24 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // Live-flip the terminal palette mode when the user toggles the
+    // setting. The Terminal component re-applies the palette on the
+    // prop change without recreating xterm.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    listen<boolean>('vosh://theme-terminal-colors-changed', (event) => {
+      setThemeTerminalColors(Boolean(event.payload));
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
     let unsub: (() => void) | undefined;
     let cancelled = false;
     onState((payload: StatePayload) => {
@@ -265,6 +285,7 @@ function App() {
           <Terminal
             fontFamily={fontFamily}
             fontSize={fontSize}
+            themeTerminalColors={themeTerminalColors}
             onReady={(handle) => {
               termRef.current = handle;
             }}
