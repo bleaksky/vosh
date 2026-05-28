@@ -468,17 +468,19 @@ body {
 .panel-zone-substack {
   display: flex;
   flex-direction: column;
+  /* Both flex-shrink and overflow:hidden so a fat panel (map) cannot
+     draw outside its substack onto the sibling cluster below. The
+     previous version let the map render its full natural canvas
+     above the vitals bar, visually overlapping it. */
+  flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
 }
-/* Top-aligned cluster sits at the top of the column at its natural
-   content size. Bottom-aligned cluster grows to fill the rest. When
-   one substack is alone (no sibling cluster), grow makes it fill;
-   when both are present, fixed-on-top + grow-on-bottom anchors top
-   panels against the top edge and lets the bottom panel expand
-   into the slack. */
-.panel-zone-substack-fixed {
-  flex: 0 0 auto;
-}
+/* Both substacks share the column proportionally to their content's
+   natural size. When the map and a small panel (vitals) coexist, the
+   map's much larger natural canvas wins most of the shrink space,
+   while vitals keeps enough room to render its bars + tick line. */
+.panel-zone-substack-fixed,
 .panel-zone-substack-grow {
   flex: 1 1 auto;
 }
