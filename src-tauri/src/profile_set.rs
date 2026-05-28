@@ -90,6 +90,7 @@ pub(crate) struct ProfilesIndex {
 const INDEX_FILENAME: &str = "profiles.toml";
 const PROFILES_DIR: &str = "profiles";
 const LEGACY_PROFILE_FILENAME: &str = "profile.toml";
+const GLOBAL_FILENAME: &str = "global.toml";
 pub(crate) const DEFAULT_PROFILE_NAME: &str = "default";
 
 /// Live in-memory view of the profile collection. Held in `AppState`
@@ -172,6 +173,13 @@ impl ProfileSet {
 
     pub(crate) fn profile_path(&self, name: &str) -> PathBuf {
         self.root.join(PROFILES_DIR).join(format!("{name}.toml"))
+    }
+
+    /// Path to the shared global.toml. Holds UI preferences (theme,
+    /// font, dock layout, keep-last, auto-update) that survive
+    /// profile switches.
+    pub(crate) fn global_path(&self) -> PathBuf {
+        self.root.join(GLOBAL_FILENAME)
     }
 
     pub(crate) fn list(&self) -> &[ProfileEntry] {
