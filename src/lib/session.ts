@@ -466,6 +466,10 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
   return invoke('updater_check');
 }
 
+export async function installUpdateAndRelaunch(): Promise<void> {
+  return invoke('updater_install_and_relaunch');
+}
+
 export interface PluginInfo {
   name: string;
   version: string;

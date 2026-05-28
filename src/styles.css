@@ -804,13 +804,15 @@ body {
 }
 
 /* CSS-driven tooltip — WKWebView's native title tooltip is flaky in
-   Tauri. Show our own pill above the glyph immediately on hover. */
+   Tauri. Show our own pill above the glyph immediately on hover.
+   Anchored from the right edge of the moon glyph (not centered) so
+   the tooltip extends leftward into the window; centering let long
+   text overflow the .app overflow:hidden boundary on the right. */
 .statusbar-moon[data-tooltip]:hover::after {
   content: attr(data-tooltip);
   position: absolute;
   bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
+  right: 0;
   padding: 3px 8px;
   background: var(--c-surface-emphasis);
   color: var(--c-text);
@@ -1846,14 +1848,17 @@ body {
   border-color: var(--c-accent);
 }
 
-.logs-case {
+.logs-case,
+.settings-checkbox {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   color: var(--c-text-faint);
+  cursor: pointer;
 }
 
-.logs-case input[type='checkbox'] {
+.logs-case input[type='checkbox'],
+.settings-checkbox input[type='checkbox'] {
   accent-color: var(--c-accent);
 }
 
@@ -1912,11 +1917,25 @@ body {
   color: var(--c-text-faint);
 }
 
+/* Save+close action bar. Sticky to the bottom of the scrollable
+   settings-body so it stays visible even when the tab content runs
+   past the window height. Background painted so scrolling content
+   does not bleed through behind the buttons. */
 .settings-actions {
+  position: sticky;
+  bottom: 0;
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-top: 8px;
+  margin-top: auto;
+  padding: 10px 0 4px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--c-surface) 30%,
+    var(--c-surface) 100%
+  );
+  z-index: 10;
 }
 
 .settings-btn {
@@ -2024,6 +2043,58 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 12px;
+}
+
+/* Update notice — single-line strip pinned just above the bottom of
+   the .app. Reads as part of the tmux/Ghostty chrome rather than a
+   separate floating card: no box-shadow, accent hairline border,
+   `[install] [later]` bracket buttons matching the rest of the UI.
+   Position absolute so it does not push the existing layout
+   (vitals row / input row / status row stays put). */
+.update-notice {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 38px;
+  z-index: 50;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 10px;
+  background: var(--c-surface-emphasis);
+  border: 1px solid var(--c-accent);
+  border-radius: 3px;
+  color: var(--c-text);
+  font-size: 0.9em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.update-notice-tag {
+  color: var(--c-accent);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.update-notice-version {
+  color: var(--c-text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.update-notice-sep {
+  color: var(--c-text-dim);
+}
+
+.update-notice-msg {
+  color: var(--c-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.update-notice-spacer {
+  flex: 1 1 auto;
 }
 
 /* Import tab — file picker + paste-in textarea + apply, with a
@@ -2270,6 +2341,20 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* When the map pane is narrow, let the mode-toggle wrap to a
+     second line instead of getting clipped off the right edge by
+     the parent's overflow: hidden. The "radius X" label is
+     allowed to truncate first. */
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.map-subhead > span:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .map-subhead .map-mode-toggle button {
@@ -2283,6 +2368,15 @@ body {
   padding: 4px 12px;
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-border-soft);
+  /* Same wrap treatment so load/clear buttons and the status
+     pill never overflow horizontally. Status pill shrinks +
+     truncates first since the buttons are essential. */
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.tileset-bar > button {
+  flex: 0 0 auto;
 }
 
 .tileset-bar button {
@@ -2339,6 +2433,8 @@ body {
 
 .map-mode-toggle {
   display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
@@ -2356,6 +2452,45 @@ body {
   background: var(--c-accent);
   color: var(--c-surface-deep);
   border-color: var(--c-accent);
+}
+
+/* Zoom +/-/reset cluster, sits alongside the mode toggle. */
+.map-zoom {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.map-zoom button {
+  background: transparent;
+  color: var(--c-text-muted);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  padding: 0 6px;
+  font: inherit;
+  cursor: pointer;
+  min-width: 22px;
+  text-align: center;
+}
+
+.map-zoom button:hover:not(:disabled) {
+  color: var(--c-text-strong);
+  border-color: var(--c-accent);
+}
+
+.map-zoom button:disabled {
+  color: var(--c-text-dim);
+  cursor: not-allowed;
+  border-color: var(--c-border-soft);
+}
+
+.map-zoom-value {
+  color: var(--c-text-faint);
+  min-width: 36px;
+  text-align: center;
+  font-size: 0.9em;
 }
 
 /* Chat pane — embedded bottom region for routed channel text. */

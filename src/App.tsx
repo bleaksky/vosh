@@ -12,6 +12,7 @@ import { ChatPane } from './components/ChatPane';
 import { GroupPane } from './components/GroupPane';
 import { RoomStrip } from './components/RoomStrip';
 import { VitalsBar } from './components/VitalsBar';
+import { UpdateNotice } from './components/UpdateNotice';
 import {
   getUiConfig,
   listTriggers,
@@ -335,6 +336,7 @@ function App() {
         onLocalEcho={(text) => termRef.current?.write(text)}
       />
       <StatusBar />
+      <UpdateNotice />
     </main>
   );
 }

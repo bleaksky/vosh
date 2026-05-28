@@ -223,6 +223,16 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           ))}
         </select>
       </Row>
+      <Row label="updates">
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={config.auto_update}
+            onChange={(e) => update({ auto_update: e.target.checked })}
+          />
+          <span>auto-check on launch</span>
+        </label>
+      </Row>
       <Row label="font">
         <input
           type="text"

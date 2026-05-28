@@ -468,8 +468,8 @@ pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
     }
     WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("index.html?view=settings".into()))
         .title("Vosh · settings")
-        .inner_size(640.0, 480.0)
-        .min_inner_size(420.0, 320.0)
+        .inner_size(780.0, 640.0)
+        .min_inner_size(520.0, 420.0)
         .resizable(true)
         // Frameless + transparent so the React side can draw the same
         // rounded Ghostty-style chrome the main window uses.
@@ -871,4 +871,25 @@ pub(crate) async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, S
         }),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// Download + install the pending update and restart the app. Errors
+/// surface to the frontend; the relaunch is a hard exit so any UI
+/// confirmation has to happen before this call returns.
+#[tauri::command]
+pub(crate) async fn updater_install_and_relaunch(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "no update available".to_string())?;
+    // Progress callbacks are no-ops at this stage; can be wired to
+    // session://event later for a download progress bar.
+    update
+        .download_and_install(|_chunk, _total| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+    app.restart();
 }
