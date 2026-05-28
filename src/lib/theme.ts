@@ -3,7 +3,14 @@
 // window event so the Terminal can refresh its xterm palette.
 
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { chromeToCssVars, DEFAULT_THEME_ID, findTheme, type AppTheme } from './themes';
+import {
+  chromeToCssVars,
+  customToAppTheme,
+  DEFAULT_THEME_ID,
+  findTheme,
+  setCustomThemes,
+  type AppTheme,
+} from './themes';
 
 const SYNC_EVENT = 'vosh://theme-changed';
 
@@ -41,7 +48,32 @@ export function applyTheme(choice: string) {
     return;
   }
 
-  applyToRoot(findTheme(choice));
+  const found = findTheme(choice);
+  if (found.id === choice || !choice) {
+    applyToRoot(found);
+    return;
+  }
+  // Requested theme wasn't found in the live registry — likely a
+  // freshly-saved custom theme this window hasn't synced yet.
+  // Re-fetch the catalog from the backend, register, retry. Falls
+  // back to the matched-but-defaulted result if the refresh fails.
+  applyToRoot(found);
+  void refreshAndReapply(choice);
+}
+
+async function refreshAndReapply(choice: string): Promise<void> {
+  try {
+    // Inline import to dodge the session.ts <-> theme.ts cycle.
+    const { getUiConfig } = await import('./session');
+    const cfg = await getUiConfig();
+    setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
+    const refreshed = findTheme(choice);
+    if (refreshed.id === choice) {
+      applyToRoot(refreshed);
+    }
+  } catch {
+    // Backend unavailable or config malformed; keep the fallback.
+  }
 }
 
 /// Apply + broadcast so other windows (settings ↔ main) stay in sync.

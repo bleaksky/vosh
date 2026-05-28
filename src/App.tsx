@@ -19,6 +19,7 @@ import {
   onState,
   presetsInstall,
   presetsRemove,
+  subscribeCustomThemesChanged,
   type StatePayload,
 } from './lib/session';
 import { applyAndBroadcastTheme } from './lib/theme';
@@ -235,6 +236,24 @@ function App() {
     let cancelled = false;
     listen<boolean>('vosh://theme-terminal-colors-changed', (event) => {
       setThemeTerminalColors(Boolean(event.payload));
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Custom-themes catalog updates from any other webview. Refreshes
+    // the in-memory THEMES registry so a subsequent theme-changed event
+    // can find a newly-saved custom theme.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    subscribeCustomThemesChanged((list) => {
+      setCustomThemes(list.map(customToAppTheme));
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
