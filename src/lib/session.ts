@@ -251,7 +251,7 @@ export async function subscribeMacrosChanged(cb: (macros: Macro[]) => void): Pro
 // Multi-format config importer. `format` is "mushclient", "mudlet",
 // "gmud", or "" to auto-detect. Returns counts + the unsupported
 // items the backend could not model.
-export type ImportFormat = 'mushclient' | 'mudlet' | 'gmud' | '';
+export type ImportFormat = 'mushclient' | 'mudlet' | 'gmud' | 'cmud' | '';
 
 export interface ImportSummary {
   aliases: number;

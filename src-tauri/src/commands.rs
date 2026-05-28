@@ -286,6 +286,7 @@ pub(crate) async fn import_detect(text: String) -> Result<Option<String>, String
         crate::import::ImportFormat::Mushclient => "mushclient".to_string(),
         crate::import::ImportFormat::Mudlet => "mudlet".to_string(),
         crate::import::ImportFormat::Gmud => "gmud".to_string(),
+        crate::import::ImportFormat::Cmud => "cmud".to_string(),
     }))
 }
 
@@ -317,6 +318,7 @@ pub(crate) async fn import_apply(
         "mushclient" => crate::import::ImportFormat::Mushclient,
         "mudlet" => crate::import::ImportFormat::Mudlet,
         "gmud" => crate::import::ImportFormat::Gmud,
+        "cmud" => crate::import::ImportFormat::Cmud,
         "" => crate::import::detect_format(&text)
             .ok_or_else(|| "could not detect import format".to_string())?,
         other => return Err(format!("unknown import format: {other}")),
