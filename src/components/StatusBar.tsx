@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { getTarget, onGmcp, onState, onTarget, type QuickKey } from '../lib/session';
-import { AffectsBar } from './AffectsBar';
 
 interface CombatState {
   name: string;
@@ -162,7 +161,6 @@ export function StatusBar() {
   return (
     <div className="statusbar">
       <div className="statusbar-left">
-        <AffectsBar />
         {combat && <CombatSeg combat={combat} />}
         {(userTarget || configuredKeys.length > 0) && (
           <span className="statusbar-target">

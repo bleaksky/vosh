@@ -1,6 +1,6 @@
 // Panel registry + zone model for the configurable layout.
 //
-// Five panels can move between four edges of the main window (plus a
+// Six panels can move between four edges of the main window (plus a
 // `hidden` zone). The map is constrained to vertical-leaning zones
 // (left or right) because a horizontal map at full window width looks
 // like a strip; everything else accepts any side.
@@ -27,9 +27,9 @@ export interface PanelPlacement {
   align: Align;
 }
 
-export type PanelId = 'map' | 'group' | 'vitals' | 'roomstrip' | 'chat';
+export type PanelId = 'map' | 'group' | 'vitals' | 'roomstrip' | 'chat' | 'affects';
 
-export const ALL_PANEL_IDS: PanelId[] = ['map', 'group', 'vitals', 'roomstrip', 'chat'];
+export const ALL_PANEL_IDS: PanelId[] = ['map', 'group', 'vitals', 'roomstrip', 'chat', 'affects'];
 
 export interface PanelMeta {
   id: PanelId;
@@ -100,6 +100,15 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     description: 'Channel + tell history.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
     defaultZone: 'hidden',
+    homeZone: 'bottom',
+    defaultAlign: 'bottom',
+  },
+  affects: {
+    id: 'affects',
+    label: 'affects',
+    description: 'Tracked-affect pills with remaining duration.',
+    allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
+    defaultZone: 'bottom',
     homeZone: 'bottom',
     defaultAlign: 'bottom',
   },
