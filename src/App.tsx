@@ -24,6 +24,7 @@ import {
   presetsRemove,
   subscribeCustomThemesChanged,
   subscribeDockLayoutChanged,
+  subscribeSidePanelsFillHeightChanged,
   subscribeSplitDividerChanged,
   type StatePayload,
 } from './lib/session';
@@ -102,6 +103,10 @@ function App() {
   // dock-layout-changed broadcast.
   const [panelPlacements, setPanelPlacements] =
     useState<Record<PanelId, PanelPlacement>>(DEFAULT_PANEL_PLACEMENTS);
+  // When true, side panels (left/right zones) extend to the bottom
+  // edge of the window and the terminal input + status bar live in
+  // a column under the terminal area only. Loaded from UiConfig.
+  const [sidePanelsFillHeight, setSidePanelsFillHeight] = useState(false);
   const termRef = useRef<TerminalHandle | null>(null);
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
@@ -229,6 +234,7 @@ function App() {
         setFontSize(cfg.font_size || 14);
         setThemeTerminalColors(cfg.theme_terminal_colors);
         applySplitDividerColor(cfg.split_divider_color);
+        setSidePanelsFillHeight(cfg.side_panels_fill_height);
 
         // Sweep orphan preset triggers — anything tagged with a
         // preset id that no longer exists in code (renamed or
@@ -306,6 +312,21 @@ function App() {
     let cancelled = false;
     subscribeSplitDividerChanged((color) => {
       applySplitDividerColor(color);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    subscribeSidePanelsFillHeightChanged((value) => {
+      setSidePanelsFillHeight(value);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -444,8 +465,95 @@ function App() {
   const leftHasAny = grouped.leftTop.length > 0 || grouped.leftBottom.length > 0;
   const rightHasAny = grouped.rightTop.length > 0 || grouped.rightBottom.length > 0;
 
+  const inputElement = (
+    <Input
+      ref={inputRef}
+      enabled={connected}
+      onError={handleError}
+      onLocalEcho={(text) => termRef.current?.write(text)}
+      onScrollTerminal={(pages) => {
+        // Split-scrollback gesture. The live pane (termRef) stays
+        // anchored to the tail. PageUp opens the split if closed;
+        // the history Terminal mounts on that state change and its
+        // onReady does the initial scroll, so we don't touch the
+        // ref here (it is null until the mount completes).
+        if (pages < 0) {
+          if (!splitOpen) {
+            setSplitOpen(true);
+            return;
+          }
+          historyTermRef.current?.scrollPages(pages);
+          return;
+        }
+        if (!splitOpen) return;
+        historyTermRef.current?.scrollPages(pages);
+        // After the page-down lands, close the split if we paged
+        // all the way back to the live tail.
+        queueMicrotask(() => {
+          if (historyTermRef.current?.isAtBottom()) setSplitOpen(false);
+        });
+      }}
+      onExitSplit={() => {
+        if (splitOpen) setSplitOpen(false);
+      }}
+    />
+  );
+
+  const bottomZoneElement = grouped.bottom.length > 0 && (
+    <div className="panel-zone panel-zone-bottom">{grouped.bottom.map(renderPanel)}</div>
+  );
+
+  const terminalAreaElement = (
+    <div
+      className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}`}
+      onMouseUp={handleTerminalMouseUp}
+    >
+      {splitOpen && (
+        // Lazy mount. A hidden Terminal cannot be measured by
+        // FitAddon (its container is display:none, bounding rect
+        // 0x0) so writes wrap at 1-3 columns and the scrollback
+        // arrives mangled. Mounting on open guarantees the xterm
+        // sizes itself against the visible split layout before
+        // any bytes land. The initial scroll runs in
+        // onScrollbackLoaded — onReady fires before loadScrollback
+        // resolves, and a scrollPages call on an empty terminal
+        // is a no-op that the next write would override anyway.
+        <div className="terminal-pane terminal-pane-history">
+          <Terminal
+            fontFamily={fontFamily}
+            fontSize={fontSize}
+            themeTerminalColors={themeTerminalColors}
+            quiet
+            onReady={(handle) => {
+              historyTermRef.current = handle;
+            }}
+            onScrollbackLoaded={() => {
+              historyTermRef.current?.scrollPages(-1);
+            }}
+            onScrollPosition={(back, max) => setHistoryScrollPos({ back, max })}
+          />
+          {historyScrollPos && historyScrollPos.max > 0 && (
+            <div className="scrollback-indicator" aria-live="polite">
+              ↑ {historyScrollPos.back} / {historyScrollPos.max}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="terminal-pane terminal-pane-live">
+        <Terminal
+          fontFamily={fontFamily}
+          fontSize={fontSize}
+          themeTerminalColors={themeTerminalColors}
+          onReady={(handle) => {
+            termRef.current = handle;
+          }}
+        />
+      </div>
+    </div>
+  );
+
   return (
-    <main className="app">
+    <main className={`app${sidePanelsFillHeight ? ' app-side-fill' : ''}`}>
       <TopBar
         mapOpen={panelPlacements.map.zone !== 'hidden'}
         onToggleMap={() => togglePanelVisibility('map')}
@@ -470,58 +578,16 @@ function App() {
             {renderSideZoneInner(grouped.leftTop, grouped.leftBottom)}
           </Resizable>
         )}
-        <div
-          className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}`}
-          onMouseUp={handleTerminalMouseUp}
-        >
-          {splitOpen && (
-            // Lazy mount. A hidden Terminal cannot be measured by
-            // FitAddon (its container is display:none, bounding rect
-            // 0x0) so writes wrap at 1-3 columns and the scrollback
-            // arrives mangled. Mounting on open guarantees the xterm
-            // sizes itself against the visible split layout before
-            // any bytes land. The initial scroll runs in
-            // onScrollbackLoaded — onReady fires before loadScrollback
-            // resolves, and a scrollPages call on an empty terminal
-            // is a no-op that the next write would override anyway.
-            <div className="terminal-pane terminal-pane-history">
-              <Terminal
-                fontFamily={fontFamily}
-                fontSize={fontSize}
-                themeTerminalColors={themeTerminalColors}
-                quiet
-                onReady={(handle) => {
-                  historyTermRef.current = handle;
-                }}
-                onScrollbackLoaded={() => {
-                  // Position the history viewport so its bottom line
-                  // sits one row above what the live pane currently
-                  // shows at its top. scrollPages(-1) shifts up by
-                  // exactly one viewport, which is the history pane
-                  // height after the split opens — so the two panes
-                  // no longer show overlapping content.
-                  historyTermRef.current?.scrollPages(-1);
-                }}
-                onScrollPosition={(back, max) => setHistoryScrollPos({ back, max })}
-              />
-              {historyScrollPos && historyScrollPos.max > 0 && (
-                <div className="scrollback-indicator" aria-live="polite">
-                  ↑ {historyScrollPos.back} / {historyScrollPos.max}
-                </div>
-              )}
-            </div>
-          )}
-          <div className="terminal-pane terminal-pane-live">
-            <Terminal
-              fontFamily={fontFamily}
-              fontSize={fontSize}
-              themeTerminalColors={themeTerminalColors}
-              onReady={(handle) => {
-                termRef.current = handle;
-              }}
-            />
+        {sidePanelsFillHeight ? (
+          <div className="terminal-column">
+            {terminalAreaElement}
+            {bottomZoneElement}
+            {inputElement}
+            <StatusBar />
           </div>
-        </div>
+        ) : (
+          terminalAreaElement
+        )}
         {rightHasAny && (
           <Resizable
             storageKey="vosh.layout.rightZoneWidth"
@@ -536,41 +602,9 @@ function App() {
           </Resizable>
         )}
       </div>
-      {grouped.bottom.length > 0 && (
-        <div className="panel-zone panel-zone-bottom">{grouped.bottom.map(renderPanel)}</div>
-      )}
-      <Input
-        ref={inputRef}
-        enabled={connected}
-        onError={handleError}
-        onLocalEcho={(text) => termRef.current?.write(text)}
-        onScrollTerminal={(pages) => {
-          // Split-scrollback gesture. The live pane (termRef) stays
-          // anchored to the tail. PageUp opens the split if closed;
-          // the history Terminal mounts on that state change and its
-          // onReady does the initial scroll, so we don't touch the
-          // ref here (it is null until the mount completes).
-          if (pages < 0) {
-            if (!splitOpen) {
-              setSplitOpen(true);
-              return;
-            }
-            historyTermRef.current?.scrollPages(pages);
-            return;
-          }
-          if (!splitOpen) return;
-          historyTermRef.current?.scrollPages(pages);
-          // After the page-down lands, close the split if we paged
-          // all the way back to the live tail.
-          queueMicrotask(() => {
-            if (historyTermRef.current?.isAtBottom()) setSplitOpen(false);
-          });
-        }}
-        onExitSplit={() => {
-          if (splitOpen) setSplitOpen(false);
-        }}
-      />
-      <StatusBar />
+      {!sidePanelsFillHeight && bottomZoneElement}
+      {!sidePanelsFillHeight && inputElement}
+      {!sidePanelsFillHeight && <StatusBar />}
       <UpdateNotice />
     </main>
   );

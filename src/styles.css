@@ -416,6 +416,19 @@ body {
    keeps xterm strictly inside terminal-area no matter how the flex
    math resolves elsewhere. */
 
+/* When side_panels_fill_height is on, the terminal area lives inside
+   a vertical column that also hosts the bottom panel zone, input bar,
+   and status bar. The column shares the main-row flex slot the
+   terminal-area used to fill directly, so left/right zones still
+   anchor to its edges but now extend further down. */
+.terminal-column {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .terminal-area {
   flex: 1 1 0;
   min-width: 0;
@@ -2198,6 +2211,19 @@ body {
   text-transform: uppercase;
   color: var(--c-text-faint);
   opacity: 0.7;
+}
+
+/* Layout-mode toggle above the per-panel rows. */
+.panels-side-fill-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  font-size: 0.85em;
+  color: var(--c-text);
+}
+.panels-side-fill-toggle span {
+  color: var(--c-text-faint);
 }
 
 /* Per-panel rows --------------------------------------------- */
