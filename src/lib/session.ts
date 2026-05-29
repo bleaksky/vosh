@@ -42,6 +42,16 @@ export async function disconnectSession(): Promise<void> {
   await invoke('session_disconnect');
 }
 
+/** Push the live terminal size to the backend. The backend updates
+ *  the telnet negotiator and emits a NAWS subnegotiation when NAWS
+ *  has already been agreed with the server. MUDs that honor NAWS
+ *  then re-wrap their output at the new column count, which is what
+ *  word-wrap actually looks like: server-side wrapping at word
+ *  boundaries instead of mid-character. No-op when not connected. */
+export async function setWindowSize(cols: number, rows: number): Promise<void> {
+  await invoke('session_set_window_size', { cols, rows });
+}
+
 export async function sendBytes(bytes: Uint8Array): Promise<void> {
   await invoke('session_send', { bytes: Array.from(bytes) });
 }

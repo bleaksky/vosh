@@ -97,6 +97,10 @@ const REQUESTED_GMCP_PACKAGES: &[&str] = &["Char 1", "Room 1", "Comm 1", "World 
 /// terminal pane synchronously, so the `io_loop` only writes to the wire.
 pub(crate) enum OutgoingMsg {
     Send(Vec<u8>),
+    /// Update the advertised terminal size and, if NAWS has already
+    /// been negotiated, push a fresh NAWS subnegotiation to the wire
+    /// so the server re-wraps its output at the new width.
+    WindowSize { cols: u16, rows: u16 },
 }
 
 pub(crate) struct SessionHandle {
@@ -109,6 +113,14 @@ impl SessionHandle {
     /// already been torn down.
     pub(crate) fn send(&self, bytes: Vec<u8>) -> bool {
         self.tx_outgoing.send(OutgoingMsg::Send(bytes)).is_ok()
+    }
+
+    /// Push a terminal resize event into the session task so it can
+    /// update the negotiator and emit a NAWS subnegotiation.
+    pub(crate) fn set_window_size(&self, cols: u16, rows: u16) -> bool {
+        self.tx_outgoing
+            .send(OutgoingMsg::WindowSize { cols, rows })
+            .is_ok()
     }
 
     pub(crate) async fn shutdown(self) {
@@ -216,9 +228,14 @@ async fn io_loop(
     scrollback_path: Option<std::path::PathBuf>,
 ) {
     let mut parser = Parser::new();
-    let negotiator = Negotiator::new();
+    let mut negotiator = Negotiator::new();
     let mut accumulator = LineAccumulator::new();
     let mut buf = vec![0u8; READ_BUFFER_BYTES];
+    // Track whether NAWS has been negotiated. Server sends DO NAWS,
+    // we respond WILL NAWS + initial subneg. From then on, every
+    // OutgoingMsg::WindowSize emits a fresh NAWS subneg so the MUD
+    // re-wraps its output at the new column count.
+    let mut naws_active = false;
 
     // Activate the tick timer for this session. The user can disable it
     // later through the slash command.
@@ -234,8 +251,7 @@ async fn io_loop(
         tokio::select! {
             biased;
             outgoing = rx_outgoing.recv() => match outgoing {
-                Some(msg) => {
-                    let OutgoingMsg::Send(bytes) = msg;
+                Some(OutgoingMsg::Send(bytes)) => {
                     // The frontend already echoed the typed line inline
                     // with the on-screen prompt. Drop the buffered partial
                     // so the next chunk from the server starts fresh on a
@@ -248,6 +264,20 @@ async fn io_loop(
                     if let Err(e) = stream.flush().await {
                         error!(error = %e, "flush failed");
                         break Some(format!("flush failed: {e}"));
+                    }
+                }
+                Some(OutgoingMsg::WindowSize { cols, rows }) => {
+                    negotiator.set_window_size(cols, rows);
+                    if naws_active {
+                        let bytes = negotiator.naws_subnegotiation();
+                        if let Err(e) = stream.write_all(&bytes).await {
+                            error!(error = %e, "naws write failed");
+                            break Some(format!("naws write failed: {e}"));
+                        }
+                        if let Err(e) = stream.flush().await {
+                            error!(error = %e, "naws flush failed");
+                            break Some(format!("naws flush failed: {e}"));
+                        }
                     }
                 }
                 None => {
@@ -263,6 +293,14 @@ async fn io_loop(
                 Ok(n) => {
                     let events = parser.feed(&buf[..n]);
                     for event in events {
+                        // Once the server sends DO NAWS we know NAWS is
+                        // active and future window-size changes can push
+                        // a fresh subneg.
+                        if let TelnetEvent::Do(opt) = &event {
+                            if *opt == telnet_option::NAWS {
+                                naws_active = true;
+                            }
+                        }
                         if let Err(e) = handle_event(
                             &app,
                             &mut stream,

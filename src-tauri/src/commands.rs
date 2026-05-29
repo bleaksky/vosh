@@ -254,6 +254,25 @@ pub(crate) async fn session_disconnect(state: State<'_, SharedState>) -> Result<
     Ok(())
 }
 
+/// Inform the session of a new terminal size. The backend updates the
+/// telnet negotiator and, when NAWS has already been negotiated with
+/// the server, pushes a NAWS subnegotiation so the MUD re-wraps its
+/// output at the new column count. No-op when not connected.
+#[tauri::command]
+pub(crate) async fn session_set_window_size(
+    state: State<'_, SharedState>,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    let current = state.session.lock().await;
+    if let Some(handle) = current.as_ref() {
+        if !handle.set_window_size(cols, rows) {
+            return Err("session task gone".into());
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub(crate) async fn triggers_list(state: State<'_, SharedState>) -> Result<Vec<Trigger>, String> {
     let p = state.profile.lock().await;
