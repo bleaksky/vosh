@@ -33,9 +33,8 @@ use commands::{
     profile_import, profile_rename, profile_resolve_match, profile_set_metadata, profile_set_scope,
     profile_switch, profiles_list, scrollback_load, session_connect, session_disconnect,
     session_send, session_send_input, session_set_window_size, target_get, triggers_export,
-    triggers_import, triggers_list,
-    ui_get_config, ui_set_config, updater_check, updater_install_and_relaunch, AppState,
-    SharedState,
+    triggers_import, triggers_list, ui_get_config, ui_set_config, updater_check,
+    updater_install_and_relaunch, AppState, SharedState,
 };
 use fonts::{fonts_list, handle_font_uri};
 use map_state::MapState;
