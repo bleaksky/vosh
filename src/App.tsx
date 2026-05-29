@@ -591,16 +591,27 @@ function App() {
       onMouseUp={handleTerminalMouseUp}
     >
       {splitOpen && (
+        // History pane is a Resizable so the user can drag the
+        // divider between history and live to set the split ratio.
+        // anchor=top places the panel at the top with the drag
+        // handle on the bottom edge facing the live pane below.
         // Lazy mount. A hidden Terminal cannot be measured by
         // FitAddon (its container is display:none, bounding rect
         // 0x0) so writes wrap at 1-3 columns and the scrollback
-        // arrives mangled. Mounting on open guarantees the xterm
-        // sizes itself against the visible split layout before
-        // any bytes land. The initial scroll runs in
+        // arrives mangled. The initial scroll runs in
         // onScrollbackLoaded — onReady fires before loadScrollback
         // resolves, and a scrollPages call on an empty terminal
         // is a no-op that the next write would override anyway.
-        <div className="terminal-pane terminal-pane-history">
+        <Resizable
+          storageKey="vosh.layout.splitHistoryHeight"
+          anchor="top"
+          defaultSize={240}
+          minSize={80}
+          maxSize={1200}
+          reservePx={120}
+          className="terminal-pane terminal-pane-history"
+          handleLabel="resize scrollback split"
+        >
           <Terminal
             fontFamily={fontFamily}
             fontSize={fontSize}
@@ -619,7 +630,7 @@ function App() {
               ↑ {historyScrollPos.back} / {historyScrollPos.max}
             </div>
           )}
-        </div>
+        </Resizable>
       )}
       <div className="terminal-pane terminal-pane-live">
         <Terminal
