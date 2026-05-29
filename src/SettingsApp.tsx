@@ -136,7 +136,10 @@ export function SettingsApp() {
             type="button"
             className={`settings-tab${tab === t.id ? ' settings-tab-active' : ''}`}
             aria-pressed={tab === t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => {
+              setError(null);
+              setTab(t.id);
+            }}
           >
             {t.label}
           </button>
