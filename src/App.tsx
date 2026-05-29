@@ -198,11 +198,13 @@ function App() {
     splitOpenRef.current = splitOpen;
   }, [splitOpen]);
 
-  // Wheel listener with passive:false so we can preventDefault and
-  // keep xterm from scrolling the live pane. The handler mirrors the
-  // PageUp / PageDown gesture: scroll up opens the split, scroll
-  // down pages history toward the live tail and closes the split
-  // when we reach it.
+  // Wheel listener attached in capture phase with passive:false so we
+  // fire BEFORE the xterm canvas inside terminal-area sees the event.
+  // Without capture phase, xterm's own bubble-phase handler scrolls
+  // the live pane first and preventDefault is too late; the live pane
+  // would scroll along with the history pane any time the cursor hovered
+  // over it during a wheel gesture. stopPropagation guarantees the
+  // event never reaches xterm at all when we handle it ourselves.
   useEffect(() => {
     const el = terminalAreaRef.current;
     if (!el) return;
@@ -212,6 +214,7 @@ function App() {
       const lines = dir * 3;
       if (lines < 0) {
         e.preventDefault();
+        e.stopPropagation();
         if (!splitOpenRef.current) {
           setSplitOpen(true);
           return;
@@ -221,13 +224,14 @@ function App() {
       }
       if (!splitOpenRef.current) return;
       e.preventDefault();
+      e.stopPropagation();
       historyTermRef.current?.scrollLines(lines);
       queueMicrotask(() => {
         if (historyTermRef.current?.isAtBottom()) setSplitOpen(false);
       });
     };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    el.addEventListener('wheel', onWheel, { passive: false, capture: true });
+    return () => el.removeEventListener('wheel', onWheel, { capture: true });
   }, []);
 
   // Click anywhere in the terminal area focuses the input. Skip when
