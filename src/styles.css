@@ -518,16 +518,23 @@ body {
   flex: 1 1 0;
 }
 .terminal-area-split .terminal-pane-history {
-  flex: 1 1 0;
-  /* 2px line with a small surface-deep buffer below it makes the
-     seam unmistakable. The buffer reads as a visible gap rather
-     than risking the line getting swallowed against the xterm
-     canvas. Color falls through to --c-text-faint when the user
-     has not picked a custom divider color, since --c-border is
-     often nearly invisible against the terminal background. */
-  border-bottom: 2px solid var(--c-split-divider, var(--c-text-faint));
-  margin-bottom: 4px;
+  /* The Resizable handle inside this wrapper is now the visible
+     divider, so the old border-bottom + margin-bottom would just
+     stack a second line below it. Keep position:relative so the
+     scrollback-indicator (position:absolute) anchors to the
+     history pane. */
   position: relative;
+  margin-bottom: 4px;
+}
+
+/* Style the resizable handle so it reads as the split divider. The
+   default --c-border is often invisible against the terminal
+   background; --c-split-divider lets the user override it from
+   Settings. Hover and focus flip to --c-accent via the base
+   .resizable-handle rule. */
+.terminal-pane-history.resizable .resizable-handle {
+  background: var(--c-split-divider, var(--c-text-faint));
+  flex: 0 0 2px;
 }
 .terminal-area-split .terminal-pane-live {
   flex: 1 1 0;
