@@ -2,6 +2,14 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.2.3 - 2026-05-29
+
+- Mouse wheel and trackpad scroll now open the split-scrollback view and page the history pane, same as PageUp / Fn+Up. The live pane stays anchored at the bottom regardless of where the cursor hovers.
+- Esc snaps the live pane back to the bottom in addition to closing the split.
+- Scroll-back divider made thicker and more visible.
+- Tick countdown is its own movable panel so hiding vitals no longer hides the tick.
+- Settings General gains a [check now] button for updates with inline status (checking, up to date, install + restart, or the error).
+
 ## v0.2.2 - 2026-05-29
 
 - Word wrap now happens server-side. The client advertises the live terminal cols and rows to the MUD via telnet NAWS, and the MUD wraps its own output at word boundaries before sending. No mid-word breaks, no client preprocessing, no latency.
