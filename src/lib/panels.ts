@@ -27,9 +27,17 @@ export interface PanelPlacement {
   align: Align;
 }
 
-export type PanelId = 'map' | 'group' | 'vitals' | 'roomstrip' | 'chat' | 'affects';
+export type PanelId = 'map' | 'group' | 'vitals' | 'roomstrip' | 'chat' | 'affects' | 'tick';
 
-export const ALL_PANEL_IDS: PanelId[] = ['map', 'group', 'vitals', 'roomstrip', 'chat', 'affects'];
+export const ALL_PANEL_IDS: PanelId[] = [
+  'map',
+  'group',
+  'vitals',
+  'roomstrip',
+  'chat',
+  'affects',
+  'tick',
+];
 
 export interface PanelMeta {
   id: PanelId;
@@ -79,7 +87,7 @@ export const PANELS: Record<PanelId, PanelMeta> = {
   vitals: {
     id: 'vitals',
     label: 'vitals (hp bar)',
-    description: 'Your hp / mn / mv bars and tick countdown.',
+    description: 'Your hp / mn / mv bars. Tick lives in its own panel.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
     defaultZone: 'bottom',
     homeZone: 'bottom',
@@ -107,6 +115,15 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     id: 'affects',
     label: 'affects',
     description: 'Tracked-affect pills with remaining duration.',
+    allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
+    defaultZone: 'bottom',
+    homeZone: 'bottom',
+    defaultAlign: 'bottom',
+  },
+  tick: {
+    id: 'tick',
+    label: 'tick',
+    description: 'Tick countdown timer. Independent of the vitals panel.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
     defaultZone: 'bottom',
     homeZone: 'bottom',

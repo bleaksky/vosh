@@ -87,31 +87,21 @@ function colorForVital(label: string, value: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-// Stacked vitals — one row per hp/mana/move, plus the tick. Each
-// row is `label · bar (20 cells) · % · cur/max · delta`. Columns
-// line up across all rows via grid auto-sizing. Subscribes to
-// Char.Vitals + World.Time + onTick; World.Time hour-change
-// rebases the per-tick delta snapshot and resets the tick counter.
+// Stacked vitals — one row per hp/mana/move. The tick countdown
+// is a separate panel (TickPanel below) so the user can hide vitals
+// without losing the tick or vice versa. Each row is
+// `label · bar (20 cells) · % · cur/max · delta`. Subscribes to
+// Char.Vitals + World.Time; World.Time hour-change rebases the
+// per-tick delta snapshot.
 export function VitalsBar() {
   const [vitals, setVitals] = useState<Vitals | null>(null);
   const [deltas, setDeltas] = useState<VitalDeltas>(NO_DELTAS);
-  const [tick, setTick] = useState<TickPayload | null>(null);
-  const [tickSecs, setTickSecs] = useState(0);
   const vitalsSnapRef = useRef<Vitals | null>(null);
   const prevHourRef = useRef<number | string | null>(null);
-  const tickResetAtRef = useRef<number>(Date.now());
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setTickSecs(Math.floor((Date.now() - tickResetAtRef.current) / 1000));
-    }, 250);
-    return () => window.clearInterval(id);
-  }, []);
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
-    let unsubTick: (() => void) | undefined;
     let cancelled = false;
 
     onGmcp((payload) => {
@@ -160,8 +150,6 @@ export function VitalsBar() {
               }
               return curr;
             });
-            tickResetAtRef.current = Date.now();
-            setTickSecs(0);
           }
           prevHourRef.current = hour;
         }
@@ -171,20 +159,94 @@ export function VitalsBar() {
       else unsubGmcp = fn;
     });
 
-    onTick((payload) => {
-      setTick(payload);
+    onState((payload) => {
+      if (payload.kind === 'disconnected') {
+        setVitals(null);
+        setDeltas(NO_DELTAS);
+        vitalsSnapRef.current = null;
+        prevHourRef.current = null;
+      }
     }).then((fn) => {
+      if (cancelled) fn();
+      else unsubState = fn;
+    });
+
+    return () => {
+      cancelled = true;
+      unsubGmcp?.();
+      unsubState?.();
+    };
+  }, []);
+
+  if (!vitals) return null;
+
+  const segs: Array<{ label: string; cur: number; max: number; delta: number | null }> = [];
+  if (vitals.maxhp > 0)
+    segs.push({ label: 'hp', cur: vitals.hp, max: vitals.maxhp, delta: deltas.hp });
+  if (vitals.maxmana > 0)
+    segs.push({ label: 'mn', cur: vitals.mana, max: vitals.maxmana, delta: deltas.mana });
+  if (vitals.maxmove > 0)
+    segs.push({ label: 'mv', cur: vitals.move, max: vitals.maxmove, delta: deltas.move });
+  if (segs.length === 0) return null;
+
+  return (
+    <div className="vitals-bar" aria-label="vitals">
+      {segs.map((s) => (
+        <VitalRow key={s.label} {...s} />
+      ))}
+    </div>
+  );
+}
+
+// Stand-alone tick countdown panel. Reuses the vitals-bar grid so it
+// renders as a single "tick · 12s" row consistent with the hp/mn/mv
+// rows. Lives in the panel registry as its own movable element so the
+// user can hide vitals without losing the tick.
+export function TickPanel() {
+  const [tick, setTick] = useState<TickPayload | null>(null);
+  const [tickSecs, setTickSecs] = useState(0);
+  const tickResetAtRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setTickSecs(Math.floor((Date.now() - tickResetAtRef.current) / 1000));
+    }, 250);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    let unsubGmcp: (() => void) | undefined;
+    let unsubTick: (() => void) | undefined;
+    let unsubState: (() => void) | undefined;
+    let cancelled = false;
+    let prevHour: number | string | null = null;
+
+    onGmcp((payload) => {
+      if (payload.package === 'World.Time' && payload.data && typeof payload.data === 'object') {
+        const incoming = payload.data as Record<string, unknown>;
+        const hour = incoming.hour as number | string | undefined | null;
+        if (hour !== undefined && hour !== null) {
+          if (prevHour !== null && prevHour !== hour) {
+            tickResetAtRef.current = Date.now();
+            setTickSecs(0);
+          }
+          prevHour = hour;
+        }
+      }
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsubGmcp = fn;
+    });
+
+    onTick((payload) => setTick(payload)).then((fn) => {
       if (cancelled) fn();
       else unsubTick = fn;
     });
 
     onState((payload) => {
       if (payload.kind === 'disconnected') {
-        setVitals(null);
-        setDeltas(NO_DELTAS);
         setTick(null);
-        vitalsSnapRef.current = null;
-        prevHourRef.current = null;
+        prevHour = null;
         tickResetAtRef.current = Date.now();
         setTickSecs(0);
       } else if (payload.kind === 'connected') {
@@ -199,36 +261,22 @@ export function VitalsBar() {
     return () => {
       cancelled = true;
       unsubGmcp?.();
-      unsubState?.();
       unsubTick?.();
+      unsubState?.();
     };
   }, []);
 
-  const tickActive = !!tick?.enabled;
-  const tickIntervalSec =
-    tick?.interval_ms && tick.interval_ms > 0
+  if (!tick?.enabled) return null;
+
+  const intervalSec =
+    tick.interval_ms && tick.interval_ms > 0
       ? Math.max(1, Math.round(tick.interval_ms / 1000))
       : 30;
-  const tickWarn = tickActive && tickSecs >= Math.max(0, tickIntervalSec - 5);
-
-  if (!vitals && !tickActive) return null;
-
-  const segs: Array<{ label: string; cur: number; max: number; delta: number | null }> = [];
-  if (vitals) {
-    if (vitals.maxhp > 0)
-      segs.push({ label: 'hp', cur: vitals.hp, max: vitals.maxhp, delta: deltas.hp });
-    if (vitals.maxmana > 0)
-      segs.push({ label: 'mn', cur: vitals.mana, max: vitals.maxmana, delta: deltas.mana });
-    if (vitals.maxmove > 0)
-      segs.push({ label: 'mv', cur: vitals.move, max: vitals.maxmove, delta: deltas.move });
-  }
+  const warn = tickSecs >= Math.max(0, intervalSec - 5);
 
   return (
-    <div className="vitals-bar" aria-label="vitals">
-      {segs.map((s) => (
-        <VitalRow key={s.label} {...s} />
-      ))}
-      {tickActive && <TickRow tickSecs={tickSecs} warn={tickWarn} />}
+    <div className="vitals-bar tick-panel" aria-label="tick">
+      <TickRow tickSecs={tickSecs} warn={warn} />
     </div>
   );
 }
