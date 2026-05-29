@@ -289,16 +289,6 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           <span>tint server output with theme palette</span>
         </label>
       </Row>
-      <Row label="word wrap">
-        <label className="settings-checkbox">
-          <input
-            type="checkbox"
-            checked={config.word_wrap}
-            onChange={(e) => update({ word_wrap: e.target.checked })}
-          />
-          <span>wrap long lines at word boundaries (can break tables)</span>
-        </label>
-      </Row>
       <Row label="updates">
         <label className="settings-checkbox">
           <input

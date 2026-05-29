@@ -26,7 +26,6 @@ import {
   subscribeDockLayoutChanged,
   subscribeSidePanelsFillHeightChanged,
   subscribeSplitDividerChanged,
-  subscribeWordWrapChanged,
   type StatePayload,
 } from './lib/session';
 import { applyAndBroadcastTheme } from './lib/theme';
@@ -108,7 +107,6 @@ function App() {
   // edge of the window and the terminal input + status bar live in
   // a column under the terminal area only. Loaded from UiConfig.
   const [sidePanelsFillHeight, setSidePanelsFillHeight] = useState(false);
-  const [wordWrap, setWordWrap] = useState(false);
   const termRef = useRef<TerminalHandle | null>(null);
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
@@ -237,7 +235,6 @@ function App() {
         setThemeTerminalColors(cfg.theme_terminal_colors);
         applySplitDividerColor(cfg.split_divider_color);
         setSidePanelsFillHeight(cfg.side_panels_fill_height);
-        setWordWrap(cfg.word_wrap);
 
         // Sweep orphan preset triggers — anything tagged with a
         // preset id that no longer exists in code (renamed or
@@ -331,19 +328,6 @@ function App() {
     subscribeSidePanelsFillHeightChanged((value) => {
       setSidePanelsFillHeight(value);
     }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeWordWrapChanged((value) => setWordWrap(value)).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
     });
@@ -539,7 +523,6 @@ function App() {
             fontFamily={fontFamily}
             fontSize={fontSize}
             themeTerminalColors={themeTerminalColors}
-            wordWrap={wordWrap}
             quiet
             onReady={(handle) => {
               historyTermRef.current = handle;
@@ -561,7 +544,6 @@ function App() {
           fontFamily={fontFamily}
           fontSize={fontSize}
           themeTerminalColors={themeTerminalColors}
-          wordWrap={wordWrap}
           onReady={(handle) => {
             termRef.current = handle;
           }}
