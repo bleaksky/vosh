@@ -991,6 +991,7 @@ pub(crate) struct UiConfigPayload {
     pub custom_themes: Vec<crate::profile_config::CustomTheme>,
     pub split_divider_color: Option<String>,
     pub side_panels_fill_height: bool,
+    pub word_wrap: bool,
 }
 
 #[tauri::command]
@@ -1010,6 +1011,7 @@ pub(crate) async fn ui_get_config(
         custom_themes: p.ui.custom_themes.clone(),
         split_divider_color: p.ui.split_divider_color.clone(),
         side_panels_fill_height: p.ui.side_panels_fill_height,
+        word_wrap: p.ui.word_wrap,
     })
 }
 
@@ -1029,6 +1031,7 @@ pub(crate) async fn ui_set_config(
     custom_themes: Vec<crate::profile_config::CustomTheme>,
     split_divider_color: Option<String>,
     side_panels_fill_height: bool,
+    word_wrap: bool,
 ) -> Result<(), String> {
     {
         let mut p = state.profile.lock().await;
@@ -1062,6 +1065,7 @@ pub(crate) async fn ui_set_config(
             }
         });
         p.ui.side_panels_fill_height = side_panels_fill_height;
+        p.ui.word_wrap = word_wrap;
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
