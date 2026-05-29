@@ -47,11 +47,12 @@ export class WordWrapper {
 
   /** Walk `input` once, splitting at word boundaries when the column
    *  count would exceed the configured width. Returns the bytes to
-   *  hand to `term.write`. Unflushed chars at the end of `input`
-   *  ARE included so the user sees prompts and other line-terminated
-   *  trailing content. A rare consequence: a word straddling two
-   *  chunks may get split mid-character if a wrap fires between
-   *  chunks. */
+   *  hand to `term.write`. Chars after the LAST whitespace in the
+   *  current line are held in pendingWord across calls so a word
+   *  that straddles two chunks still wraps at the right place. The
+   *  caller should arm a short timer after each call and invoke
+   *  `flush()` if no further chunks arrive — that surfaces prompts
+   *  that end without whitespace. */
   process(input: string): string {
     let output = '';
     for (let i = 0; i < input.length; i++) {
@@ -147,11 +148,21 @@ export class WordWrapper {
       }
     }
 
-    // Flush whatever remains at the end of the chunk so prompts and
-    // other unterminated content are visible.
-    output += this.pendingWord;
+    // Do NOT flush pendingWord here. Holding it across calls is
+    // exactly what keeps cross-chunk words intact. The caller is
+    // responsible for calling flush() on a short timer to surface
+    // prompts that end without a newline.
+    return output;
+  }
+
+  /** Emit any buffered pending word. Use after a brief idle period
+   *  so trailing prompts become visible without forcing mid-word
+   *  splits when chunks arrive back-to-back. */
+  flush(): string {
+    if (this.pendingWord.length === 0) return '';
+    const out = this.pendingWord;
     this.pendingWord = '';
     this.pendingWordCols = 0;
-    return output;
+    return out;
   }
 }
