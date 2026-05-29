@@ -273,11 +273,6 @@ async fn io_loop(
                     negotiator.set_window_size(cols, rows);
                     if naws_active {
                         let bytes = negotiator.naws_subnegotiation();
-                        emit_output(
-                            &app,
-                            format!("\x1b[2m[telnet] NAWS push {cols}x{rows}\x1b[0m\r\n")
-                                .into_bytes(),
-                        );
                         if let Err(e) = stream.write_all(&bytes).await {
                             error!(error = %e, "naws write failed");
                             break Some(format!("naws write failed: {e}"));
@@ -286,14 +281,6 @@ async fn io_loop(
                             error!(error = %e, "naws flush failed");
                             break Some(format!("naws flush failed: {e}"));
                         }
-                    } else {
-                        emit_output(
-                            &app,
-                            format!(
-                                "\x1b[2m[telnet] resize {cols}x{rows} but NAWS not yet active\x1b[0m\r\n"
-                            )
-                            .into_bytes(),
-                        );
                     }
                 }
                 None => {
@@ -314,16 +301,6 @@ async fn io_loop(
                         // a fresh subneg.
                         if let TelnetEvent::Do(opt) = &event {
                             if *opt == telnet_option::NAWS {
-                                if !naws_active {
-                                    let (c, r) = negotiator.window_size;
-                                    emit_output(
-                                        &app,
-                                        format!(
-                                            "\x1b[2m[telnet] server DO NAWS, initial {c}x{r}\x1b[0m\r\n"
-                                        )
-                                        .into_bytes(),
-                                    );
-                                }
                                 naws_active = true;
                             }
                         }
