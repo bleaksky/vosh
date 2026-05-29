@@ -1089,37 +1089,45 @@ body {
 .statusbar-target {
   display: inline-flex;
   align-items: baseline;
-  gap: 4px;
-  white-space: nowrap;
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
 }
 
 .statusbar-target-label {
   color: var(--c-text-faint);
   text-transform: lowercase;
   letter-spacing: 0.04em;
+  flex: 0 0 auto;
 }
 
 .statusbar-target-value {
   color: var(--c-accent);
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Stay whole. Earlier attempts capped this with max-width plus
+     text-overflow:ellipsis and the value got truncated to "C..."
+     whenever the statusbar lived inside a narrow column (side
+     panels filling the window height). With wrapping on the parent
+     the target keeps its full name on one row and quick keys flow
+     to the next row when they do not fit. */
+  flex: 0 0 auto;
 }
 
-/* Quick-key bindings rendered inline next to the tar value. Each
-   entry is "name verb", separated by middle dots. Ported from
-   main's TargetBar layout. */
+/* Quick-key bindings rendered next to the tar value. Each entry is
+   "name verb", separated by middle dots. Wraps to as many rows as
+   needed so a long binding list (combat builds with a dozen quick
+   keys) never gets clipped. */
 .statusbar-qkeys {
   list-style: none;
   margin: 0;
   padding: 0;
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.3rem;
+  gap: 0.25rem 0.6rem;
   font-variant-numeric: tabular-nums;
+  min-width: 0;
 }
 
 .statusbar-qkey {
