@@ -2,6 +2,11 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.2.2 - 2026-05-29
+
+- Word wrap now happens server-side. The client advertises the live terminal cols and rows to the MUD via telnet NAWS, and the MUD wraps its own output at word boundaries before sending. No mid-word breaks, no client preprocessing, no latency.
+- Window resize broadcasts the new size to the MUD immediately so output rewraps live as you drag.
+
 ## v0.2.1 - 2026-05-29
 
 - Ctrl+C / Ctrl+X copy the xterm selection on Windows and Linux. Cmd+C / Cmd+X on macOS.
