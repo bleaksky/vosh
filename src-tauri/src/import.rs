@@ -888,7 +888,9 @@ fn cmud_enabled_attr(e: &BytesStart) -> bool {
 /// with mixed syntax) are likely to need manual touch-up, but the
 /// trigger still lands so the user can fix in place.
 ///
-/// Substitutions:
+/// Substitutions (the table is intentionally not a doc-test):
+///
+/// ```text
 ///   ~X        -> \X            (literal escape)
 ///   %w        -> (\w+)         (word, capturing)
 ///   %d        -> (\d+)         (digits, capturing)
@@ -899,6 +901,7 @@ fn cmud_enabled_attr(e: &BytesStart) -> bool {
 ///   ?         -> .             (single char)
 ///   {a|b|c}   -> (?:a|b|c)     (alternation)
 ///   . + ( ) \ -> escaped       (regex specials with no CMUD meaning)
+/// ```
 fn translate_cmud_wildcards(pattern: &str) -> String {
     let mut out = String::with_capacity(pattern.len() + 8);
     let bytes = pattern.as_bytes();
