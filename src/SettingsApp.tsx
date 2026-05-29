@@ -11,6 +11,7 @@ import { ProfilesTab } from './components/ProfilesTab';
 import { ThemesTab } from './components/ThemesTab';
 import {
   broadcastTrackedAffects,
+  checkForUpdate,
   dockLayoutGet,
   dockLayoutSet,
   exportAliases,
@@ -18,6 +19,7 @@ import {
   getUiConfig,
   importAliases,
   importTriggers,
+  installUpdateAndRelaunch,
   listSystemFonts,
   setUiConfig,
   subscribeDockLayoutChanged,
@@ -205,6 +207,11 @@ interface GeneralProps {
 
 function GeneralTab({ config, setConfig, onError }: GeneralProps) {
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<{
+    kind: 'idle' | 'checking' | 'available' | 'current' | 'error' | 'installing';
+    msg?: string;
+    version?: string;
+  }>({ kind: 'idle' });
   const [systemFonts, setSystemFonts] = useState<SystemFontEntry[]>([]);
   const [fontFilter, setFontFilter] = useState('');
   const [showOnlyMono, setShowOnlyMono] = useState(true);
@@ -290,14 +297,63 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
         </label>
       </Row>
       <Row label="updates">
-        <label className="settings-checkbox">
-          <input
-            type="checkbox"
-            checked={config.auto_update}
-            onChange={(e) => update({ auto_update: e.target.checked })}
-          />
-          <span>auto-check on launch</span>
-        </label>
+        <span className="settings-updates-row">
+          <label className="settings-checkbox">
+            <input
+              type="checkbox"
+              checked={config.auto_update}
+              onChange={(e) => update({ auto_update: e.target.checked })}
+            />
+            <span>auto-check on launch</span>
+          </label>
+          <button
+            type="button"
+            className="settings-btn settings-btn-mute"
+            disabled={updateStatus.kind === 'checking' || updateStatus.kind === 'installing'}
+            onClick={async () => {
+              setUpdateStatus({ kind: 'checking' });
+              try {
+                const result = await checkForUpdate();
+                if (result.available) {
+                  setUpdateStatus({
+                    kind: 'available',
+                    version: result.version ?? 'unknown',
+                  });
+                } else {
+                  setUpdateStatus({ kind: 'current' });
+                }
+              } catch (e) {
+                setUpdateStatus({ kind: 'error', msg: String(e) });
+              }
+            }}
+          >
+            [check now]
+          </button>
+          {updateStatus.kind === 'available' && (
+            <button
+              type="button"
+              className="settings-btn"
+              onClick={async () => {
+                setUpdateStatus({ kind: 'installing' });
+                try {
+                  await installUpdateAndRelaunch();
+                } catch (e) {
+                  setUpdateStatus({ kind: 'error', msg: String(e) });
+                }
+              }}
+            >
+              [install v{updateStatus.version} + restart]
+            </button>
+          )}
+          <span className="settings-updates-status">
+            {updateStatus.kind === 'checking' && 'checking…'}
+            {updateStatus.kind === 'current' && 'up to date'}
+            {updateStatus.kind === 'installing' && 'installing…'}
+            {updateStatus.kind === 'error' && (
+              <span className="settings-updates-error">{updateStatus.msg}</span>
+            )}
+          </span>
+        </span>
       </Row>
       <Row label="input">
         <label className="settings-checkbox">
