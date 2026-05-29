@@ -3408,12 +3408,27 @@ body {
 
 /* Chat pane — embedded bottom region for routed channel text. */
 
+/* Chat panel always gets a bounded height so its body's
+   overflow-y: auto can do its job. Without this the chat-pane
+   ends up inside a fixed-size substack (top or bottom panel zone
+   parent, or a side-zone substack-fixed), nothing constrains it
+   vertically, the body has no overflow target, and chat just keeps
+   pushing the panel taller as messages arrive until it eats the
+   whole window.
+
+   240px is a reasonable default chat-strip height. The 50vh cap
+   keeps the panel sensible on short windows. The body inside
+   scrolls; auto-scroll-to-bottom in ChatColumn kicks the view to
+   the latest line as new messages arrive, which only works once
+   there is an overflow region to scroll. */
 .chat-pane {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--c-surface);
+  height: 240px;
+  max-height: 50vh;
 }
 
 .chat-pane-header {
