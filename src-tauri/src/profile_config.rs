@@ -116,6 +116,12 @@ pub(crate) struct UiConfig {
     /// CSS color is accepted; e.g. `#ff00ff`, `rgb(255, 0, 0)`.
     #[serde(default)]
     pub split_divider_color: Option<String>,
+    /// When true, the left and right panel zones extend the full
+    /// height of the window and the terminal input + status bar live
+    /// only under the terminal column. When false (default), input
+    /// and status bar span the whole window width below the panels.
+    #[serde(default)]
+    pub side_panels_fill_height: bool,
 }
 
 /// User-authored theme. All fields are colors (or strings, for
@@ -175,6 +181,7 @@ impl Default for UiConfig {
             theme_terminal_colors: false,
             custom_themes: Vec::new(),
             split_divider_color: None,
+            side_panels_fill_height: false,
         }
     }
 }
@@ -292,6 +299,7 @@ impl ProfileConfig {
             theme_terminal_colors: profile.ui.theme_terminal_colors,
             custom_themes: profile.ui.custom_themes.clone(),
             split_divider_color: profile.ui.split_divider_color.clone(),
+            side_panels_fill_height: profile.ui.side_panels_fill_height,
         };
 
         let plugins = PluginsPersist {
@@ -386,6 +394,7 @@ impl ProfileConfig {
             theme_terminal_colors: self.ui.theme_terminal_colors,
             custom_themes: self.ui.custom_themes.clone(),
             split_divider_color: self.ui.split_divider_color.clone(),
+            side_panels_fill_height: self.ui.side_panels_fill_height,
         };
 
         // Plugin enabled-set is persisted; the actual load happens in the

@@ -183,7 +183,7 @@ export function SettingsApp() {
           />
         )}
         {tab === 'themes' && <ThemesTab config={config} setConfig={setConfig} onError={setError} />}
-        {tab === 'panels' && <PanelsTab onError={setError} />}
+        {tab === 'panels' && <PanelsTab config={config} setConfig={setConfig} onError={setError} />}
         {tab === 'profiles' && <ProfilesTab onError={setError} />}
         {tab === 'macros' && <MacrosTab onError={setError} />}
         {tab === 'import' && <ImportTab onError={setError} />}
@@ -595,10 +595,12 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 interface PanelsTabProps {
+  config: UiConfig | null;
+  setConfig: (updater: (prev: UiConfig | null) => UiConfig | null) => void;
   onError: (e: string | null) => void;
 }
 
-function PanelsTab({ onError }: PanelsTabProps) {
+function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
   const [placements, setPlacements] =
     useState<Record<PanelId, PanelPlacement>>(DEFAULT_PANEL_PLACEMENTS);
   const [highlightId, setHighlightId] = useState<PanelId | null>(null);
@@ -642,6 +644,14 @@ function PanelsTab({ onError }: PanelsTabProps) {
     );
   };
 
+  const sideFillOn = Boolean(config?.side_panels_fill_height);
+  const toggleSideFill = () => {
+    if (!config) return;
+    const next: UiConfig = { ...config, side_panels_fill_height: !config.side_panels_fill_height };
+    setConfig(() => next);
+    void setUiConfig(next).catch((e) => onError(String(e)));
+  };
+
   if (!loaded) return <div className="settings-loading">loading panels…</div>;
 
   return (
@@ -651,6 +661,10 @@ function PanelsTab({ onError }: PanelsTabProps) {
         <span className="panels-tab-header-dim">live · changes save automatically</span>
       </div>
       <PanelsPreview placements={placements} highlightId={highlightId} />
+      <label className="settings-checkbox panels-side-fill-toggle">
+        <input type="checkbox" checked={sideFillOn} onChange={toggleSideFill} />
+        <span>side panels span full height (input lives under terminal only)</span>
+      </label>
       <div className="panels-rows">
         {ALL_PANEL_IDS.map((id) => (
           <PanelRow

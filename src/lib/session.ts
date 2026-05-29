@@ -431,6 +431,9 @@ export interface UiConfig {
   /** Override color for the split-scrollback divider. Empty/undefined
    *  means use the theme default (--c-border). */
   split_divider_color: string | null;
+  /** When true, left/right panel zones extend the full window height
+   *  and the input + status bar live only under the terminal column. */
+  side_panels_fill_height: boolean;
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -445,6 +448,7 @@ export async function getUiConfig(): Promise<UiConfig> {
     theme_terminal_colors?: boolean;
     custom_themes?: CustomTheme[];
     split_divider_color?: string | null;
+    side_panels_fill_height?: boolean;
   }>('ui_get_config');
   return {
     theme: typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : 'kanso-zen',
@@ -460,6 +464,7 @@ export async function getUiConfig(): Promise<UiConfig> {
       typeof cfg.split_divider_color === 'string' && cfg.split_divider_color.length > 0
         ? cfg.split_divider_color
         : null,
+    side_panels_fill_height: Boolean(cfg.side_panels_fill_height),
   };
 }
 
@@ -475,6 +480,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     themeTerminalColors: config.theme_terminal_colors,
     customThemes: config.custom_themes,
     splitDividerColor: config.split_divider_color,
+    sidePanelsFillHeight: config.side_panels_fill_height,
   });
   // Broadcast the live custom_themes list so other webviews update
   // their in-memory registry BEFORE any theme-changed event lands.
@@ -492,6 +498,19 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
   } catch {
     // ignore — main window also re-reads on focus
   }
+  try {
+    await emit('vosh://side-panels-fill-height-changed', config.side_panels_fill_height);
+  } catch {
+    // ignore
+  }
+}
+
+export async function subscribeSidePanelsFillHeightChanged(
+  cb: (value: boolean) => void,
+): Promise<UnlistenFn> {
+  return listen<boolean>('vosh://side-panels-fill-height-changed', (event) => {
+    cb(Boolean(event.payload));
+  });
 }
 
 export async function subscribeSplitDividerChanged(
