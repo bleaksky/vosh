@@ -8,6 +8,7 @@ import '@xterm/xterm/css/xterm.css';
 import { loadScrollback, onOutput, setWindowSize } from '../lib/session';
 import { findTheme, type AppTheme } from '../lib/themes';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
+import { WordWrapper } from '../lib/wordWrap';
 
 export interface TerminalHandle {
   write: (data: Uint8Array | string) => void;
@@ -275,8 +276,27 @@ export function Terminal({
         notifyPosition();
         onScrollbackLoadedRef.current?.();
       });
+    // Client-side word wrap. NAWS handles most lines server-side, but
+    // some content paths (tells, comm channels) ignore it on certain
+    // ROM derivatives. We line-buffer here so a complete line word-
+    // wraps cleanly before hitting xterm, and an idle flush surfaces
+    // prompts that arrive without a trailing newline.
+    const wrapper = new WordWrapper(term.cols);
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    term.onResize(({ cols }) => wrapper.setCols(cols));
+    let wrapFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleWrapFlush = () => {
+      if (wrapFlushTimer) clearTimeout(wrapFlushTimer);
+      wrapFlushTimer = setTimeout(() => {
+        wrapFlushTimer = null;
+        const tail = wrapper.flush();
+        if (tail.length > 0) term.write(tail);
+      }, 20);
+    };
     onOutput((bytes) => {
-      term.write(bytes);
+      const text = decoder.decode(bytes, { stream: true });
+      term.write(wrapper.process(text));
+      scheduleWrapFlush();
     }).then((unlisten) => {
       unsubOutput = unlisten;
     });
@@ -359,6 +379,7 @@ export function Terminal({
       window.removeEventListener('resize', handleWindowResize);
       window.removeEventListener('keydown', onCopyKey, true);
       if (naws_timer) clearTimeout(naws_timer);
+      if (wrapFlushTimer) clearTimeout(wrapFlushTimer);
       unsubOutput?.();
       term.dispose();
       termRef.current = null;
