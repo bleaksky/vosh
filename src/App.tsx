@@ -12,7 +12,7 @@ import { MapPane } from './components/MapPane';
 import { ChatPane } from './components/ChatPane';
 import { GroupPane } from './components/GroupPane';
 import { RoomStrip } from './components/RoomStrip';
-import { VitalsBar } from './components/VitalsBar';
+import { TickPanel, VitalsBar } from './components/VitalsBar';
 import { UpdateNotice } from './components/UpdateNotice';
 import {
   dockLayoutGet,
@@ -111,6 +111,15 @@ function App() {
   const termRef = useRef<TerminalHandle | null>(null);
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
+  // Direct ref on the terminal-area wrapper so we can attach a
+  // non-passive wheel listener. JSX onWheel is passive in some
+  // React versions and silently no-ops preventDefault, which would
+  // let xterm scroll the live pane underneath us.
+  const terminalAreaRef = useRef<HTMLDivElement | null>(null);
+  // splitOpen state needs to be read inside the wheel handler. The
+  // handler is registered once and runs many times, so we mirror the
+  // state into a ref to avoid stale closures.
+  const splitOpenRef = useRef(false);
   // Split-scrollback state. When true, a second xterm appears above the
   // live one and shows the same buffer scrolled back so you can read
   // earlier output while live combat keeps streaming below.
@@ -186,7 +195,40 @@ function App() {
   // stale numbers for one paint before being overwritten.
   useEffect(() => {
     if (!splitOpen) setHistoryScrollPos(null);
+    splitOpenRef.current = splitOpen;
   }, [splitOpen]);
+
+  // Wheel listener with passive:false so we can preventDefault and
+  // keep xterm from scrolling the live pane. The handler mirrors the
+  // PageUp / PageDown gesture: scroll up opens the split, scroll
+  // down pages history toward the live tail and closes the split
+  // when we reach it.
+  useEffect(() => {
+    const el = terminalAreaRef.current;
+    if (!el) return;
+    const onWheel = (e: globalThis.WheelEvent) => {
+      const dir = Math.sign(e.deltaY);
+      if (dir === 0) return;
+      const lines = dir * 3;
+      if (lines < 0) {
+        e.preventDefault();
+        if (!splitOpenRef.current) {
+          setSplitOpen(true);
+          return;
+        }
+        historyTermRef.current?.scrollLines(lines);
+        return;
+      }
+      if (!splitOpenRef.current) return;
+      e.preventDefault();
+      historyTermRef.current?.scrollLines(lines);
+      queueMicrotask(() => {
+        if (historyTermRef.current?.isAtBottom()) setSplitOpen(false);
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   // Click anywhere in the terminal area focuses the input. Skip when
   // the user is selecting text (so copy still works) or clicking an
@@ -429,6 +471,8 @@ function App() {
         return <ChatPane key="chat" onClose={() => setPanelZone('chat', 'hidden')} />;
       case 'affects':
         return <AffectsBar key="affects" />;
+      case 'tick':
+        return <TickPanel key="tick" />;
     }
   };
 
@@ -506,7 +550,13 @@ function App() {
         });
       }}
       onExitSplit={() => {
+        // Esc always snaps the live pane back to the bottom AND
+        // closes the split if it is open. So a user who scrolled
+        // up via mouse wheel or PageUp gets jumped back to the
+        // live tail with one keystroke whether the split is
+        // showing or not.
         if (splitOpen) setSplitOpen(false);
+        termRef.current?.scrollToBottom();
       }}
     />
   );
@@ -517,6 +567,7 @@ function App() {
 
   const terminalAreaElement = (
     <div
+      ref={terminalAreaRef}
       className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}`}
       onMouseUp={handleTerminalMouseUp}
     >

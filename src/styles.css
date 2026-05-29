@@ -519,7 +519,13 @@ body {
 }
 .terminal-area-split .terminal-pane-history {
   flex: 1 1 0;
-  border-bottom: 1px solid var(--c-split-divider, var(--c-border));
+  /* 2px line with a small surface-deep buffer below it makes the
+     seam unmistakable. The buffer reads as a visible gap rather
+     than risking the line getting swallowed against the xterm
+     canvas. Color falls through to --c-text-faint when the user
+     has not picked a custom divider color, since --c-border is
+     often nearly invisible against the terminal background. */
+  border-bottom: 2px solid var(--c-split-divider, var(--c-text-faint));
   margin-bottom: 4px;
   position: relative;
 }
