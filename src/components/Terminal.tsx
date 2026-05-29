@@ -293,18 +293,21 @@ export function Terminal({
     };
     onReadyRef.current?.(handle);
 
-    // Cmd+C / Ctrl+Shift+C copies the xterm selection. The keystroke
+    // Ctrl/Cmd + C or X copies the xterm selection. The keystroke
     // almost always lands while focus is in the Input box (the user
     // drag-selects xterm output, then hits the shortcut without
     // clicking back into the terminal), so a keydown listener
     // attached to xterm alone never fires. Listen at the window
-    // instead, and defer to the focused element's native selection
-    // when it actually has one of its own.
+    // instead, and defer to the focused element's native copy/cut
+    // when it actually has its own selection.
     const onCopyKey = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
-      const isMacCopy = event.metaKey && !event.ctrlKey && !event.altKey && key === 'c';
-      const isNonMacCopy = event.ctrlKey && event.shiftKey && key === 'c';
-      if (!isMacCopy && !isNonMacCopy) return;
+      if (key !== 'c' && key !== 'x') return;
+      // Accept any combination of Ctrl or Cmd (without Alt), with or
+      // without Shift. Plain Ctrl+C is the convention most MUD clients
+      // use; the older Ctrl+Shift+C variant still works.
+      const primary = event.ctrlKey || event.metaKey;
+      if (!primary || event.altKey) return;
       const selection = term.getSelection();
       if (!selection) return;
       const active = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;

@@ -225,16 +225,41 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     //   Cmd+Left / Cmd+Right — start / end of line
     //   Fn+Left / Fn+Right   — generate Home / End in browsers
     // Cross-platform Home/End still works.
+    //
+    // Shift+Home / Shift+End extend the selection from the current
+    // caret to the start/end of the input. Without that branch the
+    // caret just collapsed and the user lost the selection.
+    //
+    // Long inputs that overflow horizontally need scrollLeft set
+    // explicitly so the caret actually appears at the new position;
+    // setSelectionRange alone moves the caret in the document but
+    // does not always pan the viewport, leaving the user looking at
+    // the old position until the next keystroke.
     if (event.key === 'Home' || (event.metaKey && event.key === 'ArrowLeft')) {
       event.preventDefault();
       const el = inputRef.current;
-      if (el) el.setSelectionRange(0, 0);
+      if (!el) return;
+      if (event.shiftKey) {
+        const anchor = el.selectionEnd ?? 0;
+        el.setSelectionRange(0, anchor, 'backward');
+      } else {
+        el.setSelectionRange(0, 0);
+      }
+      el.scrollLeft = 0;
       return;
     }
     if (event.key === 'End' || (event.metaKey && event.key === 'ArrowRight')) {
       event.preventDefault();
       const el = inputRef.current;
-      if (el) el.setSelectionRange(el.value.length, el.value.length);
+      if (!el) return;
+      const end = el.value.length;
+      if (event.shiftKey) {
+        const anchor = el.selectionStart ?? end;
+        el.setSelectionRange(anchor, end, 'forward');
+      } else {
+        el.setSelectionRange(end, end);
+      }
+      el.scrollLeft = el.scrollWidth;
       return;
     }
 
@@ -333,7 +358,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         ref={inputRef}
         type={passwordMode ? 'password' : 'text'}
         value={value}
-        disabled={!enabled}
+        // Stay enabled even when disconnected so the user can compose
+        // commands ahead of a reconnect. The backend echoes
+        // [not connected] when Enter fires without a session, which
+        // is friendlier than a dead input field.
         spellCheck={false}
         autoCapitalize="off"
         autoCorrect="off"
