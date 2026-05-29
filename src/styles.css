@@ -2001,6 +2001,21 @@ body {
 }
 
 .logs-case,
+.settings-updates-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.settings-updates-status {
+  font-size: 0.85em;
+  color: var(--c-text-faint);
+}
+.settings-updates-error {
+  color: var(--c-text);
+  opacity: 0.85;
+}
+
 .settings-checkbox {
   display: inline-flex;
   align-items: center;
