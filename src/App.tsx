@@ -18,6 +18,7 @@ import {
   dockLayoutGet,
   dockLayoutSet,
   getUiConfig,
+  setWindowSize,
   listTriggers,
   onState,
   presetsInstall,
@@ -384,6 +385,17 @@ function App() {
         }
       } else {
         setStatus(payload);
+        // Push the current terminal size on every (re)connect so the
+        // negotiator advertises the live cols × rows via NAWS as soon
+        // as the server asks. MUDs that honor NAWS wrap at this width
+        // server-side, which is the right answer to word wrap.
+        if (payload.kind === 'connected') {
+          const handle = termRef.current;
+          if (handle) {
+            const { cols, rows } = handle.getSize();
+            void setWindowSize(cols, rows).catch(() => {});
+          }
+        }
       }
     }).then((fn) => {
       if (cancelled) fn();

@@ -5,7 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 
 import '@xterm/xterm/css/xterm.css';
-import { loadScrollback, onOutput } from '../lib/session';
+import { loadScrollback, onOutput, setWindowSize } from '../lib/session';
 import { findTheme, type AppTheme } from '../lib/themes';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 
@@ -22,6 +22,9 @@ export interface TerminalHandle {
   scrollToBottom: () => void;
   /** True when the viewport is anchored at the live tail (no scrollback offset). */
   isAtBottom: () => boolean;
+  /** Current cols × rows. Used by the host to push the size to the
+   *  backend via NAWS after a (re)connect. */
+  getSize: () => { cols: number; rows: number };
 }
 
 interface Props {
@@ -278,6 +281,31 @@ export function Terminal({
       unsubOutput = unlisten;
     });
 
+    // Push the live terminal size to the backend so the telnet
+    // negotiator can advertise it via NAWS. The MUD wraps server-side
+    // at the advertised column count, which is what well-behaved
+    // word wrap looks like — no client preprocessing, no latency.
+    // Debounce so a rapid resize animation only fires one IPC at the
+    // settled size. Only the primary (non-quiet) terminal pushes,
+    // since the history pane in the split view shares the same width.
+    let naws_timer: ReturnType<typeof setTimeout> | null = null;
+    const pushSize = () => {
+      if (quietRef.current) return;
+      void setWindowSize(term.cols, term.rows).catch(() => {
+        // Not connected, or session torn down. Either is fine; the
+        // initial NAWS handshake on the next connect will send the
+        // current size anyway.
+      });
+    };
+    const scheduleSizePush = () => {
+      if (naws_timer) clearTimeout(naws_timer);
+      naws_timer = setTimeout(pushSize, 120);
+    };
+    term.onResize(scheduleSizePush);
+    // First push after the deferred fits settle so the backend gets
+    // the real size rather than the 80x24 default xterm starts with.
+    setTimeout(pushSize, 900);
+
     const handle: TerminalHandle = {
       write: (data) => term.write(data),
       fit: () => fit.fit(),
@@ -290,6 +318,7 @@ export function Terminal({
       // baseY tracks the top of the bottom page. Equal means the
       // viewport is anchored to the live tail.
       isAtBottom: () => term.buffer.active.viewportY === term.buffer.active.baseY,
+      getSize: () => ({ cols: term.cols, rows: term.rows }),
     };
     onReadyRef.current?.(handle);
 
@@ -329,6 +358,7 @@ export function Terminal({
       observer.disconnect();
       window.removeEventListener('resize', handleWindowResize);
       window.removeEventListener('keydown', onCopyKey, true);
+      if (naws_timer) clearTimeout(naws_timer);
       unsubOutput?.();
       term.dispose();
       termRef.current = null;
