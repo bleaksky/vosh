@@ -2,6 +2,14 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.2.4 - 2026-05-29
+
+- Tab completes the current word. First Tab fills the most recent match from typed history; subsequent Tabs cycle, Shift+Tab cycles back. Room characters (combat targets) are a secondary source so `ere` completes to `Erelei`.
+- Client-side word wrap so long lines (tells, comm channels) stop splitting words mid-character. NAWS still handles most lines server-side; this catches the rest.
+- Status bar no longer truncates the target name or quick keys. Wraps to a second row when there are too many to fit.
+- Chat panel now has a bounded default height of 240 px (50vh max), so it stops eating the window and the body scrolls properly. Auto-scroll-to-bottom on new messages works again.
+- Terminal refits when the panel layout changes, so toggling chat hidden no longer leaves a stripe of padding at the bottom.
+
 ## v0.2.3 - 2026-05-29
 
 - Mouse wheel and trackpad scroll now open the split-scrollback view and page the history pane, same as PageUp / Fn+Up. The live pane stays anchored at the bottom regardless of where the cursor hovers.
