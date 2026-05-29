@@ -12,8 +12,18 @@ interface Props {
 // assigned via Settings → Panels. The group roster is no longer
 // embedded here — it lives as its own panel.
 export function ChatPane({ onClose }: Props) {
+  // Stop wheel events from leaving the chat panel. Without this, when
+  // the chat body has no scrollable content (messages fit on screen),
+  // a wheel gesture bubbles up to the terminal area and triggers the
+  // split-scrollback gesture or xterm scroll. Capture phase + stop
+  // propagation keeps every wheel event inside chat.
+  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+  };
   return (
-    <div className="chat-pane">{onClose ? <ChatColumn onClose={onClose} /> : <ChatColumn />}</div>
+    <div className="chat-pane" onWheelCapture={onWheel}>
+      {onClose ? <ChatColumn onClose={onClose} /> : <ChatColumn />}
+    </div>
   );
 }
 
@@ -23,6 +33,16 @@ function ChatColumn({ onClose }: { onClose?: () => void }) {
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => subscribeChatLines(setLines), []);
+
+  // Snap to the bottom on first mount so opening the chat panel
+  // shows the most recent lines instead of the oldest. Without this
+  // the body sits at scrollTop=0 and the user has to scroll down
+  // every time they reopen the panel.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, []);
 
   useEffect(() => {
     const el = bodyRef.current;

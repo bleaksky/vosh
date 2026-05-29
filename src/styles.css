@@ -3427,8 +3427,8 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--c-surface);
-  height: 240px;
-  max-height: 50vh;
+  height: 160px;
+  max-height: 40vh;
 }
 
 .chat-pane-header {
