@@ -198,6 +198,21 @@ function App() {
     splitOpenRef.current = splitOpen;
   }, [splitOpen]);
 
+  // Whenever the panel layout changes (e.g. chat toggled hidden), the
+  // terminal-area's available height shifts. FitAddon's own internal
+  // observers do not always pick up the change before xterm draws the
+  // next frame, which leaves a stripe of unused padding at the bottom
+  // of the terminal until something else (e.g. a scroll) kicks off a
+  // refit. Force a fit on every placements change, after layout has
+  // settled, so xterm rows match the available height immediately.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      termRef.current?.fit();
+      historyTermRef.current?.fit();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [panelPlacements, sidePanelsFillHeight]);
+
   // Wheel listener attached in capture phase with passive:false so we
   // fire BEFORE the xterm canvas inside terminal-area sees the event.
   // Without capture phase, xterm's own bubble-phase handler scrolls
