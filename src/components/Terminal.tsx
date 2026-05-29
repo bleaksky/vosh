@@ -294,10 +294,24 @@ export function Terminal({
     wordWrapRef.current = wrapper;
     const decoder = new TextDecoder('utf-8', { fatal: false });
     term.onResize(({ cols }) => wrapper.setCols(cols));
+    // The wrapper holds chars after the last whitespace across calls
+    // so a word that straddles two chunks still wraps at the right
+    // place. Trailing content that ends without whitespace (prompts)
+    // surfaces via this idle-flush timer instead.
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const armFlush = () => {
+      if (flushTimer) clearTimeout(flushTimer);
+      flushTimer = setTimeout(() => {
+        flushTimer = null;
+        const tail = wrapper.flush();
+        if (tail.length > 0) term.write(tail);
+      }, 60);
+    };
     onOutput((bytes) => {
       if (wordWrapEnabledRef.current) {
         const text = decoder.decode(bytes, { stream: true });
         term.write(wrapper.process(text));
+        armFlush();
       } else {
         term.write(bytes);
       }
@@ -353,6 +367,7 @@ export function Terminal({
       observer.disconnect();
       window.removeEventListener('resize', handleWindowResize);
       window.removeEventListener('keydown', onCopyKey, true);
+      if (flushTimer) clearTimeout(flushTimer);
       unsubOutput?.();
       term.dispose();
       termRef.current = null;
