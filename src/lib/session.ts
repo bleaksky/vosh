@@ -434,9 +434,6 @@ export interface UiConfig {
   /** When true, left/right panel zones extend the full window height
    *  and the input + status bar live only under the terminal column. */
   side_panels_fill_height: boolean;
-  /** When true, incoming MUD output is pre-processed so long lines wrap
-   *  at word boundaries instead of mid-character. */
-  word_wrap: boolean;
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -452,7 +449,6 @@ export async function getUiConfig(): Promise<UiConfig> {
     custom_themes?: CustomTheme[];
     split_divider_color?: string | null;
     side_panels_fill_height?: boolean;
-    word_wrap?: boolean;
   }>('ui_get_config');
   return {
     theme: typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : 'kanso-zen',
@@ -469,7 +465,6 @@ export async function getUiConfig(): Promise<UiConfig> {
         ? cfg.split_divider_color
         : null,
     side_panels_fill_height: Boolean(cfg.side_panels_fill_height),
-    word_wrap: Boolean(cfg.word_wrap),
   };
 }
 
@@ -486,7 +481,6 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     customThemes: config.custom_themes,
     splitDividerColor: config.split_divider_color,
     sidePanelsFillHeight: config.side_panels_fill_height,
-    wordWrap: config.word_wrap,
   });
   // Broadcast the live custom_themes list so other webviews update
   // their in-memory registry BEFORE any theme-changed event lands.
@@ -509,17 +503,6 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
   } catch {
     // ignore
   }
-  try {
-    await emit('vosh://word-wrap-changed', config.word_wrap);
-  } catch {
-    // ignore
-  }
-}
-
-export async function subscribeWordWrapChanged(cb: (value: boolean) => void): Promise<UnlistenFn> {
-  return listen<boolean>('vosh://word-wrap-changed', (event) => {
-    cb(Boolean(event.payload));
-  });
 }
 
 export async function subscribeSidePanelsFillHeightChanged(

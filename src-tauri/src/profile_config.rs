@@ -122,12 +122,6 @@ pub(crate) struct UiConfig {
     /// and status bar span the whole window width below the panels.
     #[serde(default)]
     pub side_panels_fill_height: bool,
-    /// When true, the terminal pre-processes incoming MUD output so
-    /// long lines wrap at word boundaries instead of mid-character.
-    /// Off by default because it can break pre-formatted tables or
-    /// ASCII art the MUD ships at specific column widths.
-    #[serde(default)]
-    pub word_wrap: bool,
 }
 
 /// User-authored theme. All fields are colors (or strings, for
@@ -188,7 +182,6 @@ impl Default for UiConfig {
             custom_themes: Vec::new(),
             split_divider_color: None,
             side_panels_fill_height: false,
-            word_wrap: false,
         }
     }
 }
@@ -307,7 +300,6 @@ impl ProfileConfig {
             custom_themes: profile.ui.custom_themes.clone(),
             split_divider_color: profile.ui.split_divider_color.clone(),
             side_panels_fill_height: profile.ui.side_panels_fill_height,
-            word_wrap: profile.ui.word_wrap,
         };
 
         let plugins = PluginsPersist {
@@ -403,7 +395,6 @@ impl ProfileConfig {
             custom_themes: self.ui.custom_themes.clone(),
             split_divider_color: self.ui.split_divider_color.clone(),
             side_panels_fill_height: self.ui.side_panels_fill_height,
-            word_wrap: self.ui.word_wrap,
         };
 
         // Plugin enabled-set is persisted; the actual load happens in the
