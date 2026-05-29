@@ -8,6 +8,7 @@ import '@xterm/xterm/css/xterm.css';
 import { loadScrollback, onOutput } from '../lib/session';
 import { findTheme, type AppTheme } from '../lib/themes';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
+import { WordWrapper } from '../lib/wordWrap';
 
 export interface TerminalHandle {
   write: (data: Uint8Array | string) => void;
@@ -37,6 +38,11 @@ interface Props {
   /// that load scrollback on every open and would otherwise show
   /// the banner repeatedly.
   quiet?: boolean;
+  /// When true, incoming server output is pre-processed so long
+  /// lines wrap at word boundaries instead of xterm's character
+  /// wrap. Off by default; pre-formatted output (tables, ASCII
+  /// art) can be mangled when this is on.
+  wordWrap?: boolean;
   /// Fires once after the initial scrollback has been written into the
   /// terminal (or when the backend reports none). Use this to apply an
   /// initial viewport position; doing the same work inside onReady is
@@ -118,6 +124,7 @@ export function Terminal({
   fontSize,
   themeTerminalColors,
   quiet = false,
+  wordWrap = false,
   onScrollbackLoaded,
   onScrollPosition,
 }: Props) {
@@ -127,6 +134,12 @@ export function Terminal({
   onScrollbackLoadedRef.current = onScrollbackLoaded;
   const onScrollPositionRef = useRef(onScrollPosition);
   onScrollPositionRef.current = onScrollPosition;
+  const wordWrapRef = useRef<WordWrapper | null>(null);
+  // Track the latest wordWrap value so the live output handler can
+  // decide whether to preprocess. Mirroring into a ref avoids
+  // re-running the mount effect when the toggle flips.
+  const wordWrapEnabledRef = useRef(wordWrap);
+  wordWrapEnabledRef.current = wordWrap;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -272,8 +285,22 @@ export function Terminal({
         notifyPosition();
         onScrollbackLoadedRef.current?.();
       });
+    // Word-wrap preprocessor. Held in a ref so the live output
+    // handler picks up toggle changes without rebuilding the xterm.
+    // Stream decoder + cols stay in sync with the terminal so multi-
+    // byte UTF-8 codepoints that straddle chunks decode cleanly and
+    // resizes update the wrap target without state loss.
+    const wrapper = new WordWrapper(term.cols);
+    wordWrapRef.current = wrapper;
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    term.onResize(({ cols }) => wrapper.setCols(cols));
     onOutput((bytes) => {
-      term.write(bytes);
+      if (wordWrapEnabledRef.current) {
+        const text = decoder.decode(bytes, { stream: true });
+        term.write(wrapper.process(text));
+      } else {
+        term.write(bytes);
+      }
     }).then((unlisten) => {
       unsubOutput = unlisten;
     });
@@ -359,6 +386,13 @@ export function Terminal({
     if (!term) return;
     term.options.theme = xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColors);
   }, [themeTerminalColors]);
+
+  // Reset the wrapper state when word-wrap toggles. Otherwise a stale
+  // currentCol / pendingWord from a previous run would mis-wrap the
+  // next chunk when the toggle flips back on.
+  useEffect(() => {
+    wordWrapRef.current?.reset();
+  }, [wordWrap]);
 
   // Live-refresh the xterm palette when the user switches themes from
   // the settings window. Listens on the cross-window theme event.
