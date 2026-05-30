@@ -2,6 +2,13 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.2.5 - 2026-05-30
+
+- Split-scrollback history pane is now resizable. Drag the divider down to grow the history view, drag up to shrink it. Size persists across sessions.
+- Chat panel shorter (160 px default) so it does not eat the window when pinned to bottom.
+- Chat scrolls to the most recent message on open instead of showing the oldest.
+- Wheel gestures over chat stay inside the chat panel and no longer trigger the terminal scroll.
+
 ## v0.2.4 - 2026-05-29
 
 - Tab completes the current word. First Tab fills the most recent match from typed history; subsequent Tabs cycle, Shift+Tab cycles back. Room characters (combat targets) are a secondary source so `ere` completes to `Erelei`.
