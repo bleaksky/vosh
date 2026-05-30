@@ -36,13 +36,13 @@ import { customToAppTheme, setCustomThemes } from './lib/themes';
 import { startChatStore } from './lib/chatStore';
 import { startGroupStore } from './lib/groupStore';
 import {
-  DEFAULT_PANEL_PLACEMENTS,
+  DEFAULT_PANEL_LAYOUT,
   groupPanels,
   PANELS,
-  panelPlacementsFromDock,
-  panelPlacementsToDock,
+  panelLayoutFromDock,
+  panelLayoutToDock,
   type PanelId,
-  type PanelPlacement,
+  type PanelLayout,
   type Zone,
 } from './lib/panels';
 
@@ -102,8 +102,7 @@ function App() {
   // left/right zones) vertical alignment. Seeded from the backend
   // dock_layout on mount and kept in sync via the
   // dock-layout-changed broadcast.
-  const [panelPlacements, setPanelPlacements] =
-    useState<Record<PanelId, PanelPlacement>>(DEFAULT_PANEL_PLACEMENTS);
+  const [panelLayout, setPanelLayout] = useState<PanelLayout>(DEFAULT_PANEL_LAYOUT);
   // When true, side panels (left/right zones) extend to the bottom
   // edge of the window and the terminal input + status bar live in
   // a column under the terminal area only. Loaded from UiConfig.
@@ -139,11 +138,11 @@ function App() {
     let unlisten: (() => void) | undefined;
     dockLayoutGet()
       .then((entries) => {
-        if (!cancelled) setPanelPlacements(panelPlacementsFromDock(entries));
+        if (!cancelled) setPanelLayout(panelLayoutFromDock(entries));
       })
       .catch(() => {});
     subscribeDockLayoutChanged((entries) => {
-      if (!cancelled) setPanelPlacements(panelPlacementsFromDock(entries));
+      if (!cancelled) setPanelLayout(panelLayoutFromDock(entries));
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -158,13 +157,13 @@ function App() {
   // windows. The TopBar map/chat toggle buttons go through this so a
   // quick hide/show stays synced with the Settings UI.
   const setPanelZone = (id: PanelId, zone: Zone) => {
-    setPanelPlacements((prev) => {
+    setPanelLayout((prev) => {
       if (!PANELS[id].allowedZones.includes(zone)) return prev;
-      const next: Record<PanelId, PanelPlacement> = {
-        ...prev,
-        [id]: { ...prev[id], zone },
+      const next: PanelLayout = {
+        placements: { ...prev.placements, [id]: { ...prev.placements[id], zone } },
+        order: prev.order,
       };
-      void dockLayoutSet(panelPlacementsToDock(next)).catch(() => {});
+      void dockLayoutSet(panelLayoutToDock(next)).catch(() => {});
       return next;
     });
   };
@@ -175,7 +174,7 @@ function App() {
   // where the panel was last visible.
   const lastVisibleZoneRef = useRef<Partial<Record<PanelId, Zone>>>({});
   const togglePanelVisibility = (id: PanelId) => {
-    const current = panelPlacements[id].zone;
+    const current = panelLayout.placements[id].zone;
     if (current === 'hidden') {
       // Fall back to homeZone (never 'hidden') so the topbar toggle
       // actually shows the panel somewhere even when defaultZone is
@@ -211,7 +210,7 @@ function App() {
       historyTermRef.current?.fit();
     });
     return () => cancelAnimationFrame(id);
-  }, [panelPlacements, sidePanelsFillHeight]);
+  }, [panelLayout, sidePanelsFillHeight]);
 
   // Wheel listener attached in capture phase with passive:false so we
   // fire BEFORE the xterm canvas inside terminal-area sees the event.
@@ -484,7 +483,7 @@ function App() {
 
   const connected = status.kind === 'connected' || status.kind === 'connecting';
 
-  const grouped = groupPanels(panelPlacements);
+  const grouped = groupPanels(panelLayout);
   const renderPanel = (id: PanelId) => {
     switch (id) {
       case 'map':
@@ -657,9 +656,9 @@ function App() {
   return (
     <main className={`app${sidePanelsFillHeight ? ' app-side-fill' : ''}`}>
       <TopBar
-        mapOpen={panelPlacements.map.zone !== 'hidden'}
+        mapOpen={panelLayout.placements.map.zone !== 'hidden'}
         onToggleMap={() => togglePanelVisibility('map')}
-        chatOpen={panelPlacements.chat.zone !== 'hidden'}
+        chatOpen={panelLayout.placements.chat.zone !== 'hidden'}
         onToggleChat={() => togglePanelVisibility('chat')}
       />
       <Connect status={status} onError={handleError} />

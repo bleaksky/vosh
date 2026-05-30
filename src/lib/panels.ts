@@ -139,37 +139,58 @@ export const DEFAULT_PANEL_PLACEMENTS: Record<PanelId, PanelPlacement> = ALL_PAN
   {} as Record<PanelId, PanelPlacement>,
 );
 
-/** Convert the persisted dock_layout array into a `{ panelId: placement }`
- *  lookup. Missing panels fall back to defaults. Unknown ids, disallowed
- *  zones, and invalid align values are silently dropped (the default
- *  takes over). */
-export function panelPlacementsFromDock(
+/** Layout state derived from the persisted dock_layout array. `order`
+ *  is the canonical render order — the position of a panel within its
+ *  zone follows this list, so the user can reorder by shuffling entries
+ *  in the dock layout. `placements` is the lookup by id. */
+export interface PanelLayout {
+  placements: Record<PanelId, PanelPlacement>;
+  order: PanelId[];
+}
+
+export const DEFAULT_PANEL_LAYOUT: PanelLayout = {
+  placements: DEFAULT_PANEL_PLACEMENTS,
+  order: [...ALL_PANEL_IDS],
+};
+
+/** Convert the persisted dock_layout array into a {@link PanelLayout}.
+ *  Missing panels fall back to defaults at the end of `order`. Unknown
+ *  ids and disallowed zones / aligns are silently dropped. */
+export function panelLayoutFromDock(
   entries: { id: string; zone: string; align?: string }[],
-): Record<PanelId, PanelPlacement> {
-  const out: Record<PanelId, PanelPlacement> = { ...DEFAULT_PANEL_PLACEMENTS };
+): PanelLayout {
+  const placements: Record<PanelId, PanelPlacement> = { ...DEFAULT_PANEL_PLACEMENTS };
+  const order: PanelId[] = [];
+  const seen = new Set<PanelId>();
   for (const entry of entries) {
     if (!isPanelId(entry.id)) continue;
     if (!isZone(entry.zone)) continue;
     if (!PANELS[entry.id].allowedZones.includes(entry.zone)) continue;
+    if (seen.has(entry.id)) continue;
     const align = isAlign(entry.align ?? '')
       ? (entry.align as Align)
       : PANELS[entry.id].defaultAlign;
-    out[entry.id] = { zone: entry.zone, align };
+    placements[entry.id] = { zone: entry.zone, align };
+    order.push(entry.id);
+    seen.add(entry.id);
   }
-  return out;
+  // Newly added panel ids that have never been persisted go to the end
+  // so they show up at the bottom of their zone with default placement.
+  for (const id of ALL_PANEL_IDS) {
+    if (!seen.has(id)) order.push(id);
+  }
+  return { placements, order };
 }
 
-/** Serialize a `{ panelId: placement }` lookup back into the dock_layout
- *  array. Preserves canonical panel ordering so the persisted TOML stays
- *  diff-friendly. Align is omitted when default to keep storage minimal. */
-export function panelPlacementsToDock(
-  placements: Record<PanelId, PanelPlacement>,
+/** Serialize a {@link PanelLayout} back into the dock_layout array.
+ *  Honors the layout's order so user-driven reordering survives a
+ *  round-trip. Align is omitted for top/bottom/hidden zones where it
+ *  is meaningless. */
+export function panelLayoutToDock(
+  layout: PanelLayout,
 ): { id: string; zone: string; align?: string }[] {
-  return ALL_PANEL_IDS.map((id) => {
-    const p = placements[id];
-    // Align is only meaningful in vertical zones; top/bottom/hidden
-    // never read it. Persisting unconditionally keeps the file stable
-    // when the user moves panels across zones and back.
+  return layout.order.map((id) => {
+    const p = layout.placements[id];
     const entry: { id: string; zone: string; align?: string } = { id, zone: p.zone };
     if (p.zone === 'left' || p.zone === 'right') {
       entry.align = p.align;
@@ -180,8 +201,9 @@ export function panelPlacementsToDock(
 
 /** Group panels by their (zone, align). Result has six lists: top,
  *  bottom, and for each of left/right a top-aligned and bottom-aligned
- *  list, plus hidden. Preserves canonical panel ordering inside each
- *  list. */
+ *  list, plus hidden. Iteration order within each list comes from
+ *  `layout.order`, so a user who reorders the bottom zone sees their
+ *  preferred sequence. */
 export interface GroupedPanels {
   top: PanelId[];
   bottom: PanelId[];
@@ -192,7 +214,7 @@ export interface GroupedPanels {
   hidden: PanelId[];
 }
 
-export function groupPanels(placements: Record<PanelId, PanelPlacement>): GroupedPanels {
+export function groupPanels(layout: PanelLayout): GroupedPanels {
   const out: GroupedPanels = {
     top: [],
     bottom: [],
@@ -202,8 +224,8 @@ export function groupPanels(placements: Record<PanelId, PanelPlacement>): Groupe
     rightBottom: [],
     hidden: [],
   };
-  for (const id of ALL_PANEL_IDS) {
-    const p = placements[id];
+  for (const id of layout.order) {
+    const p = layout.placements[id];
     switch (p.zone) {
       case 'top':
         out.top.push(id);
@@ -223,6 +245,60 @@ export function groupPanels(placements: Record<PanelId, PanelPlacement>): Groupe
     }
   }
   return out;
+}
+
+/** Return the list of panel ids that share a zone (and, for side zones,
+ *  align) with the given panel. The order follows `layout.order`. */
+function siblingsInGroup(layout: PanelLayout, id: PanelId): PanelId[] {
+  const p = layout.placements[id];
+  const grouped = groupPanels(layout);
+  switch (p.zone) {
+    case 'top':
+      return grouped.top;
+    case 'bottom':
+      return grouped.bottom;
+    case 'left':
+      return p.align === 'bottom' ? grouped.leftBottom : grouped.leftTop;
+    case 'right':
+      return p.align === 'bottom' ? grouped.rightBottom : grouped.rightTop;
+    case 'hidden':
+      return grouped.hidden;
+  }
+}
+
+/** Swap `id` with the previous or next panel in the same zone-and-align
+ *  group. Returns the layout unchanged if there is no sibling in the
+ *  given direction. */
+export function movePanelInZone(
+  layout: PanelLayout,
+  id: PanelId,
+  direction: 'up' | 'down',
+): PanelLayout {
+  const siblings = siblingsInGroup(layout, id);
+  const groupIdx = siblings.indexOf(id);
+  if (groupIdx < 0) return layout;
+  const neighborGroupIdx = direction === 'up' ? groupIdx - 1 : groupIdx + 1;
+  if (neighborGroupIdx < 0 || neighborGroupIdx >= siblings.length) return layout;
+  const neighborId = siblings[neighborGroupIdx];
+  const nextOrder = [...layout.order];
+  const a = nextOrder.indexOf(id);
+  const b = nextOrder.indexOf(neighborId);
+  if (a < 0 || b < 0) return layout;
+  [nextOrder[a], nextOrder[b]] = [nextOrder[b], nextOrder[a]];
+  return { placements: layout.placements, order: nextOrder };
+}
+
+/** True when `id` has a sibling above it in the same group. */
+export function canMovePanelUp(layout: PanelLayout, id: PanelId): boolean {
+  const siblings = siblingsInGroup(layout, id);
+  return siblings.indexOf(id) > 0;
+}
+
+/** True when `id` has a sibling below it in the same group. */
+export function canMovePanelDown(layout: PanelLayout, id: PanelId): boolean {
+  const siblings = siblingsInGroup(layout, id);
+  const idx = siblings.indexOf(id);
+  return idx >= 0 && idx < siblings.length - 1;
 }
 
 function isPanelId(s: string): s is PanelId {
