@@ -2,6 +2,11 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.2.6 - 2026-05-30
+
+- Closing the main window now closes the Settings popup with it instead of leaving it orphaned.
+- Middle-click (scroll-wheel click) on the terminal removes the scrollback break and snaps back to the live tail.
+
 ## v0.2.5 - 2026-05-30
 
 - Split-scrollback history pane is now resizable. Drag the divider down to grow the history view, drag up to shrink it. Size persists across sessions.
