@@ -253,6 +253,15 @@ function App() {
   // the user is selecting text (so copy still works) or clicking an
   // actual interactive element.
   const handleTerminalMouseUp = (event: MouseEvent<HTMLDivElement>) => {
+    // Middle-click (scroll-wheel click) closes the split-scrollback
+    // view and snaps the live pane to the bottom. Standard "remove
+    // scrollback break" gesture for users coming from other clients.
+    if (event.button === 1) {
+      event.preventDefault();
+      if (splitOpen) setSplitOpen(false);
+      termRef.current?.scrollToBottom();
+      return;
+    }
     const target = event.target as HTMLElement;
     if (target.closest('button, input, textarea, select')) return;
     const selection = window.getSelection?.();

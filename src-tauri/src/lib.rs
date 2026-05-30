@@ -57,6 +57,24 @@ pub fn run() {
         .register_uri_scheme_protocol("font", |_ctx, request| {
             handle_font_uri(request.uri())
         })
+        // Closing the main window should take every auxiliary window
+        // (settings, etc.) down with it. Tauri only exits the process
+        // when the LAST window closes, so without this the settings
+        // popup hangs around alone after the user closes the main
+        // client.
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                let app = window.app_handle();
+                for (label, w) in app.webview_windows() {
+                    if label != "main" {
+                        let _ = w.close();
+                    }
+                }
+            }
+        })
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
