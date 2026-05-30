@@ -2219,6 +2219,34 @@ body {
 .panels-preview-chip.is-active::after {
   color: var(--c-accent);
 }
+
+/* Up/down nudge controls on each chip in the wireframe. Click to
+   shuffle a panel within its zone-and-align group. Buttons are tiny
+   and stay subdued until hover so they do not clutter the layout
+   diagram. */
+.panels-preview-chip-nudge {
+  display: inline-flex;
+  flex-direction: column;
+  margin-left: 4px;
+  line-height: 0.85;
+}
+.panels-preview-chip-arrow {
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+  color: var(--c-text-faint);
+  font-size: 0.55em;
+  cursor: pointer;
+  opacity: 0.55;
+}
+.panels-preview-chip-arrow:hover {
+  color: var(--c-accent);
+  opacity: 1;
+}
+.panels-preview-chip-arrow:disabled {
+  opacity: 0.15;
+  cursor: default;
+}
 .panels-preview-chip.is-hidden {
   opacity: 0.45;
   text-decoration: line-through;

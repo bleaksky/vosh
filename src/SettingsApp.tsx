@@ -30,14 +30,17 @@ import { applyTheme } from './lib/theme';
 import { customToAppTheme, setCustomThemes, THEMES } from './lib/themes';
 import { loadFontStack, loadSystemFont } from './lib/fontLoader';
 import {
-  ALL_PANEL_IDS,
-  DEFAULT_PANEL_PLACEMENTS,
+  canMovePanelDown,
+  canMovePanelUp,
+  DEFAULT_PANEL_LAYOUT,
   groupPanels,
+  movePanelInZone,
   PANELS,
-  panelPlacementsFromDock,
-  panelPlacementsToDock,
+  panelLayoutFromDock,
+  panelLayoutToDock,
   type Align,
   type PanelId,
+  type PanelLayout,
   type PanelPlacement,
   type Zone,
 } from './lib/panels';
@@ -660,8 +663,7 @@ interface PanelsTabProps {
 }
 
 function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
-  const [placements, setPlacements] =
-    useState<Record<PanelId, PanelPlacement>>(DEFAULT_PANEL_PLACEMENTS);
+  const [layout, setLayout] = useState<PanelLayout>(DEFAULT_PANEL_LAYOUT);
   const [highlightId, setHighlightId] = useState<PanelId | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -671,13 +673,13 @@ function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
     dockLayoutGet()
       .then((entries) => {
         if (cancelled) return;
-        setPlacements(panelPlacementsFromDock(entries));
+        setLayout(panelLayoutFromDock(entries));
         setLoaded(true);
       })
       .catch((e) => onError(String(e)));
     subscribeDockLayoutChanged((entries) => {
       if (cancelled) return;
-      setPlacements(panelPlacementsFromDock(entries));
+      setLayout(panelLayoutFromDock(entries));
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -689,18 +691,28 @@ function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
   }, [onError]);
 
   const update = (id: PanelId, next: PanelPlacement) => {
-    setPlacements((prev) => {
-      const updated = { ...prev, [id]: next };
-      void dockLayoutSet(panelPlacementsToDock(updated)).catch((e) => onError(String(e)));
+    setLayout((prev) => {
+      const updated: PanelLayout = {
+        placements: { ...prev.placements, [id]: next },
+        order: prev.order,
+      };
+      void dockLayoutSet(panelLayoutToDock(updated)).catch((e) => onError(String(e)));
+      return updated;
+    });
+  };
+
+  const move = (id: PanelId, direction: 'up' | 'down') => {
+    setLayout((prev) => {
+      const updated = movePanelInZone(prev, id, direction);
+      if (updated === prev) return prev;
+      void dockLayoutSet(panelLayoutToDock(updated)).catch((e) => onError(String(e)));
       return updated;
     });
   };
 
   const resetDefaults = () => {
-    setPlacements(DEFAULT_PANEL_PLACEMENTS);
-    void dockLayoutSet(panelPlacementsToDock(DEFAULT_PANEL_PLACEMENTS)).catch((e) =>
-      onError(String(e)),
-    );
+    setLayout(DEFAULT_PANEL_LAYOUT);
+    void dockLayoutSet(panelLayoutToDock(DEFAULT_PANEL_LAYOUT)).catch((e) => onError(String(e)));
   };
 
   const sideFillOn = Boolean(config?.side_panels_fill_height);
@@ -719,17 +731,17 @@ function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
         <span>layout map</span>
         <span className="panels-tab-header-dim">live · changes save automatically</span>
       </div>
-      <PanelsPreview placements={placements} highlightId={highlightId} />
+      <PanelsPreview layout={layout} highlightId={highlightId} onMove={move} />
       <label className="settings-checkbox panels-side-fill-toggle">
         <input type="checkbox" checked={sideFillOn} onChange={toggleSideFill} />
         <span>side panels span full height (input lives under terminal only)</span>
       </label>
       <div className="panels-rows">
-        {ALL_PANEL_IDS.map((id) => (
+        {layout.order.map((id) => (
           <PanelRow
             key={id}
             id={id}
-            placement={placements[id]}
+            placement={layout.placements[id]}
             onChange={(next) => update(id, next)}
             onFocus={() => setHighlightId(id)}
             onBlur={() => setHighlightId(null)}
@@ -746,27 +758,55 @@ function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
 }
 
 function PanelsPreview({
-  placements,
+  layout,
   highlightId,
+  onMove,
 }: {
-  placements: Record<PanelId, PanelPlacement>;
+  layout: PanelLayout;
   highlightId: PanelId | null;
+  onMove: (id: PanelId, direction: 'up' | 'down') => void;
 }) {
-  const g = groupPanels(placements);
-  const chip = (id: PanelId, hidden = false) => (
-    <span
-      key={id}
-      className={[
-        'panels-preview-chip',
-        highlightId === id ? 'is-active' : '',
-        hidden ? 'is-hidden' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-    >
-      {PANELS[id].label}
-    </span>
-  );
+  const g = groupPanels(layout);
+  const chip = (id: PanelId, hidden = false) => {
+    const canUp = !hidden && canMovePanelUp(layout, id);
+    const canDown = !hidden && canMovePanelDown(layout, id);
+    return (
+      <span
+        key={id}
+        className={[
+          'panels-preview-chip',
+          highlightId === id ? 'is-active' : '',
+          hidden ? 'is-hidden' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        {PANELS[id].label}
+        {!hidden && (canUp || canDown) && (
+          <span className="panels-preview-chip-nudge">
+            <button
+              type="button"
+              className="panels-preview-chip-arrow"
+              disabled={!canUp}
+              aria-label={`move ${PANELS[id].label} up`}
+              onClick={() => onMove(id, 'up')}
+            >
+              ▲
+            </button>
+            <button
+              type="button"
+              className="panels-preview-chip-arrow"
+              disabled={!canDown}
+              aria-label={`move ${PANELS[id].label} down`}
+              onClick={() => onMove(id, 'down')}
+            >
+              ▼
+            </button>
+          </span>
+        )}
+      </span>
+    );
+  };
   const stack = (ids: PanelId[]) =>
     ids.length > 0 ? <div className="panels-preview-stack">{ids.map((id) => chip(id))}</div> : null;
   return (
