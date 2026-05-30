@@ -116,13 +116,18 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
     // interpolation, so `gg` becomes `<verb> <target>` and then runs
     // through the normal pipeline (so aliases inside the verb still
     // expand, vars inside still interpolate).
-    if let Some(qk) = profile.target.quick_keys.iter().find(|q| q.name == head) {
-        if qk.verb.is_empty() {
-            return error_echo(format!(
-                "quick-key `{}` has no verb yet — set with `#qkey {} <verb>`",
-                qk.name, qk.name,
-            ));
-        }
+    //
+    // Only fire when the quick-key actually has a verb configured.
+    // An unconfigured quick-key falls through to alias expansion (and
+    // then to the MUD if no alias matches), so a default-but-unused
+    // name like `gg` does not shadow a user alias of the same name
+    // with a "no verb is set" error.
+    if let Some(qk) = profile
+        .target
+        .quick_keys
+        .iter()
+        .find(|q| q.name == head && !q.verb.is_empty())
+    {
         let target = profile.target.name.clone().unwrap_or_default();
         if target.is_empty() {
             return error_echo("no target — set one with `tar <name|index>` first".to_string());
