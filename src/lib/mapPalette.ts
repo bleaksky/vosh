@@ -8,23 +8,46 @@ export interface SectorTheme {
   fill: string;
   border: string;
   halo: string;
+  /// Single character drawn in the glyph map for cells of this
+  /// sector. Picked to disambiguate from neighbors: hills `^` vs
+  /// mountain `M`, water `~` vs deep water `≈`, etc. Stay ASCII or
+  /// well-supported Unicode so any monospace font renders the cell
+  /// at exactly 1ch.
+  glyph: string;
 }
 
 export const SECTORS: Record<number, SectorTheme> = {
-  0: { name: 'Inside', fill: '#222228', border: '#5a5a64', halo: '#8888a0' },
-  1: { name: 'City', fill: '#28221a', border: '#a08a5a', halo: '#c4a872' },
-  2: { name: 'Field', fill: '#182418', border: '#4a8a4a', halo: '#5faf5f' },
-  3: { name: 'Forest', fill: '#102010', border: '#2a7a2a', halo: '#2aaa2a' },
-  4: { name: 'Hills', fill: '#242418', border: '#8a8a4a', halo: '#afaf5f' },
-  5: { name: 'Mountain', fill: '#1c1c24', border: '#5a5a6a', halo: '#7a7a8a' },
-  6: { name: 'Water', fill: '#101c2c', border: '#3a6a9a', halo: '#4a9adf' },
-  7: { name: 'Deep Water', fill: '#0c1434', border: '#2a5a8a', halo: '#2a7adf' },
-  8: { name: 'Swamp', fill: '#1a1c10', border: '#4a4a2a', halo: '#6a6a2a' },
-  9: { name: 'Air', fill: '#142028', border: '#5a8aaa', halo: '#7abada' },
-  10: { name: 'Desert', fill: '#2a2210', border: '#aa8a3a', halo: '#ddb030' },
-  11: { name: 'Lava', fill: '#2a1010', border: '#aa3a2a', halo: '#df4a2a' },
-  12: { name: 'Snow', fill: '#222428', border: '#9a9aa0', halo: '#c0c0c8' },
+  0: { name: 'Inside', fill: '#222228', border: '#5a5a64', halo: '#8888a0', glyph: '#' },
+  1: { name: 'City', fill: '#28221a', border: '#a08a5a', halo: '#c4a872', glyph: '+' },
+  2: { name: 'Field', fill: '#182418', border: '#4a8a4a', halo: '#5faf5f', glyph: '.' },
+  3: { name: 'Forest', fill: '#102010', border: '#2a7a2a', halo: '#2aaa2a', glyph: '*' },
+  4: { name: 'Hills', fill: '#242418', border: '#8a8a4a', halo: '#afaf5f', glyph: '^' },
+  5: { name: 'Mountain', fill: '#1c1c24', border: '#5a5a6a', halo: '#7a7a8a', glyph: 'M' },
+  6: { name: 'Water', fill: '#101c2c', border: '#3a6a9a', halo: '#4a9adf', glyph: '~' },
+  7: { name: 'Deep Water', fill: '#0c1434', border: '#2a5a8a', halo: '#2a7adf', glyph: '≈' },
+  8: { name: 'Swamp', fill: '#1a1c10', border: '#4a4a2a', halo: '#6a6a2a', glyph: ',' },
+  9: { name: 'Air', fill: '#142028', border: '#5a8aaa', halo: '#7abada', glyph: "'" },
+  10: { name: 'Desert', fill: '#2a2210', border: '#aa8a3a', halo: '#ddb030', glyph: ':' },
+  11: { name: 'Lava', fill: '#2a1010', border: '#aa3a2a', halo: '#df4a2a', glyph: '!' },
+  12: { name: 'Snow', fill: '#222428', border: '#9a9aa0', halo: '#c0c0c8', glyph: 'o' },
 };
+
+/// Fallback for sector codes the server sends that we have not yet
+/// mapped (e.g. a new terrain type on Aabahran). Reads as "something
+/// here" without screaming the way `?` did — but still slightly
+/// noticeable so we can find missing codes during play.
+export const UNKNOWN_GLYPH = '·';
+
+/// Color to render a sector's glyph at, given a dim level from
+/// `dimLevel()` (0 = nearest/full, 1 = mid, 2 = far/faint). The halo
+/// color is the source; dim levels mix toward the surface bg via
+/// rgba alpha. Same source-of-truth as the squares/tileset modes so
+/// a tile of the same sector reads the same color across modes.
+export function sectorGlyphColor(code: string | undefined, dimLevel: number): string {
+  const theme = sectorForCode(code);
+  const alpha = dimLevel <= 0 ? 1 : dimLevel === 1 ? 0.65 : 0.38;
+  return hexToRgba(theme.halo, alpha);
+}
 
 // Theme-dependent slots (bg, origin, originFill, text) are exposed as
 // getters that read from --c-* custom properties at access time so the

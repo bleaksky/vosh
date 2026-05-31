@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { getAreaSnapshot, onGmcp, onMap, onState, type AreaSnapshot } from '../lib/session';
-import { MAP_COLORS, SECTORS, hexToRgba, sectorForCode } from '../lib/mapPalette';
+import {
+  MAP_COLORS,
+  SECTORS,
+  UNKNOWN_GLYPH,
+  hexToRgba,
+  sectorForCode,
+  sectorGlyphColor,
+} from '../lib/mapPalette';
 import { drawTerrainDecorations } from '../lib/terrainDecor';
 import { subscribeThemeChanges } from '../lib/theme';
 
@@ -21,8 +28,10 @@ interface ServerCell {
   h?: number;
   /// Flag chars (e.g. `"$bthsq"` for safe/bank/trainer/healer/shop/quest).
   f?: string;
-  /// Sector index (`"0".."9"`, `"a".."c"` on Aabahran).
-  s?: string;
+  /// Sector index. Aabahran sends digit codes (`0..9`) as a JSON
+  /// **number** and letter codes (`a..c`) as a string. We normalize
+  /// to a string at read time via sectorCodeOf().
+  s?: string | number;
   /// Door state dict keyed by direction.
   d?: Record<string, unknown>;
   /// Exit destinations keyed by direction.
@@ -40,7 +49,9 @@ interface OffFloorEntry {
   /// Present in `zr` entries; absent in `a` / `b` entries (where the
   /// array name implies +1 / -1).
   z?: number;
-  s?: string;
+  /// Sector index — number for digit codes, string for letter codes.
+  /// See ServerCell.s for the rationale.
+  s?: string | number;
   e?: string;
   l?: number | string;
   ar?: number | string;
@@ -163,6 +174,16 @@ function gridDims(payload: MapTilesPayload): { rows: number; cols: number } {
 
 function hasExit(cell: ServerCell, dir: 'n' | 's' | 'e' | 'w'): boolean {
   return Boolean(cell.e && cell.e.toLowerCase().includes(dir));
+}
+
+// Aabahran's GMCP payload serializes digit sector codes (0..9) as
+// JSON numbers and letter codes (a..c) as strings. Without this
+// coercion the `0` cells (Inside rooms — the most common terrain
+// indoors) would short-circuit the `!sectorCode` falsy check below
+// and skip rendering entirely, leaving every indoor room invisible.
+function sectorCodeOf(s: unknown): string {
+  if (s === null || s === undefined) return '';
+  return String(s);
 }
 
 export function ServerMapView() {
@@ -699,7 +720,7 @@ function drawSquares(
       const cx = ox + c * pitch;
       const cy = oy + r * pitch;
       const isCenter = r === centerR && c === centerC;
-      const sector = sectorForCode(cell.s);
+      const sector = sectorForCode(sectorCodeOf(cell.s));
       const dist = Math.abs(r - centerR) + Math.abs(c - centerC);
       const depth = depthAlphaForRing(dist);
 
@@ -773,7 +794,7 @@ function drawOffFloorCells(
   for (const entry of entries) {
     const cx = ox + entry.x * pitch;
     const cy = oy + entry.y * pitch;
-    const sector = sectorForCode(entry.s);
+    const sector = sectorForCode(sectorCodeOf(entry.s));
     ctx.save();
     // Faint enough that off-floor rooms read as background context
     // without competing with same-floor cells; corridor lines in
@@ -856,92 +877,10 @@ function depthAlphaForRing(d: number): number {
   return 0.28;
 }
 
-// Sector → ASCII glyph, lifted verbatim from tintin's
-// ~/tintin/map_panel.tin `ui_sector_glyph` function so the Vosh
-// glyphs view reads identically to my TinTin++ client.
-const SECTOR_GLYPHS: Record<string, string> = {
-  '0': '#', // inside
-  '1': '+', // city
-  '2': '.', // field
-  '3': '*', // forest
-  '4': '^', // hills
-  '5': '^', // mountain
-  '6': '~', // water
-  '7': '~', // deep water
-  '8': ',', // air / swamp
-  '9': ':', // desert
-  a: '.', // underwater
-  b: '!', // lava / cave
-  c: '=', // road
-};
-
-// xterm-256 color ladder per sector × dim tier (0=full, 1=mid, 2=faint).
-// Indices come straight from tintin's `ui_sector_color` function.
-// Tier 0 in tintin is rendered with the bold attribute; the canvas
-// renderer fakes that by using the same color (the bold flag isn't
-// available on Canvas2D text without weight switching, which would
-// change metrics).
-const SECTOR_COLOR_LADDER: Record<string, [number, number, number]> = {
-  '0': [253, 249, 244],
-  '1': [216, 180, 137],
-  '2': [155, 119, 113],
-  '3': [120, 84, 78],
-  '4': [215, 179, 143],
-  '5': [253, 250, 246],
-  '6': [123, 117, 111],
-  '7': [111, 75, 69],
-  '8': [149, 143, 107],
-  '9': [195, 153, 117],
-  a: [230, 228, 221],
-  b: [209, 203, 167],
-  c: [255, 252, 248],
-};
-
-// Canonical 6×6×6 xterm cube + 24-step grayscale + 16 named ANSI slots.
-// Same conversion used inside RoomStrip; kept inline here to avoid
-// expanding the public surface of mapPalette for one call site.
-const ANSI_256_CUBE = [0, 95, 135, 175, 215, 255];
-function ansi256ToHex(idx: number): string {
-  if (idx < 0 || idx > 255) return '#c5c9c7';
-  if (idx >= 232) {
-    const v = 8 + (idx - 232) * 10;
-    const h = v.toString(16).padStart(2, '0');
-    return `#${h}${h}${h}`;
-  }
-  if (idx < 16) {
-    const named = [
-      '#585858',
-      '#c4746e',
-      '#8a9a7b',
-      '#c4b28a',
-      '#8ba4b0',
-      '#a292a3',
-      '#8ea4a2',
-      '#a4a7a4',
-      '#5c6066',
-      '#e46876',
-      '#87a987',
-      '#e6c384',
-      '#7fb4ca',
-      '#938aa9',
-      '#7aa89f',
-      '#c5c9c7',
-    ];
-    return named[idx] ?? '#c5c9c7';
-  }
-  const c = idx - 16;
-  const r = Math.floor(c / 36);
-  const g = Math.floor((c % 36) / 6);
-  const b = c % 6;
-  const toHex = (n: number) => n.toString(16).padStart(2, '0');
-  return `#${toHex(ANSI_256_CUBE[r])}${toHex(ANSI_256_CUBE[g])}${toHex(ANSI_256_CUBE[b])}`;
-}
-
-function glyphColor(sectorCode: string, lvl: number): string {
-  const ladder = SECTOR_COLOR_LADDER[sectorCode] ?? [250, 247, 244];
-  const idx = ladder[Math.max(0, Math.min(2, lvl))] ?? ladder[2];
-  return ansi256ToHex(idx);
-}
+// Player marker color. xterm color 220 is the bright gold tintin
+// uses in its `\e[1;38;5;220m@\e[0m` marker. Hardcoded here so the
+// glyph overlay does not need a full xterm-256 lookup table.
+const PLAYER_COLOR = '#ffd700';
 
 // Connect-glyph override: rooms with vertical exits get a marker
 // instead of the sector glyph. Matches tintin's ui_connect_glyph
@@ -968,111 +907,290 @@ function dimLevel(dr: number, dc: number, light: number | string | undefined): n
   return lvl;
 }
 
-// HTML glyph overlay. Replaces the previous canvas drawGlyphs which
-// rendered each character with square pixel pitch, producing loose,
-// misaligned cells. This version emits the grid as monospace text so
-// every cell is exactly 1ch wide × 1em tall — the same character-grid
-// shape tintin uses in a real terminal. The player cell is anchored
-// to the parent's geometric center via CSS calc().
+// HTML glyph overlay.
 //
-// Off-floor rooms (a/b/zr) are intentionally not rendered here so the
-// result reads identically to tintin's map_panel. Use squares or
-// tileset mode when multi-floor structure matters.
-function GlyphsOverlay({ payload, zoom }: { payload: MapTilesPayload; zoom: number }) {
+// Render model: each room takes one glyph cell, and adjacent rooms
+// are separated by a gap cell that either holds a box-drawing
+// connection (─, │, ┼) if both rooms share that exit or stays blank.
+// The output grid is therefore (2*rows - 1) × (2*cols - 1) so the
+// connection cells have somewhere to live.
+//
+// The player cell anchors to the parent's geometric center via a
+// CSS calc() translate, so the map scrolls around the player as
+// they walk. Each cell measures 1ch × 1em (line-height: 1) so the
+// math is a clean character count.
+//
+// Layers, painted in order:
+//   1. Off-floor rooms (a / b / zr) — dim sector glyph as a
+//      background hint so the player can see structure above and
+//      below the current floor. Rendered at low alpha via CSS.
+//   2. Same-floor rooms — full color sector glyph; overrides any
+//      off-floor cell at the same coords.
+//   3. Connection cells — drawn between two adjacent same-floor
+//      rooms when both rooms list the corresponding exit.
+//   4. Player marker (`@`) — bold yellow, always on top.
+type FloorKind = 'same' | 'above' | 'below' | 'far';
+interface GlyphCell {
+  glyph: string;
+  color: string;
+  isPlayer: boolean;
+  floor: FloorKind;
+}
+const EMPTY_CELL: GlyphCell = {
+  glyph: ' ',
+  color: 'transparent',
+  isPlayer: false,
+  floor: 'same',
+};
+
+// Wrapped in React.memo so a Char.Vitals / Room.Info / Room.Chars
+// burst during a movement (which re-renders ServerMapView when its
+// snapshot or themeVersion shifts) does not re-run the 60×60 grid
+// build + ~3500-span DOM diff. Only changes to the tiles payload
+// reference or the zoom value trigger a real rebuild.
+const GlyphsOverlay = memo(function GlyphsOverlay({
+  payload,
+  zoom,
+}: {
+  payload: MapTilesPayload;
+  zoom: number;
+}) {
   const { rows, cols } = gridDims(payload);
   if (rows === 0 || cols === 0) {
     return <div className="map-glyph-empty">no glyph data in payload</div>;
   }
-  const centerR = Math.floor((rows + 1) / 2);
-  const centerC = Math.floor((cols + 1) / 2);
+
+  // Find the player cell. Aabahran tags it with `h: 1`; falling
+  // back to (radius+1) per the GMCP spec when no cell carries the
+  // flag. Old "midpoint of observed cells" math broke on sparse
+  // grids — the player @ would not paint because the computed center
+  // missed the player's row.
+  //
+  // The h-check is permissive so a JSON quirk (`h: "1"`, `h: true`)
+  // still resolves to the player. Without that, going up into an
+  // indoor area sometimes lost the marker entirely.
+  let centerR = 0;
+  let centerC = 0;
+  if (payload.g) {
+    outer: for (const [rKey, row] of Object.entries(payload.g)) {
+      for (const [cKey, cell] of Object.entries(row)) {
+        if (!cell || typeof cell === 'string') continue;
+        const h = (cell as { h?: unknown }).h;
+        if (h === 1 || h === '1' || h === true) {
+          centerR = Number(rKey);
+          centerC = Number(cKey);
+          break outer;
+        }
+      }
+    }
+  }
+  if (centerR === 0 || centerC === 0) {
+    if (typeof payload.r === 'number' && payload.r > 0) {
+      centerR = payload.r + 1;
+      centerC = payload.r + 1;
+    } else {
+      centerR = Math.floor((rows + 1) / 2);
+      centerC = Math.floor((cols + 1) / 2);
+    }
+  }
+
   const textFallback = parseTextGrid(payload.t);
   const hasGrid = !!payload.g;
 
-  type GlyphCell = { glyph: string; color: string; isPlayer: boolean };
-  const grid: GlyphCell[][] = [];
+  // Output grid: rooms at even indices, connections at odd indices.
+  const outRows = 2 * rows - 1;
+  const outCols = 2 * cols - 1;
+  const out: GlyphCell[][] = [];
+  for (let r = 0; r < outRows; r++) {
+    out.push(Array.from({ length: outCols }, () => EMPTY_CELL));
+  }
+
+  const placeRoom = (r: number, c: number, gc: GlyphCell) => {
+    const or = 2 * (r - 1);
+    const oc = 2 * (c - 1);
+    if (or < 0 || or >= outRows || oc < 0 || oc >= outCols) return;
+    out[or][oc] = gc;
+  };
+
+  // Pass 1: off-floor rooms. Each entry produces a sector glyph
+  // tagged with its floor kind so the renderer can dim it via CSS.
+  const placeOffEntries = (entries: OffFloorEntry[] | undefined, floor: FloorKind) => {
+    if (!Array.isArray(entries)) return;
+    for (const entry of entries) {
+      const sectorCode = sectorCodeOf(entry.s);
+      if (sectorCode === '') continue;
+      const sector = sectorForCode(sectorCode);
+      const isUnknown = sectorCode !== '0' && sector === SECTORS[0];
+      const cg = connectGlyph(entry.e);
+      const glyph = cg ?? (isUnknown ? UNKNOWN_GLYPH : sector.glyph);
+      placeRoom(entry.y, entry.x, {
+        glyph,
+        color: sector.halo,
+        isPlayer: false,
+        floor,
+      });
+    }
+  };
+  placeOffEntries(payload.a, 'above');
+  placeOffEntries(payload.b, 'below');
+  if (Array.isArray(payload.zr)) {
+    for (const entry of payload.zr) {
+      const z = entry.z ?? 0;
+      const floor: FloorKind = z > 0 ? 'above' : z < 0 ? 'below' : 'far';
+      placeOffEntries([entry], floor);
+    }
+  }
+
+  // Pass 2: same-floor rooms. Overrides off-floor at the same coords.
+  // The player override fires BEFORE the sector check so an indoor
+  // cell that arrives without an `s` field (which happens on the first
+  // tick after walking up/down a Z transition) still gets the marker.
   for (let r = 1; r <= rows; r++) {
-    const rowOut: GlyphCell[] = [];
     for (let c = 1; c <= cols; c++) {
-      const cell = hasGrid ? getCell(payload, r, c) : null;
-      const sectorFromGrid = cell?.s ?? '';
-      const sectorFromText = textFallback[r - 1]?.[c - 1] ?? '';
-      const sectorCode = sectorFromGrid || sectorFromText;
-      if (!sectorCode || sectorCode === ' ') {
-        rowOut.push({ glyph: ' ', color: 'transparent', isPlayer: false });
-        continue;
-      }
-      // Player cell wins over everything. Bold yellow `@` per tintin.
       if (r === centerR && c === centerC) {
-        rowOut.push({ glyph: '@', color: ansi256ToHex(220), isPlayer: true });
+        placeRoom(r, c, { glyph: '@', color: PLAYER_COLOR, isPlayer: true, floor: 'same' });
         continue;
       }
+      const cell = hasGrid ? getCell(payload, r, c) : null;
+      const sectorFromGrid = sectorCodeOf(cell?.s);
+      // g and textFallback are parallel JS arrays. My loop reads
+      // payload.g[String(r)] (array index r) so the text fallback
+      // must read textFallback[r] too — not [r - 1]. The old
+      // off-by-one made every null-cell SE of the player pick up
+      // the player's "@" from text and render it as UNKNOWN_GLYPH.
+      const sectorFromText = textFallback[r]?.[c] ?? '';
+      const sectorCode = sectorFromGrid || sectorFromText;
+      if (!sectorCode || sectorCode === ' ') continue;
       const dr = r - centerR;
       const dc = c - centerC;
       const lvl = dimLevel(dr, dc, cell?.l);
       const cg = cell ? connectGlyph(cell.e) : null;
-      const glyph = cg ?? SECTOR_GLYPHS[sectorCode] ?? '?';
-      rowOut.push({ glyph, color: glyphColor(sectorCode, lvl), isPlayer: false });
+      const sector = sectorForCode(sectorCode);
+      const isUnknown = sectorCode !== '0' && sector === SECTORS[0];
+      const glyph = cg ?? (isUnknown ? UNKNOWN_GLYPH : sector.glyph);
+      placeRoom(r, c, {
+        glyph,
+        color: sectorGlyphColor(sectorCode, lvl),
+        isPlayer: false,
+        floor: 'same',
+      });
     }
-    grid.push(rowOut);
   }
 
+  // Pass 3: connection chars between adjacent same-floor rooms.
+  // Only same-floor connects to same-floor — connections to off-
+  // floor would require diagonal up/down markers that the
+  // single-cell grid cannot carry. The exit-string check is
+  // bidirectional so a one-way exit does not light up the line
+  // (otherwise the map would imply a connection that does not
+  // travel both ways).
+  for (let r = 1; r <= rows; r++) {
+    for (let c = 1; c <= cols; c++) {
+      const here = hasGrid ? getCell(payload, r, c) : null;
+      if (!here) continue;
+      // east-west connector
+      if (c < cols) {
+        const east = hasGrid ? getCell(payload, r, c + 1) : null;
+        if (east && hasExit(here, 'e') && hasExit(east, 'w')) {
+          const or = 2 * (r - 1);
+          const oc = 2 * (c - 1) + 1;
+          out[or][oc] = {
+            glyph: '─',
+            color: 'var(--c-border-strong, var(--c-border))',
+            isPlayer: false,
+            floor: 'same',
+          };
+        }
+      }
+      // north-south connector
+      if (r < rows) {
+        const south = hasGrid ? getCell(payload, r + 1, c) : null;
+        if (south && hasExit(here, 's') && hasExit(south, 'n')) {
+          const or = 2 * (r - 1) + 1;
+          const oc = 2 * (c - 1);
+          out[or][oc] = {
+            glyph: '│',
+            color: 'var(--c-border-strong, var(--c-border))',
+            isPlayer: false,
+            floor: 'same',
+          };
+        }
+      }
+    }
+  }
+
+  // Pass 4: unconditional player paint. Belt-and-suspenders for the
+  // pass-2 override — if the player cell is outside the iteration
+  // bounds (sparse grid, weird radius) the marker still lands at the
+  // detected center. Without this, the @ silently disappeared on
+  // some indoor floors.
+  placeRoom(centerR, centerC, {
+    glyph: '@',
+    color: PLAYER_COLOR,
+    isPlayer: true,
+    floor: 'same',
+  });
+
   // Font size scales with zoom; base 14 keeps glyph cells legible at
-  // 1.0× and matches the terminal's default size enough that the map
-  // reads as part of the same display surface.
+  // 1.0× and matches the terminal's default size.
   const fontSize = Math.round(14 * zoom);
 
-  // Translate the grid so its (centerC, centerR) cell sits at the
-  // parent's geometric center. Each cell measures 1ch wide × 1em
-  // tall (line-height: 1), so the offset is a clean calc() and the
-  // grid stays pixel-aligned without measuring text.
-  const playerColOffset = centerC - 0.5;
-  const playerRowOffset = centerR - 0.5;
+  // Asymmetric cell sizing crunches the map toward squares-mode
+  // density while keeping connection chars visible. Room cells stay
+  // 1em × 1em so each sector glyph still has a clean box. Bridge
+  // cells (the in-between row/column the doubled grid creates for
+  // ─ │ connectors) shrink to BRIDGE_EM, so room-to-room pitch is
+  // 1 + BRIDGE_EM em instead of 2em. CSS reads this constant via
+  // a --vosh-glyph-bridge custom property so the same value drives
+  // both cell widths and the player-center translate.
+  const BRIDGE_EM = 0.35;
+  const ROOM_EM = 1.0;
+  const stepEm = ROOM_EM + BRIDGE_EM;
+  const playerColOffset = (centerC - 1) * stepEm + ROOM_EM / 2;
+  const playerRowOffset = (centerR - 1) * stepEm + ROOM_EM / 2;
 
-  // Collapse runs of consecutive same-color spans per row so the DOM
-  // size stays reasonable on big grids (a 30×30 grid drops from ~900
-  // nodes to ~80–150 depending on color variety).
   return (
     <div
       className="map-glyph-grid"
       style={{
         fontSize: `${fontSize}px`,
-        transform: `translate(calc(-1ch * ${playerColOffset}), calc(-1em * ${playerRowOffset}))`,
+        transform: `translate(calc(-1em * ${playerColOffset}), calc(-1em * ${playerRowOffset}))`,
       }}
     >
-      {grid.map((row, r) => (
-        <div key={r} className="map-glyph-row">
-          {coalesceRow(row).map((seg, i) => (
-            <span
-              key={i}
-              className={seg.isPlayer ? 'map-glyph-player' : undefined}
-              style={{ color: seg.color }}
-            >
-              {seg.text}
+      {out.map((row, r) => (
+        <div
+          key={r}
+          className={`map-glyph-row ${r % 2 === 0 ? 'map-glyph-row-room' : 'map-glyph-row-bridge'}`}
+        >
+          {row.map((cell, c) => (
+            <span key={c} className={cellClass(cell, r, c)} style={{ color: cell.color }}>
+              {cell.glyph}
             </span>
           ))}
         </div>
       ))}
     </div>
   );
-}
+});
 
-interface GlyphSegment {
-  text: string;
-  color: string;
-  isPlayer: boolean;
-}
-
-function coalesceRow(row: { glyph: string; color: string; isPlayer: boolean }[]): GlyphSegment[] {
-  const out: GlyphSegment[] = [];
-  for (const cell of row) {
-    const last = out[out.length - 1];
-    if (last && last.color === cell.color && last.isPlayer === cell.isPlayer) {
-      last.text += cell.glyph;
-    } else {
-      out.push({ text: cell.glyph, color: cell.color, isPlayer: cell.isPlayer });
-    }
-  }
-  return out;
+// Cell kind is encoded in its output position:
+//   even row + even col = room (1em × 1em)
+//   even row + odd col  = horizontal bridge (BRIDGE_EM × 1em)
+//   odd row + even col  = vertical bridge (1em × BRIDGE_EM)
+//   odd row + odd col   = corner (BRIDGE_EM × BRIDGE_EM, always blank)
+function cellClass(cell: GlyphCell, r: number, c: number): string {
+  const isRoomRow = r % 2 === 0;
+  const isRoomCol = c % 2 === 0;
+  const parts = ['map-glyph-cell'];
+  if (isRoomRow && isRoomCol) parts.push('map-glyph-cell-room');
+  else if (isRoomRow) parts.push('map-glyph-cell-hbridge');
+  else if (isRoomCol) parts.push('map-glyph-cell-vbridge');
+  else parts.push('map-glyph-cell-corner');
+  if (cell.isPlayer) parts.push('map-glyph-player');
+  if (cell.floor === 'above') parts.push('map-glyph-above');
+  else if (cell.floor === 'below') parts.push('map-glyph-below');
+  else if (cell.floor === 'far') parts.push('map-glyph-far');
+  return parts.join(' ');
 }
 
 function drawTileset(
@@ -1129,7 +1247,8 @@ function drawTileset(
       if (!cell) continue;
       const cx = ox + c * pitch;
       const cy = oy + r * pitch;
-      const idx = cell.s ? SECTOR_ORDER.indexOf(cell.s) : -1;
+      const cellSector = sectorCodeOf(cell.s);
+      const idx = cellSector ? SECTOR_ORDER.indexOf(cellSector) : -1;
       const tileIndex = idx >= 0 && idx < tilesInImage ? idx : 0;
       ctx.drawImage(
         image,

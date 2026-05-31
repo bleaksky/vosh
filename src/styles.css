@@ -441,8 +441,15 @@ body {
      fills the post-padding content area; JS writes its bounding rect
      to host; FitAddon then sees the correct available space and rows
      do not get lost to a padding subtraction the way they did when
-     padding lived on host or xterm.element. */
-  padding: 8px 14px 10px 14px;
+     padding lived on host or xterm.element.
+
+     Bottom padding kept at 6px (the documented chrome-flush minimum)
+     so the visible gap between the cursor row and the input bar is
+     just `6 + xterm row-rounding remainder` instead of the older
+     `10 + remainder`. The remainder itself (0 to one row) is an
+     unavoidable artifact of the floor(availableHeight / cellHeight)
+     row count xterm-addon-fit computes. */
+  padding: 8px 14px 6px 14px;
 }
 
 /* Panel zones. The four configurable edges around the terminal where
@@ -3667,6 +3674,58 @@ body {
 
 .map-glyph-row {
   display: block;
+  white-space: nowrap;
+}
+
+/* The doubled output grid alternates room rows with bridge rows.
+   Each row's height is set explicitly so cells in the row align on
+   the same baseline regardless of glyph content. */
+.map-glyph-row-room {
+  height: 1em;
+  line-height: 1em;
+}
+
+.map-glyph-row-bridge {
+  height: 0.35em;
+  line-height: 0.35em;
+}
+
+/* Per-cell sizing. Rooms keep a 1em × 1em box so the sector glyph
+   has room to render cleanly. Bridge cells (the in-between cells
+   that hold `─` or `│` connectors) are 0.35em — narrow enough to
+   crunch the map toward squares-mode density while keeping the
+   connection chars visible. Hardcoded (instead of a CSS var) so the
+   computed cell pitch in JS and the rendered pitch in DOM cannot
+   drift; the JS side uses BRIDGE_EM = 0.35 to match. */
+.map-glyph-cell {
+  display: inline-block;
+  text-align: center;
+  vertical-align: top;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.map-glyph-cell-room {
+  width: 1em;
+  height: 1em;
+  line-height: 1em;
+}
+
+.map-glyph-cell-hbridge {
+  width: 0.35em;
+  height: 1em;
+  line-height: 1em;
+}
+
+.map-glyph-cell-vbridge {
+  width: 1em;
+  height: 0.35em;
+  line-height: 0.35em;
+}
+
+.map-glyph-cell-corner {
+  width: 0.35em;
+  height: 0.35em;
 }
 
 /* Player marker. Bold yellow `@` with a faint background-color halo
@@ -3674,6 +3733,17 @@ body {
 .map-glyph-player {
   background: rgba(255, 215, 0, 0.16);
   border-radius: 1px;
+}
+
+/* Off-floor cells (rooms one floor above / below / multi-z away).
+   Visible enough that the player can see structure on adjacent
+   floors at a glance, dim enough that the eye does not confuse them
+   with same-floor cells. Above/below could carry a hue shift here
+   to distinguish direction, but the alpha drop is the primary cue. */
+.map-glyph-above,
+.map-glyph-below,
+.map-glyph-far {
+  opacity: 0.32;
 }
 
 .map-glyph-empty {

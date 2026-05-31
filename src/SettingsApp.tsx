@@ -220,15 +220,29 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
     version?: string;
   }>({ kind: 'idle' });
   const [systemFonts, setSystemFonts] = useState<SystemFontEntry[]>([]);
+  const [fontsState, setFontsState] = useState<'idle' | 'loading' | 'loaded'>('idle');
   const [fontFilter, setFontFilter] = useState('');
   const [showOnlyMono, setShowOnlyMono] = useState(true);
   const [trackedDraft, setTrackedDraft] = useState('');
 
-  // Pull the system font catalog from the backend (font-kit) once on
-  // mount. Sorted + deduped server-side; we just filter client-side.
-  useEffect(() => {
-    void listSystemFonts().then(setSystemFonts);
-  }, []);
+  // System font enumeration is lazy. font-kit's first pass costs
+  // 200–500ms because it parses every installed font file to detect
+  // the monospace flag; we used to eat that on Settings open, which
+  // made the General tab feel sluggish. Now we trigger the fetch
+  // only when the user actually engages the font picker (focuses the
+  // filter, toggles monospace-only, etc.). The backend caches the
+  // result in a OnceLock so the second-and-later call within a
+  // session is instant.
+  const ensureFontsLoaded = () => {
+    if (fontsState !== 'idle') return;
+    setFontsState('loading');
+    void listSystemFonts()
+      .then((list) => {
+        setSystemFonts(list);
+        setFontsState('loaded');
+      })
+      .catch(() => setFontsState('idle'));
+  };
 
   // Whenever the live font_family value mentions a system family,
   // inject its @font-face so the preview block actually renders it.
@@ -453,21 +467,33 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
               type="search"
               className="settings-font-input"
               spellCheck={false}
-              placeholder={`filter ${systemFonts.length} installed fonts`}
+              placeholder={
+                fontsState === 'loaded'
+                  ? `filter ${systemFonts.length} installed fonts`
+                  : fontsState === 'loading'
+                    ? 'loading installed fonts…'
+                    : 'click to load installed fonts'
+              }
               value={fontFilter}
               onChange={(e) => setFontFilter(e.target.value)}
+              onFocus={ensureFontsLoaded}
             />
             <label className="settings-font-mono">
               <input
                 type="checkbox"
                 checked={showOnlyMono}
                 onChange={(e) => setShowOnlyMono(e.target.checked)}
+                onFocus={ensureFontsLoaded}
               />
               monospace only
             </label>
           </div>
-          <div className="settings-font-list">
-            {systemFonts.length === 0 ? (
+          <div className="settings-font-list" onMouseEnter={ensureFontsLoaded}>
+            {fontsState === 'idle' ? (
+              <span className="settings-font-empty">
+                hover or click the filter to load the installed font list
+              </span>
+            ) : fontsState === 'loading' || systemFonts.length === 0 ? (
               <span className="settings-font-empty">loading installed fonts…</span>
             ) : (
               filteredFonts.map((f) => (
