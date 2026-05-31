@@ -31,6 +31,12 @@ export function ProfilesTab({ onError }: Props) {
   const [createDraft, setCreateDraft] = useState('');
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  // Duplicate uses the same inline-input pattern as rename because
+  // window.prompt() is disabled in Tauri webviews on both macOS
+  // (WKWebView) and Windows (WebView2) — calling it returns null
+  // without showing any UI, so the operation silently aborted.
+  const [duplicateTarget, setDuplicateTarget] = useState<string | null>(null);
+  const [duplicateDraft, setDuplicateDraft] = useState('');
 
   const reload = async () => {
     try {
@@ -104,12 +110,27 @@ export function ProfilesTab({ onError }: Props) {
     }
   };
 
-  const handleDuplicate = async (source: string) => {
-    const newName = prompt(`duplicate "${source}" as:`, `${source}-copy`);
-    if (!newName) return;
+  const beginDuplicate = (name: string) => {
+    setDuplicateTarget(name);
+    setDuplicateDraft(`${name}-copy`);
+  };
+
+  const cancelDuplicate = () => {
+    setDuplicateTarget(null);
+    setDuplicateDraft('');
+  };
+
+  const commitDuplicate = async () => {
+    if (!duplicateTarget) return;
+    const newName = duplicateDraft.trim();
+    if (!newName) {
+      cancelDuplicate();
+      return;
+    }
     try {
-      await profileDuplicate(source, newName.trim());
+      await profileDuplicate(duplicateTarget, newName);
       onError(null);
+      cancelDuplicate();
     } catch (e) {
       onError(String(e));
     }
@@ -226,9 +247,14 @@ export function ProfilesTab({ onError }: Props) {
             onBeginRename={() => beginRename(p.name)}
             onCommitRename={() => void commitRename()}
             onCancelRename={() => setRenameTarget(null)}
+            duplicating={duplicateTarget === p.name}
+            duplicateDraft={duplicateDraft}
+            onDuplicateDraft={setDuplicateDraft}
+            onBeginDuplicate={() => beginDuplicate(p.name)}
+            onCommitDuplicate={() => void commitDuplicate()}
+            onCancelDuplicate={cancelDuplicate}
             onSwitch={() => void handleSwitch(p.name)}
             onDelete={() => void handleDelete(p.name)}
-            onDuplicate={() => void handleDuplicate(p.name)}
             onSaveAutoMatch={async (am, description) => {
               try {
                 await profileSetMetadata(p.name, description, am);
@@ -253,9 +279,14 @@ interface RowProps {
   onBeginRename: () => void;
   onCommitRename: () => void;
   onCancelRename: () => void;
+  duplicating: boolean;
+  duplicateDraft: string;
+  onDuplicateDraft: (v: string) => void;
+  onBeginDuplicate: () => void;
+  onCommitDuplicate: () => void;
+  onCancelDuplicate: () => void;
   onSwitch: () => void;
   onDelete: () => void;
-  onDuplicate: () => void;
   onSaveAutoMatch: (
     am: { host: string | null; port: number | null; character: string | null } | null,
     description: string | null,
@@ -271,9 +302,14 @@ function ProfileRow({
   onBeginRename,
   onCommitRename,
   onCancelRename,
+  duplicating,
+  duplicateDraft,
+  onDuplicateDraft,
+  onBeginDuplicate,
+  onCommitDuplicate,
+  onCancelDuplicate,
   onSwitch,
   onDelete,
-  onDuplicate,
   onSaveAutoMatch,
 }: RowProps) {
   const [open, setOpen] = useState(false);
@@ -347,9 +383,30 @@ function ProfileRow({
           <button type="button" className="settings-btn settings-btn-mute" onClick={onBeginRename}>
             [rename]
           </button>
-          <button type="button" className="settings-btn settings-btn-mute" onClick={onDuplicate}>
-            [duplicate]
-          </button>
+          {duplicating ? (
+            <input
+              type="text"
+              className="profile-row-rename"
+              autoFocus
+              spellCheck={false}
+              value={duplicateDraft}
+              placeholder="new profile name"
+              onChange={(e) => onDuplicateDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onCommitDuplicate();
+                if (e.key === 'Escape') onCancelDuplicate();
+              }}
+              onBlur={onCommitDuplicate}
+            />
+          ) : (
+            <button
+              type="button"
+              className="settings-btn settings-btn-mute"
+              onClick={onBeginDuplicate}
+            >
+              [duplicate]
+            </button>
+          )}
           {!isActive && (
             <button type="button" className="settings-btn settings-btn-danger" onClick={onDelete}>
               [delete]
