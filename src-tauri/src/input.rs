@@ -75,7 +75,7 @@ trigger actions:
   replace <template>
   send <template>
   route <pane>
-parameter substitution: %0 entire args, %1..%9 positional, %% literal %
+parameter substitution: %0 entire args, %1..%9 positional, %1-..%9- Nth onward, %% literal %
 variable substitution: $name or ${name}, $$ literal $
 trigger captures: $0 full match, $1..$9 positional groups, ${name} named group\
 ";
@@ -583,7 +583,10 @@ fn slash_trigger(profile: &mut Profile, args: &str) -> InputResult {
     };
     let trigger = Trigger {
         name: name.to_string(),
-        pattern,
+        patterns: vec![vosh_trigger::TriggerPattern {
+            pattern,
+            enabled: true,
+        }],
         priority: 0,
         enabled: true,
         actions: vec![action],
@@ -624,7 +627,9 @@ fn slash_triggers_list(profile: &Profile) -> InputResult {
             .join(" + ");
         lines.push(format!(
             "  {mark} [{:>3}] {} /{}/ -> {action}",
-            t.priority, t.name, t.pattern,
+            t.priority,
+            t.name,
+            t.first_pattern(),
         ));
     }
     InputResult {

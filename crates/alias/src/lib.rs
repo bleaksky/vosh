@@ -1,8 +1,15 @@
 //! Alias engine with positional substitution and a recursion-depth guard.
 //!
 //! An alias matches the first whitespace-separated word of a command. The
-//! expansion may contain `%0` (the entire arg tail), `%1` through `%9` (the
-//! Nth space-separated word in the arg tail), and `%%` (a literal `%`).
+//! expansion may contain:
+//!
+//! - `%0` — the entire arg tail.
+//! - `%1` through `%9` — the Nth whitespace-separated word.
+//! - `%1-` through `%9-` — word N and the rest of the input, preserving the
+//!   original whitespace between words. `%1-` is equivalent to `%0`. `%N-`
+//!   with fewer than N words present expands to empty.
+//! - `%%` — a literal `%`.
+//!
 //! Multiple commands separated by `;` in an expansion are split and each is
 //! re-fed through the engine, bounded by a maximum recursion depth.
 
@@ -195,7 +202,15 @@ fn substitute_params(expansion: &str, args: &str) -> String {
             Some(d @ '0'..='9') => {
                 chars.next();
                 let idx = (d as u8 - b'0') as usize;
-                if idx == 0 {
+                // Range form `%N-` means "word N through the end of the
+                // input, with the original whitespace between words
+                // preserved". Detected as a trailing `-` after the digit.
+                // Mirrors TinTin's `%1.-9` shorthand without the explicit
+                // upper bound.
+                if chars.peek().copied() == Some('-') {
+                    chars.next();
+                    out.push_str(args_from_word(args, idx));
+                } else if idx == 0 {
                     out.push_str(args);
                 } else if let Some(word) = words.get(idx - 1) {
                     out.push_str(word);
@@ -205,6 +220,36 @@ fn substitute_params(expansion: &str, args: &str) -> String {
         }
     }
     out
+}
+
+/// Return the slice of `args` that starts at the Nth whitespace-separated
+/// word (1-based). N=0 returns the full args string. When fewer than N
+/// words are present, returns an empty slice.
+///
+/// Walks the original `args` byte-by-char so the whitespace between words
+/// is preserved verbatim — `%2-` on input `"a   b\tc"` yields `"b\tc"`,
+/// not `"b c"`. Used by the `%N-` range form so the user can write
+/// `tell %1 %2-` and have the message text keep its original spacing.
+fn args_from_word(args: &str, n: usize) -> &str {
+    if n == 0 {
+        return args;
+    }
+    let mut word_count = 0;
+    let mut in_word = false;
+    for (i, ch) in args.char_indices() {
+        if ch.is_whitespace() {
+            in_word = false;
+            continue;
+        }
+        if !in_word {
+            in_word = true;
+            word_count += 1;
+            if word_count == n {
+                return &args[i..];
+            }
+        }
+    }
+    ""
 }
 
 #[cfg(test)]
@@ -265,6 +310,68 @@ mod tests {
             s.expand_line("say hello"),
             Err(ExpandError::RecursionLimit(_))
         ));
+    }
+
+    #[test]
+    fn range_param_takes_from_nth_word_onward() {
+        let s = store(&[("tell", "%1 says: %2-")]);
+        assert_eq!(
+            s.expand_line("tell bob hello there friend").unwrap(),
+            vec!["bob says: hello there friend".to_string()]
+        );
+    }
+
+    #[test]
+    fn range_param_preserves_original_whitespace() {
+        // `%2-` must keep the literal spacing between words instead of
+        // collapsing to single spaces via `split_whitespace`. This is
+        // why `args_from_word` walks `args` directly.
+        let s = store(&[("echo", "[%2-]")]);
+        assert_eq!(
+            s.expand_line("echo skip  foo   bar").unwrap(),
+            vec!["[foo   bar]".to_string()]
+        );
+    }
+
+    #[test]
+    fn range_param_one_dash_is_full_args() {
+        // `%1-` is the same as `%0`: every word starting from the first.
+        let s = store(&[("a", "%1-"), ("b", "%0")]);
+        assert_eq!(
+            s.expand_line("a foo bar baz").unwrap(),
+            vec!["foo bar baz".to_string()]
+        );
+        assert_eq!(
+            s.expand_line("b foo bar baz").unwrap(),
+            vec!["foo bar baz".to_string()]
+        );
+    }
+
+    #[test]
+    fn range_param_zero_dash_is_full_args() {
+        // `%0-` is a degenerate but harmless form: it carries the same
+        // meaning as `%0` and `%1-`. Documented so the parser is
+        // predictable rather than rejecting it.
+        let s = store(&[("a", "%0-")]);
+        assert_eq!(
+            s.expand_line("a foo bar baz").unwrap(),
+            vec!["foo bar baz".to_string()]
+        );
+    }
+
+    #[test]
+    fn range_param_with_too_few_words_expands_empty() {
+        let s = store(&[("tell", "%1 says: %3-")]);
+        assert_eq!(
+            s.expand_line("tell bob hi").unwrap(),
+            vec!["bob says:".to_string()]
+        );
+    }
+
+    #[test]
+    fn range_param_with_no_args_expands_empty() {
+        let s = store(&[("emote", "[%1-]")]);
+        assert_eq!(s.expand_line("emote").unwrap(), vec!["[]".to_string()]);
     }
 
     #[test]
