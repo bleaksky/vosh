@@ -578,7 +578,10 @@ mod tests {
         groups.sort();
         assert_eq!(
             groups,
-            vec![("Combat".to_string(), false), ("Crafting".to_string(), true)]
+            vec![
+                ("Combat".to_string(), false),
+                ("Crafting".to_string(), true)
+            ]
         );
     }
 
