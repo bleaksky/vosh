@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { onGmcp, onState } from '../lib/session';
+import {
+  DEFAULT_VITALS_CONFIG,
+  getUiConfig,
+  onGmcp,
+  onState,
+  subscribeVitalsConfigChanged,
+  type VitalsConfig,
+} from '../lib/session';
 import { useTickState } from '../lib/useTickState';
 
 interface Vitals {
@@ -18,10 +25,6 @@ interface VitalDeltas {
 }
 
 const NO_DELTAS: VitalDeltas = { hp: null, mana: null, move: null };
-
-const GLYPHS_TOTAL = 20;
-const FILLED = '▰';
-const EMPTY = '▱';
 
 function num(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -97,8 +100,32 @@ function colorForVital(label: string, value: number): string {
 export function VitalsBar({ embedTick = false }: { embedTick?: boolean } = {}) {
   const [vitals, setVitals] = useState<Vitals | null>(null);
   const [deltas, setDeltas] = useState<VitalDeltas>(NO_DELTAS);
+  const [config, setConfig] = useState<VitalsConfig>(DEFAULT_VITALS_CONFIG);
   const vitalsSnapRef = useRef<Vitals | null>(null);
   const prevHourRef = useRef<number | string | null>(null);
+
+  // Vitals appearance config. Read once on mount then live-updated via
+  // vosh://vitals-config-changed so Settings edits land without a
+  // relaunch and the bar redraws on the next render.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    getUiConfig()
+      .then((cfg) => {
+        if (!cancelled) setConfig(cfg.vitals);
+      })
+      .catch(() => {});
+    subscribeVitalsConfigChanged((next) => {
+      if (!cancelled) setConfig(next);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
@@ -191,9 +218,9 @@ export function VitalsBar({ embedTick = false }: { embedTick?: boolean } = {}) {
   if (segs.length === 0) return null;
 
   return (
-    <div className="vitals-bar" aria-label="vitals">
+    <div className={`vitals-bar${config.show_bar ? '' : ' vitals-bar-no-bar'}`} aria-label="vitals">
       {segs.map((s) => (
-        <VitalRow key={s.label} {...s} />
+        <VitalRow key={s.label} config={config} {...s} />
       ))}
       {embedTick && <InlineTick />}
     </div>
@@ -234,51 +261,66 @@ function VitalRow({
   cur,
   max,
   delta,
+  config,
 }: {
   label: string;
   cur: number;
   max: number;
   delta: number | null;
+  config: VitalsConfig;
 }) {
   const value = pct(cur, max);
   const fill = colorForVital(label, value);
-  const filledCount = Math.round((value / 100) * GLYPHS_TOTAL);
-  const emptyCount = GLYPHS_TOTAL - filledCount;
-  const showDelta = delta !== null && delta !== 0;
+  const total = Math.max(4, Math.min(60, config.bar_width));
+  const filledCount = Math.round((value / 100) * total);
+  const emptyCount = total - filledCount;
+  const showDelta = config.show_delta && delta !== null && delta !== 0;
   const deltaPositive = (delta ?? 0) > 0;
 
   return (
-    <>
+    <div className="vitals-row">
       <span className="vitals-label">{label}</span>
-      <span className="vitals-glyphs" aria-hidden="true">
-        {filledCount > 0 && <span style={{ color: fill }}>{FILLED.repeat(filledCount)}</span>}
-        {emptyCount > 0 && <span className="vitals-empty">{EMPTY.repeat(emptyCount)}</span>}
-      </span>
-      <span className="vitals-percent" style={{ color: fill }}>
-        {value}%
-      </span>
-      <span className="vitals-numeric">
-        {cur}/{max}
-      </span>
-      <span className="vitals-delta-slot">
-        {showDelta && (
-          <span
-            className={`vitals-delta${deltaPositive ? ' vitals-delta-up' : ' vitals-delta-down'}`}
-          >
-            {deltaPositive ? '+' : ''}
-            {delta}
-          </span>
-        )}
-      </span>
-    </>
+      {config.show_bar && (
+        <span className="vitals-glyphs" aria-hidden="true">
+          {filledCount > 0 && (
+            <span style={{ color: fill }}>{config.bar_filled.repeat(filledCount)}</span>
+          )}
+          {emptyCount > 0 && (
+            <span className="vitals-empty">{config.bar_empty.repeat(emptyCount)}</span>
+          )}
+        </span>
+      )}
+      {config.show_percent && (
+        <span className="vitals-percent" style={{ color: fill }}>
+          {value}%
+        </span>
+      )}
+      {config.show_numeric && (
+        <span className="vitals-numeric">
+          {cur}/{max}
+        </span>
+      )}
+      {config.show_delta && (
+        <span className="vitals-delta-slot">
+          {showDelta && (
+            <span
+              className={`vitals-delta${deltaPositive ? ' vitals-delta-up' : ' vitals-delta-down'}`}
+            >
+              {deltaPositive ? '+' : ''}
+              {delta}
+            </span>
+          )}
+        </span>
+      )}
+    </div>
   );
 }
 
 function TickRow({ tickSecs, warn }: { tickSecs: number; warn: boolean }) {
   return (
-    <>
+    <div className="vitals-row">
       <span className="vitals-label">tick</span>
       <span className={`vitals-tick-value${warn ? ' is-warn' : ''}`}>{tickSecs}s</span>
-    </>
+    </div>
   );
 }

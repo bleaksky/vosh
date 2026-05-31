@@ -1010,6 +1010,8 @@ pub(crate) struct UiConfigPayload {
     pub custom_themes: Vec<crate::profile_config::CustomTheme>,
     pub split_divider_color: Option<String>,
     pub side_panels_fill_height: bool,
+    pub paste_line_delay_ms: u32,
+    pub vitals: crate::profile_config::VitalsConfig,
 }
 
 #[tauri::command]
@@ -1029,6 +1031,8 @@ pub(crate) async fn ui_get_config(
         custom_themes: p.ui.custom_themes.clone(),
         split_divider_color: p.ui.split_divider_color.clone(),
         side_panels_fill_height: p.ui.side_panels_fill_height,
+        paste_line_delay_ms: p.ui.paste_line_delay_ms,
+        vitals: p.ui.vitals.clone(),
     })
 }
 
@@ -1048,6 +1052,8 @@ pub(crate) async fn ui_set_config(
     custom_themes: Vec<crate::profile_config::CustomTheme>,
     split_divider_color: Option<String>,
     side_panels_fill_height: bool,
+    paste_line_delay_ms: u32,
+    vitals: crate::profile_config::VitalsConfig,
 ) -> Result<(), String> {
     {
         let mut p = state.profile.lock().await;
@@ -1081,6 +1087,21 @@ pub(crate) async fn ui_set_config(
             }
         });
         p.ui.side_panels_fill_height = side_panels_fill_height;
+        // Clamp to a sane range so a malformed input cannot freeze the
+        // paste indicator (0–10s per line is plenty).
+        p.ui.paste_line_delay_ms = paste_line_delay_ms.min(10_000);
+        // Normalize vitals glyphs + width. Empty glyph strings would
+        // render zero-width bars; collapse to the default in that case
+        // so the user cannot accidentally hide the bar via a typo.
+        let mut v = vitals;
+        if v.bar_filled.is_empty() {
+            v.bar_filled = "▰".to_string();
+        }
+        if v.bar_empty.is_empty() {
+            v.bar_empty = "▱".to_string();
+        }
+        v.bar_width = v.bar_width.clamp(4, 60);
+        p.ui.vitals = v;
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;

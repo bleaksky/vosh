@@ -2,6 +2,12 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.2.9 - 2026-05-30
+
+- Pasting multi-line text into the input now sends each line as its own command instead of collapsing the whole paste onto one line. Single-line pastes still insert at the cursor as before. Password prompts are exempt.
+- Paste pacing avoids MUD flood kicks. Settings · General · paste pacing sets the delay between lines (default 500 ms, range 0–10000). A `[paste 7/50  esc cancels]` chip shows progress next to the prompt; Esc aborts the queue and leaves any unsent lines unsent.
+- Vitals panel is configurable. Settings · Panels · vitals adds independent toggles for the bar, percent, numeric, and per-tick delta columns; pick custom filled/empty glyphs from a row of quick-pick chips (parallelogram, block, heavy/light, circle, square, vertical bar) or type your own Unicode characters; tune the bar width (4–60 cells). A live preview shows the result. Preset chips snap the whole layout to `bars`, `compact`, `numeric`, or `percent` in one click.
+
 ## v0.2.7 - 2026-05-30
 
 - Settings · Panels lets you reorder panels inside a zone. Up/down arrows on each chip in the live preview shuffle the stack and persist through `dock_layout`.

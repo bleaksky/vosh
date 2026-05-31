@@ -122,6 +122,71 @@ pub(crate) struct UiConfig {
     /// and status bar span the whole window width below the panels.
     #[serde(default)]
     pub side_panels_fill_height: bool,
+    /// Milliseconds to wait between lines when sending a multi-line
+    /// paste. MUDs often kick clients that send too many commands
+    /// too fast. 0 means send back-to-back with no pacing. Default
+    /// 500ms = ~2 lines/sec, safe for most worlds.
+    #[serde(default = "default_paste_line_delay_ms")]
+    pub paste_line_delay_ms: u32,
+    /// Per-row appearance of the vitals panel. Toggles which columns
+    /// render (bar / percent / numeric / delta) and overrides the
+    /// bar glyphs and width. Default mirrors the historical look.
+    #[serde(default)]
+    pub vitals: VitalsConfig,
+}
+
+/// Vitals row appearance. Each `show_*` toggle controls whether the
+/// matching column renders; turn them all off except `show_numeric`
+/// to get a prompt-style `hp 850/1000` readout with no bar.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct VitalsConfig {
+    #[serde(default = "default_true")]
+    pub show_bar: bool,
+    #[serde(default = "default_true")]
+    pub show_percent: bool,
+    #[serde(default = "default_true")]
+    pub show_numeric: bool,
+    #[serde(default = "default_true")]
+    pub show_delta: bool,
+    /// Glyph repeated to fill the lit portion of the bar.
+    #[serde(default = "default_bar_filled")]
+    pub bar_filled: String,
+    /// Glyph repeated to fill the unlit portion of the bar.
+    #[serde(default = "default_bar_empty")]
+    pub bar_empty: String,
+    /// Total cells in the bar (filled + empty). Clamped to [4, 60].
+    #[serde(default = "default_bar_width")]
+    pub bar_width: u32,
+}
+
+impl Default for VitalsConfig {
+    fn default() -> Self {
+        Self {
+            show_bar: true,
+            show_percent: true,
+            show_numeric: true,
+            show_delta: true,
+            bar_filled: default_bar_filled(),
+            bar_empty: default_bar_empty(),
+            bar_width: default_bar_width(),
+        }
+    }
+}
+
+fn default_bar_filled() -> String {
+    "▰".to_string()
+}
+
+fn default_bar_empty() -> String {
+    "▱".to_string()
+}
+
+fn default_bar_width() -> u32 {
+    20
+}
+
+fn default_paste_line_delay_ms() -> u32 {
+    500
 }
 
 /// User-authored theme. All fields are colors (or strings, for
@@ -182,6 +247,8 @@ impl Default for UiConfig {
             custom_themes: Vec::new(),
             split_divider_color: None,
             side_panels_fill_height: false,
+            paste_line_delay_ms: default_paste_line_delay_ms(),
+            vitals: VitalsConfig::default(),
         }
     }
 }
@@ -300,6 +367,8 @@ impl ProfileConfig {
             custom_themes: profile.ui.custom_themes.clone(),
             split_divider_color: profile.ui.split_divider_color.clone(),
             side_panels_fill_height: profile.ui.side_panels_fill_height,
+            paste_line_delay_ms: profile.ui.paste_line_delay_ms,
+            vitals: profile.ui.vitals.clone(),
         };
 
         let plugins = PluginsPersist {
@@ -395,6 +464,8 @@ impl ProfileConfig {
             custom_themes: self.ui.custom_themes.clone(),
             split_divider_color: self.ui.split_divider_color.clone(),
             side_panels_fill_height: self.ui.side_panels_fill_height,
+            paste_line_delay_ms: self.ui.paste_line_delay_ms,
+            vitals: self.ui.vitals.clone(),
         };
 
         // Plugin enabled-set is persisted; the actual load happens in the

@@ -12,6 +12,7 @@ import { ThemesTab } from './components/ThemesTab';
 import {
   broadcastTrackedAffects,
   checkForUpdate,
+  DEFAULT_VITALS_CONFIG,
   dockLayoutGet,
   dockLayoutSet,
   exportAliases,
@@ -25,6 +26,7 @@ import {
   subscribeDockLayoutChanged,
   type SystemFontEntry,
   type UiConfig,
+  type VitalsConfig,
 } from './lib/session';
 import { applyTheme } from './lib/theme';
 import { customToAppTheme, setCustomThemes, THEMES } from './lib/themes';
@@ -369,6 +371,27 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           />
           <span>keep last command (press enter to repeat)</span>
         </label>
+      </Row>
+      <Row label="paste pacing">
+        <span className="settings-paste-row">
+          <input
+            type="number"
+            className="settings-num-input"
+            min={0}
+            max={10000}
+            step={50}
+            value={config.paste_line_delay_ms}
+            onChange={(e) => {
+              const n = Math.max(0, Math.min(10_000, Math.floor(Number(e.target.value) || 0)));
+              update({ paste_line_delay_ms: n });
+            }}
+            aria-label="delay between pasted lines in milliseconds"
+          />
+          <span className="settings-paste-unit">ms between lines</span>
+          <span className="settings-paste-hint">
+            0 = no pacing. higher values dodge MUD flood filters when pasting long scripts.
+          </span>
+        </span>
       </Row>
       <Row label="split divider">
         <span className="settings-color-row">
@@ -750,10 +773,265 @@ function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
           />
         ))}
       </div>
+      <VitalsConfigSection config={config} setConfig={setConfig} onError={onError} />
       <div className="settings-actions">
         <button type="button" className="settings-btn settings-btn-mute" onClick={resetDefaults}>
           [reset to defaults]
         </button>
+      </div>
+    </div>
+  );
+}
+
+// Vitals appearance section. Lives at the bottom of the Panels tab so
+// the user can dial in column toggles, custom bar glyphs, and bar
+// width next to the rest of the panel-related layout knobs. Each
+// edit autosaves through setUiConfig and broadcasts via
+// vosh://vitals-config-changed so VitalsBar redraws live.
+const VITALS_GLYPH_PRESETS: { label: string; filled: string; empty: string }[] = [
+  { label: 'parallelogram', filled: '▰', empty: '▱' },
+  { label: 'block', filled: '█', empty: '░' },
+  { label: 'heavy/light', filled: '━', empty: '─' },
+  { label: 'circle', filled: '●', empty: '○' },
+  { label: 'square', filled: '◼', empty: '◻' },
+  { label: 'vertical bar', filled: '▮', empty: '▯' },
+];
+
+interface VitalsConfigPreset {
+  label: string;
+  description: string;
+  patch: Partial<VitalsConfig>;
+}
+const VITALS_PRESETS: VitalsConfigPreset[] = [
+  {
+    label: 'bars',
+    description: 'all four columns on, default glyphs',
+    patch: {
+      show_bar: true,
+      show_percent: true,
+      show_numeric: true,
+      show_delta: true,
+    },
+  },
+  {
+    label: 'compact',
+    description: 'no bar, percent + numeric, no delta',
+    patch: {
+      show_bar: false,
+      show_percent: true,
+      show_numeric: true,
+      show_delta: false,
+    },
+  },
+  {
+    label: 'numeric',
+    description: 'just hp 850/1000 style readouts',
+    patch: {
+      show_bar: false,
+      show_percent: false,
+      show_numeric: true,
+      show_delta: false,
+    },
+  },
+  {
+    label: 'percent',
+    description: 'just hp 75% readouts',
+    patch: {
+      show_bar: false,
+      show_percent: true,
+      show_numeric: false,
+      show_delta: false,
+    },
+  },
+];
+
+function VitalsConfigSection({
+  config,
+  setConfig,
+  onError,
+}: {
+  config: UiConfig | null;
+  setConfig: (updater: (prev: UiConfig | null) => UiConfig | null) => void;
+  onError: (e: string | null) => void;
+}) {
+  if (!config) return null;
+  const v = config.vitals;
+  const apply = (patch: Partial<VitalsConfig>) => {
+    const nextVitals: VitalsConfig = { ...v, ...patch };
+    const next: UiConfig = { ...config, vitals: nextVitals };
+    setConfig(() => next);
+    void setUiConfig(next).catch((e) => onError(String(e)));
+  };
+  return (
+    <section className="panels-vitals">
+      <div className="panels-vitals-header">
+        <span>vitals</span>
+        <span className="panels-tab-header-dim">how the hp / mn / mv rows render</span>
+      </div>
+      <div className="panels-vitals-presets" role="group" aria-label="vitals presets">
+        {VITALS_PRESETS.map((preset) => (
+          <button
+            key={preset.label}
+            type="button"
+            className="settings-btn settings-btn-mute panels-vitals-preset-chip"
+            title={preset.description}
+            onClick={() => apply(preset.patch)}
+          >
+            [{preset.label}]
+          </button>
+        ))}
+      </div>
+      <div className="panels-vitals-toggles">
+        <Toggle label="bar glyphs" checked={v.show_bar} onChange={(c) => apply({ show_bar: c })} />
+        <Toggle
+          label="percent"
+          checked={v.show_percent}
+          onChange={(c) => apply({ show_percent: c })}
+        />
+        <Toggle
+          label="numeric"
+          checked={v.show_numeric}
+          onChange={(c) => apply({ show_numeric: c })}
+        />
+        <Toggle
+          label="per-tick delta"
+          checked={v.show_delta}
+          onChange={(c) => apply({ show_delta: c })}
+        />
+      </div>
+      <div className={`panels-vitals-glyphs${v.show_bar ? '' : ' is-disabled'}`}>
+        <label className="panels-vitals-glyph-field">
+          <span className="panels-vitals-glyph-label">filled</span>
+          <input
+            type="text"
+            className="panels-vitals-glyph-input"
+            value={v.bar_filled}
+            disabled={!v.show_bar}
+            spellCheck={false}
+            onChange={(e) =>
+              apply({ bar_filled: e.target.value.length > 0 ? e.target.value : '▰' })
+            }
+            aria-label="filled glyph"
+          />
+        </label>
+        <label className="panels-vitals-glyph-field">
+          <span className="panels-vitals-glyph-label">empty</span>
+          <input
+            type="text"
+            className="panels-vitals-glyph-input"
+            value={v.bar_empty}
+            disabled={!v.show_bar}
+            spellCheck={false}
+            onChange={(e) => apply({ bar_empty: e.target.value.length > 0 ? e.target.value : '▱' })}
+            aria-label="empty glyph"
+          />
+        </label>
+        <label className="panels-vitals-glyph-field">
+          <span className="panels-vitals-glyph-label">width</span>
+          <input
+            type="number"
+            className="settings-num-input"
+            min={4}
+            max={60}
+            step={1}
+            value={v.bar_width}
+            disabled={!v.show_bar}
+            onChange={(e) => {
+              const n = Math.max(4, Math.min(60, Math.floor(Number(e.target.value) || 20)));
+              apply({ bar_width: n });
+            }}
+            aria-label="bar width in glyphs"
+          />
+        </label>
+      </div>
+      <div className={`panels-vitals-quickpicks${v.show_bar ? '' : ' is-disabled'}`}>
+        <span className="panels-vitals-quickpicks-label">quick picks</span>
+        {VITALS_GLYPH_PRESETS.map((preset) => {
+          const active = preset.filled === v.bar_filled && preset.empty === v.bar_empty;
+          return (
+            <button
+              key={preset.label}
+              type="button"
+              className={`panels-vitals-glyph-chip${active ? ' is-active' : ''}`}
+              title={preset.label}
+              disabled={!v.show_bar}
+              onClick={() => apply({ bar_filled: preset.filled, bar_empty: preset.empty })}
+            >
+              {preset.filled.repeat(3)}
+              {preset.empty.repeat(3)}
+            </button>
+          );
+        })}
+      </div>
+      <div className="panels-vitals-preview" aria-label="vitals preview">
+        <VitalsPreview config={v} />
+      </div>
+      <div className="settings-actions">
+        <button
+          type="button"
+          className="settings-btn settings-btn-mute"
+          onClick={() => apply(DEFAULT_VITALS_CONFIG)}
+        >
+          [reset vitals]
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function Toggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <label className="settings-checkbox panels-vitals-toggle">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+// Static preview of a single vital row (hp at 75%) so the user can see
+// the effect of their toggles + glyph picks without leaving the
+// Settings window. Uses the same column rules as the real VitalsBar
+// so the preview matches the runtime render byte-for-byte.
+function VitalsPreview({ config }: { config: VitalsConfig }) {
+  const cur = 750;
+  const max = 1000;
+  const value = 75;
+  const width = Math.max(4, Math.min(60, config.bar_width));
+  const filled = Math.round((value / 100) * width);
+  const empty = width - filled;
+  return (
+    <div className="vitals-bar">
+      <div className="vitals-row">
+        <span className="vitals-label">hp</span>
+        {config.show_bar && (
+          <span className="vitals-glyphs" aria-hidden="true">
+            <span style={{ color: 'var(--c-accent)' }}>{config.bar_filled.repeat(filled)}</span>
+            <span className="vitals-empty">{config.bar_empty.repeat(empty)}</span>
+          </span>
+        )}
+        {config.show_percent && (
+          <span className="vitals-percent" style={{ color: 'var(--c-accent)' }}>
+            {value}%
+          </span>
+        )}
+        {config.show_numeric && (
+          <span className="vitals-numeric">
+            {cur}/{max}
+          </span>
+        )}
+        {config.show_delta && (
+          <span className="vitals-delta-slot">
+            <span className="vitals-delta vitals-delta-up">+12</span>
+          </span>
+        )}
       </div>
     </div>
   );
