@@ -293,13 +293,39 @@ export function Terminal({
     // already-complete prompt at the chunk tail.
     const wrapper = new WordWrapper(term.cols);
     const decoder = new TextDecoder('utf-8', { fatal: false });
-    term.onResize(({ cols }) => wrapper.setCols(cols));
+    term.onResize(({ cols }) => {
+      wrapper.setCols(cols);
+      // Same tail-anchor rationale as in onOutput below: a resize
+      // shifts baseY without moving viewportY, which can land the
+      // live pane above its tail. Snap on resize so the freeze
+      // resolves even when no data is currently arriving (the user
+      // dragged the divider, then waited — no write would have
+      // otherwise unstuck the viewport until the next server line).
+      if (!quietRef.current) {
+        term.scrollToBottom();
+      }
+    });
     onOutput((bytes) => {
       const text = decoder.decode(bytes, { stream: true });
       const wrapped = wrapper.process(text);
       const tail = wrapper.flush();
       if (wrapped.length > 0 || tail.length > 0) {
         term.write(wrapped + tail);
+        // Live pane is a strict tail of server output. Without this
+        // snap, dragging the split-scrollback divider can leave the
+        // live pane's viewport above its baseY — xterm preserves
+        // absolute viewportY across the resize, but baseY shifts as
+        // rows are added/removed, so the viewport ends up "stuck"
+        // showing the line you were on when the drag started. xterm's
+        // default auto-scroll-on-write only kicks in if viewport ==
+        // baseY pre-write, so subsequent server lines pile up below
+        // the visible region instead of advancing the tail. Forcing a
+        // snap on every write makes the live pane behave like a true
+        // live tail. The history pane (quiet=true) opts out so users
+        // can read past output in the split.
+        if (!quietRef.current) {
+          term.scrollToBottom();
+        }
       }
       // Feed the decoded text into the recent-names cache so Tab
       // completion can complete people the user has seen in
