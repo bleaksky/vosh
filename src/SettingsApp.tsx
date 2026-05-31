@@ -34,10 +34,12 @@ import {
   canMovePanelUp,
   DEFAULT_PANEL_LAYOUT,
   groupPanels,
+  isInlineZone,
   movePanelInZone,
   PANELS,
   panelLayoutFromDock,
   panelLayoutToDock,
+  zoneLabel,
   type Align,
   type PanelId,
   type PanelLayout,
@@ -767,9 +769,21 @@ function PanelsPreview({
   onMove: (id: PanelId, direction: 'up' | 'down') => void;
 }) {
   const g = groupPanels(layout);
+  // Map each potential host id ("vitals", "roomstrip", ...) to the list
+  // of panels currently embedded inside it via an `in:<host>` zone. The
+  // host chip shows these as small "+ tick" attachments so the user can
+  // see at a glance where the embedded panel ended up.
+  const embeddedBy: Partial<Record<PanelId, PanelId[]>> = {};
+  for (const id of layout.order) {
+    const z = layout.placements[id].zone;
+    if (!isInlineZone(z)) continue;
+    const hostId = z.slice('in:'.length) as PanelId;
+    (embeddedBy[hostId] ??= []).push(id);
+  }
   const chip = (id: PanelId, hidden = false) => {
     const canUp = !hidden && canMovePanelUp(layout, id);
     const canDown = !hidden && canMovePanelDown(layout, id);
+    const guests = embeddedBy[id] ?? [];
     return (
       <span
         key={id}
@@ -782,6 +796,11 @@ function PanelsPreview({
           .join(' ')}
       >
         {PANELS[id].label}
+        {guests.map((gid) => (
+          <span key={gid} className="panels-preview-chip-embed">
+            + {PANELS[gid].label}
+          </span>
+        ))}
         {!hidden && (canUp || canDown) && (
           <span className="panels-preview-chip-nudge">
             <button
@@ -849,6 +868,24 @@ function PanelsPreview({
           g.bottom.map((id) => chip(id))
         )}
       </div>
+      {/* The statusbar is permanent chrome, not a movable panel, so it has
+          no chip of its own in the preview. When a panel is embedded in
+          it (e.g. tick via in:statusbar), render a thin label row so the
+          user can see where the embedded panel ended up. */}
+      {(() => {
+        const guests = layout.order.filter((id) => layout.placements[id].zone === 'in:statusbar');
+        if (guests.length === 0) return null;
+        return (
+          <div className="panels-preview-zone panels-preview-zone-statusbar">
+            <span className="panels-preview-statusbar-label">statusbar</span>
+            {guests.map((gid) => (
+              <span key={gid} className="panels-preview-chip-embed">
+                + {PANELS[gid].label}
+              </span>
+            ))}
+          </div>
+        );
+      })()}
       {g.hidden.length > 0 && (
         <div className="panels-preview-tray">
           <span className="panels-preview-tray-label">hidden</span>
@@ -875,8 +912,11 @@ function PanelRow({
   const meta = PANELS[id];
   const vertical = placement.zone === 'left' || placement.zone === 'right';
   // Fill panels (map) ignore align — they always take the middle of a
-  // side zone with other panels stacking above or below.
-  const alignDisabled = !vertical || Boolean(meta.fillsSideZone);
+  // side zone with other panels stacking above or below. Inline-host
+  // zones also disable align: the panel renders embedded inside its
+  // host, so there's no column to anchor in.
+  const inline = isInlineZone(placement.zone);
+  const alignDisabled = !vertical || Boolean(meta.fillsSideZone) || inline;
   return (
     <div
       className="panels-row"
@@ -897,7 +937,7 @@ function PanelRow({
         >
           {meta.allowedZones.map((z) => (
             <option key={z} value={z}>
-              {z}
+              {zoneLabel(z)}
             </option>
           ))}
         </select>

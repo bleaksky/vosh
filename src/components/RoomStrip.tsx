@@ -17,6 +17,8 @@ interface AreaInfo {
 
 type AreaMap = Record<string, AreaInfo>;
 
+import { InlineTick } from './VitalsBar';
+
 interface RoomChar {
   name?: string;
   npc?: number | string | boolean;
@@ -157,7 +159,7 @@ function formatExits(exits: Record<string, number | string> | undefined): string
 // terrain · [exits] · here: chars · items: items. Replaces the 5-row
 // stack from the old RoomInfoBar so the room context reads in one
 // glance without consuming vertical space.
-export function RoomStrip() {
+export function RoomStrip({ embedTick = false }: { embedTick?: boolean } = {}) {
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [areas, setAreas] = useState<AreaMap | null>(null);
   const [chars, setChars] = useState<RoomChar[]>([]);
@@ -333,6 +335,7 @@ export function RoomStrip() {
           </span>
         </>
       )}
+      {embedTick && <InlineTick className="room-strip-tick" />}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getTarget, onGmcp, onState, onTarget, type QuickKey } from '../lib/session';
+import { InlineTick } from './VitalsBar';
 
 interface CombatState {
   name: string;
@@ -78,7 +79,7 @@ function extractCombat(data: unknown): CombatState | null {
   return out;
 }
 
-export function StatusBar() {
+export function StatusBar({ embedTick = false }: { embedTick?: boolean } = {}) {
   const [now, setNow] = useState(() => new Date());
   const [combat, setCombat] = useState<CombatState | null>(null);
   const [userTarget, setUserTarget] = useState<string | null>(null);
@@ -189,6 +190,7 @@ export function StatusBar() {
         )}
       </div>
       <div className="statusbar-right">
+        {embedTick && <InlineTick className="statusbar-tick" />}
         {moons.moons.length > 0 && (
           <span className="statusbar-moons">
             {moons.moons.map((m, i) => (

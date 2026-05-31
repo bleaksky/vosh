@@ -10,9 +10,62 @@
 // within a zone follows the array order, so the user can shuffle
 // stacks just by reordering entries.
 
-export type Zone = 'top' | 'bottom' | 'left' | 'right' | 'hidden';
+export type Zone =
+  | 'top'
+  | 'bottom'
+  | 'left'
+  | 'right'
+  | 'hidden'
+  // Inline hosts. A panel whose zone is one of these renders embedded
+  // at the right edge of the named host panel instead of as its own
+  // layout panel. The standalone render becomes a no-op. Currently
+  // used by the tick countdown.
+  | 'in:vitals'
+  | 'in:roomstrip'
+  | 'in:affects'
+  | 'in:statusbar';
 
-export const ALL_ZONES: Zone[] = ['top', 'bottom', 'left', 'right', 'hidden'];
+export const ALL_ZONES: Zone[] = [
+  'top',
+  'bottom',
+  'left',
+  'right',
+  'hidden',
+  'in:vitals',
+  'in:roomstrip',
+  'in:affects',
+  'in:statusbar',
+];
+
+/** True when the zone is one of the regular layout zones (renders the
+ *  panel as a full panel in its own slot). */
+export function isLayoutZone(z: Zone): boolean {
+  return z === 'top' || z === 'bottom' || z === 'left' || z === 'right';
+}
+
+/** True when the zone is an inline-host zone (panel renders embedded
+ *  inside another panel rather than as its own slot). */
+export function isInlineZone(
+  z: Zone,
+): z is 'in:vitals' | 'in:roomstrip' | 'in:affects' | 'in:statusbar' {
+  return z === 'in:vitals' || z === 'in:roomstrip' || z === 'in:affects' || z === 'in:statusbar';
+}
+
+/** Display label for the zone dropdown. */
+export function zoneLabel(z: Zone): string {
+  switch (z) {
+    case 'in:vitals':
+      return 'in vitals';
+    case 'in:roomstrip':
+      return 'in roomstrip';
+    case 'in:affects':
+      return 'in affects';
+    case 'in:statusbar':
+      return 'in statusbar';
+    default:
+      return z;
+  }
+}
 
 /** Vertical alignment within a left or right zone. Top-aligned panels
  *  stack downward from the top of the column; bottom-aligned panels
@@ -87,7 +140,7 @@ export const PANELS: Record<PanelId, PanelMeta> = {
   vitals: {
     id: 'vitals',
     label: 'vitals (hp bar)',
-    description: 'Your hp / mn / mv bars. Tick lives in its own panel.',
+    description: 'Your hp / mn / mv bars. The tick can embed here via in:vitals.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
     defaultZone: 'bottom',
     homeZone: 'bottom',
@@ -123,8 +176,19 @@ export const PANELS: Record<PanelId, PanelMeta> = {
   tick: {
     id: 'tick',
     label: 'tick',
-    description: 'Tick countdown timer. Independent of the vitals panel.',
-    allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
+    description:
+      'Tick countdown timer. Can stand alone in a zone or embed at the right edge of vitals, roomstrip, affects, or the statusbar.',
+    allowedZones: [
+      'top',
+      'bottom',
+      'left',
+      'right',
+      'in:vitals',
+      'in:roomstrip',
+      'in:affects',
+      'in:statusbar',
+      'hidden',
+    ],
     defaultZone: 'bottom',
     homeZone: 'bottom',
     defaultAlign: 'bottom',
@@ -242,6 +306,10 @@ export function groupPanels(layout: PanelLayout): GroupedPanels {
       case 'hidden':
         out.hidden.push(id);
         break;
+      default:
+        // Inline-host zones do not show up as standalone panels in any
+        // layout slot. Their host renders them inline.
+        break;
     }
   }
   return out;
@@ -263,6 +331,10 @@ function siblingsInGroup(layout: PanelLayout, id: PanelId): PanelId[] {
       return p.align === 'bottom' ? grouped.rightBottom : grouped.rightTop;
     case 'hidden':
       return grouped.hidden;
+    default:
+      // Inline-host zones have no sibling group — the panel renders
+      // inside its host, not in a layout slot.
+      return [];
   }
 }
 

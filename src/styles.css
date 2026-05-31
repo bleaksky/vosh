@@ -993,40 +993,63 @@ body {
   color: #e6c384;
 }
 
-.statusbar-tick {
+/* Inline tick chip embedded at the right edge of a host panel.
+   The InlineTick component sets className="inline-tick"; host-specific
+   sub-classes (room-strip-tick, affects-bar-tick, statusbar-tick) add
+   small spacing tweaks so the chip sits flush with the host's existing
+   right-edge rhythm. Reuses .vitals-tick-value for the warn pulse. */
+.inline-tick {
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
   font-variant-numeric: tabular-nums;
-  padding: 0 2px;
-  border-radius: 2px;
-  transition:
-    color 120ms ease-out,
-    background 120ms ease-out;
+  padding: 0 4px;
 }
 
-.statusbar-tick-label {
+/* When the tick is embedded in the vitals-bar grid, give it a full row
+   at the bottom so it lines up under the hp/mn/mv rows rather than
+   landing in an arbitrary grid cell from auto-flow. */
+.vitals-bar > .inline-tick {
+  grid-column: 1 / -1;
+  padding: 0;
+}
+
+.room-strip-tick,
+.affects-bar-tick {
+  margin-left: auto;
+}
+
+.statusbar-tick {
+  margin-left: 4px;
+}
+
+/* Embedded-panel attachment on a preview chip — "[vitals] + tick".
+   The "+ tick" sits to the right of the host chip label and visually
+   weights lighter so the host stays primary. */
+.panels-preview-chip-embed {
+  margin-left: 6px;
+  padding: 0 4px;
   color: var(--c-text-faint);
-  text-transform: lowercase;
+  border-left: 1px dashed var(--c-border);
+  font-size: 0.9em;
+}
+
+/* Synthetic statusbar row in the preview, only rendered when a panel
+   is embedded inside the statusbar. Matches the bottom zone's height
+   but flagged with a fainter background so it reads as chrome. */
+.panels-preview-zone-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--c-surface-deep);
+  border-top: 1px solid var(--c-border);
+  font-size: 0.85em;
+}
+
+.panels-preview-statusbar-label {
+  color: var(--c-text-faint);
   letter-spacing: 0.04em;
-}
-
-.statusbar-tick-value {
-  font-weight: 700;
-  color: var(--c-text);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Within ~5s of the configured tick interval, paint the counter
-   yellow and pulse to draw the eye. The pulse uses transform+opacity
-   only so it does not retrigger layout. */
-.statusbar-tick-warn .statusbar-tick-label,
-.statusbar-tick-warn .statusbar-tick-value {
-  color: var(--c-warn);
-}
-
-.statusbar-tick-warn {
-  animation: vosh-tick-pulse 700ms ease-in-out infinite;
 }
 
 @keyframes vosh-tick-pulse {
