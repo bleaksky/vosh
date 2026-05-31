@@ -50,7 +50,7 @@ function highlight(
 ): Omit<TriggerRecord, 'preset'> {
   return {
     name,
-    pattern,
+    patterns: [{ pattern, enabled: true }],
     priority,
     enabled: true,
     actions: [{ kind: 'highlight', style }],
@@ -69,7 +69,7 @@ function replace(
 ): Omit<TriggerRecord, 'preset'> {
   return {
     name,
-    pattern,
+    patterns: [{ pattern, enabled: true }],
     priority,
     enabled: true,
     actions: [{ kind: 'replace', template: colorize(template) }],
@@ -269,7 +269,9 @@ export const PRESETS: Preset[] = [
       // the cost of not having lookarounds in the trigger regex.
       {
         name: 'disarm.secondary',
-        pattern: '^(.+) disarms you and sends your secondary weapon flying!$',
+        patterns: [
+          { pattern: '^(.+) disarms you and sends your secondary weapon flying!$', enabled: true },
+        ],
         priority: 5,
         enabled: true,
         actions: [
@@ -284,7 +286,7 @@ export const PRESETS: Preset[] = [
       },
       {
         name: 'disarm.primary',
-        pattern: '^(.+) disarms you and sends your weapon flying!$',
+        patterns: [{ pattern: '^(.+) disarms you and sends your weapon flying!$', enabled: true }],
         priority: 5,
         enabled: true,
         actions: [
@@ -338,7 +340,12 @@ export const PRESETS: Preset[] = [
     triggers: [
       {
         name: 'terror.drop',
-        pattern: '^Filled with terror, your weapon slips through your slippery fingers\\.$',
+        patterns: [
+          {
+            pattern: '^Filled with terror, your weapon slips through your slippery fingers\\.$',
+            enabled: true,
+          },
+        ],
         priority: 5,
         enabled: true,
         actions: [

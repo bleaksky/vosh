@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { UnsavedDot } from './UnsavedDot';
+import { useUnsavedWarning } from '../lib/unsaved';
 
 interface Alias {
   name: string;
@@ -21,19 +23,35 @@ function blankAlias(): Alias {
 // a blank row.
 export function AliasForm({ load, save, onError }: Props) {
   const [list, setList] = useState<Alias[] | null>(null);
+  // Snapshot of the last value the backend confirmed. Drives the
+  // "● unsaved" indicator; gets reset on load and after every
+  // successful save so toggling a row and toggling back leaves the
+  // form looking clean.
+  const [baseline, setBaseline] = useState<string>('[]');
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const dirty = useMemo(() => list !== null && JSON.stringify(list) !== baseline, [list, baseline]);
+  useUnsavedWarning(dirty);
+
+  useEffect(() => {
+    if (savedAt === null) return;
+    const id = window.setTimeout(() => setSavedAt(null), 1500);
+    return () => window.clearTimeout(id);
+  }, [savedAt]);
 
   useEffect(() => {
     let cancelled = false;
     load()
       .then((json) => {
         if (cancelled) return;
+        let parsed: Alias[] = [];
         try {
-          const parsed = JSON.parse(json);
-          setList(Array.isArray(parsed) ? parsed : []);
+          const raw = JSON.parse(json);
+          parsed = Array.isArray(raw) ? (raw as Alias[]) : [];
         } catch {
-          setList([]);
+          parsed = [];
         }
+        setList(parsed);
+        setBaseline(JSON.stringify(parsed));
       })
       .catch((e) => onError(String(e)));
     return () => {
@@ -63,8 +81,13 @@ export function AliasForm({ load, save, onError }: Props) {
   const doSave = async () => {
     if (!list) return;
     try {
+      // Wire format is pretty-printed for the textarea-driven
+      // JsonTab readers, but the baseline tracks the canonical
+      // (compact) form so equality stays stable even if the user
+      // happens to retype to a different whitespace shape.
       await save(JSON.stringify(list, null, 2));
       setSavedAt(Date.now());
+      setBaseline(JSON.stringify(list));
     } catch (e) {
       onError(String(e));
     }
@@ -125,6 +148,7 @@ export function AliasForm({ load, save, onError }: Props) {
         <button type="button" className="settings-btn settings-btn-mute" onClick={add}>
           [+ alias]
         </button>
+        {dirty && <UnsavedDot />}
         {savedAt !== null && <span className="settings-saved">saved.</span>}
       </div>
     </div>

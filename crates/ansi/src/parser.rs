@@ -105,9 +105,24 @@ impl AnsiParser {
     }
 }
 
-/// Strip every escape sequence and control byte from a buffer, returning the
-/// printable text. Useful for trigger matching.
+/// Strip every escape sequence and control byte from a buffer,
+/// returning the printable text. Useful for trigger matching.
+///
+/// Fast path: when the input contains zero ESC bytes (0x1B), it
+/// cannot carry any SGR / CSI sequences, so we skip the full vte
+/// state machine and produce the string via a single
+/// `String::from_utf8_lossy` allocation. The slow path remains
+/// available for any line that actually carries escapes.
+///
+/// This is a per-line hot path (`session.rs`, `trigger::engine`,
+/// `log::append_raw`) — skipping the `AnsiParser` + spans Vec + per-
+/// span Strings on the no-escape case removes several per-line
+/// allocations for every prompt-style line that came through ANSI-
+/// clean (which is most prompts and many tells/says).
 pub fn plain_text(bytes: &[u8]) -> String {
+    if !bytes.contains(&0x1B) {
+        return String::from_utf8_lossy(bytes).into_owned();
+    }
     let mut p = AnsiParser::new();
     p.feed(bytes)
         .into_iter()

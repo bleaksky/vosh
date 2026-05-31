@@ -190,8 +190,65 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
           />
         ))}
       </div>
+
+      <SplitDividerRow config={config} setConfig={setConfig} onError={onError} />
     </div>
   );
+}
+
+function SplitDividerRow({ config, setConfig, onError }: Props) {
+  if (!config) return null;
+  const value = config.split_divider_color ?? '';
+  const update = (next: string | null) => {
+    const updated: UiConfig = { ...config, split_divider_color: next };
+    setConfig(() => updated);
+    void setUiConfig(updated).catch((e) => onError(String(e)));
+    // Cross-window emit so the running main window picks up the
+    // new color without a relaunch.
+    void emit('vosh://split-divider-changed', next);
+  };
+  return (
+    <div className="settings-row">
+      <span className="settings-row-label">split scrollback divider</span>
+      <span className="settings-color-row">
+        <input
+          type="color"
+          value={normalizeForColorInput(value)}
+          onChange={(e) => update(e.target.value)}
+          aria-label="split divider color"
+        />
+        <input
+          type="text"
+          className="settings-color-text"
+          spellCheck={false}
+          placeholder="theme default (#rrggbb, rgba, named)"
+          value={value}
+          onChange={(e) => update(e.target.value || null)}
+        />
+        <button
+          type="button"
+          className="settings-btn settings-btn-mute"
+          onClick={() => update(null)}
+        >
+          [clear]
+        </button>
+      </span>
+    </div>
+  );
+}
+
+function normalizeForColorInput(color: string): string {
+  if (!color) return '#888888';
+  const trimmed = color.trim();
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed;
+  if (/^#[0-9a-f]{3}$/i.test(trimmed)) {
+    return `#${trimmed
+      .slice(1)
+      .split('')
+      .map((c) => c + c)
+      .join('')}`;
+  }
+  return '#888888';
 }
 
 interface RowProps {

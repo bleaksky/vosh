@@ -46,42 +46,42 @@ pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
         if !compiled.trigger.enabled {
             continue;
         }
-        // Match against the original plain text so trigger order does not
-        // shift capture positions.
-        let mut iter = compiled.regex.captures_iter(&plain).peekable();
-        if iter.peek().is_none() {
-            continue;
-        }
-        any_match = true;
+        // A trigger can hold many patterns (Mudlet-style). Each enabled
+        // pattern is its own regex; we walk them all and run the
+        // shared actions for every one that matches the line. This
+        // keeps capture groups specific to the matching pattern, so a
+        // Send template with `$1` references the correct capture
+        // regardless of which sibling pattern fired.
+        for regex in &compiled.regexes {
+            let mut iter = regex.captures_iter(&plain).peekable();
+            if iter.peek().is_none() {
+                continue;
+            }
+            any_match = true;
 
-        // Every action on the trigger fires on each match — a single
-        // trigger can recolor a line AND send commands AND route it,
-        // all in one pass.
-        for action in &compiled.trigger.actions {
-            match action {
-                TriggerAction::Gag => {
-                    gagged = true;
-                }
-                TriggerAction::Replace { template } => {
-                    text = compiled
-                        .regex
-                        .replace_all(&text, template.as_str())
-                        .into_owned();
-                }
-                TriggerAction::Highlight { style } => {
-                    if !style.is_empty() {
-                        highlights.push((compiled.regex.clone(), style.clone()));
+            for action in &compiled.trigger.actions {
+                match action {
+                    TriggerAction::Gag => {
+                        gagged = true;
                     }
-                }
-                TriggerAction::Send { template } => {
-                    for caps in compiled.regex.captures_iter(&plain) {
-                        let mut buf = String::new();
-                        caps.expand(template, &mut buf);
-                        sends.push(buf);
+                    TriggerAction::Replace { template } => {
+                        text = regex.replace_all(&text, template.as_str()).into_owned();
                     }
-                }
-                TriggerAction::Route { pane } => {
-                    routes.push(pane.clone());
+                    TriggerAction::Highlight { style } => {
+                        if !style.is_empty() {
+                            highlights.push((regex.clone(), style.clone()));
+                        }
+                    }
+                    TriggerAction::Send { template } => {
+                        for caps in regex.captures_iter(&plain) {
+                            let mut buf = String::new();
+                            caps.expand(template, &mut buf);
+                            sends.push(buf);
+                        }
+                    }
+                    TriggerAction::Route { pane } => {
+                        routes.push(pane.clone());
+                    }
                 }
             }
         }
@@ -155,7 +155,7 @@ mod tests {
     fn highlight(name: &str, pattern: &str, fg: NamedColor) -> Trigger {
         Trigger {
             name: name.to_string(),
-            pattern: pattern.to_string(),
+            patterns: single_pattern(pattern),
             priority: 0,
             enabled: true,
             actions: vec![TriggerAction::Highlight {
@@ -166,6 +166,13 @@ mod tests {
             }],
             preset: None,
         }
+    }
+
+    fn single_pattern(p: &str) -> Vec<crate::store::TriggerPattern> {
+        vec![crate::store::TriggerPattern {
+            pattern: p.to_string(),
+            enabled: true,
+        }]
     }
 
     #[test]
@@ -197,7 +204,7 @@ mod tests {
     fn gag_drops_line() {
         let s = store(vec![Trigger {
             name: "spam".into(),
-            pattern: "tingle".into(),
+            patterns: single_pattern("tingle"),
             priority: 0,
             enabled: true,
             actions: vec![TriggerAction::Gag],
@@ -211,7 +218,7 @@ mod tests {
     fn replace_substitutes_with_capture() {
         let s = store(vec![Trigger {
             name: "rename".into(),
-            pattern: r"goblin".into(),
+            patterns: single_pattern(r"goblin"),
             priority: 0,
             enabled: true,
             actions: vec![TriggerAction::Replace {
@@ -227,7 +234,7 @@ mod tests {
     fn replace_uses_named_capture() {
         let s = store(vec![Trigger {
             name: "polite".into(),
-            pattern: r"(?<who>\w+) yells".into(),
+            patterns: single_pattern(r"(?<who>\w+) yells"),
             priority: 0,
             enabled: true,
             actions: vec![TriggerAction::Replace {
@@ -243,7 +250,7 @@ mod tests {
     fn send_substitutes_capture() {
         let s = store(vec![Trigger {
             name: "loot".into(),
-            pattern: r"The (\w+) is DEAD".into(),
+            patterns: single_pattern(r"The (\w+) is DEAD"),
             priority: 0,
             enabled: true,
             actions: vec![TriggerAction::Send {
@@ -259,7 +266,7 @@ mod tests {
     fn route_appends_pane_name() {
         let s = store(vec![Trigger {
             name: "tells".into(),
-            pattern: r"tells you".into(),
+            patterns: single_pattern(r"tells you"),
             priority: 0,
             enabled: true,
             actions: vec![TriggerAction::Route {
@@ -276,7 +283,7 @@ mod tests {
         let mut s = TriggerStore::new();
         s.set(Trigger {
             name: "low".into(),
-            pattern: "x".into(),
+            patterns: single_pattern("x"),
             priority: -10,
             enabled: true,
             actions: vec![TriggerAction::Replace {
@@ -287,7 +294,7 @@ mod tests {
         .unwrap();
         s.set(Trigger {
             name: "high".into(),
-            pattern: "x".into(),
+            patterns: single_pattern("x"),
             priority: 100,
             enabled: true,
             actions: vec![TriggerAction::Replace {
@@ -331,7 +338,7 @@ mod tests {
         let mut s = TriggerStore::new();
         let bad = Trigger {
             name: "bad".into(),
-            pattern: "[unclosed".into(),
+            patterns: single_pattern("[unclosed"),
             priority: 0,
             enabled: true,
             actions: vec![TriggerAction::Gag],
@@ -341,13 +348,71 @@ mod tests {
     }
 
     #[test]
+    fn multi_pattern_matches_either_row() {
+        let s = store(vec![Trigger {
+            name: "mobs".into(),
+            patterns: vec![
+                crate::store::TriggerPattern {
+                    pattern: "goblin".into(),
+                    enabled: true,
+                },
+                crate::store::TriggerPattern {
+                    pattern: "orc".into(),
+                    enabled: true,
+                },
+            ],
+            priority: 0,
+            enabled: true,
+            actions: vec![TriggerAction::Highlight {
+                style: HighlightStyle {
+                    fg: Some(NamedColor::Red),
+                    ..Default::default()
+                },
+            }],
+            preset: None,
+        }]);
+        let r1 = process(&s, b"You see a goblin.");
+        assert!(r1.display.unwrap().contains("\x1b[31m"));
+        let r2 = process(&s, b"An orc charges.");
+        assert!(r2.display.unwrap().contains("\x1b[31m"));
+    }
+
+    #[test]
+    fn disabled_pattern_row_is_skipped() {
+        let s = store(vec![Trigger {
+            name: "mobs".into(),
+            patterns: vec![
+                crate::store::TriggerPattern {
+                    pattern: "goblin".into(),
+                    enabled: true,
+                },
+                crate::store::TriggerPattern {
+                    pattern: "orc".into(),
+                    enabled: false,
+                },
+            ],
+            priority: 0,
+            enabled: true,
+            actions: vec![TriggerAction::Gag],
+            preset: None,
+        }]);
+        // goblin pattern (enabled) gags.
+        assert!(process(&s, b"You see a goblin.").display.is_none());
+        // orc pattern (disabled) does not fire.
+        assert_eq!(
+            process(&s, b"An orc charges.").display.as_deref(),
+            Some("An orc charges.")
+        );
+    }
+
+    #[test]
     fn import_export_round_trip() {
         let mut s = TriggerStore::new();
         s.set(highlight("tells", r"tells you", NamedColor::Cyan))
             .unwrap();
         s.set(Trigger {
             name: "spam".into(),
-            pattern: "tingle".into(),
+            patterns: single_pattern("tingle"),
             priority: 50,
             enabled: true,
             actions: vec![TriggerAction::Gag],

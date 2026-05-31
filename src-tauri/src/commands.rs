@@ -34,7 +34,6 @@ use crate::session::{self, OutputPayload, SessionHandle, TargetPayload};
 /// Application-wide state. Phase 1 carries a single optional session and one
 /// profile. Phase 5 widens this to a session map; Phase 9 widens to multiple
 /// profiles.
-#[derive(Default)]
 pub(crate) struct AppState {
     pub(crate) session: Mutex<Option<SessionHandle>>,
     pub(crate) profile: Arc<Mutex<Profile>>,
@@ -47,6 +46,35 @@ pub(crate) struct AppState {
     /// single-file layout) once at startup; commands mutate it under
     /// this mutex.
     pub(crate) profile_set: Arc<Mutex<Option<crate::profile_set::ProfileSet>>>,
+    /// Last terminal size reported by the frontend, kept across the
+    /// no-session window so a fresh `session_connect` can seed the
+    /// telnet `Negotiator` with the real (cols, rows) instead of the
+    /// 80×24 default. Without this cache the server's first NAWS
+    /// reply carried 80 cols and wrapped early output (login banner,
+    /// `who`, motd) until the user nudged the window. Stored under a
+    /// std Mutex because the critical section is two integer copies
+    /// — async overhead is not worth it.
+    pub(crate) window_size: std::sync::Mutex<(u16, u16)>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            session: Mutex::new(None),
+            profile: Arc::new(Mutex::new(Profile::default())),
+            map: SharedMap::default(),
+            script_timers: SharedTimers::default(),
+            logs: SharedLogStore::default(),
+            scrollback: SharedScrollback::default(),
+            plugins: SharedPluginManager::default(),
+            profile_set: Arc::new(Mutex::new(None)),
+            // Default matches `Negotiator::default()` so any code path
+            // that bypasses `session_set_window_size` (e.g. an early
+            // automated connect from a script) still gets a sensible
+            // baseline.
+            window_size: std::sync::Mutex::new((80, 24)),
+        }
+    }
 }
 
 pub(crate) type SharedState = Arc<AppState>;
@@ -134,6 +162,13 @@ pub(crate) async fn session_connect(
         .ok()
         .map(|dir| crate::log_state::scrollback_path(&dir));
 
+    // Seed the negotiator with the most recently reported terminal
+    // size so the initial `DO NAWS` reply during the handshake
+    // carries the correct cols/rows. The default of (80, 24) is
+    // applied only when the frontend never called
+    // `session_set_window_size` before this connect.
+    let initial_size = state.window_size.lock().map_or((80, 24), |g| *g);
+
     let handle = session::spawn(
         app.clone(),
         host,
@@ -145,6 +180,7 @@ pub(crate) async fn session_connect(
         state.logs.clone(),
         state.scrollback.clone(),
         scrollback_path,
+        initial_size,
     )
     .await
     .map_err(|e| {
@@ -264,6 +300,15 @@ pub(crate) async fn session_set_window_size(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
+    // Always cache the size — even when no session exists, so the
+    // next `session_connect` can seed the negotiator with the real
+    // dimensions instead of the 80×24 default. Without this the
+    // server's first NAWS reply (during the early handshake) would
+    // carry the wrong size and wrap early output until the next
+    // user-driven resize triggered a fresh subneg.
+    if let Ok(mut guard) = state.window_size.lock() {
+        *guard = (cols, rows);
+    }
     let current = state.session.lock().await;
     if let Some(handle) = current.as_ref() {
         if !handle.set_window_size(cols, rows) {
@@ -1003,7 +1048,7 @@ pub(crate) struct UiConfigPayload {
     pub auto_update: bool,
     pub font_family: String,
     pub font_size: u32,
-    pub tracked_affects: Vec<String>,
+    pub tracked_affects: Vec<crate::profile_config::TrackedAffect>,
     pub enabled_presets: Vec<String>,
     pub keep_last_command: bool,
     pub theme_terminal_colors: bool,
@@ -1012,6 +1057,7 @@ pub(crate) struct UiConfigPayload {
     pub side_panels_fill_height: bool,
     pub paste_line_delay_ms: u32,
     pub vitals: crate::profile_config::VitalsConfig,
+    pub moons_position: String,
 }
 
 #[tauri::command]
@@ -1033,6 +1079,7 @@ pub(crate) async fn ui_get_config(
         side_panels_fill_height: p.ui.side_panels_fill_height,
         paste_line_delay_ms: p.ui.paste_line_delay_ms,
         vitals: p.ui.vitals.clone(),
+        moons_position: p.ui.moons_position.clone(),
     })
 }
 
@@ -1045,7 +1092,7 @@ pub(crate) async fn ui_set_config(
     auto_update: bool,
     font_family: String,
     font_size: u32,
-    tracked_affects: Vec<String>,
+    tracked_affects: Vec<crate::profile_config::TrackedAffect>,
     enabled_presets: Vec<String>,
     keep_last_command: bool,
     theme_terminal_colors: bool,
@@ -1054,6 +1101,7 @@ pub(crate) async fn ui_set_config(
     side_panels_fill_height: bool,
     paste_line_delay_ms: u32,
     vitals: crate::profile_config::VitalsConfig,
+    moons_position: String,
 ) -> Result<(), String> {
     {
         let mut p = state.profile.lock().await;
@@ -1061,10 +1109,20 @@ pub(crate) async fn ui_set_config(
         p.ui.auto_update = auto_update;
         p.ui.font_family = font_family;
         p.ui.font_size = font_size.clamp(6, 64);
+        // Trim each entry's name + label; drop rows whose name is
+        // empty after trimming (no point tracking "" — it'll never
+        // match a real affect). An empty label is normalized back to
+        // None so the affects bar falls through to the name.
         p.ui.tracked_affects = tracked_affects
             .into_iter()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
+            .map(|t| crate::profile_config::TrackedAffect {
+                name: t.name.trim().to_string(),
+                label: t
+                    .label
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty()),
+            })
+            .filter(|t| !t.name.is_empty())
             .collect();
         p.ui.enabled_presets = enabled_presets
             .into_iter()
@@ -1093,6 +1151,9 @@ pub(crate) async fn ui_set_config(
         // Normalize vitals glyphs + width. Empty glyph strings would
         // render zero-width bars; collapse to the default in that case
         // so the user cannot accidentally hide the bar via a typo.
+        // Also coerce unknown layout / percent_color values back to
+        // the defaults so a hand-edited profile.toml typo does not
+        // break the panel render.
         let mut v = vitals;
         if v.bar_filled.is_empty() {
             v.bar_filled = "▰".to_string();
@@ -1101,7 +1162,27 @@ pub(crate) async fn ui_set_config(
             v.bar_empty = "▱".to_string();
         }
         v.bar_width = v.bar_width.clamp(4, 60);
+        if v.layout != "stacked" && v.layout != "inline" {
+            v.layout = "stacked".to_string();
+        }
+        if v.percent_color != "fill" && v.percent_color != "gradient" {
+            v.percent_color = "fill".to_string();
+        }
+        if v.bar_style != "solid" && v.bar_style != "track" {
+            // "ramped" was an earlier mode that used Unicode 1/8-step
+            // partial-block glyphs. It rendered ugly in most fonts so
+            // the option got dropped; coerce any leftover config back
+            // to "solid".
+            v.bar_style = "solid".to_string();
+        }
         p.ui.vitals = v;
+        // Coerce an unknown moons_position value back to "right-edge"
+        // so a hand-edited profile.toml typo cannot leave the status
+        // bar rendering moons in an unrecognized slot.
+        p.ui.moons_position = match moons_position.as_str() {
+            "before-time" | "after-time" | "right-edge" => moons_position,
+            _ => "right-edge".to_string(),
+        };
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;

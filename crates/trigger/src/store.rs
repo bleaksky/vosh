@@ -8,13 +8,27 @@ use thiserror::Error;
 
 use crate::action::TriggerAction;
 
+/// A single pattern row inside a trigger. Mirrors Mudlet's per-pattern
+/// editor: each row carries its own enable flag so a user can toggle
+/// individual mob names on/off without editing a long pipe-delineated
+/// regex.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TriggerPattern {
+    pub pattern: String,
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+}
+
 /// User-visible trigger record. Serializes cleanly to JSON for the editor UI
 /// and for import or export. A trigger fires every action in `actions` in
-/// order whenever its regex matches.
+/// order whenever ANY of its enabled patterns matches the line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Trigger {
     pub name: String,
-    pub pattern: String,
+    /// One or more patterns. Each row has its own enable flag; the
+    /// trigger-level `enabled` gates the whole set. Disabled rows
+    /// are skipped during matching.
+    pub patterns: Vec<TriggerPattern>,
     pub priority: i32,
     pub enabled: bool,
     /// One or more actions; the engine fires each on every match.
@@ -30,13 +44,21 @@ fn default_enabled() -> bool {
     true
 }
 
-/// Wire format for [`Trigger`] that accepts both the legacy
-/// `action: { ... }` shape and the new `actions: [ ... ]` shape on
-/// deserialize. Serializes only the new shape.
+/// Wire format for [`Trigger`] that accepts:
+/// - Legacy single-pattern shape: `pattern: "..."`
+/// - New multi-pattern shape: `patterns: [{pattern, enabled}, ...]`
+/// - Both action shapes: `action: {...}` (legacy) or `actions: [...]`
+///
+/// Serializes only the new `patterns` + `actions` shapes; the legacy
+/// `pattern` field is also emitted so older Vosh builds can still
+/// read profiles written by newer ones.
 #[derive(Deserialize)]
 struct TriggerRaw {
     name: String,
-    pattern: String,
+    #[serde(default)]
+    pattern: Option<String>,
+    #[serde(default)]
+    patterns: Option<Vec<TriggerPattern>>,
     #[serde(default)]
     priority: i32,
     #[serde(default = "default_enabled")]
@@ -59,9 +81,6 @@ impl<'de> Deserialize<'de> for Trigger {
             (Some(single), None) => vec![single],
             (None, Some(many)) => many,
             (Some(single), Some(mut many)) => {
-                // If both fields are present (unlikely outside hand-
-                // edited profiles), keep the legacy singular at the
-                // front and append the array.
                 many.insert(0, single);
                 many
             }
@@ -71,9 +90,21 @@ impl<'de> Deserialize<'de> for Trigger {
                 ));
             }
         };
+        let patterns = match (raw.pattern, raw.patterns) {
+            (_, Some(list)) if !list.is_empty() => list,
+            (Some(p), _) => vec![TriggerPattern {
+                pattern: p,
+                enabled: true,
+            }],
+            (None, _) => {
+                return Err(serde::de::Error::custom(
+                    "trigger needs either `pattern` or non-empty `patterns`",
+                ));
+            }
+        };
         Ok(Trigger {
             name: raw.name,
-            pattern: raw.pattern,
+            patterns,
             priority: raw.priority,
             enabled: raw.enabled,
             actions,
@@ -87,10 +118,15 @@ impl Serialize for Trigger {
     where
         S: Serializer,
     {
-        let field_count = 5 + usize::from(self.preset.is_some());
+        // Emit BOTH `pattern` (first entry, for older Vosh builds /
+        // tools that only know the legacy shape) and `patterns` (the
+        // canonical list).
+        let field_count = 6 + usize::from(self.preset.is_some());
         let mut state = serializer.serialize_struct("Trigger", field_count)?;
         state.serialize_field("name", &self.name)?;
-        state.serialize_field("pattern", &self.pattern)?;
+        let first_pattern = self.patterns.first().map_or("", |p| p.pattern.as_str());
+        state.serialize_field("pattern", first_pattern)?;
+        state.serialize_field("patterns", &self.patterns)?;
         state.serialize_field("priority", &self.priority)?;
         state.serialize_field("enabled", &self.enabled)?;
         state.serialize_field("actions", &self.actions)?;
@@ -98,6 +134,15 @@ impl Serialize for Trigger {
             state.serialize_field("preset", preset)?;
         }
         state.end()
+    }
+}
+
+impl Trigger {
+    /// Convenience accessor for the first pattern's text — used by
+    /// older call sites + UI summaries that just need "what does this
+    /// trigger match on?" at a glance.
+    pub fn first_pattern(&self) -> &str {
+        self.patterns.first().map_or("", |p| p.pattern.as_str())
     }
 }
 
@@ -115,11 +160,13 @@ pub enum TriggerError {
     InvalidJson(#[from] serde_json::Error),
 }
 
-/// Compiled trigger held inside the store. The regex compiles once on insert
-/// so matching does not pay a parsing cost per line.
+/// Compiled trigger held inside the store. Each enabled pattern
+/// compiles to its own Regex on insert so matching does not pay a
+/// parsing cost per line. The Vec is parallel to the user-facing
+/// `Trigger.patterns` list, but only includes ENABLED entries.
 pub(crate) struct CompiledTrigger {
     pub trigger: Trigger,
-    pub regex: Regex,
+    pub regexes: Vec<Regex>,
 }
 
 #[derive(Default)]
@@ -132,15 +179,25 @@ impl TriggerStore {
         Self::default()
     }
 
-    /// Insert or replace a trigger by name. Compiles the regex; returns an
-    /// error when the pattern does not parse.
+    /// Insert or replace a trigger by name. Compiles every enabled
+    /// pattern; returns an error on the first one that does not parse
+    /// (the error names the offending pattern so the user can fix it).
+    /// Disabled patterns are skipped — flipping them on later requires
+    /// re-saving the trigger.
     pub fn set(&mut self, trigger: Trigger) -> Result<(), TriggerError> {
-        let regex = Regex::new(&trigger.pattern).map_err(|e| TriggerError::InvalidRegex {
-            pattern: trigger.pattern.clone(),
-            source: e,
-        })?;
+        let mut regexes = Vec::with_capacity(trigger.patterns.len());
+        for entry in &trigger.patterns {
+            if !entry.enabled {
+                continue;
+            }
+            let regex = Regex::new(&entry.pattern).map_err(|e| TriggerError::InvalidRegex {
+                pattern: entry.pattern.clone(),
+                source: e,
+            })?;
+            regexes.push(regex);
+        }
         self.items.retain(|t| t.trigger.name != trigger.name);
-        self.items.push(CompiledTrigger { trigger, regex });
+        self.items.push(CompiledTrigger { trigger, regexes });
         self.items
             .sort_by_key(|t| std::cmp::Reverse(t.trigger.priority));
         Ok(())

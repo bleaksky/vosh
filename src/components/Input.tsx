@@ -11,7 +11,7 @@ import {
   getTarget,
   getUiConfig,
   listMacros,
-  onGmcp,
+  onGmcpPackage,
   onInputMode,
   onTarget,
   sendInput,
@@ -79,9 +79,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    onGmcp((payload) => {
-      if (payload.package !== 'Room.Chars') return;
-      const data = payload.data;
+    onGmcpPackage<unknown>('Room.Chars', (data) => {
       if (!Array.isArray(data)) {
         roomCharsRef.current = [];
         return;

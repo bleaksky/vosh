@@ -60,6 +60,18 @@ impl MapStore {
     }
 
     fn with_connection(conn: Connection) -> Result<Self, MapError> {
+        // Match the log store's Phase 2 fsync-cost reduction: WAL +
+        // synchronous=NORMAL turns the per-room-upsert fsync into a
+        // per-checkpoint cost. Room.Info pushes fire 1-10/sec while
+        // the player is exploring, each doing an `upsert_room` and a
+        // `set_exits` transaction; the old default forced a full
+        // fsync per statement. WAL also produces `<db>-wal` and
+        // `<db>-shm` sidecar files alongside the main `.db` — SQLite
+        // manages them transparently and folds them back at clean
+        // shutdown. Existing map databases open in WAL without any
+        // migration. In-memory databases silently report `memory`
+        // for `journal_mode`; the call still succeeds.
+        conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;")?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS rooms (
                 id INTEGER PRIMARY KEY,
@@ -302,6 +314,28 @@ mod tests {
             notes: String::new(),
             avoid: false,
         }
+    }
+
+    #[test]
+    fn low_fsync_pragmas_are_applied_on_open() {
+        // Regression guard for the Phase 3 perf fix. Mirrors the same
+        // assertion in `vosh-log` — if the pragmas are dropped,
+        // per-Room.Info fsync pressure returns and exploration stalls.
+        let s = MapStore::open_in_memory().unwrap();
+        let sync: i64 = s
+            .conn
+            .query_row("PRAGMA synchronous", [], |r| r.get(0))
+            .unwrap();
+        // 0=OFF, 1=NORMAL, 2=FULL, 3=EXTRA.
+        assert_eq!(sync, 1, "synchronous should be NORMAL, got {sync}");
+        let mode: String = s
+            .conn
+            .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+            .unwrap();
+        assert!(
+            matches!(mode.as_str(), "memory" | "wal"),
+            "journal_mode should be WAL on disk (or memory in-memory), got {mode}"
+        );
     }
 
     #[test]

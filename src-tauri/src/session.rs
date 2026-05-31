@@ -29,6 +29,82 @@ const TICK_EMIT_INTERVAL: Duration = Duration::from_millis(250);
 
 const READ_BUFFER_BYTES: usize = 8 * 1024;
 
+const PERF_REPORT_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Hot-path performance counters owned by the single `io_loop` task.
+/// Plain `u64` fields are fine because nothing else writes to them.
+/// Rolled up once per second by `report_and_reset` and emitted as
+/// one `tracing::debug!` line on the `vosh::perf` target. Silent
+/// under default `RUST_LOG=info`; bring it back with
+/// `RUST_LOG=info,vosh::perf=debug` when revisiting the save/IO
+/// audit numbers, or `RUST_LOG=vosh::perf=debug` to see only the
+/// per-second rollup.
+///
+/// Originally landed as Phase 1 instrumentation for the save/IO
+/// performance audit, kept in the code at debug level so future
+/// measurements do not need to re-instrument the hot path. The
+/// per-line `Instant::now()` cost is single-digit ns on macOS so
+/// the counters can stay live with no measurable overhead.
+#[derive(Default)]
+struct PerfCounters {
+    socket_reads: u64,
+    bytes_in: u64,
+    lines_processed: u64,
+    trigger_lua_ns: u64,
+    mutex_wait_ns: u64,
+    mutex_acquires: u64,
+    log_append_ns: u64,
+    log_appends: u64,
+    scrollback_push_ns: u64,
+    scrollback_pushes: u64,
+    output_emits: u64,
+    output_emit_bytes: u64,
+    gmcp_packets: u64,
+    tick_emits: u64,
+    routed_emits: u64,
+}
+
+impl PerfCounters {
+    /// Emit a single `info!` line summarising the last second of work
+    /// (or nothing at all if the session was idle) and zero the
+    /// counters. Per-event averages are reported in microseconds so
+    /// the user can eyeball lock contention without doing the math.
+    fn report_and_reset(&mut self) {
+        let any_activity = self.socket_reads > 0
+            || self.lines_processed > 0
+            || self.gmcp_packets > 0
+            || self.tick_emits > 0;
+        if !any_activity {
+            return;
+        }
+        let div_us = |total_ns: u64, n: u64| -> u64 { total_ns.checked_div(n).unwrap_or(0) / 1000 };
+        let avg_trigger_us = div_us(self.trigger_lua_ns, self.lines_processed);
+        let avg_lock_us = div_us(self.mutex_wait_ns, self.mutex_acquires);
+        let avg_append_us = div_us(self.log_append_ns, self.log_appends);
+        let avg_sb_us = div_us(self.scrollback_push_ns, self.scrollback_pushes);
+        tracing::debug!(
+            target: "vosh::perf",
+            reads = self.socket_reads,
+            bytes = self.bytes_in,
+            lines = self.lines_processed,
+            avg_trigger_us,
+            avg_lock_us,
+            lock_acq = self.mutex_acquires,
+            avg_append_us,
+            appends = self.log_appends,
+            avg_sb_us,
+            sb_pushes = self.scrollback_pushes,
+            emits = self.output_emits,
+            emit_bytes = self.output_emit_bytes,
+            gmcp = self.gmcp_packets,
+            ticks = self.tick_emits,
+            routes = self.routed_emits,
+            "perf 1s"
+        );
+        *self = Self::default();
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct OutputPayload {
     pub bytes: Vec<u8>,
@@ -40,12 +116,6 @@ pub(crate) enum StatePayload {
     Connecting { host: String, port: u16, tls: bool },
     Connected { host: String, port: u16, tls: bool },
     Disconnected { reason: Option<String> },
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct GmcpPayload {
-    pub package: String,
-    pub data: serde_json::Value,
 }
 
 /// Emitted on `session://target` whenever the active user target
@@ -134,6 +204,13 @@ impl SessionHandle {
 
 /// Open a connection, install a parser plus negotiator, and spin up the IO
 /// loop. The returned handle owns the outgoing channel; drop it to close.
+///
+/// `initial_window_size` is the (cols, rows) the negotiator should
+/// carry into the first NAWS subnegotiation. The caller (typically
+/// `session_connect`) reads this from `AppState.window_size` so the
+/// server's first wrap-width decision is based on the actual
+/// terminal geometry instead of the negotiator's 80×24 fallback.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn spawn(
     app: AppHandle,
     host: String,
@@ -145,6 +222,7 @@ pub(crate) async fn spawn(
     logs: crate::log_state::SharedLogStore,
     scrollback: crate::log_state::SharedScrollback,
     scrollback_path: Option<std::path::PathBuf>,
+    initial_window_size: (u16, u16),
 ) -> Result<SessionHandle, ConnectionError> {
     emit_state(
         &app,
@@ -206,6 +284,7 @@ pub(crate) async fn spawn(
         log_session_id,
         scrollback,
         scrollback_path,
+        initial_window_size,
     ));
 
     Ok(SessionHandle { tx_outgoing, task })
@@ -218,6 +297,7 @@ fn now_ms() -> i64 {
         .map_or(0, |d| d.as_millis() as i64)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn io_loop(
     app: AppHandle,
     mut stream: Stream,
@@ -229,9 +309,16 @@ async fn io_loop(
     log_session_id: Option<i64>,
     scrollback: crate::log_state::SharedScrollback,
     scrollback_path: Option<std::path::PathBuf>,
+    initial_window_size: (u16, u16),
 ) {
     let mut parser = Parser::new();
     let mut negotiator = Negotiator::new();
+    // Seed the negotiator with the size we already know about so the
+    // first `DO NAWS` from the server gets a correct subneg, instead
+    // of the 80×24 default carrying through until the user nudges
+    // the window. Stale-NAWS was visible in `who` output wrapping
+    // mid-sentence before the user reported it.
+    negotiator.set_window_size(initial_window_size.0, initial_window_size.1);
     let mut accumulator = LineAccumulator::new();
     let mut buf = vec![0u8; READ_BUFFER_BYTES];
     // Track whether NAWS has been negotiated. Server sends DO NAWS,
@@ -249,6 +336,11 @@ async fn io_loop(
 
     let mut tick_interval = tokio::time::interval(TICK_EMIT_INTERVAL);
     tick_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    // Phase 1 audit instrumentation. See `PerfCounters` doc.
+    let mut perf = PerfCounters::default();
+    let mut perf_report_interval = tokio::time::interval(PERF_REPORT_INTERVAL);
+    perf_report_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     let disconnect_reason = loop {
         tokio::select! {
@@ -294,6 +386,8 @@ async fn io_loop(
                     break Some("server closed connection".to_string());
                 }
                 Ok(n) => {
+                    perf.socket_reads += 1;
+                    perf.bytes_in += n as u64;
                     let events = parser.feed(&buf[..n]);
                     for event in events {
                         // Once the server sends DO NAWS we know NAWS is
@@ -316,6 +410,7 @@ async fn io_loop(
                             log_session_id,
                             &scrollback,
                             event,
+                            &mut perf,
                         ).await {
                             warn!(error = %e, "event handling failed");
                             break;
@@ -335,6 +430,10 @@ async fn io_loop(
                 if let Err(e) = fire_due_script_timers(&app, &mut stream, &profile, &timers).await {
                     error!(error = %e, "script timer firing failed");
                 }
+                perf.tick_emits += 1;
+            }
+            _ = perf_report_interval.tick() => {
+                perf.report_and_reset();
             }
         }
     };
@@ -466,6 +565,7 @@ async fn handle_tick(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_event(
     app: &AppHandle,
     stream: &mut Stream,
@@ -478,6 +578,7 @@ async fn handle_event(
     log_session_id: Option<i64>,
     scrollback: &crate::log_state::SharedScrollback,
     event: TelnetEvent,
+    perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
     match event {
         TelnetEvent::Data(bytes) => {
@@ -500,15 +601,29 @@ async fn handle_event(
                         display_batch.extend_from_slice(&b);
                     }
                     ChunkOp::LineComplete { bytes, clear_first } => {
+                        perf.lines_processed += 1;
                         let plain = vosh_ansi::plain_text(&bytes);
-                        let (result, tick_reset, script_apply) = {
+                        let trigger_t0 = std::time::Instant::now();
+                        // Phase 5 perf fix: build the tick-reset payload
+                        // under the same lock as trigger/Lua matching so
+                        // we never reacquire `profile` later just to read
+                        // five fields out of `p.tick`. `TickPayload` is
+                        // trivially cheap (no allocations), so computing
+                        // it under lock is free; the second
+                        // `profile.lock().await` it replaces was an
+                        // unconditional await every time a line matched
+                        // the user's tick reset pattern.
+                        let (result, tick_reset_payload, script_apply) = {
+                            let lock_t0 = std::time::Instant::now();
                             let mut p = profile.lock().await;
+                            perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
+                            perf.mutex_acquires += 1;
                             let result = vosh_trigger::process(&p.triggers, &bytes);
-                            let ticked = if p.tick.check_reset_match(&plain) {
+                            let tick_payload = if p.tick.check_reset_match(&plain) {
                                 p.tick.reset(Instant::now());
-                                true
+                                Some(TickPayload::from_runtime(&p.tick, Instant::now(), false))
                             } else {
-                                false
+                                None
                             };
                             // Run Lua triggers on the same plain text so
                             // patterns can match without worrying about
@@ -522,9 +637,13 @@ async fn handle_event(
                                 }
                             };
                             let apply = script_state::apply_actions(&mut p, outcome);
-                            (result, ticked, apply)
+                            (result, tick_payload, apply)
                         };
+                        perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
                         append_line_result(&mut display_batch, &result, clear_first);
+                        if !result.routes.is_empty() {
+                            perf.routed_emits += result.routes.len() as u64;
+                        }
                         emit_line_routes(app, &result);
                         if let Some(text) = &result.display {
                             // Persist to the searchable SQLite log and the
@@ -532,24 +651,29 @@ async fn handle_event(
                             // launch. The raw bytes carry ANSI; the plain
                             // text column drives the regex search.
                             if let Some(sid) = log_session_id {
+                                let lock_t0 = std::time::Instant::now();
                                 let mut guard = logs.lock().await;
+                                perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
+                                perf.mutex_acquires += 1;
                                 if let Some(store) = guard.as_mut() {
-                                    if let Err(e) =
-                                        store.append(sid, now_ms(), &plain, Some(&bytes))
-                                    {
+                                    let append_t0 = std::time::Instant::now();
+                                    let append_res =
+                                        store.append(sid, now_ms(), &plain, Some(&bytes));
+                                    perf.log_append_ns += append_t0.elapsed().as_nanos() as u64;
+                                    perf.log_appends += 1;
+                                    if let Err(e) = append_res {
                                         warn!(error = %e, "log append failed");
                                     }
                                 }
                             }
+                            let sb_t0 = std::time::Instant::now();
                             scrollback.lock().await.push(text.as_bytes().to_vec());
+                            perf.scrollback_push_ns += sb_t0.elapsed().as_nanos() as u64;
+                            perf.scrollback_pushes += 1;
                         }
                         send_trigger_outputs(stream, &result.sends).await?;
                         apply_script_result(app, stream, profile, timers, script_apply).await?;
-                        if tick_reset {
-                            let payload = {
-                                let p = profile.lock().await;
-                                TickPayload::from_runtime(&p.tick, Instant::now(), false)
-                            };
+                        if let Some(payload) = tick_reset_payload {
                             if let Err(e) = app.emit("session://tick", &payload) {
                                 warn!(error = %e, "failed to emit tick reset payload");
                             }
@@ -558,12 +682,15 @@ async fn handle_event(
                 }
             }
             if !display_batch.is_empty() {
+                perf.output_emits += 1;
+                perf.output_emit_bytes += display_batch.len() as u64;
                 emit_output(app, display_batch);
             }
             Ok(())
         }
         TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
-            handle_gmcp(app, profile, map, timers, stream, &payload).await?;
+            perf.gmcp_packets += 1;
+            handle_gmcp(app, profile, map, timers, stream, &payload, perf).await?;
             Ok(())
         }
         TelnetEvent::Command(byte) if byte == telnet_codes::EOR || byte == telnet_codes::GA => {
@@ -616,6 +743,7 @@ async fn handle_event(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_gmcp(
     app: &AppHandle,
     profile: &Arc<Mutex<Profile>>,
@@ -623,6 +751,7 @@ async fn handle_gmcp(
     timers: &SharedTimers,
     stream: &mut Stream,
     payload: &[u8],
+    perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
     let msg = match vosh_gmcp::parse(payload) {
         Ok(m) => m,
@@ -632,8 +761,14 @@ async fn handle_gmcp(
         }
     };
     info!(package = %msg.package, data = %msg.data, "gmcp received");
-    let (tick_reset, script_apply) = {
+    // Phase 5: same fold as the per-line path. Build the tick-reset
+    // payload under the existing lock so a World.Time hour change
+    // doesn't force a second `profile.lock().await` after release.
+    let (tick_reset_payload, script_apply) = {
+        let lock_t0 = std::time::Instant::now();
         let mut p = profile.lock().await;
+        perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
+        perf.mutex_acquires += 1;
         gmcp_bind::apply(&mut p.vars, &msg);
         // Cache the latest Room.Chars snapshot in the profile so
         // bare `tar <index>` / `tarn` / `tarp` commands can resolve
@@ -664,6 +799,11 @@ async fn handle_gmcp(
             }
         }
         let ticked = observe_world_time_for_tick(&mut p.tick, &msg);
+        let tick_payload = if ticked {
+            Some(TickPayload::from_runtime(&p.tick, Instant::now(), false))
+        } else {
+            None
+        };
         script_state::snapshot_vars(&p.script, &p.vars);
         let outcome = match p.script.dispatch_gmcp(&msg.package, &msg.data) {
             Ok(o) => o,
@@ -673,30 +813,35 @@ async fn handle_gmcp(
             }
         };
         let apply = script_state::apply_actions(&mut p, outcome);
-        (ticked, apply)
+        (tick_payload, apply)
     };
-    if tick_reset {
-        let payload = {
-            let p = profile.lock().await;
-            TickPayload::from_runtime(&p.tick, Instant::now(), false)
-        };
+    if let Some(payload) = tick_reset_payload {
         if let Err(e) = app.emit("session://tick", &payload) {
             warn!(error = %e, "failed to emit tick payload after world hour change");
+        } else {
+            perf.tick_emits += 1;
         }
     }
     apply_script_result(app, stream, profile, timers, script_apply).await?;
     if let Err(e) = map_state::handle_room_info(app, map, &msg).await {
         warn!(error = %e, "failed to update map from Room.Info");
     }
-    if let Err(e) = app.emit(
-        "session://gmcp",
-        GmcpPayload {
-            package: msg.package,
-            data: msg.data,
-        },
-    ) {
-        warn!(error = %e, "failed to emit GMCP event");
+    // Phase 4 perf fix: emit on a per-package event channel so each
+    // frontend listener subscribes only to the packages it cares
+    // about, instead of all 12 listeners running on every packet and
+    // filtering by `payload.package === '...'`. Tauri event names
+    // only allow alphanumeric, `-`, `/`, `:`, `_`, so we have to
+    // encode the `.` that GMCP packages use as a namespace
+    // separator (`Char.Vitals` → `Char-Vitals`). The frontend's
+    // `onGmcpPackage` helper does the same replacement when
+    // computing its listen target.
+    let event_name = format!("session://gmcp/{}", msg.package.replace('.', "-"));
+    if let Err(e) = app.emit(&event_name, &msg.data) {
+        warn!(error = %e, package = %msg.package, "failed to emit GMCP event");
     }
+    // `perf.gmcp_packets` already incremented by the caller before
+    // we ran. This `emit` count would otherwise duplicate that, so
+    // we leave gmcp_packets as the single source.
     Ok(())
 }
 

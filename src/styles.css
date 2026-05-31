@@ -203,6 +203,14 @@ body {
    Ported verbatim from main. Stays at fixed flex slot so xterm
    does not reflow when room data first arrives. */
 
+/* Wrapper around .room-strip + .room-strip-fade. The fade overlay
+   must live OUTSIDE the scrollable strip so it stays glued to the
+   visible right edge instead of scrolling with the content. */
+.room-strip-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
 .room-strip {
   flex: 0 0 auto;
   display: flex;
@@ -217,6 +225,31 @@ body {
   min-height: 28px;
   color: var(--c-text-muted);
   white-space: nowrap;
+}
+
+/* Right-edge fade. Sits in the wrapper, absolutely positioned over
+   the right side of the visible panel. The gradient runs from
+   transparent on the left to the surface color on the right, so any
+   content beneath fades smoothly into the panel background instead
+   of crashing into the border or scrollbar mid-letter. */
+.room-strip-fade {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent 0, var(--c-surface) 100%);
+}
+
+/* `padding-right` on an overflow:auto flex container is a no-op in
+   most browsers — content scrolls all the way to the right edge and
+   the padding gets eaten. The .room-strip-end-pad span is a real
+   flex child rendered in RoomStrip.tsx; it reserves the gap so the
+   last items/chars never crash into the panel edge or scrollbar. */
+.room-strip-end-pad {
+  flex: 0 0 24px;
+  align-self: stretch;
 }
 
 .room-strip::-webkit-scrollbar {
@@ -642,6 +675,14 @@ body {
   position: relative;
   z-index: 1;
   font-variant-numeric: tabular-nums;
+  /* Clip at the bar's own edge. Without this, a long stacked row
+     (wide bar glyphs like ▰ at bar_width 60, plus percent/numeric
+     /delta columns) paints out of the bar's right edge and over the
+     right sidebar when the terminal column shrinks under sidebar
+     pressure. The bar/column already have min-width: 0 so the column
+     itself shrinks; this just stops the no-wrap row from leaking. */
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Each hp/mn/mv row is its own horizontal flex track so toggling a
@@ -652,6 +693,126 @@ body {
   display: flex;
   align-items: baseline;
   column-gap: 12px;
+}
+
+/* Tail row at the bottom of the stacked vitals layout. Reads as
+   secondary context (tick + MUD time) right-aligned and dimmed,
+   intentionally NOT styled like a vital row — they are not vitals
+   and a labeled row format made the `tick` / `time` labels misalign
+   with the `hp` / `mn` / `mv` column. tintin's nprompt does the
+   same: `850(85%)h 230(76%)m 120(60%)v - (12s) - 3PM`. */
+.vitals-row-tail {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 4px;
+  color: var(--c-text-faint);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+
+.vitals-row-tail-chip {
+  letter-spacing: 0;
+}
+
+.vitals-row-tail-sep {
+  color: var(--c-text-dim);
+}
+
+.vitals-row-tail-time {
+  color: var(--c-accent);
+  font-weight: 700;
+}
+
+/* Template row. Renders as a single contiguous text run so the
+   author's template is reproduced character-for-character — no flex
+   gap between the segments, no extra whitespace, color spans flow
+   inline like plain text. The base .vitals-row's column-gap: 12px
+   was inserting visible whitespace between every fragment (`329(`,
+   `100%`, `)h ...`), producing `329( 100% )h` instead of `329(100%)h`. */
+.vitals-row-template {
+  display: block;
+  white-space: pre-wrap;
+  padding: 4px 14px;
+}
+
+/* Unknown template token (e.g. user typed `%xpz` instead of `%xp`,
+   or the server doesn't push the field). Renders the literal token
+   in muted red so the typo is visible without breaking the row
+   layout. */
+.vitals-template-unknown {
+  color: var(--c-danger, #c45a5a);
+  opacity: 0.7;
+}
+
+/* Inline (single-row) layout. Packs all vitals onto one row in the
+   tintin nprompt shape: `hp 850(85%) mn 230(76%) mv 120(60%)`. Each
+   InlineVitalChip is one cluster; the row hosts the InlineTick at
+   the end when embedded. */
+.vitals-bar-inline {
+  flex-direction: row;
+  align-items: baseline;
+  padding: 4px 14px;
+}
+
+.vitals-row-inline {
+  flex-wrap: wrap;
+  column-gap: 14px;
+  row-gap: 2px;
+}
+
+/* Tintin nprompt chip shape: `850(85%)h`. Zero gap between the
+   value, the parenthesized percent, and the trailing letter so it
+   reads as one token. */
+.vitals-inline-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  white-space: nowrap;
+}
+
+.vitals-inline-chip .vitals-numeric {
+  min-width: 0;
+}
+
+.vitals-inline-pct {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Single-letter trailing label per tintin (h / m / v). Slightly
+   faded so the value reads as primary, the letter as identifier. */
+.vitals-inline-letter {
+  color: var(--c-text-faint);
+  margin-left: 1px;
+  letter-spacing: 0;
+}
+
+/* Tail cluster at the end of the inline row, separated from vitals
+   by ` - ` like the tintin layout. Hosts the tick countdown and the
+   MUD time chip. */
+.vitals-inline-tail {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+
+.vitals-inline-tail-sep {
+  color: var(--c-text-dim);
+}
+
+.vitals-inline-tick,
+.vitals-inline-time {
+  padding: 0;
+}
+
+.inline-mud-time {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-accent);
 }
 
 .vitals-label {
@@ -665,6 +826,29 @@ body {
   letter-spacing: 0;
   font-weight: 700;
   flex: 0 0 auto;
+}
+
+/* Track bar: a CSS-rendered progress bar that fills smoothly at any
+   percentage. Width is sized in `ch` so it matches the bar_width
+   cell count the user picks for the solid mode — switching between
+   solid and track keeps the bar at the same horizontal footprint.
+   Track color uses the soft border so it reads as a dim rail; the
+   fill div carries the per-vital accent color. */
+.vitals-glyphs-track {
+  display: inline-block;
+  height: 0.65em;
+  background: var(--c-border-soft, var(--c-border));
+  border-radius: 2px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+
+.vitals-glyphs-track-fill {
+  display: block;
+  height: 100%;
+  /* Short transition for smooth per-tick updates without lag. */
+  transition: width 200ms ease-out;
 }
 
 .vitals-empty {
@@ -683,8 +867,11 @@ body {
 }
 
 .vitals-delta-slot {
+  /* Sits immediately after the numeric column. Used to have
+     `margin-left: auto` which shoved the delta to the row's far
+     right edge — that conflicted with the combat chip in the
+     stacked layout which lives to the right of the rows. */
   min-width: 40px;
-  margin-left: auto;
 }
 
 .vitals-delta {
@@ -914,6 +1101,55 @@ body {
   overflow: hidden;
 }
 
+/* Always-on tick + MUD time chip. Bordered + accent-tinted so it
+   reads as the primary status indicator on the bar, distinct from
+   the muted target / quickkey content on the left and the moons /
+   wall-clock on the right. */
+.statusbar-timechip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 1px 10px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  background: var(--c-surface-deep);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.statusbar-timechip-block {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.statusbar-timechip-label {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  font-weight: 400;
+}
+
+.statusbar-timechip-value {
+  color: var(--c-text);
+}
+
+/* Warn pulse on the tick value within ~5s of the next tick. Same
+   keyframes the standalone tick value uses (vosh-tick-pulse). */
+.statusbar-timechip-value.is-warn {
+  color: var(--c-warn);
+  animation: vosh-tick-pulse 700ms ease-in-out infinite;
+}
+
+.statusbar-timechip-time {
+  color: var(--c-accent);
+}
+
+.statusbar-timechip-sep {
+  color: var(--c-text-dim);
+  font-weight: 400;
+}
+
 .statusbar-bar {
   display: inline-flex;
   align-items: center;
@@ -996,6 +1232,15 @@ body {
 .statusbar-clock {
   color: var(--c-text);
   font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  padding: 0 4px;
+}
+
+/* MUD in-game time chip (replaces wall-clock when World.Time is being
+   pushed). Slightly accent-tinted so the user can tell at a glance
+   that it is showing in-game time rather than local time. */
+.statusbar-clock-mud {
+  color: var(--c-accent);
 }
 
 /* Moon group sits immediately left of the wall clock. Aabahran has
@@ -1156,39 +1401,104 @@ body {
   color: var(--c-danger);
 }
 
-/* Combat segment. Sits in the vitals row when Char.Combat is active.
-   Includes the crossed swords glyph, target name, an inline HP track,
-   and an optional condition phrase. */
-.statusbar-combat {
+/* Combat chip. A compact vertical block (swords+name / bar+pct /
+   condition) so long target names and long condition phrases never
+   get clipped — each piece takes its own row and the chip grows
+   downward as needed. Lives to the right of the stacked vitals or
+   above the inline / template prompt. */
+.vitals-combat {
   display: inline-flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  /* Bound the width so a very long target name wraps rather than
+     pushing the chip past the panel edge. Two lines of name at this
+     width is plenty for any MUD mob. */
+  max-width: 240px;
+}
+
+.vitals-combat-head {
+  display: flex;
+  align-items: baseline;
   gap: 6px;
-  white-space: nowrap;
-  max-width: 360px;
-  overflow: hidden;
+  min-width: 0;
 }
 
-.statusbar-combat-swords {
+.vitals-combat-swords {
   color: var(--c-danger);
+  flex: 0 0 auto;
 }
 
-.statusbar-combat-name {
+.vitals-combat-name {
   color: var(--c-text-strong);
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Allow the name to wrap onto a second line if needed instead of
+     ellipsing — the user wants to read the full target. */
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.2;
 }
 
-.statusbar-combat-unknown {
+.vitals-combat-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vitals-combat-unknown {
   color: var(--c-text-faint);
+  font-style: italic;
+}
+
+.vitals-combat-condition {
+  color: var(--c-text-muted);
+  font-style: italic;
+  /* Multi-word conditions like "has quite a few wounds and bruises"
+     wrap inside the chip's max-width instead of being clipped. */
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+/* HP percent label after the combat track-bar. Colored by hp tier
+   (green / yellow / red) so the bar AND number both convey urgency. */
+.vitals-combat-pct {
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-.statusbar-combat-condition {
-  color: var(--c-text-muted);
-  font-style: italic;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Combat chip in the inline / template vitals layouts. Sits as a
+   row ABOVE the single inline/template line so the eye reads
+   "what I'm fighting" first, then "my vitals" second. */
+.vitals-row-combat-top {
+  display: flex;
+  align-items: center;
+  padding: 2px 14px 0;
+}
+
+/* Stacked-layout container. Wraps the hp/mn/mv rows on the left
+   and the optional combat chip on the right, with the combat chip
+   vertically centered against the middle row (mana). When no
+   combat is in progress, the wrap collapses to just the rows. */
+.vitals-stacked-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.vitals-stacked-rows {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  row-gap: 1px;
+}
+
+.vitals-stacked-combat {
+  flex: 0 0 auto;
+  padding-right: 14px;
 }
 
 /* Target name segment. Sits on the left after vitals; only shown
@@ -1343,6 +1653,24 @@ body {
   border-bottom-color: var(--c-accent);
 }
 
+/* Inline wrapper so each tab + its optional trailing divider stay
+   together inside the tab strip's flex row. */
+.settings-tab-wrap {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+/* Hairline group divider rendered after a `groupEnd: true` tab. Reads
+   as a thin vertical line between the three tab buckets (look & layout
+   / content / tools) without changing tab labels or shifting alignment. */
+.settings-tab-divider {
+  width: 1px;
+  margin: 4px 6px 4px 10px;
+  background: var(--c-border-strong, var(--c-border));
+  opacity: 0.55;
+  align-self: stretch;
+}
+
 /* Triggers tab */
 
 .settings-triggers {
@@ -1399,17 +1727,45 @@ body {
 .editor-mode-toggle {
   flex: 0 0 auto;
   display: inline-flex;
+  align-items: stretch;
   gap: 0;
-  border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
-  overflow: hidden;
   align-self: flex-start;
+}
+
+.editor-mode-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px 0 0;
+  color: var(--c-text-faint);
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+}
+
+/* The pill group itself needs the border-style container; nesting the
+   label outside keeps it from inheriting the bordered pill look. */
+.editor-mode-toggle > .editor-mode-pill:first-of-type {
+  border-top-left-radius: 3px;
+  border-bottom-left-radius: 3px;
+  border-left: 1px solid var(--c-border-strong);
+}
+
+.editor-mode-toggle > .editor-mode-pill:last-of-type {
+  border-top-right-radius: 3px;
+  border-bottom-right-radius: 3px;
+  border-right: 1px solid var(--c-border-strong);
+}
+
+.editor-mode-pill + .editor-mode-pill {
+  border-left: 1px solid var(--c-border-strong);
 }
 
 .editor-mode-pill {
   background: transparent;
   color: var(--c-text-muted);
-  border: none;
+  border-top: 1px solid var(--c-border-strong);
+  border-bottom: 1px solid var(--c-border-strong);
+  border-left: none;
+  border-right: none;
   padding: 3px 12px;
   font: inherit;
   cursor: pointer;
@@ -1717,6 +2073,74 @@ body {
   gap: 8px;
 }
 
+/* Multi-pattern editor: each row is an enable-checkbox + input + remove. */
+
+.trigger-card-patterns {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.trigger-card-pattern-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.trigger-card-pattern-toggle {
+  display: inline-flex;
+  align-items: center;
+}
+
+.trigger-card-pattern-toggle input[type='checkbox'] {
+  accent-color: var(--c-accent);
+}
+
+.trigger-card-pattern-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.trigger-card-pattern-input.is-off {
+  color: var(--c-text-faint);
+  text-decoration: line-through;
+  text-decoration-color: var(--c-border-strong);
+}
+
+.trigger-card-pattern-remove {
+  background: transparent;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  color: var(--c-text-faint);
+  padding: 0 6px;
+  font: inherit;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.trigger-card-pattern-remove:hover {
+  color: var(--c-text-strong);
+  border-color: var(--c-accent);
+}
+
+.trigger-card-pattern-add {
+  background: transparent;
+  border: none;
+  color: var(--c-accent);
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.trigger-card-pattern-add:hover {
+  color: var(--c-text-strong);
+}
+
 .trigger-card-style label {
   display: inline-flex;
   align-items: center;
@@ -1821,6 +2245,84 @@ body {
 .settings-row input[type='number']:focus,
 .settings-row input[type='text']:focus,
 .settings-row input[type='search']:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+/* Settings-body-wide form-control aesthetic. The above .settings-row
+   rules cover the General tab; the Panels tab uses its own row
+   containers (.panels-vitals-glyph-field, .panels-row-control, etc.)
+   so without this every <select> and number <input> there falls back
+   to the browser default white chrome. This single rule pins every
+   form control inside the Settings window to the dark theme. */
+.settings-body select,
+.settings-body input[type='number'],
+.settings-body input[type='text'],
+.settings-body input[type='search'] {
+  background: var(--c-surface-deep);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: inherit;
+  border-radius: 2px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.settings-body select {
+  /* Keep room for the native dropdown chevron the appearance:none
+     strip removes from sight. Replaced with a unicode caret painted
+     via the background-image trick below. */
+  padding-right: 22px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--c-text-faint) 50%),
+    linear-gradient(135deg, var(--c-text-faint) 50%, transparent 50%);
+  background-position:
+    calc(100% - 12px) 50%,
+    calc(100% - 7px) 50%;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+}
+
+.settings-body select:focus,
+.settings-body input[type='number']:focus,
+.settings-body input[type='text']:focus,
+.settings-body input[type='search']:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+/* Strip the native number-input spinners — they paint as light
+   chrome that clashes with the dark surface. Users can still type
+   or use arrow keys. */
+.settings-body input[type='number']::-webkit-inner-spin-button,
+.settings-body input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.settings-body input[type='number'] {
+  appearance: textfield;
+}
+
+.settings-body select:disabled,
+.settings-body input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Textareas (custom template editor, etc.) live in the same chrome. */
+.settings-body textarea {
+  background: var(--c-surface-deep);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+}
+
+.settings-body textarea:focus {
   outline: none;
   border-color: var(--c-accent);
 }
@@ -1968,11 +2470,78 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 2px 1px 8px;
+  /* Left padding tightened from 8px to 2px so the up/down move arrows
+     sit flush at the chip's left edge. The name span still picks up
+     visual breathing room from the `gap: 4px` between siblings. */
+  padding: 1px 2px;
   background: var(--c-surface);
   border: 1px solid var(--c-border-strong);
   border-radius: 3px;
   color: var(--c-text);
+}
+
+/* Pair-form chip: server name + optional display label inputs side
+   by side, with up/down move arrows on the left and an × remove on
+   the right. The "→" separator makes it read as "matches <→ shown
+   as>" at a glance. */
+.settings-tracked-chip-pair {
+  /* Pair rows get more horizontal space and don't wrap mid-chip. */
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.settings-tracked-name,
+.settings-tracked-label {
+  background: var(--c-surface-deep, var(--c-surface));
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  padding: 1px 6px;
+  font: inherit;
+  min-width: 0;
+}
+
+.settings-tracked-name {
+  width: 14ch;
+}
+
+.settings-tracked-label {
+  width: 10ch;
+  color: var(--c-text-faint);
+}
+
+.settings-tracked-name:focus,
+.settings-tracked-label:focus {
+  outline: none;
+  border-color: var(--c-accent);
+  color: var(--c-text);
+}
+
+.settings-tracked-sep {
+  color: var(--c-text-faint);
+  font-size: 0.85em;
+}
+
+/* Move-up / move-down buttons on each tracked-affect chip. Mirror
+   the panel-placement up/down arrows visually so the affordance
+   reads as the same kind of control. */
+.settings-tracked-move {
+  background: transparent;
+  border: none;
+  color: var(--c-text-faint);
+  padding: 0 4px;
+  font: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.settings-tracked-move:hover:not(:disabled) {
+  color: var(--c-accent);
+}
+
+.settings-tracked-move:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .settings-tracked-remove {
@@ -2431,11 +3000,35 @@ body {
   color: var(--c-text-faint);
 }
 
+/* Header above the per-panel rows. Mirrors the .panels-vitals-header
+   look so the two sections (panel layout, vitals) read as siblings
+   and the per-panel rows are visibly labeled as a configuration
+   block rather than floating chrome. */
+.panels-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-weight: 600;
+  color: var(--c-text);
+  margin-top: 12px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--c-border);
+}
+
 /* Per-panel rows --------------------------------------------- */
 .panels-rows {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* Placeholder that occupies the same grid column as the align dropdown
+   when the panel's zone has no meaningful alignment (top / bottom /
+   hidden / inline-host / fill). Keeps the per-row grid columns
+   visually aligned across rows without rendering a greyed-out
+   dropdown that reads as broken chrome. */
+.panels-row-control-placeholder {
+  visibility: hidden;
 }
 
 .panels-row {
@@ -2550,11 +3143,66 @@ body {
 }
 
 .panels-vitals-glyphs,
-.panels-vitals-quickpicks {
+.panels-vitals-quickpicks,
+.panels-vitals-layout {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+}
+
+/* Custom-template editor. Always rendered; the body greys out when
+   the toggle above it is off so the user can read the help text and
+   default template without enabling it. */
+.panels-vitals-template {
+  border-top: 1px dashed var(--c-border);
+  padding-top: 8px;
+}
+
+.panels-vitals-template-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.panels-vitals-template-body.is-disabled {
+  opacity: 0.45;
+}
+
+.panels-vitals-template-input {
+  width: 100%;
+  background: var(--c-surface-deep);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  padding: 6px 8px;
+  font: inherit;
+  resize: vertical;
+}
+
+.panels-vitals-template-input:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+.panels-vitals-template-help {
+  color: var(--c-text-faint);
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+
+.panels-vitals-template-help-title {
+  color: var(--c-text);
+  margin-right: 6px;
+}
+
+.panels-vitals-template-help code {
+  background: var(--c-surface-deep);
+  color: var(--c-accent);
+  padding: 0 4px;
+  border-radius: 2px;
+  margin: 0 1px;
+  font-size: 0.95em;
 }
 
 .panels-vitals-glyphs.is-disabled,
@@ -2637,7 +3285,7 @@ body {
    in Settings matches the runtime, but the surrounding header makes
    it clear this is a sample. */
 .panels-vitals-preview::before {
-  content: 'preview · hp at 75%';
+  content: 'preview · hp 75% / mn 50% / mv 25%';
   display: block;
   padding: 3px 14px;
   color: var(--c-text-faint);
@@ -3217,13 +3865,20 @@ body {
 
 .profile-row {
   border: 1px solid var(--c-border-soft);
+  border-left: 3px solid transparent;
   border-radius: 3px;
   background: var(--c-surface-lift);
   padding: 6px 10px;
 }
 
+/* Active profile carries a thicker accent-colored left edge so it
+   stands out against the stack of inactive rows. The full-border
+   accent (previously only on .is-active) was too subtle in a dense
+   list — the eye now snaps to the left edge first. */
 .profile-row.is-active {
   border-color: var(--c-accent);
+  border-left-color: var(--c-accent);
+  background: color-mix(in oklab, var(--c-accent) 6%, var(--c-surface-lift));
 }
 
 .profile-row-head {
@@ -3422,6 +4077,48 @@ body {
   color: var(--c-success);
 }
 
+/* Subtle "you have unsaved changes" tag rendered next to the
+   [save] button on manual-save forms (triggers, aliases, JSON
+   tabs). Read as a warning, not an error — the field is editable,
+   the user just hasn't hit save yet. */
+.settings-unsaved {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--c-warn);
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+}
+
+.settings-unsaved-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-warn);
+  /* Soft pulse so the eye lands on the indicator without it being
+     loud chrome. Slower than the tick-warn flash so the two reads
+     as distinct affordances. */
+  animation: vosh-unsaved-pulse 1600ms ease-in-out infinite;
+}
+
+@keyframes vosh-unsaved-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Static hint shown on the auto-saving Appearance tab so the user
+   knows changes commit on the fly and they're not missing a
+   [save] button. */
+.settings-autosave-hint {
+  color: var(--c-text-faint);
+  font-style: italic;
+}
+
 .settings-error {
   color: var(--c-danger);
 }
@@ -3532,21 +4229,6 @@ body {
   z-index: 3;
 }
 
-.map-pane-header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  padding: 4px 12px;
-  border-bottom: 1px solid var(--c-border-soft);
-  color: var(--c-text-faint);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.map-pane-title {
-  color: var(--c-text-muted);
-}
-
 .map-pane-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -3582,7 +4264,21 @@ body {
   row-gap: 4px;
 }
 
-.map-subhead > span:first-child {
+/* Map title chip that replaced the standalone map-pane-header bar.
+   Sits flush-left in the subhead so the word "map" labels the row
+   that already carries radius / mode / zoom — one bar instead of
+   two. Slightly emphasized (text color, uppercase) so it reads as
+   a label rather than another status line. */
+.map-subhead-title {
+  flex: 0 0 auto;
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  /* Tiny separator gap from the status text; the parent's `gap: 8px`
+     already provides horizontal spacing, so no margin needed. */
+}
+
+.map-subhead-status {
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;

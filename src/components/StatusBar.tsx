@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
-import { getTarget, onGmcp, onState, onTarget, type QuickKey } from '../lib/session';
-import { InlineTick } from './VitalsBar';
-
-interface CombatState {
-  name: string;
-  hp?: number;
-  condition?: string;
-}
+import {
+  getTarget,
+  getUiConfig,
+  onGmcpPackage,
+  onState,
+  onTarget,
+  subscribeMoonsPositionChanged,
+  type MoonsPosition,
+  type QuickKey,
+} from '../lib/session';
+import { InlineMudTime, InlineTick } from './VitalsBar';
+import { useTickState } from '../lib/useTickState';
+import { formatMudTime, mudTimeColor, useWorldTime } from '../lib/useWorldTime';
 
 interface MoonInfo {
   name?: string;
@@ -28,31 +33,6 @@ function formatClock(date: Date): string {
   return `${hh}:${mm}`;
 }
 
-function asNumber(value: unknown): number | undefined {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
-  if (typeof value === 'string') {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : undefined;
-  }
-  return undefined;
-}
-
-function colorForPct(value: number): string {
-  if (value >= 80) return '#87a987';
-  if (value >= 60) return '#e6c384';
-  if (value >= 40) return '#d99a6c';
-  if (value >= 20) return '#e46876';
-  return '#7d1d1d';
-}
-
-function tintForFill(hex: string): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const k = 0.25;
-  return `rgb(${Math.round(r * k)}, ${Math.round(g * k)}, ${Math.round(b * k)})`;
-}
-
 // Aabahran's World.Moons GMCP uses 0=full, 4=new, with 1-3 waning
 // and 5-7 waxing. The four geometric circles cover the cardinal
 // phases legibly; intermediate phases collapse to the nearest
@@ -65,32 +45,45 @@ function moonGlyphFromIndex(phase: number): string {
   return '◐'; // waxing (left side dark)
 }
 
-function extractCombat(data: unknown): CombatState | null {
-  if (!data || typeof data !== 'object') return null;
-  const obj = data as Record<string, unknown>;
-  const name = typeof obj.target === 'string' ? obj.target.trim() : '';
-  if (!name) return null;
-  const out: CombatState = { name };
-  const hp = asNumber(obj.hp_pct);
-  if (hp !== undefined) out.hp = Math.max(0, Math.min(100, Math.round(hp)));
-  if (typeof obj.condition === 'string' && obj.condition.trim()) {
-    out.condition = obj.condition.trim();
-  }
-  return out;
-}
-
-export function StatusBar({ embedTick = false }: { embedTick?: boolean } = {}) {
+export function StatusBar({
+  embedTick = false,
+  embedTime = false,
+}: { embedTick?: boolean; embedTime?: boolean } = {}) {
   const [now, setNow] = useState(() => new Date());
-  const [combat, setCombat] = useState<CombatState | null>(null);
   const [userTarget, setUserTarget] = useState<string | null>(null);
   const [quickKeys, setQuickKeys] = useState<QuickKey[]>([]);
   const [moons, setMoons] = useState<MoonsState>({ moons: [] });
+  const [moonsPosition, setMoonsPosition] = useState<MoonsPosition>('right-edge');
 
   useEffect(() => {
     const wallTick = () => setNow(new Date());
     wallTick();
     const id = window.setInterval(wallTick, 15_000);
     return () => window.clearInterval(id);
+  }, []);
+
+  // Seed the moons placement from the persisted UI config, then keep
+  // it live by listening for the Settings window's broadcast on
+  // every save. Falls back to "right-edge" (the historical position)
+  // if the backend is unreachable.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void getUiConfig()
+      .then((cfg) => {
+        if (!cancelled) setMoonsPosition(cfg.moons_position);
+      })
+      .catch(() => undefined);
+    void subscribeMoonsPositionChanged((value) => {
+      if (!cancelled) setMoonsPosition(value);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -107,23 +100,15 @@ export function StatusBar({ embedTick = false }: { embedTick?: boolean } = {}) {
       })
       .catch(() => undefined);
 
-    onGmcp((payload) => {
-      if (payload.package === 'Char.Combat') {
-        setCombat(extractCombat(payload.data));
-      } else if (
-        payload.package === 'World.Moons' &&
-        payload.data &&
-        typeof payload.data === 'object'
-      ) {
-        const data = payload.data as Partial<MoonsState>;
-        const next: MoonsState = {
-          moons: Array.isArray(data.moons) ? data.moons : [],
-        };
-        if (data.eclipse !== undefined) next.eclipse = data.eclipse;
-        if (data.triad !== undefined) next.triad = data.triad;
-        if (data.near_alignment !== undefined) next.near_alignment = data.near_alignment;
-        setMoons(next);
-      }
+    onGmcpPackage<Partial<MoonsState>>('World.Moons', (data) => {
+      if (!data || typeof data !== 'object') return;
+      const next: MoonsState = {
+        moons: Array.isArray(data.moons) ? data.moons : [],
+      };
+      if (data.eclipse !== undefined) next.eclipse = data.eclipse;
+      if (data.triad !== undefined) next.triad = data.triad;
+      if (data.near_alignment !== undefined) next.near_alignment = data.near_alignment;
+      setMoons(next);
     }).then((fn) => {
       if (cancelled) fn();
       else unsubGmcp = fn;
@@ -139,7 +124,6 @@ export function StatusBar({ embedTick = false }: { embedTick?: boolean } = {}) {
 
     onState((payload) => {
       if (payload.kind === 'disconnected') {
-        setCombat(null);
         setUserTarget(null);
         setQuickKeys([]);
         setMoons({ moons: [] });
@@ -158,11 +142,11 @@ export function StatusBar({ embedTick = false }: { embedTick?: boolean } = {}) {
   }, []);
 
   const configuredKeys = quickKeys.filter((q) => q.verb.length > 0);
+  const moonsBlock = moons.moons.length > 0 ? <MoonsBlock moons={moons} /> : null;
 
   return (
     <div className="statusbar">
       <div className="statusbar-left">
-        {combat && <CombatSeg combat={combat} />}
         {(userTarget || configuredKeys.length > 0) && (
           <span className="statusbar-target">
             {userTarget && (
@@ -189,61 +173,96 @@ export function StatusBar({ embedTick = false }: { embedTick?: boolean } = {}) {
           </span>
         )}
       </div>
+      {/* Centered, always-visible tick + MUD time chip. Bolder than
+          surrounding chrome so the eye lands on it immediately —
+          tick is time-critical (regen, combat timing) and MUD time
+          sets daily context (shop hours, day/night). Renders nothing
+          for whichever source is inactive, so a server that doesn't
+          ship World.Time just shows the tick countdown alone, and
+          vice versa. The moons block docks here when the user picks
+          `before-time` / `after-time` so the phases sit next to the
+          MUD time chip they relate to. */}
+      <div className="statusbar-center">
+        {moonsPosition === 'before-time' && moonsBlock}
+        <StatusTimeChip />
+        {moonsPosition === 'after-time' && moonsBlock}
+      </div>
       <div className="statusbar-right">
         {embedTick && <InlineTick className="statusbar-tick" />}
-        {moons.moons.length > 0 && (
-          <span className="statusbar-moons">
-            {moons.moons.map((m, i) => (
-              <span
-                key={m.name ?? i}
-                className={`statusbar-moon${m.active ? ' is-active' : ''}`}
-                data-tooltip={
-                  `${m.name ?? 'moon'}: ${m.phase_name ?? `phase ${m.phase ?? '?'}`}` +
-                  (m.active ? ' (active)' : '')
-                }
-              >
-                {moonGlyphFromIndex(m.phase ?? -1)}
-              </span>
-            ))}
-            {moons.eclipse && <span className="statusbar-moon-badge is-eclipse">eclipse</span>}
-            {!moons.eclipse && moons.triad && (
-              <span className="statusbar-moon-badge is-triad">triad</span>
-            )}
-            {!moons.eclipse && !moons.triad && moons.near_alignment && (
-              <span className="statusbar-moon-badge is-near">near</span>
-            )}
-          </span>
-        )}
-        <span className="statusbar-clock">{formatClock(now)}</span>
+        {/* embedTime renders before the wall-clock at the bottom of the
+            block so the MUD time chip (when embedded) reads to the
+            left of the always-on wall-clock. The wall-clock now
+            unconditionally shows the local system time per user ask. */}
+        {moonsPosition === 'right-edge' && moonsBlock}
+        {embedTime && <InlineMudTime className="statusbar-time" />}
+        <span className="statusbar-clock" title="local wall-clock time">
+          {formatClock(now)}
+        </span>
       </div>
     </div>
   );
 }
 
-function CombatSeg({ combat }: { combat: CombatState }) {
-  const hp = combat.hp;
-  const fill = hp !== undefined ? colorForPct(hp) : '#7aa89f';
+function MoonsBlock({ moons }: { moons: MoonsState }) {
   return (
-    <div className="statusbar-combat">
-      <span className="statusbar-combat-swords" aria-hidden="true">
-        ⚔
-      </span>
-      <span className="statusbar-combat-name">{combat.name}</span>
-      {hp !== undefined ? (
-        <span className="statusbar-bar-track" style={{ width: 80 }}>
-          <span
-            className="statusbar-bar-fill"
-            style={{ width: `${hp}%`, background: fill }}
-            aria-hidden="true"
-          />
-          <span className="statusbar-bar-text" style={{ color: tintForFill(fill) }}>
-            {hp}%
+    <span className="statusbar-moons">
+      {moons.moons.map((m, i) => (
+        <span
+          key={m.name ?? i}
+          className={`statusbar-moon${m.active ? ' is-active' : ''}`}
+          data-tooltip={
+            `${m.name ?? 'moon'}: ${m.phase_name ?? `phase ${m.phase ?? '?'}`}` +
+            (m.active ? ' (active)' : '')
+          }
+        >
+          {moonGlyphFromIndex(m.phase ?? -1)}
+        </span>
+      ))}
+      {moons.eclipse && <span className="statusbar-moon-badge is-eclipse">eclipse</span>}
+      {!moons.eclipse && moons.triad && (
+        <span className="statusbar-moon-badge is-triad">triad</span>
+      )}
+      {!moons.eclipse && !moons.triad && moons.near_alignment && (
+        <span className="statusbar-moon-badge is-near">near</span>
+      )}
+    </span>
+  );
+}
+
+// Always-visible tick + MUD time chip rendered in the center of the
+// status bar. Reads as `tick 12s · time 9AM` with bracket-style
+// emphasis so the eye lands on it before scanning the wider bar.
+// Each side renders independently — server without World.Time still
+// shows just the tick countdown, and vice versa. When neither source
+// is active, returns null so the slot collapses.
+function StatusTimeChip() {
+  const { active, tickSecs, warn } = useTickState();
+  const worldTime = useWorldTime();
+  const mudTime = formatMudTime(worldTime);
+  const timeColor = mudTimeColor(worldTime);
+  if (!active && !mudTime) return null;
+  return (
+    <div className="statusbar-timechip" aria-label="tick and MUD time">
+      {active && (
+        <span className="statusbar-timechip-block">
+          <span className="statusbar-timechip-label">tick</span>
+          <span className={`statusbar-timechip-value${warn ? ' is-warn' : ''}`} aria-live="polite">
+            {tickSecs}s
           </span>
         </span>
-      ) : (
-        <span className="statusbar-combat-unknown">--</span>
       )}
-      {combat.condition && <span className="statusbar-combat-condition">{combat.condition}</span>}
+      {active && mudTime && <span className="statusbar-timechip-sep">·</span>}
+      {mudTime && (
+        <span className="statusbar-timechip-block">
+          <span className="statusbar-timechip-label">time</span>
+          <span
+            className="statusbar-timechip-value statusbar-timechip-time"
+            style={timeColor ? { color: timeColor } : undefined}
+          >
+            {mudTime}
+          </span>
+        </span>
+      )}
     </div>
   );
 }

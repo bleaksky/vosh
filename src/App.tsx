@@ -12,7 +12,7 @@ import { MapPane } from './components/MapPane';
 import { ChatPane } from './components/ChatPane';
 import { GroupPane } from './components/GroupPane';
 import { RoomStrip } from './components/RoomStrip';
-import { TickPanel, VitalsBar } from './components/VitalsBar';
+import { TickPanel, TimePanel, VitalsBar } from './components/VitalsBar';
 import { UpdateNotice } from './components/UpdateNotice';
 import {
   dockLayoutGet,
@@ -484,11 +484,14 @@ function App() {
   const connected = status.kind === 'connected' || status.kind === 'connecting';
 
   const grouped = groupPanels(panelLayout);
-  // Tick can live inline at the right edge of a host panel instead of
-  // taking its own slot. When the user picks one of the `in:*` zones,
-  // we skip the standalone TickPanel and let the host render an
-  // InlineTick chip. Hosts that aren't selected render no extra chip.
+  // Tick and MUD time can live inline at the right edge of a host
+  // panel instead of taking their own slot. When the user picks one
+  // of the `in:*` zones for either, we skip the standalone panel and
+  // let the host render the inline chip. Hosts that aren't selected
+  // render no extra chip. The two are independent — both can embed in
+  // the same host (e.g. both in:vitals) and appear side-by-side.
   const tickZone = panelLayout.placements.tick.zone;
+  const timeZone = panelLayout.placements.time.zone;
   const renderPanel = (id: PanelId) => {
     switch (id) {
       case 'map':
@@ -496,15 +499,35 @@ function App() {
       case 'group':
         return <GroupPane key="group" pinned onTogglePin={() => setPanelZone('group', 'hidden')} />;
       case 'vitals':
-        return <VitalsBar key="vitals" embedTick={tickZone === 'in:vitals'} />;
+        return (
+          <VitalsBar
+            key="vitals"
+            embedTick={tickZone === 'in:vitals'}
+            embedTime={timeZone === 'in:vitals'}
+          />
+        );
       case 'roomstrip':
-        return <RoomStrip key="roomstrip" embedTick={tickZone === 'in:roomstrip'} />;
+        return (
+          <RoomStrip
+            key="roomstrip"
+            embedTick={tickZone === 'in:roomstrip'}
+            embedTime={timeZone === 'in:roomstrip'}
+          />
+        );
       case 'chat':
         return <ChatPane key="chat" onClose={() => setPanelZone('chat', 'hidden')} />;
       case 'affects':
-        return <AffectsBar key="affects" embedTick={tickZone === 'in:affects'} />;
+        return (
+          <AffectsBar
+            key="affects"
+            embedTick={tickZone === 'in:affects'}
+            embedTime={timeZone === 'in:affects'}
+          />
+        );
       case 'tick':
         return <TickPanel key="tick" />;
+      case 'time':
+        return <TimePanel key="time" />;
     }
   };
 
@@ -689,7 +712,10 @@ function App() {
             {terminalAreaElement}
             {bottomZoneElement}
             {inputElement}
-            <StatusBar embedTick={tickZone === 'in:statusbar'} />
+            <StatusBar
+              embedTick={tickZone === 'in:statusbar'}
+              embedTime={timeZone === 'in:statusbar'}
+            />
           </div>
         ) : (
           terminalAreaElement
@@ -710,7 +736,12 @@ function App() {
       </div>
       {!sidePanelsFillHeight && bottomZoneElement}
       {!sidePanelsFillHeight && inputElement}
-      {!sidePanelsFillHeight && <StatusBar embedTick={tickZone === 'in:statusbar'} />}
+      {!sidePanelsFillHeight && (
+        <StatusBar
+          embedTick={tickZone === 'in:statusbar'}
+          embedTime={timeZone === 'in:statusbar'}
+        />
+      )}
       <UpdateNotice />
     </main>
   );

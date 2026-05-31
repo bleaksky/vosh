@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { getAreaSnapshot, onGmcp, onMap, onState, type AreaSnapshot } from '../lib/session';
+import { getAreaSnapshot, onGmcpPackage, onMap, onState, type AreaSnapshot } from '../lib/session';
 import {
   MAP_COLORS,
   SECTORS,
@@ -284,10 +284,8 @@ export function ServerMapView() {
     let unsubMap: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
 
-    onGmcp((payload) => {
-      if (payload.package === 'Map.Tiles') {
-        setTiles((payload.data ?? {}) as MapTilesPayload);
-      }
+    onGmcpPackage<MapTilesPayload>('Map.Tiles', (data) => {
+      setTiles(data ?? ({} as MapTilesPayload));
     }).then((fn) => {
       unsubGmcp = fn;
     });
@@ -513,7 +511,10 @@ export function ServerMapView() {
   return (
     <div className="server-view">
       <div className="map-subhead">
-        <span>{tiles ? `radius ${tiles.r ?? '?'}` : 'waiting for server map'}</span>
+        <span className="map-subhead-title">map</span>
+        <span className="map-subhead-status">
+          {tiles ? `radius ${tiles.r ?? '?'}` : 'waiting for server map'}
+        </span>
         <div className="map-mode-toggle">
           <button
             type="button"

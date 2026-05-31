@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use vosh_alias::Alias;
 use vosh_trigger::Trigger;
@@ -61,6 +61,42 @@ pub(crate) struct PluginsPersist {
     pub enabled: Vec<String>,
 }
 
+/// One tracked-affect entry. `name` is what the server actually
+/// pushes in the Char.Affects feed (matched case-insensitively); the
+/// optional `label` is what we display in the affects bar. Without a
+/// label, the name itself shows.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct TrackedAffect {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+}
+
+/// Custom deserializer that accepts both the legacy bare-string list
+/// (`tracked_affects = ["sanc", "haste"]`) and the new table list
+/// (`[[ui.tracked_affects]] name = "sanc" label = "S"`). The Settings
+/// UI emits the table form going forward; older profile.toml files
+/// keep loading without manual migration.
+fn deserialize_tracked_affects<'de, D>(deser: D) -> Result<Vec<TrackedAffect>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Row {
+        Bare(String),
+        Full(TrackedAffect),
+    }
+    let raw: Vec<Row> = Vec::deserialize(deser)?;
+    Ok(raw
+        .into_iter()
+        .map(|r| match r {
+            Row::Bare(name) => TrackedAffect { name, label: None },
+            Row::Full(t) => t,
+        })
+        .collect())
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct UiConfig {
     /// `default`, `high-contrast`, or `system`. `system` follows the OS
@@ -80,8 +116,15 @@ pub(crate) struct UiConfig {
     /// Affect names rendered as pills in the status bar. Present affects
     /// show their remaining duration; absent ones render as a struck-out
     /// red-bordered pill so the player notices the gap at a glance.
-    #[serde(default)]
-    pub tracked_affects: Vec<String>,
+    ///
+    /// Each entry can carry an optional display `label` so the in-world
+    /// name the server pushes (e.g. "Field of Discord") can be shown
+    /// under a shorter chosen handle ("Shroud"). The wire format
+    /// accepts either the new `{name, label}` table shape or the
+    /// legacy bare-string list and promotes strings into the table
+    /// shape transparently.
+    #[serde(default, deserialize_with = "deserialize_tracked_affects")]
+    pub tracked_affects: Vec<TrackedAffect>,
     /// Preset ids enabled in the Highlights drawer. On startup the
     /// frontend re-installs these presets' bundled triggers so users
     /// don't have to re-toggle each launch.
@@ -133,6 +176,13 @@ pub(crate) struct UiConfig {
     /// bar glyphs and width. Default mirrors the historical look.
     #[serde(default)]
     pub vitals: VitalsConfig,
+    /// Where to render the World.Moons phase glyphs in the status bar.
+    /// Values: `"right-edge"` (the historical placement, far right of
+    /// the status bar), `"before-time"` (left of the centered tick +
+    /// MUD time chip), `"after-time"` (right of that same chip).
+    /// Unknown values coerce back to `"right-edge"` server-side.
+    #[serde(default = "default_moons_position")]
+    pub moons_position: String,
 }
 
 /// Vitals row appearance. Each `show_*` toggle controls whether the
@@ -157,6 +207,42 @@ pub(crate) struct VitalsConfig {
     /// Total cells in the bar (filled + empty). Clamped to [4, 60].
     #[serde(default = "default_bar_width")]
     pub bar_width: u32,
+    /// Bar render style: "solid" (each cell renders bar_filled or
+    /// bar_empty, repeated as glyphs — the historical look) or
+    /// "track" (a CSS-tinted div bar that smoothly fills left-to-
+    /// right at any percentage, no glyph dependency). The old
+    /// "ramped" Unicode-partial-block mode looked rough in most
+    /// monospace fonts and was removed; old configs get coerced to
+    /// "solid" by the command handler.
+    #[serde(default = "default_bar_style")]
+    pub bar_style: String,
+    /// Row layout: "stacked" puts each vital on its own row (the
+    /// historical look); "inline" packs all three vitals into a
+    /// single horizontal row like the tintin nprompt
+    /// `hp 850(85%) mn 230(76%) mv 120(60%)` format. Frontend
+    /// validates the value and falls back to stacked on unknown
+    /// strings.
+    #[serde(default = "default_vitals_layout")]
+    pub layout: String,
+    /// Color source for the percent text: "fill" (the per-vital
+    /// color ramp; matches the bar color) or "gradient" (a 0-100
+    /// red-to-green ramp; the percent itself becomes the at-a-glance
+    /// health indicator regardless of which vital it belongs to).
+    #[serde(default = "default_percent_color")]
+    pub percent_color: String,
+    /// When true, render the vitals row from `template` instead of
+    /// the built-in stacked / inline layouts. Token reference lives
+    /// in the Settings panel's help text; the renderer ignores all
+    /// other vitals.* render fields except the bar_* settings (which
+    /// drive the `%bar_*` tokens) and percent_color (which colors
+    /// the `%pct_*` tokens).
+    #[serde(default)]
+    pub template_enabled: bool,
+    /// Free-form template authored by the user. See the Settings UI
+    /// for the token list. Tintin nprompt-like default:
+    /// `%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v - (%tick) - %time`.
+    #[serde(default = "default_template")]
+    pub template: String,
 }
 
 impl Default for VitalsConfig {
@@ -169,8 +255,25 @@ impl Default for VitalsConfig {
             bar_filled: default_bar_filled(),
             bar_empty: default_bar_empty(),
             bar_width: default_bar_width(),
+            bar_style: default_bar_style(),
+            layout: default_vitals_layout(),
+            percent_color: default_percent_color(),
+            template_enabled: false,
+            template: default_template(),
         }
     }
+}
+
+fn default_template() -> String {
+    "%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v - (%tick) - %time".to_string()
+}
+
+fn default_vitals_layout() -> String {
+    "stacked".to_string()
+}
+
+fn default_percent_color() -> String {
+    "fill".to_string()
 }
 
 fn default_bar_filled() -> String {
@@ -183,6 +286,14 @@ fn default_bar_empty() -> String {
 
 fn default_bar_width() -> u32 {
     20
+}
+
+fn default_bar_style() -> String {
+    "solid".to_string()
+}
+
+fn default_moons_position() -> String {
+    "right-edge".to_string()
 }
 
 fn default_paste_line_delay_ms() -> u32 {
@@ -249,6 +360,7 @@ impl Default for UiConfig {
             side_panels_fill_height: false,
             paste_line_delay_ms: default_paste_line_delay_ms(),
             vitals: VitalsConfig::default(),
+            moons_position: default_moons_position(),
         }
     }
 }
@@ -369,6 +481,7 @@ impl ProfileConfig {
             side_panels_fill_height: profile.ui.side_panels_fill_height,
             paste_line_delay_ms: profile.ui.paste_line_delay_ms,
             vitals: profile.ui.vitals.clone(),
+            moons_position: profile.ui.moons_position.clone(),
         };
 
         let plugins = PluginsPersist {
@@ -466,6 +579,7 @@ impl ProfileConfig {
             side_panels_fill_height: self.ui.side_panels_fill_height,
             paste_line_delay_ms: self.ui.paste_line_delay_ms,
             vitals: self.ui.vitals.clone(),
+            moons_position: self.ui.moons_position.clone(),
         };
 
         // Plugin enabled-set is persisted; the actual load happens in the
@@ -625,7 +739,14 @@ pub(crate) fn strip_global_fields(config: &mut ProfileConfig, scope: &ScopeConfi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vosh_trigger::{HighlightStyle, NamedColor, TriggerAction};
+    use vosh_trigger::{HighlightStyle, NamedColor, TriggerAction, TriggerPattern};
+
+    fn single_pattern(p: &str) -> Vec<TriggerPattern> {
+        vec![TriggerPattern {
+            pattern: p.to_string(),
+            enabled: true,
+        }]
+    }
 
     #[test]
     fn round_trip_through_toml() {
@@ -634,7 +755,7 @@ mod tests {
         config.profile_vars.insert("target".into(), "goblin".into());
         config.triggers.push(Trigger {
             name: "tells".into(),
-            pattern: r"\w+ tells you".into(),
+            patterns: single_pattern(r"\w+ tells you"),
             priority: 0,
             enabled: true,
             actions: vec![TriggerAction::Highlight {
@@ -664,7 +785,16 @@ mod tests {
         profile.ui.theme = "tokyo-night".into();
         profile.ui.font_size = 18;
         profile.ui.keep_last_command = true;
-        profile.ui.tracked_affects = vec!["sanc".into(), "haste".into()];
+        profile.ui.tracked_affects = vec![
+            TrackedAffect {
+                name: "sanc".into(),
+                label: None,
+            },
+            TrackedAffect {
+                name: "Field of Discord".into(),
+                label: Some("Shroud".into()),
+            },
+        ];
         profile.aliases.set(Alias::new("greet", "wave"));
 
         // Snapshot both halves, strip the per-profile of global fields
@@ -696,7 +826,51 @@ mod tests {
         assert_eq!(restored.ui.font_size, 18);
         assert!(restored.ui.keep_last_command);
         assert_eq!(restored.ui.tracked_affects.len(), 2);
+        let labeled = restored
+            .ui
+            .tracked_affects
+            .iter()
+            .find(|t| t.name == "Field of Discord")
+            .expect("labeled entry survives the round-trip");
+        assert_eq!(labeled.label.as_deref(), Some("Shroud"));
         assert!(restored.aliases.list().iter().any(|a| a.name == "greet"));
+    }
+
+    #[test]
+    fn tracked_affects_accept_legacy_bare_strings() {
+        // A profile written by an older build (Vec<String>) must still
+        // load after the schema change. Each bare string promotes to
+        // a `{ name, label: None }` row at deserialize time.
+        let toml = r#"
+[ui]
+tracked_affects = ["sanc", "haste"]
+"#;
+        let parsed = ProfileConfig::from_toml(toml).unwrap();
+        assert_eq!(parsed.ui.tracked_affects.len(), 2);
+        assert_eq!(parsed.ui.tracked_affects[0].name, "sanc");
+        assert!(parsed.ui.tracked_affects[0].label.is_none());
+        assert_eq!(parsed.ui.tracked_affects[1].name, "haste");
+    }
+
+    #[test]
+    fn tracked_affects_accept_new_table_form() {
+        let toml = r#"
+[ui]
+[[ui.tracked_affects]]
+name = "Field of Discord"
+label = "Shroud"
+[[ui.tracked_affects]]
+name = "haste"
+"#;
+        let parsed = ProfileConfig::from_toml(toml).unwrap();
+        assert_eq!(parsed.ui.tracked_affects.len(), 2);
+        assert_eq!(parsed.ui.tracked_affects[0].name, "Field of Discord");
+        assert_eq!(
+            parsed.ui.tracked_affects[0].label.as_deref(),
+            Some("Shroud")
+        );
+        assert_eq!(parsed.ui.tracked_affects[1].name, "haste");
+        assert!(parsed.ui.tracked_affects[1].label.is_none());
     }
 
     #[test]
@@ -716,7 +890,7 @@ mod tests {
         let mut config = ProfileConfig::default();
         config.triggers.push(Trigger {
             name: "bad".into(),
-            pattern: "[unclosed".into(),
+            patterns: single_pattern("[unclosed"),
             priority: 0,
             enabled: true,
             actions: vec![TriggerAction::Gag],
