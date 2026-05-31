@@ -26,7 +26,7 @@
 
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -66,14 +66,57 @@ pub(crate) struct ProfileEntry {
     pub auto_match: Option<AutoMatch>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub(crate) struct AutoMatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub character: Option<String>,
+    /// Characters this profile claims. A connect call carrying any of
+    /// these names matches (case-insensitive). Empty list means the
+    /// profile is character-agnostic and matches purely on
+    /// host (plus port when pinned). Persisted as a JSON array;
+    /// legacy single-string `character: "Name"` shape is accepted on
+    /// load and promoted to a one-element list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub characters: Vec<String>,
+}
+
+/// Custom deserializer that accepts both the legacy shape
+/// (`character: "Name"`) and the new shape (`characters: ["A", "B"]`)
+/// without making callers run a migration. Mirrors the same
+/// dual-shape strategy used by multi-pattern triggers and tracked
+/// affect labels.
+impl<'de> Deserialize<'de> for AutoMatch {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Raw {
+            #[serde(default)]
+            host: Option<String>,
+            #[serde(default)]
+            port: Option<u16>,
+            #[serde(default)]
+            character: Option<String>,
+            #[serde(default)]
+            characters: Vec<String>,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        let mut characters = raw.characters;
+        if let Some(c) = raw.character {
+            let trimmed = c.trim();
+            if !trimmed.is_empty() && !characters.iter().any(|x| x == trimmed) {
+                characters.insert(0, trimmed.to_string());
+            }
+        }
+        Ok(AutoMatch {
+            host: raw.host,
+            port: raw.port,
+            characters,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -454,6 +497,71 @@ mod tests {
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         let err = set.delete(DEFAULT_PROFILE_NAME).unwrap_err();
         assert!(matches!(err, ProfileSetError::CannotDeleteActive(_)));
+    }
+
+    #[test]
+    fn auto_match_accepts_legacy_single_character_shape() {
+        // Older profile.toml files (pre-multi-character feature) saved
+        // `character = "Erelei"`. Loading must still succeed and the
+        // resulting struct must hold one entry in the new `characters`
+        // list so the resolver treats it identically.
+        let toml = r#"
+host = "play.theforsakenlands.com"
+port = 1848
+character = "Erelei"
+"#;
+        let am: AutoMatch = toml::from_str(toml).unwrap();
+        assert_eq!(am.host.as_deref(), Some("play.theforsakenlands.com"));
+        assert_eq!(am.port, Some(1848));
+        assert_eq!(am.characters, vec!["Erelei".to_string()]);
+    }
+
+    #[test]
+    fn auto_match_accepts_characters_list_shape() {
+        let toml = r#"
+host = "play.theforsakenlands.com"
+characters = ["Erelei", "Akletus", "Vanek"]
+"#;
+        let am: AutoMatch = toml::from_str(toml).unwrap();
+        assert_eq!(am.characters, vec!["Erelei", "Akletus", "Vanek"]);
+    }
+
+    #[test]
+    fn auto_match_merges_legacy_and_new_when_both_present() {
+        // A hand-edited profile.toml could carry both fields; the
+        // legacy `character` should be folded into the list without
+        // duplicating an existing entry.
+        let toml = r#"
+host = "h"
+character = "Erelei"
+characters = ["Akletus", "Vanek"]
+"#;
+        let am: AutoMatch = toml::from_str(toml).unwrap();
+        assert_eq!(am.characters, vec!["Erelei", "Akletus", "Vanek"]);
+
+        let toml_with_dup = r#"
+host = "h"
+character = "Erelei"
+characters = ["Erelei", "Vanek"]
+"#;
+        let am: AutoMatch = toml::from_str(toml_with_dup).unwrap();
+        // Dedup keeps the existing position; legacy entry is not
+        // re-inserted.
+        assert_eq!(am.characters, vec!["Erelei", "Vanek"]);
+    }
+
+    #[test]
+    fn auto_match_round_trips_through_toml() {
+        let am = AutoMatch {
+            host: Some("h".into()),
+            port: Some(1848),
+            characters: vec!["A".into(), "B".into()],
+        };
+        let text = toml::to_string_pretty(&am).unwrap();
+        let parsed: AutoMatch = toml::from_str(&text).unwrap();
+        assert_eq!(parsed.host, am.host);
+        assert_eq!(parsed.port, am.port);
+        assert_eq!(parsed.characters, am.characters);
     }
 
     #[test]
