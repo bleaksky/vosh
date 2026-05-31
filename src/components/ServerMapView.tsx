@@ -420,9 +420,7 @@ export function ServerMapView() {
         zoom,
       );
 
-      if (style === 'glyphs') {
-        drawGlyphs(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC, anchor);
-      } else if (style === 'tileset') {
+      if (style === 'tileset') {
         drawTileset(
           ctx,
           cssWidth,
@@ -435,9 +433,13 @@ export function ServerMapView() {
           tilesetImage,
           anchor,
         );
-      } else {
+      } else if (style === 'squares') {
         drawSquares(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC, anchor);
       }
+      // Glyph mode: canvas paints just the background + terrain halo.
+      // The actual character grid is rendered via <GlyphsOverlay /> in
+      // the JSX below so it tiles in real terminal-cell pitch (1ch ×
+      // 1em) using the app font, matching tintin's character-grid map.
     };
 
     draw();
@@ -573,6 +575,7 @@ export function ServerMapView() {
       )}
       <div ref={containerRef} className="map-canvas-host">
         <canvas ref={canvasRef} />
+        {style === 'glyphs' && tiles && <GlyphsOverlay payload={tiles} zoom={zoom} />}
       </div>
     </div>
   );
@@ -965,97 +968,111 @@ function dimLevel(dr: number, dc: number, light: number | string | undefined): n
   return lvl;
 }
 
-function drawGlyphs(
-  ctx: CanvasRenderingContext2D,
-  _cssWidth: number,
-  _cssHeight: number,
-  payload: MapTilesPayload,
-  rows: number,
-  cols: number,
-  centerR: number,
-  centerC: number,
-  anchor: Anchor,
-) {
+// HTML glyph overlay. Replaces the previous canvas drawGlyphs which
+// rendered each character with square pixel pitch, producing loose,
+// misaligned cells. This version emits the grid as monospace text so
+// every cell is exactly 1ch wide × 1em tall — the same character-grid
+// shape tintin uses in a real terminal. The player cell is anchored
+// to the parent's geometric center via CSS calc().
+//
+// Off-floor rooms (a/b/zr) are intentionally not rendered here so the
+// result reads identically to tintin's map_panel. Use squares or
+// tileset mode when multi-floor structure matters.
+function GlyphsOverlay({ payload, zoom }: { payload: MapTilesPayload; zoom: number }) {
+  const { rows, cols } = gridDims(payload);
+  if (rows === 0 || cols === 0) {
+    return <div className="map-glyph-empty">no glyph data in payload</div>;
+  }
+  const centerR = Math.floor((rows + 1) / 2);
+  const centerC = Math.floor((cols + 1) / 2);
   const textFallback = parseTextGrid(payload.t);
   const hasGrid = !!payload.g;
-  if (!hasGrid && textFallback.length === 0) {
-    ctx.fillStyle = '#6e7681';
-    ctx.font = '12px monospace';
-    ctx.fillText('no glyph data in payload', 10, 22);
-    return;
-  }
-  // Anchor.pitch already includes the user's zoom multiplier, so
-  // glyphs scale with zoom the same way squares + tileset do. (The
-  // previous canvas-fit calculation ignored anchor.pitch entirely
-  // and capped glyphs at 20px regardless of zoom.)
-  const pitchX = anchor.pitch;
-  const pitchY = anchor.pitch;
-  void rows;
-  void cols;
-  // Match drawSquares' anchoring so off-floor entries (which share
-  // the same 1-indexed coordinate space as `g`) land on the same
-  // visual cells in both modes.
-  const ox = Math.floor(anchor.playerX - centerC * pitchX);
-  const oy = Math.floor(anchor.playerY - centerR * pitchY);
-  ctx.font = `${Math.floor(pitchY * 0.85)}px "JetBrains Mono", "Menlo", monospace`;
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = 'center';
 
-  // Pass 1: off-floor rooms first so same-floor glyphs paint on top.
-  // Tintin doesn't render off-floor at all; Vosh's squares mode does,
-  // and we mirror that behavior here at low alpha so the user sees
-  // multi-floor structure without losing the current floor.
-  const drawOffFloor = (entries: OffFloorEntry[] | undefined) => {
-    if (!Array.isArray(entries) || entries.length === 0) return;
-    ctx.save();
-    ctx.globalAlpha = 0.28;
-    for (const entry of entries) {
-      const sectorCode = entry.s ?? '';
-      const glyph = SECTOR_GLYPHS[sectorCode] ?? '?';
-      ctx.fillStyle = glyphColor(sectorCode, 2);
-      ctx.fillText(glyph, ox + entry.x * pitchX, oy + entry.y * pitchY);
-    }
-    ctx.restore();
-  };
-  drawOffFloor(payload.a);
-  drawOffFloor(payload.b);
-  drawOffFloor(payload.zr);
-
-  // Pass 2: same-floor grid via `g` (richer data — has exits + light
-  // so we can compute connect-glyph and dark-room dimming). Fall
-  // back to the text grid for cells that aren't in `g`.
+  type GlyphCell = { glyph: string; color: string; isPlayer: boolean };
+  const grid: GlyphCell[][] = [];
   for (let r = 1; r <= rows; r++) {
+    const rowOut: GlyphCell[] = [];
     for (let c = 1; c <= cols; c++) {
       const cell = hasGrid ? getCell(payload, r, c) : null;
       const sectorFromGrid = cell?.s ?? '';
       const sectorFromText = textFallback[r - 1]?.[c - 1] ?? '';
       const sectorCode = sectorFromGrid || sectorFromText;
-      if (!sectorCode || sectorCode === ' ') continue;
-
-      const cx = ox + c * pitchX;
-      const cy = oy + r * pitchY;
-
-      // Player cell wins over everything else. Bold yellow `@` per
-      // tintin's `\e[1;38;5;220m@\e[0m` marker (xterm 220 = #ffd700).
-      if (r === centerR && c === centerC) {
-        ctx.fillStyle = ansi256ToHex(220);
-        ctx.fillText('@', cx, cy);
+      if (!sectorCode || sectorCode === ' ') {
+        rowOut.push({ glyph: ' ', color: 'transparent', isPlayer: false });
         continue;
       }
-
+      // Player cell wins over everything. Bold yellow `@` per tintin.
+      if (r === centerR && c === centerC) {
+        rowOut.push({ glyph: '@', color: ansi256ToHex(220), isPlayer: true });
+        continue;
+      }
       const dr = r - centerR;
       const dc = c - centerC;
       const lvl = dimLevel(dr, dc, cell?.l);
-
-      // Z-exit override takes priority over the sector glyph so the
-      // player sees which rooms lead up/down at a glance.
       const cg = cell ? connectGlyph(cell.e) : null;
       const glyph = cg ?? SECTOR_GLYPHS[sectorCode] ?? '?';
+      rowOut.push({ glyph, color: glyphColor(sectorCode, lvl), isPlayer: false });
+    }
+    grid.push(rowOut);
+  }
 
-      ctx.fillStyle = glyphColor(sectorCode, lvl);
-      ctx.fillText(glyph, cx, cy);
+  // Font size scales with zoom; base 14 keeps glyph cells legible at
+  // 1.0× and matches the terminal's default size enough that the map
+  // reads as part of the same display surface.
+  const fontSize = Math.round(14 * zoom);
+
+  // Translate the grid so its (centerC, centerR) cell sits at the
+  // parent's geometric center. Each cell measures 1ch wide × 1em
+  // tall (line-height: 1), so the offset is a clean calc() and the
+  // grid stays pixel-aligned without measuring text.
+  const playerColOffset = centerC - 0.5;
+  const playerRowOffset = centerR - 0.5;
+
+  // Collapse runs of consecutive same-color spans per row so the DOM
+  // size stays reasonable on big grids (a 30×30 grid drops from ~900
+  // nodes to ~80–150 depending on color variety).
+  return (
+    <div
+      className="map-glyph-grid"
+      style={{
+        fontSize: `${fontSize}px`,
+        transform: `translate(calc(-1ch * ${playerColOffset}), calc(-1em * ${playerRowOffset}))`,
+      }}
+    >
+      {grid.map((row, r) => (
+        <div key={r} className="map-glyph-row">
+          {coalesceRow(row).map((seg, i) => (
+            <span
+              key={i}
+              className={seg.isPlayer ? 'map-glyph-player' : undefined}
+              style={{ color: seg.color }}
+            >
+              {seg.text}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface GlyphSegment {
+  text: string;
+  color: string;
+  isPlayer: boolean;
+}
+
+function coalesceRow(row: { glyph: string; color: string; isPlayer: boolean }[]): GlyphSegment[] {
+  const out: GlyphSegment[] = [];
+  for (const cell of row) {
+    const last = out[out.length - 1];
+    if (last && last.color === cell.color && last.isPlayer === cell.isPlayer) {
+      last.text += cell.glyph;
+    } else {
+      out.push({ text: cell.glyph, color: cell.color, isPlayer: cell.isPlayer });
     }
   }
+  return out;
 }
 
 function drawTileset(

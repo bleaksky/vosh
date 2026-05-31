@@ -481,10 +481,23 @@ async fn handle_event(
 ) -> std::io::Result<()> {
     match event {
         TelnetEvent::Data(bytes) => {
+            // Batch every byte we want to push to xterm across all
+            // ChunkOps from this single Data event into one buffer so
+            // we emit one `session://output` instead of one-per-line.
+            // Tauri events serialize through the bridge and xterm
+            // renders each write on its own frame; without batching a
+            // 50-line response paints line-by-line ("typewriter") at
+            // the speed of Tauri event delivery + xterm framing.
+            //
+            // Triggers, Lua callbacks, route emissions, log writes,
+            // and tick-reset bookkeeping still run per-line because
+            // they have ordering semantics (a `gag` action mutates the
+            // line's display before it lands in the batch).
+            let mut display_batch: Vec<u8> = Vec::new();
             for op in accumulator.feed(&bytes) {
                 match op {
                     ChunkOp::RawDisplay(b) => {
-                        emit_output(app, b);
+                        display_batch.extend_from_slice(&b);
                     }
                     ChunkOp::LineComplete { bytes, clear_first } => {
                         let plain = vosh_ansi::plain_text(&bytes);
@@ -511,7 +524,8 @@ async fn handle_event(
                             let apply = script_state::apply_actions(&mut p, outcome);
                             (result, ticked, apply)
                         };
-                        emit_line_result(app, &result, clear_first);
+                        append_line_result(&mut display_batch, &result, clear_first);
+                        emit_line_routes(app, &result);
                         if let Some(text) = &result.display {
                             // Persist to the searchable SQLite log and the
                             // ring buffer that becomes scrollback on next
@@ -542,6 +556,9 @@ async fn handle_event(
                         }
                     }
                 }
+            }
+            if !display_batch.is_empty() {
+                emit_output(app, display_batch);
             }
             Ok(())
         }
@@ -728,21 +745,26 @@ fn supports_subnegotiation() -> Vec<u8> {
     Negotiator::build_gmcp_subnegotiation(&body)
 }
 
-fn emit_line_result(app: &AppHandle, result: &LineResult, clear_first: bool) {
-    let mut bytes: Vec<u8> = Vec::new();
+/// Append this line's display bytes to a per-Data-event batch. The
+/// caller drains the batch with a single `emit_output` at the end of
+/// the for loop so a multi-line response paints in one xterm.write.
+fn append_line_result(batch: &mut Vec<u8>, result: &LineResult, clear_first: bool) {
     if clear_first {
         // Wipe the partial that was already shown raw so the trigger-
         // processed line replaces it cleanly. ESC [ 2 K clears the entire
         // line, then \r returns the cursor to column zero.
-        bytes.extend_from_slice(b"\x1b[2K\r");
+        batch.extend_from_slice(b"\x1b[2K\r");
     }
     if let Some(text) = &result.display {
-        bytes.extend_from_slice(text.as_bytes());
-        bytes.extend_from_slice(b"\r\n");
+        batch.extend_from_slice(text.as_bytes());
+        batch.extend_from_slice(b"\r\n");
     }
-    if !bytes.is_empty() {
-        emit_output(app, bytes);
-    }
+}
+
+/// Route emissions stay per-line because consumers (chat panel etc.)
+/// expect one event per routed line. The volume here is tiny relative
+/// to the display stream so per-event cost does not show up as lag.
+fn emit_line_routes(app: &AppHandle, result: &LineResult) {
     if let Some(text) = &result.display {
         for pane in &result.routes {
             if let Err(e) = app.emit(

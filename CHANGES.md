@@ -2,6 +2,11 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.2.10 - 2026-05-30
+
+- Server output no longer reads as a typewriter. Each TCP read's worth of MUD lines now lands in a single `session://output` event, so a 50-line response paints in one xterm.write instead of one-per-line. Notably more obvious on Windows where Tauri's WebView2 IPC adds higher per-event overhead than macOS WebKit.
+- Map glyph mode rewritten as an HTML monospace overlay. Each cell now tiles at real terminal-cell pitch (1ch × 1em) using the app font, matching tintin's character-grid map instead of the loose square-pixel cells the canvas version produced. Same sector glyphs, same colors, same dim ladder, same `@` player marker.
+
 ## v0.2.9 - 2026-05-30
 
 - Pasting multi-line text into the input now sends each line as its own command instead of collapsing the whole paste onto one line. Single-line pastes still insert at the cursor as before. Password prompts are exempt.
