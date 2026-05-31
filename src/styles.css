@@ -3644,6 +3644,48 @@ body {
   height: 100%;
 }
 
+/* HTML glyph overlay. Sits absolutely positioned over the canvas
+   and is translated so the player cell (`@`) lands at the host's
+   geometric center. Uses the app's monospace font so each cell tiles
+   in real terminal-cell pitch (1ch × 1em), matching tintin's
+   character-grid map. The translate baseline is (50%, 50%) of the
+   host; the inline transform on .map-glyph-grid shifts the grid by
+   (-playerCol * 1ch, -playerRow * 1em) to land the player there. */
+.map-glyph-grid {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font-family: var(--app-font-family, 'BerkeleyMono Nerd Font', Menlo, monospace);
+  font-weight: 700;
+  line-height: 1;
+  white-space: pre;
+  pointer-events: none;
+  user-select: none;
+  /* font-size + transform set inline so zoom and player offset both
+     flow from a single source of truth in the component. */
+}
+
+.map-glyph-row {
+  display: block;
+}
+
+/* Player marker. Bold yellow `@` with a faint background-color halo
+   so the eye locks on it even on a busy map. */
+.map-glyph-player {
+  background: rgba(255, 215, 0, 0.16);
+  border-radius: 1px;
+}
+
+.map-glyph-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-text-faint);
+  font-size: 0.85em;
+}
+
 .map-hover {
   position: absolute;
   bottom: 4px;
