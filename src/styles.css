@@ -626,16 +626,9 @@ body {
    filled ones take the vital's fill color, empty dims down. */
 .vitals-bar {
   flex: 0 0 auto;
-  display: grid;
-  /* Five real columns (label / glyphs / % / numeric / delta) then
-     a 1fr filler. Without the filler, the grid stretches to the
-     parent flex width and the columns visually spread out; the
-     1fr absorbs the extra space so content packs tight on the
-     left while the bar background still paints full-width. */
-  grid-template-columns: auto auto auto auto auto 1fr;
-  column-gap: 12px;
+  display: flex;
+  flex-direction: column;
   row-gap: 1px;
-  align-items: baseline;
   padding: 4px 14px;
   background: var(--c-surface);
   border-top: 1px solid var(--c-border);
@@ -644,20 +637,27 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Each row contributes 5 flat children to the parent .vitals-bar
-   grid (no per-row wrapper), so all columns line up across hp / mn
-   / mv / tick rows without per-row sizing drift. */
+/* Each hp/mn/mv row is its own horizontal flex track so toggling a
+   column off in Settings · Panels · vitals collapses the slot
+   cleanly without leaving a gap. Per-element min-widths keep the
+   columns aligned across rows even when contents vary. */
+.vitals-row {
+  display: flex;
+  align-items: baseline;
+  column-gap: 12px;
+}
+
 .vitals-label {
-  grid-column: 1;
   color: var(--c-text-faint);
   text-transform: lowercase;
   letter-spacing: 0.04em;
+  min-width: 2.5ch;
 }
 
 .vitals-glyphs {
-  grid-column: 2;
   letter-spacing: 0;
   font-weight: 700;
+  flex: 0 0 auto;
 }
 
 .vitals-empty {
@@ -665,20 +665,19 @@ body {
 }
 
 .vitals-percent {
-  grid-column: 3;
   font-weight: 700;
   min-width: 36px;
   text-align: right;
 }
 
 .vitals-numeric {
-  grid-column: 4;
   color: var(--c-text);
+  min-width: 9ch;
 }
 
 .vitals-delta-slot {
-  grid-column: 5;
   min-width: 40px;
+  margin-left: auto;
 }
 
 .vitals-delta {
@@ -693,11 +692,7 @@ body {
   color: var(--c-danger);
 }
 
-/* Tick row reuses the label column. Value pinned to column 2 so
-   it sits flush with the bars above and does not stretch into the
-   1fr filler column. */
 .vitals-tick-value {
-  grid-column: 2;
   font-weight: 700;
   color: var(--c-text);
 }
@@ -787,6 +782,84 @@ body {
 .input-row input::selection {
   background: var(--c-accent-soft);
   color: var(--c-text-strong);
+}
+
+/* Paste-burst indicator. When a multi-line paste is in flight, a thin
+   chip sits between the prompt glyph and the live input showing
+   progress + the cancel hint. Bracket-delimited to match the rest of
+   the chrome ([save], [check now], etc.). Tabular-nums keep the
+   counts stable as digits grow so the slash does not shift. The
+   subtle pulse on the row signals "work in progress" without flashing
+   colors at the user. */
+.paste-burst {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 6px;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-faint);
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  background: var(--c-surface-deep);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.paste-burst::before {
+  content: '[';
+  color: var(--c-text-dim);
+}
+
+.paste-burst::after {
+  content: ']';
+  color: var(--c-text-dim);
+}
+
+.paste-burst-tag {
+  color: var(--c-accent);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.paste-burst-count {
+  display: inline-flex;
+  align-items: baseline;
+  color: var(--c-text);
+  font-weight: 700;
+}
+
+.paste-burst-sent {
+  min-width: 2ch;
+  text-align: right;
+}
+
+.paste-burst-slash {
+  color: var(--c-text-dim);
+  margin: 0 1px;
+  font-weight: 400;
+}
+
+.paste-burst-total {
+  color: var(--c-text);
+}
+
+.paste-burst-hint {
+  color: var(--c-text-dim);
+  font-size: 0.92em;
+}
+
+.input-row-pasting {
+  animation: vosh-paste-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes vosh-paste-pulse {
+  0%,
+  100% {
+    border-top-color: var(--c-border);
+  }
+  50% {
+    border-top-color: var(--c-accent-soft);
+  }
 }
 
 /* StatusBar — tmux-style single-row bottom band */
@@ -1006,11 +1079,9 @@ body {
   padding: 0 4px;
 }
 
-/* When the tick is embedded in the vitals-bar grid, give it a full row
-   at the bottom so it lines up under the hp/mn/mv rows rather than
-   landing in an arbitrary grid cell from auto-flow. */
+/* When the tick is embedded in the vitals-bar (which is now a column
+   flex), it just lines up under the hp/mn/mv rows automatically. */
 .vitals-bar > .inline-tick {
-  grid-column: 1 / -1;
   padding: 0;
 }
 
@@ -2073,6 +2144,46 @@ body {
   gap: 8px;
 }
 
+/* Paste-pacing row in the Settings · General tab. A short number
+   input sized to the digits it needs, then a unit label, then a
+   wrap-friendly hint pinned to the right. Matches the
+   .settings-updates-row rhythm so the General tab reads as a single
+   columnated form. */
+.settings-paste-row {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-num-input {
+  width: 5.5ch;
+  background: var(--c-surface-deep);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-num-input:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+.settings-paste-unit {
+  color: var(--c-text-faint);
+  letter-spacing: 0.02em;
+}
+
+.settings-paste-hint {
+  color: var(--c-text-dim);
+  font-size: 0.85em;
+  flex-basis: 100%;
+}
+
 .settings-color-row input[type='color'] {
   width: 32px;
   height: 24px;
@@ -2384,6 +2495,150 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Vitals appearance section — sits at the bottom of the Panels tab.
+   The frame matches the rest of the tab (thin border, faint header)
+   but indents inputs so the section reads as a child of the per-panel
+   rows above it. */
+.panels-vitals {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--c-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panels-vitals-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.panels-vitals-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.panels-vitals-preset-chip {
+  font-size: 0.85em;
+}
+
+.panels-vitals-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 6px 4px;
+  border: 1px solid var(--c-border);
+  background: var(--c-surface-deep);
+  border-radius: 2px;
+}
+
+.panels-vitals-toggle {
+  font-size: 0.85em;
+}
+
+.panels-vitals-glyphs,
+.panels-vitals-quickpicks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.panels-vitals-glyphs.is-disabled,
+.panels-vitals-quickpicks.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.panels-vitals-glyph-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.panels-vitals-glyph-label {
+  color: var(--c-text-faint);
+  letter-spacing: 0.02em;
+  font-size: 0.85em;
+}
+
+/* The glyph inputs are deliberately narrow — the user is expected to
+   paste a single Unicode character, not a word. The ch-based width
+   keeps them small but accommodates wider glyphs like `██`. */
+.panels-vitals-glyph-input {
+  width: 4ch;
+  background: var(--c-surface-deep);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: 1.1em;
+  text-align: center;
+}
+
+.panels-vitals-glyph-input:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+.panels-vitals-quickpicks-label {
+  color: var(--c-text-faint);
+  letter-spacing: 0.02em;
+  font-size: 0.85em;
+}
+
+/* Glyph quick-pick chip. Each chip renders a 3-up sample of the
+   filled+empty pair (e.g. ▰▰▰▱▱▱) so the user can recognize the
+   style at a glance. Active chip carries the accent border. */
+.panels-vitals-glyph-chip {
+  font-family: inherit;
+  font-size: 1em;
+  letter-spacing: 0;
+  padding: 2px 6px;
+  background: var(--c-surface-deep);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  cursor: pointer;
+  border-radius: 2px;
+  font-weight: 700;
+}
+
+.panels-vitals-glyph-chip:hover {
+  border-color: var(--c-accent-soft);
+}
+
+.panels-vitals-glyph-chip.is-active {
+  border-color: var(--c-accent);
+  background: color-mix(in oklab, var(--c-accent) 8%, var(--c-surface-deep));
+}
+
+.panels-vitals-preview {
+  margin-top: 4px;
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--c-surface);
+}
+
+/* The preview uses the real .vitals-bar styles so what the user sees
+   in Settings matches the runtime, but the surrounding header makes
+   it clear this is a sample. */
+.panels-vitals-preview::before {
+  content: 'preview · hp at 75%';
+  display: block;
+  padding: 3px 14px;
+  color: var(--c-text-faint);
+  font-size: 0.75em;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  background: var(--c-surface-deep);
+  border-bottom: 1px dashed var(--c-border);
 }
 
 .logs-status {

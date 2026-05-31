@@ -444,7 +444,34 @@ export interface UiConfig {
   /** When true, left/right panel zones extend the full window height
    *  and the input + status bar live only under the terminal column. */
   side_panels_fill_height: boolean;
+  /** Milliseconds to wait between lines when sending a multi-line
+   *  paste. 0 = no pacing; non-zero spreads sends out so the MUD
+   *  flood filter does not kick. Clamped server-side to [0, 10000]. */
+  paste_line_delay_ms: number;
+  /** Vitals panel appearance. Toggles which columns render and lets
+   *  the user pick their own bar glyphs and width. */
+  vitals: VitalsConfig;
 }
+
+export interface VitalsConfig {
+  show_bar: boolean;
+  show_percent: boolean;
+  show_numeric: boolean;
+  show_delta: boolean;
+  bar_filled: string;
+  bar_empty: string;
+  bar_width: number;
+}
+
+export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
+  show_bar: true,
+  show_percent: true,
+  show_numeric: true,
+  show_delta: true,
+  bar_filled: '▰',
+  bar_empty: '▱',
+  bar_width: 20,
+};
 
 export async function getUiConfig(): Promise<UiConfig> {
   const cfg = await invoke<{
@@ -459,6 +486,8 @@ export async function getUiConfig(): Promise<UiConfig> {
     custom_themes?: CustomTheme[];
     split_divider_color?: string | null;
     side_panels_fill_height?: boolean;
+    paste_line_delay_ms?: number;
+    vitals?: Partial<VitalsConfig>;
   }>('ui_get_config');
   return {
     theme: typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : 'kanso-zen',
@@ -475,6 +504,35 @@ export async function getUiConfig(): Promise<UiConfig> {
         ? cfg.split_divider_color
         : null,
     side_panels_fill_height: Boolean(cfg.side_panels_fill_height),
+    paste_line_delay_ms:
+      typeof cfg.paste_line_delay_ms === 'number' && cfg.paste_line_delay_ms >= 0
+        ? Math.min(10_000, Math.floor(cfg.paste_line_delay_ms))
+        : 500,
+    vitals: normalizeVitalsConfig(cfg.vitals),
+  };
+}
+
+function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsConfig {
+  const v = raw ?? {};
+  return {
+    show_bar: typeof v.show_bar === 'boolean' ? v.show_bar : DEFAULT_VITALS_CONFIG.show_bar,
+    show_percent:
+      typeof v.show_percent === 'boolean' ? v.show_percent : DEFAULT_VITALS_CONFIG.show_percent,
+    show_numeric:
+      typeof v.show_numeric === 'boolean' ? v.show_numeric : DEFAULT_VITALS_CONFIG.show_numeric,
+    show_delta: typeof v.show_delta === 'boolean' ? v.show_delta : DEFAULT_VITALS_CONFIG.show_delta,
+    bar_filled:
+      typeof v.bar_filled === 'string' && v.bar_filled.length > 0
+        ? v.bar_filled
+        : DEFAULT_VITALS_CONFIG.bar_filled,
+    bar_empty:
+      typeof v.bar_empty === 'string' && v.bar_empty.length > 0
+        ? v.bar_empty
+        : DEFAULT_VITALS_CONFIG.bar_empty,
+    bar_width:
+      typeof v.bar_width === 'number' && Number.isFinite(v.bar_width)
+        ? Math.max(4, Math.min(60, Math.floor(v.bar_width)))
+        : DEFAULT_VITALS_CONFIG.bar_width,
   };
 }
 
@@ -491,6 +549,8 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     customThemes: config.custom_themes,
     splitDividerColor: config.split_divider_color,
     sidePanelsFillHeight: config.side_panels_fill_height,
+    pasteLineDelayMs: config.paste_line_delay_ms,
+    vitals: config.vitals,
   });
   // Broadcast the live custom_themes list so other webviews update
   // their in-memory registry BEFORE any theme-changed event lands.
@@ -513,6 +573,24 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
   } catch {
     // ignore
   }
+  try {
+    await emit('vosh://paste-line-delay-changed', config.paste_line_delay_ms);
+  } catch {
+    // ignore — Input.tsx re-reads on every paste anyway
+  }
+  try {
+    await emit('vosh://vitals-config-changed', config.vitals);
+  } catch {
+    // ignore
+  }
+}
+
+export async function subscribeVitalsConfigChanged(
+  cb: (config: VitalsConfig) => void,
+): Promise<UnlistenFn> {
+  return listen<Partial<VitalsConfig>>('vosh://vitals-config-changed', (event) => {
+    cb(normalizeVitalsConfig(event.payload));
+  });
 }
 
 export async function subscribeSidePanelsFillHeightChanged(

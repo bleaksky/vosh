@@ -4,6 +4,7 @@ import {
   useImperativeHandle,
   useRef,
   useState,
+  type ClipboardEvent,
   type KeyboardEvent,
 } from 'react';
 import {
@@ -146,23 +147,39 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // pressing Enter resends. Read once on mount, refreshed via the
   // vosh://keep-last-changed event the settings save fires.
   const keepLastRef = useRef<boolean>(false);
+  // Paste-line delay (ms). Same load + subscribe pattern as keepLast
+  // so the indicator/pacing picks up Settings edits without a relaunch.
+  const pasteDelayRef = useRef<number>(500);
   useEffect(() => {
     let cancelled = false;
-    let unlisten: (() => void) | undefined;
+    let unlistenKeep: (() => void) | undefined;
+    let unlistenPaste: (() => void) | undefined;
     getUiConfig()
       .then((cfg) => {
-        if (!cancelled) keepLastRef.current = cfg.keep_last_command;
+        if (cancelled) return;
+        keepLastRef.current = cfg.keep_last_command;
+        pasteDelayRef.current = cfg.paste_line_delay_ms;
       })
       .catch(() => {});
     listen<boolean>('vosh://keep-last-changed', (event) => {
       keepLastRef.current = Boolean(event.payload);
     }).then((fn) => {
       if (cancelled) fn();
-      else unlisten = fn;
+      else unlistenKeep = fn;
+    });
+    listen<number>('vosh://paste-line-delay-changed', (event) => {
+      const n = Number(event.payload);
+      if (Number.isFinite(n) && n >= 0) {
+        pasteDelayRef.current = Math.min(10_000, Math.floor(n));
+      }
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlistenPaste = fn;
     });
     return () => {
       cancelled = true;
-      unlisten?.();
+      unlistenKeep?.();
+      unlistenPaste?.();
     };
   }, []);
 
@@ -317,6 +334,99 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     });
   };
 
+  // Shared submit path for both Enter and multi-line paste. Echoes the
+  // line locally (skipping the echo for quick-keys so the backend's
+  // expansion lands at the prompt's cursor), records history, and
+  // forwards the line to the backend. Empty lines are forwarded too:
+  // pressing Enter on an empty prompt is a valid MUD command on many
+  // worlds (re-shows the prompt). The paste handler filters empties
+  // before calling so accidental trailing newlines don't flood.
+  const submitLine = async (line: string) => {
+    if (line.length > 0 && !passwordMode) {
+      setHistory((prev) => {
+        if (prev[prev.length - 1] === line) return prev;
+        return [...prev, line];
+      });
+    }
+    const firstWord = line.split(/\s+/)[0] ?? '';
+    const isQuickKey = quickKeysRef.current.some((q) => q.name === firstWord && q.verb.length > 0);
+    if (passwordMode) {
+      onLocalEcho?.('\r\n');
+    } else if (!isQuickKey) {
+      onLocalEcho?.(`${line}\r\n`);
+    }
+    try {
+      await sendInput(line);
+    } catch (e) {
+      onError?.(String(e));
+    }
+  };
+
+  // Multi-line paste. A single-line `<input>` collapses pasted newlines
+  // into spaces by default, so pasting an 8-line sequence ends up as
+  // one mangled command. Intercept paste, split on newlines, and send
+  // each line as its own command via submitLine. Single-line pastes
+  // fall through to the browser default so the cursor and existing
+  // input value are preserved. Password mode is exempt so passwords
+  // copied with stray whitespace never leak as individual sends.
+  //
+  // Lines are spread over time using `paste_line_delay_ms` so MUD
+  // flood filters do not kick the connection. Esc cancels the queue
+  // and leaves any unsent lines unsent. The burst state drives the
+  // [paste N/M esc cancels] indicator next to the prompt.
+  const pasteCancelRef = useRef<boolean>(false);
+  const [pasteBurst, setPasteBurst] = useState<{ sent: number; total: number } | null>(null);
+  const handlePaste = async (event: ClipboardEvent<HTMLInputElement>) => {
+    if (passwordMode) return;
+    const text = event.clipboardData.getData('text');
+    if (!text.includes('\n') && !text.includes('\r')) return;
+    event.preventDefault();
+    const lines = text
+      .replace(/\r\n?/g, '\n')
+      .split('\n')
+      .filter((l) => l.length > 0);
+    if (lines.length === 0) return;
+    setValue('');
+    setSearchPrefix(null);
+    setHistoryIndex(null);
+    // Cancel any in-flight burst before starting a new one so a fresh
+    // paste replaces the queue instead of interleaving with the old
+    // remainder.
+    pasteCancelRef.current = true;
+    await Promise.resolve();
+    pasteCancelRef.current = false;
+    const delay = pasteDelayRef.current;
+    const total = lines.length;
+    // Single-line bursts skip the indicator and the delay — they read
+    // as a normal Enter to the user.
+    if (total === 1) {
+      await submitLine(lines[0]);
+      return;
+    }
+    setPasteBurst({ sent: 0, total });
+    for (let i = 0; i < total; i++) {
+      if (pasteCancelRef.current) break;
+      await submitLine(lines[i]);
+      setPasteBurst({ sent: i + 1, total });
+      if (i < total - 1 && delay > 0) {
+        await new Promise<void>((resolve) => {
+          const id = window.setTimeout(resolve, delay);
+          // Esc-driven cancel cuts the wait short so the indicator
+          // clears immediately instead of after the next tick.
+          const tick = window.setInterval(() => {
+            if (pasteCancelRef.current) {
+              window.clearTimeout(id);
+              window.clearInterval(tick);
+              resolve();
+            }
+          }, 30);
+          window.setTimeout(() => window.clearInterval(tick), delay + 50);
+        });
+      }
+    }
+    setPasteBurst(null);
+  };
+
   const handleKeyDown = async (event: KeyboardEvent<HTMLInputElement>) => {
     // Tab completion. Pressing Tab once builds a candidate list from
     // history words and room characters that prefix-match the word
@@ -360,9 +470,16 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       return;
     }
 
-    // Esc closes the split-scrollback view if it is open. The host
-    // ignores the call when nothing is split, so a stray Esc is safe.
+    // Esc cancels an in-flight paste burst first (so the user can stop
+    // a 50-line script mid-flight). When no burst is active, it falls
+    // through to closing the split-scrollback view; the host ignores
+    // the call when nothing is split, so a stray Esc is safe.
     if (event.key === 'Escape') {
+      if (pasteBurst) {
+        pasteCancelRef.current = true;
+        setPasteBurst(null);
+        return;
+      }
       onExitSplit?.();
       return;
     }
@@ -429,37 +546,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       }
       setSearchPrefix(null);
       setHistoryIndex(null);
-      if (line.length > 0 && !passwordMode) {
-        setHistory((prev) => {
-          if (prev[prev.length - 1] === line) return prev;
-          return [...prev, line];
-        });
-      }
-      // Echo synchronously so the typed line appears the same frame the
-      // user pressed Enter. The cursor sits at the end of the partial
-      // prompt, so the line lands inline (TinTin++ style) and the
-      // trailing \r\n moves the cursor to the row where the server
-      // response will print. In password mode, only echo a newline so
-      // the password itself never lands in the terminal scrollback.
-      //
-      // Quick-keys are a third case: skip the local echo entirely so
-      // the shortcut name doesn't appear. The backend pushes the
-      // expansion via session://output, which lands inline at the
-      // same cursor position the shortcut would have occupied.
-      const firstWord = line.split(/\s+/)[0] ?? '';
-      const isQuickKey = quickKeysRef.current.some(
-        (q) => q.name === firstWord && q.verb.length > 0,
-      );
-      if (passwordMode) {
-        onLocalEcho?.('\r\n');
-      } else if (!isQuickKey) {
-        onLocalEcho?.(`${line}\r\n`);
-      }
-      try {
-        await sendInput(line);
-      } catch (e) {
-        onError?.(String(e));
-      }
+      await submitLine(line);
       return;
     }
 
@@ -496,10 +583,21 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   };
 
   return (
-    <div className="input-row">
+    <div className={`input-row${pasteBurst ? ' input-row-pasting' : ''}`}>
       <span className="prompt" aria-hidden="true">
         &gt;
       </span>
+      {pasteBurst && (
+        <span className="paste-burst" aria-live="polite" aria-label="pasting lines">
+          <span className="paste-burst-tag">paste</span>
+          <span className="paste-burst-count">
+            <span className="paste-burst-sent">{pasteBurst.sent}</span>
+            <span className="paste-burst-slash">/</span>
+            <span className="paste-burst-total">{pasteBurst.total}</span>
+          </span>
+          <span className="paste-burst-hint">esc cancels</span>
+        </span>
+      )}
       <input
         ref={inputRef}
         type={passwordMode ? 'password' : 'text'}
@@ -516,6 +614,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         aria-label={passwordMode ? 'password input' : 'command input'}
         onChange={(e) => handleChange(e.target.value)}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
       />
     </div>
   );
