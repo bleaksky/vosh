@@ -9,6 +9,7 @@ import { loadScrollback, onOutput, setWindowSize } from '../lib/session';
 import { findTheme, type AppTheme } from '../lib/themes';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 import { WordWrapper } from '../lib/wordWrap';
+import { ingestRecentNames } from '../lib/recentNames';
 
 export interface TerminalHandle {
   write: (data: Uint8Array | string) => void;
@@ -279,24 +280,33 @@ export function Terminal({
     // Client-side word wrap. NAWS handles most lines server-side, but
     // some content paths (tells, comm channels) ignore it on certain
     // ROM derivatives. We line-buffer here so a complete line word-
-    // wraps cleanly before hitting xterm, and an idle flush surfaces
-    // prompts that arrive without a trailing newline.
+    // wraps cleanly before hitting xterm.
+    //
+    // We flush the trailing partial (prompt) at the end of every chunk
+    // instead of waiting on an idle timer. The old 20ms idle flush
+    // made GMCP-driven UI (room strip, vitals, map) visibly land
+    // before the text — you would see the new room's info pop up a
+    // frame before walking into it. With backend per-read batching
+    // (v0.2.10) each TCP read arrives as one output event, so the
+    // line-buffer's wrap math still has the whole line for any line
+    // ending in \n; the only thing that flushes "early" is the
+    // already-complete prompt at the chunk tail.
     const wrapper = new WordWrapper(term.cols);
     const decoder = new TextDecoder('utf-8', { fatal: false });
     term.onResize(({ cols }) => wrapper.setCols(cols));
-    let wrapFlushTimer: ReturnType<typeof setTimeout> | null = null;
-    const scheduleWrapFlush = () => {
-      if (wrapFlushTimer) clearTimeout(wrapFlushTimer);
-      wrapFlushTimer = setTimeout(() => {
-        wrapFlushTimer = null;
-        const tail = wrapper.flush();
-        if (tail.length > 0) term.write(tail);
-      }, 20);
-    };
     onOutput((bytes) => {
       const text = decoder.decode(bytes, { stream: true });
-      term.write(wrapper.process(text));
-      scheduleWrapFlush();
+      const wrapped = wrapper.process(text);
+      const tail = wrapper.flush();
+      if (wrapped.length > 0 || tail.length > 0) {
+        term.write(wrapped + tail);
+      }
+      // Feed the decoded text into the recent-names cache so Tab
+      // completion can complete people the user has seen in
+      // who-lists, comm-channel chatter, considers, etc. — not just
+      // names they have typed before or chars currently in the room.
+      // Cost is one regex pass per output chunk; sub-millisecond.
+      if (!quietRef.current) ingestRecentNames(text);
     }).then((unlisten) => {
       unsubOutput = unlisten;
     });
@@ -379,7 +389,6 @@ export function Terminal({
       window.removeEventListener('resize', handleWindowResize);
       window.removeEventListener('keydown', onCopyKey, true);
       if (naws_timer) clearTimeout(naws_timer);
-      if (wrapFlushTimer) clearTimeout(wrapFlushTimer);
       unsubOutput?.();
       term.dispose();
       termRef.current = null;

@@ -10,6 +10,7 @@
 //! to the file we serve here.
 
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use font_kit::handle::Handle;
 use font_kit::source::SystemSource;
@@ -27,11 +28,27 @@ pub(crate) struct FontEntry {
     pub monospace: bool,
 }
 
+/// Process-lifetime cache of the enumerated font list. Computing it
+/// requires reading + parsing every installed font file to decide the
+/// monospace flag, which costs 200–500ms on typical desktops. The set
+/// rarely changes during a session, so we lock in the first result
+/// and serve it instantly on every subsequent Settings open.
+///
+/// Failure modes (font-kit can't enumerate, system source unhappy)
+/// also lock in: retrying with the same underlying state will not
+/// produce a different answer, and the Settings panel already
+/// degrades gracefully on an empty list.
+static FONTS_CACHE: OnceLock<Vec<FontEntry>> = OnceLock::new();
+
 /// List every distinct system font family. Sorted, deduped. Errors
 /// from font-kit surface as an empty list rather than a hard fail so
 /// the settings panel still opens on a partially-broken system.
 #[tauri::command]
 pub(crate) fn fonts_list() -> Vec<FontEntry> {
+    FONTS_CACHE.get_or_init(enumerate_fonts).clone()
+}
+
+fn enumerate_fonts() -> Vec<FontEntry> {
     let source = SystemSource::new();
     let families = match source.all_families() {
         Ok(f) => f,
@@ -41,6 +58,10 @@ pub(crate) fn fonts_list() -> Vec<FontEntry> {
         }
     };
 
+    // The cost here is dominated by `is_family_monospace`, which
+    // loads + parses each font file from disk to read its monospace
+    // flag. We pay it once per process; the FONTS_CACHE above keeps
+    // every later call instant.
     let mut entries: Vec<FontEntry> = families
         .into_iter()
         .map(|family| {

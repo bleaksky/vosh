@@ -20,6 +20,7 @@ import {
   type QuickKey,
 } from '../lib/session';
 import { canonicalKeyFromEvent } from '../lib/macroKeys';
+import { recentNames } from '../lib/recentNames';
 import { listen } from '@tauri-apps/api/event';
 
 export interface InputHandle {
@@ -255,6 +256,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // Build the list of completion candidates ordered by source priority:
   //   1. Unique words pulled from typed-command history, most recent first.
   //   2. Room-character names from the latest Room.Chars GMCP push.
+  //   3. Capitalized name-like tokens seen anywhere in MUD output in
+  //      the last 30 minutes (who-list names, comm-channel speakers,
+  //      consider targets, etc.). Populated by Terminal.tsx via
+  //      ingestRecentNames().
   // Filter by case-insensitive prefix and deduplicate so the user does
   // not see the same word twice when a noun also appeared in history.
   const buildTabMatches = (prefix: string): string[] => {
@@ -276,6 +281,9 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       }
     }
     for (const name of roomCharsRef.current) {
+      consider(name);
+    }
+    for (const name of recentNames()) {
       consider(name);
     }
     return matches;

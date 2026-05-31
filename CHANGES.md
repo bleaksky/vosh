@@ -2,6 +2,10 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.2.11 - 2026-05-30
+
+- Settings · General opens instantly. The system font enumeration (the slow `font-kit` pass that reads every installed font file from disk) now runs lazily — only after you focus the font filter or hover the list — and caches its result in a process-lifetime `OnceLock`, so every later Settings open in the same session is free.
+
 ## v0.2.10 - 2026-05-30
 
 - Server output no longer reads as a typewriter. Each TCP read's worth of MUD lines now lands in a single `session://output` event, so a 50-line response paints in one xterm.write instead of one-per-line. Notably more obvious on Windows where Tauri's WebView2 IPC adds higher per-event overhead than macOS WebKit.
