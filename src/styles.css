@@ -89,6 +89,46 @@ body {
   overflow: hidden;
 }
 
+/* Global scrollbar theming. WebView2 (Windows) and WebKitGTK (Linux)
+   default to chunky system scrollbars in stark white, which clash
+   with the dark chrome and overlap any absolutely-positioned overlay
+   that ignores their gutter. WebKit (macOS) uses overlay scrollbars
+   that hide when idle so the theming there is mostly about hover
+   color. The thumb picks up the theme border so it reads as part of
+   the same surface. */
+* {
+  /* Firefox / spec form. WebKit ignores this; WebView2 supports it
+     since edge 121. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border-strong, #555) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--c-border-strong, #555);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--c-text-faint, #888);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Rounded, single-surface Ghostty-style window. body is transparent so
    the corners outside the radius are clipped from the OS window; .app
    carries the only visible surface color, with a hairline outer border
@@ -107,6 +147,16 @@ body {
      how tmux at the top of a Ghostty window has padding before its
      status bar. */
   padding-top: 6px;
+}
+
+/* Windows: the WebView2 host can't composite behind the rounded
+   corners of a frameless+transparent window, so the curve area
+   shows the white window backing through. Flatten to a rectangle
+   there; Windows users get the normal flat-window look they expect
+   from a desktop client anyway. macOS draws its own rounded
+   compositor mask around transparent windows, so the curve stays. */
+[data-platform='windows'] .app {
+  border-radius: 0;
 }
 
 /* Shared inverted-video brand block (tmux session-label convention).
@@ -582,11 +632,15 @@ body {
 
 /* Scroll-depth indicator in the top-right of the history pane.
    Absolutely positioned so it overlays the xterm without affecting
-   the row count FitAddon calculates. */
+   the row count FitAddon calculates. The right offset has to clear
+   the xterm viewport scrollbar gutter — overlay scrollbars on macOS
+   take 0px when idle but Windows / Linux scrollbars eat ~10-17px
+   permanently. 24px keeps the indicator clean of the gutter on
+   every platform without measurable visual cost. */
 .scrollback-indicator {
   position: absolute;
   top: 4px;
-  right: 10px;
+  right: 24px;
   font-size: 0.78em;
   font-family: var(--font-mono, ui-monospace, monospace);
   color: var(--c-muted, #888);
