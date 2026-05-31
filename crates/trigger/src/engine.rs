@@ -165,6 +165,7 @@ mod tests {
                 },
             }],
             preset: None,
+            group: None,
         }
     }
 
@@ -209,6 +210,7 @@ mod tests {
             enabled: true,
             actions: vec![TriggerAction::Gag],
             preset: None,
+            group: None,
         }]);
         let r = process(&s, b"You feel a tingle.");
         assert!(r.display.is_none());
@@ -225,6 +227,7 @@ mod tests {
                 template: "wolf".into(),
             }],
             preset: None,
+            group: None,
         }]);
         let r = process(&s, b"You see a goblin.");
         assert_eq!(r.display.as_deref(), Some("You see a wolf."));
@@ -241,6 +244,7 @@ mod tests {
                 template: "$who calmly says".into(),
             }],
             preset: None,
+            group: None,
         }]);
         let r = process(&s, b"Bob yells");
         assert_eq!(r.display.as_deref(), Some("Bob calmly says"));
@@ -257,6 +261,7 @@ mod tests {
                 template: "loot $1".into(),
             }],
             preset: None,
+            group: None,
         }]);
         let r = process(&s, b"The goblin is DEAD!");
         assert_eq!(r.sends, vec!["loot goblin".to_string()]);
@@ -273,6 +278,7 @@ mod tests {
                 pane: "chat".into(),
             }],
             preset: None,
+            group: None,
         }]);
         let r = process(&s, b"Bob tells you 'hi'");
         assert_eq!(r.routes, vec!["chat".to_string()]);
@@ -290,6 +296,7 @@ mod tests {
                 template: "L".into(),
             }],
             preset: None,
+            group: None,
         })
         .unwrap();
         s.set(Trigger {
@@ -301,6 +308,7 @@ mod tests {
                 template: "H".into(),
             }],
             preset: None,
+            group: None,
         })
         .unwrap();
         // High runs first on plain text "x". After high replaces to "H",
@@ -343,6 +351,7 @@ mod tests {
             enabled: true,
             actions: vec![TriggerAction::Gag],
             preset: None,
+            group: None,
         };
         assert!(s.set(bad).is_err());
     }
@@ -370,6 +379,7 @@ mod tests {
                 },
             }],
             preset: None,
+            group: None,
         }]);
         let r1 = process(&s, b"You see a goblin.");
         assert!(r1.display.unwrap().contains("\x1b[31m"));
@@ -395,6 +405,7 @@ mod tests {
             enabled: true,
             actions: vec![TriggerAction::Gag],
             preset: None,
+            group: None,
         }]);
         // goblin pattern (enabled) gags.
         assert!(process(&s, b"You see a goblin.").display.is_none());
@@ -417,6 +428,7 @@ mod tests {
             enabled: true,
             actions: vec![TriggerAction::Gag],
             preset: None,
+            group: None,
         })
         .unwrap();
         let json = s.export_json().unwrap();

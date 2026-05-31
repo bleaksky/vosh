@@ -26,8 +26,10 @@ mod tintin_import;
 
 use commands::{
     aliases_export, aliases_import, app_version, dock_layout_get, dock_layout_set, import_apply,
-    import_detect, logs_export, logs_list_sessions, logs_search, macros_delete, macros_list,
-    macros_set, map_area_snapshot, map_set_avoid, map_set_note, map_walk_to, open_settings_window,
+    aliases_groups_list, aliases_set_group_enabled, import_detect, logs_export,
+    logs_list_sessions, logs_search, macros_delete, macros_groups_list, macros_list,
+    macros_set, macros_set_group_enabled, map_area_snapshot, map_set_avoid, map_set_note,
+    map_walk_to, open_settings_window, triggers_groups_list, triggers_set_group_enabled,
     plugins_list, plugins_reload, plugins_set_enabled, presets_install, presets_remove,
     profile_create, profile_delete, profile_duplicate, profile_export, profile_get_scope,
     profile_import, profile_rename, profile_resolve_match, profile_set_metadata, profile_set_scope,
@@ -277,6 +279,12 @@ pub fn run() {
             macros_list,
             macros_set,
             macros_delete,
+            aliases_groups_list,
+            aliases_set_group_enabled,
+            triggers_groups_list,
+            triggers_set_group_enabled,
+            macros_groups_list,
+            macros_set_group_enabled,
             import_detect,
             import_apply,
         ])

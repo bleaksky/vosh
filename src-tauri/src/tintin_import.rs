@@ -49,6 +49,7 @@ pub(crate) fn parse(text: &str) -> ImportReport {
                 name,
                 expansion,
                 enabled: true,
+                group: None,
             }) {
                 report.aliases.push(alias);
             } else {

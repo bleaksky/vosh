@@ -2,6 +2,8 @@
 //! store; lives across reconnects so user customization survives disconnect
 //! cycles.
 
+use std::collections::BTreeSet;
+
 use vosh_alias::AliasStore;
 use vosh_script::ScriptEngine;
 use vosh_trigger::TriggerStore;
@@ -36,6 +38,13 @@ pub(crate) struct Profile {
     /// string (e.g. "F1", "Ctrl+N", "Numpad7") to a command line
     /// (which may itself contain `;`-separated subcommands).
     pub(crate) macros: Vec<Macro>,
+    /// Macro groups currently bulk-disabled. A `Macro` whose
+    /// `group` is in this set is treated as not-bound — keypresses
+    /// fall through as if no macro existed for that key. Mirrors
+    /// the per-store `disabled_groups` machinery in `AliasStore` /
+    /// `TriggerStore` but lives here directly because there is no
+    /// `MacroStore` wrapper.
+    pub(crate) disabled_macro_groups: BTreeSet<String>,
 }
 
 /// One keyboard binding: a canonical key string mapped to a
@@ -47,6 +56,12 @@ pub(crate) struct Profile {
 pub(crate) struct Macro {
     pub(crate) key: String,
     pub(crate) command: String,
+    /// Optional group tag for bulk on/off. Mirrors `Alias.group`
+    /// and `Trigger.group`. Defaults to `None`; the wire format
+    /// omits the field when unset so legacy profile.toml files
+    /// keep loading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) group: Option<String>,
 }
 
 #[derive(Debug, Clone)]

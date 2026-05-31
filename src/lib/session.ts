@@ -124,6 +124,11 @@ export interface TriggerRecord {
    *  library. Toggling a preset off removes everything tagged with
    *  the preset's id; user-authored triggers leave this empty. */
   preset?: string | null;
+  /** Optional user-defined group / folder. Triggers sharing a group
+   *  can be bulk-toggled via the per-group switch in the Settings
+   *  Triggers tab without losing their individual `enabled` flags.
+   *  Undefined / null means ungrouped. */
+  group?: string | null;
 }
 
 /** Read a `patterns:` list out of a raw wire-shape object, falling
@@ -312,18 +317,87 @@ export async function onTick(cb: (payload: TickPayload) => void): Promise<Unlist
 export interface Macro {
   key: string;
   command: string;
+  /** Optional user-defined group / folder. Like trigger/alias groups,
+   *  bulk-disabled via the Settings UI without losing individual
+   *  bindings. */
+  group?: string | null;
+}
+
+/** One row in any groups-list response: name + current enabled state.
+ *  Backend returns these sorted by name. */
+export interface GroupState {
+  name: string;
+  enabled: boolean;
 }
 
 export async function listMacros(): Promise<Macro[]> {
   return invoke('macros_list');
 }
 
-export async function setMacro(key: string, command: string): Promise<Macro[]> {
-  return invoke('macros_set', { key, command });
+export async function setMacro(
+  key: string,
+  command: string,
+  group: string | null = null,
+): Promise<Macro[]> {
+  return invoke('macros_set', {
+    key,
+    command,
+    group: group && group.length > 0 ? group : null,
+  });
 }
 
 export async function deleteMacro(key: string): Promise<Macro[]> {
   return invoke('macros_delete', { key });
+}
+
+// --- Group toggle commands (one set per type) ---
+
+export async function listAliasGroups(): Promise<GroupState[]> {
+  return invoke('aliases_groups_list');
+}
+
+export async function setAliasGroupEnabled(group: string, enabled: boolean): Promise<void> {
+  await invoke('aliases_set_group_enabled', { group, enabled });
+}
+
+export async function listTriggerGroups(): Promise<GroupState[]> {
+  return invoke('triggers_groups_list');
+}
+
+export async function setTriggerGroupEnabled(group: string, enabled: boolean): Promise<void> {
+  await invoke('triggers_set_group_enabled', { group, enabled });
+}
+
+export async function listMacroGroups(): Promise<GroupState[]> {
+  return invoke('macros_groups_list');
+}
+
+export async function setMacroGroupEnabled(group: string, enabled: boolean): Promise<void> {
+  await invoke('macros_set_group_enabled', { group, enabled });
+}
+
+export async function subscribeAliasGroupsChanged(
+  cb: (group: string) => void,
+): Promise<UnlistenFn> {
+  return listen<string>('vosh://alias-groups-changed', (event) => {
+    cb(event.payload);
+  });
+}
+
+export async function subscribeTriggerGroupsChanged(
+  cb: (group: string) => void,
+): Promise<UnlistenFn> {
+  return listen<string>('vosh://trigger-groups-changed', (event) => {
+    cb(event.payload);
+  });
+}
+
+export async function subscribeMacroGroupsChanged(
+  cb: (group: string) => void,
+): Promise<UnlistenFn> {
+  return listen<string>('vosh://macro-groups-changed', (event) => {
+    cb(event.payload);
+  });
 }
 
 export async function subscribeMacrosChanged(cb: (macros: Macro[]) => void): Promise<UnlistenFn> {
