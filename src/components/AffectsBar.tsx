@@ -9,6 +9,7 @@ import {
   type GroupedAffect,
 } from '../lib/affects';
 import { getUiConfig, onGmcp, onState, subscribeTrackedAffectsChanged } from '../lib/session';
+import { InlineTick } from './VitalsBar';
 
 // Thin row above the input that renders every active Char.Affects
 // entry as a pill chip. Duration color tracks urgency (red imminent,
@@ -17,7 +18,7 @@ import { getUiConfig, onGmcp, onState, subscribeTrackedAffectsChanged } from '..
 //
 // Hides itself entirely when the affect list is empty so the layout
 // does not reserve a slot during cleared/disconnected states.
-export function AffectsBar() {
+export function AffectsBar({ embedTick = false }: { embedTick?: boolean } = {}) {
   const [groups, setGroups] = useState<GroupedAffect[]>([]);
   const [tracked, setTracked] = useState<string[]>([]);
 
@@ -108,6 +109,7 @@ export function AffectsBar() {
           </span>
         );
       })}
+      {embedTick && <InlineTick className="affects-bar-tick" />}
     </div>
   );
 }

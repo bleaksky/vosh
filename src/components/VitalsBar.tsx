@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { onGmcp, onState, onTick, type TickPayload } from '../lib/session';
+import { onGmcp, onState } from '../lib/session';
+import { useTickState } from '../lib/useTickState';
 
 interface Vitals {
   hp: number;
@@ -93,7 +94,7 @@ function colorForVital(label: string, value: number): string {
 // `label · bar (20 cells) · % · cur/max · delta`. Subscribes to
 // Char.Vitals + World.Time; World.Time hour-change rebases the
 // per-tick delta snapshot.
-export function VitalsBar() {
+export function VitalsBar({ embedTick = false }: { embedTick?: boolean } = {}) {
   const [vitals, setVitals] = useState<Vitals | null>(null);
   const [deltas, setDeltas] = useState<VitalDeltas>(NO_DELTAS);
   const vitalsSnapRef = useRef<Vitals | null>(null);
@@ -194,7 +195,23 @@ export function VitalsBar() {
       {segs.map((s) => (
         <VitalRow key={s.label} {...s} />
       ))}
+      {embedTick && <InlineTick />}
     </div>
+  );
+}
+
+// Inline tick chip rendered at the right edge of a host panel
+// (vitals, roomstrip, affects, statusbar) when the user picks one
+// of the `in:*` zones for the tick. Returns null when inactive so
+// hosts can drop it in unconditionally.
+export function InlineTick({ className }: { className?: string }) {
+  const { active, tickSecs, warn } = useTickState();
+  if (!active) return null;
+  return (
+    <span className={`inline-tick${className ? ` ${className}` : ''}`} aria-label="tick">
+      <span className="vitals-label">tick</span>
+      <span className={`vitals-tick-value${warn ? ' is-warn' : ''}`}>{tickSecs}s</span>
+    </span>
   );
 }
 
@@ -203,77 +220,8 @@ export function VitalsBar() {
 // rows. Lives in the panel registry as its own movable element so the
 // user can hide vitals without losing the tick.
 export function TickPanel() {
-  const [tick, setTick] = useState<TickPayload | null>(null);
-  const [tickSecs, setTickSecs] = useState(0);
-  const tickResetAtRef = useRef<number>(Date.now());
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setTickSecs(Math.floor((Date.now() - tickResetAtRef.current) / 1000));
-    }, 250);
-    return () => window.clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    let unsubGmcp: (() => void) | undefined;
-    let unsubTick: (() => void) | undefined;
-    let unsubState: (() => void) | undefined;
-    let cancelled = false;
-    let prevHour: number | string | null = null;
-
-    onGmcp((payload) => {
-      if (payload.package === 'World.Time' && payload.data && typeof payload.data === 'object') {
-        const incoming = payload.data as Record<string, unknown>;
-        const hour = incoming.hour as number | string | undefined | null;
-        if (hour !== undefined && hour !== null) {
-          if (prevHour !== null && prevHour !== hour) {
-            tickResetAtRef.current = Date.now();
-            setTickSecs(0);
-          }
-          prevHour = hour;
-        }
-      }
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsubGmcp = fn;
-    });
-
-    onTick((payload) => setTick(payload)).then((fn) => {
-      if (cancelled) fn();
-      else unsubTick = fn;
-    });
-
-    onState((payload) => {
-      if (payload.kind === 'disconnected') {
-        setTick(null);
-        prevHour = null;
-        tickResetAtRef.current = Date.now();
-        setTickSecs(0);
-      } else if (payload.kind === 'connected') {
-        tickResetAtRef.current = Date.now();
-        setTickSecs(0);
-      }
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsubState = fn;
-    });
-
-    return () => {
-      cancelled = true;
-      unsubGmcp?.();
-      unsubTick?.();
-      unsubState?.();
-    };
-  }, []);
-
-  if (!tick?.enabled) return null;
-
-  const intervalSec =
-    tick.interval_ms && tick.interval_ms > 0
-      ? Math.max(1, Math.round(tick.interval_ms / 1000))
-      : 30;
-  const warn = tickSecs >= Math.max(0, intervalSec - 5);
-
+  const { active, tickSecs, warn } = useTickState();
+  if (!active) return null;
   return (
     <div className="vitals-bar tick-panel" aria-label="tick">
       <TickRow tickSecs={tickSecs} warn={warn} />

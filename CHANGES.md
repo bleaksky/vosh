@@ -2,6 +2,12 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.2.7 - 2026-05-30
+
+- Settings · Panels lets you reorder panels inside a zone. Up/down arrows on each chip in the live preview shuffle the stack and persist through `dock_layout`.
+- Tick countdown can now embed at the right edge of the vitals bar, room strip, affects bar, or the statusbar instead of taking its own panel. New `in:vitals` / `in:roomstrip` / `in:affects` / `in:statusbar` zones in the tick's zone dropdown. The preview shows the embedded chip as `+ tick` on the host.
+- Unset quick keys silently fall through to aliases or pass to the MUD instead of erroring with `no verb is set`.
+
 ## v0.2.6 - 2026-05-30
 
 - Closing the main window now closes the Settings popup with it instead of leaving it orphaned.

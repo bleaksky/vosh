@@ -484,6 +484,11 @@ function App() {
   const connected = status.kind === 'connected' || status.kind === 'connecting';
 
   const grouped = groupPanels(panelLayout);
+  // Tick can live inline at the right edge of a host panel instead of
+  // taking its own slot. When the user picks one of the `in:*` zones,
+  // we skip the standalone TickPanel and let the host render an
+  // InlineTick chip. Hosts that aren't selected render no extra chip.
+  const tickZone = panelLayout.placements.tick.zone;
   const renderPanel = (id: PanelId) => {
     switch (id) {
       case 'map':
@@ -491,13 +496,13 @@ function App() {
       case 'group':
         return <GroupPane key="group" pinned onTogglePin={() => setPanelZone('group', 'hidden')} />;
       case 'vitals':
-        return <VitalsBar key="vitals" />;
+        return <VitalsBar key="vitals" embedTick={tickZone === 'in:vitals'} />;
       case 'roomstrip':
-        return <RoomStrip key="roomstrip" />;
+        return <RoomStrip key="roomstrip" embedTick={tickZone === 'in:roomstrip'} />;
       case 'chat':
         return <ChatPane key="chat" onClose={() => setPanelZone('chat', 'hidden')} />;
       case 'affects':
-        return <AffectsBar key="affects" />;
+        return <AffectsBar key="affects" embedTick={tickZone === 'in:affects'} />;
       case 'tick':
         return <TickPanel key="tick" />;
     }
@@ -684,7 +689,7 @@ function App() {
             {terminalAreaElement}
             {bottomZoneElement}
             {inputElement}
-            <StatusBar />
+            <StatusBar embedTick={tickZone === 'in:statusbar'} />
           </div>
         ) : (
           terminalAreaElement
@@ -705,7 +710,7 @@ function App() {
       </div>
       {!sidePanelsFillHeight && bottomZoneElement}
       {!sidePanelsFillHeight && inputElement}
-      {!sidePanelsFillHeight && <StatusBar />}
+      {!sidePanelsFillHeight && <StatusBar embedTick={tickZone === 'in:statusbar'} />}
       <UpdateNotice />
     </main>
   );
