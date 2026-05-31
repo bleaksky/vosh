@@ -103,6 +103,16 @@ impl ScriptEngine {
         })
     }
 
+    /// True when the engine has at least one registered consumer:
+    /// a Lua regex trigger, a GMCP subscription, or a loaded script.
+    /// Callers on the per-line hot path use this to skip cloning the
+    /// profile var map into the engine when nothing would observe
+    /// the snapshot. Cheap (three `is_empty` checks on small
+    /// collections).
+    pub fn has_handlers(&self) -> bool {
+        !self.triggers.is_empty() || !self.gmcp_subs.is_empty() || !self.loaded_scripts.is_empty()
+    }
+
     /// Replace the synchronous variable snapshot Lua scripts read via
     /// `mud.var(name)`. Call this before `eval`, `match_line`, or
     /// `dispatch_gmcp` so scripts see fresh values.

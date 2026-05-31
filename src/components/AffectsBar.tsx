@@ -8,8 +8,14 @@ import {
   type Affect,
   type GroupedAffect,
 } from '../lib/affects';
-import { getUiConfig, onGmcp, onState, subscribeTrackedAffectsChanged } from '../lib/session';
-import { InlineTick } from './VitalsBar';
+import {
+  getUiConfig,
+  onGmcpPackage,
+  onState,
+  subscribeTrackedAffectsChanged,
+  type TrackedAffect,
+} from '../lib/session';
+import { InlineMudTime, InlineTick } from './VitalsBar';
 
 // Thin row above the input that renders every active Char.Affects
 // entry as a pill chip. Duration color tracks urgency (red imminent,
@@ -18,9 +24,12 @@ import { InlineTick } from './VitalsBar';
 //
 // Hides itself entirely when the affect list is empty so the layout
 // does not reserve a slot during cleared/disconnected states.
-export function AffectsBar({ embedTick = false }: { embedTick?: boolean } = {}) {
+export function AffectsBar({
+  embedTick = false,
+  embedTime = false,
+}: { embedTick?: boolean; embedTime?: boolean } = {}) {
   const [groups, setGroups] = useState<GroupedAffect[]>([]);
-  const [tracked, setTracked] = useState<string[]>([]);
+  const [tracked, setTracked] = useState<TrackedAffect[]>([]);
 
   // Seed + subscribe to tracked-affects list from the settings window.
   useEffect(() => {
@@ -48,14 +57,12 @@ export function AffectsBar({ embedTick = false }: { embedTick?: boolean } = {}) 
     let unsubState: (() => void) | undefined;
     let cancelled = false;
 
-    onGmcp((payload) => {
-      if (payload.package === 'Char.Affects' && payload.data && typeof payload.data === 'object') {
-        const data = payload.data as { affects?: Affect[] };
-        const list = Array.isArray(data.affects) ? data.affects : [];
-        const grouped = groupAffects(list);
-        grouped.sort((a, b) => a.name.localeCompare(b.name));
-        setGroups(grouped);
-      }
+    onGmcpPackage<{ affects?: Affect[] }>('Char.Affects', (data) => {
+      if (!data || typeof data !== 'object') return;
+      const list = Array.isArray(data.affects) ? data.affects : [];
+      const grouped = groupAffects(list);
+      grouped.sort((a, b) => a.name.localeCompare(b.name));
+      setGroups(grouped);
     }).then((fn) => {
       if (cancelled) fn();
       else unsubGmcp = fn;
@@ -86,13 +93,23 @@ export function AffectsBar({ embedTick = false }: { embedTick?: boolean } = {}) 
 
   return (
     <div className="affects-bar" aria-label="tracked affects">
-      {tracked.map((name) => {
-        const live = liveByKey.get(normalizeAffectName(name));
+      {tracked.map((entry, i) => {
+        const live = liveByKey.get(normalizeAffectName(entry.name));
+        // Display label falls back to the in-world server name when
+        // the user hasn't set one. Tooltip always shows the
+        // server-side identity so a custom label cannot hide what
+        // the affect actually is.
+        const display = entry.label && entry.label.length > 0 ? entry.label : entry.name;
         if (live) {
-          const title = [live.name, affectDescription(live as Affect)].filter(Boolean).join(' — ');
+          const title = [
+            live.name === entry.name ? live.name : `${live.name} (tracked as ${entry.name})`,
+            affectDescription(live as Affect),
+          ]
+            .filter(Boolean)
+            .join(' — ');
           return (
-            <span key={name} className="affect-pill" title={title}>
-              <span className="affect-pill-name">{live.name}</span>
+            <span key={`${entry.name}-${i}`} className="affect-pill" title={title}>
+              <span className="affect-pill-name">{display}</span>
               <span
                 className="affect-pill-duration"
                 style={{ color: colorForDuration(live.duration) }}
@@ -103,13 +120,18 @@ export function AffectsBar({ embedTick = false }: { embedTick?: boolean } = {}) 
           );
         }
         return (
-          <span key={name} className="affect-pill affect-pill-absent" title={`${name} not active`}>
-            <span className="affect-pill-name">{name}</span>
+          <span
+            key={`${entry.name}-${i}`}
+            className="affect-pill affect-pill-absent"
+            title={`${entry.name} not active`}
+          >
+            <span className="affect-pill-name">{display}</span>
             <span className="affect-pill-duration">—</span>
           </span>
         );
       })}
       {embedTick && <InlineTick className="affects-bar-tick" />}
+      {embedTime && <InlineMudTime className="affects-bar-time" />}
     </div>
   );
 }

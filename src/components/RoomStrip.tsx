@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { onGmcp, onState, onTarget } from '../lib/session';
+import { onGmcpPackage, onState, onTarget } from '../lib/session';
 import { sectorForTerrain } from '../lib/mapPalette';
 
 interface RoomInfo {
@@ -17,7 +17,7 @@ interface AreaInfo {
 
 type AreaMap = Record<string, AreaInfo>;
 
-import { InlineTick } from './VitalsBar';
+import { InlineMudTime, InlineTick } from './VitalsBar';
 
 interface RoomChar {
   name?: string;
@@ -159,7 +159,10 @@ function formatExits(exits: Record<string, number | string> | undefined): string
 // terrain · [exits] · here: chars · items: items. Replaces the 5-row
 // stack from the old RoomInfoBar so the room context reads in one
 // glance without consuming vertical space.
-export function RoomStrip({ embedTick = false }: { embedTick?: boolean } = {}) {
+export function RoomStrip({
+  embedTick = false,
+  embedTime = false,
+}: { embedTick?: boolean; embedTime?: boolean } = {}) {
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [areas, setAreas] = useState<AreaMap | null>(null);
   const [chars, setChars] = useState<RoomChar[]>([]);
@@ -167,35 +170,41 @@ export function RoomStrip({ embedTick = false }: { embedTick?: boolean } = {}) {
   const [targetIdx, setTargetIdx] = useState<number | null>(null);
 
   useEffect(() => {
-    let unsubGmcp: (() => void) | undefined;
+    // Phase 4: one subscription per GMCP package. Each handler only
+    // runs on its own packets, instead of every Char.Vitals etc.
+    // dispatching to this listener and being filtered out.
+    const unsubs: Array<() => void> = [];
     let unsubState: (() => void) | undefined;
     let unsubTarget: (() => void) | undefined;
     let cancelled = false;
+    const track = (p: Promise<() => void>) =>
+      p.then((fn) => {
+        if (cancelled) fn();
+        else unsubs.push(fn);
+      });
 
-    onGmcp((payload) => {
-      const pkg = payload.package;
-      if (pkg === 'Room.Info' && payload.data && typeof payload.data === 'object') {
-        setRoom(payload.data as RoomInfo);
-        return;
-      }
-      if (pkg === 'Map.Tiles' && payload.data && typeof payload.data === 'object') {
-        const data = payload.data as { areas?: AreaMap };
-        if (data.areas && typeof data.areas === 'object') {
+    track(
+      onGmcpPackage<RoomInfo>('Room.Info', (data) => {
+        if (data && typeof data === 'object') setRoom(data);
+      }),
+    );
+    track(
+      onGmcpPackage<{ areas?: AreaMap }>('Map.Tiles', (data) => {
+        if (data && typeof data === 'object' && data.areas && typeof data.areas === 'object') {
           setAreas(data.areas);
         }
-        return;
-      }
-      if (pkg === 'Room.Chars') {
-        setChars(Array.isArray(payload.data) ? (payload.data as RoomChar[]) : []);
-        return;
-      }
-      if (pkg === 'Room.Items') {
-        setItems(Array.isArray(payload.data) ? (payload.data as RoomItem[]) : []);
-      }
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsubGmcp = fn;
-    });
+      }),
+    );
+    track(
+      onGmcpPackage<RoomChar[]>('Room.Chars', (data) => {
+        setChars(Array.isArray(data) ? data : []);
+      }),
+    );
+    track(
+      onGmcpPackage<RoomItem[]>('Room.Items', (data) => {
+        setItems(Array.isArray(data) ? data : []);
+      }),
+    );
 
     onState((payload) => {
       if (payload.kind === 'disconnected') {
@@ -219,7 +228,7 @@ export function RoomStrip({ embedTick = false }: { embedTick?: boolean } = {}) {
 
     return () => {
       cancelled = true;
-      unsubGmcp?.();
+      for (const fn of unsubs) fn();
       unsubState?.();
       unsubTarget?.();
     };
@@ -238,104 +247,120 @@ export function RoomStrip({ embedTick = false }: { embedTick?: boolean } = {}) {
   const itemGroups = groupByName(items);
 
   return (
-    <div className="room-strip" aria-label="current room">
-      {room.area && (
-        <span className="room-strip-area" style={{ color: areaColor }}>
-          {room.area}
+    <div className="room-strip-wrap">
+      <div className="room-strip" aria-label="current room">
+        {room.area && (
+          <span className="room-strip-area" style={{ color: areaColor }}>
+            {room.area}
+          </span>
+        )}
+        <span className="room-strip-bullet" aria-hidden="true">
+          ·
         </span>
-      )}
-      <span className="room-strip-bullet" aria-hidden="true">
-        ·
-      </span>
-      <span className="room-strip-name">{room.name}</span>
-      {room.num !== undefined && room.num !== null && (
-        <span className="room-strip-vnum">#{room.num}</span>
-      )}
-      {room.terrain && (
-        <>
-          <span className="room-strip-bullet" aria-hidden="true">
-            ·
-          </span>
-          <span className="room-strip-terrain" style={{ color: sectorColor }}>
-            {room.terrain}
-          </span>
-        </>
-      )}
-      {exits && (
-        <>
-          <span className="room-strip-bullet" aria-hidden="true">
-            ·
-          </span>
-          <span className="room-strip-exits">[{exits}]</span>
-        </>
-      )}
-      {charGroups.length > 0 && (
-        <>
-          <span className="room-strip-bullet" aria-hidden="true">
-            ·
-          </span>
-          <span className="room-strip-list-label">here</span>
-          <span className="room-strip-list">
-            {charGroups.map((grp, i) => {
-              const isTarget = targetIdx !== null && grp.positions.includes(targetIdx);
-              return (
+        <span className="room-strip-name">{room.name}</span>
+        {room.num !== undefined && room.num !== null && (
+          <span className="room-strip-vnum">#{room.num}</span>
+        )}
+        {room.terrain && (
+          <>
+            <span className="room-strip-bullet" aria-hidden="true">
+              ·
+            </span>
+            <span className="room-strip-terrain" style={{ color: sectorColor }}>
+              {room.terrain}
+            </span>
+          </>
+        )}
+        {exits && (
+          <>
+            <span className="room-strip-bullet" aria-hidden="true">
+              ·
+            </span>
+            <span className="room-strip-exits">[{exits}]</span>
+          </>
+        )}
+        {charGroups.length > 0 && (
+          <>
+            <span className="room-strip-bullet" aria-hidden="true">
+              ·
+            </span>
+            <span className="room-strip-list-label">here</span>
+            <span className="room-strip-list">
+              {charGroups.map((grp, i) => {
+                const isTarget = targetIdx !== null && grp.positions.includes(targetIdx);
+                return (
+                  <span
+                    key={`${grp.name}-${i}`}
+                    className={`room-strip-chip${isTarget ? ' is-target' : ''}`}
+                    style={{ color: isNpc(grp.sample.npc) ? NPC_COLOR : PLAYER_COLOR }}
+                  >
+                    {isTarget && (
+                      <span className="room-strip-chip-mark" aria-hidden="true">
+                        ▶
+                      </span>
+                    )}
+                    {grp.count > 1 && (
+                      <span className="room-strip-count" aria-hidden="true">
+                        ({grp.count})
+                      </span>
+                    )}
+                    {grp.name}
+                    {i < charGroups.length - 1 && (
+                      <span className="room-strip-list-sep" aria-hidden="true">
+                        ,
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
+            </span>
+          </>
+        )}
+        {itemGroups.length > 0 && (
+          <>
+            <span className="room-strip-bullet" aria-hidden="true">
+              ·
+            </span>
+            <span className="room-strip-list-label">items</span>
+            <span className="room-strip-list">
+              {itemGroups.map((grp, i) => (
                 <span
                   key={`${grp.name}-${i}`}
-                  className={`room-strip-chip${isTarget ? ' is-target' : ''}`}
-                  style={{ color: isNpc(grp.sample.npc) ? NPC_COLOR : PLAYER_COLOR }}
+                  className="room-strip-chip"
+                  style={{ color: ITEM_TYPE_COLORS[grp.sample.type ?? ''] ?? ITEM_DEFAULT_COLOR }}
                 >
-                  {isTarget && (
-                    <span className="room-strip-chip-mark" aria-hidden="true">
-                      ▶
-                    </span>
-                  )}
                   {grp.count > 1 && (
                     <span className="room-strip-count" aria-hidden="true">
                       ({grp.count})
                     </span>
                   )}
                   {grp.name}
-                  {i < charGroups.length - 1 && (
+                  {i < itemGroups.length - 1 && (
                     <span className="room-strip-list-sep" aria-hidden="true">
                       ,
                     </span>
                   )}
                 </span>
-              );
-            })}
-          </span>
-        </>
-      )}
-      {itemGroups.length > 0 && (
-        <>
-          <span className="room-strip-bullet" aria-hidden="true">
-            ·
-          </span>
-          <span className="room-strip-list-label">items</span>
-          <span className="room-strip-list">
-            {itemGroups.map((grp, i) => (
-              <span
-                key={`${grp.name}-${i}`}
-                className="room-strip-chip"
-                style={{ color: ITEM_TYPE_COLORS[grp.sample.type ?? ''] ?? ITEM_DEFAULT_COLOR }}
-              >
-                {grp.count > 1 && (
-                  <span className="room-strip-count" aria-hidden="true">
-                    ({grp.count})
-                  </span>
-                )}
-                {grp.name}
-                {i < itemGroups.length - 1 && (
-                  <span className="room-strip-list-sep" aria-hidden="true">
-                    ,
-                  </span>
-                )}
-              </span>
-            ))}
-          </span>
-        </>
-      )}
-      {embedTick && <InlineTick className="room-strip-tick" />}
+              ))}
+            </span>
+          </>
+        )}
+        {embedTick && <InlineTick className="room-strip-tick" />}
+        {embedTime && <InlineMudTime className="room-strip-time" />}
+        {/* End-pad provides 24px after the LAST content when the user
+          has scrolled all the way right. Combined with the fade
+          overlay below (which masks the right edge regardless of
+          scroll position), the strip never visually crashes content
+          into the panel border. */}
+        <span className="room-strip-end-pad" aria-hidden="true" />
+      </div>
+      {/* Right-edge fade overlay. Lives OUTSIDE the scrollable
+          .room-strip so it stays glued to the visible right edge
+          regardless of how far the user has scrolled. The gradient
+          fades the underlying text into the surface color over the
+          last 28px so cut-off content reads as "trails off" instead
+          of "hard-clipped mid-letter". */}
+      <span className="room-strip-fade" aria-hidden="true" />
     </div>
   );
 }

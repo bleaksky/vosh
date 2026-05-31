@@ -207,7 +207,10 @@ fn mushclient_trigger_from(e: &BytesStart, report: &mut ImportReport) -> Option<
     }
     Some(Trigger {
         name,
-        pattern,
+        patterns: vec![vosh_trigger::TriggerPattern {
+            pattern,
+            enabled: true,
+        }],
         priority: sequence,
         enabled,
         actions,
@@ -413,7 +416,10 @@ fn commit_mudlet_trigger(item: MudletItem, report: &mut ImportReport) {
     }
     report.triggers.push(Trigger {
         name,
-        pattern: item.pattern,
+        patterns: vec![vosh_trigger::TriggerPattern {
+            pattern: item.pattern,
+            enabled: true,
+        }],
         priority: 100,
         enabled: item.is_active,
         actions,
@@ -847,7 +853,10 @@ fn commit_cmud_trigger(t: CmudTriggerInProgress, report: &mut ImportReport) {
     }
     report.triggers.push(Trigger {
         name,
-        pattern,
+        patterns: vec![vosh_trigger::TriggerPattern {
+            pattern,
+            enabled: true,
+        }],
         priority: t.priority,
         enabled: t.enabled,
         actions,
@@ -1267,7 +1276,7 @@ mod tests {
         assert_eq!(r.aliases[0].name, "g");
         assert_eq!(r.aliases[0].expansion, "get gold");
         assert_eq!(r.triggers.len(), 1);
-        assert_eq!(r.triggers[0].pattern, "^You hit");
+        assert_eq!(r.triggers[0].first_pattern(), "^You hit");
         assert_eq!(r.triggers[0].priority, 50);
         assert_eq!(r.triggers[0].actions.len(), 1);
     }
@@ -1305,7 +1314,7 @@ mod tests {
         </MudletPackage>"#;
         let r = parse_mudlet(xml);
         assert_eq!(r.triggers.len(), 1);
-        assert_eq!(r.triggers[0].pattern, "^You hit");
+        assert_eq!(r.triggers[0].first_pattern(), "^You hit");
         assert_eq!(r.triggers[0].actions.len(), 1);
     }
 
@@ -1388,7 +1397,10 @@ mod tests {
         </window></cmud>"#;
         let r = parse_cmud(xml);
         assert_eq!(r.triggers.len(), 1);
-        assert_eq!(r.triggers[0].pattern, "You hit (\\w+) for (\\d+) damage\\.");
+        assert_eq!(
+            r.triggers[0].first_pattern(),
+            "You hit (\\w+) for (\\d+) damage\\."
+        );
         assert!(matches!(
             &r.triggers[0].actions[0],
             TriggerAction::Send { template } if template == "say got it"
@@ -1406,7 +1418,7 @@ mod tests {
         let r = parse_cmud(xml);
         assert_eq!(r.triggers.len(), 1);
         // regex=true skips wildcard translation; pattern is byte-for-byte.
-        assert_eq!(r.triggers[0].pattern, "^Spell: (.*?) wears off$");
+        assert_eq!(r.triggers[0].first_pattern(), "^Spell: (.*?) wears off$");
     }
 
     #[test]

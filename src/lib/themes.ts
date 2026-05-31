@@ -60,7 +60,7 @@ export interface ChromePalette {
   /// Hover state for borders.
   borderHover: string;
 
-  /// Primary accent — pink in Kanso Zen, blue in Nord, etc.
+  /// Primary accent — cool blue in Kanso Zen, frost blue in Nord, etc.
   accent: string;
   /// Translucent accent for subtle backgrounds (linear-gradient targets).
   accentSoft: string;
@@ -88,7 +88,7 @@ export interface AppTheme {
 const kansoZen: AppTheme = {
   id: 'kanso-zen',
   label: 'Kanso Zen',
-  description: 'Calm Japanese-inspired dark. Pink accent, muted greys.',
+  description: 'Calm Japanese-inspired dark. Cool-blue accent, sage / gold / red semantics.',
   xterm: {
     background: '#090e13',
     foreground: '#c5c9c7',
@@ -113,26 +113,33 @@ const kansoZen: AppTheme = {
     brightCyan: '#7aa89f',
     brightWhite: '#c5c9c7',
   },
+  // Chrome aligned with the canonical Kanso website theme:
+  //   accent        = #b0c8d4  cool blue  (primary CTAs / focus / active)
+  //   warn          = #c4b28a  muted gold
+  //   danger        = #c4746e  muted red
+  //   success       = #87a987  sage green
+  //   info          = #b0c8d4  same as accent (the website uses one cool blue)
+  // Pink (#ff3399) was a mistake; it never matched the Kanso brand.
   chrome: {
-    surfaceDeep: '#06090d',
+    surfaceDeep: '#0e1318',
     surface: '#090e13',
-    surfacePane: '#0d0c0c',
-    surfaceLift: '#14141a',
-    surfaceEmphasis: '#1d1d24',
-    textStrong: '#f0f3f1',
-    text: '#c5c9c7',
-    textMuted: '#a4a7a4',
-    textFaint: '#6e7681',
-    textDim: '#4a4e57',
+    surfacePane: '#14171d',
+    surfaceLift: '#1b2027',
+    surfaceEmphasis: '#22262d',
+    textStrong: '#c5c9c7',
+    text: '#a8acaa',
+    textMuted: '#75797f',
+    textFaint: '#5c6066',
+    textDim: '#3a3e44',
     borderSoft: '#161b22',
-    border: '#1a1f26',
+    border: '#22262d',
     borderStrong: '#393b44',
-    borderHover: '#2a313b',
-    accent: '#ff3399',
-    accentSoft: 'rgba(255, 51, 153, 0.09)',
-    warn: '#e6c384',
-    danger: '#e46876',
-    info: '#7fb4ca',
+    borderHover: '#393b44',
+    accent: '#b0c8d4',
+    accentSoft: 'rgba(176, 200, 212, 0.12)',
+    warn: '#c4b28a',
+    danger: '#c4746e',
+    info: '#b0c8d4',
     success: '#87a987',
   },
 };
@@ -404,10 +411,10 @@ const classicVivid: AppTheme = {
     border: '#2a2a2a',
     borderStrong: '#444444',
     borderHover: '#888888',
-    // Vivid amber for the accent. Pink belongs to Kanso Zen; here
-    // amber stays distinct from warn (yellow), success (green),
-    // info (cyan), and danger (red) — and reads as a CGA-era
-    // highlight color in keeping with the rest of the palette.
+    // Vivid amber for the accent. Distinct from warn (yellow),
+    // success (green), info (cyan), and danger (red) — and reads as
+    // a CGA-era highlight color in keeping with the rest of the
+    // palette.
     accent: '#ffaa00',
     accentSoft: 'rgba(255, 170, 0, 0.12)',
     warn: '#ffff00',

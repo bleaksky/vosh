@@ -80,7 +80,15 @@ export interface PanelPlacement {
   align: Align;
 }
 
-export type PanelId = 'map' | 'group' | 'vitals' | 'roomstrip' | 'chat' | 'affects' | 'tick';
+export type PanelId =
+  | 'map'
+  | 'group'
+  | 'vitals'
+  | 'roomstrip'
+  | 'chat'
+  | 'affects'
+  | 'tick'
+  | 'time';
 
 export const ALL_PANEL_IDS: PanelId[] = [
   'map',
@@ -90,6 +98,7 @@ export const ALL_PANEL_IDS: PanelId[] = [
   'chat',
   'affects',
   'tick',
+  'time',
 ];
 
 export interface PanelMeta {
@@ -190,6 +199,26 @@ export const PANELS: Record<PanelId, PanelMeta> = {
       'hidden',
     ],
     defaultZone: 'bottom',
+    homeZone: 'bottom',
+    defaultAlign: 'bottom',
+  },
+  time: {
+    id: 'time',
+    label: 'mud time',
+    description:
+      "In-game time from GMCP World.Time. Can stand alone in a zone or embed at the right edge of vitals, roomstrip, affects, or the statusbar. The wall-clock in the bottom-right corner is separate and always shows your computer's local time.",
+    allowedZones: [
+      'top',
+      'bottom',
+      'left',
+      'right',
+      'in:vitals',
+      'in:roomstrip',
+      'in:affects',
+      'in:statusbar',
+      'hidden',
+    ],
+    defaultZone: 'hidden',
     homeZone: 'bottom',
     defaultAlign: 'bottom',
   },

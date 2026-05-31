@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { HighlightStyle, NamedColor, TriggerAction, TriggerRecord } from '../lib/session';
-import { normalizeActions } from '../lib/session';
+import type {
+  HighlightStyle,
+  NamedColor,
+  TriggerAction,
+  TriggerPattern,
+  TriggerRecord,
+} from '../lib/session';
+import { normalizeActions, normalizePatterns } from '../lib/session';
 import { colorize, decolorize } from '../lib/colorTokens';
+import { UnsavedDot } from './UnsavedDot';
+import { useUnsavedWarning } from '../lib/unsaved';
 
 interface Props {
   load: () => Promise<string>;
@@ -34,7 +42,7 @@ const COLORS: NamedColor[] = [
 function blankTrigger(): TriggerRecord {
   return {
     name: '',
-    pattern: '',
+    patterns: [{ pattern: '', enabled: true }],
     priority: 5,
     enabled: true,
     actions: [{ kind: 'highlight', style: { fg: 'yellow' } }],
@@ -107,21 +115,34 @@ function colorizeTemplates(t: TriggerRecord): TriggerRecord {
 
 export function TriggerForm({ load, save, onError }: Props) {
   const [list, setList] = useState<TriggerRecord[] | null>(null);
+  // Baseline = the last value the backend confirmed. Drives the
+  // "● unsaved" indicator so a stray edit the user undid doesn't
+  // leave the form looking dirty.
+  const [baseline, setBaseline] = useState<string>('[]');
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const dirty = useMemo(() => list !== null && JSON.stringify(list) !== baseline, [list, baseline]);
+  useUnsavedWarning(dirty);
+
+  useEffect(() => {
+    if (savedAt === null) return;
+    const id = window.setTimeout(() => setSavedAt(null), 1500);
+    return () => window.clearTimeout(id);
+  }, [savedAt]);
 
   useEffect(() => {
     let cancelled = false;
     load()
       .then((json) => {
         if (cancelled) return;
+        let arr: TriggerRecord[] = [];
         try {
           const parsed = JSON.parse(json);
-          const arr: TriggerRecord[] = Array.isArray(parsed)
+          arr = Array.isArray(parsed)
             ? (parsed as unknown[]).map((row) => {
                 const r = row as Record<string, unknown>;
                 const out: TriggerRecord = {
                   name: String(r.name ?? ''),
-                  pattern: String(r.pattern ?? ''),
+                  patterns: normalizePatterns(row),
                   priority: typeof r.priority === 'number' ? r.priority : 0,
                   enabled: r.enabled !== false,
                   actions: normalizeActions(row),
@@ -130,10 +151,12 @@ export function TriggerForm({ load, save, onError }: Props) {
                 return out;
               })
             : [];
-          setList(arr.map(decolorizeTemplates));
         } catch {
-          setList([]);
+          arr = [];
         }
+        const initial = arr.map(decolorizeTemplates);
+        setList(initial);
+        setBaseline(JSON.stringify(initial));
       })
       .catch((e) => onError(String(e)));
     return () => {
@@ -176,6 +199,10 @@ export function TriggerForm({ load, save, onError }: Props) {
       const out = list.map(colorizeTemplates);
       await save(JSON.stringify(out, null, 2));
       setSavedAt(Date.now());
+      // Baseline tracks the editor-shape list (decolorized) since
+      // that's what the user is comparing against in the UI; the
+      // saved wire form is the colorized version.
+      setBaseline(JSON.stringify(list));
     } catch (e) {
       onError(String(e));
     }
@@ -190,7 +217,8 @@ export function TriggerForm({ load, save, onError }: Props) {
           {userTriggers.length} user · {presetTriggers.length} preset
         </span>
         <span className="settings-triggers-hint">
-          a trigger can pair one visual with any number of effects (send/route)
+          a trigger can hold many patterns (each toggleable) and pair one visual with any number of
+          effects
         </span>
       </div>
 
@@ -229,6 +257,7 @@ export function TriggerForm({ load, save, onError }: Props) {
         <button type="button" className="settings-btn settings-btn-mute" onClick={addTrigger}>
           [+ trigger]
         </button>
+        {dirty && <UnsavedDot />}
         {savedAt !== null && <span className="settings-saved">saved.</span>}
       </div>
     </div>
@@ -257,6 +286,29 @@ interface CardProps {
 function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
   const { visual, effects } = splitActions(trigger.actions);
   const visualKind: VisualKind = visual?.kind ?? 'none';
+  const patterns =
+    trigger.patterns.length > 0 ? trigger.patterns : [{ pattern: '', enabled: true }];
+
+  const setPatterns = (next: TriggerPattern[]) => {
+    onChange({ patterns: next.length > 0 ? next : [{ pattern: '', enabled: true }] });
+  };
+
+  const updatePatternAt = (idx: number, patch: Partial<TriggerPattern>) => {
+    const next = patterns.slice();
+    next[idx] = { ...next[idx], ...patch };
+    setPatterns(next);
+  };
+
+  const removePatternAt = (idx: number) => {
+    if (patterns.length <= 1) return;
+    const next = patterns.slice();
+    next.splice(idx, 1);
+    setPatterns(next);
+  };
+
+  const addPatternRow = () => {
+    setPatterns([...patterns, { pattern: '', enabled: true }]);
+  };
 
   const setVisual = (next: ReturnType<typeof splitActions>['visual']) => {
     onChange({ actions: joinActions(next, effects) });
@@ -278,6 +330,8 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
     const nextEffects = [...effects, blankEffect(kind) as (typeof effects)[number]];
     onChange({ actions: joinActions(visual, nextEffects) });
   };
+
+  const radioGroup = `visual-${trigger.name}-${patterns[0]?.pattern ?? ''}`;
 
   return (
     <div className={`trigger-card${readOnly ? ' is-readonly' : ''}`}>
@@ -320,16 +374,57 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
           </button>
         )}
       </div>
+
       <div className="trigger-card-row">
-        <span className="trigger-card-label">pattern</span>
-        <input
-          type="text"
-          value={trigger.pattern}
-          disabled={readOnly}
-          spellCheck={false}
-          placeholder="^You feel a lot better!$"
-          onChange={(e) => onChange({ pattern: e.target.value })}
-        />
+        <span className="trigger-card-label">
+          {patterns.length > 1 ? `patterns (${patterns.length})` : 'pattern'}
+        </span>
+        <div className="trigger-card-patterns">
+          {patterns.map((p, i) => (
+            <div key={i} className="trigger-card-pattern-row">
+              <label
+                className="trigger-card-pattern-toggle"
+                title={p.enabled ? 'pattern row enabled' : 'pattern row disabled'}
+              >
+                <input
+                  type="checkbox"
+                  checked={p.enabled}
+                  disabled={readOnly}
+                  onChange={(e) => updatePatternAt(i, { enabled: e.target.checked })}
+                />
+              </label>
+              <input
+                type="text"
+                className={`trigger-card-pattern-input${p.enabled ? '' : ' is-off'}`}
+                value={p.pattern}
+                disabled={readOnly}
+                spellCheck={false}
+                placeholder={i === 0 ? '^You feel a lot better!$' : 'another pattern…'}
+                onChange={(e) => updatePatternAt(i, { pattern: e.target.value })}
+              />
+              {!readOnly && patterns.length > 1 && (
+                <button
+                  type="button"
+                  className="trigger-card-pattern-remove"
+                  onClick={() => removePatternAt(i)}
+                  title="remove this pattern row"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+          {!readOnly && (
+            <button
+              type="button"
+              className="trigger-card-pattern-add"
+              onClick={addPatternRow}
+              title="add another pattern (matches if any enabled row matches)"
+            >
+              [+ pattern]
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="trigger-card-row">
@@ -340,7 +435,7 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
               <label key={k} className="trigger-card-radio">
                 <input
                   type="radio"
-                  name={`visual-${trigger.name}-${trigger.pattern}`}
+                  name={radioGroup}
                   checked={visualKind === k}
                   disabled={readOnly}
                   onChange={() => setVisual(blankVisual(k))}

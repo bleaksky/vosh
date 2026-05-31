@@ -1,4 +1,4 @@
-import { onGmcp, onState, type GmcpPayload } from './session';
+import { onGmcpPackage, onState } from './session';
 
 export interface GroupMember {
   name?: string;
@@ -43,14 +43,13 @@ function notify() {
 export function startGroupStore(): void {
   if (started) return;
   started = true;
-  void onGmcp((payload: GmcpPayload) => {
-    if (payload.package === 'Group.Info') {
-      group = payload.data && typeof payload.data === 'object' ? (payload.data as GroupInfo) : {};
-      notify();
-      return;
-    }
-    if (payload.package === 'Char.Worth' && payload.data && typeof payload.data === 'object') {
-      worth = { ...worth, ...(payload.data as Worth) };
+  void onGmcpPackage<unknown>('Group.Info', (data) => {
+    group = data && typeof data === 'object' ? (data as GroupInfo) : {};
+    notify();
+  });
+  void onGmcpPackage<unknown>('Char.Worth', (data) => {
+    if (data && typeof data === 'object') {
+      worth = { ...worth, ...(data as Worth) };
       notify();
     }
   });

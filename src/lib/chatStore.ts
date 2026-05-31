@@ -1,4 +1,4 @@
-import { onGmcp, onRouted, onState, type GmcpPayload, type RoutedPayload } from './session';
+import { onGmcpPackage, onRouted, onState, type RoutedPayload } from './session';
 
 export interface ChatLine {
   pane: string;
@@ -50,13 +50,12 @@ function append(line: ChatLine) {
 export function startChatStore(): void {
   if (started) return;
   started = true;
-  void onGmcp((payload: GmcpPayload) => {
-    if (payload.package !== 'Comm.Channel' && payload.package !== 'Comm.Channel.Text') {
-      return;
-    }
-    const line = commToChatLine(payload.data);
+  const handleComm = (data: unknown) => {
+    const line = commToChatLine(data);
     if (line) append(line);
-  });
+  };
+  void onGmcpPackage<unknown>('Comm.Channel', handleComm);
+  void onGmcpPackage<unknown>('Comm.Channel.Text', handleComm);
   void onRouted((payload: RoutedPayload) => {
     append({ pane: payload.pane, text: stripAnsi(payload.text) });
   });

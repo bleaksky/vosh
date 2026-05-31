@@ -8,21 +8,45 @@ import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 /// emitted for in-window consumers like AuxDrawer).
 const TRACKED_AFFECTS_EVENT = 'vosh://tracked-affects-changed';
 
-export async function broadcastTrackedAffects(list: string[]): Promise<void> {
-  try {
-    await emit(TRACKED_AFFECTS_EVENT, list);
-  } catch {
-    // Tauri unavailable in dev preview; the same-window CustomEvent
-    // dispatched by the caller still covers the in-window path.
-  }
+/** One tracked-affect entry. `name` is what the server pushes in the
+ *  Char.Affects feed (matched case-insensitively, whitespace
+ *  collapsed). `label` is the optional display string shown in the
+ *  affects bar — leave empty to show the name itself. Pair lets the
+ *  user track "Field of Discord" but see it as "Shroud" alongside
+ *  long names like "Comprehend Languages". */
+export interface TrackedAffect {
+  name: string;
+  label: string | null;
 }
 
 export async function subscribeTrackedAffectsChanged(
-  cb: (list: string[]) => void,
+  cb: (list: TrackedAffect[]) => void,
 ): Promise<UnlistenFn> {
-  return listen<string[]>(TRACKED_AFFECTS_EVENT, (event) => {
-    if (Array.isArray(event.payload)) cb(event.payload);
+  return listen<unknown>(TRACKED_AFFECTS_EVENT, (event) => {
+    if (Array.isArray(event.payload)) cb(normalizeTrackedAffects(event.payload));
   });
+}
+
+/** Coerce a raw array (over-the-wire) into TrackedAffect rows.
+ *  Accepts:
+ *    - bare strings (legacy): "sanc" -> { name: "sanc", label: null }
+ *    - full rows:             { name, label? }
+ *  Empty / non-object entries are skipped. */
+export function normalizeTrackedAffects(raw: unknown[]): TrackedAffect[] {
+  const out: TrackedAffect[] = [];
+  for (const row of raw) {
+    if (typeof row === 'string') {
+      const trimmed = row.trim();
+      if (trimmed.length > 0) out.push({ name: trimmed, label: null });
+    } else if (row && typeof row === 'object') {
+      const r = row as { name?: unknown; label?: unknown };
+      const name = typeof r.name === 'string' ? r.name.trim() : '';
+      if (name.length === 0) continue;
+      const labelRaw = typeof r.label === 'string' ? r.label.trim() : '';
+      out.push({ name, label: labelRaw.length > 0 ? labelRaw : null });
+    }
+  }
+  return out;
 }
 
 export interface OutputPayload {
@@ -76,9 +100,21 @@ export type TriggerAction =
   | { kind: 'send'; template: string }
   | { kind: 'route'; pane: string };
 
+/** One row inside a multi-pattern trigger. Mirrors Mudlet's
+ *  per-pattern editor so a user can keep, e.g., a list of mob names
+ *  as separate togglable rows instead of one long pipe regex. */
+export interface TriggerPattern {
+  pattern: string;
+  enabled: boolean;
+}
+
 export interface TriggerRecord {
   name: string;
-  pattern: string;
+  /** One or more patterns. The trigger fires its actions for every
+   *  enabled row that matches the line. The first row is the
+   *  "primary" pattern that legacy single-pattern call sites and
+   *  list summaries use. */
+  patterns: TriggerPattern[];
   priority: number;
   enabled: boolean;
   /** One or more actions. The trigger engine fires every action in
@@ -88,6 +124,27 @@ export interface TriggerRecord {
    *  library. Toggling a preset off removes everything tagged with
    *  the preset's id; user-authored triggers leave this empty. */
   preset?: string | null;
+}
+
+/** Read a `patterns:` list out of a raw wire-shape object, falling
+ *  back to the legacy `pattern:` string the backend still emits
+ *  alongside for compatibility. Always returns at least one entry. */
+export function normalizePatterns(raw: unknown): TriggerPattern[] {
+  if (!raw || typeof raw !== 'object') return [{ pattern: '', enabled: true }];
+  const r = raw as Record<string, unknown>;
+  if (Array.isArray(r.patterns) && r.patterns.length > 0) {
+    return r.patterns.map((row) => {
+      const rr = row as Record<string, unknown>;
+      return {
+        pattern: String(rr.pattern ?? ''),
+        enabled: rr.enabled !== false,
+      };
+    });
+  }
+  if (typeof r.pattern === 'string') {
+    return [{ pattern: r.pattern, enabled: true }];
+  }
+  return [{ pattern: '', enabled: true }];
 }
 
 /** Normalize the legacy `action: {...}` single shape that older
@@ -169,14 +226,31 @@ export async function presetsRemove(presetId: string): Promise<number> {
   return invoke('presets_remove', { presetId });
 }
 
-export interface GmcpPayload {
-  package: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: any;
-}
-
-export async function onGmcp(cb: (payload: GmcpPayload) => void): Promise<UnlistenFn> {
-  return listen<GmcpPayload>('session://gmcp', (event) => {
+// Phase 4 perf fix: subscribe to a single GMCP package. The backend
+// emits each packet on a per-package event channel
+// (`session://gmcp/<package>`) so listeners run only on packets
+// they care about, instead of every consumer running a string
+// compare on every packet. For listeners that handle multiple
+// packages (RoomStrip, useCharStats, chatStore, groupStore), call
+// this once per package and manage the unsubscribes individually.
+//
+// Tauri event names only allow alphanumeric + `-/:_`, so dots in
+// GMCP package names (`Char.Vitals`) must be encoded the same way
+// the backend encodes them (`Char-Vitals`). Callers still pass the
+// canonical package name with the dot; this helper rewrites it
+// for the wire.
+//
+// The payload arrives as the package's data shape directly; the
+// package name is implicit in the subscription target. Callers
+// supply the data type as the generic.
+//
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function onGmcpPackage<T = any>(
+  name: string,
+  cb: (data: T) => void,
+): Promise<UnlistenFn> {
+  const channel = `session://gmcp/${name.replace(/\./g, '-')}`;
+  return listen<T>(channel, (event) => {
     cb(event.payload);
   });
 }
@@ -433,7 +507,7 @@ export interface UiConfig {
   auto_update: boolean;
   font_family: string;
   font_size: number;
-  tracked_affects: string[];
+  tracked_affects: TrackedAffect[];
   enabled_presets: string[];
   keep_last_command: boolean;
   theme_terminal_colors: boolean;
@@ -451,7 +525,18 @@ export interface UiConfig {
   /** Vitals panel appearance. Toggles which columns render and lets
    *  the user pick their own bar glyphs and width. */
   vitals: VitalsConfig;
+  /** Where to render the World.Moons phase glyphs in the status bar.
+   *  `right-edge` is the historical placement; `before-time` and
+   *  `after-time` dock the moons next to the centered tick + MUD
+   *  time chip on the chosen side. */
+  moons_position: MoonsPosition;
 }
+
+export type MoonsPosition = 'right-edge' | 'before-time' | 'after-time';
+
+export type VitalsLayout = 'stacked' | 'inline';
+export type VitalsPercentColor = 'fill' | 'gradient';
+export type VitalsBarStyle = 'solid' | 'track';
 
 export interface VitalsConfig {
   show_bar: boolean;
@@ -461,7 +546,15 @@ export interface VitalsConfig {
   bar_filled: string;
   bar_empty: string;
   bar_width: number;
+  bar_style: VitalsBarStyle;
+  layout: VitalsLayout;
+  percent_color: VitalsPercentColor;
+  template_enabled: boolean;
+  template: string;
 }
+
+export const DEFAULT_VITALS_TEMPLATE =
+  '%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v - (%tick) - %time';
 
 export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
   show_bar: true,
@@ -471,6 +564,11 @@ export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
   bar_filled: '▰',
   bar_empty: '▱',
   bar_width: 20,
+  bar_style: 'solid',
+  layout: 'stacked',
+  percent_color: 'fill',
+  template_enabled: false,
+  template: DEFAULT_VITALS_TEMPLATE,
 };
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -479,7 +577,7 @@ export async function getUiConfig(): Promise<UiConfig> {
     auto_update: boolean;
     font_family: string;
     font_size: number;
-    tracked_affects: string[];
+    tracked_affects: unknown[];
     enabled_presets: string[];
     keep_last_command?: boolean;
     theme_terminal_colors?: boolean;
@@ -488,13 +586,16 @@ export async function getUiConfig(): Promise<UiConfig> {
     side_panels_fill_height?: boolean;
     paste_line_delay_ms?: number;
     vitals?: Partial<VitalsConfig>;
+    moons_position?: string;
   }>('ui_get_config');
   return {
     theme: typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : 'kanso-zen',
     auto_update: cfg.auto_update,
     font_family: cfg.font_family,
     font_size: cfg.font_size,
-    tracked_affects: Array.isArray(cfg.tracked_affects) ? cfg.tracked_affects : [],
+    tracked_affects: Array.isArray(cfg.tracked_affects)
+      ? normalizeTrackedAffects(cfg.tracked_affects)
+      : [],
     enabled_presets: Array.isArray(cfg.enabled_presets) ? cfg.enabled_presets : [],
     keep_last_command: Boolean(cfg.keep_last_command),
     theme_terminal_colors: Boolean(cfg.theme_terminal_colors),
@@ -509,6 +610,10 @@ export async function getUiConfig(): Promise<UiConfig> {
         ? Math.min(10_000, Math.floor(cfg.paste_line_delay_ms))
         : 500,
     vitals: normalizeVitalsConfig(cfg.vitals),
+    moons_position:
+      cfg.moons_position === 'before-time' || cfg.moons_position === 'after-time'
+        ? cfg.moons_position
+        : 'right-edge',
   };
 }
 
@@ -533,7 +638,50 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
       typeof v.bar_width === 'number' && Number.isFinite(v.bar_width)
         ? Math.max(4, Math.min(60, Math.floor(v.bar_width)))
         : DEFAULT_VITALS_CONFIG.bar_width,
+    bar_style: v.bar_style === 'track' ? 'track' : DEFAULT_VITALS_CONFIG.bar_style,
+    layout: v.layout === 'inline' ? 'inline' : DEFAULT_VITALS_CONFIG.layout,
+    percent_color:
+      v.percent_color === 'gradient' ? 'gradient' : DEFAULT_VITALS_CONFIG.percent_color,
+    template_enabled:
+      typeof v.template_enabled === 'boolean'
+        ? v.template_enabled
+        : DEFAULT_VITALS_CONFIG.template_enabled,
+    template:
+      typeof v.template === 'string' && v.template.length > 0
+        ? v.template
+        : DEFAULT_VITALS_CONFIG.template,
   };
+}
+
+// Phase 7 perf fix: snapshot of the last UiConfig we successfully
+// wrote, used to skip cross-window emits for fields the user did
+// NOT change. Previously every setUiConfig call fanned out 10-11
+// emits regardless of which slider moved — a font-size nudge fired
+// custom-themes (500B-5KB), vitals, moons, etc. The diff cache cuts
+// that to "emit only for fields that actually moved" without
+// changing wire-protocol or subscriber surface.
+let lastSentConfig: UiConfig | null = null;
+
+async function emitChanged<T>(
+  event: string,
+  value: T,
+  prevValue: T | undefined,
+  equal: (a: T, b: T) => boolean = Object.is,
+): Promise<void> {
+  if (prevValue !== undefined && equal(value, prevValue)) return;
+  try {
+    await emit(event, value);
+  } catch {
+    // Tauri bus unavailable (dev preview, window not yet ready); the
+    // same-window in-process state is already updated by the caller.
+  }
+}
+
+// Cheap deep-equality for the structured fields. Both vitals and
+// custom_themes are small bounded objects, so JSON round-trip is
+// faster (and more predictable) than a hand-rolled walker.
+function deepEqual<T>(a: T, b: T): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 export async function setUiConfig(config: UiConfig): Promise<void> {
@@ -542,7 +690,12 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     autoUpdate: config.auto_update,
     fontFamily: config.font_family,
     fontSize: config.font_size,
-    trackedAffects: config.tracked_affects,
+    // Wire format intentionally drops `label: null` to the omitted
+    // form so the backend's `Option<String>` deserializes cleanly.
+    trackedAffects: config.tracked_affects.map((t) => ({
+      name: t.name,
+      ...(t.label ? { label: t.label } : {}),
+    })),
     enabledPresets: config.enabled_presets,
     keepLastCommand: config.keep_last_command,
     themeTerminalColors: config.theme_terminal_colors,
@@ -551,38 +704,68 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     sidePanelsFillHeight: config.side_panels_fill_height,
     pasteLineDelayMs: config.paste_line_delay_ms,
     vitals: config.vitals,
+    moonsPosition: config.moons_position,
   });
-  // Broadcast the live custom_themes list so other webviews update
-  // their in-memory registry BEFORE any theme-changed event lands.
-  // Otherwise the main window receives `theme-changed: custom-1`
-  // and findTheme falls back to the default because its CUSTOM_THEMES
-  // is stale.
-  try {
-    await emit('vosh://custom-themes-changed', config.custom_themes);
-  } catch {
-    // Tauri event bus unavailable; in-app listeners cover the same
-    // window.
-  }
-  try {
-    await emit('vosh://split-divider-changed', config.split_divider_color);
-  } catch {
-    // ignore — main window also re-reads on focus
-  }
-  try {
-    await emit('vosh://side-panels-fill-height-changed', config.side_panels_fill_height);
-  } catch {
-    // ignore
-  }
-  try {
-    await emit('vosh://paste-line-delay-changed', config.paste_line_delay_ms);
-  } catch {
-    // ignore — Input.tsx re-reads on every paste anyway
-  }
-  try {
-    await emit('vosh://vitals-config-changed', config.vitals);
-  } catch {
-    // ignore
-  }
+  const prev = lastSentConfig;
+  // Snapshot BEFORE the emits so a listener that re-reads via
+  // `getUiConfig` sees the new state if it races us.
+  lastSentConfig = config;
+
+  // Emit theme + custom-themes BEFORE any other event so the main
+  // window's theme registry is up-to-date by the time `theme-changed`
+  // points at a custom theme id. The ordering matters; the diffing
+  // does not change that.
+  await emitChanged(
+    'vosh://custom-themes-changed',
+    config.custom_themes,
+    prev?.custom_themes,
+    deepEqual,
+  );
+  await emitChanged('vosh://theme-changed', config.theme, prev?.theme);
+  await emitChanged(
+    'vosh://font-changed',
+    { family: config.font_family, size: config.font_size },
+    prev ? { family: prev.font_family, size: prev.font_size } : undefined,
+    (a, b) => a.family === b.family && a.size === b.size,
+  );
+  await emitChanged('vosh://keep-last-changed', config.keep_last_command, prev?.keep_last_command);
+  await emitChanged(
+    'vosh://theme-terminal-colors-changed',
+    config.theme_terminal_colors,
+    prev?.theme_terminal_colors,
+  );
+  await emitChanged(
+    'vosh://split-divider-changed',
+    config.split_divider_color,
+    prev?.split_divider_color,
+  );
+  await emitChanged(
+    'vosh://side-panels-fill-height-changed',
+    config.side_panels_fill_height,
+    prev?.side_panels_fill_height,
+  );
+  await emitChanged(
+    'vosh://paste-line-delay-changed',
+    config.paste_line_delay_ms,
+    prev?.paste_line_delay_ms,
+  );
+  await emitChanged('vosh://vitals-config-changed', config.vitals, prev?.vitals, deepEqual);
+  await emitChanged('vosh://moons-position-changed', config.moons_position, prev?.moons_position);
+  await emitChanged(
+    TRACKED_AFFECTS_EVENT,
+    config.tracked_affects,
+    prev?.tracked_affects,
+    deepEqual,
+  );
+}
+
+export async function subscribeMoonsPositionChanged(
+  cb: (value: MoonsPosition) => void,
+): Promise<UnlistenFn> {
+  return listen<string>('vosh://moons-position-changed', (event) => {
+    const v = event.payload;
+    cb(v === 'before-time' || v === 'after-time' ? v : 'right-edge');
+  });
 }
 
 export async function subscribeVitalsConfigChanged(

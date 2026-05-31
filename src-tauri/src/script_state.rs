@@ -29,8 +29,16 @@ pub(crate) struct PendingTimer {
 pub(crate) type SharedTimers = Arc<Mutex<Vec<PendingTimer>>>;
 
 /// Refresh the script engine's view of session vars so `mud.var(name)`
-/// returns up-to-date values.
+/// returns up-to-date values. Skipped entirely when the engine has
+/// no registered triggers / GMCP subs / loaded scripts — without
+/// any consumer of `mud.var(name)`, cloning the var map per line
+/// is wasted work. This is the common case for users who don't
+/// write Lua, and matches what the engine's match/dispatch paths
+/// would do anyway (no-op when nothing is registered).
 pub(crate) fn snapshot_vars(script: &ScriptEngine, vars: &VariableStore) {
+    if !script.has_handlers() {
+        return;
+    }
     let snapshot: std::collections::HashMap<String, String> = vars
         .iter()
         .map(|(k, v, _)| (k.to_string(), v.to_string()))
