@@ -591,6 +591,7 @@ fn slash_trigger(profile: &mut Profile, args: &str) -> InputResult {
         enabled: true,
         actions: vec![action],
         preset: None,
+        group: None,
     };
     match profile.triggers.set(trigger) {
         Ok(()) => echo_one(format!("trigger {name} set")),

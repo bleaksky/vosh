@@ -1,15 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
 import type {
+  GroupState,
   HighlightStyle,
   NamedColor,
   TriggerAction,
   TriggerPattern,
   TriggerRecord,
 } from '../lib/session';
-import { normalizeActions, normalizePatterns } from '../lib/session';
+import {
+  listTriggerGroups,
+  normalizeActions,
+  normalizePatterns,
+  setTriggerGroupEnabled,
+  subscribeTriggerGroupsChanged,
+} from '../lib/session';
 import { colorize, decolorize } from '../lib/colorTokens';
 import { UnsavedDot } from './UnsavedDot';
 import { useUnsavedWarning } from '../lib/unsaved';
+
+const UNGROUPED_LABEL = '(no group)';
+
+function groupKey(t: TriggerRecord): string {
+  const g = t.group?.trim();
+  return g && g.length > 0 ? g : '';
+}
 
 interface Props {
   load: () => Promise<string>;
@@ -120,8 +134,45 @@ export function TriggerForm({ load, save, onError }: Props) {
   // leave the form looking dirty.
   const [baseline, setBaseline] = useState<string>('[]');
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [groupStates, setGroupStates] = useState<GroupState[]>([]);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const dirty = useMemo(() => list !== null && JSON.stringify(list) !== baseline, [list, baseline]);
   useUnsavedWarning(dirty);
+
+  // Sync group enabled-state from the backend. Drives the per-group
+  // toggle checkbox so a `#trigger`-style change elsewhere shows up
+  // here without a manual refresh.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    const refresh = () => {
+      void listTriggerGroups()
+        .then((groups) => {
+          if (!cancelled) setGroupStates(groups);
+        })
+        .catch(() => undefined);
+    };
+    refresh();
+    subscribeTriggerGroupsChanged(() => {
+      if (!cancelled) refresh();
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+
+  const toggleCollapsed = (group: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (savedAt === null) return;
@@ -148,6 +199,7 @@ export function TriggerForm({ load, save, onError }: Props) {
                   actions: normalizeActions(row),
                 };
                 if (typeof r.preset === 'string') out.preset = r.preset;
+                if (typeof r.group === 'string' && r.group.length > 0) out.group = r.group;
                 return out;
               })
             : [];
@@ -223,15 +275,94 @@ export function TriggerForm({ load, save, onError }: Props) {
       </div>
 
       <div className="trigger-form-list">
-        {userTriggers.map((t, i) => (
-          <TriggerCard
-            key={`u-${i}`}
-            trigger={t}
-            onChange={(patch) => updateUser(i, patch)}
-            onRemove={() => removeUser(i)}
-            readOnly={false}
-          />
-        ))}
+        {(() => {
+          // Bucket user triggers by their group field. Ungrouped (empty
+          // / null) goes into a top "(no group)" section without a
+          // toggle. Named groups follow in alphabetical order, each
+          // with its own enabled checkbox.
+          const buckets = new Map<string, Array<{ slot: number; trigger: TriggerRecord }>>();
+          userTriggers.forEach((t, slot) => {
+            const key = groupKey(t);
+            if (!buckets.has(key)) buckets.set(key, []);
+            buckets.get(key)!.push({ slot, trigger: t });
+          });
+          const named = Array.from(buckets.keys())
+            .filter((k) => k !== '')
+            .sort((a, b) => a.localeCompare(b));
+          const renderOrder: string[] = [];
+          if (buckets.has('')) renderOrder.push('');
+          renderOrder.push(...named);
+          const groupEnabledMap = new Map(groupStates.map((g) => [g.name, g.enabled]));
+          return renderOrder.map((group) => {
+            const entries = buckets.get(group) ?? [];
+            const isUngrouped = group === '';
+            const groupEnabled = isUngrouped ? true : (groupEnabledMap.get(group) ?? true);
+            const isCollapsed = collapsed.has(group);
+            return (
+              <section
+                key={isUngrouped ? '__ungrouped__' : group}
+                className={`group-section${groupEnabled ? '' : ' group-disabled'}`}
+              >
+                <header className="group-section-head">
+                  <button
+                    type="button"
+                    className="group-section-collapse"
+                    onClick={() => toggleCollapsed(group)}
+                    aria-expanded={!isCollapsed}
+                    title={isCollapsed ? 'expand group' : 'collapse group'}
+                  >
+                    {isCollapsed ? '▸' : '▾'}
+                  </button>
+                  <span className="group-section-name">
+                    {isUngrouped ? UNGROUPED_LABEL : group}
+                  </span>
+                  <span className="group-section-count">
+                    {entries.length} trigger{entries.length === 1 ? '' : 's'}
+                  </span>
+                  {!isUngrouped && (
+                    <label
+                      className="group-section-toggle"
+                      title={
+                        groupEnabled
+                          ? 'group is on; click to disable'
+                          : 'group is off; click to enable'
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={groupEnabled}
+                        onChange={(e) =>
+                          void setTriggerGroupEnabled(group, e.target.checked).catch((err) =>
+                            onError(String(err)),
+                          )
+                        }
+                      />
+                      enabled
+                    </label>
+                  )}
+                </header>
+                {!isCollapsed && (
+                  <div className="group-section-body">
+                    {entries.map(({ slot, trigger }) => (
+                      <TriggerCard
+                        key={`u-${slot}`}
+                        trigger={trigger}
+                        onChange={(patch) => updateUser(slot, patch)}
+                        onRemove={() => removeUser(slot)}
+                        readOnly={false}
+                      />
+                    ))}
+                    {entries.length === 0 && (
+                      <div className="settings-font-empty">
+                        empty group — drag a trigger here or set the group field on a row
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+            );
+          });
+        })()}
         {presetTriggers.length > 0 && (
           <div className="trigger-form-preset-group">
             <div className="trigger-form-preset-heading">
@@ -362,6 +493,17 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
           disabled={readOnly}
           onChange={(e) => onChange({ priority: Number(e.target.value) || 0 })}
           title="priority"
+        />
+        <input
+          className="trigger-card-group"
+          type="text"
+          placeholder="group"
+          value={trigger.group ?? ''}
+          disabled={readOnly}
+          title="optional folder; triggers sharing a group can be bulk-disabled"
+          onChange={(e) =>
+            onChange({ group: e.target.value.trim().length > 0 ? e.target.value : null })
+          }
         />
         {trigger.preset && (
           <span className="trigger-card-preset" title={`from preset: ${trigger.preset}`}>

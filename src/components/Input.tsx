@@ -11,11 +11,14 @@ import {
   getTarget,
   getUiConfig,
   listMacros,
+  listMacroGroups,
   onGmcpPackage,
   onInputMode,
   onTarget,
   sendInput,
+  subscribeMacroGroupsChanged,
   subscribeMacrosChanged,
+  type GroupState,
   type Macro,
   type QuickKey,
 } from '../lib/session';
@@ -184,32 +187,79 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
 
   // Keyboard macro bindings — keyed by canonical key string
   // ("F1", "Ctrl+N", "Numpad7"). Seeded from the backend and
-  // refreshed on every macros-changed broadcast.
+  // refreshed on every macros-changed broadcast. Macros whose
+  // group has been bulk-disabled in the Settings UI are stripped
+  // here so a disabled "Combat" group means pressing F1 does
+  // nothing (key bubbles back up as if no macro existed) instead
+  // of firing a stale command.
   const macroMapRef = useRef<Map<string, string>>(new Map());
+  const macroListRef = useRef<Macro[]>([]);
+  const disabledMacroGroupsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     let cancelled = false;
-    let unsub: (() => void) | undefined;
-    const apply = (list: Macro[]) => {
+    const unsubs: Array<() => void> = [];
+
+    const rebuild = () => {
       const m = new Map<string, string>();
-      for (const entry of list) {
-        if (entry.key && entry.command) m.set(entry.key, entry.command);
+      for (const entry of macroListRef.current) {
+        if (!entry.key || !entry.command) continue;
+        if (entry.group && disabledMacroGroupsRef.current.has(entry.group)) continue;
+        m.set(entry.key, entry.command);
       }
       macroMapRef.current = m;
     };
+
+    const applyList = (list: Macro[]) => {
+      macroListRef.current = list;
+      rebuild();
+    };
+
+    const applyGroups = (groups: GroupState[]) => {
+      const disabled = new Set<string>();
+      for (const g of groups) {
+        if (!g.enabled) disabled.add(g.name);
+      }
+      disabledMacroGroupsRef.current = disabled;
+      rebuild();
+    };
+
+    const refreshGroups = () => {
+      void listMacroGroups()
+        .then((groups) => {
+          if (!cancelled) applyGroups(groups);
+        })
+        .catch(() => {});
+    };
+
     listMacros()
       .then((list) => {
-        if (!cancelled) apply(list);
+        if (!cancelled) applyList(list);
       })
       .catch(() => {});
+    refreshGroups();
+
     subscribeMacrosChanged((list) => {
-      if (!cancelled) apply(list);
+      if (!cancelled) {
+        applyList(list);
+        // A new or removed macro can change which groups exist;
+        // re-pull the group list so the disabled-set stays accurate.
+        refreshGroups();
+      }
     }).then((fn) => {
       if (cancelled) fn();
-      else unsub = fn;
+      else unsubs.push(fn);
     });
+
+    subscribeMacroGroupsChanged(() => {
+      if (!cancelled) refreshGroups();
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsubs.push(fn);
+    });
+
     return () => {
       cancelled = true;
-      unsub?.();
+      for (const fn of unsubs) fn();
     };
   }, []);
 

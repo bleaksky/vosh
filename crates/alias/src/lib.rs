@@ -13,7 +13,7 @@
 //! Multiple commands separated by `;` in an expansion are split and each is
 //! re-fed through the engine, bounded by a maximum recursion depth.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -24,6 +24,12 @@ pub struct Alias {
     pub expansion: String,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    /// Optional group tag. Aliases sharing a group can be turned
+    /// on or off together via `AliasStore::set_group_enabled` without
+    /// losing their individual `enabled` flags. `None` means the
+    /// alias is ungrouped and only its own `enabled` controls it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 fn default_enabled() -> bool {
@@ -36,7 +42,15 @@ impl Alias {
             name: name.into(),
             expansion: expansion.into(),
             enabled: true,
+            group: None,
         }
+    }
+
+    /// Builder-style setter for the optional group tag.
+    #[must_use]
+    pub fn with_group(mut self, group: impl Into<String>) -> Self {
+        self.group = Some(group.into());
+        self
     }
 }
 
@@ -57,6 +71,12 @@ pub struct AliasStore {
     aliases: HashMap<String, Alias>,
     max_depth: usize,
     separator: char,
+    /// Group names the user has turned OFF as a bulk override. An
+    /// alias whose `group` is in this set is treated as disabled
+    /// regardless of its own `enabled` flag. Stored as the inverse
+    /// (disabled list) rather than enabled list so a freshly added
+    /// group defaults to enabled.
+    disabled_groups: BTreeSet<String>,
 }
 
 impl Default for AliasStore {
@@ -71,7 +91,69 @@ impl AliasStore {
             aliases: HashMap::new(),
             max_depth: DEFAULT_MAX_DEPTH,
             separator: DEFAULT_SEPARATOR,
+            disabled_groups: BTreeSet::new(),
         }
+    }
+
+    /// True when the named group is effectively enabled. Returns true
+    /// for an empty / missing group name (ungrouped aliases never
+    /// participate in the group-disable mechanism).
+    pub fn is_group_enabled(&self, group: &str) -> bool {
+        group.is_empty() || !self.disabled_groups.contains(group)
+    }
+
+    /// Toggle a whole group. Calling with `enabled = true` removes
+    /// the group from the disabled set; with `false` adds it.
+    pub fn set_group_enabled(&mut self, group: &str, enabled: bool) {
+        if group.is_empty() {
+            return;
+        }
+        if enabled {
+            self.disabled_groups.remove(group);
+        } else {
+            self.disabled_groups.insert(group.to_string());
+        }
+    }
+
+    /// Sorted list of every group name referenced by at least one
+    /// alias, paired with whether that group is currently enabled.
+    /// Used by the Settings UI to render the per-group toggle row.
+    pub fn groups(&self) -> Vec<(String, bool)> {
+        let mut names: BTreeSet<String> = BTreeSet::new();
+        for a in self.aliases.values() {
+            if let Some(g) = &a.group {
+                if !g.is_empty() {
+                    names.insert(g.clone());
+                }
+            }
+        }
+        names
+            .into_iter()
+            .map(|n| {
+                let enabled = !self.disabled_groups.contains(&n);
+                (n, enabled)
+            })
+            .collect()
+    }
+
+    /// Persistence accessor for the disabled-groups set. Returns the
+    /// names that should be saved alongside the alias list.
+    pub fn disabled_groups(&self) -> Vec<String> {
+        self.disabled_groups.iter().cloned().collect()
+    }
+
+    /// Persistence inverse of `disabled_groups()`. Replaces the
+    /// current disabled-set with the supplied names.
+    pub fn set_disabled_groups<I, S>(&mut self, groups: I)
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.disabled_groups = groups
+            .into_iter()
+            .map(Into::into)
+            .filter(|s| !s.is_empty())
+            .collect();
     }
 
     #[must_use]
@@ -129,7 +211,19 @@ impl AliasStore {
         }
 
         let (name, rest) = split_first_word(command);
-        let Some(alias) = self.aliases.get(name).filter(|a| a.enabled) else {
+        // The alias fires only when:
+        //   * the named entry exists, AND
+        //   * its own `enabled` flag is true, AND
+        //   * its group is enabled (or it is ungrouped).
+        // Disabled groups short-circuit to pass-through so the user
+        // can flip whole "Combat" / "Crafting" loadouts off without
+        // editing each row.
+        let Some(alias) = self.aliases.get(name).filter(|a| {
+            a.enabled
+                && a.group
+                    .as_deref()
+                    .is_none_or(|g| !self.disabled_groups.contains(g))
+        }) else {
             out.push(command.to_string());
             return Ok(());
         };
@@ -436,6 +530,65 @@ mod tests {
             s.expand_line("say hello\\;world").unwrap(),
             vec!["say hello;world".to_string()]
         );
+    }
+
+    #[test]
+    fn disabled_group_passes_alias_through() {
+        let mut s = AliasStore::new();
+        s.set(Alias::new("kk", "kick %1").with_group("Combat"));
+        // Group enabled by default — the alias fires.
+        assert_eq!(
+            s.expand_line("kk goblin").unwrap(),
+            vec!["kick goblin".to_string()]
+        );
+        // Disable the whole group and the alias passes through as
+        // typed (no expansion, no error).
+        s.set_group_enabled("Combat", false);
+        assert_eq!(
+            s.expand_line("kk goblin").unwrap(),
+            vec!["kk goblin".to_string()]
+        );
+        // Re-enable and it fires again.
+        s.set_group_enabled("Combat", true);
+        assert_eq!(
+            s.expand_line("kk goblin").unwrap(),
+            vec!["kick goblin".to_string()]
+        );
+    }
+
+    #[test]
+    fn ungrouped_alias_ignores_group_state() {
+        // Sanity check that the disabled-set never affects ungrouped
+        // aliases (a buggy is_group_enabled check might reach for an
+        // empty-string entry).
+        let mut s = AliasStore::new();
+        s.set(Alias::new("greet", "wave"));
+        s.set_disabled_groups([String::new(), "Combat".to_string()]);
+        assert_eq!(s.expand_line("greet").unwrap(), vec!["wave".to_string()]);
+    }
+
+    #[test]
+    fn groups_lists_referenced_names_with_enabled_state() {
+        let mut s = AliasStore::new();
+        s.set(Alias::new("kk", "kick %1").with_group("Combat"));
+        s.set(Alias::new("forge", "smith %1").with_group("Crafting"));
+        s.set(Alias::new("greet", "wave"));
+        s.set_group_enabled("Combat", false);
+        let mut groups = s.groups();
+        groups.sort();
+        assert_eq!(
+            groups,
+            vec![("Combat".to_string(), false), ("Crafting".to_string(), true)]
+        );
+    }
+
+    #[test]
+    fn disabled_groups_round_trip_through_setters() {
+        let mut s = AliasStore::new();
+        s.set_disabled_groups(["Combat", "Crafting"]);
+        let mut listed = s.disabled_groups();
+        listed.sort();
+        assert_eq!(listed, vec!["Combat".to_string(), "Crafting".to_string()]);
     }
 
     #[test]

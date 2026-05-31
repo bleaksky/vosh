@@ -3481,11 +3481,146 @@ body {
 
 .macros-row {
   display: grid;
-  grid-template-columns: 160px 1fr auto;
+  grid-template-columns: 160px 1fr 110px auto;
   align-items: center;
   gap: 10px;
   padding: 4px 0;
   border-bottom: 1px solid var(--c-border-soft);
+}
+
+.macros-group {
+  background: var(--c-surface-emphasis);
+  color: var(--c-text-faint);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  padding: 4px 8px;
+  font: inherit;
+  min-width: 0;
+}
+
+.macros-group:focus {
+  outline: none;
+  border-color: var(--c-accent);
+  color: var(--c-text);
+}
+
+/* Trigger-card group input: same role as the priority input, sits
+   to its right in the head row. Narrow + dim so it reads as an
+   organizational tag rather than a primary field. */
+.trigger-card-group {
+  width: 110px;
+  background: var(--c-surface-emphasis);
+  color: var(--c-text-faint);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font: inherit;
+}
+
+.trigger-card-group:focus {
+  outline: none;
+  border-color: var(--c-accent);
+  color: var(--c-text);
+}
+
+/* Alias group input: sits between expansion and remove. */
+.alias-row-group {
+  width: 110px;
+  background: var(--c-surface-emphasis);
+  color: var(--c-text-faint);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font: inherit;
+}
+
+.alias-row-group:focus {
+  outline: none;
+  border-color: var(--c-accent);
+  color: var(--c-text);
+}
+
+/* The alias-row grid was 4 columns (enabled, name, expansion, remove);
+   add a 5th for the group input. Stays tightly aligned without
+   per-row overrides. */
+.alias-row {
+  grid-template-columns: auto 160px 1fr 110px auto;
+}
+
+/* Collapsible group section shared by trigger/alias/macro forms.
+   Header reads as a folder bar — name + count on the left, the
+   per-group enable checkbox on the right. Body holds the actual
+   item rows. A disabled group dims its header + body so the user
+   can see at a glance that nothing inside is currently effective. */
+.group-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.group-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--c-surface-deep, var(--c-surface));
+  border: 1px solid var(--c-border-soft);
+  border-radius: 3px;
+}
+
+.group-section-collapse {
+  background: transparent;
+  border: none;
+  color: var(--c-text-faint);
+  padding: 0 4px;
+  font: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.group-section-collapse:hover {
+  color: var(--c-accent);
+}
+
+.group-section-name {
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.group-section-count {
+  color: var(--c-text-faint);
+  font-size: 0.88em;
+}
+
+.group-section-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--c-text-faint);
+  font-size: 0.88em;
+  cursor: pointer;
+  user-select: none;
+}
+
+.group-section-toggle input[type='checkbox'] {
+  accent-color: var(--c-accent);
+}
+
+.group-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 18px;
+}
+
+.group-section.group-disabled .group-section-head {
+  opacity: 0.7;
+}
+
+.group-section.group-disabled .group-section-body {
+  opacity: 0.55;
 }
 
 .macros-row-new {

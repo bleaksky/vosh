@@ -445,6 +445,7 @@ pub(crate) async fn macros_set(
     state: State<'_, SharedState>,
     key: String,
     command: String,
+    group: Option<String>,
 ) -> Result<Vec<Macro>, String> {
     let key = key.trim().to_string();
     let command = command.trim().to_string();
@@ -454,12 +455,22 @@ pub(crate) async fn macros_set(
     if command.is_empty() {
         return Err("command cannot be empty".into());
     }
+    // Normalize the group: empty / whitespace-only -> None so the
+    // wire format does not persist an empty group string.
+    let group = group
+        .map(|g| g.trim().to_string())
+        .filter(|g| !g.is_empty());
     let updated = {
         let mut p = state.profile.lock().await;
         if let Some(existing) = p.macros.iter_mut().find(|m| m.key == key) {
             existing.command = command;
+            existing.group = group;
         } else {
-            p.macros.push(Macro { key, command });
+            p.macros.push(Macro {
+                key,
+                command,
+                group,
+            });
         }
         p.macros.clone()
     };
@@ -485,6 +496,120 @@ pub(crate) async fn macros_delete(
     persist_profile(&app, &shared).await;
     broadcast(&app, "vosh://macros-changed", &updated);
     Ok(updated)
+}
+
+/// One entry in a groups-list response: name + whether the group is
+/// currently enabled. Used by every per-type groups list endpoint so
+/// the frontend can render the toggle UI from a single shape.
+#[derive(Debug, Clone, serde::Serialize)]
+pub(crate) struct GroupState {
+    pub name: String,
+    pub enabled: bool,
+}
+
+#[tauri::command]
+pub(crate) async fn aliases_groups_list(
+    state: State<'_, SharedState>,
+) -> Result<Vec<GroupState>, String> {
+    let p = state.profile.lock().await;
+    Ok(p.aliases
+        .groups()
+        .into_iter()
+        .map(|(name, enabled)| GroupState { name, enabled })
+        .collect())
+}
+
+#[tauri::command]
+pub(crate) async fn aliases_set_group_enabled(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    group: String,
+    enabled: bool,
+) -> Result<(), String> {
+    {
+        let mut p = state.profile.lock().await;
+        p.aliases.set_group_enabled(group.trim(), enabled);
+    }
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    broadcast(&app, "vosh://alias-groups-changed", &group);
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn triggers_groups_list(
+    state: State<'_, SharedState>,
+) -> Result<Vec<GroupState>, String> {
+    let p = state.profile.lock().await;
+    Ok(p.triggers
+        .groups()
+        .into_iter()
+        .map(|(name, enabled)| GroupState { name, enabled })
+        .collect())
+}
+
+#[tauri::command]
+pub(crate) async fn triggers_set_group_enabled(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    group: String,
+    enabled: bool,
+) -> Result<(), String> {
+    {
+        let mut p = state.profile.lock().await;
+        p.triggers.set_group_enabled(group.trim(), enabled);
+    }
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    broadcast(&app, "vosh://trigger-groups-changed", &group);
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn macros_groups_list(
+    state: State<'_, SharedState>,
+) -> Result<Vec<GroupState>, String> {
+    let p = state.profile.lock().await;
+    let mut names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for m in &p.macros {
+        if let Some(g) = &m.group {
+            if !g.is_empty() {
+                names.insert(g.clone());
+            }
+        }
+    }
+    Ok(names
+        .into_iter()
+        .map(|n| {
+            let enabled = !p.disabled_macro_groups.contains(&n);
+            GroupState { name: n, enabled }
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub(crate) async fn macros_set_group_enabled(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    group: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let group = group.trim().to_string();
+    if group.is_empty() {
+        return Ok(());
+    }
+    {
+        let mut p = state.profile.lock().await;
+        if enabled {
+            p.disabled_macro_groups.remove(&group);
+        } else {
+            p.disabled_macro_groups.insert(group.clone());
+        }
+    }
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    broadcast(&app, "vosh://macro-groups-changed", &group);
+    Ok(())
 }
 
 #[tauri::command]

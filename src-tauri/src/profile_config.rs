@@ -52,6 +52,17 @@ pub(crate) struct ProfileConfig {
     /// Keyboard macro bindings.
     #[serde(default)]
     pub macros: Vec<Macro>,
+    /// Group folders the user bulk-disabled. One list per type so a
+    /// "Combat" alias group is independent of a "Combat" trigger
+    /// group — the UX is per-type, matching the existing tab split.
+    /// Empty by default. Skip-serialize so profile.toml stays clean
+    /// for users who do not use groups.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_alias_groups: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_trigger_groups: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_macro_groups: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -488,6 +499,11 @@ impl ProfileConfig {
             enabled: profile.plugins.enabled.clone(),
         };
 
+        let disabled_alias_groups = profile.aliases.disabled_groups();
+        let disabled_trigger_groups = profile.triggers.disabled_groups();
+        let disabled_macro_groups: Vec<String> =
+            profile.disabled_macro_groups.iter().cloned().collect();
+
         Self {
             connection: ConnectionConfig::default(),
             aliases,
@@ -498,6 +514,9 @@ impl ProfileConfig {
             ui,
             plugins,
             macros: profile.macros.clone(),
+            disabled_alias_groups,
+            disabled_trigger_groups,
+            disabled_macro_groups,
         }
     }
 
@@ -511,6 +530,7 @@ impl ProfileConfig {
         for alias in &self.aliases {
             aliases.set(alias.clone());
         }
+        aliases.set_disabled_groups(self.disabled_alias_groups.iter().cloned());
         profile.aliases = aliases;
 
         // Profile-scoped vars: clear existing profile-scoped, then set.
@@ -542,6 +562,7 @@ impl ProfileConfig {
                 warnings.push(format!("trigger `{}` rejected: {e}", t.name));
             }
         }
+        triggers.set_disabled_groups(self.disabled_trigger_groups.iter().cloned());
         profile.triggers = triggers;
 
         // Tick: build a fresh TickRuntime around the persisted config.
@@ -588,8 +609,15 @@ impl ProfileConfig {
             enabled: self.plugins.enabled.clone(),
         };
 
-        // Macros round-trip whole.
+        // Macros round-trip whole; the disabled-groups set lives
+        // directly on Profile because there is no MacroStore wrapper.
         profile.macros.clone_from(&self.macros);
+        profile.disabled_macro_groups = self
+            .disabled_macro_groups
+            .iter()
+            .filter(|s| !s.is_empty())
+            .cloned()
+            .collect();
 
         warnings
     }
@@ -765,6 +793,7 @@ mod tests {
                 },
             }],
             preset: None,
+            group: None,
         });
         let text = config.to_toml().unwrap();
         let parsed = ProfileConfig::from_toml(&text).unwrap();
@@ -895,6 +924,7 @@ name = "haste"
             enabled: true,
             actions: vec![TriggerAction::Gag],
             preset: None,
+            group: None,
         });
         let mut profile = Profile::default();
         let warnings = config.apply_to(&mut profile);

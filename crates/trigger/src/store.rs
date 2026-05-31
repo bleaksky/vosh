@@ -1,6 +1,8 @@
 //! Trigger store. Owns the user-defined triggers, compiles their regex on
 //! insert, and exposes them in priority order.
 
+use std::collections::BTreeSet;
+
 use regex::Regex;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -38,6 +40,13 @@ pub struct Trigger {
     /// id so the UI can list/remove them as a group. User-authored
     /// triggers leave this empty.
     pub preset: Option<String>,
+    /// Optional user-facing group tag. Triggers sharing a group can
+    /// be toggled on/off in bulk via `TriggerStore::set_group_enabled`
+    /// without losing their individual `enabled` flags. Distinct
+    /// from `preset` — `preset` is set automatically by the highlight
+    /// preset library and removed when the preset is uninstalled,
+    /// while `group` is user-authored and persists across edits.
+    pub group: Option<String>,
 }
 
 fn default_enabled() -> bool {
@@ -69,6 +78,8 @@ struct TriggerRaw {
     actions: Option<Vec<TriggerAction>>,
     #[serde(default)]
     preset: Option<String>,
+    #[serde(default)]
+    group: Option<String>,
 }
 
 impl<'de> Deserialize<'de> for Trigger {
@@ -109,6 +120,7 @@ impl<'de> Deserialize<'de> for Trigger {
             enabled: raw.enabled,
             actions,
             preset: raw.preset,
+            group: raw.group,
         })
     }
 }
@@ -120,8 +132,10 @@ impl Serialize for Trigger {
     {
         // Emit BOTH `pattern` (first entry, for older Vosh builds /
         // tools that only know the legacy shape) and `patterns` (the
-        // canonical list).
-        let field_count = 6 + usize::from(self.preset.is_some());
+        // canonical list). `group` is omitted when unset so older
+        // builds and grep-friendly diffs stay clean.
+        let field_count =
+            6 + usize::from(self.preset.is_some()) + usize::from(self.group.is_some());
         let mut state = serializer.serialize_struct("Trigger", field_count)?;
         state.serialize_field("name", &self.name)?;
         let first_pattern = self.patterns.first().map_or("", |p| p.pattern.as_str());
@@ -132,6 +146,9 @@ impl Serialize for Trigger {
         state.serialize_field("actions", &self.actions)?;
         if let Some(preset) = &self.preset {
             state.serialize_field("preset", preset)?;
+        }
+        if let Some(group) = &self.group {
+            state.serialize_field("group", group)?;
         }
         state.end()
     }
@@ -172,6 +189,11 @@ pub(crate) struct CompiledTrigger {
 #[derive(Default)]
 pub struct TriggerStore {
     items: Vec<CompiledTrigger>,
+    /// Group names the user has bulk-disabled. A trigger whose
+    /// `group` is in this set is skipped in matching regardless of
+    /// its own `enabled` flag. Stored as the disabled inverse so a
+    /// freshly-tagged group defaults to ON.
+    disabled_groups: BTreeSet<String>,
 }
 
 impl TriggerStore {
@@ -248,9 +270,76 @@ impl TriggerStore {
         self.items.is_empty()
     }
 
-    /// Iterate the compiled triggers in priority order (high to low).
+    /// Iterate the compiled triggers in priority order (high to low),
+    /// filtering out anything whose group is in the disabled set. The
+    /// engine consumes this directly; per-trigger and per-pattern
+    /// enable flags still apply downstream of the group check.
     pub(crate) fn iter_compiled(&self) -> impl Iterator<Item = &CompiledTrigger> {
-        self.items.iter()
+        self.items.iter().filter(|c| {
+            c.trigger
+                .group
+                .as_deref()
+                .is_none_or(|g| !self.disabled_groups.contains(g))
+        })
+    }
+
+    /// True when the named group is effectively enabled. Empty / missing
+    /// group names are always "enabled" since ungrouped triggers do not
+    /// participate in the bulk-disable mechanism.
+    pub fn is_group_enabled(&self, group: &str) -> bool {
+        group.is_empty() || !self.disabled_groups.contains(group)
+    }
+
+    /// Toggle a whole group. Calling with `true` removes the group
+    /// from the disabled set; `false` adds it. No-op for an empty
+    /// group name.
+    pub fn set_group_enabled(&mut self, group: &str, enabled: bool) {
+        if group.is_empty() {
+            return;
+        }
+        if enabled {
+            self.disabled_groups.remove(group);
+        } else {
+            self.disabled_groups.insert(group.to_string());
+        }
+    }
+
+    /// Sorted list of every group referenced by at least one trigger,
+    /// paired with its current enabled state.
+    pub fn groups(&self) -> Vec<(String, bool)> {
+        let mut names: BTreeSet<String> = BTreeSet::new();
+        for t in &self.items {
+            if let Some(g) = &t.trigger.group {
+                if !g.is_empty() {
+                    names.insert(g.clone());
+                }
+            }
+        }
+        names
+            .into_iter()
+            .map(|n| {
+                let enabled = !self.disabled_groups.contains(&n);
+                (n, enabled)
+            })
+            .collect()
+    }
+
+    /// Persistence accessor — returns the disabled group names.
+    pub fn disabled_groups(&self) -> Vec<String> {
+        self.disabled_groups.iter().cloned().collect()
+    }
+
+    /// Persistence inverse — replaces the disabled-group set.
+    pub fn set_disabled_groups<I, S>(&mut self, groups: I)
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.disabled_groups = groups
+            .into_iter()
+            .map(Into::into)
+            .filter(|s| !s.is_empty())
+            .collect();
     }
 
     /// Replace every trigger from a JSON array. Returns the new count.

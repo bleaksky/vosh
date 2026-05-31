@@ -173,6 +173,7 @@ fn mushclient_alias_from(e: &BytesStart) -> Option<Alias> {
         name,
         expansion: send,
         enabled,
+        group: None,
     })
 }
 
@@ -213,6 +214,7 @@ fn mushclient_trigger_from(e: &BytesStart, report: &mut ImportReport) -> Option<
         }],
         priority: sequence,
         enabled,
+        group: None,
         actions,
         preset: None,
     })
@@ -424,6 +426,7 @@ fn commit_mudlet_trigger(item: MudletItem, report: &mut ImportReport) {
         enabled: item.is_active,
         actions,
         preset: None,
+        group: None,
     });
 }
 
@@ -451,6 +454,7 @@ fn commit_mudlet_alias(item: MudletItem, report: &mut ImportReport) {
         name,
         expansion,
         enabled: item.is_active,
+        group: None,
     });
 }
 
@@ -469,6 +473,7 @@ fn commit_mudlet_key(item: MudletItem, report: &mut ImportReport) {
     report.macros.push(Macro {
         key: canonical,
         command,
+        group: None,
     });
 }
 
@@ -502,6 +507,7 @@ fn parse_gmud(text: &str) -> ImportReport {
                     name: name.clone(),
                     expansion: command.clone(),
                     enabled: true,
+                    group: None,
                 });
             }
             ("macro", [key, command]) if !key.is_empty() && !command.is_empty() => {
@@ -509,6 +515,7 @@ fn parse_gmud(text: &str) -> ImportReport {
                     report.macros.push(Macro {
                         key: canonical,
                         command: command.clone(),
+                        group: None,
                     });
                 } else {
                     report
@@ -832,6 +839,7 @@ fn commit_cmud_alias(a: CmudAliasInProgress, report: &mut ImportReport) {
         name: a.name,
         expansion: a.value,
         enabled: a.enabled,
+        group: None,
     });
 }
 
@@ -861,6 +869,7 @@ fn commit_cmud_trigger(t: CmudTriggerInProgress, report: &mut ImportReport) {
         enabled: t.enabled,
         actions,
         preset: None,
+        group: None,
     });
 }
 
@@ -872,6 +881,7 @@ fn commit_cmud_macro(m: CmudMacroInProgress, report: &mut ImportReport) {
         Some(canonical) => report.macros.push(Macro {
             key: canonical,
             command: m.value,
+            group: None,
         }),
         None => report
             .unsupported
