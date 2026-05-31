@@ -888,7 +888,13 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
 export interface ProfileAutoMatch {
   host?: string | null;
   port?: number | null;
-  character?: string | null;
+  /** Character names the profile claims. Any-of matching: a connect
+   *  call carrying any one of these names triggers a profile switch.
+   *  Empty list means the profile matches on host/port alone.
+   *  The legacy single-string `character` field is accepted by the
+   *  backend on load and promoted to a one-element list, so older
+   *  profiles keep working without manual migration. */
+  characters?: string[];
 }
 
 export interface ProfileEntry {

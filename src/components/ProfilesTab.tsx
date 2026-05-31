@@ -288,7 +288,7 @@ interface RowProps {
   onSwitch: () => void;
   onDelete: () => void;
   onSaveAutoMatch: (
-    am: { host: string | null; port: number | null; character: string | null } | null,
+    am: { host: string | null; port: number | null; characters: string[] } | null,
     description: string | null,
   ) => void;
 }
@@ -317,28 +317,36 @@ function ProfileRow({
   const [portDraft, setPortDraft] = useState(
     entry.auto_match?.port ? String(entry.auto_match.port) : '',
   );
-  const [charDraft, setCharDraft] = useState(entry.auto_match?.character ?? '');
+  // Comma-separated character list. Free-form display while editing
+  // so backspace + retype stays predictable; we split + trim at save
+  // time and the backend re-emits as a JSON array. Any-of matching
+  // means a profile listing "Erelei, Akletus, Vanek" claims any of
+  // those three at connect time.
+  const [charDraft, setCharDraft] = useState((entry.auto_match?.characters ?? []).join(', '));
   const [descDraft, setDescDraft] = useState(entry.description ?? '');
 
   useEffect(() => {
     setHostDraft(entry.auto_match?.host ?? '');
     setPortDraft(entry.auto_match?.port ? String(entry.auto_match.port) : '');
-    setCharDraft(entry.auto_match?.character ?? '');
+    setCharDraft((entry.auto_match?.characters ?? []).join(', '));
     setDescDraft(entry.description ?? '');
   }, [entry]);
 
   const handleSaveMatch = () => {
     const host = hostDraft.trim();
     const port = portDraft.trim() ? Number(portDraft.trim()) : null;
-    const character = charDraft.trim();
+    const characters = charDraft
+      .split(',')
+      .map((c) => c.trim())
+      .filter((c) => c.length > 0);
     const description = descDraft.trim();
-    const hasAny = host || port !== null || character;
+    const hasAny = host || port !== null || characters.length > 0;
     onSaveAutoMatch(
       hasAny
         ? {
             host: host || null,
             port: port && Number.isFinite(port) ? port : null,
-            character: character || null,
+            characters,
           }
         : null,
       description || null,
@@ -449,12 +457,13 @@ function ProfileRow({
               />
             </label>
             <label className="profile-row-field">
-              <span>character</span>
+              <span>characters</span>
               <input
                 type="text"
                 spellCheck={false}
                 value={charDraft}
-                placeholder="optional. used when one MUD has many"
+                placeholder="comma-separated, e.g. Erelei, Akletus, Vanek"
+                title="any-of match. leave empty to match this MUD regardless of which character logs in"
                 onChange={(e) => setCharDraft(e.target.value)}
               />
             </label>

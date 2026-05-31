@@ -931,28 +931,31 @@ pub(crate) async fn profile_resolve_match(
                 continue;
             }
         }
-        // Character: if both specified, must equal (case-insensitive).
-        // A profile with a character pinned scores higher than one
-        // matching on host:port alone so multi-character setups
-        // resolve to the right one.
+        // Character: if the profile pins at least one character, the
+        // connect call must supply one AND it must match (case-
+        // insensitively) any name in the profile's list. A profile
+        // with a character pin that matches scores higher than a
+        // host-only match so multi-character setups resolve to the
+        // right one.
         let mut score: u8 = 1; // host match
         if am.port.is_some() {
             score += 1;
         }
-        match (&am.character, &character_l) {
-            (Some(profile_char), Some(connect_char)) => {
-                if profile_char.trim().to_ascii_lowercase() != *connect_char {
-                    continue;
-                }
-                score += 2;
-            }
-            (Some(_), None) => {
-                // Profile pins a character but the connect call did
-                // not supply one — soft skip rather than match (the
-                // user may not know which character they are).
+        if !am.characters.is_empty() {
+            let Some(connect_char) = &character_l else {
+                // Profile pins one or more characters but the connect
+                // call did not supply one — soft skip rather than
+                // match (we don't yet know which character it is).
+                continue;
+            };
+            let any_match = am
+                .characters
+                .iter()
+                .any(|name| name.trim().to_ascii_lowercase() == *connect_char);
+            if !any_match {
                 continue;
             }
-            _ => {}
+            score += 2;
         }
         if best.map_or(true, |(_, b)| score > b) {
             best = Some((entry.name.as_str(), score));
