@@ -222,7 +222,7 @@ impl AliasStore {
             a.enabled
                 && a.group
                     .as_deref()
-                    .is_none_or(|g| !self.disabled_groups.contains(g))
+                    .map_or(true, |g| !self.disabled_groups.contains(g))
         }) else {
             out.push(command.to_string());
             return Ok(());

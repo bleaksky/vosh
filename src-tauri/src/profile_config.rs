@@ -218,8 +218,8 @@ pub(crate) struct VitalsConfig {
     /// Total cells in the bar (filled + empty). Clamped to [4, 60].
     #[serde(default = "default_bar_width")]
     pub bar_width: u32,
-    /// Bar render style: "solid" (each cell renders bar_filled or
-    /// bar_empty, repeated as glyphs — the historical look) or
+    /// Bar render style: "solid" (each cell renders `bar_filled` or
+    /// `bar_empty`, repeated as glyphs — the historical look) or
     /// "track" (a CSS-tinted div bar that smoothly fills left-to-
     /// right at any percentage, no glyph dependency). The old
     /// "ramped" Unicode-partial-block mode looked rough in most
@@ -245,7 +245,7 @@ pub(crate) struct VitalsConfig {
     /// the built-in stacked / inline layouts. Token reference lives
     /// in the Settings panel's help text; the renderer ignores all
     /// other vitals.* render fields except the bar_* settings (which
-    /// drive the `%bar_*` tokens) and percent_color (which colors
+    /// drive the `%bar_*` tokens) and `percent_color` (which colors
     /// the `%pct_*` tokens).
     #[serde(default)]
     pub template_enabled: bool,
