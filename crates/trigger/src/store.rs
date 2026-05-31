@@ -279,7 +279,7 @@ impl TriggerStore {
             c.trigger
                 .group
                 .as_deref()
-                .is_none_or(|g| !self.disabled_groups.contains(g))
+                .map_or(true, |g| !self.disabled_groups.contains(g))
         })
     }
 
@@ -363,6 +363,7 @@ impl std::fmt::Debug for TriggerStore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TriggerStore")
             .field("count", &self.items.len())
+            .field("disabled_groups", &self.disabled_groups)
             .finish()
     }
 }
