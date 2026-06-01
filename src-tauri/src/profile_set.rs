@@ -288,6 +288,70 @@ impl ProfileSet {
         self.index.profiles.iter().find(|p| p.name == name)
     }
 
+    /// Find the best-matching profile for a connect target plus optional
+    /// character name. Pure function over the entry list so both the
+    /// `profile_resolve_match` Tauri command and the Char.Status auto-
+    /// switch path in the session loop can share the same scoring
+    /// logic.
+    ///
+    /// Match rules. A profile's `auto_match.host` is required and must
+    /// match case-insensitively. `port`, if specified on the profile,
+    /// must equal the connect port. The `characters` list, if non-
+    /// empty, requires `character` to be supplied AND to match (case-
+    /// insensitively) at least one entry. Higher scores win:
+    ///
+    ///   - host match: 1
+    ///   - port match: +1
+    ///   - character match: +2
+    ///
+    /// So a profile pinned to (host, port, character) beats one pinned
+    /// to (host, port) which beats one pinned to (host) alone.
+    pub(crate) fn resolve_match(
+        &self,
+        host: &str,
+        port: u16,
+        character: Option<&str>,
+    ) -> Option<String> {
+        let host_l = host.trim().to_ascii_lowercase();
+        let character_l = character.map(str::trim).map(str::to_ascii_lowercase);
+        let mut best: Option<(&str, u8)> = None;
+        for entry in &self.index.profiles {
+            let Some(am) = &entry.auto_match else {
+                continue;
+            };
+            let Some(am_host) = &am.host else { continue };
+            if am_host.trim().to_ascii_lowercase() != host_l {
+                continue;
+            }
+            if let Some(p) = am.port {
+                if p != port {
+                    continue;
+                }
+            }
+            let mut score: u8 = 1;
+            if am.port.is_some() {
+                score += 1;
+            }
+            if !am.characters.is_empty() {
+                let Some(connect_char) = &character_l else {
+                    continue;
+                };
+                let any_match = am
+                    .characters
+                    .iter()
+                    .any(|name| name.trim().to_ascii_lowercase() == *connect_char);
+                if !any_match {
+                    continue;
+                }
+                score += 2;
+            }
+            if best.map_or(true, |(_, b)| score > b) {
+                best = Some((entry.name.as_str(), score));
+            }
+        }
+        best.map(|(name, _)| name.to_string())
+    }
+
     /// Create an empty entry. The per-profile file is created on the
     /// next save (so a brand-new profile inherits whatever defaults
     /// `ProfileConfig::default()` produces on first persist).
@@ -600,5 +664,137 @@ characters = ["Erelei", "Vanek"]
         assert!(set.create("").is_err());
         assert!(set.create("    ").is_err());
         assert!(set.create("with:colon").is_err());
+    }
+
+    fn set_with_profiles(profiles: Vec<(&str, AutoMatch)>) -> ProfileSet {
+        let dir = tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        for (name, am) in profiles {
+            if name != DEFAULT_PROFILE_NAME {
+                set.create(name).unwrap();
+            }
+            set.set_metadata(name, None, Some(am)).unwrap();
+        }
+        set
+    }
+
+    #[test]
+    fn resolve_match_returns_none_when_no_profile_pins_host() {
+        let set = set_with_profiles(vec![]);
+        assert_eq!(set.resolve_match("a.b.c", 1234, None), None);
+    }
+
+    #[test]
+    fn resolve_match_host_only_picks_host_match() {
+        let set = set_with_profiles(vec![(
+            DEFAULT_PROFILE_NAME,
+            AutoMatch {
+                host: Some("h".into()),
+                port: None,
+                characters: vec![],
+            },
+        )]);
+        assert_eq!(
+            set.resolve_match("h", 0, None),
+            Some(DEFAULT_PROFILE_NAME.to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_match_host_case_insensitive() {
+        let set = set_with_profiles(vec![(
+            DEFAULT_PROFILE_NAME,
+            AutoMatch {
+                host: Some("PLAY.example.com".into()),
+                port: None,
+                characters: vec![],
+            },
+        )]);
+        assert!(set.resolve_match("play.EXAMPLE.com", 0, None).is_some());
+    }
+
+    #[test]
+    fn resolve_match_with_pinned_character_skips_when_none_supplied() {
+        // A profile that pins characters must NOT match when the caller
+        // supplied no character: the Char.Status-driven path leans on
+        // this so the pre-login resolver does not lock to a
+        // character-pinned profile before Char.Status arrives.
+        let set = set_with_profiles(vec![(
+            DEFAULT_PROFILE_NAME,
+            AutoMatch {
+                host: Some("h".into()),
+                port: None,
+                characters: vec!["Erelei".into()],
+            },
+        )]);
+        assert_eq!(set.resolve_match("h", 0, None), None);
+        assert_eq!(
+            set.resolve_match("h", 0, Some("Erelei")),
+            Some(DEFAULT_PROFILE_NAME.to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_match_character_pinned_beats_host_only() {
+        // host-only profile + character-pinned profile on the same host
+        // and the supplied character matches the pin → the pinned one
+        // wins on score (host=1 vs host+char=3).
+        let set = set_with_profiles(vec![
+            (
+                DEFAULT_PROFILE_NAME,
+                AutoMatch {
+                    host: Some("h".into()),
+                    port: None,
+                    characters: vec![],
+                },
+            ),
+            (
+                "warrior",
+                AutoMatch {
+                    host: Some("h".into()),
+                    port: None,
+                    characters: vec!["Erelei".into()],
+                },
+            ),
+        ]);
+        assert_eq!(
+            set.resolve_match("h", 0, Some("Erelei")),
+            Some("warrior".to_string())
+        );
+        // Without the character, the host-only profile wins.
+        assert_eq!(
+            set.resolve_match("h", 0, None),
+            Some(DEFAULT_PROFILE_NAME.to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_match_any_of_characters_list() {
+        let set = set_with_profiles(vec![(
+            DEFAULT_PROFILE_NAME,
+            AutoMatch {
+                host: Some("h".into()),
+                port: None,
+                characters: vec!["A".into(), "B".into(), "C".into()],
+            },
+        )]);
+        assert!(set.resolve_match("h", 0, Some("a")).is_some());
+        assert!(set.resolve_match("h", 0, Some("B")).is_some());
+        assert!(set.resolve_match("h", 0, Some("D")).is_none());
+    }
+
+    #[test]
+    fn resolve_match_port_pin_required_when_set() {
+        let set = set_with_profiles(vec![(
+            DEFAULT_PROFILE_NAME,
+            AutoMatch {
+                host: Some("h".into()),
+                port: Some(1848),
+                characters: vec![],
+            },
+        )]);
+        assert!(set.resolve_match("h", 1848, None).is_some());
+        // Wrong port: profile skipped.
+        assert!(set.resolve_match("h", 4000, None).is_none());
     }
 }
