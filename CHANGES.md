@@ -4,8 +4,8 @@ All notable changes to Vosh. Newest first.
 
 ## v0.3.1 - 2026-05-31
 
-- The Connect form now has a character field. Type the character name you are about to log in as and the right profile autoloads when you connect, so profiles pinned to a specific character finally fire reliably. The last character you used on each host is remembered, so reconnects do not need re-typing.
-- A profile can now claim more than one character. List them in Settings · Profiles · auto-match as a comma-separated string ("Erelei, Lustig, Carmen") and the profile autoloads for any of those characters. Useful when you want one profile to cover every warrior you play, or every alt on a single shared host. The old single-character syntax still works.
+- Profile auto-match now reads your character name from the MUD itself. As soon as you log in, the MUD sends Vosh your character name over GMCP, and Vosh swaps to the matching profile silently. No more typing your character name into the Connect form, no more wrong profile loaded because you forgot.
+- A profile can now claim more than one character. List them in Settings · Profiles · auto-match as a comma-separated string ("Erelei, Lustig, Carmen") and the profile autoloads for any of those characters. Useful when you want one profile to cover every warrior you play, or every alt on a single shared host.
 - Your settings are now protected against bad writes. Every save of `profile.toml` and `global.toml` is atomic, and the previous version is kept as a timestamped backup. Up to ten backup generations are retained, so a crashed save or a stale-state overwrite can no longer wipe your custom themes or tracked affects. (One user reported losing both after installing v0.3.0; this protection lives forward of this release.)
 
 ## v0.3.0 - 2026-05-31
