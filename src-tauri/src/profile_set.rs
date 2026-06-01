@@ -252,10 +252,12 @@ impl ProfileSet {
 
     pub(crate) fn save_index(&self) -> Result<(), ProfileSetError> {
         let path = self.root.join(INDEX_FILENAME);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(&path, toml::to_string_pretty(&self.index)?)?;
+        let body = toml::to_string_pretty(&self.index)?;
+        // Atomic write with rotating backups; same protection the
+        // per-profile and global config files get. A botched index
+        // write would orphan every profile, so the rollback safety
+        // net matters here too.
+        crate::profile_config::write_with_backup(&path, &body)?;
         Ok(())
     }
 

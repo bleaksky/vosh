@@ -6,8 +6,8 @@
 //! that does not belong in the on-disk file.
 
 use std::collections::BTreeMap;
-use std::path::Path;
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
@@ -623,11 +623,8 @@ impl ProfileConfig {
     }
 
     pub(crate) fn save(&self, path: &Path) -> Result<(), ConfigError> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
         let toml_str = toml::to_string_pretty(self)?;
-        std::fs::write(path, toml_str)?;
+        write_with_backup(path, &toml_str)?;
         Ok(())
     }
 
@@ -723,11 +720,8 @@ impl GlobalConfig {
     }
 
     pub(crate) fn save(&self, path: &Path) -> Result<(), ConfigError> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
         let toml_str = toml::to_string_pretty(self)?;
-        std::fs::write(path, toml_str)?;
+        write_with_backup(path, &toml_str)?;
         Ok(())
     }
 
@@ -764,10 +758,194 @@ pub(crate) fn strip_global_fields(config: &mut ProfileConfig, scope: &ScopeConfi
     }
 }
 
+/// Number of timestamped backups to retain alongside each profile /
+/// global config file. Each call to a top-level `save()` rotates the
+/// pre-write file off to a new backup before the new content lands,
+/// so the user has a recovery window of the last N saves. 10 covers
+/// enough launches that an upgrade-time bad save survives even if the
+/// next few launches also touch the file.
+const BACKUP_RETENTION: usize = 10;
+
+/// Atomically write `contents` to `path`, snapshotting the current
+/// on-disk file (if any) to a timestamped `.bak.<unix-ms>` sibling
+/// first. After the write, prune older backups so at most
+/// `BACKUP_RETENTION` remain.
+///
+/// Steps in order:
+///   1. Ensure parent dir exists.
+///   2. Move the existing file (if any) to `<path>.bak.<unix-ms>` so
+///      a partial write below cannot lose the prior state.
+///   3. Write the new content to `<path>.tmp` and rename into place.
+///      The rename is atomic on every platform we ship.
+///   4. Prune backups: keep the `BACKUP_RETENTION` newest, delete
+///      the rest.
+///
+/// Errors during pruning are swallowed — they should not block the
+/// save from being reported as successful. A failure during step 2
+/// or 3 is fatal and the original file is left untouched (the backup
+/// either does not exist yet, or has already been renamed away
+/// successfully).
+pub(crate) fn write_with_backup(path: &Path, contents: &str) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    if path.exists() {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis());
+        let backup_path = backup_path_for(path, now_ms);
+        // `rename` is atomic; if it fails (e.g. cross-device) fall
+        // back to a copy. Either way the original is preserved.
+        if std::fs::rename(path, &backup_path).is_err() {
+            std::fs::copy(path, &backup_path)?;
+            std::fs::remove_file(path)?;
+        }
+    }
+    let tmp = tmp_path_for(path);
+    std::fs::write(&tmp, contents)?;
+    std::fs::rename(&tmp, path)?;
+    prune_backups(path, BACKUP_RETENTION);
+    Ok(())
+}
+
+fn tmp_path_for(path: &Path) -> PathBuf {
+    let mut name = path
+        .file_name()
+        .map(std::ffi::OsStr::to_os_string)
+        .unwrap_or_default();
+    name.push(".tmp");
+    path.with_file_name(name)
+}
+
+fn backup_path_for(path: &Path, when_ms: u128) -> PathBuf {
+    let mut name = path
+        .file_name()
+        .map(std::ffi::OsStr::to_os_string)
+        .unwrap_or_default();
+    name.push(format!(".bak.{when_ms}"));
+    path.with_file_name(name)
+}
+
+/// Delete every `<file>.bak.<digits>` sibling beyond the `keep` most
+/// recent. Older backups vanish silently; nothing here is fatal.
+fn prune_backups(path: &Path, keep: usize) {
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    let Some(stem) = path.file_name().and_then(|s| s.to_str()) else {
+        return;
+    };
+    let prefix = format!("{stem}.bak.");
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return;
+    };
+    let mut backups: Vec<(u128, PathBuf)> = entries
+        .filter_map(Result::ok)
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let suffix = name.strip_prefix(&prefix)?;
+            let ts: u128 = suffix.parse().ok()?;
+            Some((ts, e.path()))
+        })
+        .collect();
+    // Newest first so the head of the list is what we keep.
+    backups.sort_by_key(|(ts, _)| std::cmp::Reverse(*ts));
+    for (_, path) in backups.into_iter().skip(keep) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use vosh_trigger::{HighlightStyle, NamedColor, TriggerAction, TriggerPattern};
+
+    #[test]
+    fn write_with_backup_creates_initial_file_without_backup() {
+        // First write to a fresh path produces just the file; no
+        // backup yet because there was nothing to roll off.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        write_with_backup(&path, "initial = true\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "initial = true\n");
+        let backups = list_backups(&path);
+        assert!(backups.is_empty(), "no backups expected on first write");
+    }
+
+    #[test]
+    fn write_with_backup_rolls_existing_file_off() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        write_with_backup(&path, "v1\n").unwrap();
+        // A small sleep guarantees a distinct timestamp on the
+        // second write; the millisecond resolution is normally
+        // enough but back-to-back calls on a fast machine can land
+        // in the same ms.
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        write_with_backup(&path, "v2\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "v2\n");
+        let backups = list_backups(&path);
+        assert_eq!(backups.len(), 1, "previous version should be backed up");
+        let backup_content = std::fs::read_to_string(&backups[0]).unwrap();
+        assert_eq!(backup_content, "v1\n");
+    }
+
+    #[test]
+    fn write_with_backup_keeps_at_most_retention_backups() {
+        // Write N+5 times where N = BACKUP_RETENTION. Only the
+        // BACKUP_RETENTION most-recent pre-write states should
+        // remain on disk; the rest are pruned.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let count = BACKUP_RETENTION + 5;
+        for i in 0..count {
+            write_with_backup(&path, &format!("v{i}\n")).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        let backups = list_backups(&path);
+        assert_eq!(
+            backups.len(),
+            BACKUP_RETENTION,
+            "expected exactly BACKUP_RETENTION backups; got {}",
+            backups.len()
+        );
+    }
+
+    #[test]
+    fn write_with_backup_creates_parent_dir() {
+        // Writing to a path whose parent does not yet exist must
+        // create the directory tree; this mirrors how the live
+        // `<app_data_dir>/profiles/` subdir is created on first
+        // launch.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/under/here/config.toml");
+        write_with_backup(&path, "ok\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "ok\n");
+    }
+
+    /// Helper for the backup tests: list every `<file>.bak.<digits>`
+    /// sibling of `path` in chronological order (oldest first).
+    fn list_backups(path: &Path) -> Vec<std::path::PathBuf> {
+        let Some(parent) = path.parent() else {
+            return Vec::new();
+        };
+        let Some(stem) = path.file_name().and_then(|s| s.to_str()) else {
+            return Vec::new();
+        };
+        let prefix = format!("{stem}.bak.");
+        let mut out: Vec<(u128, std::path::PathBuf)> = std::fs::read_dir(parent)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter_map(|e| {
+                let name = e.file_name().to_string_lossy().into_owned();
+                let suffix = name.strip_prefix(&prefix)?;
+                let ts: u128 = suffix.parse().ok()?;
+                Some((ts, e.path()))
+            })
+            .collect();
+        out.sort_by_key(|(ts, _)| *ts);
+        out.into_iter().map(|(_, p)| p).collect()
+    }
 
     fn single_pattern(p: &str) -> Vec<TriggerPattern> {
         vec![TriggerPattern {
