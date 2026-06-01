@@ -28,9 +28,9 @@ mod tick;
 mod tintin_import;
 
 use commands::{
-    aliases_export, aliases_groups_list, aliases_import, aliases_set_group_enabled, app_version,
-    dock_layout_get, dock_layout_set, import_apply, import_detect, logs_export, logs_list_sessions,
-    logs_search, macros_delete, macros_groups_list, macros_list, macros_set,
+    aliases_export, aliases_groups_list, aliases_import, aliases_set_group_enabled, app_quit,
+    app_version, dock_layout_get, dock_layout_set, import_apply, import_detect, logs_export,
+    logs_list_sessions, logs_search, macros_delete, macros_groups_list, macros_list, macros_set,
     macros_set_group_enabled, map_area_snapshot, map_set_avoid, map_set_note, map_walk_to,
     migration_analyze, migration_apply, open_settings_window, plugins_list, plugins_reload,
     plugins_set_enabled, presets_install, presets_remove, profile_create, profile_delete,
@@ -316,6 +316,7 @@ pub fn run() {
             profile_resolve_match,
             migration_analyze,
             migration_apply,
+            app_quit,
             profile_get_scope,
             profile_set_scope,
             plugins_list,

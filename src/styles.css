@@ -4271,6 +4271,28 @@ body {
   color: var(--c-muted-red, #c4746e);
 }
 
+.migration-wizard-applied {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: var(--c-surface-emphasis);
+  border: 1px solid var(--c-border);
+  border-left: 2px solid var(--c-accent);
+  border-radius: 2px;
+}
+
+.migration-wizard-applied-title {
+  color: var(--c-accent);
+  font-weight: 600;
+}
+
+.migration-wizard-applied-body {
+  color: var(--c-text);
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+
 .migration-wizard-footer {
   display: flex;
   align-items: center;

@@ -1000,13 +1000,21 @@ export interface MigrationConflictResolution {
   source_profile: string;
 }
 
-// Commit the migration. The backend re-runs the analyzer, applies the
-// per-conflict resolutions (or first-variant default for any missing
-// resolution), writes catalog.toml + loadouts.toml, moves the per-
-// profile files into profiles/legacy/, and restarts the app. This
-// call typically never returns — the restart kicks the WebView.
+// Commit the migration. The backend writes catalog.toml + loadouts.toml
+// and moves per-profile files into profiles/legacy/. Returns Ok once
+// the files have landed. The runtime stays in legacy mode until the
+// user relaunches Vosh; the startup hook detects catalog.toml on next
+// launch and enters Path B mode. The wizard prompts the user to quit
+// + reopen via appQuit because app.restart() is fragile in dev mode
+// and silently leaves the WebView with no frontend to load.
 export async function migrationApply(resolutions: MigrationConflictResolution[]): Promise<void> {
   return invoke('migration_apply', { resolutions });
+}
+
+// Cleanly quit Vosh. The post-migration prompt uses this so the
+// user can relaunch into Path B mode in one click.
+export async function appQuit(): Promise<void> {
+  return invoke('app_quit');
 }
 
 // Per-category scope toggle (Profile vs Global).
