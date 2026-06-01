@@ -20,47 +20,12 @@ export type ConnectionStatus =
 
 const DEFAULT_HOST = 'play.theforsakenlands.com';
 const DEFAULT_PORT = 1848;
-// Remember the last character typed per host so the user does not
-// have to re-enter it on every reconnect. Stored under a host-scoped
-// key so different MUDs do not stomp on each other.
-const CHAR_KEY_PREFIX = 'vosh.connect.character.';
-const charStorageKey = (host: string) => `${CHAR_KEY_PREFIX}${host.trim().toLowerCase()}`;
-
-function loadCharacterFor(host: string): string {
-  try {
-    return localStorage.getItem(charStorageKey(host)) ?? '';
-  } catch {
-    return '';
-  }
-}
-
-function saveCharacterFor(host: string, name: string) {
-  try {
-    const key = charStorageKey(host);
-    if (name.trim().length > 0) {
-      localStorage.setItem(key, name.trim());
-    } else {
-      localStorage.removeItem(key);
-    }
-  } catch {
-    // localStorage may be unavailable in some sandboxes; tolerate.
-  }
-}
 
 export function Connect({ status, onError }: Props) {
   const [host, setHost] = useState(DEFAULT_HOST);
   const [port, setPort] = useState(DEFAULT_PORT);
   const [tls, setTls] = useState(false);
-  const [character, setCharacter] = useState(() => loadCharacterFor(DEFAULT_HOST));
   const isLive = status.kind === 'connecting' || status.kind === 'connected';
-
-  // When the user retypes the host, swap to the remembered
-  // character for that host so character autoselect tracks the
-  // server they are about to dial.
-  const handleHostChange = (next: string) => {
-    setHost(next);
-    setCharacter(loadCharacterFor(next));
-  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -69,16 +34,13 @@ export function Connect({ status, onError }: Props) {
         await disconnectSession();
         return;
       }
-      // Auto-switch to a matching profile before opening the
-      // connection. Match is by host (required) + port (when
-      // pinned by the profile) + character (when pinned). Falling
-      // back to the currently-active profile when nothing matches
-      // is the natural behavior: existing connections keep using
-      // whatever profile is loaded today.
-      const characterArg = character.trim().length > 0 ? character.trim() : null;
-      if (characterArg) saveCharacterFor(host, characterArg);
+      // Pre-login profile auto-match. Resolve by host (plus port if a
+      // profile pins one) and switch ahead of the connection. Profiles
+      // pinned to a specific character soft-skip here because the
+      // character is unknown until the MUD sends Char.Status after
+      // login; the session GMCP handler picks them up and swaps then.
       try {
-        const matchName = await profileResolveMatch(host, port, characterArg);
+        const matchName = await profileResolveMatch(host, port, null);
         if (matchName) {
           const current = await profilesList();
           if (matchName !== current.active) {
@@ -104,7 +66,7 @@ export function Connect({ status, onError }: Props) {
         value={host}
         disabled={isLive}
         spellCheck={false}
-        onChange={(e) => handleHostChange(e.target.value)}
+        onChange={(e) => setHost(e.target.value)}
         aria-label="host"
       />
       <span className="connect-label">port:</span>
@@ -116,21 +78,6 @@ export function Connect({ status, onError }: Props) {
         max={65535}
         onChange={(e) => setPort(Number(e.target.value))}
         aria-label="port"
-      />
-      <span
-        className="connect-label"
-        title="optional — pin a profile to this character at connect time"
-      >
-        char:
-      </span>
-      <input
-        type="text"
-        value={character}
-        disabled={isLive}
-        spellCheck={false}
-        placeholder="optional"
-        onChange={(e) => setCharacter(e.target.value)}
-        aria-label="character"
       />
       <label className="connect-tls">
         <span className="connect-label">tls:</span>

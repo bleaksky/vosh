@@ -55,6 +55,17 @@ pub(crate) struct AppState {
     /// std Mutex because the critical section is two integer copies
     /// — async overhead is not worth it.
     pub(crate) window_size: std::sync::Mutex<(u16, u16)>,
+    /// Live connection target (host, port). Set when
+    /// `session_connect` succeeds, cleared on disconnect. Read by the
+    /// Char.Status-driven auto-switch path so the resolver knows
+    /// which connection's profile to pick. Stored under a std mutex
+    /// because the work inside the lock is just a clone.
+    pub(crate) current_connection: std::sync::Mutex<Option<(String, u16)>>,
+    /// Last character name observed via Char.Status or Char.Name on
+    /// the current session. Cleared on disconnect. Used to suppress
+    /// duplicate resolver calls when the MUD re-sends Char.Status on
+    /// every vitals update.
+    pub(crate) current_character: std::sync::Mutex<Option<String>>,
 }
 
 impl Default for AppState {
@@ -73,6 +84,8 @@ impl Default for AppState {
             // automated connect from a script) still gets a sensible
             // baseline.
             window_size: std::sync::Mutex::new((80, 24)),
+            current_connection: std::sync::Mutex::new(None),
+            current_character: std::sync::Mutex::new(None),
         }
     }
 }
@@ -156,6 +169,18 @@ pub(crate) async fn session_connect(
 
     // Clear session-scoped variables on reconnect; profile-scoped survive.
     state.profile.lock().await.vars.clear_session();
+
+    // Remember the live connection target so the Char.Status-driven
+    // auto-switch path can re-resolve against it once the MUD tells us
+    // who we logged in as. Cleared in `session_disconnect`. Reset the
+    // last-known character at the same time so a reconnect to a
+    // different account triggers a fresh resolve.
+    if let Ok(mut g) = state.current_connection.lock() {
+        *g = Some((host.clone(), port));
+    }
+    if let Ok(mut g) = state.current_character.lock() {
+        *g = None;
+    }
 
     let scrollback_path = tauri::Manager::path(&app)
         .app_data_dir()
@@ -286,6 +311,12 @@ pub(crate) async fn session_disconnect(state: State<'_, SharedState>) -> Result<
     let mut current = state.session.lock().await;
     if let Some(handle) = current.take() {
         handle.shutdown().await;
+    }
+    if let Ok(mut g) = state.current_connection.lock() {
+        *g = None;
+    }
+    if let Ok(mut g) = state.current_character.lock() {
+        *g = None;
     }
     Ok(())
 }
@@ -913,67 +944,21 @@ pub(crate) async fn profile_resolve_match(
     let Some(set) = guard.as_ref() else {
         return Ok(None);
     };
-    let host_l = host.trim().to_ascii_lowercase();
-    let character_l = character.as_deref().map(str::to_ascii_lowercase);
-    let mut best: Option<(&str, u8)> = None;
-    for entry in set.list() {
-        let Some(am) = &entry.auto_match else {
-            continue;
-        };
-        // Host is required to be set AND match (case-insensitive).
-        let Some(am_host) = &am.host else { continue };
-        if am_host.trim().to_ascii_lowercase() != host_l {
-            continue;
-        }
-        // Port: if specified, must equal.
-        if let Some(p) = am.port {
-            if p != port {
-                continue;
-            }
-        }
-        // Character: if the profile pins at least one character, the
-        // connect call must supply one AND it must match (case-
-        // insensitively) any name in the profile's list. A profile
-        // with a character pin that matches scores higher than a
-        // host-only match so multi-character setups resolve to the
-        // right one.
-        let mut score: u8 = 1; // host match
-        if am.port.is_some() {
-            score += 1;
-        }
-        if !am.characters.is_empty() {
-            let Some(connect_char) = &character_l else {
-                // Profile pins one or more characters but the connect
-                // call did not supply one — soft skip rather than
-                // match (we don't yet know which character it is).
-                continue;
-            };
-            let any_match = am
-                .characters
-                .iter()
-                .any(|name| name.trim().to_ascii_lowercase() == *connect_char);
-            if !any_match {
-                continue;
-            }
-            score += 2;
-        }
-        if best.map_or(true, |(_, b)| score > b) {
-            best = Some((entry.name.as_str(), score));
-        }
-    }
-    Ok(best.map(|(name, _)| name.to_string()))
+    Ok(set.resolve_match(&host, port, character.as_deref()))
 }
 
-#[tauri::command]
-pub(crate) async fn profile_switch(
-    app: AppHandle,
-    state: State<'_, SharedState>,
-    name: String,
+/// Shared body for switching the active profile. The
+/// `profile_switch` Tauri command and the Char.Status auto-switch
+/// path in `handle_char_known_for_auto_switch` both call this so the
+/// persist + flip + reload sequence stays identical.
+pub(crate) async fn apply_profile_switch(
+    app: &AppHandle,
+    state: &SharedState,
+    name: &str,
 ) -> Result<(), String> {
     // Step 1: snapshot + write the CURRENT active profile so user
     // changes since the last persist are not lost on switch.
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
+    persist_profile(app, state).await;
 
     // Step 2: flip the active pointer in the index.
     let (new_path, global_path) = {
@@ -981,7 +966,7 @@ pub(crate) async fn profile_switch(
         let Some(set) = guard.as_mut() else {
             return Err("profile set not initialized".into());
         };
-        set.switch(&name).map_err(|e| e.to_string())?;
+        set.switch(name).map_err(|e| e.to_string())?;
         (set.active_path(), set.global_path())
     };
 
@@ -1014,8 +999,83 @@ pub(crate) async fn profile_switch(
         }
     }
 
-    let _ = app.emit("vosh://profile-switched", &name);
+    let _ = app.emit("vosh://profile-switched", name);
     Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn profile_switch(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    name: String,
+) -> Result<(), String> {
+    let shared: SharedState = state.inner().clone();
+    apply_profile_switch(&app, &shared, &name).await
+}
+
+/// Called by the session GMCP handler when Char.Status or Char.Name
+/// reports a character name. Suppresses duplicate observations so the
+/// resolver does not re-run on every Char.Status tick, then resolves
+/// (host, port, character) against the profile set. When the resolved
+/// profile differs from the currently-active one, swap to it and
+/// announce on the terminal so the user knows the active profile
+/// changed.
+pub(crate) async fn handle_char_known_for_auto_switch(
+    app: &AppHandle,
+    state: &SharedState,
+    character: &str,
+) {
+    let trimmed = character.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    // Short-circuit on duplicate observations. Char.Status is sent on
+    // every vitals update, so without this gate the resolver would
+    // run every tick.
+    let should_resolve = {
+        let Ok(mut guard) = state.current_character.lock() else {
+            return;
+        };
+        if guard.as_deref() == Some(trimmed) {
+            false
+        } else {
+            *guard = Some(trimmed.to_string());
+            true
+        }
+    };
+    if !should_resolve {
+        return;
+    }
+    let Some((host, port)) = state.current_connection.lock().ok().and_then(|g| g.clone()) else {
+        return;
+    };
+    let target = {
+        let guard = state.profile_set.lock().await;
+        let Some(set) = guard.as_ref() else {
+            return;
+        };
+        let resolved = set.resolve_match(&host, port, Some(trimmed));
+        match resolved {
+            Some(name) if name != set.active_name() => Some(name),
+            _ => None,
+        }
+    };
+    let Some(new_name) = target else {
+        return;
+    };
+    if let Err(e) = apply_profile_switch(app, state, &new_name).await {
+        warn!(error = %e, "auto profile switch failed");
+        return;
+    }
+    // Yellow announce line on the terminal mirrors the [vosh] system-
+    // message style used by tick warnings.
+    let line = format!("\r\n\x1b[33m[vosh] auto-switched profile to {new_name}\x1b[0m\r\n");
+    let _ = app.emit(
+        "session://output",
+        OutputPayload {
+            bytes: line.into_bytes(),
+        },
+    );
 }
 
 #[derive(serde::Serialize)]

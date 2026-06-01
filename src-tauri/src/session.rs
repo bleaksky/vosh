@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 use serde_json::json;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
@@ -815,6 +815,23 @@ async fn handle_gmcp(
         let apply = script_state::apply_actions(&mut p, outcome);
         (tick_payload, apply)
     };
+
+    // Char.Status / Char.Name carry the logged-in character name on
+    // Aabahran (and most ROM derivatives). Extract it so the auto-
+    // switch path can re-resolve profiles against the now-known
+    // character. The handler short-circuits on duplicate observations
+    // so this is cheap even though Char.Status fires every vitals
+    // update.
+    if msg.package == "Char.Status" || msg.package == "Char.Name" {
+        if let Some(name) = msg.data.get("name").and_then(|v| v.as_str()) {
+            let owned = name.trim().to_string();
+            if !owned.is_empty() {
+                let state = app.state::<crate::commands::SharedState>();
+                crate::commands::handle_char_known_for_auto_switch(app, state.inner(), &owned)
+                    .await;
+            }
+        }
+    }
     if let Some(payload) = tick_reset_payload {
         if let Err(e) = app.emit("session://tick", &payload) {
             warn!(error = %e, "failed to emit tick payload after world hour change");
