@@ -1,19 +1,32 @@
-import { useEffect, useState } from 'react';
-import { migrationAnalyze, type MigrationPlan, type MigrationItemKind } from '../lib/session';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  migrationAnalyze,
+  migrationApply,
+  type MigrationConflictResolution,
+  type MigrationItemKind,
+  type MigrationPlan,
+} from '../lib/session';
 
 interface Props {
   onClose: () => void;
 }
 
-// Read-only preview of the Path B migration. Shows source profiles,
-// auto-resolved item counts per kind, the per-source-profile loadouts
-// that would be generated, and any conflicts the user would need to
-// pick winners on. No apply button yet — that wires in a follow-up
-// commit once this UX is validated.
+// Wizard for the Path B migration. Shows the analyzer's plan in three
+// sections (auto-resolved, conflicts, derived loadouts), lets the user
+// pick a winner per conflict via a radio per source, then runs the
+// apply step which writes catalog.toml + loadouts.toml, moves the
+// per-profile files into profiles/legacy/, and restarts the app so
+// the startup hook picks up Path B mode. The first variant in each
+// conflict is the default winner (analyzer source order is the
+// profile index order).
 export function MigrationWizard({ onClose }: Props) {
   const [plan, setPlan] = useState<MigrationPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(true);
+  // Map of conflict-key -> chosen source profile. Missing entries
+  // fall back to the first variant (the analyzer's default).
+  const [picks, setPicks] = useState<Record<string, string>>({});
+  const [applying, setApplying] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,6 +36,15 @@ export function MigrationWizard({ onClose }: Props) {
         if (!cancelled) {
           setPlan(p);
           setPending(false);
+          // Seed picks with each conflict's first variant so the
+          // submission payload is explicit even when the user does
+          // not interact.
+          const seed: Record<string, string> = {};
+          for (const c of p.conflicts) {
+            const first = c.variants[0]?.source_profile;
+            if (first) seed[conflictKey(c.kind, c.name)] = first;
+          }
+          setPicks(seed);
         }
       } catch (e) {
         if (!cancelled) {
@@ -36,16 +58,40 @@ export function MigrationWizard({ onClose }: Props) {
     };
   }, []);
 
+  const resolutions = useMemo<MigrationConflictResolution[]>(() => {
+    if (!plan) return [];
+    return plan.conflicts.map((c) => ({
+      kind: c.kind,
+      name: c.name,
+      source_profile: picks[conflictKey(c.kind, c.name)] ?? c.variants[0].source_profile,
+    }));
+  }, [plan, picks]);
+
+  const handleApply = async () => {
+    if (!plan) return;
+    setApplying(true);
+    try {
+      await migrationApply(resolutions);
+      // migration_apply restarts the app; if we are still here it
+      // means the restart was suppressed and we should report.
+      setError('migration applied but app did not restart — try restarting manually.');
+      setApplying(false);
+    } catch (e) {
+      setError(String(e));
+      setApplying(false);
+    }
+  };
+
   return (
     <div className="migration-wizard-backdrop" onClick={onClose}>
       <div
         className="migration-wizard"
         role="dialog"
-        aria-label="Path B migration preview"
+        aria-label="Path B migration"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="migration-wizard-header">
-          <span className="migration-wizard-title">migrate to global catalog (preview)</span>
+          <span className="migration-wizard-title">migrate to global catalog</span>
           <button type="button" className="migration-wizard-close" onClick={onClose}>
             [close]
           </button>
@@ -54,20 +100,43 @@ export function MigrationWizard({ onClose }: Props) {
         <div className="migration-wizard-body">
           {pending && <div className="migration-wizard-status">analyzing profiles...</div>}
           {error && <div className="migration-wizard-error">[error] {error}</div>}
-          {plan && <PlanView plan={plan} />}
+          {plan && (
+            <PlanView
+              plan={plan}
+              picks={picks}
+              onPick={(key, source) => setPicks((prev) => ({ ...prev, [key]: source }))}
+              disabled={applying}
+            />
+          )}
         </div>
 
         <footer className="migration-wizard-footer">
           <span className="migration-wizard-hint">
-            preview only — nothing is written to disk by this view.
+            applying writes catalog.toml + loadouts.toml, moves per-profile files into
+            profiles/legacy/, and restarts the app.
           </span>
+          <button
+            type="button"
+            className="settings-btn migration-apply-btn"
+            disabled={!plan || applying}
+            onClick={() => void handleApply()}
+          >
+            {applying ? '[applying...]' : '[apply migration]'}
+          </button>
         </footer>
       </div>
     </div>
   );
 }
 
-function PlanView({ plan }: { plan: MigrationPlan }) {
+interface PlanViewProps {
+  plan: MigrationPlan;
+  picks: Record<string, string>;
+  onPick: (key: string, source: string) => void;
+  disabled: boolean;
+}
+
+function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
   const autoResolvedTotal =
     plan.auto_resolved.aliases.length +
     plan.auto_resolved.triggers.length +
@@ -105,30 +174,46 @@ function PlanView({ plan }: { plan: MigrationPlan }) {
           <Empty>no conflicts — every named item is either unique or byte-identical.</Empty>
         ) : (
           <ul className="migration-conflict-list">
-            {plan.conflicts.map((c) => (
-              <li key={`${c.kind}-${c.name}`} className="migration-conflict">
-                <div className="migration-conflict-head">
-                  <span className={`migration-kind-tag migration-kind-${c.kind}`}>
-                    {kindLabel(c.kind)}
-                  </span>
-                  <span className="migration-conflict-name">{c.name}</span>
-                </div>
-                <ul className="migration-variant-list">
-                  {c.variants.map((v) => (
-                    <li key={v.source_profile} className="migration-variant">
-                      <span className="migration-variant-source">{v.source_profile}</span>
-                      <span className="migration-variant-body">{summarizeVariant(c.kind, v)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            ))}
+            {plan.conflicts.map((c) => {
+              const key = conflictKey(c.kind, c.name);
+              const chosen = picks[key] ?? c.variants[0].source_profile;
+              return (
+                <li key={key} className="migration-conflict">
+                  <div className="migration-conflict-head">
+                    <span className={`migration-kind-tag migration-kind-${c.kind}`}>
+                      {kindLabel(c.kind)}
+                    </span>
+                    <span className="migration-conflict-name">{c.name}</span>
+                  </div>
+                  <ul className="migration-variant-list">
+                    {c.variants.map((v) => (
+                      <li key={v.source_profile} className="migration-variant">
+                        <label className="migration-variant-radio">
+                          <input
+                            type="radio"
+                            name={key}
+                            value={v.source_profile}
+                            checked={chosen === v.source_profile}
+                            onChange={() => onPick(key, v.source_profile)}
+                            disabled={disabled}
+                          />
+                          <span className="migration-variant-source">{v.source_profile}</span>
+                        </label>
+                        <span className="migration-variant-body">
+                          {summarizeVariant(c.kind, v)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              );
+            })}
           </ul>
         )}
         {plan.conflicts.length > 0 && (
           <div className="migration-hint">
-            the apply step (not in this build) will let you pick which variant wins, or keep all
-            variants under renamed slots.
+            pick the variant you want preserved. unchecked profiles keep their version inside
+            profiles/legacy/ so nothing is permanently lost.
           </div>
         )}
       </Section>
@@ -160,8 +245,8 @@ function PlanView({ plan }: { plan: MigrationPlan }) {
           </ul>
         )}
         <div className="migration-hint">
-          each loadout enables the groups its source profile contributed. activate one and its
-          aliases / triggers / macros become live; deactivate it and they pass through.
+          each loadout enables the groups its source profile contributed. the previously-active
+          profile becomes the sole initial active loadout so your day-one session matches today.
         </div>
       </Section>
     </>
@@ -194,6 +279,10 @@ function kindLabel(kind: MigrationItemKind): string {
   return kind;
 }
 
+function conflictKey(kind: MigrationItemKind, name: string): string {
+  return `${kind}::${name}`;
+}
+
 function summarizeVariant(
   kind: MigrationItemKind,
   v: { item: { kind: MigrationItemKind; item: Record<string, unknown> } },
@@ -208,7 +297,6 @@ function summarizeVariant(
     const first = patterns.length > 0 ? patterns[0].pattern : '';
     return first.length > 80 ? `${first.slice(0, 80)}…` : first;
   }
-  // macro
   const command = (item.command ?? '') as string;
   return command.length > 80 ? `${command.slice(0, 80)}…` : command;
 }

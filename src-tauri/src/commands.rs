@@ -66,6 +66,15 @@ pub(crate) struct AppState {
     /// duplicate resolver calls when the MUD re-sends Char.Status on
     /// every vitals update.
     pub(crate) current_character: std::sync::Mutex<Option<String>>,
+    /// Path B authoring catalog. `Some` when the app started up with
+    /// `catalog.toml` present (Path B mode); `None` in legacy per-
+    /// profile mode. Mutated alongside the live `Profile` so on-disk
+    /// state stays in step with in-memory edits.
+    pub(crate) global_catalog: Arc<Mutex<Option<crate::loadout::GlobalCatalog>>>,
+    /// Path B loadout collection. Same `Some`/`None` semantics as
+    /// `global_catalog`. The active subset drives which catalog groups
+    /// the runtime gates on (see [`crate::loadout_store::apply_loadout_state`]).
+    pub(crate) loadout_set: Arc<Mutex<Option<crate::loadout::LoadoutSet>>>,
 }
 
 impl Default for AppState {
@@ -86,6 +95,8 @@ impl Default for AppState {
             window_size: std::sync::Mutex::new((80, 24)),
             current_connection: std::sync::Mutex::new(None),
             current_character: std::sync::Mutex::new(None),
+            global_catalog: Arc::new(Mutex::new(None)),
+            loadout_set: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -98,6 +109,17 @@ pub(crate) type SharedState = Arc<AppState>;
 /// the disk is full mid-flight, and the in-memory state is still
 /// correct for the rest of the session.
 async fn persist_profile(app: &AppHandle, state: &SharedState) {
+    // Path B branch. When `state.global_catalog` is `Some`, the user is
+    // post-migration: authored items live in catalog.toml and the live
+    // Profile is the cache. Write the live aliases / triggers / macros
+    // back to the catalog plus the loadout set; the per-profile branch
+    // below is skipped entirely (legacy profiles are in profiles/legacy/
+    // and never reopened from a Path B session).
+    if state.global_catalog.lock().await.is_some() {
+        persist_path_b(app, state).await;
+        return;
+    }
+
     // Resolve the active profile's path + global path via ProfileSet
     // if it's been loaded; fall back to the legacy single-file path
     // if ProfileSet is somehow missing (shouldn't happen post-
@@ -146,6 +168,73 @@ async fn persist_profile(app: &AppHandle, state: &SharedState) {
             warn!(error = %e, path = %g.display(), "auto-save global failed");
         }
     }
+}
+
+/// Path B persistence. Snapshots the live `Profile`'s authored items
+/// into `catalog.toml` and the in-memory `LoadoutSet` into
+/// `loadouts.toml`, both via the same atomic-write-with-backup
+/// pipeline the per-profile branch uses. Falls through to the legacy
+/// `global.toml` write so theme / font / `dock_layout` edits land on
+/// the same path in both modes.
+async fn persist_path_b(app: &AppHandle, state: &SharedState) {
+    let Ok(dir) = app.path().app_data_dir() else {
+        return;
+    };
+
+    // Catalog. Pull aliases / triggers / macros directly from the live
+    // Profile. The catalog is the authoritative source in Path B mode
+    // so an overwrite here is correct — anything the user typed via
+    // #alias / Settings made it into Profile and now into the file.
+    let (catalog, global_snapshot, scope) = {
+        let p = state.profile.lock().await;
+        let aliases: Vec<vosh_alias::Alias> = p.aliases.list().into_iter().cloned().collect();
+        let triggers: Vec<Trigger> = p.triggers.list();
+        let macros: Vec<Macro> = p.macros.clone();
+        let catalog = crate::loadout::GlobalCatalog {
+            aliases,
+            triggers,
+            macros,
+        };
+        let scope = state
+            .profile_set
+            .lock()
+            .await
+            .as_ref()
+            .map(|s| *s.scope())
+            .unwrap_or_default();
+        let global = GlobalConfig::from_profile(&p, &scope);
+        (catalog, global, scope)
+    };
+    let _ = scope; // global state already overlays via apply_to elsewhere
+
+    // Snapshot the current LoadoutSet from state. We do not mutate the
+    // active list here; that gets driven by future loadout_set_active
+    // commands. Just persist whatever the runtime currently holds.
+    let set_snapshot = state.loadout_set.lock().await.clone();
+
+    if let Err(e) = crate::loadout_store::save_global_catalog(&dir, &catalog) {
+        warn!(error = %e, "Path B catalog auto-save failed");
+    }
+    if let Some(set) = set_snapshot {
+        if let Err(e) = crate::loadout_store::save_loadout_set(&dir, &set) {
+            warn!(error = %e, "Path B loadout set auto-save failed");
+        }
+    }
+
+    let global_path = state
+        .profile_set
+        .lock()
+        .await
+        .as_ref()
+        .map(crate::profile_set::ProfileSet::global_path);
+    if let Some(g) = global_path {
+        if let Err(e) = global_snapshot.save(&g) {
+            warn!(error = %e, path = %g.display(), "Path B global auto-save failed");
+        }
+    }
+    // Mirror the new catalog into `state.global_catalog` so subsequent
+    // reads see the latest write without going back to disk.
+    *state.global_catalog.lock().await = Some(catalog);
 }
 
 #[tauri::command]
@@ -1540,9 +1629,9 @@ pub(crate) async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, S
 /// auto-resolved item, every conflict (one entry per name with two or
 /// more diverging variants), and the per-source-profile loadouts the
 /// migration would generate. Nothing is written to disk; the wizard
-/// uses this for the preview pane only. The follow-up
-/// `migration_apply` command (not in this build) takes the user's
-/// conflict resolutions and commits the plan.
+/// uses this for the preview pane only. The companion
+/// [`migration_apply`] command commits the plan once the user picks
+/// winners for any conflicts.
 #[tauri::command]
 pub(crate) async fn migration_analyze(
     state: State<'_, SharedState>,
@@ -1562,6 +1651,140 @@ pub(crate) async fn migration_analyze(
         sources.push((entry.name.clone(), cfg));
     }
     Ok(crate::migration::analyze_profiles(&sources))
+}
+
+/// One conflict resolution from the wizard. Identifies a single
+/// conflicted item (kind + name) and the source profile whose variant
+/// should win. Resolutions not present in the list fall back to the
+/// first variant in the conflict (the analyzer iterates source
+/// profiles in index order, so this is deterministic).
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ConflictResolution {
+    pub kind: crate::migration::ItemKind,
+    pub name: String,
+    pub source_profile: String,
+}
+
+/// Commit the Path B migration. Re-runs the analyzer, applies the
+/// user's per-conflict resolutions (or the first-variant default for
+/// any missing resolution), writes `catalog.toml` + `loadouts.toml`,
+/// moves every existing per-profile file into `profiles/legacy/`, and
+/// restarts the app so the startup hook picks up Path B mode. The
+/// previously-active profile name (from the index) becomes the sole
+/// initial active loadout so the user's first post-restart session
+/// keeps the same authoring set live.
+#[tauri::command]
+pub(crate) async fn migration_apply(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    resolutions: Vec<ConflictResolution>,
+) -> Result<(), String> {
+    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    let previously_active = {
+        let guard = state.profile_set.lock().await;
+        guard.as_ref().map(|s| s.active_name().to_string())
+    };
+
+    // Re-load sources from disk — the analyze call has to walk the
+    // same set the user just previewed, but a few seconds may have
+    // passed and we want the fresh snapshot rather than caching across
+    // commands.
+    let sources = {
+        let guard = state.profile_set.lock().await;
+        let Some(set) = guard.as_ref() else {
+            return Err("profile set not initialized".into());
+        };
+        let mut sources = Vec::with_capacity(set.list().len());
+        for entry in set.list() {
+            let path = set.profile_path(&entry.name);
+            let cfg = if path.exists() {
+                ProfileConfig::load(&path).map_err(|e| e.to_string())?
+            } else {
+                ProfileConfig::default()
+            };
+            sources.push((entry.name.clone(), cfg));
+        }
+        sources
+    };
+
+    let plan = crate::migration::analyze_profiles(&sources);
+    let mut catalog = plan.auto_resolved;
+    for conflict in &plan.conflicts {
+        let chosen_source = resolutions
+            .iter()
+            .find(|r| r.kind == conflict.kind && r.name == conflict.name)
+            .map_or_else(
+                || conflict.variants[0].source_profile.as_str(),
+                |r| r.source_profile.as_str(),
+            );
+        let chosen = conflict
+            .variants
+            .iter()
+            .find(|v| v.source_profile == chosen_source)
+            .ok_or_else(|| {
+                format!(
+                    "resolution for `{}` points to unknown source `{}`",
+                    conflict.name, chosen_source
+                )
+            })?;
+        match &chosen.item {
+            crate::migration::ItemPayload::Alias { item } => catalog.aliases.push(item.clone()),
+            crate::migration::ItemPayload::Trigger { item } => catalog.triggers.push(item.clone()),
+            crate::migration::ItemPayload::Macro { item } => catalog.macros.push(item.clone()),
+        }
+    }
+
+    let mut loadout_set = crate::loadout::LoadoutSet {
+        loadouts: plan.loadouts,
+        active: Vec::new(),
+    };
+    if let Some(name) = previously_active {
+        if loadout_set.loadouts.iter().any(|l| l.name == name) {
+            loadout_set.active.push(name);
+        }
+    }
+
+    crate::loadout_store::save_global_catalog(&app_data, &catalog).map_err(|e| e.to_string())?;
+    crate::loadout_store::save_loadout_set(&app_data, &loadout_set).map_err(|e| e.to_string())?;
+
+    // Move profiles/<name>.toml into profiles/legacy/. Keep the index
+    // file in place — it does not interfere with Path B mode and gives
+    // a recoverable rollback if the user reverts. Each move uses
+    // rename; cross-device or in-use cases fall through to copy-then-
+    // delete via the standard library's fallback.
+    let profiles_dir = app_data.join("profiles");
+    let legacy_dir = profiles_dir.join("legacy");
+    if let Err(e) = std::fs::create_dir_all(&legacy_dir) {
+        return Err(format!(
+            "failed to create legacy dir at {}: {e}",
+            legacy_dir.display()
+        ));
+    }
+    for (name, _) in &sources {
+        let src = profiles_dir.join(format!("{name}.toml"));
+        if !src.exists() {
+            continue;
+        }
+        let dst = legacy_dir.join(format!("{name}.toml"));
+        if let Err(e) = std::fs::rename(&src, &dst) {
+            // Cross-device fallback: copy then remove.
+            std::fs::copy(&src, &dst).map_err(|copy_err| {
+                format!(
+                    "failed to move {} to {}: {e}; copy fallback also failed: {copy_err}",
+                    src.display(),
+                    dst.display(),
+                )
+            })?;
+            let _ = std::fs::remove_file(&src);
+        }
+    }
+
+    // app.restart() is non-returning — emit a marker event so the
+    // frontend can flash a "restarting" toast in the brief window
+    // before the WebView is torn down.
+    let _ = app.emit("vosh://migration-restart", &());
+    app.restart();
 }
 
 /// Download + install the pending update and restart the app. Errors

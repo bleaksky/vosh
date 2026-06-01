@@ -44,8 +44,6 @@ use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
-use vosh_alias::AliasStore;
-use vosh_trigger::TriggerStore;
 
 use crate::loadout::{GlobalCatalog, LoadoutSet};
 use crate::profile::Profile;
@@ -126,45 +124,42 @@ pub(crate) fn save_loadout_set(app_data: &Path, set: &LoadoutSet) -> Result<(), 
     Ok(())
 }
 
-/// Write the per-store `disabled_groups` from the active loadouts'
-/// union.
+/// Write the per-store `disabled_groups` on a live `Profile` from the
+/// active loadouts' union.
 ///
 /// For each store the rule is: gather every group name that appears
 /// on at least one item; the disabled set is that universe minus the
-/// `LoadoutSet::effective_enabled_groups` output. Ungrouped items
+/// [`LoadoutSet::effective_enabled_groups`] output. Ungrouped items
 /// stay live because the stores already treat empty / `None` groups
 /// as always-on.
 ///
 /// This is idempotent and does not touch the items themselves, only
 /// the per-store bookkeeping the runtime gates on.
-pub(crate) fn apply_loadout_state(
-    set: &LoadoutSet,
-    aliases: &mut AliasStore,
-    triggers: &mut TriggerStore,
-    profile: &mut Profile,
-) {
+pub(crate) fn apply_loadout_state(set: &LoadoutSet, profile: &mut Profile) {
     let enabled: HashSet<String> = set.effective_enabled_groups().into_iter().collect();
 
     // Aliases. `AliasStore::groups()` returns (name, enabled), we
     // only need the names to build the universe.
-    let alias_groups: HashSet<String> = aliases
+    let alias_groups: HashSet<String> = profile
+        .aliases
         .groups()
         .into_iter()
         .map(|(name, _)| name)
         .filter(|n| !n.is_empty())
         .collect();
     let alias_disabled: Vec<String> = alias_groups.difference(&enabled).cloned().collect();
-    aliases.set_disabled_groups(alias_disabled);
+    profile.aliases.set_disabled_groups(alias_disabled);
 
     // Triggers, same shape.
-    let trigger_groups: HashSet<String> = triggers
+    let trigger_groups: HashSet<String> = profile
+        .triggers
         .groups()
         .into_iter()
         .map(|(name, _)| name)
         .filter(|n| !n.is_empty())
         .collect();
     let trigger_disabled: Vec<String> = trigger_groups.difference(&enabled).cloned().collect();
-    triggers.set_disabled_groups(trigger_disabled);
+    profile.triggers.set_disabled_groups(trigger_disabled);
 
     // Macros. No wrapper store, the profile owns the set directly.
     let macro_groups: HashSet<String> = profile
@@ -292,59 +287,67 @@ mod tests {
         fs::remove_dir_all(&dir).ok();
     }
 
+    fn profile_with_items(
+        aliases: Vec<Alias>,
+        triggers: Vec<Trigger>,
+        macros: Vec<Macro>,
+    ) -> Profile {
+        let mut p = Profile {
+            macros,
+            ..Profile::default()
+        };
+        for a in aliases {
+            p.aliases.set(a);
+        }
+        for t in triggers {
+            p.triggers.set(t).unwrap();
+        }
+        p
+    }
+
     #[test]
     fn apply_with_no_active_loadouts_disables_every_group() {
         // Every group present in any store is disabled when nothing is
         // active. Ungrouped items are not affected because the stores
         // treat empty group as always-on.
-        let mut aliases = AliasStore::default();
-        aliases.set(alias_with_group("kk", "kick %1", Some("combat")));
-
-        let mut triggers = TriggerStore::default();
-        triggers
-            .set(make_trigger("dot", r"burning", Some("buffs")))
-            .unwrap();
-
-        let mut profile = Profile {
-            macros: vec![Macro {
+        let mut profile = profile_with_items(
+            vec![alias_with_group("kk", "kick %1", Some("combat"))],
+            vec![make_trigger("dot", r"burning", Some("buffs"))],
+            vec![Macro {
                 key: "F1".into(),
                 command: "north".into(),
                 group: Some("movement".into()),
             }],
-            ..Profile::default()
-        };
+        );
 
         let set = LoadoutSet::default();
-        apply_loadout_state(&set, &mut aliases, &mut triggers, &mut profile);
+        apply_loadout_state(&set, &mut profile);
 
-        assert!(aliases.disabled_groups().contains(&"combat".to_string()));
-        assert!(triggers.disabled_groups().contains(&"buffs".to_string()));
+        assert!(profile
+            .aliases
+            .disabled_groups()
+            .contains(&"combat".to_string()));
+        assert!(profile
+            .triggers
+            .disabled_groups()
+            .contains(&"buffs".to_string()));
         assert!(profile.disabled_macro_groups.contains("movement"));
     }
 
     #[test]
     fn apply_with_one_active_loadout_enables_its_groups_only() {
-        let mut aliases = AliasStore::default();
-        aliases.set(alias_with_group("kk", "kick %1", Some("combat")));
-        aliases.set(alias_with_group(
-            "smelt",
-            "smelt iron ore",
-            Some("crafting"),
-        ));
-
-        let mut triggers = TriggerStore::default();
-        triggers
-            .set(make_trigger("dot", r"burning", Some("buffs")))
-            .unwrap();
-
-        let mut profile = Profile {
-            macros: vec![Macro {
+        let mut profile = profile_with_items(
+            vec![
+                alias_with_group("kk", "kick %1", Some("combat")),
+                alias_with_group("smelt", "smelt iron ore", Some("crafting")),
+            ],
+            vec![make_trigger("dot", r"burning", Some("buffs"))],
+            vec![Macro {
                 key: "F1".into(),
                 command: "north".into(),
                 group: Some("movement".into()),
             }],
-            ..Profile::default()
-        };
+        );
 
         let mut set = LoadoutSet::default();
         let mut warrior = Loadout::empty("warrior");
@@ -352,28 +355,29 @@ mod tests {
         set.loadouts = vec![warrior];
         set.active = vec!["warrior".into()];
 
-        apply_loadout_state(&set, &mut aliases, &mut triggers, &mut profile);
+        apply_loadout_state(&set, &mut profile);
 
-        let alias_disabled = aliases.disabled_groups();
+        let alias_disabled = profile.aliases.disabled_groups();
         assert!(!alias_disabled.contains(&"combat".to_string()));
         assert!(alias_disabled.contains(&"crafting".to_string()));
-        assert!(triggers.disabled_groups().contains(&"buffs".to_string()));
+        assert!(profile
+            .triggers
+            .disabled_groups()
+            .contains(&"buffs".to_string()));
         assert!(!profile.disabled_macro_groups.contains("movement"));
     }
 
     #[test]
     fn apply_unions_multiple_active_loadouts() {
-        let mut aliases = AliasStore::default();
-        aliases.set(alias_with_group("kk", "kick %1", Some("combat")));
-        aliases.set(alias_with_group(
-            "smelt",
-            "smelt iron ore",
-            Some("crafting"),
-        ));
-        aliases.set(alias_with_group("hb", "say hello there", Some("social")));
-
-        let mut triggers = TriggerStore::default();
-        let mut profile = Profile::default();
+        let mut profile = profile_with_items(
+            vec![
+                alias_with_group("kk", "kick %1", Some("combat")),
+                alias_with_group("smelt", "smelt iron ore", Some("crafting")),
+                alias_with_group("hb", "say hello there", Some("social")),
+            ],
+            vec![],
+            vec![],
+        );
 
         let mut warrior = Loadout::empty("warrior");
         warrior.enabled_groups = vec!["combat".into()];
@@ -384,9 +388,9 @@ mod tests {
             active: vec!["warrior".into(), "crafter".into()],
         };
 
-        apply_loadout_state(&set, &mut aliases, &mut triggers, &mut profile);
+        apply_loadout_state(&set, &mut profile);
 
-        let disabled = aliases.disabled_groups();
+        let disabled = profile.aliases.disabled_groups();
         assert!(!disabled.contains(&"combat".to_string()));
         assert!(!disabled.contains(&"crafting".to_string()));
         assert!(disabled.contains(&"social".to_string()));
@@ -397,11 +401,11 @@ mod tests {
         // Running apply twice in a row produces identical state. Catches
         // accidental accumulation bugs where the function appended to
         // disabled_groups instead of replacing it.
-        let mut aliases = AliasStore::default();
-        aliases.set(alias_with_group("kk", "kick %1", Some("combat")));
-
-        let mut triggers = TriggerStore::default();
-        let mut profile = Profile::default();
+        let mut profile = profile_with_items(
+            vec![alias_with_group("kk", "kick %1", Some("combat"))],
+            vec![],
+            vec![],
+        );
         let mut warrior = Loadout::empty("warrior");
         warrior.enabled_groups = vec!["combat".into()];
         let set = LoadoutSet {
@@ -409,10 +413,10 @@ mod tests {
             active: vec!["warrior".into()],
         };
 
-        apply_loadout_state(&set, &mut aliases, &mut triggers, &mut profile);
-        let first = aliases.disabled_groups();
-        apply_loadout_state(&set, &mut aliases, &mut triggers, &mut profile);
-        let second = aliases.disabled_groups();
+        apply_loadout_state(&set, &mut profile);
+        let first = profile.aliases.disabled_groups();
+        apply_loadout_state(&set, &mut profile);
+        let second = profile.aliases.disabled_groups();
         assert_eq!(first, second);
     }
 
@@ -421,13 +425,13 @@ mod tests {
         // Items with no group must never appear in disabled_groups (the
         // stores treat empty group as always-on independently, but the
         // apply function should not surface "" into the set either).
-        let mut aliases = AliasStore::default();
-        aliases.set(Alias::new("loose", "look")); // group: None
-
-        let mut triggers = TriggerStore::default();
-        let mut profile = Profile::default();
+        let mut profile = profile_with_items(
+            vec![Alias::new("loose", "look")], // group: None
+            vec![],
+            vec![],
+        );
         let set = LoadoutSet::default();
-        apply_loadout_state(&set, &mut aliases, &mut triggers, &mut profile);
-        assert!(aliases.disabled_groups().is_empty());
+        apply_loadout_state(&set, &mut profile);
+        assert!(profile.aliases.disabled_groups().is_empty());
     }
 }
