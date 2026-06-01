@@ -14,6 +14,7 @@ mod import;
 mod input;
 mod line_accumulator;
 mod loadout;
+mod loadout_store;
 mod log_state;
 mod map_state;
 mod migration;
