@@ -994,6 +994,21 @@ export async function migrationAnalyze(): Promise<MigrationPlan> {
   return invoke('migration_analyze');
 }
 
+export interface MigrationConflictResolution {
+  kind: MigrationItemKind;
+  name: string;
+  source_profile: string;
+}
+
+// Commit the migration. The backend re-runs the analyzer, applies the
+// per-conflict resolutions (or first-variant default for any missing
+// resolution), writes catalog.toml + loadouts.toml, moves the per-
+// profile files into profiles/legacy/, and restarts the app. This
+// call typically never returns — the restart kicks the WebView.
+export async function migrationApply(resolutions: MigrationConflictResolution[]): Promise<void> {
+  return invoke('migration_apply', { resolutions });
+}
+
 // Per-category scope toggle (Profile vs Global).
 export type ProfileScope = 'profile' | 'global';
 

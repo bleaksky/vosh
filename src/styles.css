@@ -4272,7 +4272,11 @@ body {
 }
 
 .migration-wizard-footer {
-  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 14px;
   border-top: 1px solid var(--c-border);
   background: var(--c-surface-deep);
 }
@@ -4280,6 +4284,17 @@ body {
 .migration-wizard-hint {
   color: var(--c-text-faint);
   font-size: 0.85em;
+  line-height: 1.4;
+  flex: 1 1 auto;
+}
+
+.migration-apply-btn {
+  flex: 0 0 auto;
+}
+
+.migration-apply-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .migration-section {
@@ -4396,6 +4411,17 @@ body {
   gap: 10px;
   padding: 3px 6px;
   font-size: 0.9em;
+}
+
+.migration-variant-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.migration-variant-radio input[type='radio'] {
+  margin: 0;
 }
 
 .migration-variant-source {

@@ -32,13 +32,13 @@ use commands::{
     dock_layout_get, dock_layout_set, import_apply, import_detect, logs_export, logs_list_sessions,
     logs_search, macros_delete, macros_groups_list, macros_list, macros_set,
     macros_set_group_enabled, map_area_snapshot, map_set_avoid, map_set_note, map_walk_to,
-    migration_analyze, open_settings_window, plugins_list, plugins_reload, plugins_set_enabled,
-    presets_install, presets_remove, profile_create, profile_delete, profile_duplicate,
-    profile_export, profile_get_scope, profile_import, profile_rename, profile_resolve_match,
-    profile_set_metadata, profile_set_scope, profile_switch, profiles_list, scrollback_load,
-    session_connect, session_disconnect, session_send, session_send_input, session_set_window_size,
-    target_get, triggers_export, triggers_groups_list, triggers_import, triggers_list,
-    triggers_set_group_enabled, ui_get_config, ui_set_config, updater_check,
+    migration_analyze, migration_apply, open_settings_window, plugins_list, plugins_reload,
+    plugins_set_enabled, presets_install, presets_remove, profile_create, profile_delete,
+    profile_duplicate, profile_export, profile_get_scope, profile_import, profile_rename,
+    profile_resolve_match, profile_set_metadata, profile_set_scope, profile_switch, profiles_list,
+    scrollback_load, session_connect, session_disconnect, session_send, session_send_input,
+    session_set_window_size, target_get, triggers_export, triggers_groups_list, triggers_import,
+    triggers_list, triggers_set_group_enabled, ui_get_config, ui_set_config, updater_check,
     updater_install_and_relaunch, AppState, SharedState,
 };
 use fonts::{fonts_list, handle_font_uri};
@@ -171,6 +171,50 @@ pub fn run() {
                         error!(error = %e, "failed to load profile set; using in-memory defaults");
                     }
                 }
+
+                // Path B startup hook. Detect catalog.toml; if present,
+                // overlay catalog content onto the live Profile (replacing
+                // whatever per-profile load just put there) and apply the
+                // active loadouts' enabled_groups. global.toml stays as the
+                // shared UI surface either way.
+                if loadout_store::path_b_mode_active(&path) {
+                    let catalog_load = loadout_store::load_global_catalog(&path);
+                    let set_load = loadout_store::load_loadout_set(&path);
+                    match (catalog_load, set_load) {
+                        (Ok(catalog), Ok(set)) => {
+                            let profile = state.profile.clone();
+                            let catalog_for_state = catalog.clone();
+                            let set_for_state = set.clone();
+                            tauri::async_runtime::block_on(async move {
+                                let mut p = profile.lock().await;
+                                let mut aliases = vosh_alias::AliasStore::new();
+                                for a in &catalog.aliases {
+                                    aliases.set(a.clone());
+                                }
+                                p.aliases = aliases;
+                                let mut triggers = vosh_trigger::TriggerStore::new();
+                                for t in &catalog.triggers {
+                                    if let Err(e) = triggers.set(t.clone()) {
+                                        info!(error = %e, "catalog trigger rejected at startup");
+                                    }
+                                }
+                                p.triggers = triggers;
+                                p.macros.clone_from(&catalog.macros);
+                                loadout_store::apply_loadout_state(&set, &mut p);
+                            });
+                            let catalog_arc = state.global_catalog.clone();
+                            let set_arc = state.loadout_set.clone();
+                            tauri::async_runtime::block_on(async move {
+                                *catalog_arc.lock().await = Some(catalog_for_state);
+                                *set_arc.lock().await = Some(set_for_state);
+                            });
+                            info!("loaded Path B catalog + loadout set");
+                        }
+                        (Err(e), _) | (_, Err(e)) => {
+                            error!(error = %e, "Path B files present but failed to load; falling back to per-profile state");
+                        }
+                    }
+                }
                 match open_log_store(&path) {
                     Ok(store) => {
                         let logs = state.logs.clone();
@@ -271,6 +315,7 @@ pub fn run() {
             profile_set_metadata,
             profile_resolve_match,
             migration_analyze,
+            migration_apply,
             profile_get_scope,
             profile_set_scope,
             plugins_list,

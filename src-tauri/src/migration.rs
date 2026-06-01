@@ -57,7 +57,7 @@ use crate::profile_config::ProfileConfig;
 
 /// Which kind of item a conflict or auto-resolved entry refers to.
 /// The frontend wizard renders different summaries per kind.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ItemKind {
     Alias,
