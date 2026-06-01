@@ -1534,6 +1534,36 @@ pub(crate) async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, S
     }
 }
 
+/// Read-only Path B migration preview. Walks the current profile set,
+/// loads each per-profile [`ProfileConfig`] off disk, and runs the
+/// analyzer in [`crate::migration`]. Returns the full plan: every
+/// auto-resolved item, every conflict (one entry per name with two or
+/// more diverging variants), and the per-source-profile loadouts the
+/// migration would generate. Nothing is written to disk; the wizard
+/// uses this for the preview pane only. The follow-up
+/// `migration_apply` command (not in this build) takes the user's
+/// conflict resolutions and commits the plan.
+#[tauri::command]
+pub(crate) async fn migration_analyze(
+    state: State<'_, SharedState>,
+) -> Result<crate::migration::MigrationPlan, String> {
+    let guard = state.profile_set.lock().await;
+    let Some(set) = guard.as_ref() else {
+        return Err("profile set not initialized".into());
+    };
+    let mut sources: Vec<(String, ProfileConfig)> = Vec::with_capacity(set.list().len());
+    for entry in set.list() {
+        let path = set.profile_path(&entry.name);
+        let cfg = if path.exists() {
+            ProfileConfig::load(&path).map_err(|e| e.to_string())?
+        } else {
+            ProfileConfig::default()
+        };
+        sources.push((entry.name.clone(), cfg));
+    }
+    Ok(crate::migration::analyze_profiles(&sources))
+}
+
 /// Download + install the pending update and restart the app. Errors
 /// surface to the frontend; the relaunch is a hard exit so any UI
 /// confirmation has to happen before this call returns.
