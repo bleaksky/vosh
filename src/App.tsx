@@ -15,6 +15,7 @@ import { RoomStrip } from './components/RoomStrip';
 import { TickPanel, TimePanel, VitalsBar } from './components/VitalsBar';
 import { UpdateNotice } from './components/UpdateNotice';
 import {
+  broadcastUiConfigChanges,
   dockLayoutGet,
   dockLayoutSet,
   getUiConfig,
@@ -25,6 +26,7 @@ import {
   presetsRemove,
   subscribeCustomThemesChanged,
   subscribeDockLayoutChanged,
+  subscribeProfileSwitched,
   subscribeSidePanelsFillHeightChanged,
   subscribeSplitDividerChanged,
   type StatePayload,
@@ -345,6 +347,47 @@ function App() {
       .catch(() => void applyAndBroadcastTheme('system'))
       .finally(reveal);
     return onUnmount;
+  }, []);
+
+  // When the active profile changes (manual #profile switch, Settings
+  // click, or Char.Status auto-swap after login), the backend has
+  // already swapped the in-memory Profile but the frontend's React
+  // state still mirrors the old profile's theme / font / vitals /
+  // panel layout / etc. Re-fetch the new UiConfig, apply locally, and
+  // broadcast the diff so every other window's per-field subscriber
+  // settles too. Dock layout sits in its own store and reloads
+  // explicitly because its event is not part of the UiConfig fan-out.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void subscribeProfileSwitched(() => {
+      void (async () => {
+        try {
+          const cfg = await getUiConfig();
+          if (cancelled) return;
+          setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
+          void applyAndBroadcastTheme(cfg.theme);
+          setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
+          setFontSize(cfg.font_size || 14);
+          setThemeTerminalColors(cfg.theme_terminal_colors);
+          applySplitDividerColor(cfg.split_divider_color);
+          setSidePanelsFillHeight(cfg.side_panels_fill_height);
+          await broadcastUiConfigChanges(cfg);
+          const entries = await dockLayoutGet();
+          if (cancelled) return;
+          setPanelLayout(panelLayoutFromDock(entries));
+        } catch (e) {
+          console.error('[app] profile-switched refresh failed', e);
+        }
+      })();
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
   }, []);
 
   useEffect(() => {

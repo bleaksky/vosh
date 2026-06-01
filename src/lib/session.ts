@@ -758,37 +758,15 @@ function deepEqual<T>(a: T, b: T): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-export async function setUiConfig(config: UiConfig): Promise<void> {
-  await invoke('ui_set_config', {
-    theme: config.theme,
-    autoUpdate: config.auto_update,
-    fontFamily: config.font_family,
-    fontSize: config.font_size,
-    // Wire format intentionally drops `label: null` to the omitted
-    // form so the backend's `Option<String>` deserializes cleanly.
-    trackedAffects: config.tracked_affects.map((t) => ({
-      name: t.name,
-      ...(t.label ? { label: t.label } : {}),
-    })),
-    enabledPresets: config.enabled_presets,
-    keepLastCommand: config.keep_last_command,
-    themeTerminalColors: config.theme_terminal_colors,
-    customThemes: config.custom_themes,
-    splitDividerColor: config.split_divider_color,
-    sidePanelsFillHeight: config.side_panels_fill_height,
-    pasteLineDelayMs: config.paste_line_delay_ms,
-    vitals: config.vitals,
-    moonsPosition: config.moons_position,
-  });
+// Fire the cross-window `vosh://*-changed` event fan-out for every
+// field in `config` that differs from the last-broadcast snapshot.
+// Both `setUiConfig` (after writing to disk) and the
+// profile-switched handler in App.tsx (after re-fetching the new
+// profile's config) call this so every window's per-field subscriber
+// sees the updated value.
+export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> {
   const prev = lastSentConfig;
-  // Snapshot BEFORE the emits so a listener that re-reads via
-  // `getUiConfig` sees the new state if it races us.
   lastSentConfig = config;
-
-  // Emit theme + custom-themes BEFORE any other event so the main
-  // window's theme registry is up-to-date by the time `theme-changed`
-  // points at a custom theme id. The ordering matters; the diffing
-  // does not change that.
   await emitChanged(
     'vosh://custom-themes-changed',
     config.custom_themes,
@@ -831,6 +809,35 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     prev?.tracked_affects,
     deepEqual,
   );
+}
+
+export async function setUiConfig(config: UiConfig): Promise<void> {
+  await invoke('ui_set_config', {
+    theme: config.theme,
+    autoUpdate: config.auto_update,
+    fontFamily: config.font_family,
+    fontSize: config.font_size,
+    // Wire format intentionally drops `label: null` to the omitted
+    // form so the backend's `Option<String>` deserializes cleanly.
+    trackedAffects: config.tracked_affects.map((t) => ({
+      name: t.name,
+      ...(t.label ? { label: t.label } : {}),
+    })),
+    enabledPresets: config.enabled_presets,
+    keepLastCommand: config.keep_last_command,
+    themeTerminalColors: config.theme_terminal_colors,
+    customThemes: config.custom_themes,
+    splitDividerColor: config.split_divider_color,
+    sidePanelsFillHeight: config.side_panels_fill_height,
+    pasteLineDelayMs: config.paste_line_delay_ms,
+    vitals: config.vitals,
+    moonsPosition: config.moons_position,
+  });
+  // Theme + custom-themes go out first so any other window's theme
+  // registry is current by the time `theme-changed` points at a
+  // custom theme id. `broadcastUiConfigChanges` preserves that
+  // ordering.
+  await broadcastUiConfigChanges(config);
 }
 
 export async function subscribeMoonsPositionChanged(
