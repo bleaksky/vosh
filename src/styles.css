@@ -1648,8 +1648,17 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Settings window. Shares .app + TopBar chrome with the main window;
-   the body is a single column of label/control rows. */
+/* Settings window. Shares .app + TopBar chrome with the main window.
+   Body splits into a left-nav + right-pane shell so the section list
+   stays visible while the right pane scrolls. */
+
+.settings-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
 
 .settings-app .settings-body {
   flex: 1 1 auto;
@@ -1659,6 +1668,7 @@ body {
   gap: 14px;
   overflow-y: auto;
   min-height: 0;
+  min-width: 0;
 }
 
 .settings-version {
@@ -1684,6 +1694,23 @@ body {
   gap: 4px;
 }
 
+/* Vertical variant used inside .settings-shell. Becomes a left-side
+   nav column with one tab per row. Existing button styles (color,
+   accent on active) all carry over; only layout shifts. */
+.settings-tabs-vertical {
+  flex-direction: column;
+  align-items: stretch;
+  height: auto;
+  min-height: 0;
+  width: 160px;
+  padding: 12px 0;
+  background: var(--c-surface-deep);
+  border-right: 1px solid var(--c-border);
+  border-bottom: none;
+  gap: 2px;
+  overflow-y: auto;
+}
+
 .settings-tab {
   background: transparent;
   border: none;
@@ -1707,10 +1734,35 @@ body {
   border-bottom-color: var(--c-accent);
 }
 
+/* In the vertical nav, the active marker moves from a bottom border
+   to a left border so the accent runs alongside the section name
+   instead of underlining it. The button also widens to fill the
+   column and pads vertically. */
+.settings-tabs-vertical .settings-tab {
+  width: 100%;
+  height: 28px;
+  padding: 0 14px;
+  border-bottom: none;
+  border-left: 2px solid transparent;
+  margin-bottom: 0;
+}
+
+.settings-tabs-vertical .settings-tab-active {
+  border-bottom-color: transparent;
+  border-left-color: var(--c-accent);
+  background: var(--c-surface);
+}
+
 /* Inline wrapper so each tab + its optional trailing divider stay
    together inside the tab strip's flex row. */
 .settings-tab-wrap {
   display: inline-flex;
+  align-items: stretch;
+}
+
+.settings-tabs-vertical .settings-tab-wrap {
+  display: flex;
+  flex-direction: column;
   align-items: stretch;
 }
 
@@ -1722,6 +1774,15 @@ body {
   margin: 4px 6px 4px 10px;
   background: var(--c-border-strong, var(--c-border));
   opacity: 0.55;
+  align-self: stretch;
+}
+
+/* In the vertical nav the divider rotates: a thin horizontal hairline
+   that spans the nav width between groups. */
+.settings-tabs-vertical .settings-tab-divider {
+  width: auto;
+  height: 1px;
+  margin: 6px 12px;
   align-self: stretch;
 }
 
@@ -5251,4 +5312,166 @@ body {
 .group-worth dd {
   margin: 0;
   color: var(--c-text);
+}
+
+/* Loadouts tab. Path B-only section listing every loadout with an
+   active checkbox, description, group chips, and the auto-match
+   block. Editing the loadout body (rename, edit groups, edit
+   auto-match) lands in a follow-up. */
+.loadouts-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.loadouts-help {
+  color: var(--c-text-faint);
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+.loadouts-active-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  background: var(--c-surface-emphasis);
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+}
+
+.loadouts-active-label {
+  color: var(--c-text-faint);
+  font-size: 0.9em;
+}
+
+.loadouts-clear-btn {
+  flex: 0 0 auto;
+}
+
+.loadouts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.loadout-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-left: 2px solid transparent;
+  border-radius: 2px;
+}
+
+.loadout-row-active {
+  border-left-color: var(--c-accent);
+  background: var(--c-surface-emphasis);
+}
+
+.loadout-row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.loadout-row-head input[type='checkbox'] {
+  margin: 0;
+}
+
+.loadout-row-name {
+  color: var(--c-text);
+  font-weight: 600;
+}
+
+.loadout-row-active-tag {
+  color: var(--c-accent);
+  font-size: 0.78em;
+  letter-spacing: 0.04em;
+}
+
+.loadout-row-description {
+  color: var(--c-text-faint);
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.loadout-row-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.loadout-row-groups-empty {
+  color: var(--c-text-faint);
+  font-style: italic;
+  font-size: 0.85em;
+}
+
+.loadout-group-tag {
+  padding: 1px 8px;
+  font-size: 0.8em;
+  background: var(--c-surface-deep);
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  color: var(--c-text-faint);
+}
+
+.loadout-row-active .loadout-group-tag {
+  color: var(--c-text);
+}
+
+.loadout-row-automatch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 0.85em;
+  color: var(--c-text-faint);
+  border-top: 1px dashed var(--c-border);
+}
+
+.loadout-row-automatch-label {
+  color: var(--c-text-muted, var(--c-text-faint));
+  font-weight: 600;
+}
+
+.loadout-row-automatch-field {
+  color: var(--c-text);
+}
+
+.loadouts-status {
+  color: var(--c-text-faint);
+  padding: 12px;
+}
+
+.loadouts-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  background: var(--c-surface-emphasis);
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+}
+
+.loadouts-empty-title {
+  color: var(--c-text);
+  font-weight: 600;
+}
+
+.loadouts-empty-body {
+  color: var(--c-text-faint);
+  font-size: 0.9em;
+  line-height: 1.45;
 }
