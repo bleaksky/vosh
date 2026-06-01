@@ -389,7 +389,7 @@ fn default_font_size() -> u32 {
     14
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ConnectionConfig {
     pub host: String,
     pub port: u16,
@@ -407,7 +407,7 @@ impl Default for ConnectionConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct TickPersistConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
