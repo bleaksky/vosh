@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { TopBarLoadouts } from './TopBarLoadouts';
 
 // Platform sniff. The square button means "make the window as big as
 // possible." On macOS that idiom maps to native full-screen mode (the
@@ -61,6 +62,7 @@ export function TopBar({
       <span className="topbar-spacer" data-tauri-drag-region />
       {showAuxButtons && (
         <div className="topbar-aux">
+          <TopBarLoadouts />
           {onToggleChat && (
             <button
               type="button"
