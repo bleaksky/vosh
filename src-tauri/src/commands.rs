@@ -1805,6 +1805,95 @@ pub(crate) async fn app_quit(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// One loadout as the frontend cares about it: the user-visible
+/// identifying fields, the `enabled_groups` list (chips for the picker),
+/// and the auto-match block.
+#[derive(Debug, Clone, serde::Serialize)]
+pub(crate) struct LoadoutSummary {
+    pub name: String,
+    pub description: Option<String>,
+    pub enabled_groups: Vec<String>,
+    pub auto_match: Option<crate::profile_set::AutoMatch>,
+}
+
+/// Shape returned by [`loadouts_get_state`]. Carries the active list,
+/// the full loadout summaries, and a `path_b_active` flag so the
+/// frontend can decide whether to render the Loadouts tab at all.
+#[derive(Debug, Clone, serde::Serialize)]
+pub(crate) struct LoadoutsState {
+    pub path_b_active: bool,
+    pub active: Vec<String>,
+    pub loadouts: Vec<LoadoutSummary>,
+}
+
+/// Snapshot the current Path B loadout state for the Settings UI.
+/// In legacy mode returns `path_b_active: false` plus empty lists so
+/// the frontend can hide the Loadouts tab. In Path B mode the
+/// active list and every loadout's summary come from the
+/// `state.loadout_set` mutex.
+#[tauri::command]
+pub(crate) async fn loadouts_get_state(
+    state: State<'_, SharedState>,
+) -> Result<LoadoutsState, String> {
+    let guard = state.loadout_set.lock().await;
+    let Some(set) = guard.as_ref() else {
+        return Ok(LoadoutsState {
+            path_b_active: false,
+            active: Vec::new(),
+            loadouts: Vec::new(),
+        });
+    };
+    let summaries: Vec<LoadoutSummary> = set
+        .loadouts
+        .iter()
+        .map(|l| LoadoutSummary {
+            name: l.name.clone(),
+            description: l.description.clone(),
+            enabled_groups: l.enabled_groups.clone(),
+            auto_match: l.auto_match.clone(),
+        })
+        .collect();
+    Ok(LoadoutsState {
+        path_b_active: true,
+        active: set.active.clone(),
+        loadouts: summaries,
+    })
+}
+
+/// Replace the active-loadouts list and recompute every store's
+/// `disabled_groups` from the new union. Persists the loadout set
+/// to disk and emits a state-changed event so other windows (e.g. a
+/// future `TopBar` checklist) see the update.
+#[tauri::command]
+pub(crate) async fn loadouts_set_active(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    active: Vec<String>,
+) -> Result<(), String> {
+    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    {
+        let mut guard = state.loadout_set.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Err("Path B not active".into());
+        };
+        // Filter to known loadout names. A stale name (e.g. from a
+        // future-truncated payload) is silently dropped rather than
+        // returning an error.
+        set.active = active
+            .into_iter()
+            .filter(|n| set.loadouts.iter().any(|l| &l.name == n))
+            .collect();
+        let snapshot = set.clone();
+        let mut p = state.profile.lock().await;
+        crate::loadout_store::apply_loadout_state(&snapshot, &mut p);
+        if let Err(e) = crate::loadout_store::save_loadout_set(&app_data, &snapshot) {
+            warn!(error = %e, "loadouts.toml save failed");
+        }
+    }
+    let _ = app.emit("vosh://loadouts-changed", &());
+    Ok(())
+}
+
 /// Download + install the pending update and restart the app. Errors
 /// surface to the frontend; the relaunch is a hard exit so any UI
 /// confirmation has to happen before this call returns.

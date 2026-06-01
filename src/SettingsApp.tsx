@@ -10,7 +10,9 @@ import { LogsTab } from './components/LogsTab';
 import { MacrosTab } from './components/MacrosTab';
 import { ImportTab } from './components/ImportTab';
 import { ProfilesTab } from './components/ProfilesTab';
+import { LoadoutsTab } from './components/LoadoutsTab';
 import { ThemesTab } from './components/ThemesTab';
+import { loadoutsGetState, subscribeLoadoutsChanged } from './lib/session';
 import {
   checkForUpdate,
   DEFAULT_VITALS_CONFIG,
@@ -77,20 +79,23 @@ type TabId =
   | 'themes'
   | 'panels'
   | 'profiles'
+  | 'loadouts'
   | 'triggers'
   | 'aliases'
   | 'macros'
   | 'import'
   | 'logs';
-// Tab list with a `groupEnd` marker between buckets. The strip
-// renders a hairline divider after any tab flagged `groupEnd: true`,
-// so the three logical groups (look & layout / content / tools) read
-// as distinct sections without changing the labels themselves.
-const TABS: { id: TabId; label: string; groupEnd?: boolean }[] = [
+// Tab list with a `groupEnd` marker between buckets. The nav renders
+// a divider after any tab flagged `groupEnd: true` so the three
+// logical groups (look & layout / content / tools) read as distinct
+// sections without changing the labels themselves. `pathBOnly` tabs
+// only appear when Path B mode is active.
+const TABS: { id: TabId; label: string; groupEnd?: boolean; pathBOnly?: boolean }[] = [
   { id: 'general', label: 'general' },
   { id: 'themes', label: 'themes' },
   { id: 'panels', label: 'panels', groupEnd: true },
   { id: 'profiles', label: 'profiles' },
+  { id: 'loadouts', label: 'loadouts', pathBOnly: true },
   { id: 'triggers', label: 'triggers' },
   { id: 'aliases', label: 'aliases' },
   { id: 'macros', label: 'macros', groupEnd: true },
@@ -106,6 +111,31 @@ export function SettingsApp() {
   const [tab, setTab] = useState<TabId>('general');
   const [config, setConfig] = useState<UiConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pathBActive, setPathBActive] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () =>
+      loadoutsGetState()
+        .then((s) => {
+          if (!cancelled) setPathBActive(s.path_b_active);
+        })
+        .catch(() => {});
+    void refresh();
+    let unsub: (() => void) | undefined;
+    void subscribeLoadoutsChanged(() => {
+      if (!cancelled) void refresh();
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
+  }, []);
+
+  const visibleTabs = TABS.filter((t) => !t.pathBOnly || pathBActive);
 
   // Load current config and reveal the window once painted.
   useEffect(() => {
@@ -131,70 +161,77 @@ export function SettingsApp() {
   return (
     <main className="app settings-app">
       <TopBar brand="[vosh : settings]" showAuxButtons={false} />
-      <nav className="settings-tabs">
-        {TABS.map((t) => (
-          <span key={t.id} className="settings-tab-wrap">
-            <button
-              type="button"
-              className={`settings-tab${tab === t.id ? ' settings-tab-active' : ''}`}
-              aria-pressed={tab === t.id}
-              onClick={() => {
-                setError(null);
-                setTab(t.id);
-              }}
-            >
-              {t.label}
-            </button>
-            {t.groupEnd && <span className="settings-tab-divider" aria-hidden="true" />}
-          </span>
-        ))}
-      </nav>
-      <div className="settings-body">
-        {error && <div className="settings-error">error: {error}</div>}
-        {tab === 'general' && (
-          <GeneralTab config={config} setConfig={setConfig} onError={setError} />
-        )}
-        {tab === 'triggers' && (
-          <EditorModeSwitcher
-            modeKey="triggers"
-            formRender={() => (
-              <TriggerForm load={exportTriggers} save={importTriggers} onError={setError} />
-            )}
-            jsonRender={() => (
-              <JsonTab
-                kind="triggers"
-                singular="trigger"
-                load={exportTriggers}
-                save={importTriggers}
-                onError={setError}
-              />
-            )}
-          />
-        )}
-        {tab === 'aliases' && (
-          <EditorModeSwitcher
-            modeKey="aliases"
-            formRender={() => (
-              <AliasForm load={exportAliases} save={importAliases} onError={setError} />
-            )}
-            jsonRender={() => (
-              <JsonTab
-                kind="aliases"
-                singular="alias"
-                plural="aliases"
-                load={exportAliases}
-                save={importAliases}
-                onError={setError}
-              />
-            )}
-          />
-        )}
-        {tab === 'themes' && <ThemesTab config={config} setConfig={setConfig} onError={setError} />}
-        {tab === 'panels' && <PanelsTab config={config} setConfig={setConfig} onError={setError} />}
-        {tab === 'profiles' && <ProfilesTab onError={setError} />}
-        {tab === 'macros' && <MacrosTab onError={setError} />}
-        {tab === 'import' && <ImportTab onError={setError} />}
-        {tab === 'logs' && <LogsTab onError={setError} />}
+      <div className="settings-shell">
+        <nav className="settings-tabs settings-tabs-vertical">
+          {visibleTabs.map((t) => (
+            <span key={t.id} className="settings-tab-wrap">
+              <button
+                type="button"
+                className={`settings-tab${tab === t.id ? ' settings-tab-active' : ''}`}
+                aria-pressed={tab === t.id}
+                onClick={() => {
+                  setError(null);
+                  setTab(t.id);
+                }}
+              >
+                {t.label}
+              </button>
+              {t.groupEnd && <span className="settings-tab-divider" aria-hidden="true" />}
+            </span>
+          ))}
+        </nav>
+        <div className="settings-body">
+          {error && <div className="settings-error">error: {error}</div>}
+          {tab === 'general' && (
+            <GeneralTab config={config} setConfig={setConfig} onError={setError} />
+          )}
+          {tab === 'triggers' && (
+            <EditorModeSwitcher
+              modeKey="triggers"
+              formRender={() => (
+                <TriggerForm load={exportTriggers} save={importTriggers} onError={setError} />
+              )}
+              jsonRender={() => (
+                <JsonTab
+                  kind="triggers"
+                  singular="trigger"
+                  load={exportTriggers}
+                  save={importTriggers}
+                  onError={setError}
+                />
+              )}
+            />
+          )}
+          {tab === 'aliases' && (
+            <EditorModeSwitcher
+              modeKey="aliases"
+              formRender={() => (
+                <AliasForm load={exportAliases} save={importAliases} onError={setError} />
+              )}
+              jsonRender={() => (
+                <JsonTab
+                  kind="aliases"
+                  singular="alias"
+                  plural="aliases"
+                  load={exportAliases}
+                  save={importAliases}
+                  onError={setError}
+                />
+              )}
+            />
+          )}
+          {tab === 'themes' && (
+            <ThemesTab config={config} setConfig={setConfig} onError={setError} />
+          )}
+          {tab === 'panels' && (
+            <PanelsTab config={config} setConfig={setConfig} onError={setError} />
+          )}
+          {tab === 'profiles' && <ProfilesTab onError={setError} />}
+          {tab === 'loadouts' && <LoadoutsTab onError={setError} />}
+          {tab === 'macros' && <MacrosTab onError={setError} />}
+          {tab === 'import' && <ImportTab onError={setError} />}
+          {tab === 'logs' && <LogsTab onError={setError} />}
+        </div>
       </div>
       <footer className="settings-version">Vosh {__APP_VERSION__}</footer>
     </main>
