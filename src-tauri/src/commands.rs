@@ -1780,11 +1780,29 @@ pub(crate) async fn migration_apply(
         }
     }
 
-    // app.restart() is non-returning — emit a marker event so the
-    // frontend can flash a "restarting" toast in the brief window
-    // before the WebView is torn down.
-    let _ = app.emit("vosh://migration-restart", &());
-    app.restart();
+    // Returning Ok rather than calling `app.restart()` here. Restart
+    // is fragile in dev mode: it tears down the binary out from under
+    // the `tauri dev` watcher and leaves the next process trying to
+    // load a frontend whose Vite dev server may have been killed
+    // with the parent, ending in a hidden window with no JS reveal.
+    // The frontend shows a "migration complete, please relaunch"
+    // banner and offers an explicit [Quit Vosh] button (handled
+    // separately by app_quit) that cleanly exits the process. The
+    // user re-opens Vosh and the Path B startup hook picks the new
+    // catalog up. Path B mode is durable on disk either way.
+    let _ = app.emit("vosh://migration-applied", &());
+    Ok(())
+}
+
+/// Cleanly exit the app. Surfaces a "quit" event first so any window
+/// can flush state, then calls `app.exit(0)`. Used by the post-
+/// migration prompt to take the user out of the legacy-mode session
+/// in one click; on relaunch the Path B startup hook picks up the
+/// new catalog.
+#[tauri::command]
+pub(crate) async fn app_quit(app: AppHandle) -> Result<(), String> {
+    app.exit(0);
+    Ok(())
 }
 
 /// Download + install the pending update and restart the app. Errors

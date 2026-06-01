@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  appQuit,
   migrationAnalyze,
   migrationApply,
   type MigrationConflictResolution,
@@ -14,11 +15,12 @@ interface Props {
 // Wizard for the Path B migration. Shows the analyzer's plan in three
 // sections (auto-resolved, conflicts, derived loadouts), lets the user
 // pick a winner per conflict via a radio per source, then runs the
-// apply step which writes catalog.toml + loadouts.toml, moves the
-// per-profile files into profiles/legacy/, and restarts the app so
-// the startup hook picks up Path B mode. The first variant in each
-// conflict is the default winner (analyzer source order is the
-// profile index order).
+// apply step which writes catalog.toml + loadouts.toml and moves the
+// per-profile files into profiles/legacy/. The runtime stays in legacy
+// mode until the user relaunches Vosh: the wizard switches to a
+// "Migration complete" state with a [quit Vosh] button. Path B mode
+// activates on the next launch when the startup hook picks up the
+// freshly-written catalog.toml.
 export function MigrationWizard({ onClose }: Props) {
   const [plan, setPlan] = useState<MigrationPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +29,7 @@ export function MigrationWizard({ onClose }: Props) {
   // fall back to the first variant (the analyzer's default).
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,15 +73,22 @@ export function MigrationWizard({ onClose }: Props) {
   const handleApply = async () => {
     if (!plan) return;
     setApplying(true);
+    setError(null);
     try {
       await migrationApply(resolutions);
-      // migration_apply restarts the app; if we are still here it
-      // means the restart was suppressed and we should report.
-      setError('migration applied but app did not restart — try restarting manually.');
+      setApplied(true);
       setApplying(false);
     } catch (e) {
       setError(String(e));
       setApplying(false);
+    }
+  };
+
+  const handleQuit = async () => {
+    try {
+      await appQuit();
+    } catch (e) {
+      setError(String(e));
     }
   };
 
@@ -100,7 +110,18 @@ export function MigrationWizard({ onClose }: Props) {
         <div className="migration-wizard-body">
           {pending && <div className="migration-wizard-status">analyzing profiles...</div>}
           {error && <div className="migration-wizard-error">[error] {error}</div>}
-          {plan && (
+          {applied && (
+            <div className="migration-wizard-status migration-wizard-applied">
+              <div className="migration-wizard-applied-title">migration complete.</div>
+              <div className="migration-wizard-applied-body">
+                catalog.toml and loadouts.toml are on disk; your per-profile files are preserved
+                under profiles/legacy/ in case you want to roll back. Vosh stays in legacy mode
+                until you quit and relaunch. Click [quit Vosh] below, then reopen Vosh to enter Path
+                B.
+              </div>
+            </div>
+          )}
+          {!applied && plan && (
             <PlanView
               plan={plan}
               picks={picks}
@@ -111,18 +132,35 @@ export function MigrationWizard({ onClose }: Props) {
         </div>
 
         <footer className="migration-wizard-footer">
-          <span className="migration-wizard-hint">
-            applying writes catalog.toml + loadouts.toml, moves per-profile files into
-            profiles/legacy/, and restarts the app.
-          </span>
-          <button
-            type="button"
-            className="settings-btn migration-apply-btn"
-            disabled={!plan || applying}
-            onClick={() => void handleApply()}
-          >
-            {applying ? '[applying...]' : '[apply migration]'}
-          </button>
+          {applied ? (
+            <>
+              <span className="migration-wizard-hint">
+                Path B activates the next time you launch Vosh.
+              </span>
+              <button
+                type="button"
+                className="settings-btn migration-apply-btn"
+                onClick={() => void handleQuit()}
+              >
+                [quit Vosh]
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="migration-wizard-hint">
+                applying writes catalog.toml + loadouts.toml and moves per-profile files into
+                profiles/legacy/. Vosh stays in legacy mode until you relaunch.
+              </span>
+              <button
+                type="button"
+                className="settings-btn migration-apply-btn"
+                disabled={!plan || applying}
+                onClick={() => void handleApply()}
+              >
+                {applying ? '[applying...]' : '[apply migration]'}
+              </button>
+            </>
+          )}
         </footer>
       </div>
     </div>
