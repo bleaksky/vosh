@@ -16,6 +16,7 @@ import {
   type ProfilesList,
   type ScopeConfig,
 } from '../lib/session';
+import { MigrationWizard } from './MigrationWizard';
 
 interface Props {
   onError: (e: string | null) => void;
@@ -37,6 +38,7 @@ export function ProfilesTab({ onError }: Props) {
   // without showing any UI, so the operation silently aborted.
   const [duplicateTarget, setDuplicateTarget] = useState<string | null>(null);
   const [duplicateDraft, setDuplicateDraft] = useState('');
+  const [showMigrationWizard, setShowMigrationWizard] = useState(false);
 
   const reload = async () => {
     try {
@@ -266,6 +268,20 @@ export function ProfilesTab({ onError }: Props) {
           />
         ))}
       </div>
+
+      <div className="migration-section-row">
+        <div className="migration-section-text">
+          <div className="migration-section-title-inline">global catalog (preview)</div>
+          <div className="migration-section-hint">
+            see how your profiles would merge into a single shared catalog with one loadout per
+            profile. read-only, nothing is written.
+          </div>
+        </div>
+        <button type="button" className="settings-btn" onClick={() => setShowMigrationWizard(true)}>
+          [preview migration]
+        </button>
+      </div>
+      {showMigrationWizard && <MigrationWizard onClose={() => setShowMigrationWizard(false)} />}
     </div>
   );
 }

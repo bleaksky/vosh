@@ -34,14 +34,15 @@
 //! today: turning on loadout `default` enables every group that came
 //! from the original `default` profile.
 //!
-//! ## Phase B1 scope
+//! ## Scope
 //!
 //! This module produces the plan only. Applying the plan (writing
 //! `catalog.toml` and `loadouts.toml`, renaming the old per-profile
-//! files into a `legacy/` subdir for safekeeping) is Phase B2's
-//! job and runs only after the user confirms via the wizard in
-//! Phase B3. No callers exist for `analyze_profiles` yet, so
-//! `dead_code` is allowed at the module level for this phase only.
+//! files into a `legacy/` subdir for safekeeping) is a follow-up
+//! `migration_apply` command, gated on the user confirming conflict
+//! resolutions in the wizard. The `migration_analyze` Tauri command
+//! consumes [`analyze_profiles`] today; the variant accessors stay
+//! on the type for the apply path.
 #![allow(dead_code)]
 
 use std::collections::BTreeMap;

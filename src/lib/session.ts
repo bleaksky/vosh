@@ -952,6 +952,48 @@ export async function profileResolveMatch(
   return invoke('profile_resolve_match', { host, port, character });
 }
 
+// Path B migration preview. The backend walks the current profile set,
+// loads each per-profile snapshot, and returns the merge plan: every
+// auto-resolved item, every conflict (one entry per name with two or
+// more diverging variants), and one derived loadout per source profile.
+// Read-only — nothing is written to disk by this call. The eventual
+// migration_apply (not in this build) commits the plan after the user
+// picks conflict winners in the wizard.
+
+export type MigrationItemKind = 'alias' | 'trigger' | 'macro';
+
+export interface MigrationVariant {
+  source_profile: string;
+  item: { kind: MigrationItemKind; item: Record<string, unknown> };
+}
+
+export interface MigrationConflict {
+  kind: MigrationItemKind;
+  name: string;
+  variants: MigrationVariant[];
+}
+
+export interface MigrationLoadoutPreview {
+  name: string;
+  description?: string | null;
+  enabled_groups: string[];
+}
+
+export interface MigrationPlan {
+  source_profiles: string[];
+  auto_resolved: {
+    aliases: Array<{ name: string; group?: string | null }>;
+    triggers: Array<{ name: string; group?: string | null }>;
+    macros: Array<{ key: string; group?: string | null }>;
+  };
+  conflicts: MigrationConflict[];
+  loadouts: MigrationLoadoutPreview[];
+}
+
+export async function migrationAnalyze(): Promise<MigrationPlan> {
+  return invoke('migration_analyze');
+}
+
 // Per-category scope toggle (Profile vs Global).
 export type ProfileScope = 'profile' | 'global';
 
