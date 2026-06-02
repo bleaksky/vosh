@@ -29,13 +29,21 @@ interface Props {
   // pressed state.
   mapOpen?: boolean;
   onToggleMap?: () => void;
+  // Help modal opener. When provided, a `help` button renders.
+  onOpenHelp?: () => void;
 }
 
 // Frameless-window top strip. Drag region across most of its width
 // with text-style chrome buttons on the right (settings, map, then
 // the window controls). Cross-platform substitute for native
 // traffic lights.
-export function TopBar({ showAuxButtons = true, brand = '[vosh]', mapOpen, onToggleMap }: Props) {
+export function TopBar({
+  showAuxButtons = true,
+  brand = '[vosh]',
+  mapOpen,
+  onToggleMap,
+  onOpenHelp,
+}: Props) {
   const win = () => getCurrentWindow();
 
   const openSettings = () => {
@@ -61,6 +69,11 @@ export function TopBar({ showAuxButtons = true, brand = '[vosh]', mapOpen, onTog
               onClick={onToggleMap}
             >
               map
+            </button>
+          )}
+          {onOpenHelp && (
+            <button type="button" className="topbar-aux-btn" onClick={onOpenHelp}>
+              help
             </button>
           )}
           <button type="button" className="topbar-aux-btn" onClick={openSettings}>

@@ -14,6 +14,7 @@ import { GroupPane } from './components/GroupPane';
 import { RoomStrip } from './components/RoomStrip';
 import { VitalsBar } from './components/VitalsBar';
 import { UpdateNotice } from './components/UpdateNotice';
+import { HelpView } from './components/HelpView';
 import {
   broadcastUiConfigChanges,
   dockLayoutGet,
@@ -125,6 +126,9 @@ function App() {
   // live one and shows the same buffer scrolled back so you can read
   // earlier output while live combat keeps streaming below.
   const [splitOpen, setSplitOpen] = useState(false);
+  // In-client help modal. Opened from the top-bar [help] button;
+  // backdrop click, [close], and Esc all dismiss via setHelpOpen(false).
+  const [helpOpen, setHelpOpen] = useState(false);
   // History pane scroll depth, driven by the Terminal's onScrollPosition
   // callback. Drives the "↑ N / max" indicator in the top-right of the
   // history pane.
@@ -753,6 +757,7 @@ function App() {
       <TopBar
         mapOpen={panelLayout.placements.map.zone !== 'hidden'}
         onToggleMap={() => togglePanelVisibility('map')}
+        onOpenHelp={() => setHelpOpen(true)}
       />
       <Connect status={status} onError={handleError} />
       {grouped.top.length > 0 && (
@@ -800,6 +805,7 @@ function App() {
       {!sidePanelsFillHeight && inputElement}
       {!sidePanelsFillHeight && <StatusBar />}
       <UpdateNotice />
+      {helpOpen && <HelpView onClose={() => setHelpOpen(false)} />}
     </main>
   );
 }
