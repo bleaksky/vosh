@@ -753,8 +753,6 @@ function App() {
       <TopBar
         mapOpen={panelLayout.placements.map.zone !== 'hidden'}
         onToggleMap={() => togglePanelVisibility('map')}
-        chatOpen={panelLayout.placements.chat.zone !== 'hidden'}
-        onToggleChat={() => togglePanelVisibility('chat')}
       />
       <Connect status={status} onError={handleError} />
       {grouped.top.length > 0 && (
