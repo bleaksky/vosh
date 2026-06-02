@@ -2,6 +2,18 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.3.5 - 2026-06-02
+
+- New in-client help. Click `[help]` in the top bar to open a full help window. Read about every feature in plain language, with a search bar that filters topics live and highlights matches as you type. Press Esc or click the backdrop to close. The same content is mirrored as `HELP.md` at the repo root for offline reading.
+- The tick countdown and MUD time clock are now one chip riding on the top border of the input row. Pick its appearance (value only, caption plus value, or icon plus value) in Settings · Panels · chips. The chips sub-view also brings tick interval, auto-fire command, regex reset, sound, and warning settings into the same place, so you no longer have to drop to the command line to dial in the tick.
+- Settings · Panels gains a sub-toggle for layout, panes, and chips. Layout still shows zone placement. Panes is where you configure individual panel content like vitals shape and tracked affects. Chips is where the tick, MUD time, and moons chips live. The three sub-views read as distinct chapters instead of one long scrolling tab.
+- Click anywhere in the main window that is not a button or an active text selection and the command input refocuses. A quick way back to typing after reading is just to click anywhere in the terminal area. The same focus pull fires when you bring Vosh back to the front from another app.
+- The chat pane sticks to the bottom while you are reading the latest messages and pauses autoscroll when you scroll up to read back. Scroll back within twenty-four pixels of the bottom and autoscroll resumes. Opening the chat pane jumps to the latest message instead of the oldest.
+- The room strip wraps onto multiple lines when you place it in a left or right side panel, and the panel becomes resizable. A wide strip in a side zone now reads top to bottom instead of being clipped.
+- Deleting a profile, alias, or trigger uses an inline two-step confirm (`[delete]` then `[confirm delete]`) instead of the browser confirm dialog that the Tauri webview silently rejected. The destructive action lives next to its target row.
+- The top bar drops the `chat` toggle button. The chat pane now opens from Settings · Panels by setting its zone to top, bottom, left, or right, matching how every other panel is shown or hidden.
+- The group pane drops the unpin button. The pane is always pinned when its zone is not hidden, so its visibility is controlled the same way every other panel is.
+
 ## v0.3.1 - 2026-05-31
 
 - Profile auto-match now reads your character name from the MUD itself. As soon as you log in, the MUD sends Vosh your character name over GMCP, and Vosh swaps to the matching profile silently. No more typing your character name into the Connect form, no more wrong profile loaded because you forgot.

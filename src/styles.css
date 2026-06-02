@@ -6038,3 +6038,231 @@ body {
   font-size: 0.9em;
   line-height: 1.45;
 }
+
+/* Help modal — frameless overlay opened from the top-bar [help]
+   button. Shares the dialog shape with .migration-wizard (backdrop +
+   centered card + header / body / footer) but carries its own classes
+   so the two can diverge without bleed. Layout inside the card is a
+   left-side topic rail + right-side body, mirroring SettingsApp's
+   tab shell so the modal reads as part of the same family. */
+.help-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.help-modal {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  width: 100%;
+  max-width: 1100px;
+  height: 85vh;
+  max-height: 900px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.help-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-surface-deep);
+}
+
+.help-modal-title {
+  color: var(--c-accent);
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.help-modal-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-strong);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: inherit;
+  padding: 5px 8px;
+  border-radius: 2px;
+  outline: none;
+}
+
+.help-modal-search:focus {
+  border-color: var(--c-accent);
+}
+
+/* Stop the WebKit "search clear" Stroke leaking the system style. */
+.help-modal-search::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.help-modal-close {
+  flex: 0 0 auto;
+  background: transparent;
+  color: var(--c-text-faint);
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9em;
+  padding: 2px 6px;
+}
+
+.help-modal-close:hover {
+  color: var(--c-text);
+}
+
+.help-modal-shell {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+.help-modal-rail {
+  flex: 0 0 240px;
+  border-right: 1px solid var(--c-border);
+  background: var(--c-surface-deep);
+  overflow-y: auto;
+  padding: 10px 0;
+}
+
+.help-modal-section {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0 10px;
+}
+
+.help-modal-section-title {
+  color: var(--c-text-faint);
+  font-size: 0.78em;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  padding: 4px 14px 6px;
+}
+
+.help-modal-topic {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  background: transparent;
+  color: var(--c-text-muted);
+  border: none;
+  border-left: 2px solid transparent;
+  padding: 5px 14px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.92em;
+  line-height: 1.4;
+}
+
+.help-modal-topic:hover {
+  color: var(--c-text);
+  background: var(--c-surface);
+}
+
+.help-modal-topic.is-active {
+  color: var(--c-accent);
+  background: var(--c-surface);
+  border-left-color: var(--c-accent);
+}
+
+.help-modal-topic-num {
+  flex: 0 0 auto;
+  color: var(--c-text-faint);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85em;
+  min-width: 2.4em;
+}
+
+.help-modal-topic.is-active .help-modal-topic-num {
+  color: var(--c-accent);
+}
+
+.help-modal-topic-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.help-modal-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 24px 28px 32px;
+  color: var(--c-text);
+  font-size: 0.95em;
+  line-height: 1.55;
+  max-width: 760px;
+}
+
+.help-modal-eyebrow {
+  color: var(--c-text-faint);
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  margin-bottom: 6px;
+}
+
+.help-modal-heading {
+  margin: 0 0 18px;
+  color: var(--c-text-strong);
+  font-size: 1.4em;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.help-modal-heading-num {
+  color: var(--c-text-faint);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75em;
+  flex: 0 0 auto;
+}
+
+.help-modal-p {
+  margin: 0 0 14px;
+}
+
+.help-modal-list {
+  margin: 0 0 14px;
+  padding-left: 20px;
+}
+
+.help-modal-list-item {
+  margin: 0 0 6px;
+}
+
+.help-modal-code {
+  background: var(--c-surface-emphasis);
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  padding: 0 4px;
+  font-family: var(--app-font-family);
+  font-size: 0.9em;
+  color: var(--c-text-strong);
+  white-space: nowrap;
+}
+
+.help-modal-hit {
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.help-modal-empty {
+  color: var(--c-text-faint);
+  padding: 24px 28px;
+  font-style: italic;
+}
