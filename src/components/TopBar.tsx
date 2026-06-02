@@ -20,7 +20,7 @@ async function handleMaximize() {
 }
 
 interface Props {
-  // When true, the auxiliary chrome buttons (settings/map/chat) render.
+  // When true, the auxiliary chrome buttons (settings / map) render.
   // Set false on auxiliary windows so they only show window controls.
   showAuxButtons?: boolean;
   // Label rendered inside the brand block. Defaults to "[vosh]".
@@ -29,23 +29,13 @@ interface Props {
   // pressed state.
   mapOpen?: boolean;
   onToggleMap?: () => void;
-  // Chat pane toggle. Same shape as map.
-  chatOpen?: boolean;
-  onToggleChat?: () => void;
 }
 
 // Frameless-window top strip. Drag region across most of its width
 // with text-style chrome buttons on the right (settings, map, then
 // the window controls). Cross-platform substitute for native
 // traffic lights.
-export function TopBar({
-  showAuxButtons = true,
-  brand = '[vosh]',
-  mapOpen,
-  onToggleMap,
-  chatOpen,
-  onToggleChat,
-}: Props) {
+export function TopBar({ showAuxButtons = true, brand = '[vosh]', mapOpen, onToggleMap }: Props) {
   const win = () => getCurrentWindow();
 
   const openSettings = () => {
@@ -63,16 +53,6 @@ export function TopBar({
       {showAuxButtons && (
         <div className="topbar-aux">
           <TopBarLoadouts />
-          {onToggleChat && (
-            <button
-              type="button"
-              className={`topbar-aux-btn${chatOpen ? ' topbar-aux-btn-pressed' : ''}`}
-              aria-pressed={chatOpen}
-              onClick={onToggleChat}
-            >
-              chat
-            </button>
-          )}
           {onToggleMap && (
             <button
               type="button"
