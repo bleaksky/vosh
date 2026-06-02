@@ -9,7 +9,6 @@ import {
 } from '../lib/session';
 import { useTickState } from '../lib/useTickState';
 import { formatMudTime, mudTimeColor, useWorldTime } from '../lib/useWorldTime';
-import { ChipFrame } from './ChipFrame';
 import { useCharStats } from '../lib/useCharStats';
 import { useCombat, type CombatState } from '../lib/useCombat';
 import { tokenizeTemplate, type TemplateSegment } from '../lib/vitalsTemplate';
@@ -171,16 +170,13 @@ function colorForVital(label: string, value: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-// Stacked vitals — one row per hp/mana/move. The tick countdown
-// is a separate panel (TickPanel below) so the user can hide vitals
-// without losing the tick or vice versa. Each row is
+// Stacked vitals — one row per hp/mana/move. Tick and mud time render
+// in the LineChip on the input row's top border; this component no
+// longer hosts them. Each row is
 // `label · bar (20 cells) · % · cur/max · delta`. Subscribes to
 // Char.Vitals + World.Time; World.Time hour-change rebases the
 // per-tick delta snapshot.
-export function VitalsBar({
-  embedTick = false,
-  embedTime = false,
-}: { embedTick?: boolean; embedTime?: boolean } = {}) {
+export function VitalsBar() {
   const [vitals, setVitals] = useState<Vitals | null>(null);
   const [deltas, setDeltas] = useState<VitalDeltas>(NO_DELTAS);
   const [config, setConfig] = useState<VitalsConfig>(DEFAULT_VITALS_CONFIG);
@@ -307,24 +303,12 @@ export function VitalsBar({
   // template can replace the entire row shape without disabling
   // any of the underlying toggles.
   if (config.template_enabled) {
-    return (
-      <TemplateVitalsRow
-        config={config}
-        vitals={vitals}
-        deltas={deltas}
-        combat={combat}
-        embedTick={embedTick}
-        embedTime={embedTime}
-      />
-    );
+    return <TemplateVitalsRow config={config} vitals={vitals} deltas={deltas} combat={combat} />;
   }
 
   // Inline layout packs every vital onto a single horizontal row in
   // the tintin nprompt shape:
-  //   850(85%)h 230(76%)m 120(60%)v - (12s) - 3PM
-  // Single-letter label AFTER the percent, no space between value
-  // and paren. The tick and MUD-time chips appear at the end as
-  // `- (...)` clusters when enabled.
+  //   850(85%)h 230(76%)m 120(60%)v
   if (config.layout === 'inline') {
     return (
       <div className="vitals-bar vitals-bar-inline" aria-label="vitals">
@@ -337,18 +321,6 @@ export function VitalsBar({
           {segs.map((s, i) => (
             <InlineVitalChip key={s.label} config={config} compact={i > 0} {...s} />
           ))}
-          {embedTick && (
-            <span className="vitals-inline-tail">
-              <span className="vitals-inline-tail-sep">-</span>
-              <InlineTick className="vitals-inline-tick" />
-            </span>
-          )}
-          {embedTime && (
-            <span className="vitals-inline-tail">
-              <span className="vitals-inline-tail-sep">-</span>
-              <InlineMudTime className="vitals-inline-time" />
-            </span>
-          )}
         </div>
       </div>
     );
@@ -372,27 +344,6 @@ export function VitalsBar({
           </div>
         )}
       </div>
-      {(embedTick || embedTime) && <VitalsTailRow embedTick={embedTick} embedTime={embedTime} />}
-    </div>
-  );
-}
-
-// Compact tail row at the bottom of the stacked vitals layout.
-// Mirrors tintin's nprompt `(12s) · 3PM` cluster. Uses the shared
-// InlineTick / InlineMudTime so the chip-style picker reaches here
-// too — was previously hand-rolled JSX with hardcoded labels.
-function VitalsTailRow({ embedTick, embedTime }: { embedTick: boolean; embedTime: boolean }) {
-  const { active } = useTickState();
-  const worldTime = useWorldTime();
-  const mudTime = formatMudTime(worldTime);
-  const showTick = embedTick && active;
-  const showTime = embedTime && mudTime !== null;
-  if (!showTick && !showTime) return null;
-  return (
-    <div className="vitals-row-tail" aria-hidden="true">
-      {showTick && <InlineTick className="vitals-row-tail-chip" />}
-      {showTick && showTime && <span className="vitals-row-tail-sep">·</span>}
-      {showTime && <InlineMudTime className="vitals-row-tail-chip vitals-row-tail-time" />}
     </div>
   );
 }
@@ -447,81 +398,6 @@ function InlineVitalChip({
         </span>
       )}
     </span>
-  );
-}
-
-// Inline MUD time chip. Reads the GMCP World.Time push and renders
-// the current in-game hour (formatted 3PM / 12AM). Used by any host
-// panel that the user picks via the `time` panel's `in:*` zone
-// (vitals / roomstrip / affects / statusbar). Returns null until the
-// server pushes a parseable time. The chip frame (caption vs icon vs
-// value-only) is owned by the shared ChipFrame component so the same
-// style applies regardless of host.
-export function InlineMudTime({ className }: { className?: string }) {
-  const worldTime = useWorldTime();
-  const formatted = formatMudTime(worldTime);
-  const color = mudTimeColor(worldTime);
-  if (!formatted) return null;
-  const value = <span style={color ? { color } : undefined}>{formatted}</span>;
-  return (
-    <ChipFrame
-      caption="time"
-      icon="☀"
-      value={value}
-      className={`inline-mud-time${className ? ` ${className}` : ''}`}
-      ariaLabel="MUD time"
-    />
-  );
-}
-
-// Inline tick chip rendered at the right edge of a host panel
-// (vitals, roomstrip, affects, statusbar) when the user picks one
-// of the `in:*` zones for the tick. Returns null when inactive so
-// hosts can drop it in unconditionally. Chip frame styling comes
-// from the shared ChipFrame so this chip and the MUD time chip read
-// consistently in every host.
-export function InlineTick({ className }: { className?: string }) {
-  const { active, tickSecs, warn } = useTickState();
-  if (!active) return null;
-  const value = (
-    <span className={warn ? 'vitals-tick-value is-warn' : 'vitals-tick-value'}>{tickSecs}s</span>
-  );
-  return (
-    <ChipFrame
-      caption="tick"
-      icon="⏱"
-      value={value}
-      className={`inline-tick${className ? ` ${className}` : ''}`}
-      ariaLabel="tick"
-    />
-  );
-}
-
-// Stand-alone MUD time panel. Wraps the shared InlineMudTime chip in
-// the vitals-bar grid so it renders as its own movable element in
-// the panel layout. Delegates chrome (caption / icon / value-only)
-// to ChipFrame so the style picker applies here too.
-export function TimePanel() {
-  return (
-    <div className="vitals-bar time-panel" aria-label="mud time">
-      <div className="vitals-row">
-        <InlineMudTime className="time-panel-chip" />
-      </div>
-    </div>
-  );
-}
-
-// Stand-alone tick countdown panel. Same wrapping pattern as
-// TimePanel: a vitals-bar grid around the shared InlineTick chip so
-// the user's chip style picker reaches this standalone placement
-// too.
-export function TickPanel() {
-  return (
-    <div className="vitals-bar tick-panel" aria-label="tick">
-      <div className="vitals-row">
-        <InlineTick className="tick-panel-chip" />
-      </div>
-    </div>
   );
 }
 
@@ -604,15 +480,11 @@ function TemplateVitalsRow({
   vitals,
   deltas,
   combat,
-  embedTick,
-  embedTime,
 }: {
   config: VitalsConfig;
   vitals: Vitals;
   deltas: VitalDeltas;
   combat: CombatState | null;
-  embedTick: boolean;
-  embedTime: boolean;
 }) {
   // Phase 6 perf fix: TemplateVitalsRow no longer subscribes to
   // tick state. The `%tick` token resolves to a `<TickSecondsToken
@@ -730,8 +602,6 @@ function TemplateVitalsRow({
         {segments.map((seg, i) => (
           <TemplateSegmentNode key={i} segment={seg} renderToken={renderToken} />
         ))}
-        {embedTick && <InlineTick className="vitals-inline-tick" />}
-        {embedTime && <InlineMudTime className="vitals-inline-time" />}
       </div>
     </div>
   );

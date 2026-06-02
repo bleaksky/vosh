@@ -955,33 +955,6 @@ body {
   color: var(--c-accent);
 }
 
-/* ChipFrame — shared inline container for tick / mud-time / future
-   chips. Hosts mount a ChipFrame; the chip owns its appearance via
-   the `chip-frame-<style>` modifier (`value_only`, `caption_value`,
-   `icon_value`). The caption and icon slots only render under their
-   matching style. Both InlineTick and InlineMudTime now wrap their
-   value in this frame so the same look applies regardless of host. */
-.chip-frame {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-}
-.chip-frame-caption {
-  color: var(--c-text-faint);
-  text-transform: lowercase;
-  letter-spacing: 0.04em;
-}
-.chip-frame-icon {
-  color: var(--c-text-faint);
-  font-size: 0.95em;
-  line-height: 1;
-}
-/* Tighter gap when only the value renders (no leading caption or
-   icon to space away from). */
-.chip-frame-value_only {
-  gap: 0;
-}
-
 .vitals-label {
   color: var(--c-text-faint);
   text-transform: lowercase;
@@ -1115,6 +1088,73 @@ body {
      row's slot to main-row when xterm hasn't refit yet, which paints
      the input ON TOP of the terminal output. */
   flex: 0 0 auto;
+}
+
+/* LineChip — single tick + mud time chip riding on the input row's
+   top border. Centered horizontally; transformed up by half its
+   height so its vertical midline sits exactly on the border. Borrows
+   the old centered statusbar tick + time chip styling so the chrome
+   reads as familiar visual language. The bordered pill covers the
+   portion of the input-row border it overlaps; the rest of the
+   border continues on either side as the line shown in the design
+   mockup. */
+.line-chip {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 1px 10px;
+  background: var(--c-surface-deep);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  color: var(--c-text);
+  font-size: 0.92em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.line-chip-block {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.line-chip-caption {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  font-weight: 400;
+}
+
+.line-chip-icon {
+  color: var(--c-text-faint);
+  font-weight: 400;
+}
+
+.line-chip-value {
+  color: var(--c-text);
+}
+
+.line-chip-time {
+  color: var(--c-accent);
+}
+
+.line-chip-sep {
+  color: var(--c-text-dim);
+  font-weight: 400;
+}
+
+/* Warn pulse on the tick value within ~warn_at seconds of the next
+   fire. Same keyframes the standalone tick value used. */
+.line-chip-value.is-warn {
+  color: var(--c-warn);
+  animation: vosh-tick-pulse 700ms ease-in-out infinite;
 }
 
 .input-row .prompt {

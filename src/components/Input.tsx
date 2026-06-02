@@ -25,6 +25,7 @@ import {
 import { canonicalKeyFromEvent } from '../lib/macroKeys';
 import { recentNames } from '../lib/recentNames';
 import { listen } from '@tauri-apps/api/event';
+import { LineChip } from './LineChip';
 
 export interface InputHandle {
   focus: () => void;
@@ -640,6 +641,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
 
   return (
     <div className={`input-row${pasteBurst ? ' input-row-pasting' : ''}`}>
+      <LineChip />
       <span className="prompt" aria-hidden="true">
         &gt;
       </span>
