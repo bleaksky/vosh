@@ -377,31 +377,22 @@ export function VitalsBar({
   );
 }
 
-// Compact, label-less tail row at the bottom of the stacked vitals
-// layout. Mirrors tintin's nprompt `- (12s) - 3PM` cluster: just the
-// tick countdown and/or MUD time, right-aligned, dim. Renders
-// nothing when both sources are inactive so the bar does not
-// reserve an empty slot.
+// Compact tail row at the bottom of the stacked vitals layout.
+// Mirrors tintin's nprompt `(12s) · 3PM` cluster. Uses the shared
+// InlineTick / InlineMudTime so the chip-style picker reaches here
+// too — was previously hand-rolled JSX with hardcoded labels.
 function VitalsTailRow({ embedTick, embedTime }: { embedTick: boolean; embedTime: boolean }) {
-  const { active, tickSecs } = useTickState();
+  const { active } = useTickState();
   const worldTime = useWorldTime();
   const mudTime = formatMudTime(worldTime);
-  const timeColor = mudTimeColor(worldTime);
   const showTick = embedTick && active;
   const showTime = embedTime && mudTime !== null;
   if (!showTick && !showTime) return null;
   return (
     <div className="vitals-row-tail" aria-hidden="true">
-      {showTick && <span className="vitals-row-tail-chip">({tickSecs}s)</span>}
+      {showTick && <InlineTick className="vitals-row-tail-chip" />}
       {showTick && showTime && <span className="vitals-row-tail-sep">·</span>}
-      {showTime && (
-        <span
-          className="vitals-row-tail-chip vitals-row-tail-time"
-          style={timeColor ? { color: timeColor } : undefined}
-        >
-          {mudTime}
-        </span>
-      )}
+      {showTime && <InlineMudTime className="vitals-row-tail-chip vitals-row-tail-time" />}
     </div>
   );
 }
@@ -506,38 +497,30 @@ export function InlineTick({ className }: { className?: string }) {
   );
 }
 
-// Stand-alone MUD time panel. Mirrors TickPanel: lives in the panel
-// registry as its own movable element so the user can place the
-// in-game time anywhere a panel can go (or embed it inline). Wall-
-// clock stays in the bottom-right StatusBar slot regardless of
-// where this panel is placed.
+// Stand-alone MUD time panel. Wraps the shared InlineMudTime chip in
+// the vitals-bar grid so it renders as its own movable element in
+// the panel layout. Delegates chrome (caption / icon / value-only)
+// to ChipFrame so the style picker applies here too.
 export function TimePanel() {
-  const worldTime = useWorldTime();
-  const formatted = formatMudTime(worldTime);
-  const color = mudTimeColor(worldTime);
-  if (!formatted) return null;
   return (
     <div className="vitals-bar time-panel" aria-label="mud time">
       <div className="vitals-row">
-        <span className="vitals-label">time</span>
-        <span className="inline-mud-time" style={color ? { color } : undefined}>
-          {formatted}
-        </span>
+        <InlineMudTime className="time-panel-chip" />
       </div>
     </div>
   );
 }
 
-// Stand-alone tick countdown panel. Reuses the vitals-bar grid so it
-// renders as a single "tick · 12s" row consistent with the hp/mn/mv
-// rows. Lives in the panel registry as its own movable element so the
-// user can hide vitals without losing the tick.
+// Stand-alone tick countdown panel. Same wrapping pattern as
+// TimePanel: a vitals-bar grid around the shared InlineTick chip so
+// the user's chip style picker reaches this standalone placement
+// too.
 export function TickPanel() {
-  const { active, tickSecs, warn } = useTickState();
-  if (!active) return null;
   return (
     <div className="vitals-bar tick-panel" aria-label="tick">
-      <TickRow tickSecs={tickSecs} warn={warn} />
+      <div className="vitals-row">
+        <InlineTick className="tick-panel-chip" />
+      </div>
     </div>
   );
 }
@@ -607,15 +590,6 @@ function VitalRow({
           )}
         </span>
       )}
-    </div>
-  );
-}
-
-function TickRow({ tickSecs, warn }: { tickSecs: number; warn: boolean }) {
-  return (
-    <div className="vitals-row">
-      <span className="vitals-label">tick</span>
-      <span className={`vitals-tick-value${warn ? ' is-warn' : ''}`}>{tickSecs}s</span>
     </div>
   );
 }
