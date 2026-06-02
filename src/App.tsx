@@ -560,7 +560,7 @@ function App() {
       case 'map':
         return <MapPane key="map" />;
       case 'group':
-        return <GroupPane key="group" pinned onTogglePin={() => setPanelZone('group', 'hidden')} />;
+        return <GroupPane key="group" />;
       case 'vitals':
         return <VitalsBar key="vitals" />;
       case 'roomstrip': {
