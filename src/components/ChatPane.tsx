@@ -31,26 +31,37 @@ function ChatColumn({ onClose }: { onClose?: () => void }) {
   const [lines, setLines] = useState<ChatLine[]>(() => getChatLines());
   const [filter, setFilter] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  // Stick-to-bottom flag. Starts `true` so the first batch of lines to
+  // arrive after mount snaps to the bottom; only flips to false once
+  // the user scrolls up to read back. Returns to true when the user
+  // scrolls back within the 24px threshold of the bottom. Read-back
+  // therefore pauses autoscroll without locking it out.
+  const stickyBottomRef = useRef(true);
 
   useEffect(() => subscribeChatLines(setLines), []);
 
-  // Snap to the bottom on first mount so opening the chat panel
-  // shows the most recent lines instead of the oldest. Without this
-  // the body sits at scrollTop=0 and the user has to scroll down
-  // every time they reopen the panel.
+  // Track user-driven scrolling so the sticky flag follows where the
+  // viewport actually is. Programmatic scrollTop = scrollHeight also
+  // triggers a scroll event but lands at distance 0, so the flag
+  // settles back to true and we don't get pongs.
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    const onScroll = () => {
+      const distance = el.scrollHeight - (el.scrollTop + el.clientHeight);
+      stickyBottomRef.current = distance < 24;
+    };
+    el.addEventListener('scroll', onScroll);
+    return () => el.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Snap to the bottom on first mount so opening the chat panel shows
+  // the most recent lines instead of the oldest, and again whenever
+  // new lines arrive while the sticky flag is on.
   useEffect(() => {
     const el = bodyRef.current;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
-    if (distanceFromBottom < 24) {
-      el.scrollTop = el.scrollHeight;
-    }
+    if (!el || !stickyBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
   }, [lines]);
 
   const panes = Array.from(new Set(lines.map((l) => l.pane))).sort();
