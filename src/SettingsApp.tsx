@@ -764,6 +764,24 @@ function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
     });
   };
 
+  // Atomic preset application for chip placements. Sets tick + time
+  // zones in one setLayout so the user sees both move together and
+  // dockLayoutSet fires once instead of twice.
+  const applyChipPreset = (tickZone: Zone, timeZone: Zone) => {
+    setLayout((prev) => {
+      const updated: PanelLayout = {
+        placements: {
+          ...prev.placements,
+          tick: { ...prev.placements.tick, zone: tickZone },
+          time: { ...prev.placements.time, zone: timeZone },
+        },
+        order: prev.order,
+      };
+      void dockLayoutSet(panelLayoutToDock(updated)).catch((e) => onError(String(e)));
+      return updated;
+    });
+  };
+
   const resetDefaults = () => {
     setLayout(DEFAULT_PANEL_LAYOUT);
     void dockLayoutSet(panelLayoutToDock(DEFAULT_PANEL_LAYOUT)).catch((e) => onError(String(e)));
@@ -830,6 +848,7 @@ function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
         <PanelsChipsSubview
           layout={layout}
           onUpdate={update}
+          onApplyPreset={applyChipPreset}
           config={config}
           setConfig={setConfig}
           onError={onError}
@@ -995,21 +1014,154 @@ function PaneAccordionRow({ label, description, open, onToggle, children }: Acco
 interface ChipsSubviewProps {
   layout: PanelLayout;
   onUpdate: (id: PanelId, next: PanelPlacement) => void;
+  onApplyPreset: (tickZone: Zone, timeZone: Zone) => void;
   config: UiConfig | null;
   setConfig: (updater: (prev: UiConfig | null) => UiConfig | null) => void;
   onError: (e: string | null) => void;
 }
-function PanelsChipsSubview({ layout, onUpdate, config, setConfig, onError }: ChipsSubviewProps) {
+
+// Quick-pick presets for chip placement. Each preset sets both tick
+// and mud time at once so the user can pick a layout style in one
+// click without poking at two host dropdowns. The "active" preset is
+// the one whose tick + time zones both match the current layout; if
+// no preset matches, none is highlighted (user has a custom mix).
+interface ChipPreset {
+  id: string;
+  label: string;
+  description: string;
+  tickZone: Zone;
+  timeZone: Zone;
+}
+const CHIP_PRESETS: ChipPreset[] = [
+  {
+    id: 'statusbar',
+    label: 'statusbar embed',
+    description: 'tick + time ride along the bottom status bar. minimal chrome.',
+    tickZone: 'in:statusbar',
+    timeZone: 'in:statusbar',
+  },
+  {
+    id: 'vitals',
+    label: 'vitals embed',
+    description: 'tick + time sit at the right edge of the vitals bar.',
+    tickZone: 'in:vitals',
+    timeZone: 'in:vitals',
+  },
+  {
+    id: 'standalone',
+    label: 'standalone bottom',
+    description: 'tick + time get their own slots in the bottom row. larger, harder to miss.',
+    tickZone: 'bottom',
+    timeZone: 'bottom',
+  },
+  {
+    id: 'hidden',
+    label: 'hidden',
+    description: 'no tick or time chrome. read the prompt yourself.',
+    tickZone: 'hidden',
+    timeZone: 'hidden',
+  },
+];
+
+const CHIP_STYLE_OPTIONS: {
+  id: NonNullable<UiConfig['chip_style']>;
+  label: string;
+  description: string;
+  preview: { caption: boolean; icon: boolean };
+}[] = [
+  {
+    id: 'value_only',
+    label: 'value only',
+    description: 'minimal chrome. the chip is just the number.',
+    preview: { caption: false, icon: false },
+  },
+  {
+    id: 'caption_value',
+    label: 'caption + value',
+    description: 'explicit labels next to the value. easier to learn at a glance.',
+    preview: { caption: true, icon: false },
+  },
+  {
+    id: 'icon_value',
+    label: 'icon + value',
+    description: 'small unicode icons in place of captions. compact and recognizable.',
+    preview: { caption: false, icon: true },
+  },
+];
+
+function PanelsChipsSubview({
+  layout,
+  onUpdate,
+  onApplyPreset,
+  config,
+  setConfig,
+  onError,
+}: ChipsSubviewProps) {
   const setHost = (id: 'tick' | 'time', zone: Zone) => {
     onUpdate(id, { ...layout.placements[id], zone });
   };
+  const activePresetId = CHIP_PRESETS.find(
+    (p) => p.tickZone === layout.placements.tick.zone && p.timeZone === layout.placements.time.zone,
+  )?.id;
+  const chipStyle = config?.chip_style ?? 'value_only';
+  const pickStyle = (id: NonNullable<UiConfig['chip_style']>) => {
+    if (!config) return;
+    const next: UiConfig = { ...config, chip_style: id };
+    setConfig(() => next);
+    void setUiConfig(next).catch((e) => onError(String(e)));
+  };
+
   return (
     <>
       <div className="panels-tab-header">
-        <span>chip routing</span>
-        <span className="panels-tab-header-dim">
-          where the small ride-along elements live in the chrome
-        </span>
+        <span>presets</span>
+        <span className="panels-tab-header-dim">one-click placement for tick + mud time</span>
+      </div>
+      <div className="chip-presets">
+        {CHIP_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={`chip-preset${activePresetId === p.id ? ' is-active' : ''}`}
+            onClick={() => onApplyPreset(p.tickZone, p.timeZone)}
+            aria-pressed={activePresetId === p.id}
+          >
+            <span className="chip-preset-name">
+              {p.label}
+              {activePresetId === p.id && <span className="chip-preset-tag">[active]</span>}
+            </span>
+            <ChipPresetPreview preset={p} />
+            <span className="chip-preset-desc">{p.description}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="panels-tab-header" style={{ marginTop: 18 }}>
+        <span>chip style</span>
+        <span className="panels-tab-header-dim">same rendering style applies in every host</span>
+      </div>
+      <div className="chip-style-picker">
+        {CHIP_STYLE_OPTIONS.map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            className={`chip-style-card${chipStyle === opt.id ? ' is-on' : ''}`}
+            onClick={() => pickStyle(opt.id)}
+            aria-pressed={chipStyle === opt.id}
+          >
+            <span className="chip-style-name">
+              {opt.label}
+              {chipStyle === opt.id && <span className="chip-preset-tag">[active]</span>}
+            </span>
+            <ChipStyleSample preview={opt.preview} />
+            <span className="chip-style-desc">{opt.description}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="panels-tab-header" style={{ marginTop: 18 }}>
+        <span>custom</span>
+        <span className="panels-tab-header-dim">per-chip host + tick interval + moons</span>
       </div>
       <div className="chips-rows">
         <ChipRow
@@ -1039,6 +1191,53 @@ function PanelsChipsSubview({ layout, onUpdate, config, setConfig, onError }: Ch
         )}
       </div>
     </>
+  );
+}
+
+// Tiny rendered preview of a preset. Draws a 4-row miniature of the
+// main window (top / middle / bottom / statusbar) and floats a small
+// `+ tick` `+ time` chip into whichever zone the preset routes them
+// to. Matches the chrome of the visual layout map at the top of the
+// Layout sub-view so the two surfaces read as related.
+function ChipPresetPreview({ preset }: { preset: ChipPreset }) {
+  const inStatusbar = preset.tickZone === 'in:statusbar' || preset.timeZone === 'in:statusbar';
+  const inVitals = preset.tickZone === 'in:vitals' || preset.timeZone === 'in:vitals';
+  const inAffects = preset.tickZone === 'in:affects' || preset.timeZone === 'in:affects';
+  const standalone = preset.tickZone === 'bottom' || preset.timeZone === 'bottom';
+  return (
+    <span className="chip-preset-mini" aria-hidden="true">
+      <span className="chip-preset-mini-row top">roomstrip</span>
+      <span className="chip-preset-mini-row center">terminal</span>
+      <span className="chip-preset-mini-row bottom">
+        <span className={`chip-preset-mini-pill${inVitals ? ' has-chip' : ''}`}>
+          vitals{inVitals && <span className="chip-preset-mini-attach">+ T</span>}
+        </span>
+        <span className={`chip-preset-mini-pill${inAffects ? ' has-chip' : ''}`}>
+          affects{inAffects && <span className="chip-preset-mini-attach">+ T</span>}
+        </span>
+        {standalone && <span className="chip-preset-mini-pill standalone">tick · time</span>}
+      </span>
+      <span className={`chip-preset-mini-row statusbar${inStatusbar ? ' has-chip' : ''}`}>
+        {inStatusbar && <span className="chip-preset-mini-attach">+ T</span>}
+        <span style={{ marginLeft: 'auto', opacity: 0.5 }}>◐◑</span>
+      </span>
+    </span>
+  );
+}
+
+// Tiny inline sample of how a chip renders in the picked style. Uses
+// a fixed value (`14s`) so the user sees just the visual difference.
+function ChipStyleSample({ preview }: { preview: { caption: boolean; icon: boolean } }) {
+  return (
+    <span className="chip-style-sample">
+      {preview.caption && <span className="chip-style-sample-caption">tick</span>}
+      {preview.icon && (
+        <span className="chip-style-sample-icon" aria-hidden="true">
+          ⏱
+        </span>
+      )}
+      <span className="chip-style-sample-value">14s</span>
+    </span>
   );
 }
 

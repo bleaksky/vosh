@@ -194,6 +194,16 @@ pub(crate) struct UiConfig {
     /// Unknown values coerce back to `"right-edge"` server-side.
     #[serde(default = "default_moons_position")]
     pub moons_position: String,
+    /// Rendering style for tick / mud time chips. Values:
+    /// `"value_only"` (just the value, no caption — minimal chrome),
+    /// `"caption_value"` (caption + value, e.g. "tick 14s"),
+    /// `"icon_value"` (small unicode icon + value). Default matches
+    /// today's "value only" terseness for the mud time chip; with
+    /// the new chip frame the tick chip switches to the same style
+    /// so both chips look consistent regardless of host. Unknown
+    /// values coerce back to `"value_only"` server-side.
+    #[serde(default = "default_chip_style")]
+    pub chip_style: String,
 }
 
 /// Vitals row appearance. Each `show_*` toggle controls whether the
@@ -307,6 +317,10 @@ fn default_moons_position() -> String {
     "right-edge".to_string()
 }
 
+fn default_chip_style() -> String {
+    "value_only".to_string()
+}
+
 fn default_paste_line_delay_ms() -> u32 {
     500
 }
@@ -372,6 +386,7 @@ impl Default for UiConfig {
             paste_line_delay_ms: default_paste_line_delay_ms(),
             vitals: VitalsConfig::default(),
             moons_position: default_moons_position(),
+            chip_style: default_chip_style(),
         }
     }
 }
@@ -493,6 +508,7 @@ impl ProfileConfig {
             paste_line_delay_ms: profile.ui.paste_line_delay_ms,
             vitals: profile.ui.vitals.clone(),
             moons_position: profile.ui.moons_position.clone(),
+            chip_style: profile.ui.chip_style.clone(),
         };
 
         let plugins = PluginsPersist {
@@ -601,6 +617,7 @@ impl ProfileConfig {
             paste_line_delay_ms: self.ui.paste_line_delay_ms,
             vitals: self.ui.vitals.clone(),
             moons_position: self.ui.moons_position.clone(),
+            chip_style: self.ui.chip_style.clone(),
         };
 
         // Plugin enabled-set is persisted; the actual load happens in the

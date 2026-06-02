@@ -604,9 +604,14 @@ export interface UiConfig {
    *  `after-time` dock the moons next to the centered tick + MUD
    *  time chip on the chosen side. */
   moons_position: MoonsPosition;
+  /** Rendering style for tick / mud time chips. Same style applies
+   *  in every host so the chip reads consistently whether it rides
+   *  in the statusbar, vitals, roomstrip, or affects bar. */
+  chip_style: ChipStyle;
 }
 
 export type MoonsPosition = 'right-edge' | 'before-time' | 'after-time';
+export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
 
 export type VitalsLayout = 'stacked' | 'inline';
 export type VitalsPercentColor = 'fill' | 'gradient';
@@ -661,6 +666,7 @@ export async function getUiConfig(): Promise<UiConfig> {
     paste_line_delay_ms?: number;
     vitals?: Partial<VitalsConfig>;
     moons_position?: string;
+    chip_style?: string;
   }>('ui_get_config');
   return {
     theme: typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : 'kanso-zen',
@@ -688,6 +694,10 @@ export async function getUiConfig(): Promise<UiConfig> {
       cfg.moons_position === 'before-time' || cfg.moons_position === 'after-time'
         ? cfg.moons_position
         : 'right-edge',
+    chip_style:
+      cfg.chip_style === 'caption_value' || cfg.chip_style === 'icon_value'
+        ? cfg.chip_style
+        : 'value_only',
   };
 }
 
@@ -803,6 +813,7 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   );
   await emitChanged('vosh://vitals-config-changed', config.vitals, prev?.vitals, deepEqual);
   await emitChanged('vosh://moons-position-changed', config.moons_position, prev?.moons_position);
+  await emitChanged('vosh://chip-style-changed', config.chip_style, prev?.chip_style);
   await emitChanged(
     TRACKED_AFFECTS_EVENT,
     config.tracked_affects,
@@ -832,6 +843,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     pasteLineDelayMs: config.paste_line_delay_ms,
     vitals: config.vitals,
     moonsPosition: config.moons_position,
+    chipStyle: config.chip_style,
   });
   // Theme + custom-themes go out first so any other window's theme
   // registry is current by the time `theme-changed` points at a
@@ -846,6 +858,15 @@ export async function subscribeMoonsPositionChanged(
   return listen<string>('vosh://moons-position-changed', (event) => {
     const v = event.payload;
     cb(v === 'before-time' || v === 'after-time' ? v : 'right-edge');
+  });
+}
+
+export async function subscribeChipStyleChanged(
+  cb: (value: ChipStyle) => void,
+): Promise<UnlistenFn> {
+  return listen<string>('vosh://chip-style-changed', (event) => {
+    const v = event.payload;
+    cb(v === 'caption_value' || v === 'icon_value' ? v : 'value_only');
   });
 }
 
