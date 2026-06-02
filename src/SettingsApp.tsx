@@ -13,7 +13,14 @@ import { ImportTab } from './components/ImportTab';
 import { ProfilesTab } from './components/ProfilesTab';
 import { LoadoutsTab } from './components/LoadoutsTab';
 import { ThemesTab } from './components/ThemesTab';
-import { loadoutsGetState, subscribeLoadoutsChanged } from './lib/session';
+import {
+  loadoutsGetState,
+  subscribeLoadoutsChanged,
+  subscribeTickConfigChanged,
+  tickGetConfig,
+  tickSetConfig,
+  type TickConfig,
+} from './lib/session';
 import {
   checkForUpdate,
   DEFAULT_VITALS_CONFIG,
@@ -1012,10 +1019,11 @@ function PanelsChipsSubview({ layout, onUpdate, config, setConfig, onError }: Ch
           zone={layout.placements.tick.zone}
           onChange={(z) => setHost('tick', z)}
         />
+        <TickConfigEditor onError={onError} />
         <ChipRow
           id="time"
           label="mud time"
-          description="in-game clock from GMCP World.Time"
+          description="in-game clock from GMCP World.Time (12-hour, sky-tinted)"
           zone={layout.placements.time.zone}
           onChange={(z) => setHost('time', z)}
         />
@@ -1030,11 +1038,177 @@ function PanelsChipsSubview({ layout, onUpdate, config, setConfig, onError }: Ch
           />
         )}
       </div>
-      <div className="chips-tab-footnote">
-        Per-chip settings (tick interval, auto-fire, warning sound, mud-time format) are coming in a
-        follow-up. Today: use slash commands like <code>#tick interval 30</code> for tick tuning.
-      </div>
     </>
+  );
+}
+
+// Tick chip's content config: interval, auto-fire, sound, reset
+// pattern, and the warning timer / message / color. Rides directly
+// under the tick chip's host-routing row so the placement and the
+// content sit together. Backed by tick_get_config / tick_set_config.
+// Empty strings round-trip as null on save so the persisted state
+// stays clean (the backend trims them too as a belt-and-braces).
+interface TickConfigEditorProps {
+  onError: (e: string | null) => void;
+}
+function TickConfigEditor({ onError }: TickConfigEditorProps) {
+  const [cfg, setCfg] = useState<TickConfig | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    tickGetConfig()
+      .then((c) => {
+        if (!cancelled) setCfg(c);
+      })
+      .catch((e) => onError(String(e)));
+    void subscribeTickConfigChanged((c) => {
+      if (!cancelled) setCfg(c);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, [onError]);
+
+  if (!cfg) {
+    return (
+      <div className="chips-tick-config-loading">
+        <span className="chips-row-control-label">loading tick config…</span>
+      </div>
+    );
+  }
+
+  const commit = (patch: Partial<TickConfig>) => {
+    const next: TickConfig = { ...cfg, ...patch };
+    setCfg(next);
+    void tickSetConfig(next).catch((e) => onError(String(e)));
+  };
+  const warnOn = cfg.warn_at_secs !== null && cfg.warn_at_secs > 0;
+
+  return (
+    <div className="chips-tick-config">
+      <div className="chips-tick-config-row">
+        <label className="chips-tick-config-field chips-tick-config-toggle">
+          <input
+            type="checkbox"
+            checked={cfg.enabled}
+            onChange={(e) => commit({ enabled: e.target.checked })}
+          />
+          <span>tick timer enabled</span>
+        </label>
+        <label className="chips-tick-config-field chips-tick-config-toggle">
+          <input
+            type="checkbox"
+            checked={cfg.sound}
+            onChange={(e) => commit({ sound: e.target.checked })}
+          />
+          <span>sound on fire</span>
+        </label>
+      </div>
+      <div className="chips-tick-config-row">
+        <label className="chips-tick-config-field">
+          <span>interval</span>
+          <input
+            type="number"
+            min={1}
+            max={3600}
+            value={cfg.interval_secs}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (Number.isFinite(v) && v > 0) commit({ interval_secs: Math.floor(v) });
+            }}
+          />
+          <span className="chips-tick-config-unit">sec</span>
+        </label>
+        <label className="chips-tick-config-field chips-tick-config-field-wide">
+          <span>auto-fire</span>
+          <input
+            type="text"
+            spellCheck={false}
+            placeholder="command to send on every tick (blank = off)"
+            value={cfg.auto_fire ?? ''}
+            onChange={(e) =>
+              commit({ auto_fire: e.target.value.length > 0 ? e.target.value : null })
+            }
+          />
+        </label>
+      </div>
+      <div className="chips-tick-config-row">
+        <label className="chips-tick-config-field chips-tick-config-field-wide">
+          <span>reset on</span>
+          <input
+            type="text"
+            spellCheck={false}
+            placeholder="regex; resets the tick on every match (blank = off)"
+            value={cfg.reset_pattern ?? ''}
+            onChange={(e) =>
+              commit({ reset_pattern: e.target.value.length > 0 ? e.target.value : null })
+            }
+          />
+        </label>
+      </div>
+      <div className="chips-tick-config-row">
+        <label className="chips-tick-config-field chips-tick-config-toggle">
+          <input
+            type="checkbox"
+            checked={warnOn}
+            onChange={(e) =>
+              commit({
+                warn_at_secs: e.target.checked ? (cfg.warn_at_secs ?? 5) : null,
+              })
+            }
+          />
+          <span>warn before fire</span>
+        </label>
+        <label className="chips-tick-config-field">
+          <span>at</span>
+          <input
+            type="number"
+            min={1}
+            max={300}
+            disabled={!warnOn}
+            value={cfg.warn_at_secs ?? 5}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (Number.isFinite(v) && v > 0) commit({ warn_at_secs: Math.floor(v) });
+            }}
+          />
+          <span className="chips-tick-config-unit">sec before</span>
+        </label>
+      </div>
+      <div className="chips-tick-config-row">
+        <label className="chips-tick-config-field chips-tick-config-field-wide">
+          <span>warn text</span>
+          <input
+            type="text"
+            spellCheck={false}
+            disabled={!warnOn}
+            placeholder="default: tick incoming"
+            value={cfg.warn_message ?? ''}
+            onChange={(e) =>
+              commit({ warn_message: e.target.value.length > 0 ? e.target.value : null })
+            }
+          />
+        </label>
+        <label className="chips-tick-config-field">
+          <span>color</span>
+          <input
+            type="text"
+            spellCheck={false}
+            disabled={!warnOn}
+            placeholder="bright-red"
+            value={cfg.warn_color ?? ''}
+            onChange={(e) =>
+              commit({ warn_color: e.target.value.length > 0 ? e.target.value : null })
+            }
+          />
+        </label>
+      </div>
+    </div>
   );
 }
 

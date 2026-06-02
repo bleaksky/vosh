@@ -1894,6 +1894,117 @@ pub(crate) async fn loadouts_set_active(
     Ok(())
 }
 
+/// Snapshot of the per-session tick timer config. Mirrors
+/// `tick::TickConfig` with `Duration` flattened to a `u64` of seconds
+/// so the frontend can edit it cleanly. Reset pattern, auto-fire
+/// command, warning timer / message / color are all optional — empty
+/// means the feature is off.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(crate) struct TickConfigPayload {
+    pub enabled: bool,
+    pub interval_secs: u64,
+    pub auto_fire: Option<String>,
+    pub sound: bool,
+    pub reset_pattern: Option<String>,
+    pub warn_at_secs: Option<u64>,
+    pub warn_message: Option<String>,
+    pub warn_color: Option<String>,
+}
+
+/// Read the live tick configuration.
+#[tauri::command]
+pub(crate) async fn tick_get_config(
+    state: State<'_, SharedState>,
+) -> Result<TickConfigPayload, String> {
+    let p = state.profile.lock().await;
+    let cfg = &p.tick.config;
+    Ok(TickConfigPayload {
+        enabled: cfg.enabled,
+        interval_secs: cfg.interval.as_secs(),
+        auto_fire: cfg.auto_fire.clone(),
+        sound: cfg.sound,
+        reset_pattern: cfg.reset_pattern.clone(),
+        warn_at_secs: cfg.warn_at_secs,
+        warn_message: cfg.warn_message.clone(),
+        warn_color: cfg.warn_color.clone(),
+    })
+}
+
+/// Apply a new tick configuration. Routes interval changes through
+/// `TickRuntime::set_interval` so the next-fire deadline rebuilds,
+/// and reset-pattern changes through `set_reset_pattern` so the
+/// regex re-compiles (an invalid regex returns the underlying error
+/// to the caller). Other fields are direct assignments. Persists the
+/// active profile and broadcasts `vosh://tick-config-changed`.
+#[tauri::command]
+pub(crate) async fn tick_set_config(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    config: TickConfigPayload,
+) -> Result<TickConfigPayload, String> {
+    // Normalize string options: empty / whitespace-only -> None so the
+    // persisted state does not carry an empty placeholder.
+    let auto_fire = config
+        .auto_fire
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let reset_pattern = config
+        .reset_pattern
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let warn_message = config
+        .warn_message
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let warn_color = config
+        .warn_color
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let snapshot = {
+        let mut p = state.profile.lock().await;
+        let now = tokio::time::Instant::now();
+        if config.enabled {
+            if !p.tick.config.enabled {
+                p.tick.enable(now);
+            }
+            p.tick.set_interval(config.interval_secs, now);
+        } else {
+            p.tick.disable();
+            // Still record the interval so the user can flip enabled
+            // back on without re-typing it.
+            p.tick.config.interval = std::time::Duration::from_secs(config.interval_secs.max(1));
+        }
+        p.tick
+            .set_reset_pattern(reset_pattern.clone())
+            .map_err(|e| format!("invalid reset pattern: {e}"))?;
+        p.tick.config.auto_fire.clone_from(&auto_fire);
+        p.tick.config.sound = config.sound;
+        p.tick.config.warn_at_secs = config.warn_at_secs.filter(|s| *s > 0);
+        p.tick.config.warn_message.clone_from(&warn_message);
+        p.tick.config.warn_color.clone_from(&warn_color);
+
+        TickConfigPayload {
+            enabled: p.tick.config.enabled,
+            interval_secs: p.tick.config.interval.as_secs(),
+            auto_fire: auto_fire.clone(),
+            sound: p.tick.config.sound,
+            reset_pattern: reset_pattern.clone(),
+            warn_at_secs: p.tick.config.warn_at_secs,
+            warn_message: warn_message.clone(),
+            warn_color: warn_color.clone(),
+        }
+    };
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    broadcast(&app, "vosh://tick-config-changed", &snapshot);
+    Ok(snapshot)
+}
+
 /// Download + install the pending update and restart the app. Errors
 /// surface to the frontend; the relaunch is a hard exit so any UI
 /// confirmation has to happen before this call returns.

@@ -3112,21 +3112,74 @@ body {
   font-size: 0.88em;
   line-height: 1.35;
 }
-.chips-tab-footnote {
+/* Inline tick-content editor that rides directly under the tick chip
+   row in the Chips sub-view. Indents into the chip row's bracket-name
+   column so it reads as belonging to that row. */
+.chips-tick-config {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px 10px 24px;
+  margin: -4px 0 4px 0;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-top: none;
+  border-radius: 0 0 2px 2px;
+}
+.chips-tick-config-loading {
+  padding: 6px 12px;
   color: var(--c-text-faint);
-  font-size: 0.85em;
-  line-height: 1.45;
-  padding: 8px 12px;
-  border: 1px dashed var(--c-border);
+}
+.chips-tick-config-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  align-items: center;
+}
+.chips-tick-config-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88em;
+  color: var(--c-text);
+}
+.chips-tick-config-field > span:first-child {
+  color: var(--c-text-faint);
+  letter-spacing: 0.02em;
+}
+.chips-tick-config-toggle {
+  cursor: pointer;
+}
+.chips-tick-config-toggle span {
+  color: var(--c-text);
+}
+.chips-tick-config-field-wide {
+  flex: 1 1 280px;
+}
+.chips-tick-config-field-wide input[type='text'] {
+  flex: 1 1 auto;
+  min-width: 200px;
+}
+.chips-tick-config-field input[type='number'] {
+  width: 64px;
+}
+.chips-tick-config-field input[type='text'] {
+  background: var(--c-surface-emphasis);
+  border: 1px solid var(--c-border-strong);
+  color: var(--c-text-strong);
+  font-family: inherit;
+  font-size: 0.95em;
+  padding: 3px 6px;
   border-radius: 2px;
 }
-.chips-tab-footnote code {
-  background: var(--c-surface-emphasis);
-  padding: 1px 5px;
-  border-radius: 2px;
-  font-family: inherit;
-  font-size: 0.96em;
-  color: var(--c-text);
+.chips-tick-config-field input[type='text']:disabled,
+.chips-tick-config-field input[type='number']:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.chips-tick-config-unit {
+  color: var(--c-text-faint);
+  font-size: 0.85em;
 }
 
 .panels-tab-header {
