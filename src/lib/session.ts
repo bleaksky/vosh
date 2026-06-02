@@ -1061,6 +1061,34 @@ export async function subscribeLoadoutsChanged(cb: () => void): Promise<Unlisten
   return listen('vosh://loadouts-changed', () => cb());
 }
 
+// Live tick-timer configuration. Mirrors TickConfigPayload on the
+// backend. Optional fields use null to mean "feature off / use
+// default"; the backend trims empty strings to null on write.
+export interface TickConfig {
+  enabled: boolean;
+  interval_secs: number;
+  auto_fire: string | null;
+  sound: boolean;
+  reset_pattern: string | null;
+  warn_at_secs: number | null;
+  warn_message: string | null;
+  warn_color: string | null;
+}
+
+export async function tickGetConfig(): Promise<TickConfig> {
+  return invoke('tick_get_config');
+}
+
+export async function tickSetConfig(config: TickConfig): Promise<TickConfig> {
+  return invoke('tick_set_config', { config });
+}
+
+export async function subscribeTickConfigChanged(
+  cb: (cfg: TickConfig) => void,
+): Promise<UnlistenFn> {
+  return listen<TickConfig>('vosh://tick-config-changed', (event) => cb(event.payload));
+}
+
 // Per-category scope toggle (Profile vs Global).
 export type ProfileScope = 'profile' | 'global';
 
