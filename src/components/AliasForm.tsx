@@ -47,6 +47,12 @@ export function AliasForm({ load, save, onError }: Props) {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [groupStates, setGroupStates] = useState<GroupState[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Per-row drafts for the group field so changes do not commit (and
+  // re-bucket the row mid-edit) until the user blurs. Without this,
+  // typing the first character of a new group name moves the row to a
+  // freshly-bucketed section, React unmounts the old DOM node, and
+  // focus is dropped after every keystroke.
+  const [groupDrafts, setGroupDrafts] = useState<Record<number, string>>({});
   const dirty = useMemo(() => list !== null && JSON.stringify(list) !== baseline, [list, baseline]);
   useUnsavedWarning(dirty);
 
@@ -254,12 +260,34 @@ export function AliasForm({ load, save, onError }: Props) {
                         type="text"
                         placeholder="group"
                         title="optional folder; aliases sharing a group can be bulk-disabled"
-                        value={alias.group ?? ''}
+                        value={groupDrafts[index] ?? alias.group ?? ''}
                         onChange={(e) =>
-                          update(index, {
-                            group: e.target.value.trim().length > 0 ? e.target.value : null,
-                          })
+                          setGroupDrafts((prev) => ({ ...prev, [index]: e.target.value }))
                         }
+                        onBlur={() => {
+                          const draft = groupDrafts[index];
+                          if (draft === undefined) return;
+                          const next = draft.trim().length > 0 ? draft.trim() : null;
+                          setGroupDrafts((prev) => {
+                            const copy = { ...prev };
+                            delete copy[index];
+                            return copy;
+                          });
+                          if (next !== (alias.group ?? null)) update(index, { group: next });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            (e.currentTarget as HTMLInputElement).blur();
+                          } else if (e.key === 'Escape') {
+                            setGroupDrafts((prev) => {
+                              const copy = { ...prev };
+                              delete copy[index];
+                              return copy;
+                            });
+                            (e.currentTarget as HTMLInputElement).blur();
+                          }
+                        }}
                       />
                       <button
                         type="button"

@@ -38,6 +38,10 @@ export function ProfilesTab({ onError }: Props) {
   // without showing any UI, so the operation silently aborted.
   const [duplicateTarget, setDuplicateTarget] = useState<string | null>(null);
   const [duplicateDraft, setDuplicateDraft] = useState('');
+  // Tauri webviews silently reject window.confirm() too. Replace the
+  // browser confirm with a two-step inline pattern: click [delete],
+  // the row swaps to [confirm] / [cancel], click confirm to commit.
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [showMigrationWizard, setShowMigrationWizard] = useState(false);
 
   const reload = async () => {
@@ -92,11 +96,9 @@ export function ProfilesTab({ onError }: Props) {
   };
 
   const handleDelete = async (name: string) => {
-    if (!confirm(`delete profile "${name}"? this also removes its profiles/${name}.toml file.`)) {
-      return;
-    }
     try {
       await profileDelete(name);
+      setDeleteTarget(null);
       onError(null);
     } catch (e) {
       onError(String(e));
@@ -256,7 +258,10 @@ export function ProfilesTab({ onError }: Props) {
             onCommitDuplicate={() => void commitDuplicate()}
             onCancelDuplicate={cancelDuplicate}
             onSwitch={() => void handleSwitch(p.name)}
-            onDelete={() => void handleDelete(p.name)}
+            confirmingDelete={deleteTarget === p.name}
+            onBeginDelete={() => setDeleteTarget(p.name)}
+            onConfirmDelete={() => void handleDelete(p.name)}
+            onCancelDelete={() => setDeleteTarget(null)}
             onSaveAutoMatch={async (am, description) => {
               try {
                 await profileSetMetadata(p.name, description, am);
@@ -302,7 +307,10 @@ interface RowProps {
   onCommitDuplicate: () => void;
   onCancelDuplicate: () => void;
   onSwitch: () => void;
-  onDelete: () => void;
+  confirmingDelete: boolean;
+  onBeginDelete: () => void;
+  onConfirmDelete: () => void;
+  onCancelDelete: () => void;
   onSaveAutoMatch: (
     am: { host: string | null; port: number | null; characters: string[] } | null,
     description: string | null,
@@ -325,7 +333,10 @@ function ProfileRow({
   onCommitDuplicate,
   onCancelDuplicate,
   onSwitch,
-  onDelete,
+  confirmingDelete,
+  onBeginDelete,
+  onConfirmDelete,
+  onCancelDelete,
   onSaveAutoMatch,
 }: RowProps) {
   const [open, setOpen] = useState(false);
@@ -431,11 +442,33 @@ function ProfileRow({
               [duplicate]
             </button>
           )}
-          {!isActive && (
-            <button type="button" className="settings-btn settings-btn-danger" onClick={onDelete}>
-              [delete]
-            </button>
-          )}
+          {!isActive &&
+            (confirmingDelete ? (
+              <>
+                <button
+                  type="button"
+                  className="settings-btn settings-btn-danger"
+                  onClick={onConfirmDelete}
+                >
+                  [confirm delete]
+                </button>
+                <button
+                  type="button"
+                  className="settings-btn settings-btn-mute"
+                  onClick={onCancelDelete}
+                >
+                  [cancel]
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="settings-btn settings-btn-danger"
+                onClick={onBeginDelete}
+              >
+                [delete]
+              </button>
+            ))}
         </div>
       </div>
 
