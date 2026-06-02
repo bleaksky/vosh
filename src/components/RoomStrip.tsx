@@ -153,11 +153,21 @@ function formatExits(exits: Record<string, number | string> | undefined): string
   return out.join(' ');
 }
 
+interface Props {
+  /** Layout variant. `strip` (default) is a single horizontal line —
+   *  the original tintin-inspired prompt strip that lives in top /
+   *  bottom zones. `column` wraps content onto multiple lines and
+   *  drops the horizontal scrollbar; used when placed in a left /
+   *  right side panel where width is constrained and height is
+   *  available. */
+  variant?: 'strip' | 'column';
+}
+
 // Single horizontal strip above the terminal: area · room (vnum) ·
 // terrain · [exits] · here: chars · items: items. Replaces the 5-row
 // stack from the old RoomInfoBar so the room context reads in one
 // glance without consuming vertical space.
-export function RoomStrip() {
+export function RoomStrip({ variant = 'strip' }: Props = {}) {
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [areas, setAreas] = useState<AreaMap | null>(null);
   const [chars, setChars] = useState<RoomChar[]>([]);
@@ -242,8 +252,11 @@ export function RoomStrip() {
   const itemGroups = groupByName(items);
 
   return (
-    <div className="room-strip-wrap">
-      <div className="room-strip" aria-label="current room">
+    <div className={`room-strip-wrap${variant === 'column' ? ' room-strip-wrap-column' : ''}`}>
+      <div
+        className={`room-strip${variant === 'column' ? ' room-strip-column' : ''}`}
+        aria-label="current room"
+      >
         {room.area && (
           <span className="room-strip-area" style={{ color: areaColor }}>
             {room.area}
