@@ -7,6 +7,7 @@ import { AliasForm } from './components/AliasForm';
 import { UnsavedDot } from './components/UnsavedDot';
 import { useUnsavedWarning } from './lib/unsaved';
 import { LogsTab } from './components/LogsTab';
+import { TrackedAffectsEditor } from './components/TrackedAffectsEditor';
 import { MacrosTab } from './components/MacrosTab';
 import { ImportTab } from './components/ImportTab';
 import { ProfilesTab } from './components/ProfilesTab';
@@ -29,7 +30,6 @@ import {
   setUiConfig,
   subscribeDockLayoutChanged,
   type SystemFontEntry,
-  type TrackedAffect,
   type UiConfig,
   type VitalsBarStyle,
   type VitalsConfig,
@@ -255,7 +255,6 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
   const [fontsState, setFontsState] = useState<'idle' | 'loading' | 'loaded'>('idle');
   const [fontFilter, setFontFilter] = useState('');
   const [showOnlyMono, setShowOnlyMono] = useState(true);
-  const [trackedDraft, setTrackedDraft] = useState('');
 
   // System font enumeration is lazy. font-kit's first pass costs
   // 200–500ms because it parses every installed font file to detect
@@ -335,21 +334,6 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
     const id = window.setTimeout(() => setSavedAt(null), 1500);
     return () => window.clearTimeout(id);
   }, [savedAt]);
-
-  const addTrackedAffect = (raw: string) => {
-    if (!config) return;
-    const name = raw.trim();
-    if (!name) return;
-    const norm = name.toLowerCase().replace(/\s+/g, ' ');
-    if (config.tracked_affects.some((t) => t.name.toLowerCase().replace(/\s+/g, ' ') === norm)) {
-      setTrackedDraft('');
-      return;
-    }
-    update({
-      tracked_affects: [...config.tracked_affects, { name, label: null }],
-    });
-    setTrackedDraft('');
-  };
 
   const close = () => void getCurrentWindow().close();
 
@@ -435,26 +419,6 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           />
           <span>keep last command (press enter to repeat)</span>
         </label>
-      </Row>
-      <Row label="moons">
-        <span className="settings-paste-row">
-          <select
-            value={config.moons_position}
-            onChange={(e) =>
-              update({
-                moons_position: e.target.value as UiConfig['moons_position'],
-              })
-            }
-            aria-label="moon phases placement in the status bar"
-          >
-            <option value="right-edge">far right (historical)</option>
-            <option value="before-time">left of tick/time chip</option>
-            <option value="after-time">right of tick/time chip</option>
-          </select>
-          <span className="settings-paste-hint">
-            where the World.Moons phase glyphs render in the status bar.
-          </span>
-        </span>
       </Row>
       <Row label="paste pacing">
         <span className="settings-paste-row">
@@ -576,118 +540,6 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           style={{ fontFamily: config.font_family, fontSize: config.font_size }}
         >
           {PREVIEW_TEXT}
-        </div>
-      </div>
-      <div className="settings-row">
-        <span className="settings-row-label">tracked affects</span>
-        <div className="settings-tracked">
-          <div className="settings-tracked-chips">
-            {config.tracked_affects.length === 0 && (
-              <span className="settings-font-empty">no affects tracked yet</span>
-            )}
-            {config.tracked_affects.map((entry, i) => {
-              const moveTo = (target: number) => {
-                if (target < 0 || target >= config.tracked_affects.length || target === i) return;
-                const next = config.tracked_affects.slice();
-                const [moved] = next.splice(i, 1);
-                next.splice(target, 0, moved);
-                update({ tracked_affects: next });
-              };
-              const updateEntry = (patch: Partial<TrackedAffect>) => {
-                const next = config.tracked_affects.slice();
-                next[i] = { ...next[i], ...patch };
-                update({ tracked_affects: next });
-              };
-              const removeEntry = () => {
-                update({
-                  tracked_affects: config.tracked_affects.filter((_, j) => j !== i),
-                });
-              };
-              return (
-                <span
-                  key={`${entry.name}-${i}`}
-                  className="settings-tracked-chip settings-tracked-chip-pair"
-                >
-                  <button
-                    type="button"
-                    className="settings-tracked-move"
-                    aria-label={`move ${entry.name} up`}
-                    disabled={i === 0}
-                    onClick={() => moveTo(i - 1)}
-                    title="move up"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    className="settings-tracked-move"
-                    aria-label={`move ${entry.name} down`}
-                    disabled={i === config.tracked_affects.length - 1}
-                    onClick={() => moveTo(i + 1)}
-                    title="move down"
-                  >
-                    ↓
-                  </button>
-                  <input
-                    type="text"
-                    className="settings-tracked-name"
-                    spellCheck={false}
-                    value={entry.name}
-                    placeholder="server name"
-                    title="affect name the server pushes (matched case-insensitively)"
-                    onChange={(e) => updateEntry({ name: e.target.value })}
-                  />
-                  <span className="settings-tracked-sep" aria-hidden="true">
-                    →
-                  </span>
-                  <input
-                    type="text"
-                    className="settings-tracked-label"
-                    spellCheck={false}
-                    value={entry.label ?? ''}
-                    placeholder="label (optional)"
-                    title="display label; leave empty to show the server name"
-                    onChange={(e) =>
-                      updateEntry({
-                        label: e.target.value.length > 0 ? e.target.value : null,
-                      })
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="settings-tracked-remove"
-                    aria-label={`remove ${entry.name}`}
-                    onClick={removeEntry}
-                  >
-                    ×
-                  </button>
-                </span>
-              );
-            })}
-          </div>
-          <div className="settings-tracked-add">
-            <input
-              type="text"
-              spellCheck={false}
-              placeholder="affect name"
-              value={trackedDraft}
-              onChange={(e) => setTrackedDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  addTrackedAffect(trackedDraft);
-                }
-              }}
-            />
-            <button
-              type="button"
-              className="settings-btn"
-              disabled={trackedDraft.trim().length === 0}
-              onClick={() => addTrackedAffect(trackedDraft)}
-            >
-              [add]
-            </button>
-          </div>
         </div>
       </div>
       <div className="settings-actions">
@@ -837,10 +689,30 @@ interface PanelsTabProps {
   onError: (e: string | null) => void;
 }
 
+type PanelsSubView = 'layout' | 'panes' | 'chips';
+
 function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
   const [layout, setLayout] = useState<PanelLayout>(DEFAULT_PANEL_LAYOUT);
   const [highlightId, setHighlightId] = useState<PanelId | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [subView, setSubView] = useState<PanelsSubView>(() => {
+    try {
+      const stored = localStorage.getItem('vosh.settings.panels.subview');
+      if (stored === 'panes' || stored === 'chips') return stored;
+    } catch {
+      // ignore
+    }
+    return 'layout';
+  });
+
+  const pickSubView = (next: PanelsSubView) => {
+    setSubView(next);
+    try {
+      localStorage.setItem('vosh.settings.panels.subview', next);
+    } catch {
+      // ignore
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -902,17 +774,102 @@ function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
 
   return (
     <div className="panels-tab">
+      <div className="panels-subtoggle" role="tablist" aria-label="panels view">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={subView === 'layout'}
+          className={`panels-subtoggle-btn${subView === 'layout' ? ' is-on' : ''}`}
+          onClick={() => pickSubView('layout')}
+        >
+          layout
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={subView === 'panes'}
+          className={`panels-subtoggle-btn${subView === 'panes' ? ' is-on' : ''}`}
+          onClick={() => pickSubView('panes')}
+        >
+          panes
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={subView === 'chips'}
+          className={`panels-subtoggle-btn${subView === 'chips' ? ' is-on' : ''}`}
+          onClick={() => pickSubView('chips')}
+        >
+          chips
+        </button>
+      </div>
+
+      {subView === 'layout' && (
+        <PanelsLayoutSubview
+          layout={layout}
+          highlightId={highlightId}
+          setHighlightId={setHighlightId}
+          onUpdate={update}
+          onMove={move}
+          sideFillOn={sideFillOn}
+          onToggleSideFill={toggleSideFill}
+          onResetDefaults={resetDefaults}
+        />
+      )}
+      {subView === 'panes' && (
+        <PanelsPanesSubview config={config} setConfig={setConfig} onError={onError} />
+      )}
+      {subView === 'chips' && (
+        <PanelsChipsSubview
+          layout={layout}
+          onUpdate={update}
+          config={config}
+          setConfig={setConfig}
+          onError={onError}
+        />
+      )}
+    </div>
+  );
+}
+
+// === Layout sub-view ====================================================
+// The visual placement view: the layout map preview, per-panel zone +
+// align dropdowns, the side-panels-fill-height toggle, and a reset
+// button. This is the pre-redesign Panels tab body, just split out so
+// the sub-toggle can show one view at a time.
+interface LayoutSubviewProps {
+  layout: PanelLayout;
+  highlightId: PanelId | null;
+  setHighlightId: (id: PanelId | null) => void;
+  onUpdate: (id: PanelId, next: PanelPlacement) => void;
+  onMove: (id: PanelId, direction: 'up' | 'down') => void;
+  sideFillOn: boolean;
+  onToggleSideFill: () => void;
+  onResetDefaults: () => void;
+}
+function PanelsLayoutSubview({
+  layout,
+  highlightId,
+  setHighlightId,
+  onUpdate,
+  onMove,
+  sideFillOn,
+  onToggleSideFill,
+  onResetDefaults,
+}: LayoutSubviewProps) {
+  return (
+    <>
       <div className="panels-tab-header">
         <span>layout map</span>
         <span className="panels-tab-header-dim">live · changes save automatically</span>
       </div>
-      <PanelsPreview layout={layout} highlightId={highlightId} onMove={move} />
+      <PanelsPreview layout={layout} highlightId={highlightId} onMove={onMove} />
       <label className="settings-checkbox panels-side-fill-toggle">
-        <input type="checkbox" checked={sideFillOn} onChange={toggleSideFill} />
+        <input type="checkbox" checked={sideFillOn} onChange={onToggleSideFill} />
         <span>side panels span full height (input lives under terminal only)</span>
       </label>
       <div className="panels-section-header">
-        <span>panel layout</span>
+        <span>panel placement</span>
         <span className="panels-tab-header-dim">zone and alignment for each panel</span>
       </div>
       <div className="panels-rows">
@@ -921,18 +878,219 @@ function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
             key={id}
             id={id}
             placement={layout.placements[id]}
-            onChange={(next) => update(id, next)}
+            onChange={(next) => onUpdate(id, next)}
             onFocus={() => setHighlightId(id)}
             onBlur={() => setHighlightId(null)}
           />
         ))}
       </div>
-      <VitalsConfigSection config={config} setConfig={setConfig} onError={onError} />
       <div className="settings-actions">
-        <button type="button" className="settings-btn settings-btn-mute" onClick={resetDefaults}>
+        <button type="button" className="settings-btn settings-btn-mute" onClick={onResetDefaults}>
           [reset to defaults]
         </button>
       </div>
+    </>
+  );
+}
+
+// === Panes sub-view =====================================================
+// Per-pane content config as a collapsible accordion. Currently lists
+// only panes with content config: vitals (template + glyphs + presets)
+// and affects (tracked-affect editor). Tick and mud time appear in the
+// "chips" sub-view because their host-routing is the primary knob;
+// their content config (interval, format) lands in a follow-up commit.
+// Map / chat / group / roomstrip have no content config yet, so they
+// are not listed at all rather than rendering an empty row.
+interface PanesSubviewProps {
+  config: UiConfig | null;
+  setConfig: (updater: (prev: UiConfig | null) => UiConfig | null) => void;
+  onError: (e: string | null) => void;
+}
+function PanelsPanesSubview({ config, setConfig, onError }: PanesSubviewProps) {
+  const [open, setOpen] = useState<Set<PanelId>>(new Set<PanelId>(['vitals']));
+  const toggle = (id: PanelId) => {
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  if (!config) return <div className="settings-loading">loading panes…</div>;
+  const update = (patch: Partial<UiConfig>) => {
+    const next: UiConfig = { ...config, ...patch };
+    setConfig(() => next);
+    void setUiConfig(next).catch((e) => onError(String(e)));
+  };
+  return (
+    <div className="panes-accordion">
+      <PaneAccordionRow
+        id="vitals"
+        label="vitals"
+        description="your hp / mn / mv bars and any GMCP fields you template in"
+        open={open.has('vitals')}
+        onToggle={() => toggle('vitals')}
+      >
+        <VitalsConfigSection config={config} setConfig={setConfig} onError={onError} />
+      </PaneAccordionRow>
+      <PaneAccordionRow
+        id="affects"
+        label="affects"
+        description="tracked-affect pills with remaining duration"
+        open={open.has('affects')}
+        onToggle={() => toggle('affects')}
+      >
+        <TrackedAffectsEditor config={config} update={update} />
+      </PaneAccordionRow>
+    </div>
+  );
+}
+
+interface AccordionRowProps {
+  id: PanelId;
+  label: string;
+  description: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}
+function PaneAccordionRow({ label, description, open, onToggle, children }: AccordionRowProps) {
+  return (
+    <div className={`panes-accordion-row${open ? ' is-open' : ''}`}>
+      <button
+        type="button"
+        className="panes-accordion-head"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        <span className="panes-accordion-name">{label}</span>
+        <span className="panes-accordion-desc">{description}</span>
+        <span className="panes-accordion-caret" aria-hidden="true">
+          {open ? '▾' : '▸'}
+        </span>
+      </button>
+      {open && <div className="panes-accordion-body">{children}</div>}
+    </div>
+  );
+}
+
+// === Chips sub-view =====================================================
+// Tick, MUD time, and moons-phase host routing. These are the small
+// ride-along elements in Vosh's chrome: they don't take their own
+// panel slot, they hang off a host (vitals, roomstrip, affects, the
+// statusbar). This view lets you pick a host per chip in one place,
+// plus the moons-position knob (which is statusbar chrome only).
+//
+// Per-chip content config (tick interval / auto-fire / sound /
+// warning, mud-time format) is intentionally left out of this commit
+// so the structural change stays focused; it surfaces here in a
+// follow-up.
+interface ChipsSubviewProps {
+  layout: PanelLayout;
+  onUpdate: (id: PanelId, next: PanelPlacement) => void;
+  config: UiConfig | null;
+  setConfig: (updater: (prev: UiConfig | null) => UiConfig | null) => void;
+  onError: (e: string | null) => void;
+}
+function PanelsChipsSubview({ layout, onUpdate, config, setConfig, onError }: ChipsSubviewProps) {
+  const setHost = (id: 'tick' | 'time', zone: Zone) => {
+    onUpdate(id, { ...layout.placements[id], zone });
+  };
+  return (
+    <>
+      <div className="panels-tab-header">
+        <span>chip routing</span>
+        <span className="panels-tab-header-dim">
+          where the small ride-along elements live in the chrome
+        </span>
+      </div>
+      <div className="chips-rows">
+        <ChipRow
+          id="tick"
+          label="tick"
+          description="tick countdown"
+          zone={layout.placements.tick.zone}
+          onChange={(z) => setHost('tick', z)}
+        />
+        <ChipRow
+          id="time"
+          label="mud time"
+          description="in-game clock from GMCP World.Time"
+          zone={layout.placements.time.zone}
+          onChange={(z) => setHost('time', z)}
+        />
+        {config && (
+          <MoonsRow
+            position={config.moons_position}
+            onChange={(p) => {
+              const next: UiConfig = { ...config, moons_position: p };
+              setConfig(() => next);
+              void setUiConfig(next).catch((e) => onError(String(e)));
+            }}
+          />
+        )}
+      </div>
+      <div className="chips-tab-footnote">
+        Per-chip settings (tick interval, auto-fire, warning sound, mud-time format) are coming in a
+        follow-up. Today: use slash commands like <code>#tick interval 30</code> for tick tuning.
+      </div>
+    </>
+  );
+}
+
+interface ChipRowProps {
+  id: PanelId;
+  label: string;
+  description: string;
+  zone: Zone;
+  onChange: (zone: Zone) => void;
+}
+function ChipRow({ id, label, description, zone, onChange }: ChipRowProps) {
+  const meta = PANELS[id];
+  return (
+    <div className="chips-row">
+      <span className="chips-row-name">[{label}]</span>
+      <span className="chips-row-arrow" aria-hidden="true">
+        →
+      </span>
+      <label className="chips-row-control">
+        <span className="chips-row-control-label">host</span>
+        <select value={zone} onChange={(e) => onChange(e.target.value as Zone)}>
+          {meta.allowedZones.map((z) => (
+            <option key={z} value={z}>
+              {zoneLabel(z)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <span className="chips-row-hint">{description}</span>
+    </div>
+  );
+}
+
+interface MoonsRowProps {
+  position: UiConfig['moons_position'];
+  onChange: (next: UiConfig['moons_position']) => void;
+}
+function MoonsRow({ position, onChange }: MoonsRowProps) {
+  return (
+    <div className="chips-row">
+      <span className="chips-row-name">[moons]</span>
+      <span className="chips-row-arrow" aria-hidden="true">
+        →
+      </span>
+      <label className="chips-row-control">
+        <span className="chips-row-control-label">position</span>
+        <select
+          value={position}
+          onChange={(e) => onChange(e.target.value as UiConfig['moons_position'])}
+        >
+          <option value="right-edge">far right (historical)</option>
+          <option value="before-time">left of tick/time chip</option>
+          <option value="after-time">right of tick/time chip</option>
+        </select>
+      </label>
+      <span className="chips-row-hint">moon-phase glyphs in the status bar</span>
     </div>
   );
 }

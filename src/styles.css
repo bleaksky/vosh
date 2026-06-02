@@ -2992,6 +2992,143 @@ body {
   gap: 12px;
 }
 
+/* Sub-toggle at the top of the Panels tab. Three pills:
+   [layout | panes | chips]. Pure visual swap of the rest of the tab. */
+.panels-subtoggle {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 2px;
+  background: var(--c-surface-pane, var(--c-surface));
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+}
+.panels-subtoggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--c-text-faint);
+  font-family: inherit;
+  font-size: 0.92em;
+  padding: 4px 12px;
+  cursor: pointer;
+  border-radius: 2px;
+  letter-spacing: 0.04em;
+}
+.panels-subtoggle-btn:hover {
+  color: var(--c-text);
+}
+.panels-subtoggle-btn.is-on {
+  color: var(--c-accent);
+  background: var(--c-accent-soft, rgba(176, 200, 212, 0.12));
+}
+
+/* Panes accordion: one expandable row per pane that has content config. */
+.panes-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.panes-accordion-row {
+  background: var(--c-surface-pane, var(--c-surface));
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+}
+.panes-accordion-row.is-open {
+  border-color: var(--c-border-strong);
+}
+.panes-accordion-head {
+  display: grid;
+  grid-template-columns: 120px 1fr 24px;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 14px;
+  background: transparent;
+  border: none;
+  color: var(--c-text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.panes-accordion-head:hover {
+  color: var(--c-text-strong);
+}
+.panes-accordion-name {
+  font-weight: 600;
+}
+.panes-accordion-desc {
+  color: var(--c-text-faint);
+  font-size: 0.88em;
+  line-height: 1.35;
+}
+.panes-accordion-caret {
+  text-align: right;
+  color: var(--c-text-faint);
+}
+.panes-accordion-row.is-open .panes-accordion-caret {
+  color: var(--c-accent);
+}
+.panes-accordion-body {
+  padding: 6px 14px 14px;
+  border-top: 1px dashed var(--c-border);
+}
+
+/* Chips view rows. Same shape as PanelRow but no align column and a
+   shorter dropdown set. */
+.chips-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chips-row {
+  display: grid;
+  grid-template-columns: 130px 24px auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 12px;
+  background: var(--c-surface-pane, var(--c-surface));
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+}
+.chips-row-name {
+  color: var(--c-text-strong);
+  letter-spacing: 0.02em;
+}
+.chips-row-arrow {
+  text-align: center;
+  color: var(--c-text-faint);
+}
+.chips-row-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chips-row-control-label {
+  color: var(--c-text-faint);
+  font-size: 0.85em;
+}
+.chips-row-hint {
+  color: var(--c-text-faint);
+  font-size: 0.88em;
+  line-height: 1.35;
+}
+.chips-tab-footnote {
+  color: var(--c-text-faint);
+  font-size: 0.85em;
+  line-height: 1.45;
+  padding: 8px 12px;
+  border: 1px dashed var(--c-border);
+  border-radius: 2px;
+}
+.chips-tab-footnote code {
+  background: var(--c-surface-emphasis);
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-family: inherit;
+  font-size: 0.96em;
+  color: var(--c-text);
+}
+
 .panels-tab-header {
   display: flex;
   justify-content: space-between;
