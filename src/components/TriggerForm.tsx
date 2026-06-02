@@ -419,6 +419,10 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
   const visualKind: VisualKind = visual?.kind ?? 'none';
   const patterns =
     trigger.patterns.length > 0 ? trigger.patterns : [{ pattern: '', enabled: true }];
+  // Local draft for the group field so changes do not commit (and
+  // re-bucket the card mid-edit) until the user blurs. See the same
+  // fix in AliasForm.
+  const [groupDraft, setGroupDraft] = useState<string | null>(null);
 
   const setPatterns = (next: TriggerPattern[]) => {
     onChange({ patterns: next.length > 0 ? next : [{ pattern: '', enabled: true }] });
@@ -498,12 +502,25 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
           className="trigger-card-group"
           type="text"
           placeholder="group"
-          value={trigger.group ?? ''}
+          value={groupDraft ?? trigger.group ?? ''}
           disabled={readOnly}
           title="optional folder; triggers sharing a group can be bulk-disabled"
-          onChange={(e) =>
-            onChange({ group: e.target.value.trim().length > 0 ? e.target.value : null })
-          }
+          onChange={(e) => setGroupDraft(e.target.value)}
+          onBlur={() => {
+            if (groupDraft === null) return;
+            const next = groupDraft.trim().length > 0 ? groupDraft.trim() : null;
+            setGroupDraft(null);
+            if (next !== (trigger.group ?? null)) onChange({ group: next });
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              (e.currentTarget as HTMLInputElement).blur();
+            } else if (e.key === 'Escape') {
+              setGroupDraft(null);
+              (e.currentTarget as HTMLInputElement).blur();
+            }
+          }}
         />
         {trigger.preset && (
           <span className="trigger-card-preset" title={`from preset: ${trigger.preset}`}>
