@@ -347,6 +347,17 @@ body {
   flex: 0 0 auto;
 }
 
+/* When placed in a left/right zone the wrapper fills the Resizable
+   container (which sets the height). The inner .room-strip-column
+   handles wrapping + vertical scroll inside that height. */
+.room-strip-wrap-column {
+  flex: 1 1 auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .room-strip {
   flex: 0 0 auto;
   display: flex;
@@ -361,6 +372,23 @@ body {
   min-height: 28px;
   color: var(--c-text-muted);
   white-space: nowrap;
+}
+
+/* Column variant. Drops the horizontal scrollbar in favor of wrap +
+   vertical scroll, fills the parent so the Resizable wrapper's
+   height is authoritative. Bullets and chips wrap naturally onto
+   multiple lines instead of running off the right edge. */
+.room-strip-column {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  overflow-x: visible;
+  overflow-y: auto;
+  white-space: normal;
+  align-items: flex-start;
+  align-content: flex-start;
+  min-height: 0;
+  padding: 8px 14px;
+  line-height: 1.5;
 }
 
 /* Right-edge fade. Sits in the wrapper, absolutely positioned over
@@ -386,6 +414,14 @@ body {
 .room-strip-end-pad {
   flex: 0 0 24px;
   align-self: stretch;
+}
+
+/* In the column variant the fade overlay + end-pad both exist for
+   the horizontal-scroll case only. Hide them so they do not steal
+   space or paint over wrapped content. */
+.room-strip-wrap-column .room-strip-fade,
+.room-strip-column .room-strip-end-pad {
+  display: none;
 }
 
 .room-strip::-webkit-scrollbar {

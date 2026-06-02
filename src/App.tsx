@@ -563,8 +563,31 @@ function App() {
         return <GroupPane key="group" pinned onTogglePin={() => setPanelZone('group', 'hidden')} />;
       case 'vitals':
         return <VitalsBar key="vitals" />;
-      case 'roomstrip':
-        return <RoomStrip key="roomstrip" />;
+      case 'roomstrip': {
+        const placement = panelLayout.placements.roomstrip;
+        const inSideZone = placement.zone === 'left' || placement.zone === 'right';
+        if (!inSideZone) return <RoomStrip key="roomstrip" />;
+        // Side-zone layout: wrap content + drop the horizontal
+        // scrollbar so a packed room reads top-to-bottom instead of
+        // being clipped by the panel width. Wrap in a Resizable so
+        // the user can give it more height when they want every
+        // chip + name visible without scrolling at all.
+        const anchor: 'top' | 'bottom' = placement.align === 'top' ? 'top' : 'bottom';
+        return (
+          <Resizable
+            key="roomstrip"
+            storageKey="vosh.layout.roomstrip.height"
+            anchor={anchor}
+            defaultSize={140}
+            minSize={48}
+            maxSize={800}
+            reservePx={120}
+            handleLabel="resize roomstrip panel"
+          >
+            <RoomStrip variant="column" />
+          </Resizable>
+        );
+      }
       case 'chat':
         return <ChatPane key="chat" onClose={() => setPanelZone('chat', 'hidden')} />;
       case 'affects':
