@@ -263,12 +263,38 @@ function App() {
       termRef.current?.scrollToBottom();
       return;
     }
+    focusInputFromClick(event);
+  };
+
+  // Wider click handler attached to the <main>. Catches clicks outside
+  // the terminal (panels, chrome) so the user who clicks anywhere in
+  // the window — including after pulling focus back from Discord —
+  // lands with the command line ready to type.
+  const handleAppMouseUp = (event: MouseEvent<HTMLElement>) => {
+    focusInputFromClick(event);
+  };
+
+  // Shared "click anywhere focuses input" logic. Skips interactive
+  // elements (so the actual click handler runs and keeps its own
+  // focus state) and selection drags (so copy still works).
+  const focusInputFromClick = (event: MouseEvent<Element>) => {
+    if (event.button !== 0) return;
     const target = event.target as HTMLElement;
-    if (target.closest('button, input, textarea, select')) return;
+    if (target.closest('button, input, textarea, select, a, [role="button"]')) return;
     const selection = window.getSelection?.();
     if (selection && selection.toString().length > 0) return;
     inputRef.current?.focus();
   };
+
+  // Tauri reports a window-level focus event when the OS brings the
+  // app back to front (user clicked the Vosh window while it was
+  // unfocused, or alt-tabbed in). Focusing the input here is the
+  // "click-to-type" affordance the user expects on every reactivation.
+  useEffect(() => {
+    const onFocus = () => inputRef.current?.focus();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
 
   // Bootstrap the chat + group buffers at app launch so any
   // Comm.Channel / routed / Group.Info / Char.Worth pushes that
@@ -697,7 +723,10 @@ function App() {
   );
 
   return (
-    <main className={`app${sidePanelsFillHeight ? ' app-side-fill' : ''}`}>
+    <main
+      className={`app${sidePanelsFillHeight ? ' app-side-fill' : ''}`}
+      onMouseUp={handleAppMouseUp}
+    >
       <TopBar
         mapOpen={panelLayout.placements.map.zone !== 'hidden'}
         onToggleMap={() => togglePanelVisibility('map')}
