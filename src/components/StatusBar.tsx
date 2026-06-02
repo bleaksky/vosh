@@ -11,7 +11,7 @@ import {
 } from '../lib/session';
 import { InlineMudTime, InlineTick } from './VitalsBar';
 import { useTickState } from '../lib/useTickState';
-import { formatMudTime, mudTimeColor, useWorldTime } from '../lib/useWorldTime';
+import { formatMudTime, useWorldTime } from '../lib/useWorldTime';
 
 interface MoonInfo {
   name?: string;
@@ -230,39 +230,21 @@ function MoonsBlock({ moons }: { moons: MoonsState }) {
 }
 
 // Always-visible tick + MUD time chip rendered in the center of the
-// status bar. Reads as `tick 12s · time 9AM` with bracket-style
-// emphasis so the eye lands on it before scanning the wider bar.
-// Each side renders independently — server without World.Time still
-// shows just the tick countdown, and vice versa. When neither source
-// is active, returns null so the slot collapses.
+// status bar. Both halves use the shared `InlineTick` / `InlineMudTime`
+// which delegate their rendering to `ChipFrame`, so the user-picked
+// chip style (value-only / caption + value / icon + value) applies
+// here too. Each half renders independently and null-returns when
+// inactive; when both are null the whole slot collapses.
 function StatusTimeChip() {
-  const { active, tickSecs, warn } = useTickState();
+  const { active } = useTickState();
   const worldTime = useWorldTime();
   const mudTime = formatMudTime(worldTime);
-  const timeColor = mudTimeColor(worldTime);
   if (!active && !mudTime) return null;
   return (
     <div className="statusbar-timechip" aria-label="tick and MUD time">
-      {active && (
-        <span className="statusbar-timechip-block">
-          <span className="statusbar-timechip-label">tick</span>
-          <span className={`statusbar-timechip-value${warn ? ' is-warn' : ''}`} aria-live="polite">
-            {tickSecs}s
-          </span>
-        </span>
-      )}
+      <InlineTick className="statusbar-timechip-block" />
       {active && mudTime && <span className="statusbar-timechip-sep">·</span>}
-      {mudTime && (
-        <span className="statusbar-timechip-block">
-          <span className="statusbar-timechip-label">time</span>
-          <span
-            className="statusbar-timechip-value statusbar-timechip-time"
-            style={timeColor ? { color: timeColor } : undefined}
-          >
-            {mudTime}
-          </span>
-        </span>
-      )}
+      <InlineMudTime className="statusbar-timechip-block statusbar-timechip-time" />
     </div>
   );
 }

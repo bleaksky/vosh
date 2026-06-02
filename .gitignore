@@ -37,3 +37,4 @@ logs/
 .env.local
 .env.*.local
 mockups/panels-redesign.html
+mockups/chip-placement.html

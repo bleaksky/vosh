@@ -955,6 +955,33 @@ body {
   color: var(--c-accent);
 }
 
+/* ChipFrame — shared inline container for tick / mud-time / future
+   chips. Hosts mount a ChipFrame; the chip owns its appearance via
+   the `chip-frame-<style>` modifier (`value_only`, `caption_value`,
+   `icon_value`). The caption and icon slots only render under their
+   matching style. Both InlineTick and InlineMudTime now wrap their
+   value in this frame so the same look applies regardless of host. */
+.chip-frame {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.chip-frame-caption {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+.chip-frame-icon {
+  color: var(--c-text-faint);
+  font-size: 0.95em;
+  line-height: 1;
+}
+/* Tighter gap when only the value renders (no leading caption or
+   icon to space away from). */
+.chip-frame-value_only {
+  gap: 0;
+}
+
 .vitals-label {
   color: var(--c-text-faint);
   text-transform: lowercase;
@@ -3112,6 +3139,190 @@ body {
   font-size: 0.88em;
   line-height: 1.35;
 }
+/* Preset gallery at the top of the Chips sub-view. One-click presets
+   for the most common tick + mud-time placements. The active preset
+   (where both chips' zones match the preset's definition) lights up
+   with the accent border. Each card includes a miniature window
+   preview so the choice reads visually, not just by name. */
+.chip-presets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+.chip-preset {
+  background: var(--c-surface-pane, var(--c-surface));
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  font-family: inherit;
+  color: var(--c-text);
+}
+.chip-preset:hover {
+  border-color: var(--c-border-strong);
+}
+.chip-preset.is-active {
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft, rgba(176, 200, 212, 0.06));
+}
+.chip-preset-name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--c-text-strong);
+  font-weight: 600;
+  font-size: 0.92em;
+}
+.chip-preset-tag {
+  color: var(--c-accent);
+  font-size: 0.78em;
+  letter-spacing: 0.05em;
+}
+.chip-preset-desc {
+  color: var(--c-text-faint);
+  font-size: 0.82em;
+  line-height: 1.4;
+}
+
+/* Mini-window preview inside a preset card. Stacks four rows:
+   top (roomstrip), center (terminal), bottom (vitals + affects), and
+   the statusbar strip. A small `+ T` chip floats into whichever zone
+   the preset routes tick + time to so the choice is visible at a
+   glance. */
+.chip-preset-mini {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 12px 1fr 16px 12px;
+  gap: 2px;
+  height: 80px;
+  background: var(--c-surface-deep, var(--c-surface));
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  padding: 2px;
+}
+.chip-preset-mini-row {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-soft, var(--c-border));
+  border-radius: 1px;
+  padding: 0 4px;
+  font-size: 7.5px;
+  color: var(--c-text-faint);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  letter-spacing: 0.04em;
+}
+.chip-preset-mini-row.center {
+  background: transparent;
+  border: 1px dashed var(--c-border-soft, var(--c-border));
+  color: var(--c-text-dim, var(--c-text-faint));
+  justify-content: center;
+}
+.chip-preset-mini-row.statusbar {
+  background: var(--c-surface-deep, var(--c-surface));
+  border-top: 1px solid var(--c-border-soft, var(--c-border));
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  font-size: 7px;
+  color: var(--c-text-faint);
+}
+.chip-preset-mini-row.statusbar.has-chip {
+  color: var(--c-accent);
+  border-top-color: var(--c-accent);
+}
+.chip-preset-mini-pill {
+  background: var(--c-surface-emphasis);
+  border: 1px solid var(--c-border);
+  border-radius: 1px;
+  padding: 0 4px;
+  font-size: 7.5px;
+  color: var(--c-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.chip-preset-mini-pill.standalone {
+  margin-left: auto;
+  color: var(--c-accent);
+  border-color: var(--c-accent);
+}
+.chip-preset-mini-pill.has-chip {
+  color: var(--c-text-strong);
+}
+.chip-preset-mini-attach {
+  font-size: 6.5px;
+  color: var(--c-accent);
+  background: var(--c-accent-soft, rgba(176, 200, 212, 0.12));
+  padding: 0 3px;
+  border-radius: 1px;
+}
+
+/* Chip style picker. Three cards showing how the user-selected style
+   renders the chip. Same selection shape as the preset gallery so
+   the two surfaces read as siblings. */
+.chip-style-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.chip-style-card {
+  background: var(--c-surface-pane, var(--c-surface));
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  font-family: inherit;
+  color: var(--c-text);
+}
+.chip-style-card.is-on {
+  border-color: var(--c-accent);
+}
+.chip-style-name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--c-text-strong);
+  font-weight: 600;
+  font-size: 0.92em;
+}
+.chip-style-desc {
+  color: var(--c-text-faint);
+  font-size: 0.82em;
+  line-height: 1.4;
+}
+.chip-style-sample {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 8px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-soft, var(--c-border));
+  border-radius: 2px;
+  font-size: 0.92em;
+  align-self: flex-start;
+}
+.chip-style-sample-caption {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+.chip-style-sample-icon {
+  color: var(--c-text-faint);
+}
+.chip-style-sample-value {
+  color: var(--c-text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Inline tick-content editor that rides directly under the tick chip
    row in the Chips sub-view. Indents into the chip row's bracket-name
    column so it reads as belonging to that row. */

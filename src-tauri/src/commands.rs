@@ -1335,6 +1335,7 @@ pub(crate) struct UiConfigPayload {
     pub paste_line_delay_ms: u32,
     pub vitals: crate::profile_config::VitalsConfig,
     pub moons_position: String,
+    pub chip_style: String,
 }
 
 #[tauri::command]
@@ -1357,6 +1358,7 @@ pub(crate) async fn ui_get_config(
         paste_line_delay_ms: p.ui.paste_line_delay_ms,
         vitals: p.ui.vitals.clone(),
         moons_position: p.ui.moons_position.clone(),
+        chip_style: p.ui.chip_style.clone(),
     })
 }
 
@@ -1379,6 +1381,7 @@ pub(crate) async fn ui_set_config(
     paste_line_delay_ms: u32,
     vitals: crate::profile_config::VitalsConfig,
     moons_position: String,
+    chip_style: String,
 ) -> Result<(), String> {
     {
         let mut p = state.profile.lock().await;
@@ -1459,6 +1462,13 @@ pub(crate) async fn ui_set_config(
         p.ui.moons_position = match moons_position.as_str() {
             "before-time" | "after-time" | "right-edge" => moons_position,
             _ => "right-edge".to_string(),
+        };
+        // Same coercion for chip_style — an unknown variant from a
+        // hand-edited profile.toml falls back to the default rather
+        // than letting the frontend render a chip with no style.
+        p.ui.chip_style = match chip_style.as_str() {
+            "value_only" | "caption_value" | "icon_value" => chip_style,
+            _ => "value_only".to_string(),
         };
     }
     let shared: SharedState = state.inner().clone();

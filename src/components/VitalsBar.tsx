@@ -9,6 +9,7 @@ import {
 } from '../lib/session';
 import { useTickState } from '../lib/useTickState';
 import { formatMudTime, mudTimeColor, useWorldTime } from '../lib/useWorldTime';
+import { ChipFrame } from './ChipFrame';
 import { useCharStats } from '../lib/useCharStats';
 import { useCombat, type CombatState } from '../lib/useCombat';
 import { tokenizeTemplate, type TemplateSegment } from '../lib/vitalsTemplate';
@@ -462,35 +463,46 @@ function InlineVitalChip({
 // the current in-game hour (formatted 3PM / 12AM). Used by any host
 // panel that the user picks via the `time` panel's `in:*` zone
 // (vitals / roomstrip / affects / statusbar). Returns null until the
-// server pushes a parseable time.
+// server pushes a parseable time. The chip frame (caption vs icon vs
+// value-only) is owned by the shared ChipFrame component so the same
+// style applies regardless of host.
 export function InlineMudTime({ className }: { className?: string }) {
   const worldTime = useWorldTime();
   const formatted = formatMudTime(worldTime);
   const color = mudTimeColor(worldTime);
   if (!formatted) return null;
+  const value = <span style={color ? { color } : undefined}>{formatted}</span>;
   return (
-    <span
+    <ChipFrame
+      caption="time"
+      icon="☀"
+      value={value}
       className={`inline-mud-time${className ? ` ${className}` : ''}`}
-      style={color ? { color } : undefined}
-      aria-label="MUD time"
-    >
-      {formatted}
-    </span>
+      ariaLabel="MUD time"
+    />
   );
 }
 
 // Inline tick chip rendered at the right edge of a host panel
 // (vitals, roomstrip, affects, statusbar) when the user picks one
 // of the `in:*` zones for the tick. Returns null when inactive so
-// hosts can drop it in unconditionally.
+// hosts can drop it in unconditionally. Chip frame styling comes
+// from the shared ChipFrame so this chip and the MUD time chip read
+// consistently in every host.
 export function InlineTick({ className }: { className?: string }) {
   const { active, tickSecs, warn } = useTickState();
   if (!active) return null;
+  const value = (
+    <span className={warn ? 'vitals-tick-value is-warn' : 'vitals-tick-value'}>{tickSecs}s</span>
+  );
   return (
-    <span className={`inline-tick${className ? ` ${className}` : ''}`} aria-label="tick">
-      <span className="vitals-label">tick</span>
-      <span className={`vitals-tick-value${warn ? ' is-warn' : ''}`}>{tickSecs}s</span>
-    </span>
+    <ChipFrame
+      caption="tick"
+      icon="⏱"
+      value={value}
+      className={`inline-tick${className ? ` ${className}` : ''}`}
+      ariaLabel="tick"
+    />
   );
 }
 
