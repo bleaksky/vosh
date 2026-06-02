@@ -7,20 +7,12 @@ import {
   type Worth,
 } from '../lib/groupStore';
 
-interface Props {
-  /** True when the pane sits standalone (right column); false when
-   *  embedded as the right half of the chat pane. Only affects the
-   *  wrapper class for sizing/borders. */
-  pinned: boolean;
-  /** Toggle handler for the pin/unpin button in the header. */
-  onTogglePin: () => void;
-}
-
 // Party roster + your-own-worth panel. Subscribes to Group.Info +
 // Char.Worth via the module store (chatStore/groupStore pattern) so
-// state survives close/reopen and pin/unpin. Renders one line per
-// member as a 6-column grid (display:contents per row).
-export function GroupPane({ pinned, onTogglePin }: Props) {
+// state survives close/reopen. Renders one line per member as a
+// 6-column grid (display:contents per row). Placement (which zone
+// it lives in, hidden / visible) is managed by Settings · Panels.
+export function GroupPane() {
   const [state, setState] = useState<{ group: GroupInfo; worth: Worth }>(() => getGroupState());
 
   useEffect(() => subscribeGroupState(setState), []);
@@ -29,18 +21,10 @@ export function GroupPane({ pinned, onTogglePin }: Props) {
   const grouped = !!group.leader && Array.isArray(group.members) && group.members.length > 0;
 
   return (
-    <div className={`group-pane${pinned ? ' group-pane-pinned' : ' chat-pane-half'}`}>
+    <div className="group-pane group-pane-pinned">
       <div className="chat-pane-header">
         <span className="chat-pane-title">group</span>
         <span className="chat-pane-count">{grouped ? `${group.members!.length}` : 'solo'}</span>
-        <button
-          type="button"
-          className="chat-pane-tab"
-          onClick={onTogglePin}
-          title={pinned ? 'move back into chat pane' : 'pin to right side under map'}
-        >
-          {pinned ? 'unpin' : 'pin →'}
-        </button>
       </div>
       <div className="chat-pane-body">
         {grouped ? (
