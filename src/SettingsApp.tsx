@@ -51,7 +51,6 @@ import {
   canMovePanelUp,
   DEFAULT_PANEL_LAYOUT,
   groupPanels,
-  isInlineZone,
   movePanelInZone,
   PANELS,
   panelLayoutFromDock,
@@ -764,24 +763,6 @@ function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
     });
   };
 
-  // Atomic preset application for chip placements. Sets tick + time
-  // zones in one setLayout so the user sees both move together and
-  // dockLayoutSet fires once instead of twice.
-  const applyChipPreset = (tickZone: Zone, timeZone: Zone) => {
-    setLayout((prev) => {
-      const updated: PanelLayout = {
-        placements: {
-          ...prev.placements,
-          tick: { ...prev.placements.tick, zone: tickZone },
-          time: { ...prev.placements.time, zone: timeZone },
-        },
-        order: prev.order,
-      };
-      void dockLayoutSet(panelLayoutToDock(updated)).catch((e) => onError(String(e)));
-      return updated;
-    });
-  };
-
   const resetDefaults = () => {
     setLayout(DEFAULT_PANEL_LAYOUT);
     void dockLayoutSet(panelLayoutToDock(DEFAULT_PANEL_LAYOUT)).catch((e) => onError(String(e)));
@@ -845,14 +826,7 @@ function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
         <PanelsPanesSubview config={config} setConfig={setConfig} onError={onError} />
       )}
       {subView === 'chips' && (
-        <PanelsChipsSubview
-          layout={layout}
-          onUpdate={update}
-          onApplyPreset={applyChipPreset}
-          config={config}
-          setConfig={setConfig}
-          onError={onError}
-        />
+        <PanelsChipsSubview config={config} setConfig={setConfig} onError={onError} />
       )}
     </div>
   );
@@ -1012,56 +986,10 @@ function PaneAccordionRow({ label, description, open, onToggle, children }: Acco
 // so the structural change stays focused; it surfaces here in a
 // follow-up.
 interface ChipsSubviewProps {
-  layout: PanelLayout;
-  onUpdate: (id: PanelId, next: PanelPlacement) => void;
-  onApplyPreset: (tickZone: Zone, timeZone: Zone) => void;
   config: UiConfig | null;
   setConfig: (updater: (prev: UiConfig | null) => UiConfig | null) => void;
   onError: (e: string | null) => void;
 }
-
-// Quick-pick presets for chip placement. Each preset sets both tick
-// and mud time at once so the user can pick a layout style in one
-// click without poking at two host dropdowns. The "active" preset is
-// the one whose tick + time zones both match the current layout; if
-// no preset matches, none is highlighted (user has a custom mix).
-interface ChipPreset {
-  id: string;
-  label: string;
-  description: string;
-  tickZone: Zone;
-  timeZone: Zone;
-}
-const CHIP_PRESETS: ChipPreset[] = [
-  {
-    id: 'statusbar',
-    label: 'statusbar embed',
-    description: 'tick + time ride along the bottom status bar. minimal chrome.',
-    tickZone: 'in:statusbar',
-    timeZone: 'in:statusbar',
-  },
-  {
-    id: 'vitals',
-    label: 'vitals embed',
-    description: 'tick + time sit at the right edge of the vitals bar.',
-    tickZone: 'in:vitals',
-    timeZone: 'in:vitals',
-  },
-  {
-    id: 'standalone',
-    label: 'standalone bottom',
-    description: 'tick + time get their own slots in the bottom row. larger, harder to miss.',
-    tickZone: 'bottom',
-    timeZone: 'bottom',
-  },
-  {
-    id: 'hidden',
-    label: 'hidden',
-    description: 'no tick or time chrome. read the prompt yourself.',
-    tickZone: 'hidden',
-    timeZone: 'hidden',
-  },
-];
 
 const CHIP_STYLE_OPTIONS: {
   id: NonNullable<UiConfig['chip_style']>;
@@ -1089,20 +1017,7 @@ const CHIP_STYLE_OPTIONS: {
   },
 ];
 
-function PanelsChipsSubview({
-  layout,
-  onUpdate,
-  onApplyPreset,
-  config,
-  setConfig,
-  onError,
-}: ChipsSubviewProps) {
-  const setHost = (id: 'tick' | 'time', zone: Zone) => {
-    onUpdate(id, { ...layout.placements[id], zone });
-  };
-  const activePresetId = CHIP_PRESETS.find(
-    (p) => p.tickZone === layout.placements.tick.zone && p.timeZone === layout.placements.time.zone,
-  )?.id;
+function PanelsChipsSubview({ config, setConfig, onError }: ChipsSubviewProps) {
   const chipStyle = config?.chip_style ?? 'value_only';
   const pickStyle = (id: NonNullable<UiConfig['chip_style']>) => {
     if (!config) return;
@@ -1114,31 +1029,10 @@ function PanelsChipsSubview({
   return (
     <>
       <div className="panels-tab-header">
-        <span>presets</span>
-        <span className="panels-tab-header-dim">one-click placement for tick + mud time</span>
-      </div>
-      <div className="chip-presets">
-        {CHIP_PRESETS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={`chip-preset${activePresetId === p.id ? ' is-active' : ''}`}
-            onClick={() => onApplyPreset(p.tickZone, p.timeZone)}
-            aria-pressed={activePresetId === p.id}
-          >
-            <span className="chip-preset-name">
-              {p.label}
-              {activePresetId === p.id && <span className="chip-preset-tag">[active]</span>}
-            </span>
-            <ChipPresetPreview preset={p} />
-            <span className="chip-preset-desc">{p.description}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="panels-tab-header" style={{ marginTop: 18 }}>
         <span>chip style</span>
-        <span className="panels-tab-header-dim">same rendering style applies in every host</span>
+        <span className="panels-tab-header-dim">
+          rendering of the tick + mud time chip on the input row
+        </span>
       </div>
       <div className="chip-style-picker">
         {CHIP_STYLE_OPTIONS.map((opt) => (
@@ -1160,25 +1054,16 @@ function PanelsChipsSubview({
       </div>
 
       <div className="panels-tab-header" style={{ marginTop: 18 }}>
-        <span>custom</span>
-        <span className="panels-tab-header-dim">per-chip host + tick interval + moons</span>
+        <span>tick timer</span>
+        <span className="panels-tab-header-dim">interval, auto-fire, sound, warning</span>
+      </div>
+      <TickConfigEditor onError={onError} />
+
+      <div className="panels-tab-header" style={{ marginTop: 18 }}>
+        <span>moons</span>
+        <span className="panels-tab-header-dim">phase glyphs in the status bar</span>
       </div>
       <div className="chips-rows">
-        <ChipRow
-          id="tick"
-          label="tick"
-          description="tick countdown"
-          zone={layout.placements.tick.zone}
-          onChange={(z) => setHost('tick', z)}
-        />
-        <TickConfigEditor onError={onError} />
-        <ChipRow
-          id="time"
-          label="mud time"
-          description="in-game clock from GMCP World.Time (12-hour, sky-tinted)"
-          zone={layout.placements.time.zone}
-          onChange={(z) => setHost('time', z)}
-        />
         {config && (
           <MoonsRow
             position={config.moons_position}
@@ -1191,37 +1076,6 @@ function PanelsChipsSubview({
         )}
       </div>
     </>
-  );
-}
-
-// Tiny rendered preview of a preset. Draws a 4-row miniature of the
-// main window (top / middle / bottom / statusbar) and floats a small
-// `+ tick` `+ time` chip into whichever zone the preset routes them
-// to. Matches the chrome of the visual layout map at the top of the
-// Layout sub-view so the two surfaces read as related.
-function ChipPresetPreview({ preset }: { preset: ChipPreset }) {
-  const inStatusbar = preset.tickZone === 'in:statusbar' || preset.timeZone === 'in:statusbar';
-  const inVitals = preset.tickZone === 'in:vitals' || preset.timeZone === 'in:vitals';
-  const inAffects = preset.tickZone === 'in:affects' || preset.timeZone === 'in:affects';
-  const standalone = preset.tickZone === 'bottom' || preset.timeZone === 'bottom';
-  return (
-    <span className="chip-preset-mini" aria-hidden="true">
-      <span className="chip-preset-mini-row top">roomstrip</span>
-      <span className="chip-preset-mini-row center">terminal</span>
-      <span className="chip-preset-mini-row bottom">
-        <span className={`chip-preset-mini-pill${inVitals ? ' has-chip' : ''}`}>
-          vitals{inVitals && <span className="chip-preset-mini-attach">+ T</span>}
-        </span>
-        <span className={`chip-preset-mini-pill${inAffects ? ' has-chip' : ''}`}>
-          affects{inAffects && <span className="chip-preset-mini-attach">+ T</span>}
-        </span>
-        {standalone && <span className="chip-preset-mini-pill standalone">tick · time</span>}
-      </span>
-      <span className={`chip-preset-mini-row statusbar${inStatusbar ? ' has-chip' : ''}`}>
-        {inStatusbar && <span className="chip-preset-mini-attach">+ T</span>}
-        <span style={{ marginLeft: 'auto', opacity: 0.5 }}>◐◑</span>
-      </span>
-    </span>
   );
 }
 
@@ -1407,36 +1261,6 @@ function TickConfigEditor({ onError }: TickConfigEditorProps) {
           />
         </label>
       </div>
-    </div>
-  );
-}
-
-interface ChipRowProps {
-  id: PanelId;
-  label: string;
-  description: string;
-  zone: Zone;
-  onChange: (zone: Zone) => void;
-}
-function ChipRow({ id, label, description, zone, onChange }: ChipRowProps) {
-  const meta = PANELS[id];
-  return (
-    <div className="chips-row">
-      <span className="chips-row-name">[{label}]</span>
-      <span className="chips-row-arrow" aria-hidden="true">
-        →
-      </span>
-      <label className="chips-row-control">
-        <span className="chips-row-control-label">host</span>
-        <select value={zone} onChange={(e) => onChange(e.target.value as Zone)}>
-          {meta.allowedZones.map((z) => (
-            <option key={z} value={z}>
-              {zoneLabel(z)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <span className="chips-row-hint">{description}</span>
     </div>
   );
 }
@@ -2010,20 +1834,12 @@ function PanelsPreview({
 }) {
   const g = groupPanels(layout);
   // Map each potential host id ("vitals", "roomstrip", ...) to the list
-  // of panels currently embedded inside it via an `in:<host>` zone. The
-  // host chip shows these as small "+ tick" attachments so the user can
-  // see at a glance where the embedded panel ended up.
-  const embeddedBy: Partial<Record<PanelId, PanelId[]>> = {};
-  for (const id of layout.order) {
-    const z = layout.placements[id].zone;
-    if (!isInlineZone(z)) continue;
-    const hostId = z.slice('in:'.length) as PanelId;
-    (embeddedBy[hostId] ??= []).push(id);
-  }
+  // (Embedded-zone tracking removed with the tick/time placement
+  // model — chips no longer ride inside hosts.)
   const chip = (id: PanelId, hidden = false) => {
     const canUp = !hidden && canMovePanelUp(layout, id);
     const canDown = !hidden && canMovePanelDown(layout, id);
-    const guests = embeddedBy[id] ?? [];
+    const guests: PanelId[] = [];
     return (
       <span
         key={id}
@@ -2110,24 +1926,6 @@ function PanelsPreview({
           g.bottom.map((id) => chip(id))
         )}
       </div>
-      {/* The statusbar is permanent chrome, not a movable panel, so it has
-          no chip of its own in the preview. When a panel is embedded in
-          it (e.g. tick via in:statusbar), render a thin label row so the
-          user can see where the embedded panel ended up. */}
-      {(() => {
-        const guests = layout.order.filter((id) => layout.placements[id].zone === 'in:statusbar');
-        if (guests.length === 0) return null;
-        return (
-          <div className="panels-preview-zone panels-preview-zone-statusbar">
-            <span className="panels-preview-statusbar-label">statusbar</span>
-            {guests.map((gid) => (
-              <span key={gid} className="panels-preview-chip-embed">
-                + {PANELS[gid].label}
-              </span>
-            ))}
-          </div>
-        );
-      })()}
       {g.hidden.length > 0 && (
         <div className="panels-preview-tray">
           <span className="panels-preview-tray-label">hidden</span>
@@ -2154,11 +1952,8 @@ function PanelRow({
   const meta = PANELS[id];
   const vertical = placement.zone === 'left' || placement.zone === 'right';
   // Fill panels (map) ignore align — they always take the middle of a
-  // side zone with other panels stacking above or below. Inline-host
-  // zones also have no align: the panel renders embedded inside its
-  // host, so there's no column to anchor in. For both these cases we
-  // hide the align control entirely below.
-  const inline = isInlineZone(placement.zone);
+  // side zone with other panels stacking above or below. For those
+  // we hide the align control entirely below.
   return (
     <div
       className="panels-row"
@@ -2184,7 +1979,7 @@ function PanelRow({
           ))}
         </select>
       </label>
-      {vertical && !meta.fillsSideZone && !inline ? (
+      {vertical && !meta.fillsSideZone ? (
         <label className="panels-row-control">
           <span className="panels-row-control-label">align</span>
           <select
@@ -2197,10 +1992,8 @@ function PanelRow({
         </label>
       ) : (
         // Alignment is meaningful only in left/right zones. For top /
-        // bottom / hidden / inline-host / fill zones we used to render
-        // a greyed-out dropdown that read as confusing chrome; render
-        // a placeholder span instead so the grid columns still line up
-        // with other rows.
+        // bottom / hidden / fill zones we render a placeholder span so
+        // the grid columns still line up with other rows.
         <span className="panels-row-control panels-row-control-placeholder" aria-hidden />
       )}
       <span className="panels-row-hint">{meta.description}</span>

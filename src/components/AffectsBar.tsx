@@ -15,7 +15,6 @@ import {
   subscribeTrackedAffectsChanged,
   type TrackedAffect,
 } from '../lib/session';
-import { InlineMudTime, InlineTick } from './VitalsBar';
 
 // Thin row above the input that renders every active Char.Affects
 // entry as a pill chip. Duration color tracks urgency (red imminent,
@@ -24,10 +23,7 @@ import { InlineMudTime, InlineTick } from './VitalsBar';
 //
 // Hides itself entirely when the affect list is empty so the layout
 // does not reserve a slot during cleared/disconnected states.
-export function AffectsBar({
-  embedTick = false,
-  embedTime = false,
-}: { embedTick?: boolean; embedTime?: boolean } = {}) {
+export function AffectsBar() {
   const [groups, setGroups] = useState<GroupedAffect[]>([]);
   const [tracked, setTracked] = useState<TrackedAffect[]>([]);
 
@@ -130,8 +126,6 @@ export function AffectsBar({
           </span>
         );
       })}
-      {embedTick && <InlineTick className="affects-bar-tick" />}
-      {embedTime && <InlineMudTime className="affects-bar-time" />}
     </div>
   );
 }

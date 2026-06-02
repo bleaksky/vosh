@@ -17,8 +17,6 @@ interface AreaInfo {
 
 type AreaMap = Record<string, AreaInfo>;
 
-import { InlineMudTime, InlineTick } from './VitalsBar';
-
 interface RoomChar {
   name?: string;
   npc?: number | string | boolean;
@@ -159,10 +157,7 @@ function formatExits(exits: Record<string, number | string> | undefined): string
 // terrain · [exits] · here: chars · items: items. Replaces the 5-row
 // stack from the old RoomInfoBar so the room context reads in one
 // glance without consuming vertical space.
-export function RoomStrip({
-  embedTick = false,
-  embedTime = false,
-}: { embedTick?: boolean; embedTime?: boolean } = {}) {
+export function RoomStrip() {
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [areas, setAreas] = useState<AreaMap | null>(null);
   const [chars, setChars] = useState<RoomChar[]>([]);
@@ -345,8 +340,6 @@ export function RoomStrip({
             </span>
           </>
         )}
-        {embedTick && <InlineTick className="room-strip-tick" />}
-        {embedTime && <InlineMudTime className="room-strip-time" />}
         {/* End-pad provides 24px after the LAST content when the user
           has scrolled all the way right. Combined with the fade
           overlay below (which masks the right edge regardless of

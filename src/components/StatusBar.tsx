@@ -9,9 +9,6 @@ import {
   type MoonsPosition,
   type QuickKey,
 } from '../lib/session';
-import { InlineMudTime, InlineTick } from './VitalsBar';
-import { useTickState } from '../lib/useTickState';
-import { formatMudTime, useWorldTime } from '../lib/useWorldTime';
 
 interface MoonInfo {
   name?: string;
@@ -45,10 +42,7 @@ function moonGlyphFromIndex(phase: number): string {
   return '◐'; // waxing (left side dark)
 }
 
-export function StatusBar({
-  embedTick = false,
-  embedTime = false,
-}: { embedTick?: boolean; embedTime?: boolean } = {}) {
+export function StatusBar() {
   const [now, setNow] = useState(() => new Date());
   const [userTarget, setUserTarget] = useState<string | null>(null);
   const [quickKeys, setQuickKeys] = useState<QuickKey[]>([]);
@@ -173,17 +167,12 @@ export function StatusBar({
           </span>
         )}
       </div>
-      {/* Centered tick + MUD time chip. Renders only when the user
-          has picked `in:statusbar` for one or both chips via the
-          Chips sub-view; otherwise the slot collapses and the chips
-          show in whichever zone the user chose (standalone, embedded
-          in another pane, or hidden). The moons block docks here when
-          the user picks `before-time` / `after-time` so the phases
-          sit next to the MUD time chip they relate to. */}
+      {/* Centered slot now hosts only the moons block when the user
+          has picked `before-time` / `after-time` for them. Tick and
+          MUD time render in the LineChip on the input row's top
+          border, not here. */}
       <div className="statusbar-center">
-        {moonsPosition === 'before-time' && moonsBlock}
-        {(embedTick || embedTime) && <StatusTimeChip showTick={embedTick} showTime={embedTime} />}
-        {moonsPosition === 'after-time' && moonsBlock}
+        {(moonsPosition === 'before-time' || moonsPosition === 'after-time') && moonsBlock}
       </div>
       <div className="statusbar-right">
         {moonsPosition === 'right-edge' && moonsBlock}
@@ -218,28 +207,5 @@ function MoonsBlock({ moons }: { moons: MoonsState }) {
         <span className="statusbar-moon-badge is-near">near</span>
       )}
     </span>
-  );
-}
-
-// Centered tick + MUD time chip in the status bar. Rendered ONLY
-// when the user has picked `in:statusbar` for tick or MUD time via
-// the Chips sub-view; the parent gates this render on
-// embedTick / embedTime. Each half also null-returns when its data
-// source is inactive (no World.Time push -> no time half). Both
-// halves use the shared InlineTick / InlineMudTime which delegate
-// to ChipFrame, so the chip style picker reaches here too.
-function StatusTimeChip({ showTick, showTime }: { showTick: boolean; showTime: boolean }) {
-  const { active } = useTickState();
-  const worldTime = useWorldTime();
-  const mudTime = formatMudTime(worldTime);
-  const tickHere = showTick && active;
-  const timeHere = showTime && Boolean(mudTime);
-  if (!tickHere && !timeHere) return null;
-  return (
-    <div className="statusbar-timechip" aria-label="tick and MUD time">
-      {showTick && <InlineTick className="statusbar-timechip-block" />}
-      {tickHere && timeHere && <span className="statusbar-timechip-sep">·</span>}
-      {showTime && <InlineMudTime className="statusbar-timechip-block statusbar-timechip-time" />}
-    </div>
   );
 }
