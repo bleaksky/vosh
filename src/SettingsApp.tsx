@@ -1467,6 +1467,37 @@ function VitalsConfigSection({
           );
         })}
       </div>
+      <div className="panels-vitals-colors">
+        <div className="panels-vitals-header">
+          <span>colors</span>
+          <span className="panels-tab-header-dim">
+            override per-vital colors or keep the built-in ramps
+          </span>
+        </div>
+        <VitalColorRow
+          label="hp color"
+          value={v.hp_color}
+          fallback="green"
+          onChange={(c) => apply({ hp_color: c })}
+        />
+        <VitalColorRow
+          label="mn color"
+          value={v.mn_color}
+          fallback="blue"
+          onChange={(c) => apply({ mn_color: c })}
+        />
+        <VitalColorRow
+          label="mv color"
+          value={v.mv_color}
+          fallback="orange"
+          onChange={(c) => apply({ mv_color: c })}
+        />
+        <Toggle
+          label="drain through red as the bar empties"
+          checked={v.use_color_ramp}
+          onChange={(c) => apply({ use_color_ramp: c })}
+        />
+      </div>
       <div className="panels-vitals-preview" aria-label="vitals preview">
         <VitalsPreview config={v} />
       </div>
@@ -1480,6 +1511,50 @@ function VitalsConfigSection({
         </button>
       </div>
     </section>
+  );
+}
+
+function VitalColorRow({
+  label,
+  value,
+  fallback,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  fallback: string;
+  onChange: (next: string) => void;
+}) {
+  const hex =
+    value.trim().length > 0 && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim())
+      ? value.trim()
+      : '#888888';
+  return (
+    <label className="panels-vitals-color-row">
+      <span className="panels-vitals-color-label">{label}</span>
+      <input
+        type="color"
+        value={hex}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={`${label} swatch`}
+      />
+      <input
+        type="text"
+        className="panels-vitals-color-hex"
+        spellCheck={false}
+        value={value}
+        placeholder={`built-in ${fallback}`}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <button
+        type="button"
+        className="settings-btn settings-btn-mute"
+        onClick={() => onChange('')}
+        disabled={value.trim().length === 0}
+      >
+        [clear]
+      </button>
+    </label>
   );
 }
 

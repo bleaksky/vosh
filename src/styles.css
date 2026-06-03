@@ -921,6 +921,35 @@ body {
   padding: 4px 14px;
 }
 
+/* Per-line flex row for templates that contain bar tokens. The
+   default `.vitals-row-template` is `display: block; white-space:
+   pre-wrap`, which wraps mid-line at the bar's right edge when the
+   line outgrows the panel and strands trailing tokens on their own
+   line. The bar-aware flex variant treats each newline as a row
+   break and lets the bar cell absorb the remainder of the line. */
+.vitals-row-template-line {
+  display: flex;
+  align-items: baseline;
+  padding: 0 14px;
+  min-width: 0;
+}
+
+.vitals-template-cell {
+  flex: 0 0 auto;
+  /* `pre` preserves the spaces the user typed between tokens (e.g.
+     three spaces between `HP` and `%bar_hp` should stay three
+     spaces). Without this, the leading whitespace would collapse. */
+  white-space: pre;
+}
+
+.vitals-template-bar-cell {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  overflow: hidden;
+}
+
 /* Unknown template token (e.g. user typed `%xpz` instead of `%xp`,
    or the server doesn't push the field). Renders the literal token
    in muted red so the typo is visible without breaking the row
@@ -1009,7 +1038,17 @@ body {
 .vitals-glyphs {
   letter-spacing: 0;
   font-weight: 700;
-  flex: 0 0 auto;
+  /* Auto-shrink. The bar should give up width first so percent /
+     current-max / delta columns stay visible when the row is narrow.
+     `flex: 1 1 0` grows the bar to absorb remaining row width up to
+     its inline max-width (`${cells}ch`); `min-width: 0` lets it
+     shrink below content width. `overflow: hidden` keeps any stray
+     glyph that lands during a ResizeObserver-resync frame from
+     poking past the visible area. */
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 /* Track bar: a CSS-rendered progress bar that fills smoothly at any
@@ -1024,7 +1063,13 @@ body {
   background: var(--c-border-soft, var(--c-border));
   border-radius: 2px;
   overflow: hidden;
-  flex: 0 0 auto;
+  /* Track variant uses the same shrink semantics as the glyph
+     variant: try to be `flex-basis: ${cells}ch` (set inline) but
+     shrink first to make room for the readouts. The inner fill is a
+     CSS percent, so it stays accurate at whatever actual width the
+     bar settles at. */
+  flex: 1 1 auto;
+  min-width: 0;
   vertical-align: middle;
 }
 
@@ -3895,6 +3940,56 @@ body {
 .panels-vitals-quickpicks.is-disabled {
   opacity: 0.4;
   pointer-events: none;
+}
+
+/* Per-vital color override rows. Sits below the layout / glyph
+   knobs in the vitals section. Each row has a label, a native color
+   swatch, the hex text field, and a [clear] button so the user can
+   fall back to the built-in green / blue / orange ramp. */
+.panels-vitals-colors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0 4px;
+}
+
+.panels-vitals-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panels-vitals-color-label {
+  flex: 0 0 6em;
+  color: var(--c-text);
+}
+
+.panels-vitals-color-row input[type='color'] {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  background: var(--c-surface-deep);
+  cursor: pointer;
+}
+
+.panels-vitals-color-hex {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--c-surface-deep);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: 0.9em;
+  padding: 3px 6px;
+  border-radius: 2px;
+  outline: none;
+}
+
+.panels-vitals-color-hex:focus {
+  border-color: var(--c-accent);
 }
 
 .panels-vitals-glyph-field {

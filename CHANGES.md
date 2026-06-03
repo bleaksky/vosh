@@ -2,6 +2,12 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.3.7 - 2026-06-02
+
+- The vitals bar no longer hides your current/max or your delta column when the panel is narrow. The bar now gives up width first so the percent, the numeric, and the delta stay visible at the panel edge. The bar_width setting in Settings becomes a maximum width rather than a hard pin. For the smooth track style the fill stays proportionally correct at the shrunk width. For the solid glyph style the filled and empty character counts are recomputed from the rendered width so a 50 percent bar always shows as half full no matter how narrow the panel is.
+- Custom vitals templates that contain bar tokens now wrap cleanly at newlines you typed instead of mid-line wherever the browser felt like breaking. Each line of your template becomes its own row, and inside the row the bar token absorbs the leftover width while the text and other tokens hold their natural width. The classic three-line template `HP %bar_hp %pct_hp %dhp` / `Mana %bar_mn %pct_mn %dmn` / `Move %bar_mv %pct_mv %dmv` lays out correctly even at panel widths the old renderer would have wrapped through the middle of. Templates without any bar tokens keep the original inline rendering so users who depend on exact whitespace are not disturbed.
+- New per-vital color overrides. Settings · Panels · panes · vitals now has a colors section with a swatch per vital and a "drain through red as the bar empties" toggle. Leave a color blank to keep the built-in green / blue / orange ramps. Pick a color and keep the toggle on to make that color the high end of a drain-to-red ramp. Pick a color and turn the toggle off to make the bar that color flat at every fill percentage.
+
 ## v0.3.6 - 2026-06-02
 
 - Per-profile settings now actually save when you are using the global catalog (Path B) mode. Tracked affects, the "tint server output with theme palette" toggle, panel layout when its scope is profile, the vitals shape, custom themes, paste pacing, moon-glyph position, chip style, and the enabled-presets list all stayed in memory and silently dropped on quit. Switching profiles also lost them. Each loadout now writes its own per-profile file, and switching loadouts re-applies the shared catalog on top so your aliases and triggers stay in sync.

@@ -138,10 +138,16 @@ function combatHpColor(value: number): string {
 // in most monospace fonts.
 function TrackBar({ value, cells, color }: { value: number; cells: number; color: string }) {
   const pct = Math.max(0, Math.min(100, value));
+  // `flex-basis` (not `width`) lets the bar shrink first when the row
+  // is narrower than label + bar + readouts. `max-width` caps it at
+  // the user's configured cells so a wide panel does not balloon the
+  // bar beyond what the user asked for. The inner fill stays a
+  // straight `width: ${pct}%`, which reads as a true proportion at
+  // whatever the outer bar's actual rendered width turns out to be.
   return (
     <span
       className="vitals-glyphs vitals-glyphs-track"
-      style={{ width: `${cells}ch` }}
+      style={{ flexBasis: `${cells}ch`, maxWidth: `${cells}ch` }}
       aria-hidden="true"
     >
       <span className="vitals-glyphs-track-fill" style={{ width: `${pct}%`, background: color }} />
@@ -149,9 +155,128 @@ function TrackBar({ value, cells, color }: { value: number; cells: number; color
   );
 }
 
-function colorForVital(label: string, value: number): string {
-  const ramp = VITAL_RAMPS[label] ?? VITAL_RAMPS.hp;
+// Solid (glyph) bar with auto-shrink. xterm-style fixed-character
+// bars cannot just clip on overflow without lying about the fill
+// percentage (a 30/60 bar visible as 20/60 reads as 100% full). So we
+// observe the rendered width, measure the actual character cell size,
+// and recompute filled / empty counts so the visible bar always
+// matches the live percentage at whatever width the row gives us.
+function SolidBar({
+  value,
+  cells,
+  filledGlyph,
+  emptyGlyph,
+  color,
+}: {
+  value: number;
+  cells: number;
+  filledGlyph: string;
+  emptyGlyph: string;
+  color: string;
+}) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  // Start at the configured cell count so the first paint shows the
+  // user's intent without a flash of zero glyphs. The ResizeObserver
+  // narrows this on the next frame if the row cannot afford the full
+  // width.
+  const [renderCells, setRenderCells] = useState(cells);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // Render a single hidden sample of the filled glyph and measure
+    // its bounding box. Cached per resize so a font swap propagates
+    // through the next observed event. Using a getBoundingClientRect
+    // on a real DOM node beats hard-coding "1ch == X px" because the
+    // user's font choice can change the glyph's advance width.
+    let sample: HTMLSpanElement | null = null;
+    const measure = () => {
+      if (!ref.current) return;
+      if (!sample) {
+        sample = document.createElement('span');
+        sample.style.visibility = 'hidden';
+        sample.style.position = 'absolute';
+        sample.style.whiteSpace = 'pre';
+        sample.style.letterSpacing = '0';
+        sample.style.fontWeight = '700';
+        sample.textContent = filledGlyph;
+        ref.current.appendChild(sample);
+      } else if (sample.parentNode !== ref.current) {
+        ref.current.appendChild(sample);
+      }
+      const charWidth = sample.getBoundingClientRect().width;
+      if (charWidth <= 0) return;
+      const available = ref.current.clientWidth;
+      const fits = Math.max(1, Math.floor(available / charWidth));
+      const next = Math.min(cells, fits);
+      setRenderCells((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      if (sample && sample.parentNode) sample.parentNode.removeChild(sample);
+    };
+  }, [cells, filledGlyph]);
+
+  const filledCount = Math.round((value / 100) * renderCells);
+  const emptyCount = Math.max(0, renderCells - filledCount);
+  return (
+    <span ref={ref} className="vitals-glyphs" style={{ maxWidth: `${cells}ch` }} aria-hidden="true">
+      {filledCount > 0 && <span style={{ color }}>{filledGlyph.repeat(filledCount)}</span>}
+      {emptyCount > 0 && <span className="vitals-empty">{emptyGlyph.repeat(emptyCount)}</span>}
+    </span>
+  );
+}
+
+/**
+ * Resolve the bar color for a vital at a given percent fill, honoring
+ * the user's per-vital override + drain-to-red toggle from
+ * `VitalsConfig`. Behavior matrix:
+ *   - override set, ramp on  → lerp drain-red ↔ override by percent
+ *   - override set, ramp off → static override color
+ *   - no override, ramp on   → existing built-in ramp (unchanged)
+ *   - no override, ramp off  → static "full" color of the built-in ramp
+ *
+ * `config` is optional so call sites that have no access to it (the
+ * static combat chip ramp, for example) still get the historical
+ * built-in behavior with no override.
+ */
+function colorForVital(label: string, value: number, config?: VitalsConfig): string {
+  const overrideHex = config
+    ? label === 'hp'
+      ? config.hp_color
+      : label === 'mn'
+        ? config.mn_color
+        : label === 'mv'
+          ? config.mv_color
+          : ''
+    : '';
+  const useRamp = config ? config.use_color_ramp : true;
   const v = Math.max(0, Math.min(100, value));
+
+  if (overrideHex) {
+    const rgb = hexToRgb(overrideHex);
+    if (rgb) {
+      if (!useRamp) return rgbString(rgb);
+      const drainRed: [number, number, number] = [228, 104, 118];
+      const t = v / 100;
+      return rgbString([
+        Math.round(drainRed[0] + (rgb[0] - drainRed[0]) * t),
+        Math.round(drainRed[1] + (rgb[1] - drainRed[1]) * t),
+        Math.round(drainRed[2] + (rgb[2] - drainRed[2]) * t),
+      ]);
+    }
+    // Malformed hex falls through to the built-in path so a typo does
+    // not leave the bar invisible.
+  }
+
+  const ramp = VITAL_RAMPS[label] ?? VITAL_RAMPS.hp;
+  if (!useRamp) {
+    const top = ramp[ramp.length - 1][1];
+    return rgbString(top);
+  }
   let lower = ramp[0];
   let upper = ramp[ramp.length - 1];
   for (let i = 0; i < ramp.length - 1; i++) {
@@ -164,10 +289,34 @@ function colorForVital(label: string, value: number): string {
   const range = upper[0] - lower[0];
   const t = range > 0 ? (v - lower[0]) / range : 0;
   const lerp = (a: number, b: number) => Math.round(a + (b - a) * t);
-  const r = lerp(lower[1][0], upper[1][0]);
-  const g = lerp(lower[1][1], upper[1][1]);
-  const b = lerp(lower[1][2], upper[1][2]);
-  return `rgb(${r}, ${g}, ${b})`;
+  return rgbString([
+    lerp(lower[1][0], upper[1][0]),
+    lerp(lower[1][1], upper[1][1]),
+    lerp(lower[1][2], upper[1][2]),
+  ]);
+}
+
+function rgbString(rgb: [number, number, number]): string {
+  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+}
+
+/** Parse `#rrggbb` or `#rgb` into an RGB triple, or return null for
+ *  anything else. Color pickers in Settings emit `#rrggbb`, so this
+ *  is enough; non-hex CSS colors (rgb(), named, etc.) fall through
+ *  to the built-in ramp. */
+function hexToRgb(hex: string): [number, number, number] | null {
+  const trimmed = hex.trim();
+  const m6 = /^#([0-9a-f]{6})$/i.exec(trimmed);
+  if (m6) {
+    const n = parseInt(m6[1], 16);
+    return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+  }
+  const m3 = /^#([0-9a-f]{3})$/i.exec(trimmed);
+  if (m3) {
+    const c = m3[1];
+    return [parseInt(c[0] + c[0], 16), parseInt(c[1] + c[1], 16), parseInt(c[2] + c[2], 16)];
+  }
+  return null;
 }
 
 // Stacked vitals — one row per hp/mana/move. Tick and mud time render
@@ -369,7 +518,9 @@ function InlineVitalChip({
 }) {
   const value = pct(cur, max);
   const percentColor =
-    config.percent_color === 'gradient' ? colorForPercent(value) : colorForVital(label, value);
+    config.percent_color === 'gradient'
+      ? colorForPercent(value)
+      : colorForVital(label, value, config);
   const showDelta = config.show_delta && delta !== null && delta !== 0;
   const deltaPositive = (delta ?? 0) > 0;
   // Single-letter label per tintin: hp -> h, mn -> m, mv -> v. Any
@@ -415,11 +566,9 @@ function VitalRow({
   config: VitalsConfig;
 }) {
   const value = pct(cur, max);
-  const fill = colorForVital(label, value);
+  const fill = colorForVital(label, value, config);
   const total = Math.max(4, Math.min(60, config.bar_width));
   const track = config.bar_style === 'track';
-  const filledCount = Math.round((value / 100) * total);
-  const emptyCount = total - filledCount;
   const showDelta = config.show_delta && delta !== null && delta !== 0;
   const deltaPositive = (delta ?? 0) > 0;
 
@@ -430,14 +579,13 @@ function VitalRow({
         (track ? (
           <TrackBar value={value} cells={total} color={fill} />
         ) : (
-          <span className="vitals-glyphs" aria-hidden="true">
-            {filledCount > 0 && (
-              <span style={{ color: fill }}>{config.bar_filled.repeat(filledCount)}</span>
-            )}
-            {emptyCount > 0 && (
-              <span className="vitals-empty">{config.bar_empty.repeat(emptyCount)}</span>
-            )}
-          </span>
+          <SolidBar
+            value={value}
+            cells={total}
+            filledGlyph={config.bar_filled}
+            emptyGlyph={config.bar_empty}
+            color={fill}
+          />
         ))}
       {config.show_percent && (
         <span
@@ -531,7 +679,7 @@ function TemplateVitalsRow({
         const max =
           label === 'hp' ? vitals.maxhp : label === 'mn' ? vitals.maxmana : vitals.maxmove;
         const v = valueFor(cur, max);
-        const color = gradient ? colorForPercent(v) : colorForVital(label, v);
+        const color = gradient ? colorForPercent(v) : colorForVital(label, v, config);
         return <span style={{ color }}>{v}%</span>;
       }
       case 'dhp':
@@ -556,17 +704,18 @@ function TemplateVitalsRow({
         const max =
           label === 'hp' ? vitals.maxhp : label === 'mn' ? vitals.maxmana : vitals.maxmove;
         const v = valueFor(cur, max);
-        const fill = colorForVital(label, v);
+        const fill = colorForVital(label, v, config);
         if (config.bar_style === 'track') {
           return <TrackBar value={v} cells={width} color={fill} />;
         }
-        const filled = Math.round((v / 100) * width);
-        const empty = width - filled;
         return (
-          <span className="vitals-glyphs" aria-hidden="true">
-            <span style={{ color: fill }}>{config.bar_filled.repeat(filled)}</span>
-            <span className="vitals-empty">{config.bar_empty.repeat(empty)}</span>
-          </span>
+          <SolidBar
+            value={v}
+            cells={width}
+            filledGlyph={config.bar_filled}
+            emptyGlyph={config.bar_empty}
+            color={fill}
+          />
         );
       }
       case 'tick':
@@ -591,6 +740,39 @@ function TemplateVitalsRow({
     }
   };
 
+  // Bar tokens (%bar_hp / %bar_mn / %bar_mv) are fixed-width inline
+  // spans. When a template puts them on a line that does not fit, the
+  // browser wraps at the bar boundary which strands the trailing
+  // tokens (`%pct_hp %dhp`) on their own line. To wrap cleanly, we
+  // detect a template with bar tokens, split it on newlines, and
+  // render each line as a flex row where the bar absorbs the
+  // remaining width and the surrounding text segments hold their
+  // natural width. Templates without bars keep the original inline
+  // pre-wrap rendering so users who care about exact whitespace are
+  // not disturbed.
+  const hasBarToken = segments.some(
+    (s) =>
+      s.kind === 'token' && (s.name === 'bar_hp' || s.name === 'bar_mn' || s.name === 'bar_mv'),
+  );
+
+  if (!hasBarToken) {
+    return (
+      <div className="vitals-bar vitals-bar-template" aria-label="vitals">
+        {combat && (
+          <div className="vitals-row vitals-row-combat-top">
+            <CombatChip combat={combat} />
+          </div>
+        )}
+        <div className="vitals-row vitals-row-template">
+          {segments.map((seg, i) => (
+            <TemplateSegmentNode key={i} segment={seg} renderToken={renderToken} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const lines = splitTemplateLines(segments);
   return (
     <div className="vitals-bar vitals-bar-template" aria-label="vitals">
       {combat && (
@@ -598,11 +780,9 @@ function TemplateVitalsRow({
           <CombatChip combat={combat} />
         </div>
       )}
-      <div className="vitals-row vitals-row-template">
-        {segments.map((seg, i) => (
-          <TemplateSegmentNode key={i} segment={seg} renderToken={renderToken} />
-        ))}
-      </div>
+      {lines.map((lineSegments, i) => (
+        <TemplateLineFlexRow key={i} segments={lineSegments} renderToken={renderToken} />
+      ))}
     </div>
   );
 }
@@ -636,4 +816,69 @@ function TemplateSegmentNode({
     return null;
   }
   return <>{node}</>;
+}
+
+/**
+ * Split a tokenized template into a list of lines. `\n` inside text
+ * segments starts a new line; tokens stay on whichever line their
+ * surrounding text put them on. Empty lines (two consecutive `\n`)
+ * survive as empty arrays so the rendered output keeps the same
+ * vertical spacing the user typed.
+ */
+function splitTemplateLines(segments: TemplateSegment[]): TemplateSegment[][] {
+  const lines: TemplateSegment[][] = [[]];
+  for (const seg of segments) {
+    if (seg.kind === 'text') {
+      const parts = seg.text.split('\n');
+      for (let i = 0; i < parts.length; i++) {
+        if (i > 0) lines.push([]);
+        if (parts[i].length > 0) {
+          lines[lines.length - 1].push({ kind: 'text', text: parts[i] });
+        }
+      }
+    } else {
+      lines[lines.length - 1].push(seg);
+    }
+  }
+  return lines;
+}
+
+/**
+ * Render one line of a bar-containing template as a flex row. Text
+ * segments and non-bar tokens render in fixed-width flex cells so
+ * their natural width is preserved; bar tokens render in a flex-
+ * shrinkable cell so they give up width first when the line is
+ * narrow. The line's `min-width: 0` lets the bar shrink below its
+ * own cell content via the SolidBar / TrackBar `max-width: ${cells}ch`
+ * cap rather than overflowing the row.
+ */
+function TemplateLineFlexRow({
+  segments,
+  renderToken,
+}: {
+  segments: TemplateSegment[];
+  renderToken: (name: string) => ReactNode;
+}) {
+  return (
+    <div className="vitals-row vitals-row-template-line">
+      {segments.map((seg, i) => {
+        if (seg.kind === 'text') {
+          return (
+            <span key={i} className="vitals-template-cell">
+              {seg.text}
+            </span>
+          );
+        }
+        const node = renderToken(seg.name);
+        if (node === null || node === undefined) return null;
+        const isBar = seg.name === 'bar_hp' || seg.name === 'bar_mn' || seg.name === 'bar_mv';
+        const cls = isBar ? 'vitals-template-bar-cell' : 'vitals-template-cell';
+        return (
+          <span key={i} className={cls}>
+            {node}
+          </span>
+        );
+      })}
+    </div>
+  );
 }

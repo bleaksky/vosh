@@ -264,6 +264,23 @@ pub(crate) struct VitalsConfig {
     /// `%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v - (%tick) - %time`.
     #[serde(default = "default_template")]
     pub template: String,
+    /// CSS color string used for the hp bar's "full" end. Empty
+    /// preserves the built-in green-to-red ramp; any non-empty value
+    /// becomes the per-vital identity color and (when `use_color_ramp`
+    /// is true) the bar still drains through red as the value drops.
+    #[serde(default)]
+    pub hp_color: String,
+    #[serde(default)]
+    pub mn_color: String,
+    #[serde(default)]
+    pub mv_color: String,
+    /// When true (the default), the per-vital color is the "full"
+    /// stop of a ramp that drains through red as the bar empties —
+    /// preserves the historical low-value-reads-as-danger cue. When
+    /// false, the configured color is used flat at every fill
+    /// percentage.
+    #[serde(default = "default_true")]
+    pub use_color_ramp: bool,
 }
 
 impl Default for VitalsConfig {
@@ -281,6 +298,10 @@ impl Default for VitalsConfig {
             percent_color: default_percent_color(),
             template_enabled: false,
             template: default_template(),
+            hp_color: String::new(),
+            mn_color: String::new(),
+            mv_color: String::new(),
+            use_color_ramp: true,
         }
     }
 }
