@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { tokenizeTemplate } from './lib/vitalsTemplate';
+import { colorForVital } from './lib/vitalsColor';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TopBar } from './components/TopBar';
 import { TriggerForm } from './components/TriggerForm';
@@ -1697,8 +1698,9 @@ function previewTemplate(
       case 'pct_hp':
       case 'pct_mn':
       case 'pct_mv': {
-        const s = get(name.slice(4));
-        const c = gradient ? s.color : 'var(--c-accent)';
+        const label = name.slice(4);
+        const s = get(label);
+        const c = gradient ? s.color : colorForVital(label, s.value, config);
         return <span style={{ color: c }}>{s.value}%</span>;
       }
       case 'dhp':
@@ -1717,8 +1719,9 @@ function previewTemplate(
       case 'bar_hp':
       case 'bar_mn':
       case 'bar_mv': {
-        const s = get(name.slice(4));
-        const fill = gradient ? s.color : 'var(--c-accent)';
+        const label = name.slice(4);
+        const s = get(label);
+        const fill = gradient ? s.color : colorForVital(label, s.value, config);
         if (track) {
           return <PreviewTrackBar value={s.value} cells={width} color={fill} />;
         }
@@ -1786,7 +1789,7 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
               {config.show_percent && (
                 <span
                   className="vitals-inline-pct"
-                  style={{ color: gradient ? s.color : 'var(--c-accent)' }}
+                  style={{ color: gradient ? s.color : colorForVital(s.label, s.value, config) }}
                 >
                   ({s.value}%)
                 </span>
@@ -1812,7 +1815,7 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
       {sample.map((s) => {
         const filled = Math.round((s.value / 100) * width);
         const empty = width - filled;
-        const percentColor = gradient ? s.color : 'var(--c-accent)';
+        const percentColor = gradient ? s.color : colorForVital(s.label, s.value, config);
         return (
           <div key={s.label} className="vitals-row">
             <span className="vitals-label">{s.label}</span>

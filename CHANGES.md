@@ -2,6 +2,10 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.3.8 - 2026-06-02
+
+- The vitals preview in Settings now reflects the per-vital color overrides you pick. Previously the bars in the preview pane always used the theme accent (pink) and never changed when you set a custom hp / mn / mv color, so you had to save and look at the live bar to see the result. Both the preview and the live bar now run through the same color resolver, including the drain-through-red ramp toggle.
+
 ## v0.3.7 - 2026-06-02
 
 - The vitals bar no longer hides your current/max or your delta column when the panel is narrow. The bar now gives up width first so the percent, the numeric, and the delta stay visible at the panel edge. The bar_width setting in Settings becomes a maximum width rather than a hard pin. For the smooth track style the fill stays proportionally correct at the shrunk width. For the solid glyph style the filled and empty character counts are recomputed from the rendered width so a 50 percent bar always shows as half full no matter how narrow the panel is.
