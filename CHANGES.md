@@ -2,6 +2,10 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.3.9 - 2026-06-02
+
+- The "drain through red as the bar empties" toggle no longer washes out dark per-vital colors. Before, the bar lerped from your picked color toward red across the whole 0 to 100 percent range, so even a 75 percent full bar mixed in 25 percent red. A dark green like `#102000` rendered as muddy olive instead of green. The drain now compresses into the bottom half of the bar. Above 50 percent the bar is your picked color flat. Below 50 percent it transitions toward red so the warning cue still fires when the bar empties.
+
 ## v0.3.8 - 2026-06-02
 
 - The vitals preview in Settings now reflects the per-vital color overrides you pick. Previously the bars in the preview pane always used the theme accent (pink) and never changed when you set a custom hp / mn / mv color, so you had to save and look at the live bar to see the result. Both the preview and the live bar now run through the same color resolver, including the drain-through-red ramp toggle.
