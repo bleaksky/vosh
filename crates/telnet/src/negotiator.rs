@@ -16,8 +16,7 @@ use crate::parser::Event;
 /// client name itself. The lowercase "xterm" form matches even on
 /// case-sensitive `strstr` checks, and the embedded "256color"
 /// covers the "256" substring scan.
-pub const DEFAULT_TERMINAL_TYPE: &str =
-    concat!("VOSH-xterm-256color ", env!("CARGO_PKG_VERSION"));
+pub const DEFAULT_TERMINAL_TYPE: &str = concat!("VOSH-xterm-256color ", env!("CARGO_PKG_VERSION"));
 
 /// MTTS capability bits the client advertises on the third TTYPE
 /// response. Computed from <https://tintin.mudhalla.net/protocols/mtts/>:
@@ -269,10 +268,7 @@ fn push_environ_var(out: &mut Vec<u8>, kind: u8, name: &[u8], value: &[u8]) {
 fn push_environ_token(out: &mut Vec<u8>, bytes: &[u8]) {
     for &b in bytes {
         match b {
-            new_environ::VAR
-            | new_environ::VALUE
-            | new_environ::ESC
-            | new_environ::USERVAR => {
+            new_environ::VAR | new_environ::VALUE | new_environ::ESC | new_environ::USERVAR => {
                 out.push(new_environ::ESC);
                 out.push(b);
             }
