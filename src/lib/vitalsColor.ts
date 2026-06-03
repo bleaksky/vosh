@@ -59,7 +59,18 @@ export function colorForVital(label: string, value: number, config?: VitalsConfi
     const rgb = hexToRgb(overrideHex);
     if (rgb) {
       if (!useRamp) return rgbString(rgb);
-      const t = v / 100;
+      // Compressed drain ramp. Above 50% full the bar is the user's
+      // picked color flat — that is the "safe" zone where the color
+      // identity matters. Below 50% the bar lerps toward DRAIN_RED so
+      // it still signals danger as it empties.
+      //
+      // The historical linear-across-0-100 lerp mixed ~25% drain red
+      // into the bar even at 75% full, which washed out dark user
+      // picks (`#102000` rendered as olive-brown instead of green).
+      // Custom ramps have just two stops (user + red) where built-ins
+      // have curated intermediate colors, so they need the compressed
+      // range to look intentional at every value.
+      const t = Math.min(1, v / 50);
       return rgbString([
         Math.round(DRAIN_RED[0] + (rgb[0] - DRAIN_RED[0]) * t),
         Math.round(DRAIN_RED[1] + (rgb[1] - DRAIN_RED[1]) * t),
