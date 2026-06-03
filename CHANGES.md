@@ -2,40 +2,25 @@
 
 All notable changes to Vosh. Newest first.
 
-## v0.3.13 - 2026-06-03
-
-- Fix the bar-font CSS font-family input. Picking "custom CSS font-family ..." from the dropdown in v0.3.12 did nothing because the text input only appeared once you already had a non-preset value set, and picking custom did not set one. The text input is now always visible below the bar font dropdown so you can paste any CSS font-family stack at any time, and the dropdown remains a quick-pick that fills the input.
-
 ## v0.3.12 - 2026-06-03
 
-- The vitals settings top is redesigned to match the dropdown mockup. The crowded row of `style | filled | empty | width` is replaced by a single `style` dropdown that carries both the bar style and the glyph pair as one choice (e.g. `solid · block · █ ░`, `ramped · braille full · ⣿ ⣀`, `track · smooth CSS bar, no glyphs`), and a small `width` field next to it. Hand-edited custom glyphs surface a `custom` entry in the dropdown and reveal the filled / empty text inputs on demand. Cleaner at a glance, fewer controls to scan.
-- New `bar font` picker that applies only to the bar glyphs. Pick `Berkeley Mono (bundled)` or `JetBrains Mono (bundled)` to get clean partial-block and braille rendering for the bar while keeping the rest of the UI (labels, percent, numeric, delta, panels chrome) in whatever app font you have set. There is also a `custom CSS font-family` option for anyone with MonoLisa, Iosevka, or any other locally-installed font they prefer for bars.
-- The standalone "preset" dropdown that appeared below the template editor in v0.3.11 is gone. It was redundant with the new unified style picker at the top.
+- The vitals settings top is redesigned. The crowded row of `style | filled | empty | width` is replaced by a single `style` dropdown that carries both the bar style and the glyph pair as one choice (e.g. `solid · block · █ ░`, `ramped · braille full · ⣿ ⣀`, `track · smooth CSS bar, no glyphs`), and a small `width` field next to it. Hand-edited custom glyphs surface a `custom` entry in the dropdown and reveal the filled / empty text inputs on demand.
+- New `bar font` picker that applies only to the bar glyphs, leaving labels, percent, numeric, delta, and panels chrome in your app font. Pick `Berkeley Mono (bundled)` or `JetBrains Mono (bundled)` for clean partial-block and braille rendering. Pick any locally-installed monospace by name and Vosh registers a runtime `@font-face` for it so the font actually resolves on macOS WKWebView (where bare CSS family names are refused by anti-fingerprinting). An always-visible `CSS font-family` input below the dropdown accepts any custom stack.
 
 ## v0.3.11 - 2026-06-03
 
-- Five new vitals bar glyph presets in the btop family. dark / light shade (▓ ░), block / medium shade (█ ▒), braille full (⣿ ⣀), braille mid (⠿ ⠤), and braille thin (⠶ ␣). Pick them from the new glyph-preset dropdown under Settings · Panels · panes · vitals.
-- The chip row of glyph quick-picks is replaced by a single dropdown. Cleaner at a glance, easier to scan all the available pairs, and gracefully surfaces a `custom` entry when you have hand-typed your own glyphs in the filled / empty fields.
-- The ramped bar style is back. Pick `ramped` in the style dropdown next to solid and track. Ramped uses 1/8-step partial-block characters (▏▎▍▌▋▊▉) on the boundary cell so the bar moves at sub-character resolution instead of snapping to whole-cell increments. At bar width 20 a solid bar moves in 5% jumps; the ramped variant moves in 0.625% jumps. Looks best in the bundled Berkeley Mono or JetBrains Mono. The preview in Settings honors the ramped style too so you can drag the bars and watch the partial blocks tick through every step.
-- Two minor preview refinements: the chip row's "quick picks" label is gone (the dropdown is self-describing), and the preview's ramped path mirrors the runtime renderer exactly so what you see while configuring is what you get on the live bar.
+- Five new vitals bar glyph presets in the btop family. dark / light shade (▓ ░), block / medium shade (█ ▒), braille full (⣿ ⣀), braille mid (⠿ ⠤), and braille thin (⠶ ␣).
+- The ramped bar style is back. Pick `ramped` in the style dropdown next to solid and track. Ramped uses 1/8-step partial-block characters (▏▎▍▌▋▊▉) on the boundary cell so the bar moves at sub-character resolution instead of snapping to whole-cell increments. At bar width 20 a solid bar moves in 5% jumps; the ramped variant moves in 0.625% jumps. Looks best in the bundled Berkeley Mono or JetBrains Mono.
 
 ## v0.3.10 - 2026-06-02
 
-- The vitals preview in Settings is now interactive. Click and drag any of the hp / mn / mv bars to scrub through the 0 to 100 percent range and watch the colors transition through the ramp live. The header above the preview reads the current values so you can see exactly which percent each bar is at. Useful for verifying a custom color renders the way you want at every fill level before you commit to it. The cursor changes to a horizontal resize affordance when you hover a bar so the drag handle is discoverable.
-
-## v0.3.9 - 2026-06-02
-
-- The "drain through red as the bar empties" toggle no longer washes out dark per-vital colors. Before, the bar lerped from your picked color toward red across the whole 0 to 100 percent range, so even a 75 percent full bar mixed in 25 percent red. A dark green like `#102000` rendered as muddy olive instead of green. The drain now compresses into the bottom half of the bar. Above 50 percent the bar is your picked color flat. Below 50 percent it transitions toward red so the warning cue still fires when the bar empties.
-
-## v0.3.8 - 2026-06-02
-
-- The vitals preview in Settings now reflects the per-vital color overrides you pick. Previously the bars in the preview pane always used the theme accent (pink) and never changed when you set a custom hp / mn / mv color, so you had to save and look at the live bar to see the result. Both the preview and the live bar now run through the same color resolver, including the drain-through-red ramp toggle.
+- The vitals preview in Settings is now interactive. Click and drag any of the hp / mn / mv bars to scrub through the 0 to 100 percent range and watch the colors transition through the ramp live. The header above the preview reads the current values so you can see exactly which percent each bar is at. Useful for verifying a custom color renders the way you want at every fill level before you commit to it.
 
 ## v0.3.7 - 2026-06-02
 
 - The vitals bar no longer hides your current/max or your delta column when the panel is narrow. The bar now gives up width first so the percent, the numeric, and the delta stay visible at the panel edge. The bar_width setting in Settings becomes a maximum width rather than a hard pin. For the smooth track style the fill stays proportionally correct at the shrunk width. For the solid glyph style the filled and empty character counts are recomputed from the rendered width so a 50 percent bar always shows as half full no matter how narrow the panel is.
-- Custom vitals templates that contain bar tokens now wrap cleanly at newlines you typed instead of mid-line wherever the browser felt like breaking. Each line of your template becomes its own row, and inside the row the bar token absorbs the leftover width while the text and other tokens hold their natural width. The classic three-line template `HP %bar_hp %pct_hp %dhp` / `Mana %bar_mn %pct_mn %dmn` / `Move %bar_mv %pct_mv %dmv` lays out correctly even at panel widths the old renderer would have wrapped through the middle of. Templates without any bar tokens keep the original inline rendering so users who depend on exact whitespace are not disturbed.
-- New per-vital color overrides. Settings · Panels · panes · vitals now has a colors section with a swatch per vital and a "drain through red as the bar empties" toggle. Leave a color blank to keep the built-in green / blue / orange ramps. Pick a color and keep the toggle on to make that color the high end of a drain-to-red ramp. Pick a color and turn the toggle off to make the bar that color flat at every fill percentage.
+- Custom vitals templates that contain bar tokens now wrap cleanly at newlines you typed instead of mid-line wherever the browser felt like breaking. Each line of your template becomes its own row, and inside the row the bar token absorbs the leftover width while the text and other tokens hold their natural width. Templates without any bar tokens keep the original inline rendering so users who depend on exact whitespace are not disturbed.
+- New per-vital color overrides. Settings · Panels · panes · vitals now has a colors section with a swatch per vital and a "drain through red as the bar empties" toggle. Leave a color blank to keep the built-in green / blue / orange ramps. Pick a color and keep the toggle on to make that color the high end of a drain-to-red ramp; the drain compresses into the bottom half of the bar so a 75 percent bar stays your picked color flat and dark picks like `#102000` render as green, not muddy olive. Pick a color and turn the toggle off to make the bar that color flat at every fill percentage. The preview in Settings reflects per-vital overrides too, so what you see while configuring is what you get on the live bar.
 
 ## v0.3.6 - 2026-06-02
 
