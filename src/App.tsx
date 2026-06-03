@@ -15,6 +15,7 @@ import { RoomStrip } from './components/RoomStrip';
 import { VitalsBar } from './components/VitalsBar';
 import { UpdateNotice } from './components/UpdateNotice';
 import { HelpView } from './components/HelpView';
+import { FindToolbar, type FindToolbarHandle } from './components/FindToolbar';
 import {
   broadcastUiConfigChanges,
   dockLayoutGet,
@@ -129,6 +130,33 @@ function App() {
   // In-client help modal. Opened from the top-bar [help] button;
   // backdrop click, [close], and Esc all dismiss via setHelpOpen(false).
   const [helpOpen, setHelpOpen] = useState(false);
+  // Scrollback find toolbar. Opens on Cmd+F (macOS) or Ctrl+F (other
+  // platforms). Drives xterm's SearchAddon. The live pane always owns
+  // iteration (selection + cached search term live on its addon, so
+  // pressing Enter advances one match each time). The history pane
+  // mirrors the search in parallel so a scrollback match has a
+  // visible highlight up top while the live pane stays anchored to
+  // its tail. A search whose match lands inside the live viewport
+  // skips the split entirely.
+  const [findOpen, setFindOpen] = useState(false);
+  const findToolbarRef = useRef<FindToolbarHandle | null>(null);
+  // History pane readiness: flips true once the history Terminal has
+  // finished loading scrollback after its mount. We queue any pending
+  // mirror search through pendingFindRef until the history is ready,
+  // since findNext on an empty buffer would silently return no match.
+  const [historyReady, setHistoryReady] = useState(false);
+  const pendingFindRef = useRef<{
+    query: string;
+    opts: { caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean };
+    direction: 'next' | 'previous';
+  } | null>(null);
+  // Match count from live's SearchAddon. Drives the "3 / 12" badge in
+  // the find toolbar. `index` of -1 means the active match was lost
+  // (e.g. after the toolbar opened but before the first search ran).
+  const [findResults, setFindResults] = useState<{ index: number; count: number }>({
+    index: -1,
+    count: 0,
+  });
   // History pane scroll depth, driven by the Terminal's onScrollPosition
   // callback. Drives the "↑ N / max" indicator in the top-right of the
   // history pane.
@@ -202,6 +230,29 @@ function App() {
     if (!splitOpen) setHistoryScrollPos(null);
     splitOpenRef.current = splitOpen;
   }, [splitOpen]);
+
+  // Reset history readiness whenever the split closes. The next time
+  // the split opens, the history Terminal remounts and the
+  // onScrollbackLoaded callback will set this back to true.
+  useEffect(() => {
+    if (!splitOpen) setHistoryReady(false);
+  }, [splitOpen]);
+
+  // Drain a queued search once the split has opened and the history
+  // pane finishes loading scrollback. submitFind enqueues here when a
+  // live-pane search would have scrolled the live pane off its tail —
+  // we hand the search off to the history pane and run it as soon as
+  // history is ready to receive it.
+  useEffect(() => {
+    if (!splitOpen || !historyReady) return;
+    const pending = pendingFindRef.current;
+    if (!pending) return;
+    pendingFindRef.current = null;
+    const handle = historyTermRef.current;
+    if (!handle) return;
+    if (pending.direction === 'next') handle.findNext(pending.query, pending.opts);
+    else handle.findPrevious(pending.query, pending.opts);
+  }, [splitOpen, historyReady]);
 
   // Whenever the panel layout changes (e.g. chat toggled hidden), the
   // terminal-area's available height shifts. FitAddon's own internal
@@ -299,6 +350,60 @@ function App() {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, []);
+
+  // Cmd+F (macOS) / Ctrl+F (others) opens the scrollback find toolbar.
+  // Attached at the capture phase so it fires before xterm's own
+  // keybindings or the webview's default find dialog. A second press
+  // while the toolbar is already open re-focuses + selects the input
+  // so the user can type a new query immediately.
+  //
+  // Skipped only when the help modal is open (its own search box is
+  // already taking that role). In every other context — including
+  // while focus sits in the command input, which is the common case —
+  // Cmd+F opens the scrollback search.
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'f') return;
+      const primary = e.metaKey || e.ctrlKey;
+      if (!primary || e.altKey) return;
+      if (helpOpen) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (findOpen) {
+        findToolbarRef.current?.focus();
+      } else {
+        // Open just the toolbar. Whether to open the split is decided
+        // per-search: only when a match would scroll the live pane up
+        // off its tail (see submitFind below).
+        setFindOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [findOpen, helpOpen]);
+
+  // Esc closes the find toolbar regardless of which element has
+  // focus. The toolbar's own Esc handler is attached to its input,
+  // so a click that drifted focus away (or the split auto-closing
+  // when history scrolled back to its tail) would otherwise leave
+  // the user pressing Esc to no effect. Capture-phase + stopPropagation
+  // keeps this from also firing Input.tsx's split-close handler.
+  useEffect(() => {
+    if (!findOpen) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      termRef.current?.clearSearch();
+      historyTermRef.current?.clearSearch();
+      pendingFindRef.current = null;
+      setFindResults({ index: -1, count: 0 });
+      setFindOpen(false);
+      inputRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [findOpen]);
 
   // Bootstrap the chat + group buffers at app launch so any
   // Comm.Channel / routed / Group.Info / Char.Worth pushes that
@@ -549,6 +654,70 @@ function App() {
     };
   }, []);
 
+  // Run a find call from the toolbar. The live pane is the
+  // authoritative iterator: each call advances its SearchAddon
+  // selection + cachedSearchTerm, so pressing Enter walks through
+  // matches in order. The history pane is a passive mirror, used
+  // only when the active match falls outside the live viewport.
+  //
+  // Strategy per call:
+  //   1. Advance live.findNext (or findPrevious). If no match, close
+  //      any open split and clear history decorations.
+  //   2. If after the call live is still anchored to its tail, the
+  //      match is in the visible viewport. Close the split if it had
+  //      been opened for a prior scrollback match.
+  //   3. Otherwise the active match is up in scrollback. Snap live
+  //      back to its tail (without clearing live's search state, so
+  //      iteration survives), open the split, and run the same search
+  //      on the history pane so its decorations + viewport land on
+  //      a matching line.
+  const submitFind = (
+    query: string,
+    opts: { caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean },
+    direction: 'next' | 'previous',
+  ): boolean => {
+    if (query.length === 0) return false;
+    const live = termRef.current;
+    if (!live) return false;
+
+    const hit = direction === 'next' ? live.findNext(query, opts) : live.findPrevious(query, opts);
+    if (!hit) {
+      if (splitOpen) {
+        historyTermRef.current?.clearSearch();
+        setSplitOpen(false);
+      }
+      return false;
+    }
+
+    if (live.isAtBottom()) {
+      // Match landed inside the live viewport. Decorations on live
+      // are visible; no split needed. Tear down the split if it had
+      // been opened for an earlier scrollback match.
+      if (splitOpen) {
+        historyTermRef.current?.clearSearch();
+        setSplitOpen(false);
+      }
+      return true;
+    }
+
+    // Match is up in scrollback. Pin live back to its tail so it
+    // keeps streaming; live's SearchAddon selection + cachedSearchTerm
+    // survive the scroll, which is what lets the next call advance.
+    // Mirror the search into the history pane so the user can see
+    // the highlighted match up there.
+    live.scrollToBottom();
+    if (!splitOpen) {
+      pendingFindRef.current = { query, opts, direction };
+      setSplitOpen(true);
+    } else if (historyTermRef.current && historyReady) {
+      if (direction === 'next') historyTermRef.current.findNext(query, opts);
+      else historyTermRef.current.findPrevious(query, opts);
+    } else {
+      pendingFindRef.current = { query, opts, direction };
+    }
+    return true;
+  };
+
   const handleError = (message: string) => {
     setStatus({ kind: 'error', message });
     termRef.current?.write(`\r\n\x1b[31m[${message}]\x1b[0m\r\n`);
@@ -694,6 +863,22 @@ function App() {
       className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}`}
       onMouseUp={handleTerminalMouseUp}
     >
+      {findOpen && (
+        <FindToolbar
+          ref={findToolbarRef}
+          results={findResults}
+          onFindNext={(query, opts) => submitFind(query, opts, 'next')}
+          onFindPrevious={(query, opts) => submitFind(query, opts, 'previous')}
+          onClose={() => {
+            termRef.current?.clearSearch();
+            historyTermRef.current?.clearSearch();
+            pendingFindRef.current = null;
+            setFindResults({ index: -1, count: 0 });
+            setFindOpen(false);
+            inputRef.current?.focus();
+          }}
+        />
+      )}
       {splitOpen && (
         // History pane is a Resizable so the user can drag the
         // divider between history and live to set the split ratio.
@@ -726,6 +911,7 @@ function App() {
             }}
             onScrollbackLoaded={() => {
               historyTermRef.current?.scrollPages(-1);
+              setHistoryReady(true);
             }}
             onScrollPosition={(back, max) => setHistoryScrollPos({ back, max })}
           />
@@ -744,6 +930,9 @@ function App() {
           onReady={(handle) => {
             termRef.current = handle;
           }}
+          onResultsChanged={(event) =>
+            setFindResults({ index: event.resultIndex, count: event.resultCount })
+          }
         />
       </div>
     </div>

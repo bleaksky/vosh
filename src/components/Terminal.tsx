@@ -3,6 +3,11 @@ import { Terminal as XTerm, type ITheme } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
+import {
+  SearchAddon,
+  type ISearchOptions,
+  type ISearchResultChangeEvent,
+} from '@xterm/addon-search';
 
 import '@xterm/xterm/css/xterm.css';
 import { loadScrollback, onOutput, setWindowSize } from '../lib/session';
@@ -10,6 +15,15 @@ import { findTheme, type AppTheme } from '../lib/themes';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 import { WordWrapper } from '../lib/wordWrap';
 import { ingestRecentNames } from '../lib/recentNames';
+
+export interface FindOptions {
+  /** Treat the term as a regex. Default false (plain substring). */
+  regex?: boolean;
+  /** Whole-word match. Default false. */
+  wholeWord?: boolean;
+  /** Case-sensitive search. Default false. */
+  caseSensitive?: boolean;
+}
 
 export interface TerminalHandle {
   write: (data: Uint8Array | string) => void;
@@ -27,6 +41,14 @@ export interface TerminalHandle {
   /** Current cols × rows. Used by the host to push the size to the
    *  backend via NAWS after a (re)connect. */
   getSize: () => { cols: number; rows: number };
+  /** Search forward from the current selection (or top of buffer). Returns
+   *  true when a match was found and scrolled into view. Highlights every
+   *  match across the entire scrollback as a side effect. */
+  findNext: (term: string, options?: FindOptions) => boolean;
+  /** Search backward. Same return + decoration semantics as findNext. */
+  findPrevious: (term: string, options?: FindOptions) => boolean;
+  /** Clear search decorations (called when the find toolbar closes). */
+  clearSearch: () => void;
 }
 
 interface Props {
@@ -53,6 +75,11 @@ interface Props {
   /// anchored to the tail). `max` is the total scrollback above (the
   /// largest possible `back`). Use to drive a scroll-depth indicator.
   onScrollPosition?: (back: number, max: number) => void;
+  /// Fires whenever SearchAddon's match list changes (after every
+  /// findNext / findPrevious call). The event carries the index of
+  /// the active match plus the total result count. Use to drive a
+  /// "3 / 12" badge in a find toolbar.
+  onResultsChanged?: (event: ISearchResultChangeEvent) => void;
 }
 
 // Canonical xterm-256 palette for ANSI codes 0-15. Used when the
@@ -125,6 +152,7 @@ export function Terminal({
   quiet = false,
   onScrollbackLoaded,
   onScrollPosition,
+  onResultsChanged,
 }: Props) {
   const quietRef = useRef(quiet);
   quietRef.current = quiet;
@@ -132,6 +160,8 @@ export function Terminal({
   onScrollbackLoadedRef.current = onScrollbackLoaded;
   const onScrollPositionRef = useRef(onScrollPosition);
   onScrollPositionRef.current = onScrollPosition;
+  const onResultsChangedRef = useRef(onResultsChanged);
+  onResultsChangedRef.current = onResultsChanged;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -175,6 +205,14 @@ export function Terminal({
     const unicode11 = new Unicode11Addon();
     term.loadAddon(unicode11);
     term.unicode.activeVersion = '11';
+    // Scrollback search. Highlights every match across the full
+    // 10k-line buffer via decorations; the host's find toolbar drives
+    // it through the findNext / findPrevious handle methods.
+    const searchAddon = new SearchAddon();
+    term.loadAddon(searchAddon);
+    const resultsSub = searchAddon.onDidChangeResults((event) => {
+      onResultsChangedRef.current?.(event);
+    });
 
     term.open(containerRef.current);
     // DECTCEM: hide the cursor entirely. Belt-and-suspenders alongside
@@ -362,6 +400,25 @@ export function Terminal({
     // the real size rather than the 80x24 default xterm starts with.
     setTimeout(pushSize, 900);
 
+    // Match-highlight colors. Read from CSS vars at search time so a
+    // theme switch picks up the new accent on the next find call.
+    // Hard-coded fallbacks keep matches visible if the var lookup
+    // returns empty (early-mount race in WKWebView).
+    const searchDecorations = (): NonNullable<ISearchOptions['decorations']> => {
+      const rootStyle = getComputedStyle(document.documentElement);
+      const accent = rootStyle.getPropertyValue('--c-accent').trim() || '#ff3399';
+      const accentSoft =
+        rootStyle.getPropertyValue('--c-accent-soft').trim() || 'rgba(255, 51, 153, 0.25)';
+      return {
+        matchBackground: accentSoft,
+        matchBorder: accent,
+        matchOverviewRuler: accent,
+        activeMatchBackground: accent,
+        activeMatchBorder: accent,
+        activeMatchColorOverviewRuler: accent,
+      };
+    };
+
     const handle: TerminalHandle = {
       write: (data) => term.write(data),
       fit: () => fit.fit(),
@@ -375,6 +432,21 @@ export function Terminal({
       // viewport is anchored to the live tail.
       isAtBottom: () => term.buffer.active.viewportY === term.buffer.active.baseY,
       getSize: () => ({ cols: term.cols, rows: term.rows }),
+      findNext: (query, opts) =>
+        searchAddon.findNext(query, {
+          regex: opts?.regex ?? false,
+          wholeWord: opts?.wholeWord ?? false,
+          caseSensitive: opts?.caseSensitive ?? false,
+          decorations: searchDecorations(),
+        }),
+      findPrevious: (query, opts) =>
+        searchAddon.findPrevious(query, {
+          regex: opts?.regex ?? false,
+          wholeWord: opts?.wholeWord ?? false,
+          caseSensitive: opts?.caseSensitive ?? false,
+          decorations: searchDecorations(),
+        }),
+      clearSearch: () => searchAddon.clearDecorations(),
     };
     onReadyRef.current?.(handle);
 
@@ -416,6 +488,8 @@ export function Terminal({
       window.removeEventListener('keydown', onCopyKey, true);
       if (naws_timer) clearTimeout(naws_timer);
       unsubOutput?.();
+      resultsSub.dispose();
+      searchAddon.dispose();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;

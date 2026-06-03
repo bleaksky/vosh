@@ -111,7 +111,7 @@ Drag the divider between the two panes to set the split ratio. Press PageUp and 
 
 ### 3.4 The status bar and clock
 
-The bar across the very bottom of the window carries small status chips. The left side shows your current target (when one is set) and your quick-key bindings. The middle or right side shows the moon-phase glyphs the MUD pushes via GMCP. The far right shows your computer's local clock.
+The bar across the very bottom of the window carries small status chips. The left side shows your current target (when one is set) and your quick-key bindings. The right side shows the moon-phase glyphs the MUD pushes via GMCP, followed by your computer's local clock.
 
 The chips are read-only. Quick-keys configure under `#qkey <name> <verb>`. The moon glyphs have tooltips that show each moon's name and phase when you hover.
 

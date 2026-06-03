@@ -205,7 +205,10 @@ async fn persist_path_b(app: &AppHandle, state: &SharedState) {
         let global = GlobalConfig::from_profile(&p, &scope);
         (catalog, global, scope)
     };
-    let _ = scope; // global state already overlays via apply_to elsewhere
+    // `scope` is consumed below when stripping global-scoped fields out
+    // of the per-profile snapshot. Holding the binding here so the
+    // catalog/loadout writes can run without holding the profile-set
+    // lock alongside them.
 
     // Snapshot the current LoadoutSet from state. We do not mutate the
     // active list here; that gets driven by future loadout_set_active
@@ -221,15 +224,47 @@ async fn persist_path_b(app: &AppHandle, state: &SharedState) {
         }
     }
 
-    let global_path = state
-        .profile_set
-        .lock()
-        .await
-        .as_ref()
-        .map(crate::profile_set::ProfileSet::global_path);
+    let (global_path, per_profile_path) = {
+        let guard = state.profile_set.lock().await;
+        match guard.as_ref() {
+            Some(set) => (Some(set.global_path()), Some(set.active_path())),
+            None => (None, None),
+        }
+    };
     if let Some(g) = global_path {
         if let Err(e) = global_snapshot.save(&g) {
             warn!(error = %e, path = %g.display(), "Path B global auto-save failed");
+        }
+    }
+    // Per-profile snapshot. Before this, Path B only wrote catalog /
+    // loadouts / global, which meant every UI field outside the five
+    // scope-controlled ones (tracked_affects, theme_terminal_colors,
+    // vitals config, custom themes, paste pacing, moons position,
+    // chip style, side-panels fill, split-divider color, enabled
+    // presets, dock layout when its scope is profile, ...) silently
+    // dropped on every quit. Writing a per-profile file lets these
+    // persist per-loadout the same way legacy mode does. The catalog
+    // stays authoritative for aliases / triggers / macros, so we
+    // blank those out of the per-profile snapshot before saving —
+    // otherwise switching to an older loadout would resurrect that
+    // loadout's stale alias copy and override fresher catalog edits.
+    if let Some(p) = per_profile_path {
+        let mut per_profile_snapshot = {
+            let live = state.profile.lock().await;
+            ProfileConfig::from_profile(&live)
+        };
+        per_profile_snapshot.aliases.clear();
+        per_profile_snapshot.triggers.clear();
+        per_profile_snapshot.disabled_alias_groups.clear();
+        per_profile_snapshot.disabled_trigger_groups.clear();
+        per_profile_snapshot.disabled_macro_groups.clear();
+        strip_global_fields(&mut per_profile_snapshot, &scope);
+        if let Err(e) = per_profile_snapshot.save(&p) {
+            warn!(
+                error = %e,
+                path = %p.display(),
+                "Path B per-profile auto-save failed",
+            );
         }
     }
     // Mirror the new catalog into `state.global_catalog` so subsequent
@@ -1040,6 +1075,38 @@ pub(crate) async fn profile_resolve_match(
 /// `profile_switch` Tauri command and the Char.Status auto-switch
 /// path in `handle_char_known_for_auto_switch` both call this so the
 /// persist + flip + reload sequence stays identical.
+/// Re-apply Path B's catalog + active loadout set onto the live
+/// profile. Used after a per-profile load on profile-switch to make
+/// sure the catalog (the authoritative source for aliases / triggers /
+/// macros in Path B mode) wins over whatever the per-profile file
+/// carried — the per-profile file's aliases are blanked out by
+/// `persist_path_b`, but the loadout's `enabled_groups` + tick still
+/// need to be replayed against the freshly-loaded profile state.
+async fn apply_path_b_overlays(state: &SharedState) {
+    let catalog = match state.global_catalog.lock().await.as_ref() {
+        Some(c) => c.clone(),
+        None => return,
+    };
+    let set = state.loadout_set.lock().await.clone();
+    let mut p = state.profile.lock().await;
+    let mut aliases = vosh_alias::AliasStore::new();
+    for a in &catalog.aliases {
+        aliases.set(a.clone());
+    }
+    p.aliases = aliases;
+    let mut triggers = vosh_trigger::TriggerStore::new();
+    for t in &catalog.triggers {
+        if let Err(e) = triggers.set(t.clone()) {
+            warn!(error = %e, "catalog trigger rejected during profile switch");
+        }
+    }
+    p.triggers = triggers;
+    p.macros.clone_from(&catalog.macros);
+    if let Some(set) = set.as_ref() {
+        crate::loadout_store::apply_loadout_state(set, &mut p);
+    }
+}
+
 pub(crate) async fn apply_profile_switch(
     app: &AppHandle,
     state: &SharedState,
@@ -1087,6 +1154,14 @@ pub(crate) async fn apply_profile_switch(
             g.apply_to(&mut p);
         }
     }
+
+    // Path B catalog re-overlay. The per-profile file in Path B mode
+    // is written with blank aliases / triggers / macros (catalog is
+    // authoritative), so after the apply_to above the live profile
+    // has empty stores. Re-pour the catalog onto the live profile and
+    // re-apply the loadout state so the freshly-switched profile
+    // starts from the right place.
+    apply_path_b_overlays(state).await;
 
     let _ = app.emit("vosh://profile-switched", name);
     Ok(())

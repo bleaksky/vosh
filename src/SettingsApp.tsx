@@ -1058,23 +1058,6 @@ function PanelsChipsSubview({ config, setConfig, onError }: ChipsSubviewProps) {
         <span className="panels-tab-header-dim">interval, auto-fire, sound, warning</span>
       </div>
       <TickConfigEditor onError={onError} />
-
-      <div className="panels-tab-header" style={{ marginTop: 18 }}>
-        <span>moons</span>
-        <span className="panels-tab-header-dim">phase glyphs in the status bar</span>
-      </div>
-      <div className="chips-rows">
-        {config && (
-          <MoonsRow
-            position={config.moons_position}
-            onChange={(p) => {
-              const next: UiConfig = { ...config, moons_position: p };
-              setConfig(() => next);
-              void setUiConfig(next).catch((e) => onError(String(e)));
-            }}
-          />
-        )}
-      </div>
     </>
   );
 }
@@ -1261,33 +1244,6 @@ function TickConfigEditor({ onError }: TickConfigEditorProps) {
           />
         </label>
       </div>
-    </div>
-  );
-}
-
-interface MoonsRowProps {
-  position: UiConfig['moons_position'];
-  onChange: (next: UiConfig['moons_position']) => void;
-}
-function MoonsRow({ position, onChange }: MoonsRowProps) {
-  return (
-    <div className="chips-row">
-      <span className="chips-row-name">[moons]</span>
-      <span className="chips-row-arrow" aria-hidden="true">
-        →
-      </span>
-      <label className="chips-row-control">
-        <span className="chips-row-control-label">position</span>
-        <select
-          value={position}
-          onChange={(e) => onChange(e.target.value as UiConfig['moons_position'])}
-        >
-          <option value="right-edge">far right (historical)</option>
-          <option value="before-time">left of tick/time chip</option>
-          <option value="after-time">right of tick/time chip</option>
-        </select>
-      </label>
-      <span className="chips-row-hint">moon-phase glyphs in the status bar</span>
     </div>
   );
 }

@@ -49,3 +49,18 @@ pub mod charset {
     pub const ACCEPTED: u8 = 2;
     pub const REJECTED: u8 = 3;
 }
+
+/// RFC 1572 subnegotiation codes for NEW-ENVIRON. The well-known
+/// variable list (USER, JOB, ACCT, PRINTER, SYSTEMTYPE, DISPLAY) goes
+/// under VAR; everything else (TERM, COLORTERM, etc.) is USERVAR.
+pub mod new_environ {
+    pub const IS: u8 = 0;
+    pub const SEND: u8 = 1;
+    #[allow(dead_code)]
+    pub const INFO: u8 = 2;
+    pub const VAR: u8 = 0;
+    pub const VALUE: u8 = 1;
+    #[allow(dead_code)]
+    pub const ESC: u8 = 2;
+    pub const USERVAR: u8 = 3;
+}

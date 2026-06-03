@@ -1,14 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  getTarget,
-  getUiConfig,
-  onGmcpPackage,
-  onState,
-  onTarget,
-  subscribeMoonsPositionChanged,
-  type MoonsPosition,
-  type QuickKey,
-} from '../lib/session';
+import { getTarget, onGmcpPackage, onState, onTarget, type QuickKey } from '../lib/session';
 
 interface MoonInfo {
   name?: string;
@@ -47,37 +38,12 @@ export function StatusBar() {
   const [userTarget, setUserTarget] = useState<string | null>(null);
   const [quickKeys, setQuickKeys] = useState<QuickKey[]>([]);
   const [moons, setMoons] = useState<MoonsState>({ moons: [] });
-  const [moonsPosition, setMoonsPosition] = useState<MoonsPosition>('right-edge');
 
   useEffect(() => {
     const wallTick = () => setNow(new Date());
     wallTick();
     const id = window.setInterval(wallTick, 15_000);
     return () => window.clearInterval(id);
-  }, []);
-
-  // Seed the moons placement from the persisted UI config, then keep
-  // it live by listening for the Settings window's broadcast on
-  // every save. Falls back to "right-edge" (the historical position)
-  // if the backend is unreachable.
-  useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    void getUiConfig()
-      .then((cfg) => {
-        if (!cancelled) setMoonsPosition(cfg.moons_position);
-      })
-      .catch(() => undefined);
-    void subscribeMoonsPositionChanged((value) => {
-      if (!cancelled) setMoonsPosition(value);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsub = fn;
-    });
-    return () => {
-      cancelled = true;
-      unsub?.();
-    };
   }, []);
 
   useEffect(() => {
@@ -167,15 +133,12 @@ export function StatusBar() {
           </span>
         )}
       </div>
-      {/* Centered slot now hosts only the moons block when the user
-          has picked `before-time` / `after-time` for them. Tick and
-          MUD time render in the LineChip on the input row's top
-          border, not here. */}
-      <div className="statusbar-center">
-        {(moonsPosition === 'before-time' || moonsPosition === 'after-time') && moonsBlock}
-      </div>
+      {/* Centered slot is empty now that the tick + MUD time chip rides
+          on the input row's top border. Kept as a layout spacer so the
+          left and right slots stay anchored to their edges. */}
+      <div className="statusbar-center" />
       <div className="statusbar-right">
-        {moonsPosition === 'right-edge' && moonsBlock}
+        {moonsBlock}
         <span className="statusbar-clock" title="local wall-clock time">
           {formatClock(now)}
         </span>
