@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals settings · split-pane DAW redesign</title>
+    <style>
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-surface-emphasis: #1d1d24;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+        --c-accent-soft: rgba(255, 51, 153, 0.09);
+        --c-hp: #a3e635;
+        --c-mn: #38bdf8;
+        --c-mv: #fb923c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 32px;
+        background: var(--c-surface-deep);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      /* DAW / OPERATOR-CONSOLE LAYOUT
+         Left: dense control rack. Right: big live monitor. The preview
+         is no longer an afterthought at the bottom — it owns half the
+         frame. The user drags bars in the monitor, and every control
+         change reflects in the same view that will appear in their
+         real HUD. */
+
+      .frame {
+        display: grid;
+        grid-template-columns: 380px 1fr;
+        gap: 0;
+        max-width: 1100px;
+        margin: 0 auto;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      /* LEFT RACK ----------------------------------------------------- */
+      .rack {
+        border-right: 1px solid var(--c-border);
+        background: var(--c-surface);
+      }
+
+      .rack-head {
+        padding: 16px 20px 12px;
+        border-bottom: 1px solid var(--c-border);
+        background: var(--c-surface-lift);
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+      .rack-head h1 {
+        margin: 0;
+        font-size: 12px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--c-text-strong);
+      }
+      .rack-head .led {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--c-accent);
+        box-shadow: 0 0 6px var(--c-accent);
+      }
+
+      .group {
+        padding: 14px 20px 12px;
+        border-bottom: 1px solid var(--c-border-soft);
+      }
+
+      .group-label {
+        font-size: 10px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .group-label::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--c-border);
+      }
+
+      /* compact row primitive */
+      .knob {
+        display: grid;
+        grid-template-columns: 76px 1fr;
+        gap: 10px;
+        align-items: center;
+        padding: 4px 0;
+      }
+      .knob > .lbl {
+        color: var(--c-text-faint);
+        font-size: 11px;
+      }
+
+      select,
+      input[type='text'],
+      input[type='number'] {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        border-radius: 2px;
+        color: var(--c-text);
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 8px;
+        width: 100%;
+      }
+      input[type='number'] {
+        width: 60px;
+      }
+      select:focus,
+      input:focus {
+        outline: none;
+        border-color: var(--c-accent);
+      }
+
+      .pip-group {
+        display: flex;
+        gap: 4px;
+      }
+      .pip {
+        flex: 1;
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        border-radius: 2px;
+        color: var(--c-text-muted);
+        font: inherit;
+        font-size: 11px;
+        padding: 5px 6px;
+        cursor: pointer;
+        text-align: center;
+        transition: all 120ms;
+      }
+      .pip:hover {
+        color: var(--c-text-strong);
+        border-color: var(--c-border-strong);
+      }
+      .pip.is-on {
+        background: var(--c-accent-soft);
+        border-color: var(--c-accent);
+        color: var(--c-text-strong);
+      }
+
+      .swatch-row {
+        display: grid;
+        grid-template-columns: 76px 24px 1fr 26px;
+        gap: 8px;
+        align-items: center;
+        padding: 3px 0;
+      }
+      .swatch {
+        width: 22px;
+        height: 20px;
+        border-radius: 2px;
+        border: 1px solid var(--c-border-strong);
+        cursor: pointer;
+      }
+      .clear {
+        background: none;
+        border: none;
+        color: var(--c-text-dim);
+        cursor: pointer;
+        font: inherit;
+        font-size: 14px;
+        padding: 2px 0;
+        line-height: 1;
+      }
+      .clear:hover {
+        color: var(--c-accent);
+      }
+
+      .status {
+        margin-top: 4px;
+        padding-left: 86px;
+        font-size: 10px;
+        color: var(--c-text-faint);
+      }
+      .status.ok {
+        color: #6ee7b7;
+      }
+
+      details.adv {
+        margin-top: 8px;
+      }
+      details.adv summary {
+        cursor: pointer;
+        list-style: none;
+        color: var(--c-text-dim);
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        padding: 4px 0;
+      }
+      details.adv summary::before {
+        content: '+ ';
+      }
+      details.adv[open] summary::before {
+        content: '− ';
+      }
+      details.adv textarea {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        border-radius: 2px;
+        color: var(--c-text);
+        font: inherit;
+        font-size: 12px;
+        padding: 8px;
+        width: 100%;
+        min-height: 60px;
+        margin-top: 6px;
+        resize: vertical;
+      }
+
+      .token-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px 5px;
+        margin-top: 8px;
+      }
+      .token-chip {
+        font-size: 10px;
+        color: var(--c-text-faint);
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        border-radius: 2px;
+        padding: 2px 5px;
+        cursor: pointer;
+      }
+
+      .footer {
+        padding: 10px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid var(--c-border);
+        background: var(--c-surface-lift);
+      }
+
+      .bracket-btn {
+        background: none;
+        border: none;
+        color: var(--c-text-faint);
+        font: inherit;
+        font-size: 11px;
+        cursor: pointer;
+        padding: 2px 4px;
+      }
+      .bracket-btn:hover {
+        color: var(--c-accent);
+      }
+
+      /* RIGHT MONITOR ------------------------------------------------- */
+      .monitor {
+        background: radial-gradient(
+          ellipse at top,
+          var(--c-surface-emphasis) 0%,
+          var(--c-surface) 70%
+        );
+        padding: 40px 36px;
+        display: flex;
+        flex-direction: column;
+        min-height: 580px;
+      }
+
+      .monitor-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-bottom: 28px;
+      }
+      .monitor-head h2 {
+        margin: 0;
+        font-size: 11px;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        color: var(--c-text-faint);
+      }
+      .monitor-head .live {
+        color: var(--c-text-muted);
+        font-size: 11px;
+      }
+
+      .vital-rack {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .vital-row {
+        display: grid;
+        grid-template-columns: 36px 1fr 64px 110px 60px;
+        gap: 14px;
+        align-items: center;
+      }
+
+      .v-label {
+        color: var(--c-text-faint);
+        font-size: 12px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .v-bar {
+        position: relative;
+        height: 22px;
+        cursor: ew-resize;
+      }
+      .v-bar-track {
+        position: absolute;
+        inset: 0;
+        background: var(--c-border-soft);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .v-bar-fill {
+        height: 100%;
+        transition: width 120ms ease-out;
+        position: relative;
+      }
+      .v-bar-fill::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 0;
+        height: 100%;
+        width: 14px;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18));
+      }
+      .v-pct {
+        font-size: 22px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+      .v-num {
+        color: var(--c-text-muted);
+        font-variant-numeric: tabular-nums;
+        font-size: 13px;
+      }
+      .v-delta {
+        color: var(--c-hp);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+      .v-delta.down {
+        color: #f87171;
+      }
+
+      .monitor-foot {
+        margin-top: auto;
+        padding-top: 20px;
+        border-top: 1px solid var(--c-border);
+        display: flex;
+        gap: 22px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+      }
+      .monitor-foot strong {
+        color: var(--c-text);
+      }
+
+      .scrub-hint {
+        position: absolute;
+        right: 0;
+        top: -16px;
+        font-size: 9px;
+        color: var(--c-text-dim);
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <aside class="rack">
+        <div class="rack-head">
+          <h1>vitals · console</h1>
+          <span class="led" title="live"></span>
+        </div>
+
+        <div class="group">
+          <div class="group-label">show</div>
+          <div class="pip-group">
+            <button class="pip is-on">bars</button>
+            <button class="pip is-on">%</button>
+            <button class="pip is-on">cur/max</button>
+            <button class="pip is-on">Δ tick</button>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-label">appearance</div>
+          <div class="knob">
+            <span class="lbl">style</span>
+            <select>
+              <option>dark / light shade · ▓ ░</option>
+              <option>block · █ ░</option>
+              <option>parallelogram · ▰ ▱</option>
+              <option>track (smooth)</option>
+            </select>
+          </div>
+          <div class="knob">
+            <span class="lbl">width</span>
+            <input type="number" min="4" max="60" value="20" />
+          </div>
+          <div class="knob">
+            <span class="lbl">bar font</span>
+            <select>
+              <option>use the app font</option>
+              <option>Berkeley Mono (bundled)</option>
+              <option>JetBrains Mono (bundled)</option>
+              <option selected>MonoLisa (local)</option>
+            </select>
+          </div>
+          <div class="status ok">MonoLisa detected · bars are using it</div>
+        </div>
+
+        <div class="group">
+          <div class="group-label">layout</div>
+          <div class="knob">
+            <span class="lbl">arrange</span>
+            <select>
+              <option>stacked rows</option>
+              <option>inline (compact)</option>
+            </select>
+          </div>
+          <div class="knob">
+            <span class="lbl">% color</span>
+            <select>
+              <option>per-vital</option>
+              <option>gradient red → green</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-label">colors</div>
+          <div class="swatch-row">
+            <span class="lbl" style="font-size: 11px; color: var(--c-text-faint)">hp</span>
+            <span class="swatch" style="background: var(--c-hp)"></span>
+            <input type="text" value="built-in green" />
+            <button class="clear" title="reset">×</button>
+          </div>
+          <div class="swatch-row">
+            <span class="lbl" style="font-size: 11px; color: var(--c-text-faint)">mn</span>
+            <span class="swatch" style="background: var(--c-mn)"></span>
+            <input type="text" value="built-in blue" />
+            <button class="clear" title="reset">×</button>
+          </div>
+          <div class="swatch-row">
+            <span class="lbl" style="font-size: 11px; color: var(--c-text-faint)">mv</span>
+            <span class="swatch" style="background: var(--c-mv)"></span>
+            <input type="text" value="built-in orange" />
+            <button class="clear" title="reset">×</button>
+          </div>
+          <div class="knob" style="margin-top: 6px">
+            <span class="lbl">drain</span>
+            <div class="pip-group">
+              <button class="pip is-on">red as bar empties</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <details class="adv">
+            <summary>template · advanced</summary>
+            <div class="pip-group" style="margin-top: 8px">
+              <button class="pip">use custom template (overrides layout)</button>
+            </div>
+            <textarea>%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v - (%tick) - %time</textarea>
+            <div class="token-chips">
+              <span class="token-chip">%hp</span>
+              <span class="token-chip">%mhp</span>
+              <span class="token-chip">%mn</span>
+              <span class="token-chip">%mmn</span>
+              <span class="token-chip">%mv</span>
+              <span class="token-chip">%mmv</span>
+              <span class="token-chip">%pct_hp</span>
+              <span class="token-chip">%pct_mn</span>
+              <span class="token-chip">%pct_mv</span>
+              <span class="token-chip">%bar_hp</span>
+              <span class="token-chip">%bar_mn</span>
+              <span class="token-chip">%bar_mv</span>
+              <span class="token-chip">%tick</span>
+              <span class="token-chip">%time</span>
+            </div>
+          </details>
+        </div>
+
+        <div class="footer">
+          <span
+            style="
+              color: var(--c-text-dim);
+              font-size: 10px;
+              letter-spacing: 0.18em;
+              text-transform: uppercase;
+            "
+            >live</span
+          >
+          <button class="bracket-btn">[reset vitals]</button>
+        </div>
+      </aside>
+
+      <main class="monitor">
+        <div class="monitor-head">
+          <h2>live monitor</h2>
+          <span class="live">drag any bar to scrub · changes propagate to the running app</span>
+        </div>
+
+        <div class="vital-rack">
+          <div class="vital-row">
+            <span class="v-label">hp</span>
+            <div class="v-bar" data-key="hp">
+              <span class="scrub-hint">drag ↔</span>
+              <div class="v-bar-track">
+                <div class="v-bar-fill" style="width: 75%; background: var(--c-hp)"></div>
+              </div>
+            </div>
+            <span class="v-pct" style="color: var(--c-hp)">75%</span>
+            <span class="v-num">750 / 1000</span>
+            <span class="v-delta">+12</span>
+          </div>
+
+          <div class="vital-row">
+            <span class="v-label">mn</span>
+            <div class="v-bar" data-key="mn">
+              <div class="v-bar-track">
+                <div class="v-bar-fill" style="width: 50%; background: var(--c-mn)"></div>
+              </div>
+            </div>
+            <span class="v-pct" style="color: var(--c-mn)">50%</span>
+            <span class="v-num">150 / 300</span>
+            <span class="v-delta down">−8</span>
+          </div>
+
+          <div class="vital-row">
+            <span class="v-label">mv</span>
+            <div class="v-bar" data-key="mv">
+              <div class="v-bar-track">
+                <div class="v-bar-fill" style="width: 25%; background: var(--c-mv)"></div>
+              </div>
+            </div>
+            <span class="v-pct" style="color: var(--c-mv)">25%</span>
+            <span class="v-num">50 / 200</span>
+            <span class="v-delta"></span>
+          </div>
+        </div>
+
+        <div class="monitor-foot">
+          <span><strong>tick</strong> 12s</span>
+          <span><strong>time</strong> 14:32</span>
+          <span><strong>layout</strong> stacked rows</span>
+          <span><strong>font</strong> MonoLisa</span>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      document.querySelectorAll('.pip').forEach((p) => {
+        p.addEventListener('click', () => p.classList.toggle('is-on'));
+      });
+
+      document.querySelectorAll('.v-bar').forEach((bar) => {
+        bar.addEventListener('mousedown', (e) => {
+          if (e.target.classList.contains('scrub-hint')) return;
+          const rect = bar.getBoundingClientRect();
+          const set = (clientX) => {
+            const pct = Math.max(
+              0,
+              Math.min(100, Math.round(((clientX - rect.left) / rect.width) * 100)),
+            );
+            const fill = bar.querySelector('.v-bar-fill');
+            fill.style.width = pct + '%';
+            const row = bar.parentElement;
+            const pctEl = row.querySelector('.v-pct');
+            pctEl.textContent = pct + '%';
+          };
+          set(e.clientX);
+          const onMove = (ev) => set(ev.clientX);
+          const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+          };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        });
+      });
+    </script>
+  </body>
+</html>

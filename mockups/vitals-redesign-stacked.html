@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals settings · stacked accordion redesign</title>
+    <style>
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-surface-emphasis: #1d1d24;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+        --c-accent-soft: rgba(255, 51, 153, 0.09);
+        --c-hp: #a3e635;
+        --c-mn: #38bdf8;
+        --c-mv: #fb923c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 48px 32px;
+        background: var(--c-surface-deep);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      /* PRINT-MAGAZINE LAYOUT
+         A column of editorial-style sections. Section headers use small
+         all-caps treatment with a long underline rule. One section open
+         at a time. The pinned preview at the bottom acts as the live
+         baseline that you tweak against. */
+
+      .frame {
+        max-width: 760px;
+        margin: 0 auto;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 4px;
+      }
+
+      .frame-head {
+        padding: 22px 28px 18px;
+        border-bottom: 2px solid var(--c-text-strong);
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+
+      .frame-head h1 {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        color: var(--c-text-strong);
+        text-transform: lowercase;
+      }
+
+      .frame-head .kicker {
+        color: var(--c-text-faint);
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      /* SECTION ROWS --------------------------------------------------- */
+      .section {
+        border-bottom: 1px solid var(--c-border);
+      }
+
+      .section-head {
+        display: grid;
+        grid-template-columns: 32px 1fr auto;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 28px;
+        cursor: pointer;
+        user-select: none;
+        transition: background 120ms;
+      }
+      .section-head:hover {
+        background: var(--c-surface-lift);
+      }
+
+      .section-num {
+        color: var(--c-text-dim);
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .section-title {
+        font-size: 13px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--c-text-strong);
+        font-weight: 600;
+      }
+
+      .section-summary {
+        color: var(--c-text-faint);
+        font-size: 12px;
+        margin-left: 12px;
+        font-weight: 400;
+        letter-spacing: normal;
+        text-transform: lowercase;
+      }
+
+      .section-toggle {
+        color: var(--c-text-faint);
+        font-size: 16px;
+        transition:
+          transform 160ms ease,
+          color 160ms;
+      }
+      .section.is-open .section-toggle {
+        color: var(--c-accent);
+        transform: rotate(90deg);
+      }
+      .section.is-open .section-head {
+        background: var(--c-surface-lift);
+      }
+      .section.is-open .section-title {
+        color: var(--c-accent);
+      }
+
+      .section-body {
+        display: none;
+        padding: 4px 28px 22px;
+        animation: fade-in 200ms ease;
+      }
+      .section.is-open .section-body {
+        display: block;
+      }
+      @keyframes fade-in {
+        from {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* ROW PRIMITIVE -------------------------------------------------- */
+      .row {
+        display: grid;
+        grid-template-columns: 100px 1fr auto;
+        gap: 14px;
+        align-items: center;
+        padding: 7px 0;
+      }
+
+      .row > .label {
+        color: var(--c-text-faint);
+        font-size: 12px;
+        text-transform: lowercase;
+      }
+
+      .row .meta {
+        color: var(--c-text-dim);
+        font-size: 11px;
+      }
+
+      select,
+      input[type='text'],
+      input[type='number'] {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        border-radius: 2px;
+        color: var(--c-text);
+        font: inherit;
+        font-size: 13px;
+        padding: 6px 10px;
+        width: 100%;
+      }
+      input[type='number'] {
+        width: 80px;
+      }
+      select:focus,
+      input:focus {
+        outline: none;
+        border-color: var(--c-accent);
+      }
+
+      .pill-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .pill {
+        padding: 6px 12px;
+        border: 1px solid var(--c-border);
+        background: var(--c-surface-deep);
+        color: var(--c-text-muted);
+        border-radius: 2px;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        transition: all 120ms;
+      }
+      .pill:hover {
+        color: var(--c-text-strong);
+        border-color: var(--c-border-strong);
+      }
+      .pill.is-on {
+        background: var(--c-accent-soft);
+        border-color: var(--c-accent);
+        color: var(--c-text-strong);
+      }
+      .pill.is-on::before {
+        content: '✓ ';
+        color: var(--c-accent);
+      }
+
+      .color-row {
+        display: grid;
+        grid-template-columns: 100px 28px 1fr auto;
+        gap: 10px;
+        align-items: center;
+        padding: 5px 0;
+      }
+      .color-swatch {
+        width: 26px;
+        height: 22px;
+        border-radius: 2px;
+        border: 1px solid var(--c-border-strong);
+        cursor: pointer;
+      }
+
+      .bracket-btn {
+        background: none;
+        border: none;
+        color: var(--c-text-faint);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 2px;
+      }
+      .bracket-btn:hover {
+        color: var(--c-accent);
+        background: var(--c-accent-soft);
+      }
+
+      .status-line {
+        margin-top: 6px;
+        padding-left: 114px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+      }
+      .status-line.ok {
+        color: #6ee7b7;
+      }
+
+      textarea {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        border-radius: 2px;
+        color: var(--c-text);
+        font: inherit;
+        font-size: 13px;
+        padding: 10px;
+        width: 100%;
+        min-height: 76px;
+        margin-top: 8px;
+        resize: vertical;
+      }
+
+      .token-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 6px;
+        margin-top: 10px;
+      }
+      .token-chip {
+        font-size: 11px;
+        color: var(--c-text-faint);
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        border-radius: 2px;
+        padding: 2px 6px;
+        cursor: pointer;
+      }
+      .token-chip:hover {
+        color: var(--c-text);
+        border-color: var(--c-border-strong);
+      }
+
+      /* PREVIEW PIN AT BOTTOM ----------------------------------------- */
+      .preview {
+        position: sticky;
+        bottom: 0;
+        padding: 16px 28px;
+        background: var(--c-surface);
+        border-top: 2px solid var(--c-text-strong);
+      }
+      .preview-head {
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--c-text-faint);
+        margin-bottom: 12px;
+        display: flex;
+        gap: 14px;
+        align-items: baseline;
+      }
+      .preview-head strong {
+        color: var(--c-text-strong);
+        letter-spacing: 0.22em;
+      }
+      .preview-head .live {
+        color: var(--c-text-muted);
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .preview-grid {
+        display: grid;
+        grid-template-columns: 24px 1fr 48px 90px 40px;
+        gap: 8px 14px;
+        align-items: center;
+      }
+      .pv-bar {
+        cursor: ew-resize;
+        height: 14px;
+        position: relative;
+      }
+      .pv-bar-track {
+        position: absolute;
+        inset: 0;
+        background: var(--c-border-soft);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .pv-bar-fill {
+        height: 100%;
+        transition: width 120ms ease-out;
+      }
+      .pv-label {
+        color: var(--c-text-faint);
+      }
+      .pv-pct {
+        font-weight: 700;
+        text-align: right;
+      }
+      .pv-num {
+        color: var(--c-text-muted);
+      }
+      .pv-delta {
+        color: var(--c-hp);
+        font-weight: 600;
+      }
+      .pv-delta.down {
+        color: #f87171;
+      }
+
+      .footer {
+        padding: 12px 28px;
+        text-align: right;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <header class="frame-head">
+        <h1>vitals</h1>
+        <span class="kicker">hp · mn · mv rendering</span>
+      </header>
+
+      <section class="section is-open">
+        <div class="section-head" data-toggle="visibility">
+          <span class="section-num">01</span>
+          <div>
+            <span class="section-title">visibility</span>
+            <span class="section-summary">· bars / percent / numeric / delta</span>
+          </div>
+          <span class="section-toggle">›</span>
+        </div>
+        <div class="section-body">
+          <div class="pill-group">
+            <button class="pill is-on">bar glyphs</button>
+            <button class="pill is-on">percent</button>
+            <button class="pill is-on">numeric</button>
+            <button class="pill is-on">per-tick delta</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head" data-toggle="style">
+          <span class="section-num">02</span>
+          <div>
+            <span class="section-title">appearance</span>
+            <span class="section-summary">· dark/light shade · 20 cells · MonoLisa</span>
+          </div>
+          <span class="section-toggle">›</span>
+        </div>
+        <div class="section-body">
+          <div class="row">
+            <span class="label">bar style</span>
+            <select>
+              <option>dark / light shade · ▓ ░</option>
+              <option>block · █ ░</option>
+              <option>parallelogram · ▰ ▱</option>
+              <option>track (smooth)</option>
+            </select>
+            <span class="meta"></span>
+          </div>
+          <div class="row">
+            <span class="label">bar width</span>
+            <input type="number" min="4" max="60" value="20" />
+            <span class="meta">cells (4–60)</span>
+          </div>
+          <div class="row">
+            <span class="label">bar font</span>
+            <select>
+              <option>use the app font</option>
+              <option>Berkeley Mono (bundled)</option>
+              <option>JetBrains Mono (bundled)</option>
+              <option selected>MonoLisa (must be installed locally)</option>
+            </select>
+            <span class="meta"></span>
+          </div>
+          <div class="status-line ok">MonoLisa detected as "MonoLisa" · bars are using it</div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head" data-toggle="layout">
+          <span class="section-num">03</span>
+          <div>
+            <span class="section-title">layout</span>
+            <span class="section-summary">· stacked · per-vital percent color</span>
+          </div>
+          <span class="section-toggle">›</span>
+        </div>
+        <div class="section-body">
+          <div class="row">
+            <span class="label">arrangement</span>
+            <select>
+              <option>stacked rows (hp / mn / mv per row)</option>
+              <option>inline (single row, compact)</option>
+            </select>
+            <span class="meta"></span>
+          </div>
+          <div class="row">
+            <span class="label">percent color</span>
+            <select>
+              <option>per-vital (matches bar)</option>
+              <option>gradient (red → green)</option>
+            </select>
+            <span class="meta"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head" data-toggle="colors">
+          <span class="section-num">04</span>
+          <div>
+            <span class="section-title">colors</span>
+            <span class="section-summary">· built-in ramps · drain to red</span>
+          </div>
+          <span class="section-toggle">›</span>
+        </div>
+        <div class="section-body">
+          <div class="color-row">
+            <span class="label">hp color</span>
+            <span class="color-swatch" style="background: var(--c-hp)"></span>
+            <input type="text" value="built-in green" />
+            <button class="bracket-btn">[clear]</button>
+          </div>
+          <div class="color-row">
+            <span class="label">mn color</span>
+            <span class="color-swatch" style="background: var(--c-mn)"></span>
+            <input type="text" value="built-in blue" />
+            <button class="bracket-btn">[clear]</button>
+          </div>
+          <div class="color-row">
+            <span class="label">mv color</span>
+            <span class="color-swatch" style="background: var(--c-mv)"></span>
+            <input type="text" value="built-in orange" />
+            <button class="bracket-btn">[clear]</button>
+          </div>
+          <div class="row" style="margin-top: 8px">
+            <span class="label">drain to red</span>
+            <span class="pill-group">
+              <button class="pill is-on">on · drain through red as the bar empties</button>
+            </span>
+            <span class="meta"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head" data-toggle="template">
+          <span class="section-num">05</span>
+          <div>
+            <span class="section-title">template</span>
+            <span class="section-summary">· off · advanced</span>
+          </div>
+          <span class="section-toggle">›</span>
+        </div>
+        <div class="section-body">
+          <div class="pill-group">
+            <button class="pill">use a custom template (overrides layout)</button>
+          </div>
+          <textarea>%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v - (%tick) - %time</textarea>
+          <div class="token-chips">
+            <span class="token-chip">%hp</span>
+            <span class="token-chip">%mhp</span>
+            <span class="token-chip">%mn</span>
+            <span class="token-chip">%mmn</span>
+            <span class="token-chip">%mv</span>
+            <span class="token-chip">%mmv</span>
+            <span class="token-chip">%pct_hp</span>
+            <span class="token-chip">%pct_mn</span>
+            <span class="token-chip">%pct_mv</span>
+            <span class="token-chip">%bar_hp</span>
+            <span class="token-chip">%bar_mn</span>
+            <span class="token-chip">%bar_mv</span>
+            <span class="token-chip">%tick</span>
+            <span class="token-chip">%time</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="footer">
+        <button class="bracket-btn">[reset vitals]</button>
+      </div>
+
+      <div class="preview">
+        <div class="preview-head">
+          <strong>preview</strong>
+          <span class="live"
+            >hp <span id="pvHp">75</span>% / mn <span id="pvMn">50</span>% / mv
+            <span id="pvMv">25</span>% · drag a bar to scrub</span
+          >
+        </div>
+        <div class="preview-grid">
+          <span class="pv-label">hp</span>
+          <div class="pv-bar" data-key="hp">
+            <div class="pv-bar-track">
+              <div class="pv-bar-fill" style="width: 75%; background: var(--c-hp)"></div>
+            </div>
+          </div>
+          <span class="pv-pct" style="color: var(--c-hp)">75%</span>
+          <span class="pv-num">750/1000</span>
+          <span class="pv-delta">+12</span>
+
+          <span class="pv-label">mn</span>
+          <div class="pv-bar" data-key="mn">
+            <div class="pv-bar-track">
+              <div class="pv-bar-fill" style="width: 50%; background: var(--c-mn)"></div>
+            </div>
+          </div>
+          <span class="pv-pct" style="color: var(--c-mn)">50%</span>
+          <span class="pv-num">150/300</span>
+          <span class="pv-delta down">-8</span>
+
+          <span class="pv-label">mv</span>
+          <div class="pv-bar" data-key="mv">
+            <div class="pv-bar-track">
+              <div class="pv-bar-fill" style="width: 25%; background: var(--c-mv)"></div>
+            </div>
+          </div>
+          <span class="pv-pct" style="color: var(--c-mv)">25%</span>
+          <span class="pv-num">50/200</span>
+          <span></span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      document.querySelectorAll('.section-head').forEach((head) => {
+        head.addEventListener('click', () => {
+          const sec = head.parentElement;
+          const open = sec.classList.contains('is-open');
+          document.querySelectorAll('.section').forEach((s) => s.classList.remove('is-open'));
+          if (!open) sec.classList.add('is-open');
+        });
+      });
+
+      document.querySelectorAll('.pill').forEach((p) => {
+        p.addEventListener('click', () => p.classList.toggle('is-on'));
+      });
+
+      document.querySelectorAll('.pv-bar').forEach((bar) => {
+        bar.addEventListener('mousedown', (e) => {
+          const rect = bar.getBoundingClientRect();
+          const key = bar.dataset.key;
+          const set = (clientX) => {
+            const pct = Math.max(
+              0,
+              Math.min(100, Math.round(((clientX - rect.left) / rect.width) * 100)),
+            );
+            const fill = bar.querySelector('.pv-bar-fill');
+            fill.style.width = pct + '%';
+            document.getElementById('pv' + key[0].toUpperCase() + key[1]).textContent = pct;
+            const row = bar.parentElement;
+            const pctEl = row.querySelector('.pv-pct');
+            pctEl.textContent = pct + '%';
+          };
+          set(e.clientX);
+          const onMove = (ev) => set(ev.clientX);
+          const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+          };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        });
+      });
+    </script>
+  </body>
+</html>

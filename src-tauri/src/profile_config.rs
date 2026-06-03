@@ -289,6 +289,14 @@ pub(crate) struct VitalsConfig {
     /// different font for the rest of the UI.
     #[serde(default)]
     pub bar_font: String,
+    /// Replaces the entire vitals bar with three corner L-brackets
+    /// drawn on the main window's chrome (top-left = hp, top-right =
+    /// mn, bottom-right = mv). When hp drops below 30%, a soft red
+    /// vignette pulses at the window periphery. Named "one with
+    /// erelei" because the vitals stop being a panel widget and
+    /// merge into the UI itself.
+    #[serde(default)]
+    pub one_with_erelei: bool,
 }
 
 impl Default for VitalsConfig {
@@ -311,6 +319,7 @@ impl Default for VitalsConfig {
             mv_color: String::new(),
             use_color_ramp: true,
             bar_font: String::new(),
+            one_with_erelei: false,
         }
     }
 }

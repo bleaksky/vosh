@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vertical vitals · thermometer</title>
+    <style>
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-surface-emphasis: #1d1d24;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+        --c-hp: #a3e635;
+        --c-mn: #38bdf8;
+        --c-mv: #fb923c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 40px;
+        background: var(--c-surface-deep);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+        letter-spacing: 0.04em;
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 720px;
+        margin: 0 0 28px;
+      }
+
+      .stage {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+        max-width: 1100px;
+      }
+
+      /* THERMOMETER
+         Three narrow vertical bars built from stacked block glyphs.
+         Bottom-up fill. The bar column is a fixed character cell wide
+         (2ch) so the glyph alignment stays crisp; height is set in
+         em so it scales with the host font-size. */
+      .therm-card {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 4px;
+        padding: 18px 16px;
+      }
+
+      .therm-card h2 {
+        margin: 0 0 14px;
+        font-size: 11px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--c-text-faint);
+        font-weight: 600;
+      }
+
+      .therm-row {
+        display: flex;
+        gap: 16px;
+        align-items: flex-end;
+        justify-content: center;
+        padding: 8px 0 6px;
+      }
+
+      .therm-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        cursor: ns-resize;
+        user-select: none;
+      }
+      .therm-col .label {
+        font-size: 11px;
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+      }
+      .therm-col .pct {
+        font-size: 13px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .therm-col .num {
+        font-size: 10px;
+        color: var(--c-text-dim);
+      }
+
+      .therm-bar {
+        position: relative;
+        width: 2ch;
+        height: 9em;
+        line-height: 1;
+        font-size: 1.1em;
+        overflow: hidden;
+        background: var(--c-border-soft);
+        border-radius: 1px;
+      }
+      .therm-bar-fill {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        transition: height 120ms ease-out;
+        color: var(--c-hp);
+        text-align: center;
+        white-space: pre;
+        font-family: inherit;
+        font-weight: 700;
+      }
+      .col-mn .therm-bar-fill {
+        color: var(--c-mn);
+      }
+      .col-mv .therm-bar-fill {
+        color: var(--c-mv);
+      }
+
+      /* COMPACT VARIANT
+         Same idea, label inline at the bottom, no numeric. Lives in a
+         tight 3-bar strip you could drop in any corner. */
+      .strip-card {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 4px;
+        padding: 16px 14px 12px;
+      }
+      .strip-row {
+        display: flex;
+        gap: 10px;
+        align-items: flex-end;
+        justify-content: center;
+        padding: 4px 0;
+      }
+      .strip-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        cursor: ns-resize;
+      }
+      .strip-bar {
+        position: relative;
+        width: 2ch;
+        height: 6em;
+        line-height: 1;
+        overflow: hidden;
+        background: var(--c-border-soft);
+        border-radius: 1px;
+      }
+      .strip-bar-fill {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        text-align: center;
+        white-space: pre;
+        color: var(--c-hp);
+        font-weight: 700;
+        transition: height 120ms ease-out;
+      }
+      .strip-col-mn .strip-bar-fill {
+        color: var(--c-mn);
+      }
+      .strip-col-mv .strip-bar-fill {
+        color: var(--c-mv);
+      }
+      .strip-label {
+        font-size: 10px;
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        letter-spacing: 0.14em;
+      }
+
+      /* DETACHED OVERLAY VARIANT
+         Glyph thermometers with an outer frame that suggests a HUD
+         element pinned to a corner. The labels live on the left flank
+         vertically, like a fuel gauge label. */
+      .hud-card {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 4px;
+        padding: 18px 16px;
+      }
+      .hud-frame {
+        display: grid;
+        grid-template-columns: 16px repeat(3, 1fr);
+        gap: 10px;
+        align-items: stretch;
+        padding: 8px;
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        border-radius: 3px;
+      }
+      .hud-spine {
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        transform: rotate(180deg);
+        font-size: 9px;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+        align-self: center;
+      }
+      .hud-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        cursor: ns-resize;
+        padding: 4px 0;
+      }
+      .hud-col .label {
+        font-size: 10px;
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+      }
+      .hud-col .pct {
+        font-size: 12px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .hud-bar {
+        position: relative;
+        width: 100%;
+        height: 7em;
+        overflow: hidden;
+        background: var(--c-border-soft);
+        border: 1px solid var(--c-border);
+        border-radius: 2px;
+      }
+      .hud-bar-fill {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        text-align: center;
+        white-space: pre;
+        line-height: 1;
+        font-weight: 700;
+        transition: height 120ms ease-out;
+        color: var(--c-hp);
+      }
+      .hud-col-mn .hud-bar-fill {
+        color: var(--c-mn);
+      }
+      .hud-col-mv .hud-bar-fill {
+        color: var(--c-mv);
+      }
+
+      .footnote {
+        margin-top: 30px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        max-width: 720px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vertical vitals · thermometer family</h1>
+    <p class="lede">
+      narrow glyph-built columns. each column is one character wide; the bar fills bottom-up by
+      repeating a filled glyph (default <code>█</code>). drag any column up or down to scrub the
+      value.
+    </p>
+
+    <div class="stage">
+      <div class="therm-card">
+        <h2>full · label · % · num</h2>
+        <div class="therm-row">
+          <div class="therm-col" data-key="hp" data-max="1000">
+            <span class="label">hp</span>
+            <div class="therm-bar"><div class="therm-bar-fill" style="height: 75%"></div></div>
+            <span class="pct">75%</span>
+            <span class="num">750/1000</span>
+          </div>
+          <div class="therm-col col-mn" data-key="mn" data-max="300">
+            <span class="label">mn</span>
+            <div class="therm-bar"><div class="therm-bar-fill" style="height: 50%"></div></div>
+            <span class="pct">50%</span>
+            <span class="num">150/300</span>
+          </div>
+          <div class="therm-col col-mv" data-key="mv" data-max="200">
+            <span class="label">mv</span>
+            <div class="therm-bar"><div class="therm-bar-fill" style="height: 25%"></div></div>
+            <span class="pct">25%</span>
+            <span class="num">50/200</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="strip-card">
+        <h2
+          style="
+            margin: 0 0 14px;
+            font-size: 11px;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--c-text-faint);
+            font-weight: 600;
+          "
+        >
+          compact strip
+        </h2>
+        <div class="strip-row">
+          <div class="strip-col" data-key="hp" data-max="1000">
+            <div class="strip-bar"><div class="strip-bar-fill" style="height: 75%"></div></div>
+            <span class="strip-label">hp</span>
+          </div>
+          <div class="strip-col strip-col-mn" data-key="mn" data-max="300">
+            <div class="strip-bar"><div class="strip-bar-fill" style="height: 50%"></div></div>
+            <span class="strip-label">mn</span>
+          </div>
+          <div class="strip-col strip-col-mv" data-key="mv" data-max="200">
+            <div class="strip-bar"><div class="strip-bar-fill" style="height: 25%"></div></div>
+            <span class="strip-label">mv</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hud-card">
+        <h2
+          style="
+            margin: 0 0 14px;
+            font-size: 11px;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--c-text-faint);
+            font-weight: 600;
+          "
+        >
+          corner HUD · spine label
+        </h2>
+        <div class="hud-frame">
+          <span class="hud-spine">vitals</span>
+          <div class="hud-col" data-key="hp" data-max="1000">
+            <span class="label">hp</span>
+            <div class="hud-bar"><div class="hud-bar-fill" style="height: 75%"></div></div>
+            <span class="pct">75</span>
+          </div>
+          <div class="hud-col hud-col-mn" data-key="mn" data-max="300">
+            <span class="label">mn</span>
+            <div class="hud-bar"><div class="hud-bar-fill" style="height: 50%"></div></div>
+            <span class="pct">50</span>
+          </div>
+          <div class="hud-col hud-col-mv" data-key="mv" data-max="200">
+            <span class="label">mv</span>
+            <div class="hud-bar"><div class="hud-bar-fill" style="height: 25%"></div></div>
+            <span class="pct">25</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="footnote">
+      drawback: vertical fill via repeated glyphs in a monospace cell can show seams where one cell
+      ends and the next begins, especially in fonts without flush block glyphs. the
+      <code>█</code> default looks seamless in Berkeley, JetBrains, and MonoLisa. fonts without a
+      proper full-block character will show 1px gaps between cells.
+    </p>
+
+    <script>
+      const SAMPLES = { hp: 1000, mn: 300, mv: 200 };
+      function attachDrag(selector, fillSel, withReadouts) {
+        document.querySelectorAll(selector).forEach((col) => {
+          col.addEventListener('mousedown', (e) => {
+            const bar = col.querySelector(fillSel)?.parentElement;
+            if (!bar) return;
+            const rect = bar.getBoundingClientRect();
+            const set = (clientY) => {
+              const y = clientY - rect.top;
+              const pct = Math.max(0, Math.min(100, Math.round(100 - (y / rect.height) * 100)));
+              col.querySelector(fillSel).style.height = pct + '%';
+              if (withReadouts) {
+                const pctEl = col.querySelector('.pct');
+                const numEl = col.querySelector('.num');
+                if (pctEl) pctEl.textContent = pct + (col.querySelector('.num') ? '%' : '');
+                if (numEl) {
+                  const max = +col.dataset.max;
+                  numEl.textContent = Math.round((pct / 100) * max) + '/' + max;
+                }
+              }
+            };
+            set(e.clientY);
+            const onMove = (ev) => set(ev.clientY);
+            const onUp = () => {
+              window.removeEventListener('mousemove', onMove);
+              window.removeEventListener('mouseup', onUp);
+            };
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+          });
+        });
+      }
+      attachDrag('.therm-col', '.therm-bar-fill', true);
+      attachDrag('.strip-col', '.strip-bar-fill', false);
+      attachDrag('.hud-col', '.hud-bar-fill', true);
+    </script>
+  </body>
+</html>
