@@ -110,6 +110,23 @@ export function rgbString(rgb: [number, number, number]): string {
   return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
 }
 
+/**
+ * Universal red → yellow → green ramp keyed off a fill percent. Used
+ * when `VitalsConfig.percent_color === 'gradient'` so the percent
+ * text colors the same way regardless of which vital it labels — the
+ * eye picks up "low value = danger" from the color alone, divorced
+ * from hp / mn / mv identity. Mirrors the tintin nprompt @check / @percent
+ * stop colors.
+ */
+export function colorForPercent(value: number): string {
+  const v = Math.max(0, Math.min(100, value));
+  if (v < 20) return '#dc4444';
+  if (v < 40) return '#dc8a44';
+  if (v < 60) return '#dccd44';
+  if (v < 80) return '#a8dc44';
+  return '#5fdc6a';
+}
+
 /** Parse `#rrggbb` or `#rgb` into an RGB triple. Returns null for
  *  anything else; the caller falls back to the built-in ramp. The
  *  Settings color picker emits `#rrggbb`, so this is enough. */

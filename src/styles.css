@@ -4062,11 +4062,13 @@ body {
   background: var(--c-surface);
 }
 
-/* The preview uses the real .vitals-bar styles so what the user sees
-   in Settings matches the runtime, but the surrounding header makes
-   it clear this is a sample. */
-.panels-vitals-preview::before {
-  content: 'preview · hp 75% / mn 50% / mv 25%';
+/* The preview uses the real .vitals-bar styles so what the user
+   sees in Settings matches the runtime. The header reads current
+   percent values for each vital, plus a drag affordance hint. The
+   header div is rendered from React so the values track live drag
+   state — earlier versions hardcoded the text in a CSS ::before
+   pseudo and went out of sync with the bars. */
+.vitals-preview-head {
   display: block;
   padding: 3px 14px;
   color: var(--c-text-faint);
@@ -4075,6 +4077,23 @@ body {
   text-transform: lowercase;
   background: var(--c-surface-deep);
   border-bottom: 1px dashed var(--c-border);
+}
+
+/* Drag hit-target around the preview bar. cursor and a subtle hover
+   tint signal that the bar is interactive; the wrapper itself is
+   inline-flex so it does not shift the bar layout when added. */
+.vitals-preview-drag {
+  display: inline-flex;
+  align-items: center;
+  cursor: ew-resize;
+  user-select: none;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.vitals-preview-drag:hover {
+  background: var(--c-accent-soft);
+  border-radius: 2px;
 }
 
 .logs-status {
