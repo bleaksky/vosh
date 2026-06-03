@@ -2,6 +2,13 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.3.11 - 2026-06-03
+
+- Five new vitals bar glyph presets in the btop family. dark / light shade (▓ ░), block / medium shade (█ ▒), braille full (⣿ ⣀), braille mid (⠿ ⠤), and braille thin (⠶ ␣). Pick them from the new glyph-preset dropdown under Settings · Panels · panes · vitals.
+- The chip row of glyph quick-picks is replaced by a single dropdown. Cleaner at a glance, easier to scan all the available pairs, and gracefully surfaces a `custom` entry when you have hand-typed your own glyphs in the filled / empty fields.
+- The ramped bar style is back. Pick `ramped` in the style dropdown next to solid and track. Ramped uses 1/8-step partial-block characters (▏▎▍▌▋▊▉) on the boundary cell so the bar moves at sub-character resolution instead of snapping to whole-cell increments. At bar width 20 a solid bar moves in 5% jumps; the ramped variant moves in 0.625% jumps. Looks best in the bundled Berkeley Mono or JetBrains Mono. The preview in Settings honors the ramped style too so you can drag the bars and watch the partial blocks tick through every step.
+- Two minor preview refinements: the chip row's "quick picks" label is gone (the dropdown is self-describing), and the preview's ramped path mirrors the runtime renderer exactly so what you see while configuring is what you get on the live bar.
+
 ## v0.3.10 - 2026-06-02
 
 - The vitals preview in Settings is now interactive. Click and drag any of the hp / mn / mv bars to scrub through the 0 to 100 percent range and watch the colors transition through the ramp live. The header above the preview reads the current values so you can see exactly which percent each bar is at. Useful for verifying a custom color renders the way you want at every fill level before you commit to it. The cursor changes to a horizontal resize affordance when you hover a bar so the drag handle is discoverable.

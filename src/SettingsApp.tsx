@@ -1254,13 +1254,29 @@ function TickConfigEditor({ onError }: TickConfigEditorProps) {
 // width next to the rest of the panel-related layout knobs. Each
 // edit autosaves through setUiConfig and broadcasts via
 // vosh://vitals-config-changed so VitalsBar redraws live.
+/** Resolve the dropdown value for the currently-set bar glyphs.
+ *  Returns the `<filled>|<empty>` key when the live values match a
+ *  preset, or `__custom` when the user has hand-typed glyphs that
+ *  don't match any preset. */
+function presetKeyFor(v: VitalsConfig): string {
+  const match = VITALS_GLYPH_PRESETS.find(
+    (p) => p.filled === v.bar_filled && p.empty === v.bar_empty,
+  );
+  return match ? `${match.filled}|${match.empty}` : '__custom';
+}
+
 const VITALS_GLYPH_PRESETS: { label: string; filled: string; empty: string }[] = [
   { label: 'parallelogram', filled: '▰', empty: '▱' },
   { label: 'block', filled: '█', empty: '░' },
-  { label: 'heavy/light', filled: '━', empty: '─' },
+  { label: 'block / medium shade', filled: '█', empty: '▒' },
+  { label: 'dark / light shade', filled: '▓', empty: '░' },
+  { label: 'heavy / light line', filled: '━', empty: '─' },
   { label: 'circle', filled: '●', empty: '○' },
   { label: 'square', filled: '◼', empty: '◻' },
   { label: 'vertical bar', filled: '▮', empty: '▯' },
+  { label: 'braille full', filled: '⣿', empty: '⣀' },
+  { label: 'braille mid', filled: '⠿', empty: '⠤' },
+  { label: 'braille thin', filled: '⠶', empty: '⠀' },
 ];
 
 interface VitalsConfigPreset {
@@ -1373,7 +1389,8 @@ function VitalsConfigSection({
             disabled={!v.show_bar}
             onChange={(e) => apply({ bar_style: e.target.value as VitalsBarStyle })}
           >
-            <option value="solid">solid (glyph per cell)</option>
+            <option value="solid">solid (one glyph per cell)</option>
+            <option value="ramped">ramped (1/8 partial blocks for sub-cell smoothness)</option>
             <option value="track">track (smooth CSS bar)</option>
           </select>
         </label>
@@ -1446,27 +1463,35 @@ function VitalsConfigSection({
       </div>
       <VitalsTemplateEditor config={v} apply={apply} />
       <div
-        className={`panels-vitals-quickpicks${
+        className={`panels-vitals-glyphs${
           !v.show_bar || v.bar_style === 'track' ? ' is-disabled' : ''
         }`}
       >
-        <span className="panels-vitals-quickpicks-label">quick picks</span>
-        {VITALS_GLYPH_PRESETS.map((preset) => {
-          const active = preset.filled === v.bar_filled && preset.empty === v.bar_empty;
-          return (
-            <button
-              key={preset.label}
-              type="button"
-              className={`panels-vitals-glyph-chip${active ? ' is-active' : ''}`}
-              title={preset.label}
-              disabled={!v.show_bar || v.bar_style === 'track'}
-              onClick={() => apply({ bar_filled: preset.filled, bar_empty: preset.empty })}
-            >
-              {preset.filled.repeat(3)}
-              {preset.empty.repeat(3)}
-            </button>
-          );
-        })}
+        <label className="panels-vitals-glyph-field" style={{ flex: '1 1 auto', minWidth: 0 }}>
+          <span className="panels-vitals-glyph-label">preset</span>
+          <select
+            value={presetKeyFor(v)}
+            disabled={!v.show_bar || v.bar_style === 'track'}
+            onChange={(e) => {
+              const key = e.target.value;
+              if (key === '__custom') return;
+              const preset = VITALS_GLYPH_PRESETS.find((p) => `${p.filled}|${p.empty}` === key);
+              if (preset) apply({ bar_filled: preset.filled, bar_empty: preset.empty });
+            }}
+            style={{ flex: '1 1 auto', minWidth: 0 }}
+          >
+            {presetKeyFor(v) === '__custom' && (
+              <option value="__custom">
+                custom · {v.bar_filled} {v.bar_empty}
+              </option>
+            )}
+            {VITALS_GLYPH_PRESETS.map((preset) => (
+              <option key={preset.label} value={`${preset.filled}|${preset.empty}`}>
+                {preset.label} · {preset.filled} {preset.empty}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       <div className="panels-vitals-colors">
         <div className="panels-vitals-header">
@@ -1661,6 +1686,42 @@ function PreviewTrackBar({ value, cells, color }: { value: number; cells: number
   );
 }
 
+// 1/8-step partial-block ladder used to render the boundary cell of a
+// ramped bar in the Settings preview. Mirrors `RAMP_PARTIALS` in
+// VitalsBar.tsx so the preview matches the runtime exactly.
+const PREVIEW_RAMP_PARTIALS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
+
+function previewRampedBar({
+  value,
+  cells,
+  filled,
+  empty,
+  color,
+}: {
+  value: number;
+  cells: number;
+  filled: string;
+  empty: string;
+  color: string;
+}): ReactNode {
+  const exact = (Math.max(0, Math.min(100, value)) / 100) * cells;
+  const whole = Math.floor(exact);
+  const fraction = exact - whole;
+  const stepIdx = Math.round(fraction * 8);
+  let boundary = '';
+  if (whole < cells && stepIdx > 0) {
+    boundary = stepIdx === 8 ? filled : PREVIEW_RAMP_PARTIALS[stepIdx];
+  }
+  const emptyCount = Math.max(0, cells - whole - (boundary ? 1 : 0));
+  return (
+    <span className="vitals-glyphs" aria-hidden="true">
+      {whole > 0 && <span style={{ color }}>{filled.repeat(whole)}</span>}
+      {boundary && <span style={{ color }}>{boundary}</span>}
+      {emptyCount > 0 && <span className="vitals-empty">{empty.repeat(emptyCount)}</span>}
+    </span>
+  );
+}
+
 interface PreviewSample {
   label: string;
   cur: number;
@@ -1724,6 +1785,15 @@ function previewTemplate(
         const fill = gradient ? s.color : colorForVital(label, s.value, config);
         if (track) {
           return <PreviewTrackBar value={s.value} cells={width} color={fill} />;
+        }
+        if (config.bar_style === 'ramped') {
+          return previewRampedBar({
+            value: s.value,
+            cells: width,
+            filled: config.bar_filled,
+            empty: config.bar_empty,
+            color: fill,
+          });
         }
         const filled = Math.round((s.value / 100) * width);
         const empty = width - filled;
@@ -1902,6 +1972,14 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
           const percentColor = gradient ? s.color : colorForVital(s.label, s.value, config);
           const bar = track ? (
             <PreviewTrackBar value={s.value} cells={width} color={percentColor} />
+          ) : config.bar_style === 'ramped' ? (
+            previewRampedBar({
+              value: s.value,
+              cells: width,
+              filled: config.bar_filled,
+              empty: config.bar_empty,
+              color: percentColor,
+            })
           ) : (
             <span className="vitals-glyphs" aria-hidden="true">
               <span style={{ color: percentColor }}>{config.bar_filled.repeat(filled)}</span>

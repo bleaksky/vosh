@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals bar styles mockup</title>
+    <style>
+      /* Load the fonts Vosh ships with so the mockup renders these
+         glyphs identically to the running app. Without this the browser
+         falls back to Menlo on macOS / Consolas on Windows and the
+         partial-block and braille characters look squished or seam at
+         cell boundaries. Paths are relative to this file at
+         mockups/ → ../src/assets/fonts/. */
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'JetBrainsMono Bundled';
+        src: url('../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'JetBrainsMono Bundled';
+        src: url('../src/assets/fonts/JetBrainsMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-pane: #0d0c0c;
+        --c-surface-lift: #14141a;
+        --c-surface-emphasis: #1d1d24;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-border-hover: #2a313b;
+        --c-accent: #ff3399;
+        --c-accent-soft: rgba(255, 51, 153, 0.09);
+      }
+
+      body {
+        margin: 0;
+        padding: 32px;
+        background: var(--c-surface-deep);
+        color: var(--c-text);
+        font-family:
+          'BerkeleyMono Bundled', 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      h1 {
+        margin: 0 0 24px;
+        color: var(--c-text-strong);
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .frame {
+        max-width: 720px;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 3px;
+        padding: 18px 20px;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin: 0 0 12px;
+      }
+
+      .label {
+        flex: 0 0 110px;
+        color: var(--c-text-muted);
+      }
+
+      .ctrl {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      select {
+        width: 100%;
+        background: var(--c-surface-deep);
+        color: var(--c-text);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 2px;
+        padding: 5px 8px;
+        font-family: inherit;
+        font-size: inherit;
+        outline: none;
+      }
+
+      select:focus {
+        border-color: var(--c-accent);
+      }
+
+      .preview-box {
+        margin-top: 18px;
+        border: 1px solid var(--c-border);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+
+      .preview-head {
+        background: var(--c-surface-deep);
+        color: var(--c-text-faint);
+        padding: 3px 14px;
+        font-size: 0.75em;
+        letter-spacing: 0.04em;
+        border-bottom: 1px dashed var(--c-border);
+      }
+
+      .preview-body {
+        padding: 6px 14px;
+        background: var(--c-surface);
+      }
+
+      .vrow {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        margin: 2px 0;
+      }
+
+      .vlabel {
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        min-width: 2.5ch;
+      }
+
+      .bar {
+        flex: 0 1 auto;
+        cursor: ew-resize;
+        user-select: none;
+        font-weight: 700;
+        letter-spacing: 0;
+        white-space: nowrap;
+        padding: 1px 2px;
+        border-radius: 2px;
+        /* Only the bar itself swaps fonts when the picker changes. The
+           surrounding labels / percent / numeric columns stay in the
+           app font for visual consistency. The picker writes a
+           `--bar-font` CSS variable on :root which this rule reads. */
+        font-family: var(--bar-font, inherit);
+      }
+
+      .bar:hover {
+        background: var(--c-accent-soft);
+      }
+
+      .bar .empty {
+        color: var(--c-text-dim);
+      }
+
+      .vpct {
+        font-weight: 700;
+        min-width: 36px;
+        text-align: right;
+      }
+
+      .vnumeric {
+        color: var(--c-text);
+        min-width: 9ch;
+      }
+
+      .vdelta {
+        font-weight: 700;
+        min-width: 40px;
+      }
+
+      .vdelta-up {
+        color: #87a987;
+      }
+
+      .vdelta-down {
+        color: #d99a6c;
+      }
+
+      .track {
+        display: inline-block;
+        height: 0.65em;
+        width: 20ch;
+        background: var(--c-border-soft);
+        border-radius: 2px;
+        overflow: hidden;
+        vertical-align: middle;
+      }
+
+      .track .fill {
+        display: block;
+        height: 100%;
+        transition: width 200ms ease-out;
+      }
+
+      .ramped {
+        font-feature-settings: 'liga' 0;
+      }
+
+      .note {
+        margin-top: 18px;
+        color: var(--c-text-faint);
+        font-size: 0.85em;
+        line-height: 1.5;
+      }
+
+      .note code {
+        background: var(--c-surface-emphasis);
+        border: 1px solid var(--c-border);
+        padding: 0 4px;
+        border-radius: 2px;
+      }
+
+      .footer {
+        margin-top: 32px;
+        color: var(--c-text-dim);
+        font-size: 0.8em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vitals bar style · dropdown mockup</h1>
+
+    <div class="frame">
+      <div class="row">
+        <span class="label">style</span>
+        <span class="ctrl">
+          <select id="styleSelect">
+            <optgroup label="solid glyph pairs (current)">
+              <option value="solid:▰:▱">parallelogram · ▰ ▱</option>
+              <option value="solid:█:░">block · █ ░</option>
+              <option value="solid:━:─">heavy / light · ━ ─</option>
+              <option value="solid:●:○">circle · ● ○</option>
+              <option value="solid:◼:◻">square · ◼ ◻</option>
+              <option value="solid:▮:▯">vertical bar · ▮ ▯</option>
+            </optgroup>
+            <optgroup label="solid glyph pairs (btop-inspired, new)">
+              <option value="solid:▓:░">dark / light shade · ▓ ░</option>
+              <option value="solid:█:▒">block / medium shade · █ ▒</option>
+              <option value="solid:⣿:⣀">braille full · ⣿ ⣀</option>
+              <option value="solid:⠿:⠤">braille mid · ⠿ ⠤</option>
+              <option value="solid:⠶:⠀">braille thin · ⠶ ⠀</option>
+            </optgroup>
+            <optgroup label="ramped (sub-character smoothness, btop-style)">
+              <option value="ramped:█:░">ramped block · █ ░ (smooth)</option>
+              <option value="ramped:▰:▱">ramped parallelogram · ▰ ▱</option>
+              <option value="ramped:▓:░">ramped shade · ▓ ░</option>
+            </optgroup>
+            <optgroup label="track (CSS-rendered smooth bar)">
+              <option value="track::">track · perfectly smooth, no glyphs</option>
+            </optgroup>
+          </select>
+        </span>
+      </div>
+
+      <div class="row">
+        <span class="label">bar font</span>
+        <span class="ctrl">
+          <select id="fontSelect">
+            <option value="berkeley">Berkeley Mono (bundled) — best for blocks + braille</option>
+            <option value="jetbrains">JetBrains Mono (bundled) — also excellent</option>
+            <option value="monolisa">MonoLisa (must be installed locally)</option>
+            <option value="menlo">Menlo (macOS fallback) — shows the squishing</option>
+            <option value="consolas">Consolas (Windows fallback)</option>
+            <option value="courier">Courier New — broken, for comparison</option>
+          </select>
+          <span
+            id="fontStatus"
+            style="display: block; color: var(--c-text-faint); font-size: 0.78em; margin-top: 4px"
+          ></span>
+        </span>
+      </div>
+
+      <div class="row">
+        <span class="label">width</span>
+        <span class="ctrl">
+          <input type="range" id="widthRange" min="8" max="40" value="20" style="width: 100%" />
+          <span
+            id="widthLabel"
+            style="color: var(--c-text-faint); font-size: 0.85em; margin-left: 8px"
+          ></span>
+        </span>
+      </div>
+
+      <div class="preview-box">
+        <div class="preview-head" id="previewHead">preview · drag any bar to scrub fill %</div>
+        <div class="preview-body" id="previewBody">
+          <!-- rendered by JS -->
+        </div>
+      </div>
+
+      <p class="note">
+        Click and drag any bar to set its fill from 0 to 100. The numeric and percent columns
+        follow. <code>ramped</code> uses 1/8-step partial blocks on the boundary cell so the bar
+        moves at sub-character resolution (notice how a 51.2% bar reads <em>differently</em> from a
+        50% bar in ramped, but identically in solid). <code>track</code> is a CSS-rendered smooth
+        bar — no glyph dependency, always proportional.
+      </p>
+    </div>
+
+    <p class="footer">
+      mockup · variants and dropdown shape proposed for Settings · panels · panes · vitals
+    </p>
+
+    <script>
+      // Seed values are deliberately OFF the 5% grid so ramped's
+      // sub-character resolution shows on the first paint. At
+      // bar_width 20 each cell is 5%; if we started at 75 / 50 / 25
+      // every boundary cell would land exactly on a whole-cell edge
+      // and ramped would look identical to solid until the user
+      // dragged off-grid. 73 / 47 / 28 give boundary fractions of
+      // .60 / .40 / .60 → partial blocks ▋ / ▍ / ▋.
+      const VITALS = [
+        { label: 'hp', max: 1000, value: 73, deltaColor: '#87a987' },
+        { label: 'mn', max: 300, value: 47, deltaColor: '#7fb4ca' },
+        { label: 'mv', max: 200, value: 28, deltaColor: '#d99a6c' },
+      ];
+
+      // 1/8-step block characters for ramped boundary cell. Index 0 is empty,
+      // index 8 is full. The boundary cell index = floor((fractional * 8)).
+      const RAMP_STEPS_BLOCK = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
+      // For the parallelogram and shade ramped variants we fall back to the
+      // same partial-block ladder; the empty glyph is what the user picked.
+
+      function colorForVital(label, value) {
+        // Built-in green/blue/orange ramps, drained through red as the value
+        // drops. Same logic the Vosh runtime uses.
+        const ramps = {
+          hp: [
+            [0, [228, 104, 118]],
+            [25, [217, 154, 108]],
+            [55, [230, 195, 132]],
+            [100, [135, 169, 135]],
+          ],
+          mn: [
+            [0, [228, 104, 118]],
+            [30, [192, 130, 168]],
+            [65, [134, 153, 188]],
+            [100, [127, 180, 202]],
+          ],
+          mv: [
+            [0, [228, 104, 118]],
+            [60, [220, 130, 100]],
+            [100, [217, 154, 108]],
+          ],
+        };
+        const ramp = ramps[label] || ramps.hp;
+        const v = Math.max(0, Math.min(100, value));
+        let lower = ramp[0];
+        let upper = ramp[ramp.length - 1];
+        for (let i = 0; i < ramp.length - 1; i++) {
+          if (v >= ramp[i][0] && v <= ramp[i + 1][0]) {
+            lower = ramp[i];
+            upper = ramp[i + 1];
+            break;
+          }
+        }
+        const range = upper[0] - lower[0];
+        const t = range > 0 ? (v - lower[0]) / range : 0;
+        const rgb = [0, 1, 2].map((i) => Math.round(lower[1][i] + (upper[1][i] - lower[1][i]) * t));
+        return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+      }
+
+      function renderBar(mode, filledGlyph, emptyGlyph, value, cells, color) {
+        if (mode === 'track') {
+          const inner = document.createElement('span');
+          inner.className = 'fill';
+          inner.style.width = `${value}%`;
+          inner.style.background = color;
+          const track = document.createElement('span');
+          track.className = 'track';
+          track.style.width = `${cells}ch`;
+          track.appendChild(inner);
+          return track;
+        }
+        if (mode === 'ramped') {
+          const exact = (value / 100) * cells;
+          const wholeFilled = Math.floor(exact);
+          const fraction = exact - wholeFilled;
+          const stepIdx = Math.round(fraction * 8); // 0..8
+          let boundary = '';
+          if (wholeFilled < cells) {
+            boundary = stepIdx === 0 ? '' : stepIdx === 8 ? filledGlyph : RAMP_STEPS_BLOCK[stepIdx];
+          }
+          const empties = Math.max(0, cells - wholeFilled - (boundary ? 1 : 0));
+          const wrapper = document.createElement('span');
+          wrapper.className = 'bar ramped';
+          const f = document.createElement('span');
+          f.style.color = color;
+          f.textContent = filledGlyph.repeat(wholeFilled);
+          const b = document.createElement('span');
+          b.style.color = color;
+          b.textContent = boundary;
+          const e = document.createElement('span');
+          e.className = 'empty';
+          e.textContent = emptyGlyph.repeat(empties);
+          wrapper.appendChild(f);
+          wrapper.appendChild(b);
+          wrapper.appendChild(e);
+          return wrapper;
+        }
+        // solid
+        const filledCount = Math.round((value / 100) * cells);
+        const emptyCount = cells - filledCount;
+        const wrapper = document.createElement('span');
+        wrapper.className = 'bar';
+        const f = document.createElement('span');
+        f.style.color = color;
+        f.textContent = filledGlyph.repeat(filledCount);
+        const e = document.createElement('span');
+        e.className = 'empty';
+        e.textContent = emptyGlyph.repeat(emptyCount);
+        wrapper.appendChild(f);
+        wrapper.appendChild(e);
+        return wrapper;
+      }
+
+      function render() {
+        const body = document.getElementById('previewBody');
+        const head = document.getElementById('previewHead');
+        body.innerHTML = '';
+        const selectVal = document.getElementById('styleSelect').value;
+        const [mode, filled, empty] = selectVal.split(':');
+        const cells = parseInt(document.getElementById('widthRange').value, 10);
+        document.getElementById('widthLabel').textContent = `${cells} cells`;
+        head.textContent = `preview · hp ${VITALS[0].value}% / mn ${VITALS[1].value}% / mv ${VITALS[2].value}% · drag a bar`;
+
+        for (const v of VITALS) {
+          const row = document.createElement('div');
+          row.className = 'vrow';
+          const lbl = document.createElement('span');
+          lbl.className = 'vlabel';
+          lbl.textContent = v.label;
+          row.appendChild(lbl);
+
+          const color = colorForVital(v.label, v.value);
+          const bar = renderBar(mode, filled, empty, v.value, cells, color);
+          // Track variant ignores the .bar class; wrap so hover state is consistent.
+          if (mode === 'track') {
+            const w = document.createElement('span');
+            w.className = 'bar';
+            w.appendChild(bar);
+            attachDrag(w, v);
+            row.appendChild(w);
+          } else {
+            attachDrag(bar, v);
+            row.appendChild(bar);
+          }
+
+          const pct = document.createElement('span');
+          pct.className = 'vpct';
+          pct.style.color = color;
+          pct.textContent = `${v.value}%`;
+          row.appendChild(pct);
+
+          const num = document.createElement('span');
+          num.className = 'vnumeric';
+          const cur = Math.round((v.value / 100) * v.max);
+          num.textContent = `${cur}/${v.max}`;
+          row.appendChild(num);
+
+          body.appendChild(row);
+        }
+      }
+
+      function attachDrag(el, vital) {
+        el.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          const rect = el.getBoundingClientRect();
+          const setFromX = (clientX) => {
+            const x = clientX - rect.left;
+            const pct = Math.max(0, Math.min(100, Math.round((x / rect.width) * 100)));
+            if (vital.value !== pct) {
+              vital.value = pct;
+              render();
+            }
+          };
+          setFromX(e.clientX);
+          const onMove = (ev) => setFromX(ev.clientX);
+          const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+          };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        });
+      }
+
+      // Each picker option maps to a font stack written into the
+      // `--bar-font` CSS variable on :root. The `.bar` rule reads it
+      // so only bar glyphs swap — labels / percent / numeric stay in
+      // the app font.
+      //
+      // The "berkeley" stack falls through to JetBrains for any glyph
+      // Berkeley does not include (notably the Unicode braille block,
+      // U+2800–U+28FF, which is absent from Berkeley Mono and the
+      // Nerd Font patch). This mirrors Vosh's real default font stack
+      // so what you see here matches what the live app renders.
+      const FONT_STACKS = {
+        berkeley:
+          "'BerkeleyMono Bundled', 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace",
+        jetbrains: "'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace",
+        // MonoLisa ships under several family names depending on which
+        // build is installed. We cannot bundle it, so list every
+        // common variant; CSS picks the first one the OS exposes.
+        // Includes the base name, the Variable build, the trial
+        // version, and the script subfamily.
+        monolisa:
+          "'MonoLisa', 'MonoLisa Variable', 'MonoLisaVariable', 'MonoLisa Script', 'MonoLisa Trial', monospace",
+        menlo: 'Menlo, monospace',
+        consolas: 'Consolas, monospace',
+        courier: "'Courier New', monospace",
+      };
+
+      // Detect whether any MonoLisa family is actually installed using
+      // the FontFace Set API, which is reliable across browsers and
+      // handles installed-system fonts (the old canvas-width trick
+      // false-negatives when the system fallback has the same per-
+      // character width as the requested font). Returns the matched
+      // family name, or null if none are present.
+      function detectMonolisa() {
+        const candidates = [
+          'MonoLisa',
+          'MonoLisa Variable',
+          'MonoLisaVariable',
+          'MonoLisa Script',
+          'MonoLisa Trial',
+        ];
+        for (const name of candidates) {
+          try {
+            if (document.fonts.check(`12px "${name}"`)) return name;
+          } catch (e) {
+            // Some browsers throw on bare names. Fall through.
+          }
+        }
+        return null;
+      }
+
+      function applyFont() {
+        const key = document.getElementById('fontSelect').value;
+        document.documentElement.style.setProperty('--bar-font', FONT_STACKS[key]);
+        const status = document.getElementById('fontStatus');
+        if (key === 'monolisa') {
+          const matched = detectMonolisa();
+          status.textContent = matched
+            ? `MonoLisa detected as "${matched}" — bars are using it`
+            : 'no MonoLisa family found; bars fell through to the generic monospace fallback. The font may still load if your install uses a name not in the probe list — check the bars visually.';
+        } else {
+          status.textContent = '';
+        }
+      }
+
+      document.getElementById('styleSelect').addEventListener('change', render);
+      document.getElementById('widthRange').addEventListener('input', render);
+      document.getElementById('fontSelect').addEventListener('change', applyFont);
+      applyFont();
+      render();
+    </script>
+  </body>
+</html>
