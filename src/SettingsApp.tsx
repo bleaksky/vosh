@@ -1254,15 +1254,61 @@ function TickConfigEditor({ onError }: TickConfigEditorProps) {
 // width next to the rest of the panel-related layout knobs. Each
 // edit autosaves through setUiConfig and broadcasts via
 // vosh://vitals-config-changed so VitalsBar redraws live.
-/** Resolve the dropdown value for the currently-set bar glyphs.
- *  Returns the `<filled>|<empty>` key when the live values match a
- *  preset, or `__custom` when the user has hand-typed glyphs that
- *  don't match any preset. */
-function presetKeyFor(v: VitalsConfig): string {
-  const match = VITALS_GLYPH_PRESETS.find(
+/** Resolve the unified style dropdown value from a live `VitalsConfig`.
+ *  Returns `track`, `solid|<filled>|<empty>`, `ramped|<filled>|<empty>`,
+ *  or `__custom` when the glyph pair does not match a known preset. */
+function styleKeyFor(v: VitalsConfig): string {
+  if (v.bar_style === 'track') return 'track';
+  const preset = VITALS_GLYPH_PRESETS.find(
     (p) => p.filled === v.bar_filled && p.empty === v.bar_empty,
   );
-  return match ? `${match.filled}|${match.empty}` : '__custom';
+  if ((v.bar_style === 'solid' || v.bar_style === 'ramped') && preset) {
+    return `${v.bar_style}|${preset.filled}|${preset.empty}`;
+  }
+  return '__custom';
+}
+
+/** Translate a `styleKeyFor` value back into a partial `VitalsConfig`
+ *  patch. Used by the unified style dropdown's onChange. */
+function applyStyleKey(key: string, current: VitalsConfig): Partial<VitalsConfig> {
+  if (key === 'track') return { bar_style: 'track' };
+  if (key === '__custom') {
+    // Selecting "custom" from the dropdown leaves bar_filled / bar_empty
+    // alone (the user is presumably about to edit them) and snaps the
+    // bar_style off track since track has no glyph customization.
+    return { bar_style: current.bar_style === 'track' ? 'solid' : current.bar_style };
+  }
+  const [style, filled, empty] = key.split('|');
+  return {
+    bar_style: style as VitalsBarStyle,
+    bar_filled: filled,
+    bar_empty: empty,
+  };
+}
+
+/** Quick-pick bar font stacks. Empty string means "inherit the app font"
+ *  (the historical behavior). Berkeley and JetBrains are the two bundled
+ *  fonts; users can also paste a custom CSS font-family stack via the
+ *  text input that shows when "custom" is selected. */
+const BAR_FONT_PRESETS: { key: string; label: string; stack: string }[] = [
+  { key: '', label: 'use the app font', stack: '' },
+  {
+    key: 'berkeley',
+    label: 'Berkeley Mono (bundled)',
+    stack:
+      '"BerkeleyMono Bundled", "JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace',
+  },
+  {
+    key: 'jetbrains',
+    label: 'JetBrains Mono (bundled)',
+    stack: '"JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace',
+  },
+];
+
+function barFontKeyFor(v: VitalsConfig): string {
+  if (!v.bar_font) return '';
+  const match = BAR_FONT_PRESETS.find((p) => p.stack === v.bar_font);
+  return match ? match.key : '__custom';
 }
 
 const VITALS_GLYPH_PRESETS: { label: string; filled: string; empty: string }[] = [
@@ -1381,47 +1427,45 @@ function VitalsConfigSection({
           onChange={(c) => apply({ show_delta: c })}
         />
       </div>
-      <div className={`panels-vitals-glyphs${v.show_bar ? '' : ' is-disabled'}`}>
-        <label className="panels-vitals-glyph-field">
-          <span className="panels-vitals-glyph-label">style</span>
+      <div className={`panels-vitals-style${v.show_bar ? '' : ' is-disabled'}`}>
+        <label className="panels-vitals-style-field panels-vitals-style-field-grow">
+          <span className="panels-vitals-style-label">style</span>
           <select
-            value={v.bar_style}
+            value={styleKeyFor(v)}
             disabled={!v.show_bar}
-            onChange={(e) => apply({ bar_style: e.target.value as VitalsBarStyle })}
+            onChange={(e) => apply(applyStyleKey(e.target.value, v))}
           >
-            <option value="solid">solid (one glyph per cell)</option>
-            <option value="ramped">ramped (1/8 partial blocks for sub-cell smoothness)</option>
-            <option value="track">track (smooth CSS bar)</option>
+            {styleKeyFor(v) === '__custom' && (
+              <option value="__custom">
+                custom · {v.bar_style} · {v.bar_filled} {v.bar_empty}
+              </option>
+            )}
+            <optgroup label="solid · one glyph per cell">
+              {VITALS_GLYPH_PRESETS.map((p) => (
+                <option key={`solid|${p.label}`} value={`solid|${p.filled}|${p.empty}`}>
+                  {p.label} · {p.filled} {p.empty}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="ramped · sub-character smoothness">
+              {VITALS_GLYPH_PRESETS.map((p) => (
+                <option key={`ramped|${p.label}`} value={`ramped|${p.filled}|${p.empty}`}>
+                  {p.label} · {p.filled} {p.empty}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="track">
+              <option value="track">track · smooth CSS bar, no glyphs</option>
+            </optgroup>
+            {styleKeyFor(v) !== '__custom' && (
+              <optgroup label="other">
+                <option value="__custom">custom · set glyphs below</option>
+              </optgroup>
+            )}
           </select>
         </label>
-        <label className="panels-vitals-glyph-field">
-          <span className="panels-vitals-glyph-label">filled</span>
-          <input
-            type="text"
-            className="panels-vitals-glyph-input"
-            value={v.bar_filled}
-            disabled={!v.show_bar || v.bar_style === 'track'}
-            spellCheck={false}
-            onChange={(e) =>
-              apply({ bar_filled: e.target.value.length > 0 ? e.target.value : '▰' })
-            }
-            aria-label="filled glyph"
-          />
-        </label>
-        <label className="panels-vitals-glyph-field">
-          <span className="panels-vitals-glyph-label">empty</span>
-          <input
-            type="text"
-            className="panels-vitals-glyph-input"
-            value={v.bar_empty}
-            disabled={!v.show_bar || v.bar_style === 'track'}
-            spellCheck={false}
-            onChange={(e) => apply({ bar_empty: e.target.value.length > 0 ? e.target.value : '▱' })}
-            aria-label="empty glyph"
-          />
-        </label>
-        <label className="panels-vitals-glyph-field">
-          <span className="panels-vitals-glyph-label">width</span>
+        <label className="panels-vitals-style-field">
+          <span className="panels-vitals-style-label">width</span>
           <input
             type="number"
             className="settings-num-input"
@@ -1438,6 +1482,81 @@ function VitalsConfigSection({
           />
         </label>
       </div>
+      <div className={`panels-vitals-style${v.show_bar ? '' : ' is-disabled'}`}>
+        <label className="panels-vitals-style-field panels-vitals-style-field-grow">
+          <span className="panels-vitals-style-label">bar font</span>
+          <select
+            value={barFontKeyFor(v)}
+            disabled={!v.show_bar}
+            onChange={(e) => {
+              const key = e.target.value;
+              if (key === '__custom') return; // user edits the text input below
+              const preset = BAR_FONT_PRESETS.find((p) => p.key === key);
+              if (preset) apply({ bar_font: preset.stack });
+            }}
+          >
+            {BAR_FONT_PRESETS.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label}
+              </option>
+            ))}
+            {barFontKeyFor(v) === '__custom' && (
+              <option value="__custom">custom · (set below)</option>
+            )}
+            {barFontKeyFor(v) !== '__custom' && (
+              <option value="__custom">custom CSS font-family ...</option>
+            )}
+          </select>
+        </label>
+      </div>
+      {barFontKeyFor(v) === '__custom' && (
+        <div className={`panels-vitals-style${v.show_bar ? '' : ' is-disabled'}`}>
+          <label className="panels-vitals-style-field panels-vitals-style-field-grow">
+            <span className="panels-vitals-style-label">CSS font-family</span>
+            <input
+              type="text"
+              className="panels-vitals-glyph-input"
+              spellCheck={false}
+              value={v.bar_font}
+              disabled={!v.show_bar}
+              placeholder='e.g. "MonoLisa", "Iosevka", monospace'
+              onChange={(e) => apply({ bar_font: e.target.value })}
+            />
+          </label>
+        </div>
+      )}
+      {styleKeyFor(v) === '__custom' && v.bar_style !== 'track' && (
+        <div className={`panels-vitals-style${v.show_bar ? '' : ' is-disabled'}`}>
+          <label className="panels-vitals-style-field">
+            <span className="panels-vitals-style-label">filled</span>
+            <input
+              type="text"
+              className="panels-vitals-glyph-input"
+              value={v.bar_filled}
+              disabled={!v.show_bar}
+              spellCheck={false}
+              onChange={(e) =>
+                apply({ bar_filled: e.target.value.length > 0 ? e.target.value : '▰' })
+              }
+              aria-label="filled glyph"
+            />
+          </label>
+          <label className="panels-vitals-style-field">
+            <span className="panels-vitals-style-label">empty</span>
+            <input
+              type="text"
+              className="panels-vitals-glyph-input"
+              value={v.bar_empty}
+              disabled={!v.show_bar}
+              spellCheck={false}
+              onChange={(e) =>
+                apply({ bar_empty: e.target.value.length > 0 ? e.target.value : '▱' })
+              }
+              aria-label="empty glyph"
+            />
+          </label>
+        </div>
+      )}
       <div className="panels-vitals-layout">
         <label className="panels-vitals-glyph-field">
           <span className="panels-vitals-glyph-label">layout</span>
@@ -1462,37 +1581,6 @@ function VitalsConfigSection({
         </label>
       </div>
       <VitalsTemplateEditor config={v} apply={apply} />
-      <div
-        className={`panels-vitals-glyphs${
-          !v.show_bar || v.bar_style === 'track' ? ' is-disabled' : ''
-        }`}
-      >
-        <label className="panels-vitals-glyph-field" style={{ flex: '1 1 auto', minWidth: 0 }}>
-          <span className="panels-vitals-glyph-label">preset</span>
-          <select
-            value={presetKeyFor(v)}
-            disabled={!v.show_bar || v.bar_style === 'track'}
-            onChange={(e) => {
-              const key = e.target.value;
-              if (key === '__custom') return;
-              const preset = VITALS_GLYPH_PRESETS.find((p) => `${p.filled}|${p.empty}` === key);
-              if (preset) apply({ bar_filled: preset.filled, bar_empty: preset.empty });
-            }}
-            style={{ flex: '1 1 auto', minWidth: 0 }}
-          >
-            {presetKeyFor(v) === '__custom' && (
-              <option value="__custom">
-                custom · {v.bar_filled} {v.bar_empty}
-              </option>
-            )}
-            {VITALS_GLYPH_PRESETS.map((preset) => (
-              <option key={preset.label} value={`${preset.filled}|${preset.empty}`}>
-                {preset.label} · {preset.filled} {preset.empty}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
       <div className="panels-vitals-colors">
         <div className="panels-vitals-header">
           <span>colors</span>
@@ -1673,12 +1761,22 @@ function Toggle({
 // Tiny inline track-bar component for the Settings preview. Mirrors
 // the `TrackBar` in VitalsBar.tsx; kept local to avoid a circular
 // dep (VitalsBar imports session, SettingsApp imports both).
-function PreviewTrackBar({ value, cells, color }: { value: number; cells: number; color: string }) {
+function PreviewTrackBar({
+  value,
+  cells,
+  color,
+  font,
+}: {
+  value: number;
+  cells: number;
+  color: string;
+  font?: string;
+}) {
   const pct = Math.max(0, Math.min(100, value));
   return (
     <span
       className="vitals-glyphs vitals-glyphs-track"
-      style={{ width: `${cells}ch` }}
+      style={{ width: `${cells}ch`, fontFamily: font || undefined }}
       aria-hidden="true"
     >
       <span className="vitals-glyphs-track-fill" style={{ width: `${pct}%`, background: color }} />
@@ -1697,12 +1795,14 @@ function previewRampedBar({
   filled,
   empty,
   color,
+  font,
 }: {
   value: number;
   cells: number;
   filled: string;
   empty: string;
   color: string;
+  font?: string;
 }): ReactNode {
   const exact = (Math.max(0, Math.min(100, value)) / 100) * cells;
   const whole = Math.floor(exact);
@@ -1714,7 +1814,7 @@ function previewRampedBar({
   }
   const emptyCount = Math.max(0, cells - whole - (boundary ? 1 : 0));
   return (
-    <span className="vitals-glyphs" aria-hidden="true">
+    <span className="vitals-glyphs" style={{ fontFamily: font || undefined }} aria-hidden="true">
       {whole > 0 && <span style={{ color }}>{filled.repeat(whole)}</span>}
       {boundary && <span style={{ color }}>{boundary}</span>}
       {emptyCount > 0 && <span className="vitals-empty">{empty.repeat(emptyCount)}</span>}
@@ -1784,7 +1884,9 @@ function previewTemplate(
         const s = get(label);
         const fill = gradient ? s.color : colorForVital(label, s.value, config);
         if (track) {
-          return <PreviewTrackBar value={s.value} cells={width} color={fill} />;
+          return (
+            <PreviewTrackBar value={s.value} cells={width} color={fill} font={config.bar_font} />
+          );
         }
         if (config.bar_style === 'ramped') {
           return previewRampedBar({
@@ -1793,12 +1895,17 @@ function previewTemplate(
             filled: config.bar_filled,
             empty: config.bar_empty,
             color: fill,
+            font: config.bar_font,
           });
         }
         const filled = Math.round((s.value / 100) * width);
         const empty = width - filled;
         return (
-          <span className="vitals-glyphs" aria-hidden="true">
+          <span
+            className="vitals-glyphs"
+            style={{ fontFamily: config.bar_font || undefined }}
+            aria-hidden="true"
+          >
             <span style={{ color: fill }}>{config.bar_filled.repeat(filled)}</span>
             <span className="vitals-empty">{config.bar_empty.repeat(empty)}</span>
           </span>
@@ -1971,7 +2078,12 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
           const empty = width - filled;
           const percentColor = gradient ? s.color : colorForVital(s.label, s.value, config);
           const bar = track ? (
-            <PreviewTrackBar value={s.value} cells={width} color={percentColor} />
+            <PreviewTrackBar
+              value={s.value}
+              cells={width}
+              color={percentColor}
+              font={config.bar_font}
+            />
           ) : config.bar_style === 'ramped' ? (
             previewRampedBar({
               value: s.value,
@@ -1979,9 +2091,14 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
               filled: config.bar_filled,
               empty: config.bar_empty,
               color: percentColor,
+              font: config.bar_font,
             })
           ) : (
-            <span className="vitals-glyphs" aria-hidden="true">
+            <span
+              className="vitals-glyphs"
+              style={{ fontFamily: config.bar_font || undefined }}
+              aria-hidden="true"
+            >
               <span style={{ color: percentColor }}>{config.bar_filled.repeat(filled)}</span>
               <span className="vitals-empty">{config.bar_empty.repeat(empty)}</span>
             </span>

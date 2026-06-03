@@ -103,7 +103,17 @@ function combatHpColor(value: number): string {
 // any fill percentage and any font, transitions on update. Replaces
 // the dropped "ramped" Unicode 1/8-block mode which rendered ugly
 // in most monospace fonts.
-function TrackBar({ value, cells, color }: { value: number; cells: number; color: string }) {
+function TrackBar({
+  value,
+  cells,
+  color,
+  font,
+}: {
+  value: number;
+  cells: number;
+  color: string;
+  font?: string;
+}) {
   const pct = Math.max(0, Math.min(100, value));
   // `flex-basis` (not `width`) lets the bar shrink first when the row
   // is narrower than label + bar + readouts. `max-width` caps it at
@@ -114,7 +124,11 @@ function TrackBar({ value, cells, color }: { value: number; cells: number; color
   return (
     <span
       className="vitals-glyphs vitals-glyphs-track"
-      style={{ flexBasis: `${cells}ch`, maxWidth: `${cells}ch` }}
+      style={{
+        flexBasis: `${cells}ch`,
+        maxWidth: `${cells}ch`,
+        fontFamily: font || undefined,
+      }}
       aria-hidden="true"
     >
       <span className="vitals-glyphs-track-fill" style={{ width: `${pct}%`, background: color }} />
@@ -134,12 +148,14 @@ function SolidBar({
   filledGlyph,
   emptyGlyph,
   color,
+  font,
 }: {
   value: number;
   cells: number;
   filledGlyph: string;
   emptyGlyph: string;
   color: string;
+  font?: string;
 }) {
   const ref = useRef<HTMLSpanElement | null>(null);
   // Start at the configured cell count so the first paint shows the
@@ -190,7 +206,12 @@ function SolidBar({
   const filledCount = Math.round((value / 100) * renderCells);
   const emptyCount = Math.max(0, renderCells - filledCount);
   return (
-    <span ref={ref} className="vitals-glyphs" style={{ maxWidth: `${cells}ch` }} aria-hidden="true">
+    <span
+      ref={ref}
+      className="vitals-glyphs"
+      style={{ maxWidth: `${cells}ch`, fontFamily: font || undefined }}
+      aria-hidden="true"
+    >
       {filledCount > 0 && <span style={{ color }}>{filledGlyph.repeat(filledCount)}</span>}
       {emptyCount > 0 && <span className="vitals-empty">{emptyGlyph.repeat(emptyCount)}</span>}
     </span>
@@ -216,12 +237,14 @@ function RampedBar({
   filledGlyph,
   emptyGlyph,
   color,
+  font,
 }: {
   value: number;
   cells: number;
   filledGlyph: string;
   emptyGlyph: string;
   color: string;
+  font?: string;
 }) {
   const ref = useRef<HTMLSpanElement | null>(null);
   const [renderCells, setRenderCells] = useState(cells);
@@ -270,7 +293,12 @@ function RampedBar({
   }
   const emptyCount = Math.max(0, renderCells - wholeFilled - (boundary ? 1 : 0));
   return (
-    <span ref={ref} className="vitals-glyphs" style={{ maxWidth: `${cells}ch` }} aria-hidden="true">
+    <span
+      ref={ref}
+      className="vitals-glyphs"
+      style={{ maxWidth: `${cells}ch`, fontFamily: font || undefined }}
+      aria-hidden="true"
+    >
       {wholeFilled > 0 && <span style={{ color }}>{filledGlyph.repeat(wholeFilled)}</span>}
       {boundary && <span style={{ color }}>{boundary}</span>}
       {emptyCount > 0 && <span className="vitals-empty">{emptyGlyph.repeat(emptyCount)}</span>}
@@ -535,7 +563,7 @@ function VitalRow({
       <span className="vitals-label">{label}</span>
       {config.show_bar &&
         (config.bar_style === 'track' ? (
-          <TrackBar value={value} cells={total} color={fill} />
+          <TrackBar value={value} cells={total} color={fill} font={config.bar_font} />
         ) : config.bar_style === 'ramped' ? (
           <RampedBar
             value={value}
@@ -543,6 +571,7 @@ function VitalRow({
             filledGlyph={config.bar_filled}
             emptyGlyph={config.bar_empty}
             color={fill}
+            font={config.bar_font}
           />
         ) : (
           <SolidBar
@@ -551,6 +580,7 @@ function VitalRow({
             filledGlyph={config.bar_filled}
             emptyGlyph={config.bar_empty}
             color={fill}
+            font={config.bar_font}
           />
         ))}
       {config.show_percent && (
@@ -672,7 +702,7 @@ function TemplateVitalsRow({
         const v = valueFor(cur, max);
         const fill = colorForVital(label, v, config);
         if (config.bar_style === 'track') {
-          return <TrackBar value={v} cells={width} color={fill} />;
+          return <TrackBar value={v} cells={width} color={fill} font={config.bar_font} />;
         }
         if (config.bar_style === 'ramped') {
           return (
@@ -682,6 +712,7 @@ function TemplateVitalsRow({
               filledGlyph={config.bar_filled}
               emptyGlyph={config.bar_empty}
               color={fill}
+              font={config.bar_font}
             />
           );
         }
@@ -692,6 +723,7 @@ function TemplateVitalsRow({
             filledGlyph={config.bar_filled}
             emptyGlyph={config.bar_empty}
             color={fill}
+            font={config.bar_font}
           />
         );
       }
