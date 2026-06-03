@@ -12,7 +12,7 @@ import { formatMudTime, mudTimeColor, useWorldTime } from '../lib/useWorldTime';
 import { useCharStats } from '../lib/useCharStats';
 import { useCombat, type CombatState } from '../lib/useCombat';
 import { tokenizeTemplate, type TemplateSegment } from '../lib/vitalsTemplate';
-import { colorForVital } from '../lib/vitalsColor';
+import { colorForVital, colorForPercent } from '../lib/vitalsColor';
 
 interface Vitals {
   hp: number;
@@ -55,15 +55,6 @@ function pct(current: number, max: number): number {
 // percent text reads as a universal health signal regardless of
 // which vital it labels (hp / mn / mv all use the same ramp here).
 // Used when VitalsConfig.percent_color === 'gradient'.
-function colorForPercent(value: number): string {
-  const v = Math.max(0, Math.min(100, value));
-  if (v < 20) return '#dc4444';
-  if (v < 40) return '#dc8a44';
-  if (v < 60) return '#dccd44';
-  if (v < 80) return '#a8dc44';
-  return '#5fdc6a';
-}
-
 // Combat chip — name + hp% track bar + optional condition word.
 // Moved here from the status bar so it sits adjacent to the vitals
 // (the natural place to glance when something is hitting you).

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { tokenizeTemplate } from './lib/vitalsTemplate';
-import { colorForVital } from './lib/vitalsColor';
+import { colorForVital, colorForPercent } from './lib/vitalsColor';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TopBar } from './components/TopBar';
 import { TriggerForm } from './components/TriggerForm';
@@ -1756,91 +1756,127 @@ function previewTemplate(
   });
 }
 
+type PreviewLabel = 'hp' | 'mn' | 'mv';
+const PREVIEW_MAX: Record<PreviewLabel, number> = { hp: 1000, mn: 300, mv: 200 };
+const PREVIEW_DELTA: Record<PreviewLabel, number> = { hp: 12, mn: -8, mv: 0 };
+
+/**
+ * Build the sample row for one vital from a percent value. Computes
+ * `cur` from `value * max / 100` so the numeric column tracks the
+ * dragged value, and `color` from `colorForPercent` so the gradient
+ * percent-color path follows the live value too.
+ */
+function previewSample(label: PreviewLabel, value: number): PreviewSample {
+  const v = Math.max(0, Math.min(100, Math.round(value)));
+  return {
+    label,
+    cur: Math.round((v / 100) * PREVIEW_MAX[label]),
+    max: PREVIEW_MAX[label],
+    value: v,
+    delta: PREVIEW_DELTA[label],
+    color: colorForPercent(v),
+  };
+}
+
 function VitalsPreview({ config }: { config: VitalsConfig }) {
-  const sample = [
-    { label: 'hp', cur: 750, max: 1000, value: 75, delta: 12, color: '#5fdc6a' },
-    { label: 'mn', cur: 150, max: 300, value: 50, delta: -8, color: '#dccd44' },
-    { label: 'mv', cur: 50, max: 200, value: 25, delta: 0, color: '#dc8a44' },
-  ];
+  // Dragable per-vital fill state. Seed values match the previous
+  // static preview (hp 75% / mn 50% / mv 25%) so a Settings reopen
+  // starts at the same starting point users were used to.
+  const [values, setValues] = useState<Record<PreviewLabel, number>>({
+    hp: 75,
+    mn: 50,
+    mv: 25,
+  });
+  const sample = (['hp', 'mn', 'mv'] as PreviewLabel[]).map((l) => previewSample(l, values[l]));
   const width = Math.max(4, Math.min(60, config.bar_width));
   const gradient = config.percent_color === 'gradient';
   const track = config.bar_style === 'track';
 
+  // Mouse-drag scrubber. On mousedown we capture the bar wrapper's
+  // bounding rect once and then translate cursor X into a 0..100
+  // percent for the rest of the gesture. window-level listeners catch
+  // moves and releases that drift outside the bar, which matters when
+  // the user drags past either edge.
+  const startDrag = (label: PreviewLabel) => (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const setFromX = (clientX: number) => {
+      const x = clientX - rect.left;
+      const pct = Math.max(0, Math.min(100, Math.round((x / rect.width) * 100)));
+      setValues((prev) => (prev[label] === pct ? prev : { ...prev, [label]: pct }));
+    };
+    setFromX(e.clientX);
+    const onMove = (ev: MouseEvent) => setFromX(ev.clientX);
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  const headerText = `preview · hp ${values.hp}% / mn ${values.mn}% / mv ${values.mv}% · drag a bar`;
+
+  // Wrap the rendered bar in a draggable hit-target. Cursor and a
+  // dashed bottom-edge tag make the drag affordance obvious without
+  // adding chrome that distorts the real layout. The wrapper covers
+  // the same horizontal space as the bar so dragging on any pixel of
+  // the bar counts.
+  const draggableBar = (label: PreviewLabel, node: ReactNode) => (
+    <div
+      className="vitals-preview-drag"
+      onMouseDown={startDrag(label)}
+      role="slider"
+      aria-label={`${label} fill percent`}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={values[label]}
+    >
+      {node}
+    </div>
+  );
+
   // Template preview takes priority because the template field
   // overrides layout. Renders sample values for each token using the
-  // same look the runtime VitalsBar would produce.
+  // same look the runtime VitalsBar would produce. The template
+  // variant is not dragable in this commit (the bar token lives
+  // anywhere inside an arbitrary template, and the per-line layout
+  // makes the wrapper hit-region ambiguous); the stacked and inline
+  // variants are.
   if (config.template_enabled) {
     return (
-      <div className="vitals-bar vitals-bar-template">
-        <div className="vitals-row vitals-row-template">
-          {previewTemplate(config, sample, track, gradient)}
+      <>
+        <div className="vitals-preview-head">{headerText}</div>
+        <div className="vitals-bar vitals-bar-template">
+          <div className="vitals-row vitals-row-template">
+            {previewTemplate(config, sample, track, gradient)}
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   if (config.layout === 'inline') {
     return (
-      <div className="vitals-bar vitals-bar-inline">
-        <div className="vitals-row vitals-row-inline">
-          {sample.map((s) => (
-            <span key={s.label} className="vitals-inline-chip">
-              {config.show_numeric && <span className="vitals-numeric">{s.cur}</span>}
-              {config.show_percent && (
-                <span
-                  className="vitals-inline-pct"
-                  style={{ color: gradient ? s.color : colorForVital(s.label, s.value, config) }}
-                >
-                  ({s.value}%)
-                </span>
-              )}
-              <span className="vitals-inline-letter">{s.label[0]}</span>
-              {config.show_delta && s.delta !== 0 && (
-                <span
-                  className={`vitals-delta${s.delta > 0 ? ' vitals-delta-up' : ' vitals-delta-down'}`}
-                >
-                  {s.delta > 0 ? '+' : ''}
-                  {s.delta}
-                </span>
-              )}
-            </span>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="vitals-bar">
-      {sample.map((s) => {
-        const filled = Math.round((s.value / 100) * width);
-        const empty = width - filled;
-        const percentColor = gradient ? s.color : colorForVital(s.label, s.value, config);
-        return (
-          <div key={s.label} className="vitals-row">
-            <span className="vitals-label">{s.label}</span>
-            {config.show_bar &&
-              (track ? (
-                <PreviewTrackBar value={s.value} cells={width} color={percentColor} />
-              ) : (
-                <span className="vitals-glyphs" aria-hidden="true">
-                  <span style={{ color: percentColor }}>{config.bar_filled.repeat(filled)}</span>
-                  <span className="vitals-empty">{config.bar_empty.repeat(empty)}</span>
-                </span>
-              ))}
-            {config.show_percent && (
-              <span className="vitals-percent" style={{ color: percentColor }}>
-                {s.value}%
-              </span>
-            )}
-            {config.show_numeric && (
-              <span className="vitals-numeric">
-                {s.cur}/{s.max}
-              </span>
-            )}
-            {config.show_delta && (
-              <span className="vitals-delta-slot">
-                {s.delta !== 0 && (
+      <>
+        <div className="vitals-preview-head">{headerText}</div>
+        <div className="vitals-bar vitals-bar-inline">
+          <div className="vitals-row vitals-row-inline">
+            {sample.map((s) => (
+              <span key={s.label} className="vitals-inline-chip">
+                {config.show_numeric && <span className="vitals-numeric">{s.cur}</span>}
+                {config.show_percent && (
+                  <span
+                    className="vitals-inline-pct"
+                    style={{
+                      color: gradient ? s.color : colorForVital(s.label, s.value, config),
+                    }}
+                  >
+                    ({s.value}%)
+                  </span>
+                )}
+                <span className="vitals-inline-letter">{s.label[0]}</span>
+                {config.show_delta && s.delta !== 0 && (
                   <span
                     className={`vitals-delta${s.delta > 0 ? ' vitals-delta-up' : ' vitals-delta-down'}`}
                   >
@@ -1849,11 +1885,60 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
                   </span>
                 )}
               </span>
-            )}
+            ))}
           </div>
-        );
-      })}
-    </div>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="vitals-preview-head">{headerText}</div>
+      <div className="vitals-bar">
+        {sample.map((s) => {
+          const filled = Math.round((s.value / 100) * width);
+          const empty = width - filled;
+          const percentColor = gradient ? s.color : colorForVital(s.label, s.value, config);
+          const bar = track ? (
+            <PreviewTrackBar value={s.value} cells={width} color={percentColor} />
+          ) : (
+            <span className="vitals-glyphs" aria-hidden="true">
+              <span style={{ color: percentColor }}>{config.bar_filled.repeat(filled)}</span>
+              <span className="vitals-empty">{config.bar_empty.repeat(empty)}</span>
+            </span>
+          );
+          return (
+            <div key={s.label} className="vitals-row">
+              <span className="vitals-label">{s.label}</span>
+              {config.show_bar && draggableBar(s.label as PreviewLabel, bar)}
+              {config.show_percent && (
+                <span className="vitals-percent" style={{ color: percentColor }}>
+                  {s.value}%
+                </span>
+              )}
+              {config.show_numeric && (
+                <span className="vitals-numeric">
+                  {s.cur}/{s.max}
+                </span>
+              )}
+              {config.show_delta && (
+                <span className="vitals-delta-slot">
+                  {s.delta !== 0 && (
+                    <span
+                      className={`vitals-delta${s.delta > 0 ? ' vitals-delta-up' : ' vitals-delta-down'}`}
+                    >
+                      {s.delta > 0 ? '+' : ''}
+                      {s.delta}
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
