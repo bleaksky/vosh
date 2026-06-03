@@ -1489,8 +1489,12 @@ function VitalsConfigSection({
             value={barFontKeyFor(v)}
             disabled={!v.show_bar}
             onChange={(e) => {
+              // Preset picks fill the text input below. The `__custom`
+              // entry only appears as a display indicator when the
+              // live value does not match a preset — picking it does
+              // nothing (user keeps typing into the text input).
               const key = e.target.value;
-              if (key === '__custom') return; // user edits the text input below
+              if (key === '__custom') return;
               const preset = BAR_FONT_PRESETS.find((p) => p.key === key);
               if (preset) apply({ bar_font: preset.stack });
             }}
@@ -1501,30 +1505,25 @@ function VitalsConfigSection({
               </option>
             ))}
             {barFontKeyFor(v) === '__custom' && (
-              <option value="__custom">custom · (set below)</option>
-            )}
-            {barFontKeyFor(v) !== '__custom' && (
-              <option value="__custom">custom CSS font-family ...</option>
+              <option value="__custom">custom · (edit below)</option>
             )}
           </select>
         </label>
       </div>
-      {barFontKeyFor(v) === '__custom' && (
-        <div className={`panels-vitals-style${v.show_bar ? '' : ' is-disabled'}`}>
-          <label className="panels-vitals-style-field panels-vitals-style-field-grow">
-            <span className="panels-vitals-style-label">CSS font-family</span>
-            <input
-              type="text"
-              className="panels-vitals-glyph-input"
-              spellCheck={false}
-              value={v.bar_font}
-              disabled={!v.show_bar}
-              placeholder='e.g. "MonoLisa", "Iosevka", monospace'
-              onChange={(e) => apply({ bar_font: e.target.value })}
-            />
-          </label>
-        </div>
-      )}
+      <div className={`panels-vitals-style${v.show_bar ? '' : ' is-disabled'}`}>
+        <label className="panels-vitals-style-field panels-vitals-style-field-grow">
+          <span className="panels-vitals-style-label">CSS font-family</span>
+          <input
+            type="text"
+            className="panels-vitals-glyph-input"
+            spellCheck={false}
+            value={v.bar_font}
+            disabled={!v.show_bar}
+            placeholder='blank = use the app font · or "MonoLisa", "Iosevka", monospace'
+            onChange={(e) => apply({ bar_font: e.target.value })}
+          />
+        </label>
+      </div>
       {styleKeyFor(v) === '__custom' && v.bar_style !== 'track' && (
         <div className={`panels-vitals-style${v.show_bar ? '' : ' is-disabled'}`}>
           <label className="panels-vitals-style-field">

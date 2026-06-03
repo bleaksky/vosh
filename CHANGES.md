@@ -2,6 +2,10 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.3.13 - 2026-06-03
+
+- Fix the bar-font CSS font-family input. Picking "custom CSS font-family ..." from the dropdown in v0.3.12 did nothing because the text input only appeared once you already had a non-preset value set, and picking custom did not set one. The text input is now always visible below the bar font dropdown so you can paste any CSS font-family stack at any time, and the dropdown remains a quick-pick that fills the input.
+
 ## v0.3.12 - 2026-06-03
 
 - The vitals settings top is redesigned to match the dropdown mockup. The crowded row of `style | filled | empty | width` is replaced by a single `style` dropdown that carries both the bar style and the glyph pair as one choice (e.g. `solid · block · █ ░`, `ramped · braille full · ⣿ ⣀`, `track · smooth CSS bar, no glyphs`), and a small `width` field next to it. Hand-edited custom glyphs surface a `custom` entry in the dropdown and reveal the filled / empty text inputs on demand. Cleaner at a glance, fewer controls to scan.
