@@ -2,6 +2,12 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.3.12 - 2026-06-03
+
+- The vitals settings top is redesigned to match the dropdown mockup. The crowded row of `style | filled | empty | width` is replaced by a single `style` dropdown that carries both the bar style and the glyph pair as one choice (e.g. `solid · block · █ ░`, `ramped · braille full · ⣿ ⣀`, `track · smooth CSS bar, no glyphs`), and a small `width` field next to it. Hand-edited custom glyphs surface a `custom` entry in the dropdown and reveal the filled / empty text inputs on demand. Cleaner at a glance, fewer controls to scan.
+- New `bar font` picker that applies only to the bar glyphs. Pick `Berkeley Mono (bundled)` or `JetBrains Mono (bundled)` to get clean partial-block and braille rendering for the bar while keeping the rest of the UI (labels, percent, numeric, delta, panels chrome) in whatever app font you have set. There is also a `custom CSS font-family` option for anyone with MonoLisa, Iosevka, or any other locally-installed font they prefer for bars.
+- The standalone "preset" dropdown that appeared below the template editor in v0.3.11 is gone. It was redundant with the new unified style picker at the top.
+
 ## v0.3.11 - 2026-06-03
 
 - Five new vitals bar glyph presets in the btop family. dark / light shade (▓ ░), block / medium shade (█ ▒), braille full (⣿ ⣀), braille mid (⠿ ⠤), and braille thin (⠶ ␣). Pick them from the new glyph-preset dropdown under Settings · Panels · panes · vitals.

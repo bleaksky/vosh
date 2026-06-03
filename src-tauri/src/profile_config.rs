@@ -281,6 +281,14 @@ pub(crate) struct VitalsConfig {
     /// percentage.
     #[serde(default = "default_true")]
     pub use_color_ramp: bool,
+    /// CSS font-family stack used **only** for the bar glyphs (the
+    /// label / percent / numeric / delta columns still use the app
+    /// font). Empty means "use the app font." Useful when the user
+    /// wants `Berkeley` `Mono` or `JetBrains` `Mono` just for the bar to
+    /// get clean partial-block / braille rendering while keeping a
+    /// different font for the rest of the UI.
+    #[serde(default)]
+    pub bar_font: String,
 }
 
 impl Default for VitalsConfig {
@@ -302,6 +310,7 @@ impl Default for VitalsConfig {
             mn_color: String::new(),
             mv_color: String::new(),
             use_color_ramp: true,
+            bar_font: String::new(),
         }
     }
 }

@@ -3942,6 +3942,46 @@ body {
   pointer-events: none;
 }
 
+/* Vitals style row (mockup-style). One unified dropdown carries the
+   bar_style + glyph pair, sitting next to the width number. Stacks
+   vertically with the bar-font row and the conditional custom-glyph
+   row to keep the top of the vitals section uncluttered. */
+.panels-vitals-style {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 6px;
+}
+
+.panels-vitals-style.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.panels-vitals-style-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.panels-vitals-style-field-grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.panels-vitals-style-field-grow select,
+.panels-vitals-style-field-grow input[type='text'] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.panels-vitals-style-label {
+  color: var(--c-text-faint);
+  font-size: 0.9em;
+  text-transform: lowercase;
+  flex: 0 0 auto;
+}
+
 /* Per-vital color override rows. Sits below the layout / glyph
    knobs in the vitals section. Each row has a label, a native color
    swatch, the hex text field, and a [clear] button so the user can

@@ -641,6 +641,10 @@ export interface VitalsConfig {
    *  false, the configured color (or the built-in's full color when
    *  no override) is used at every fill percentage. */
   use_color_ramp: boolean;
+  /** CSS font-family stack applied to the bar glyphs only. The
+   *  surrounding label / percent / numeric / delta columns stay in
+   *  the app font. Empty falls through to the parent font. */
+  bar_font: string;
 }
 
 export const DEFAULT_VITALS_TEMPLATE =
@@ -663,6 +667,7 @@ export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
   mn_color: '',
   mv_color: '',
   use_color_ramp: true,
+  bar_font: '',
 };
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -759,6 +764,7 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
       typeof v.use_color_ramp === 'boolean'
         ? v.use_color_ramp
         : DEFAULT_VITALS_CONFIG.use_color_ramp,
+    bar_font: typeof v.bar_font === 'string' ? v.bar_font : DEFAULT_VITALS_CONFIG.bar_font,
   };
 }
 
