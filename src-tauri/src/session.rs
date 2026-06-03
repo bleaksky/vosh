@@ -419,7 +419,61 @@ async fn io_loop(
                 }
                 Err(e) => {
                     error!(error = %e, "read failed");
-                    break Some(format!("read failed: {e}"));
+                    // Some MUDs (Forsaken Lands among them) close with
+                    // SO_LINGER 0 on quit, sending an RST instead of a
+                    // graceful FIN. On macOS / BSD that can race with
+                    // buffered bytes in the kernel recv queue, so the
+                    // read returns ECONNRESET while the goodbye text is
+                    // still pending. Try non-blocking reads to scoop up
+                    // anything the kernel still has before we tear the
+                    // session down. The cap is a belt-and-braces against
+                    // a misbehaving stack returning Ok forever.
+                    let mut drained_bytes = 0usize;
+                    for _ in 0..32 {
+                        match stream.try_read(&mut buf) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                perf.socket_reads += 1;
+                                perf.bytes_in += n as u64;
+                                drained_bytes += n;
+                                let events = parser.feed(&buf[..n]);
+                                for event in events {
+                                    if let Err(handle_err) = handle_event(
+                                        &app,
+                                        &mut stream,
+                                        &negotiator,
+                                        &mut accumulator,
+                                        &profile,
+                                        &map,
+                                        &timers,
+                                        &logs,
+                                        log_session_id,
+                                        &scrollback,
+                                        event,
+                                        &mut perf,
+                                    )
+                                    .await
+                                    {
+                                        warn!(
+                                            error = %handle_err,
+                                            "event handling failed during drain",
+                                        );
+                                        break;
+                                    }
+                                }
+                            }
+                            Err(drain_err)
+                                if drain_err.kind() == std::io::ErrorKind::WouldBlock =>
+                            {
+                                break;
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                    if drained_bytes > 0 {
+                        debug!(drained_bytes, "recovered bytes after read error");
+                    }
+                    break Some(format_disconnect_reason(&e));
                 }
             },
             _ = tick_interval.tick() => {
@@ -1063,6 +1117,25 @@ async fn send_trigger_outputs(stream: &mut Stream, sends: &[String]) -> std::io:
     }
     stream.write_all(&payload).await?;
     stream.flush().await
+}
+
+/// Map a read-side `io::Error` to a short human-readable disconnect
+/// reason. The previous "read failed: Connection reset by peer (os
+/// error 54)" wording read as an internal panic; MUD quits routinely
+/// land here because Diku / ROM derivatives close with `SO_LINGER` 0 and
+/// the OS surfaces it as `ECONNRESET`. Phrase it like a normal disconnect
+/// instead, and fall back to the raw text for anything we have not
+/// classified.
+fn format_disconnect_reason(err: &std::io::Error) -> String {
+    use std::io::ErrorKind;
+    match err.kind() {
+        ErrorKind::ConnectionReset => "connection reset by server".to_string(),
+        ErrorKind::ConnectionAborted => "connection aborted by server".to_string(),
+        ErrorKind::BrokenPipe => "broken pipe".to_string(),
+        ErrorKind::UnexpectedEof => "server closed connection".to_string(),
+        ErrorKind::TimedOut => "connection timed out".to_string(),
+        _ => format!("read failed: {err}"),
+    }
 }
 
 fn emit_output(app: &AppHandle, bytes: Vec<u8>) {

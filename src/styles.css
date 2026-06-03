@@ -642,6 +642,8 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Containing block for the floating find toolbar overlay (Cmd+F). */
+  position: relative;
   /* Padding lives HERE, not on host or .xterm. Sizer (flex:1 inside)
      fills the post-padding content area; JS writes its bounding rect
      to host; FitAddon then sees the correct available space and rows
@@ -869,6 +871,12 @@ body {
   display: flex;
   align-items: baseline;
   column-gap: 12px;
+  /* The bar (.vitals-glyphs / .vitals-glyphs-track) is the flex item
+     that gives up width first when the panel is narrow. Without this,
+     a long bar at bar_width: 60 inside a 50ch-wide panel pushes the
+     percent/numeric/delta columns past the right edge where the parent
+     `overflow: hidden` clips them out of view. */
+  min-width: 0;
 }
 
 /* Tail row at the bottom of the stacked vitals layout. Reads as
@@ -6265,4 +6273,132 @@ body {
   color: var(--c-text-faint);
   padding: 24px 28px;
   font-style: italic;
+}
+
+/* Find toolbar — floats over the top-right of the terminal area when
+   open. Drives xterm's SearchAddon across the full live scrollback.
+   Positioned via absolute inside .terminal-area (which is already
+   position: relative). z-index sits above xterm's canvas but below
+   the modal overlay. */
+.find-toolbar {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.find-toolbar-input {
+  background: var(--c-surface-deep);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: 0.9em;
+  padding: 3px 6px;
+  border-radius: 2px;
+  outline: none;
+  width: 220px;
+}
+
+.find-toolbar-input:focus {
+  border-color: var(--c-accent);
+}
+
+.find-toolbar-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.find-toolbar-status {
+  font-size: 0.78em;
+  min-width: 5em;
+  text-align: center;
+}
+
+.find-toolbar-status-hit {
+  color: var(--c-accent);
+}
+
+.find-toolbar-status-miss {
+  color: var(--c-warn, #c4746e);
+}
+
+.find-toolbar-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--c-text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.95em;
+  padding: 2px 6px;
+  border-radius: 2px;
+  line-height: 1;
+}
+
+.find-toolbar-btn:hover:not(:disabled) {
+  color: var(--c-text);
+  border-color: var(--c-border-hover);
+}
+
+.find-toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Three boolean toggles (case, whole-word, regex). Hide the native
+   checkbox; the label is the click target and gets visual state from
+   the .is-on class the component applies. */
+.find-toolbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78em;
+  color: var(--c-text-muted);
+  padding: 2px 6px;
+  border-radius: 2px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  min-width: 1.8em;
+  text-align: center;
+}
+
+.find-toolbar-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+.find-toolbar-toggle:hover {
+  color: var(--c-text);
+}
+
+.find-toolbar-toggle.is-on {
+  color: var(--c-accent);
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
+}
+
+.find-toolbar-close {
+  background: transparent;
+  border: none;
+  color: var(--c-text-faint);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 1em;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.find-toolbar-close:hover {
+  color: var(--c-text);
 }

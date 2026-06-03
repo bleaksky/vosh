@@ -172,7 +172,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: 'The status bar and clock',
     section: 'Reading output',
     body:
-      "The bar across the very bottom of the window carries small status chips. The left side shows your current target (when one is set) and your quick-key bindings. The middle or right side shows the moon-phase glyphs the MUD pushes via GMCP. The far right shows your computer's local clock.\n\n" +
+      "The bar across the very bottom of the window carries small status chips. The left side shows your current target (when one is set) and your quick-key bindings. The right side shows the moon-phase glyphs the MUD pushes via GMCP, followed by your computer's local clock.\n\n" +
       "The chips are read-only. Quick-keys configure under `#qkey <name> <verb>`. The moon glyphs have tooltips that show each moon's name and phase when you hover.",
   },
   {

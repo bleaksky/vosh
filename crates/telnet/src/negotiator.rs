@@ -3,13 +3,21 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::codes::{charset, option, ttype, DO, DONT, IAC, SB, SE, WILL, WONT};
+use crate::codes::{charset, new_environ, option, ttype, DO, DONT, IAC, SB, SE, WILL, WONT};
 use crate::parser::Event;
 
-/// Default first TTYPE response (slot 0). The MTTS standard expects the
-/// client name plus version; keeping it on one line so curious server
-/// admins can grep their logs for the client.
-pub const DEFAULT_TERMINAL_TYPE: &str = concat!("VOSH ", env!("CARGO_PKG_VERSION"));
+/// Default first TTYPE response (slot 0). MTTS expects the client
+/// name plus version here, and MTTS-aware servers iterate to slot 1
+/// for the terminal emulation. But many ROM- and Diku-derived servers
+/// (Forsaken Lands among them) only ever send a single
+/// `IAC SB TTYPE SEND IAC SE` and then substring-scan the reply for
+/// "xterm" or "256" to decide 256-color support. Slot 0 is the only
+/// thing those servers ever see, so we bake both markers into the
+/// client name itself. The lowercase "xterm" form matches even on
+/// case-sensitive `strstr` checks, and the embedded "256color"
+/// covers the "256" substring scan.
+pub const DEFAULT_TERMINAL_TYPE: &str =
+    concat!("VOSH-xterm-256color ", env!("CARGO_PKG_VERSION"));
 
 /// MTTS capability bits the client advertises on the third TTYPE
 /// response. Computed from <https://tintin.mudhalla.net/protocols/mtts/>:
@@ -155,9 +163,11 @@ impl Negotiator {
     fn respond_do(&self, opt: u8) -> Vec<u8> {
         // Server requests we DO an option.
         match opt {
-            option::TTYPE | option::CHARSET | option::SUPPRESS_GO_AHEAD | option::GMCP => {
-                vec![IAC, WILL, opt]
-            }
+            option::TTYPE
+            | option::CHARSET
+            | option::SUPPRESS_GO_AHEAD
+            | option::GMCP
+            | option::NEW_ENVIRON => vec![IAC, WILL, opt],
             option::NAWS => {
                 let mut out = vec![IAC, WILL, option::NAWS];
                 out.extend(self.naws_subnegotiation());
@@ -176,6 +186,7 @@ impl Negotiator {
         match opt {
             option::TTYPE => self.respond_ttype(payload),
             option::CHARSET => self.respond_charset(payload),
+            option::NEW_ENVIRON => self.respond_new_environ(payload),
             _ => Vec::new(),
         }
     }
@@ -192,6 +203,30 @@ impl Negotiator {
         let response = &self.ttype_responses[slot];
         let mut out = vec![IAC, SB, option::TTYPE, ttype::IS];
         out.extend_from_slice(response.as_bytes());
+        out.extend_from_slice(&[IAC, SE]);
+        out
+    }
+
+    /// Reply to an `IAC SB NEW-ENVIRON SEND ... IAC SE` request with the
+    /// environment variables MUD servers actually look at for color
+    /// detection. We send `TERM=xterm-256color` and `COLORTERM=truecolor`
+    /// regardless of which variables the server specifically asked for —
+    /// RFC 1572 permits returning every value the client knows when the
+    /// payload is a bare SEND or lists unsupported variables, and most
+    /// MUDs only care about TERM anyway.
+    ///
+    /// The MTTS bitmask we send via TTYPE already advertises 256-color
+    /// and truecolor, but a number of ROM- and Diku-derived servers
+    /// gate their per-character color flag on the TERM env var as a
+    /// second check, so without this responder the flag flips back to
+    /// 16-color on every reconnect.
+    fn respond_new_environ(&self, payload: &[u8]) -> Vec<u8> {
+        if payload.first() != Some(&new_environ::SEND) {
+            return Vec::new();
+        }
+        let mut out = vec![IAC, SB, option::NEW_ENVIRON, new_environ::IS];
+        push_environ_var(&mut out, new_environ::USERVAR, b"TERM", b"xterm-256color");
+        push_environ_var(&mut out, new_environ::USERVAR, b"COLORTERM", b"truecolor");
         out.extend_from_slice(&[IAC, SE]);
         out
     }
@@ -214,6 +249,39 @@ impl Negotiator {
             out
         } else {
             vec![IAC, SB, option::CHARSET, charset::REJECTED, IAC, SE]
+        }
+    }
+}
+
+/// Append one NEW-ENVIRON entry (a kind byte, the variable name, a
+/// VALUE byte, and the value bytes) onto the running response buffer.
+/// Per RFC 1572 the kind/value/escape bytes inside a name or value
+/// must be escaped with ESC; in practice TERM and COLORTERM never
+/// contain those bytes, so the escape is a belt-and-braces for future
+/// callers that might pass arbitrary values.
+fn push_environ_var(out: &mut Vec<u8>, kind: u8, name: &[u8], value: &[u8]) {
+    out.push(kind);
+    push_environ_token(out, name);
+    out.push(new_environ::VALUE);
+    push_environ_token(out, value);
+}
+
+fn push_environ_token(out: &mut Vec<u8>, bytes: &[u8]) {
+    for &b in bytes {
+        match b {
+            new_environ::VAR
+            | new_environ::VALUE
+            | new_environ::ESC
+            | new_environ::USERVAR => {
+                out.push(new_environ::ESC);
+                out.push(b);
+            }
+            IAC => {
+                // IAC inside a subnegotiation must be doubled per RFC 854.
+                out.push(IAC);
+                out.push(IAC);
+            }
+            _ => out.push(b),
         }
     }
 }
@@ -334,6 +402,23 @@ mod tests {
     }
 
     #[test]
+    fn ttype_slot0_contains_color_markers_for_non_mtts_servers() {
+        // Servers that only send a single SB TTYPE SEND (Forsaken
+        // Lands, various ROM 2.4 derivatives) substring-scan slot 0
+        // for "xterm" / "256" to decide on 256-color. Both markers
+        // must stay in the default first response, in lowercase so
+        // case-sensitive scans also pass.
+        assert!(
+            DEFAULT_TERMINAL_TYPE.contains("xterm"),
+            "slot 0 lost the lowercase \"xterm\" marker: {DEFAULT_TERMINAL_TYPE}",
+        );
+        assert!(
+            DEFAULT_TERMINAL_TYPE.contains("256"),
+            "slot 0 lost the \"256\" marker: {DEFAULT_TERMINAL_TYPE}",
+        );
+    }
+
+    #[test]
     fn mtts_bits_include_ansi_utf8_256_truecolor() {
         // If anyone changes the constant, the assertion documents which
         // capability bits Vosh actually claims so the change is deliberate.
@@ -385,6 +470,43 @@ mod tests {
         expected.extend_from_slice(b"UTF-8");
         expected.extend_from_slice(&[IAC, SE]);
         assert_eq!(bytes, expected);
+    }
+
+    #[test]
+    fn accepts_do_new_environ() {
+        let n = Negotiator::new();
+        let bytes = n.handle(&Event::Do(option::NEW_ENVIRON));
+        assert_eq!(bytes, vec![IAC, WILL, option::NEW_ENVIRON]);
+    }
+
+    #[test]
+    fn new_environ_send_returns_color_env_vars() {
+        let n = Negotiator::new();
+        let bytes = n.handle(&Event::Subnegotiation {
+            option: option::NEW_ENVIRON,
+            payload: vec![new_environ::SEND],
+        });
+        let mut expected = vec![IAC, SB, option::NEW_ENVIRON, new_environ::IS];
+        expected.push(new_environ::USERVAR);
+        expected.extend_from_slice(b"TERM");
+        expected.push(new_environ::VALUE);
+        expected.extend_from_slice(b"xterm-256color");
+        expected.push(new_environ::USERVAR);
+        expected.extend_from_slice(b"COLORTERM");
+        expected.push(new_environ::VALUE);
+        expected.extend_from_slice(b"truecolor");
+        expected.extend_from_slice(&[IAC, SE]);
+        assert_eq!(bytes, expected);
+    }
+
+    #[test]
+    fn new_environ_ignores_non_send_payloads() {
+        let n = Negotiator::new();
+        let bytes = n.handle(&Event::Subnegotiation {
+            option: option::NEW_ENVIRON,
+            payload: vec![new_environ::IS],
+        });
+        assert!(bytes.is_empty());
     }
 
     #[test]

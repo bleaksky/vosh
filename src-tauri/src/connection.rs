@@ -64,6 +64,25 @@ impl Stream {
             Stream::Tls(s) => AsyncWriteExt::shutdown(s.as_mut()).await,
         }
     }
+
+    /// Non-blocking read. Used by the session loop after a read error to
+    /// scoop any bytes still buffered in the kernel recv queue before
+    /// tearing the connection down. Returns `WouldBlock` when nothing is
+    /// available right now (the caller should stop draining).
+    ///
+    /// Only meaningful for plain TCP. TLS framing makes a single
+    /// non-blocking read unable to surface application bytes in
+    /// isolation, so the TLS variant always reports `WouldBlock` and the
+    /// caller falls back to its normal error path.
+    pub(crate) fn try_read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Stream::Tcp(s) => s.try_read(buf),
+            Stream::Tls(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::WouldBlock,
+                "try_read not supported on TLS streams",
+            )),
+        }
+    }
 }
 
 /// Open a connection. Returns a [`Stream`] ready for the session loop.
