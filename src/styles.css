@@ -1084,6 +1084,44 @@ body {
   color: var(--c-text-dim);
 }
 
+/* "One with Erelei" mode — three corner L-brackets pinned to the
+   main window's viewport corners (top-left = hp, top-right = mn,
+   bottom-right = mv). Replaces the entire vitals widget; when this
+   class is mounted the regular bar / template / inline layouts are
+   not rendered at all. Pure CSS — the only thing that changes per
+   frame is three custom properties (--owe-hp/mn/mv as unitless
+   0..100 numbers) plus --owe-danger (0..1) for the vignette. */
+.one-with-erelei {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9000;
+}
+
+/* Danger vignette. Fades in as hp drops below 30 (the React side
+   writes --owe-danger 0..1). Pulses on a 1.2s rhythm so the
+   periphery breathes red, but at the cost of one brightness filter
+   per frame — opacity stays static between bumps so we are not
+   thrashing the compositor. */
+.owe-danger {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(217, 48, 48, 0.45) 100%);
+  opacity: var(--owe-danger, 0);
+  animation: owe-danger-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes owe-danger-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(0.65);
+  }
+}
+
 .vitals-percent {
   font-weight: 700;
   min-width: 36px;
@@ -3982,6 +4020,27 @@ body {
   flex: 0 0 auto;
 }
 
+/* Hint row under the bar-font dropdown. Used by the MonoLisa
+   detection status; sits flush under the dropdown without a top
+   margin so it reads as belonging to the field above. */
+.panels-vitals-style-hint {
+  margin: -2px 0 8px;
+  font-size: 0.85em;
+  padding-left: 86px;
+}
+
+.panels-vitals-style-hint.is-disabled {
+  opacity: 0.4;
+}
+
+.panels-vitals-style-ok {
+  color: var(--c-text-dim);
+}
+
+.panels-vitals-style-warn {
+  color: var(--c-warn, var(--c-text-faint));
+}
+
 /* Per-vital color override rows. Sits below the layout / glyph
    knobs in the vitals section. Each row has a label, a native color
    swatch, the hex text field, and a [clear] button so the user can
@@ -4061,6 +4120,353 @@ body {
 .panels-vitals-glyph-input:focus {
   outline: none;
   border-color: var(--c-accent);
+}
+
+/* =================================================================
+   VITALS SPLIT-CONSOLE LAYOUT
+   ==================================================================
+   Two-pane "operator console" layout for the vitals Settings panel.
+   Left rack holds dense control groups (show / appearance / layout /
+   colors / template); right monitor holds the always-visible preview
+   so the user can see every change land in the same surface the HUD
+   will eventually render. Collapses to a single column on narrow
+   viewports so the panel still works in a half-width Settings window.
+*/
+
+.vsplit-frame {
+  display: grid;
+  /* minmax(0, ...) on both tracks: a 1fr track defaults to a min
+     of auto (content-min), which lets a wide preview push the grid
+     past its container and shove the rack out of view. Pinning the
+     min to 0 lets each track shrink to its CSS-imposed width
+     instead of its content's. */
+  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+@media (max-width: 820px) {
+  .vsplit-frame {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* LEFT RACK ------------------------------------------------------- */
+.vsplit-rack {
+  border-right: 1px solid var(--c-border);
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 820px) {
+  .vsplit-rack {
+    border-right: none;
+    border-bottom: 1px solid var(--c-border);
+  }
+}
+
+.vsplit-rack-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 12px;
+  background: var(--c-surface-lift);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.vsplit-rack-head h2 {
+  margin: 0;
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--c-text-strong);
+}
+
+.vsplit-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  box-shadow: 0 0 6px var(--c-accent);
+}
+
+.vsplit-group {
+  padding: 12px 18px 10px;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+
+.vsplit-group.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.vsplit-group-label {
+  font-size: 0.7em;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vsplit-group-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--c-border);
+}
+
+/* Compact label + control row used throughout the rack. The label
+   column is fixed-width so selects and inputs left-align cleanly. */
+.vsplit-knob {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 0;
+}
+
+.vsplit-knob-label {
+  color: var(--c-text-faint);
+  font-size: 0.85em;
+  text-transform: lowercase;
+}
+
+.vsplit-knob select,
+.vsplit-knob input[type='text'],
+.vsplit-knob input[type='number'] {
+  background: var(--c-surface-deep);
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: 0.9em;
+  padding: 4px 8px;
+  width: 100%;
+}
+
+.vsplit-knob select:focus,
+.vsplit-knob input:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+.vsplit-num {
+  width: 60px !important;
+  text-align: right;
+}
+
+.vsplit-knob-hint {
+  padding: 4px 0 4px 84px;
+  font-size: 0.8em;
+}
+
+/* Pill-toggle grid. Used for the SHOW row's 4 booleans, and for the
+   single-pill drain-to-red row in the colors block. */
+.vsplit-pip-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+}
+
+.vsplit-pip-grid-one {
+  grid-template-columns: 1fr;
+  margin-top: 6px;
+}
+
+.vsplit-pip {
+  background: var(--c-surface-deep);
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  color: var(--c-text-muted);
+  font-family: inherit;
+  font-size: 0.85em;
+  padding: 5px 8px;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    color 120ms,
+    background 120ms,
+    border-color 120ms;
+}
+
+.vsplit-pip:hover {
+  color: var(--c-text-strong);
+  border-color: var(--c-border-strong);
+}
+
+.vsplit-pip.is-on {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent);
+  color: var(--c-text-strong);
+}
+
+/* Disclosure-style "advanced" expander used for the CSS font-family
+   override and for the template editor. Keeps complexity out of the
+   default view but one click away. */
+.vsplit-adv {
+  margin-top: 6px;
+}
+
+.vsplit-adv > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--c-text-dim);
+  font-size: 0.7em;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  padding: 4px 0;
+  user-select: none;
+}
+
+.vsplit-adv > summary::before {
+  content: '+ ';
+}
+
+.vsplit-adv[open] > summary::before {
+  content: '− ';
+}
+
+.vsplit-adv > summary:hover {
+  color: var(--c-text);
+}
+
+.vsplit-adv-input {
+  width: 100% !important;
+  text-align: left !important;
+  margin-top: 6px;
+}
+
+.vsplit-rack-foot {
+  margin-top: auto;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--c-surface-lift);
+  border-top: 1px solid var(--c-border);
+}
+
+.vsplit-rack-foot-live {
+  color: var(--c-text-dim);
+  font-size: 0.7em;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* Color row override. The VitalColorRow component is shared with the
+   old layout where the label was "hp color" (about 7 characters). The
+   rack uses just "hp", so shrink the label column to match — keeping
+   the swatch + hex input + clear button readable in a narrow column. */
+.vsplit-group .panels-vitals-color-row {
+  gap: 6px;
+}
+
+.vsplit-group .panels-vitals-color-label {
+  flex: 0 0 2.2em;
+  color: var(--c-text-faint);
+  font-size: 0.85em;
+  text-transform: lowercase;
+}
+
+.vsplit-group .panels-vitals-color-hex {
+  font-size: 0.85em;
+}
+
+/* The bundled .panels-vitals-template wrapping VitalsTemplateEditor
+   re-anchors visually inside the rack disclosure: drop the heavy
+   internal borders / spacing it had as a top-level section, since
+   the disclosure already provides framing. */
+.vsplit-adv .panels-vitals-template {
+  padding: 0;
+}
+
+.vsplit-adv .panels-vitals-template-body {
+  padding: 6px 0 0;
+}
+
+.vsplit-adv .panels-vitals-template-help {
+  font-size: 0.8em;
+}
+
+/* RIGHT MONITOR -------------------------------------------------- */
+.vsplit-monitor {
+  background: radial-gradient(ellipse at top, var(--c-surface-emphasis) 0%, var(--c-surface) 70%);
+  padding: 24px 28px 20px;
+  display: flex;
+  flex-direction: column;
+  min-height: 380px;
+  /* min-width: 0 lets the grid column shrink when the rendered
+     preview is wider than the column. Without this, a wide bar (60
+     cells) pushes the entire .vsplit-frame grid past its container
+     and the rack starts to bleed under the monitor. */
+  min-width: 0;
+}
+
+.vsplit-monitor-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  /* Wide letter-spacing on the h3 eats the available row; the hint
+     was butting against it without a gap. column-gap keeps both
+     readable when the row is narrow, then wraps. */
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-bottom: 18px;
+}
+
+.vsplit-monitor-head h3 {
+  margin: 0;
+  font-size: 0.75em;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--c-text-faint);
+}
+
+.vsplit-monitor-hint {
+  color: var(--c-text-muted);
+  font-size: 0.8em;
+}
+
+.vsplit-monitor-stage {
+  /* Column flow so VitalsPreview's two children (preview-head and
+     vitals-bar) stack vertically; the previous row-flow laid them
+     side-by-side, which is why the preview-head text appeared in
+     the left column and the bars on the right. overflow: hidden
+     clips a wide bar so the user can experiment with bar_width 60
+     without the stage spilling into the rack. */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.vsplit-monitor-foot {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--c-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  color: var(--c-text-faint);
+  font-size: 0.8em;
+}
+
+.vsplit-monitor-foot strong {
+  color: var(--c-text);
+  font-weight: 600;
+  text-transform: lowercase;
+  margin-right: 6px;
 }
 
 .panels-vitals-quickpicks-label {

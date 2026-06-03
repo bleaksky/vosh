@@ -2,6 +2,12 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.3.14 - 2026-06-03
+
+- The vitals settings panel is restructured as a two-column console. A dense control rack on the left (mode · show · appearance · layout · colors · template) and a live monitor on the right showing your real bar preview at full width. The monitor footer surfaces the current layout, style, width, and font so you can confirm state at a glance without scrolling. Collapses to a single column under 820px so a half-width Settings window still works.
+- New "one with erelei" mode in the vitals console. Toggles a soft red peripheral vignette that pulses on the window edges when hp drops below 30 percent. Additive — your bar, template, or inline layout continues rendering normally and the vignette sits on top of the chrome as a fixed-position overlay.
+- The bar font picker grows MonoLisa, Menlo, Consolas, and Courier New presets. MonoLisa ships under several family names depending on the build (regular, Variable, Trial); the picker probes for each and surfaces a small status line under the dropdown noting which variant your system actually carries, or a warning if none was found.
+
 ## v0.3.12 - 2026-06-03
 
 - The vitals settings top is redesigned. The crowded row of `style | filled | empty | width` is replaced by a single `style` dropdown that carries both the bar style and the glyph pair as one choice (e.g. `solid · block · █ ░`, `ramped · braille full · ⣿ ⣀`, `track · smooth CSS bar, no glyphs`), and a small `width` field next to it. Hand-edited custom glyphs surface a `custom` entry in the dropdown and reveal the filled / empty text inputs on demand.

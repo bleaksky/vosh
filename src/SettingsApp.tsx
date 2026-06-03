@@ -1287,8 +1287,10 @@ function applyStyleKey(key: string, current: VitalsConfig): Partial<VitalsConfig
 }
 
 /** Quick-pick bar font stacks. Empty string means "inherit the app font"
- *  (the historical behavior). Berkeley and JetBrains are the two bundled
- *  fonts; users can also paste a custom CSS font-family stack via the
+ *  (the historical behavior). Berkeley and JetBrains are bundled with
+ *  Vosh; MonoLisa, Menlo, Consolas, Courier are looked up from the
+ *  system font catalog and registered via the font:// URI scheme on
+ *  pick. Users can also paste a custom CSS font-family stack via the
  *  text input that shows when "custom" is selected. */
 const BAR_FONT_PRESETS: { key: string; label: string; stack: string }[] = [
   { key: '', label: 'use the app font', stack: '' },
@@ -1303,12 +1305,69 @@ const BAR_FONT_PRESETS: { key: string; label: string; stack: string }[] = [
     label: 'JetBrains Mono (bundled)',
     stack: '"JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace',
   },
+  {
+    key: 'monolisa',
+    label: 'MonoLisa (must be installed locally)',
+    // MonoLisa ships under several family names depending on which
+    // build you have (regular, Variable, the trial). List every common
+    // variant so CSS picks the first one your OS exposes.
+    stack:
+      '"MonoLisa", "MonoLisa Variable", "MonoLisaVariable", "MonoLisa Script", "MonoLisa Trial", monospace',
+  },
+  { key: 'menlo', label: 'Menlo (macOS default)', stack: 'Menlo, monospace' },
+  { key: 'consolas', label: 'Consolas (Windows default)', stack: 'Consolas, monospace' },
+  { key: 'courier', label: 'Courier New', stack: '"Courier New", monospace' },
 ];
+
+/** Family-name candidates for the MonoLisa-detection helper. Picks up
+ *  every common installer variant; the first one document.fonts.check
+ *  approves is the family the CSS stack will actually resolve to. */
+const MONOLISA_CANDIDATES = [
+  'MonoLisa',
+  'MonoLisa Variable',
+  'MonoLisaVariable',
+  'MonoLisa Script',
+  'MonoLisa Trial',
+];
+
+function detectMonoLisaFamily(): string | null {
+  for (const name of MONOLISA_CANDIDATES) {
+    try {
+      if (document.fonts.check(`12px "${name}"`)) return name;
+    } catch {
+      // Some browsers throw on bare names; ignore and try the next.
+    }
+  }
+  return null;
+}
 
 function barFontKeyFor(v: VitalsConfig): string {
   if (!v.bar_font) return '';
   const match = BAR_FONT_PRESETS.find((p) => p.stack === v.bar_font);
   return match ? match.key : '__custom';
+}
+
+/** Status line under the bar-font dropdown when the user picks MonoLisa.
+ *  Re-runs detection every time the FontFaceSet emits `loadingdone` so
+ *  the line flips from "not found" to "detected as X" once the runtime-
+ *  injected @font-face for the matching family finishes loading. */
+function BarFontMonoLisaStatus() {
+  const [matched, setMatched] = useState<string | null>(() => detectMonoLisaFamily());
+  useEffect(() => {
+    const recheck = () => setMatched(detectMonoLisaFamily());
+    recheck();
+    const fonts = document.fonts as FontFaceSet | undefined;
+    if (!fonts) return;
+    fonts.addEventListener('loadingdone', recheck);
+    return () => fonts.removeEventListener('loadingdone', recheck);
+  }, []);
+  return (
+    <span className={matched ? 'panels-vitals-style-ok' : 'panels-vitals-style-warn'}>
+      {matched
+        ? `MonoLisa detected as "${matched}" · bars are using it`
+        : 'no MonoLisa family found yet · install MonoLisa and reopen Settings, or check the bars visually since some installers use a name not in the probe list'}
+    </span>
+  );
 }
 
 const VITALS_GLYPH_PRESETS: { label: string; filled: string; empty: string }[] = [
@@ -1325,54 +1384,6 @@ const VITALS_GLYPH_PRESETS: { label: string; filled: string; empty: string }[] =
   { label: 'braille thin', filled: '⠶', empty: '⠀' },
 ];
 
-interface VitalsConfigPreset {
-  label: string;
-  description: string;
-  patch: Partial<VitalsConfig>;
-}
-const VITALS_PRESETS: VitalsConfigPreset[] = [
-  {
-    label: 'bars',
-    description: 'all four columns on, default glyphs',
-    patch: {
-      show_bar: true,
-      show_percent: true,
-      show_numeric: true,
-      show_delta: true,
-    },
-  },
-  {
-    label: 'compact',
-    description: 'no bar, percent + numeric, no delta',
-    patch: {
-      show_bar: false,
-      show_percent: true,
-      show_numeric: true,
-      show_delta: false,
-    },
-  },
-  {
-    label: 'numeric',
-    description: 'just hp 850/1000 style readouts',
-    patch: {
-      show_bar: false,
-      show_percent: false,
-      show_numeric: true,
-      show_delta: false,
-    },
-  },
-  {
-    label: 'percent',
-    description: 'just hp 75% readouts',
-    patch: {
-      show_bar: false,
-      show_percent: true,
-      show_numeric: false,
-      show_delta: false,
-    },
-  },
-];
-
 function VitalsConfigSection({
   config,
   setConfig,
@@ -1382,6 +1393,13 @@ function VitalsConfigSection({
   setConfig: (updater: (prev: UiConfig | null) => UiConfig | null) => void;
   onError: (e: string | null) => void;
 }) {
+  // Inject @font-face for any system font named in the bar font
+  // stack so the in-Settings preview can actually resolve it. WKWebView
+  // refuses bare family names without @font-face registration. Mirrors
+  // the same call inside VitalsBar so live + preview stay in sync.
+  useEffect(() => {
+    if (config?.vitals.bar_font) loadFontStack(config.vitals.bar_font);
+  }, [config?.vitals.bar_font]);
   if (!config) return null;
   const v = config.vitals;
   const apply = (patch: Partial<VitalsConfig>) => {
@@ -1390,240 +1408,301 @@ function VitalsConfigSection({
     setConfig(() => next);
     void setUiConfig(next).catch((e) => onError(String(e)));
   };
+  const fontPresetKey = barFontKeyFor(v);
+  const fontPresetLabel =
+    fontPresetKey === ''
+      ? 'app font'
+      : (BAR_FONT_PRESETS.find((p) => p.key === fontPresetKey)?.label.split(' (')[0] ?? 'custom');
   return (
-    <section className="panels-vitals">
-      <div className="panels-vitals-header">
-        <span>vitals</span>
-        <span className="panels-tab-header-dim">how the hp / mn / mv rows render</span>
-      </div>
-      <div className="panels-vitals-presets" role="group" aria-label="vitals presets">
-        {VITALS_PRESETS.map((preset) => (
-          <button
-            key={preset.label}
-            type="button"
-            className="settings-btn settings-btn-mute panels-vitals-preset-chip"
-            title={preset.description}
-            onClick={() => apply(preset.patch)}
-          >
-            [{preset.label}]
-          </button>
-        ))}
-      </div>
-      <div className="panels-vitals-toggles">
-        <Toggle label="bar glyphs" checked={v.show_bar} onChange={(c) => apply({ show_bar: c })} />
-        <Toggle
-          label="percent"
-          checked={v.show_percent}
-          onChange={(c) => apply({ show_percent: c })}
-        />
-        <Toggle
-          label="numeric"
-          checked={v.show_numeric}
-          onChange={(c) => apply({ show_numeric: c })}
-        />
-        <Toggle
-          label="per-tick delta"
-          checked={v.show_delta}
-          onChange={(c) => apply({ show_delta: c })}
-        />
-      </div>
-      <div className={`panels-vitals-style${v.show_bar ? '' : ' is-disabled'}`}>
-        <label className="panels-vitals-style-field panels-vitals-style-field-grow">
-          <span className="panels-vitals-style-label">style</span>
-          <select
-            value={styleKeyFor(v)}
-            disabled={!v.show_bar}
-            onChange={(e) => apply(applyStyleKey(e.target.value, v))}
-          >
-            {styleKeyFor(v) === '__custom' && (
-              <option value="__custom">
-                custom · {v.bar_style} · {v.bar_filled} {v.bar_empty}
-              </option>
-            )}
-            <optgroup label="solid · one glyph per cell">
-              {VITALS_GLYPH_PRESETS.map((p) => (
-                <option key={`solid|${p.label}`} value={`solid|${p.filled}|${p.empty}`}>
-                  {p.label} · {p.filled} {p.empty}
+    <section className="vsplit-frame">
+      <aside className="vsplit-rack">
+        <header className="vsplit-rack-head">
+          <h2>vitals · console</h2>
+          <span className="vsplit-led" aria-hidden="true" />
+        </header>
+
+        <div className="vsplit-group">
+          <div className="vsplit-group-label">mode</div>
+          <div className="vsplit-pip-grid vsplit-pip-grid-one">
+            <PipToggle
+              label="one with erelei"
+              checked={v.one_with_erelei}
+              onChange={(c) => apply({ one_with_erelei: c })}
+            />
+          </div>
+        </div>
+
+        <div className="vsplit-group">
+          <div className="vsplit-group-label">show</div>
+          <div className="vsplit-pip-grid">
+            <PipToggle label="bars" checked={v.show_bar} onChange={(c) => apply({ show_bar: c })} />
+            <PipToggle
+              label="percent"
+              checked={v.show_percent}
+              onChange={(c) => apply({ show_percent: c })}
+            />
+            <PipToggle
+              label="numeric"
+              checked={v.show_numeric}
+              onChange={(c) => apply({ show_numeric: c })}
+            />
+            <PipToggle
+              label="delta"
+              checked={v.show_delta}
+              onChange={(c) => apply({ show_delta: c })}
+            />
+          </div>
+        </div>
+
+        <div className={`vsplit-group${v.show_bar ? '' : ' is-disabled'}`}>
+          <div className="vsplit-group-label">appearance</div>
+          <div className="vsplit-knob">
+            <span className="vsplit-knob-label">style</span>
+            <select
+              value={styleKeyFor(v)}
+              disabled={!v.show_bar}
+              onChange={(e) => apply(applyStyleKey(e.target.value, v))}
+            >
+              {styleKeyFor(v) === '__custom' && (
+                <option value="__custom">
+                  custom · {v.bar_style} · {v.bar_filled} {v.bar_empty}
                 </option>
-              ))}
-            </optgroup>
-            <optgroup label="ramped · sub-character smoothness">
-              {VITALS_GLYPH_PRESETS.map((p) => (
-                <option key={`ramped|${p.label}`} value={`ramped|${p.filled}|${p.empty}`}>
-                  {p.label} · {p.filled} {p.empty}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="track">
-              <option value="track">track · smooth CSS bar, no glyphs</option>
-            </optgroup>
-            {styleKeyFor(v) !== '__custom' && (
-              <optgroup label="other">
-                <option value="__custom">custom · set glyphs below</option>
+              )}
+              <optgroup label="solid · one glyph per cell">
+                {VITALS_GLYPH_PRESETS.map((p) => (
+                  <option key={`solid|${p.label}`} value={`solid|${p.filled}|${p.empty}`}>
+                    {p.label} · {p.filled} {p.empty}
+                  </option>
+                ))}
               </optgroup>
-            )}
-          </select>
-        </label>
-        <label className="panels-vitals-style-field">
-          <span className="panels-vitals-style-label">width</span>
-          <input
-            type="number"
-            className="settings-num-input"
-            min={4}
-            max={60}
-            step={1}
-            value={v.bar_width}
-            disabled={!v.show_bar}
-            onChange={(e) => {
-              const n = Math.max(4, Math.min(60, Math.floor(Number(e.target.value) || 20)));
-              apply({ bar_width: n });
-            }}
-            aria-label="bar width in glyphs"
-          />
-        </label>
-      </div>
-      <div className={`panels-vitals-style${v.show_bar ? '' : ' is-disabled'}`}>
-        <label className="panels-vitals-style-field panels-vitals-style-field-grow">
-          <span className="panels-vitals-style-label">bar font</span>
-          <select
-            value={barFontKeyFor(v)}
-            disabled={!v.show_bar}
-            onChange={(e) => {
-              // Preset picks fill the text input below. The `__custom`
-              // entry only appears as a display indicator when the
-              // live value does not match a preset — picking it does
-              // nothing (user keeps typing into the text input).
-              const key = e.target.value;
-              if (key === '__custom') return;
-              const preset = BAR_FONT_PRESETS.find((p) => p.key === key);
-              if (preset) apply({ bar_font: preset.stack });
-            }}
-          >
-            {BAR_FONT_PRESETS.map((p) => (
-              <option key={p.key} value={p.key}>
-                {p.label}
-              </option>
-            ))}
-            {barFontKeyFor(v) === '__custom' && (
-              <option value="__custom">custom · (edit below)</option>
-            )}
-          </select>
-        </label>
-      </div>
-      <div className={`panels-vitals-style${v.show_bar ? '' : ' is-disabled'}`}>
-        <label className="panels-vitals-style-field panels-vitals-style-field-grow">
-          <span className="panels-vitals-style-label">CSS font-family</span>
-          <input
-            type="text"
-            className="panels-vitals-glyph-input"
-            spellCheck={false}
-            value={v.bar_font}
-            disabled={!v.show_bar}
-            placeholder='blank = use the app font · or "MonoLisa", "Iosevka", monospace'
-            onChange={(e) => apply({ bar_font: e.target.value })}
-          />
-        </label>
-      </div>
-      {styleKeyFor(v) === '__custom' && v.bar_style !== 'track' && (
-        <div className={`panels-vitals-style${v.show_bar ? '' : ' is-disabled'}`}>
-          <label className="panels-vitals-style-field">
-            <span className="panels-vitals-style-label">filled</span>
+              <optgroup label="ramped · sub-character smoothness">
+                {VITALS_GLYPH_PRESETS.map((p) => (
+                  <option key={`ramped|${p.label}`} value={`ramped|${p.filled}|${p.empty}`}>
+                    {p.label} · {p.filled} {p.empty}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="track">
+                <option value="track">track · smooth CSS bar, no glyphs</option>
+              </optgroup>
+              {styleKeyFor(v) !== '__custom' && (
+                <optgroup label="other">
+                  <option value="__custom">custom · set glyphs below</option>
+                </optgroup>
+              )}
+            </select>
+          </div>
+          <div className="vsplit-knob">
+            <span className="vsplit-knob-label">width</span>
+            <input
+              type="number"
+              className="settings-num-input vsplit-num"
+              min={4}
+              max={60}
+              step={1}
+              value={v.bar_width}
+              disabled={!v.show_bar}
+              onChange={(e) => {
+                const n = Math.max(4, Math.min(60, Math.floor(Number(e.target.value) || 20)));
+                apply({ bar_width: n });
+              }}
+              aria-label="bar width in glyphs"
+            />
+          </div>
+          <div className="vsplit-knob">
+            <span className="vsplit-knob-label">bar font</span>
+            <select
+              value={fontPresetKey}
+              disabled={!v.show_bar}
+              onChange={(e) => {
+                const key = e.target.value;
+                if (key === '__custom') return;
+                const preset = BAR_FONT_PRESETS.find((p) => p.key === key);
+                if (preset) apply({ bar_font: preset.stack });
+              }}
+            >
+              {BAR_FONT_PRESETS.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.label}
+                </option>
+              ))}
+              {fontPresetKey === '__custom' && (
+                <option value="__custom">custom · (edit below)</option>
+              )}
+            </select>
+          </div>
+          {fontPresetKey === 'monolisa' && (
+            <div className="vsplit-knob-hint">
+              <BarFontMonoLisaStatus />
+            </div>
+          )}
+          {styleKeyFor(v) === '__custom' && v.bar_style !== 'track' && (
+            <>
+              <div className="vsplit-knob">
+                <span className="vsplit-knob-label">filled</span>
+                <input
+                  type="text"
+                  className="panels-vitals-glyph-input"
+                  value={v.bar_filled}
+                  disabled={!v.show_bar}
+                  spellCheck={false}
+                  onChange={(e) =>
+                    apply({ bar_filled: e.target.value.length > 0 ? e.target.value : '▰' })
+                  }
+                  aria-label="filled glyph"
+                />
+              </div>
+              <div className="vsplit-knob">
+                <span className="vsplit-knob-label">empty</span>
+                <input
+                  type="text"
+                  className="panels-vitals-glyph-input"
+                  value={v.bar_empty}
+                  disabled={!v.show_bar}
+                  spellCheck={false}
+                  onChange={(e) =>
+                    apply({ bar_empty: e.target.value.length > 0 ? e.target.value : '▱' })
+                  }
+                  aria-label="empty glyph"
+                />
+              </div>
+            </>
+          )}
+          <details className="vsplit-adv">
+            <summary>custom CSS font-family</summary>
             <input
               type="text"
-              className="panels-vitals-glyph-input"
-              value={v.bar_filled}
-              disabled={!v.show_bar}
+              className="panels-vitals-glyph-input vsplit-adv-input"
               spellCheck={false}
-              onChange={(e) =>
-                apply({ bar_filled: e.target.value.length > 0 ? e.target.value : '▰' })
-              }
-              aria-label="filled glyph"
-            />
-          </label>
-          <label className="panels-vitals-style-field">
-            <span className="panels-vitals-style-label">empty</span>
-            <input
-              type="text"
-              className="panels-vitals-glyph-input"
-              value={v.bar_empty}
+              value={v.bar_font}
               disabled={!v.show_bar}
-              spellCheck={false}
-              onChange={(e) =>
-                apply({ bar_empty: e.target.value.length > 0 ? e.target.value : '▱' })
-              }
-              aria-label="empty glyph"
+              placeholder='blank = use the app font · or "MonoLisa", "Iosevka", monospace'
+              onChange={(e) => apply({ bar_font: e.target.value })}
             />
-          </label>
+          </details>
         </div>
-      )}
-      <div className="panels-vitals-layout">
-        <label className="panels-vitals-glyph-field">
-          <span className="panels-vitals-glyph-label">layout</span>
-          <select
-            value={v.layout}
-            disabled={v.template_enabled}
-            onChange={(e) => apply({ layout: e.target.value as VitalsLayout })}
+
+        <div className="vsplit-group">
+          <div className="vsplit-group-label">layout</div>
+          <div className="vsplit-knob">
+            <span className="vsplit-knob-label">arrange</span>
+            <select
+              value={v.layout}
+              disabled={v.template_enabled}
+              onChange={(e) => apply({ layout: e.target.value as VitalsLayout })}
+            >
+              <option value="stacked">stacked rows (hp / mn / mv per row)</option>
+              <option value="inline">inline (one row, prompt-style)</option>
+            </select>
+          </div>
+          <div className="vsplit-knob">
+            <span className="vsplit-knob-label">% color</span>
+            <select
+              value={v.percent_color}
+              onChange={(e) => apply({ percent_color: e.target.value as VitalsPercentColor })}
+            >
+              <option value="fill">per-vital (matches bar)</option>
+              <option value="gradient">red → green gradient</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="vsplit-group">
+          <div className="vsplit-group-label">colors</div>
+          <VitalColorRow
+            label="hp"
+            value={v.hp_color}
+            fallback="green"
+            onChange={(c) => apply({ hp_color: c })}
+          />
+          <VitalColorRow
+            label="mn"
+            value={v.mn_color}
+            fallback="blue"
+            onChange={(c) => apply({ mn_color: c })}
+          />
+          <VitalColorRow
+            label="mv"
+            value={v.mv_color}
+            fallback="orange"
+            onChange={(c) => apply({ mv_color: c })}
+          />
+          <div className="vsplit-pip-grid vsplit-pip-grid-one">
+            <PipToggle
+              label="drain through red as the bar empties"
+              checked={v.use_color_ramp}
+              onChange={(c) => apply({ use_color_ramp: c })}
+            />
+          </div>
+        </div>
+
+        <div className="vsplit-group vsplit-group-template">
+          <details className="vsplit-adv">
+            <summary>template · advanced</summary>
+            <VitalsTemplateEditor config={v} apply={apply} />
+          </details>
+        </div>
+
+        <footer className="vsplit-rack-foot">
+          <span className="vsplit-rack-foot-live">live</span>
+          <button
+            type="button"
+            className="settings-btn settings-btn-mute"
+            onClick={() => apply(DEFAULT_VITALS_CONFIG)}
           >
-            <option value="stacked">stacked rows (hp / mn / mv per row)</option>
-            <option value="inline">inline (one row, prompt-style)</option>
-          </select>
-        </label>
-        <label className="panels-vitals-glyph-field">
-          <span className="panels-vitals-glyph-label">percent color</span>
-          <select
-            value={v.percent_color}
-            onChange={(e) => apply({ percent_color: e.target.value as VitalsPercentColor })}
-          >
-            <option value="fill">per-vital (matches bar)</option>
-            <option value="gradient">red → green gradient</option>
-          </select>
-        </label>
-      </div>
-      <VitalsTemplateEditor config={v} apply={apply} />
-      <div className="panels-vitals-colors">
-        <div className="panels-vitals-header">
-          <span>colors</span>
-          <span className="panels-tab-header-dim">
-            override per-vital colors or keep the built-in ramps
+            [reset vitals]
+          </button>
+        </footer>
+      </aside>
+
+      <main className="vsplit-monitor">
+        <header className="vsplit-monitor-head">
+          <h3>live monitor</h3>
+          <span className="vsplit-monitor-hint">
+            drag a bar to scrub · changes reflect in the running HUD
           </span>
+        </header>
+        <div className="vsplit-monitor-stage" aria-label="vitals preview">
+          <VitalsPreview config={v} />
         </div>
-        <VitalColorRow
-          label="hp color"
-          value={v.hp_color}
-          fallback="green"
-          onChange={(c) => apply({ hp_color: c })}
-        />
-        <VitalColorRow
-          label="mn color"
-          value={v.mn_color}
-          fallback="blue"
-          onChange={(c) => apply({ mn_color: c })}
-        />
-        <VitalColorRow
-          label="mv color"
-          value={v.mv_color}
-          fallback="orange"
-          onChange={(c) => apply({ mv_color: c })}
-        />
-        <Toggle
-          label="drain through red as the bar empties"
-          checked={v.use_color_ramp}
-          onChange={(c) => apply({ use_color_ramp: c })}
-        />
-      </div>
-      <div className="panels-vitals-preview" aria-label="vitals preview">
-        <VitalsPreview config={v} />
-      </div>
-      <div className="settings-actions">
-        <button
-          type="button"
-          className="settings-btn settings-btn-mute"
-          onClick={() => apply(DEFAULT_VITALS_CONFIG)}
-        >
-          [reset vitals]
-        </button>
-      </div>
+        <footer className="vsplit-monitor-foot">
+          <span>
+            <strong>layout</strong> {v.template_enabled ? 'template' : v.layout}
+          </span>
+          <span>
+            <strong>style</strong> {v.bar_style}
+          </span>
+          <span>
+            <strong>width</strong> {v.bar_width} cells
+          </span>
+          <span>
+            <strong>font</strong> {fontPresetLabel}
+          </span>
+        </footer>
+      </main>
     </section>
+  );
+}
+
+function PipToggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`vsplit-pip${checked ? ' is-on' : ''}`}
+      onClick={() => onChange(!checked)}
+      role="switch"
+      aria-checked={checked}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -1993,14 +2072,16 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
 
   const headerText = `preview · hp ${values.hp}% / mn ${values.mn}% / mv ${values.mv}% · drag a bar`;
 
-  // Wrap the rendered bar in a draggable hit-target. Cursor and a
-  // dashed bottom-edge tag make the drag affordance obvious without
-  // adding chrome that distorts the real layout. The wrapper covers
-  // the same horizontal space as the bar so dragging on any pixel of
-  // the bar counts.
-  const draggableBar = (label: PreviewLabel, node: ReactNode) => (
+  // Wrap the rendered bar in a draggable hit-target. The wrapper is
+  // capped at the bar's cell width so its bounding rect matches the
+  // visible bar exactly — dragging at 50% of the wrapper lands at 50%
+  // of the bar, not 50% of the whole row. Without the cap the wrapper
+  // grew into the trailing row whitespace, making fine-grained drag
+  // on narrow bars unusable.
+  const draggableBar = (label: PreviewLabel, cells: number, node: ReactNode) => (
     <div
       className="vitals-preview-drag"
+      style={{ flexBasis: `${cells}ch`, maxWidth: `${cells}ch` }}
       onMouseDown={startDrag(label)}
       role="slider"
       aria-label={`${label} fill percent`}
@@ -2105,7 +2186,7 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
           return (
             <div key={s.label} className="vitals-row">
               <span className="vitals-label">{s.label}</span>
-              {config.show_bar && draggableBar(s.label as PreviewLabel, bar)}
+              {config.show_bar && draggableBar(s.label as PreviewLabel, width, bar)}
               {config.show_percent && (
                 <span className="vitals-percent" style={{ color: percentColor }}>
                   {s.value}%

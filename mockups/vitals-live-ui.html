@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals · live UI chrome (v2)</title>
+    <style>
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+        --c-warn: #f5a524;
+
+        --c-hp: #d93030;
+        --c-mn: #38bdf8;
+        --c-mv: #fbbf24;
+        --c-hp-glow: rgba(217, 48, 48, 0.55);
+        --c-mn-glow: rgba(56, 189, 248, 0.5);
+        --c-mv-glow: rgba(251, 191, 36, 0.45);
+
+        /* Live state. Sliders set --hp / --mn / --mv as percentages
+           AND --hp-num / --mn-num / --mv-num as unit-less numbers
+           (needed for calc that produces a length, not a percent). */
+        --hp: 75%;
+        --mn: 50%;
+        --mv: 25%;
+        --hp-num: 75;
+        --mn-num: 50;
+        --mv-num: 25;
+        --hp-danger: 0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 32px 32px 64px;
+        background: radial-gradient(ellipse at top, #0d0a0e 0%, #04060a 60%, #000 100%);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        min-height: 100vh;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 760px;
+        margin: 0 0 22px;
+        line-height: 1.55;
+      }
+
+      /* Sticky slider strip ---------------------------------------- */
+      .scrubber {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin: 0 -32px 28px;
+        padding: 12px 32px;
+        background: rgba(9, 14, 19, 0.94);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--c-border);
+        display: flex;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+      .scrubber-item {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        font-size: 12px;
+      }
+      .scrubber-item label {
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+        min-width: 26px;
+      }
+      .scrubber-item input[type='range'] {
+        width: 180px;
+        accent-color: var(--c-accent);
+      }
+      .scrubber-item .val {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        min-width: 36px;
+        text-align: right;
+      }
+      .hp-val {
+        color: var(--c-hp);
+      }
+      .mn-val {
+        color: var(--c-mn);
+      }
+      .mv-val {
+        color: var(--c-mv);
+      }
+
+      .stage {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 28px;
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+
+      .demo {
+        position: relative;
+        background: var(--c-surface-lift);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 5px;
+        padding: 30px 26px 24px;
+      }
+      .demo-label {
+        position: absolute;
+        top: 10px;
+        left: 16px;
+        font-size: 10px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+      }
+      .demo-desc {
+        color: var(--c-text-faint);
+        font-size: 12px;
+        margin: 14px 0 0;
+        line-height: 1.55;
+      }
+
+      /* ============================================================
+         FAUX VOSH SHELL
+         Modeled directly on the real components:
+           .topbar   — height 24px, surface bg, border-bottom, aux btns
+                       on the left, loadouts in the middle, window
+                       controls (-, □, ✕) on the right
+           .terminal-area — fills the middle, holds the scrollback
+                       text in monospace, surface bg
+           .input-row — bottom strip, border-top + border-bottom, has
+                       the '>' prompt, the input text, and a centered
+                       .line-chip pill overlapping the top border
+                       (showing tick + mud time)
+         No fake "tabs" or extra status strip. This matches Vosh as it
+         actually ships today. */
+      .vosh {
+        position: relative;
+        height: 360px;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        font-size: 12px;
+      }
+      .vosh-topbar {
+        display: flex;
+        align-items: center;
+        height: 24px;
+        flex: 0 0 24px;
+        padding: 0 8px;
+        background: var(--c-surface);
+        border-bottom: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font-size: 11px;
+        position: relative;
+      }
+      .vosh-topbar .aux {
+        display: flex;
+        gap: 2px;
+      }
+      .vosh-topbar .aux button {
+        background: transparent;
+        border: none;
+        color: var(--c-text-muted);
+        font: inherit;
+        padding: 2px 10px;
+        cursor: pointer;
+        letter-spacing: 0.02em;
+      }
+      .vosh-topbar .aux button:hover {
+        color: var(--c-text-strong);
+      }
+      .vosh-topbar .loadouts {
+        margin-left: 6px;
+        padding: 2px 10px;
+        color: var(--c-accent);
+        font-size: 11px;
+      }
+      .vosh-topbar .spacer {
+        flex: 1;
+      }
+      .vosh-topbar .controls {
+        display: flex;
+        gap: 2px;
+      }
+      .vosh-topbar .controls button {
+        background: transparent;
+        border: none;
+        color: var(--c-text-muted);
+        font: inherit;
+        font-size: 13px;
+        line-height: 1;
+        padding: 0 10px;
+        cursor: pointer;
+      }
+      .vosh-topbar .controls button:last-child:hover {
+        color: var(--c-hp);
+      }
+
+      .vosh-term {
+        flex: 1 1 0;
+        background: var(--c-surface);
+        padding: 10px 14px;
+        line-height: 1.55;
+        position: relative;
+        overflow: hidden;
+      }
+      .vosh-term p {
+        margin: 0;
+        color: var(--c-text);
+      }
+      .vosh-term p.dim {
+        color: var(--c-text-faint);
+      }
+      .vosh-term p.dmg {
+        color: #f87171;
+      }
+      .vosh-term p.cmd {
+        color: var(--c-text-dim);
+        font-style: italic;
+      }
+      .vosh-term p.say {
+        color: #d4d4aa;
+      }
+
+      .vosh-input {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 32px;
+        padding: 6px 14px;
+        background: var(--c-surface);
+        border-top: 1px solid var(--c-border);
+        border-bottom: 1px solid var(--c-border);
+        position: relative;
+        z-index: 1;
+      }
+      .vosh-input .prompt {
+        color: var(--c-accent);
+        font-weight: 700;
+      }
+      .vosh-input input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: var(--c-text);
+        font: inherit;
+        font-size: 12px;
+      }
+      .vosh-input .caret {
+        display: inline-block;
+        width: 6px;
+        height: 13px;
+        background: var(--c-text);
+        animation: caret-blink 1s steps(1, end) infinite;
+      }
+      @keyframes caret-blink {
+        50% {
+          background: transparent;
+        }
+      }
+
+      /* LineChip pill — centered on the input row's TOP border, half
+         above / half below. Matches Vosh's real .line-chip exactly. */
+      .vosh-chip {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 1px 10px;
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 3px;
+        color: var(--c-text);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        white-space: nowrap;
+        z-index: 2;
+        pointer-events: none;
+        display: inline-flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .vosh-chip .caption {
+        color: var(--c-text-faint);
+        font-weight: 400;
+        text-transform: lowercase;
+        letter-spacing: 0.04em;
+      }
+      .vosh-chip .tick {
+        color: var(--c-text);
+      }
+      .vosh-chip .time {
+        color: var(--c-accent);
+      }
+      .vosh-chip .sep {
+        color: var(--c-text-dim);
+        font-weight: 400;
+      }
+
+      /* ============================================================
+         VARIANT A — FRAME-AS-BAR
+         The frameless tauri window's outer outline is the indicator.
+         Left edge fills bottom-up = hp.
+         Top edge fills right-to-left = mn (drains backward toward
+            the upper-left corner like a clock unwinding).
+         Right edge fills bottom-up = mv.
+         Bottom edge stays unmarked because the input row lives
+            against it and adding accent there fights the LineChip. */
+      .vosh-frame .edge {
+        position: absolute;
+        pointer-events: none;
+        z-index: 6;
+      }
+      .vosh-frame .edge-hp {
+        left: 0;
+        bottom: 0;
+        width: 2px;
+        height: var(--hp);
+        background: linear-gradient(0deg, var(--c-hp), color-mix(in srgb, var(--c-hp) 60%, black));
+        box-shadow: 0 0 8px var(--c-hp-glow);
+        transition: height 700ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      }
+      .vosh-frame .edge-mn {
+        top: 0;
+        left: 0;
+        height: 2px;
+        width: var(--mn);
+        background: linear-gradient(
+          270deg,
+          var(--c-mn),
+          color-mix(in srgb, var(--c-mn) 60%, black)
+        );
+        box-shadow: 0 0 8px var(--c-mn-glow);
+        transition: width 700ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      }
+      .vosh-frame .edge-mv {
+        right: 0;
+        bottom: 0;
+        width: 2px;
+        height: var(--mv);
+        background: linear-gradient(0deg, var(--c-mv), color-mix(in srgb, var(--c-mv) 60%, black));
+        box-shadow: 0 0 8px var(--c-mv-glow);
+        transition: height 700ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      }
+
+      /* ============================================================
+         VARIANT B — INPUT-ROW BORDER + TOPBAR BOTTOM
+         The seams that already exist in Vosh become the indicators:
+           topbar bottom border  = mn (right-aligned: fills toward the
+                                      left as mana is FULL)
+           input-row TOP border  = hp (split around the LineChip pill;
+                                      left half drains, right half
+                                      shows the full bar — symmetric)
+           input-row BOT border  = mv (left-aligned)
+         The LineChip naturally segments the input row's top border
+         in half, which we lean into: hp's bar is drawn ONLY in the
+         span LEFT of the LineChip (so a full hp reaches up to the
+         pill from the screen edge). */
+      .vosh-seams .vosh-topbar {
+        position: relative;
+      }
+      .vosh-seams .vosh-topbar .seam-mn {
+        position: absolute;
+        right: 0;
+        bottom: -1px;
+        height: 2px;
+        width: var(--mn);
+        background: linear-gradient(
+          90deg,
+          color-mix(in srgb, var(--c-mn) 35%, transparent),
+          var(--c-mn)
+        );
+        box-shadow: 0 0 8px var(--c-mn-glow);
+        transition: width 700ms cubic-bezier(0.22, 0.61, 0.36, 1);
+        z-index: 3;
+      }
+      .vosh-seams .vosh-input {
+        position: relative;
+      }
+      .vosh-seams .vosh-input .seam-hp {
+        position: absolute;
+        left: 0;
+        top: -1px;
+        height: 2px;
+        /* Width is clamped to 50% so the bar never reaches past the
+           LineChip pill in the middle; combined with right alignment
+           below the bar runs FROM the left edge TOWARD the pill. */
+        width: calc(var(--hp) * 0.5);
+        background: linear-gradient(
+          90deg,
+          var(--c-hp),
+          color-mix(in srgb, var(--c-hp) 35%, transparent)
+        );
+        box-shadow: 0 0 8px var(--c-hp-glow);
+        transition: width 700ms cubic-bezier(0.22, 0.61, 0.36, 1);
+        z-index: 3;
+      }
+      .vosh-seams .vosh-input .seam-mn-r {
+        position: absolute;
+        right: 0;
+        top: -1px;
+        height: 2px;
+        width: calc(var(--mn) * 0.5);
+        background: linear-gradient(
+          270deg,
+          var(--c-mn),
+          color-mix(in srgb, var(--c-mn) 35%, transparent)
+        );
+        box-shadow: 0 0 8px var(--c-mn-glow);
+        transition: width 700ms cubic-bezier(0.22, 0.61, 0.36, 1);
+        z-index: 3;
+      }
+      .vosh-seams .vosh-input .seam-mv {
+        position: absolute;
+        left: 0;
+        bottom: -1px;
+        height: 2px;
+        width: var(--mv);
+        background: linear-gradient(
+          90deg,
+          var(--c-mv),
+          color-mix(in srgb, var(--c-mv) 35%, transparent)
+        );
+        box-shadow: 0 0 8px var(--c-mv-glow);
+        transition: width 700ms cubic-bezier(0.22, 0.61, 0.36, 1);
+        z-index: 3;
+      }
+
+      /* ============================================================
+         VARIANT C — CORNER L-BRACKETS (fixed)
+         Each L bracket fills two arms that grow outward from a
+         corner. The arm lengths are computed against the .vosh shell
+         dimensions (not the bracket's own box, which was the v1 bug),
+         using calc(var(--hp-num) * 1%) of the shell width / height,
+         clamped to a max arm length of 90px so a 100% bar doesn't
+         eat the topbar text. */
+      .vosh-corners .corner-l {
+        position: absolute;
+        pointer-events: none;
+        z-index: 6;
+      }
+      .vosh-corners .corner-l .arm {
+        position: absolute;
+        background: currentColor;
+        box-shadow: 0 0 8px currentColor;
+        transition:
+          width 700ms cubic-bezier(0.22, 0.61, 0.36, 1),
+          height 700ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      }
+      .vosh-corners .corner-tl {
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        color: var(--c-hp);
+      }
+      .vosh-corners .corner-tl .arm-h {
+        top: 0;
+        left: 0;
+        height: 2px;
+        width: min(90px, calc(var(--hp-num) * 0.9px));
+      }
+      .vosh-corners .corner-tl .arm-v {
+        top: 0;
+        left: 0;
+        width: 2px;
+        height: min(90px, calc(var(--hp-num) * 0.9px));
+      }
+      .vosh-corners .corner-tr {
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        color: var(--c-mn);
+      }
+      .vosh-corners .corner-tr .arm-h {
+        top: 0;
+        right: 0;
+        height: 2px;
+        width: min(90px, calc(var(--mn-num) * 0.9px));
+      }
+      .vosh-corners .corner-tr .arm-v {
+        top: 0;
+        right: 0;
+        width: 2px;
+        height: min(90px, calc(var(--mn-num) * 0.9px));
+      }
+      .vosh-corners .corner-br {
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        color: var(--c-mv);
+      }
+      .vosh-corners .corner-br .arm-h {
+        bottom: 0;
+        right: 0;
+        height: 2px;
+        width: min(90px, calc(var(--mv-num) * 0.9px));
+      }
+      .vosh-corners .corner-br .arm-v {
+        bottom: 0;
+        right: 0;
+        width: 2px;
+        height: min(90px, calc(var(--mv-num) * 0.9px));
+      }
+
+      /* Critical-state vignette — a soft red glow creeping in from
+         the periphery as hp drops below 30. opacity ramps via the
+         --hp-danger custom property the JS writes (0..1). Pulses
+         gently on a 1.2s rhythm. */
+      .vosh-corners .danger {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(
+          ellipse at center,
+          transparent 50%,
+          rgba(217, 48, 48, 0.45) 100%
+        );
+        opacity: var(--hp-danger);
+        animation: danger-pulse 1.2s ease-in-out infinite;
+        z-index: 5;
+      }
+      @keyframes danger-pulse {
+        0%,
+        100% {
+          filter: brightness(1);
+        }
+        50% {
+          filter: brightness(0.65);
+        }
+      }
+
+      .footnote {
+        margin: 32px auto 0;
+        max-width: 1100px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      .footnote code {
+        color: var(--c-text);
+        background: var(--c-surface-deep);
+        padding: 1px 5px;
+        border-radius: 2px;
+        font-size: 0.95em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vitals · live UI chrome · v2</h1>
+    <p class="lede">
+      rebuilt to match Vosh's actual shell — topbar with aux buttons + window controls, terminal
+      body, input row with the LineChip pill centered on its top border. no fake tabs, no separate
+      status strip. drag the sliders to scrub all three vitals and watch each variant respond.
+    </p>
+
+    <div class="scrubber">
+      <div class="scrubber-item">
+        <label>hp</label>
+        <input id="hp-slider" type="range" min="0" max="100" value="75" />
+        <span class="val hp-val" id="hp-val">75</span>
+      </div>
+      <div class="scrubber-item">
+        <label>mn</label>
+        <input id="mn-slider" type="range" min="0" max="100" value="50" />
+        <span class="val mn-val" id="mn-val">50</span>
+      </div>
+      <div class="scrubber-item">
+        <label>mv</label>
+        <input id="mv-slider" type="range" min="0" max="100" value="25" />
+        <span class="val mv-val" id="mv-val">25</span>
+      </div>
+    </div>
+
+    <div class="stage">
+      <!-- VARIANT A -->
+      <div class="demo">
+        <span class="demo-label">A · window outline as bar</span>
+        <div class="vosh vosh-frame">
+          <div class="vosh-topbar">
+            <div class="aux">
+              <button>profiles</button>
+              <button>panels</button>
+              <button>triggers</button>
+              <button>aliases</button>
+            </div>
+            <span class="loadouts">[ no loadout ]</span>
+            <span class="spacer"></span>
+            <div class="controls">
+              <button>−</button>
+              <button>□</button>
+              <button>✕</button>
+            </div>
+          </div>
+          <div class="vosh-term">
+            <p class="dim">A grim hall opens before you, its ribs of stone arching overhead.</p>
+            <p>A wraith hisses, "you stink of bone-dust."</p>
+            <p class="dmg">The wraith claws at you for 47.</p>
+            <p>You ready your blade.</p>
+            <p class="cmd">&gt; cast firebolt wraith</p>
+            <p>Your firebolt strikes the wraith for 86 damage.</p>
+            <p class="say">Aelin says, "behind you!"</p>
+          </div>
+          <div class="vosh-input">
+            <span class="prompt">&gt;</span>
+            <input value="cast firebolt wrai" />
+            <span class="caret"></span>
+            <div class="vosh-chip">
+              <span class="caption">tick</span>
+              <span class="tick">12s</span>
+              <span class="sep">·</span>
+              <span class="caption">time</span>
+              <span class="time">14:32</span>
+            </div>
+          </div>
+          <span class="edge edge-hp"></span>
+          <span class="edge edge-mn"></span>
+          <span class="edge edge-mv"></span>
+        </div>
+        <p class="demo-desc">
+          left edge fills bottom-up for hp, top edge fills right-to-left for mn (drains backward
+          like a clock unwinding), right edge fills bottom-up for mv. bottom edge stays neutral so
+          the LineChip's centered placement isn't fighting an accent line. you read your state by
+          glancing at the window perimeter.
+        </p>
+      </div>
+
+      <!-- VARIANT B -->
+      <div class="demo">
+        <span class="demo-label">B · seams (topbar bottom + input-row borders)</span>
+        <div class="vosh vosh-seams">
+          <div class="vosh-topbar">
+            <div class="aux">
+              <button>profiles</button>
+              <button>panels</button>
+              <button>triggers</button>
+              <button>aliases</button>
+            </div>
+            <span class="loadouts">[ no loadout ]</span>
+            <span class="spacer"></span>
+            <div class="controls">
+              <button>−</button>
+              <button>□</button>
+              <button>✕</button>
+            </div>
+            <span class="seam-mn"></span>
+          </div>
+          <div class="vosh-term">
+            <p class="dim">A grim hall opens before you, its ribs of stone arching overhead.</p>
+            <p>A wraith hisses, "you stink of bone-dust."</p>
+            <p class="dmg">The wraith claws at you for 47.</p>
+            <p>You ready your blade.</p>
+            <p class="cmd">&gt; cast firebolt wraith</p>
+            <p>Your firebolt strikes the wraith for 86 damage.</p>
+            <p class="say">Aelin says, "behind you!"</p>
+          </div>
+          <div class="vosh-input">
+            <span class="seam-hp"></span>
+            <span class="seam-mn-r"></span>
+            <span class="seam-mv"></span>
+            <span class="prompt">&gt;</span>
+            <input value="cast firebolt wrai" />
+            <span class="caret"></span>
+            <div class="vosh-chip">
+              <span class="caption">tick</span>
+              <span class="tick">12s</span>
+              <span class="sep">·</span>
+              <span class="caption">time</span>
+              <span class="time">14:32</span>
+            </div>
+          </div>
+        </div>
+        <p class="demo-desc">
+          uses the actual seams Vosh already has. topbar bottom border = mn (fills right-to-left so
+          a full mana bar runs from the window's right edge inward). input-row top border is split
+          by the LineChip pill — the LEFT half is hp (drains from the left edge toward the chip),
+          the RIGHT half mirrors mn (drains from the right edge toward the chip). input-row bottom
+          border = mv. the LineChip sits at the center of the hp/mn split, so when both vitals are
+          full the border meets the pill from both sides cleanly.
+        </p>
+      </div>
+
+      <!-- VARIANT C -->
+      <div class="demo">
+        <span class="demo-label">C · corner L-brackets + danger vignette</span>
+        <div class="vosh vosh-corners">
+          <div class="vosh-topbar">
+            <div class="aux">
+              <button>profiles</button>
+              <button>panels</button>
+              <button>triggers</button>
+              <button>aliases</button>
+            </div>
+            <span class="loadouts">[ no loadout ]</span>
+            <span class="spacer"></span>
+            <div class="controls">
+              <button>−</button>
+              <button>□</button>
+              <button>✕</button>
+            </div>
+          </div>
+          <div class="vosh-term">
+            <p class="dim">A grim hall opens before you, its ribs of stone arching overhead.</p>
+            <p>A wraith hisses, "you stink of bone-dust."</p>
+            <p class="dmg">The wraith claws at you for 47.</p>
+            <p>You ready your blade.</p>
+            <p class="cmd">&gt; cast firebolt wraith</p>
+            <p>Your firebolt strikes the wraith for 86 damage.</p>
+            <p class="say">Aelin says, "behind you!"</p>
+          </div>
+          <div class="vosh-input">
+            <span class="prompt">&gt;</span>
+            <input value="cast firebolt wrai" />
+            <span class="caret"></span>
+            <div class="vosh-chip">
+              <span class="caption">tick</span>
+              <span class="tick">12s</span>
+              <span class="sep">·</span>
+              <span class="caption">time</span>
+              <span class="time">14:32</span>
+            </div>
+          </div>
+          <span class="corner-l corner-tl"
+            ><span class="arm arm-h"></span><span class="arm arm-v"></span
+          ></span>
+          <span class="corner-l corner-tr"
+            ><span class="arm arm-h"></span><span class="arm arm-v"></span
+          ></span>
+          <span class="corner-l corner-br"
+            ><span class="arm arm-h"></span><span class="arm arm-v"></span
+          ></span>
+          <span class="danger"></span>
+        </div>
+        <p class="demo-desc">
+          each corner carries an L-bracket that grows from the corner outward as the vital fills. a
+          full bar reaches 90px along each arm; an empty bar collapses to a single corner pixel.
+          top-left = hp, top-right = mn, bottom-right = mv. bottom-left is reserved (could host a
+          tick indicator in a future variant). drop hp below 30 and a red peripheral vignette pulses
+          — the UI tells you you're dying without a single word.
+        </p>
+      </div>
+    </div>
+
+    <p class="footnote">
+      v2 fixes: rebuilt the faux shell on top of Vosh's actual chrome (topbar with aux buttons, no
+      fake tabs, no separate status strip, LineChip pill centered on the input row's top border).
+      corner-bracket math fixed by sizing <code>.corner-l</code> with <code>inset: 0</code>
+      so its children resolve their length against the window dimensions, plus using a unit-less
+      <code>--hp-num</code> custom property to multiply against a pixel literal instead of
+      multiplying a percentage. all three variants share one set of properties driven by the
+      sliders.
+    </p>
+
+    <script>
+      const sliders = {
+        hp: document.getElementById('hp-slider'),
+        mn: document.getElementById('mn-slider'),
+        mv: document.getElementById('mv-slider'),
+      };
+      const vals = {
+        hp: document.getElementById('hp-val'),
+        mn: document.getElementById('mn-val'),
+        mv: document.getElementById('mv-val'),
+      };
+      const root = document.documentElement;
+      function update(key) {
+        const v = +sliders[key].value;
+        root.style.setProperty('--' + key, v + '%');
+        root.style.setProperty('--' + key + '-num', v);
+        vals[key].textContent = v;
+        if (key === 'hp') {
+          const danger = v >= 30 ? 0 : ((30 - v) / 30) * 0.6;
+          root.style.setProperty('--hp-danger', danger.toFixed(3));
+        }
+      }
+      Object.keys(sliders).forEach((k) => {
+        sliders[k].addEventListener('input', () => update(k));
+        update(k);
+      });
+    </script>
+  </body>
+</html>

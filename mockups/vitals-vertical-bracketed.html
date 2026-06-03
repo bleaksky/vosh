@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vertical vitals · bracketed columns</title>
+    <style>
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+        --c-hp: #a3e635;
+        --c-mn: #38bdf8;
+        --c-mv: #fb923c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 40px;
+        background: var(--c-surface-deep);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        line-height: 1;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+        line-height: 1.4;
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 720px;
+        margin: 0 0 28px;
+        line-height: 1.5;
+      }
+
+      .stage {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+        max-width: 1100px;
+      }
+
+      .card {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 4px;
+        padding: 22px 18px;
+      }
+      .card h2 {
+        margin: 0 0 18px;
+        font-size: 11px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--c-text-faint);
+        font-weight: 600;
+        line-height: 1;
+      }
+
+      /* BRACKETED COLUMN
+         The bar is rendered as a true ASCII art figure: top cap, body,
+         bottom cap. The body is a stack of cells that read as either
+         a filled glyph (default ▓) or an empty glyph (default ░). Fill
+         rises bottom-up. The cap chars ( ╤ / ╧ , ╭╮ / ╰╯ etc.) frame
+         the column like an industrial reservoir. The whole thing
+         renders in pure monospace text so it lines up cleanly with
+         surrounding terminal content. */
+
+      .col-stack {
+        display: flex;
+        gap: 14px;
+        justify-content: center;
+        align-items: flex-end;
+      }
+
+      .col {
+        font-family: inherit;
+        line-height: 1;
+        text-align: center;
+        cursor: ns-resize;
+        user-select: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+      }
+      .col .cap-top,
+      .col .cap-bot {
+        color: var(--c-text-dim);
+        font-weight: 400;
+      }
+      .col .label {
+        color: var(--c-text-faint);
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: lowercase;
+      }
+      .col .pct {
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .col-stack-row .pct {
+        color: var(--c-hp);
+      }
+      .col-stack-row .col-mn .pct {
+        color: var(--c-mn);
+      }
+      .col-stack-row .col-mv .pct {
+        color: var(--c-mv);
+      }
+      .col-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        font-weight: 700;
+        line-height: 1;
+      }
+      .col-cell-fill {
+        color: var(--c-hp);
+      }
+      .col-cell-empty {
+        color: var(--c-text-dim);
+      }
+      .col-mn .col-cell-fill {
+        color: var(--c-mn);
+      }
+      .col-mv .col-cell-fill {
+        color: var(--c-mv);
+      }
+
+      /* GLYPH PAIR VARIANTS
+         Knobs in the card header tweak which filled/empty glyph the
+         columns render so you can compare aesthetics directly. */
+      .ctrl-row {
+        display: flex;
+        gap: 14px;
+        justify-content: center;
+        margin-bottom: 14px;
+        align-items: center;
+      }
+      .ctrl-row .ctrl-label {
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+      }
+      .ctrl-row select {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        color: var(--c-text);
+        font: inherit;
+        font-size: 11px;
+        padding: 3px 6px;
+        border-radius: 2px;
+      }
+
+      .footnote {
+        margin-top: 30px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        max-width: 720px;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vertical vitals · bracketed columns</h1>
+    <p class="lede">
+      pure-text vertical bars. each cell is one mono character; the column reads as ASCII art and
+      lines up perfectly with surrounding xterm output. caps frame the column ( <code>╭╮</code> /
+      <code>╰╯</code> by default). drag a column up or down to scrub.
+    </p>
+
+    <div class="stage">
+      <!-- variant 1: shade -->
+      <div class="card">
+        <h2>shade · ▓ / ░</h2>
+        <div class="ctrl-row">
+          <span class="ctrl-label">cells</span>
+          <select data-target="card-1" data-prop="cells">
+            <option>8</option>
+            <option selected>12</option>
+            <option>16</option>
+            <option>20</option>
+          </select>
+        </div>
+        <div class="col-stack col-stack-row" data-card="card-1" data-filled="▓" data-empty="░">
+          <div class="col col-hp" data-pct="75" data-max="1000">
+            <span class="cap-top">╭╮</span>
+            <div class="col-body"></div>
+            <span class="cap-bot">╰╯</span>
+            <span class="label">hp</span>
+            <span class="pct">75%</span>
+          </div>
+          <div class="col col-mn" data-pct="50" data-max="300">
+            <span class="cap-top">╭╮</span>
+            <div class="col-body"></div>
+            <span class="cap-bot">╰╯</span>
+            <span class="label">mn</span>
+            <span class="pct">50%</span>
+          </div>
+          <div class="col col-mv" data-pct="25" data-max="200">
+            <span class="cap-top">╭╮</span>
+            <div class="col-body"></div>
+            <span class="cap-bot">╰╯</span>
+            <span class="label">mv</span>
+            <span class="pct">25%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- variant 2: full block -->
+      <div class="card">
+        <h2>block · █ / ·</h2>
+        <div class="ctrl-row">
+          <span class="ctrl-label">cells</span>
+          <select data-target="card-2" data-prop="cells">
+            <option>8</option>
+            <option selected>12</option>
+            <option>16</option>
+            <option>20</option>
+          </select>
+        </div>
+        <div class="col-stack col-stack-row" data-card="card-2" data-filled="█" data-empty="·">
+          <div class="col col-hp" data-pct="75" data-max="1000">
+            <span class="cap-top">┌┐</span>
+            <div class="col-body"></div>
+            <span class="cap-bot">└┘</span>
+            <span class="label">hp</span>
+            <span class="pct">75%</span>
+          </div>
+          <div class="col col-mn" data-pct="50" data-max="300">
+            <span class="cap-top">┌┐</span>
+            <div class="col-body"></div>
+            <span class="cap-bot">└┘</span>
+            <span class="label">mn</span>
+            <span class="pct">50%</span>
+          </div>
+          <div class="col col-mv" data-pct="25" data-max="200">
+            <span class="cap-top">┌┐</span>
+            <div class="col-body"></div>
+            <span class="cap-bot">└┘</span>
+            <span class="label">mv</span>
+            <span class="pct">25%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- variant 3: braille -->
+      <div class="card">
+        <h2>braille · ⣿ / ⠀</h2>
+        <div class="ctrl-row">
+          <span class="ctrl-label">cells</span>
+          <select data-target="card-3" data-prop="cells">
+            <option>8</option>
+            <option selected>12</option>
+            <option>16</option>
+            <option>20</option>
+          </select>
+        </div>
+        <div class="col-stack col-stack-row" data-card="card-3" data-filled="⣿" data-empty="⠀">
+          <div class="col col-hp" data-pct="75" data-max="1000">
+            <span class="cap-top">┓┏</span>
+            <div class="col-body"></div>
+            <span class="cap-bot">┛┗</span>
+            <span class="label">hp</span>
+            <span class="pct">75%</span>
+          </div>
+          <div class="col col-mn" data-pct="50" data-max="300">
+            <span class="cap-top">┓┏</span>
+            <div class="col-body"></div>
+            <span class="cap-bot">┛┗</span>
+            <span class="label">mn</span>
+            <span class="pct">50%</span>
+          </div>
+          <div class="col col-mv" data-pct="25" data-max="200">
+            <span class="cap-top">┓┏</span>
+            <div class="col-body"></div>
+            <span class="cap-bot">┛┗</span>
+            <span class="label">mv</span>
+            <span class="pct">25%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="footnote">
+      this is the variant that fits Vosh's aesthetic best. uses the same character grid as the
+      scrollback, the same glyph presets you already chose for horizontal bars, and benefits from
+      the same MonoLisa / Berkeley / JetBrains bar-font picker. ramped boundary glyph can be added
+      to smooth the transition between filled and empty cells (▔ ▂ ▄ ▆) the same way horizontal
+      ramped does it.
+    </p>
+
+    <script>
+      const CELL_COUNTS = { 'card-1': 12, 'card-2': 12, 'card-3': 12 };
+
+      function renderCol(stack, col) {
+        const cells = CELL_COUNTS[stack.dataset.card];
+        const pct = +col.dataset.pct;
+        const filled = stack.dataset.filled;
+        const empty = stack.dataset.empty;
+        const body = col.querySelector('.col-body');
+        const filledCount = Math.round((pct / 100) * cells);
+        body.innerHTML = '';
+        for (let i = cells - 1; i >= 0; i--) {
+          const span = document.createElement('span');
+          if (i < filledCount) {
+            span.className = 'col-cell-fill';
+            span.textContent = filled;
+          } else {
+            span.className = 'col-cell-empty';
+            span.textContent = empty;
+          }
+          body.appendChild(span);
+        }
+        col.querySelector('.pct').textContent = pct + '%';
+      }
+
+      function renderAll() {
+        document.querySelectorAll('.col-stack').forEach((stack) => {
+          stack.querySelectorAll('.col').forEach((col) => renderCol(stack, col));
+        });
+      }
+
+      document.querySelectorAll('select[data-target]').forEach((sel) => {
+        sel.addEventListener('change', () => {
+          CELL_COUNTS[sel.dataset.target] = +sel.value;
+          renderAll();
+        });
+      });
+
+      document.querySelectorAll('.col-stack').forEach((stack) => {
+        stack.querySelectorAll('.col').forEach((col) => {
+          col.addEventListener('mousedown', (e) => {
+            const body = col.querySelector('.col-body');
+            const rect = body.getBoundingClientRect();
+            const set = (clientY) => {
+              const y = clientY - rect.top;
+              const pct = Math.max(0, Math.min(100, Math.round(100 - (y / rect.height) * 100)));
+              col.dataset.pct = pct;
+              renderCol(stack, col);
+            };
+            set(e.clientY);
+            const onMove = (ev) => set(ev.clientY);
+            const onUp = () => {
+              window.removeEventListener('mousemove', onMove);
+              window.removeEventListener('mouseup', onUp);
+            };
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+          });
+        });
+      });
+
+      renderAll();
+    </script>
+  </body>
+</html>

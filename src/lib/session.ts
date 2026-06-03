@@ -645,6 +645,11 @@ export interface VitalsConfig {
    *  surrounding label / percent / numeric / delta columns stay in
    *  the app font. Empty falls through to the parent font. */
   bar_font: string;
+  /** Replaces the entire vitals bar with three corner L-brackets
+   *  drawn on the main window's chrome (top-left = hp, top-right =
+   *  mn, bottom-right = mv) plus a soft red peripheral vignette
+   *  that pulses when hp drops below 30%. */
+  one_with_erelei: boolean;
 }
 
 export const DEFAULT_VITALS_TEMPLATE =
@@ -668,6 +673,7 @@ export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
   mv_color: '',
   use_color_ramp: true,
   bar_font: '',
+  one_with_erelei: false,
 };
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -765,6 +771,10 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
         ? v.use_color_ramp
         : DEFAULT_VITALS_CONFIG.use_color_ramp,
     bar_font: typeof v.bar_font === 'string' ? v.bar_font : DEFAULT_VITALS_CONFIG.bar_font,
+    one_with_erelei:
+      typeof v.one_with_erelei === 'boolean'
+        ? v.one_with_erelei
+        : DEFAULT_VITALS_CONFIG.one_with_erelei,
   };
 }
 

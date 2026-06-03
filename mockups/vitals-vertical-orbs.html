@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vertical vitals · orb / capsule</title>
+    <style>
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+        --c-hp: #a3e635;
+        --c-mn: #38bdf8;
+        --c-mv: #fb923c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 40px;
+        background: var(--c-surface-deep);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 720px;
+        margin: 0 0 28px;
+      }
+
+      .stage {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 32px;
+        max-width: 1100px;
+      }
+
+      /* CAPSULE
+         Tall rounded rectangle. CSS gradient fill rises from the
+         bottom. A subtle inner shadow + a top gloss-highlight sell
+         the "liquid in a tube" feel without being cheesy. The
+         readout sits inside the capsule top, on a colored backdrop
+         that picks up the vital's hue at low opacity. */
+      .cap-card {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 4px;
+        padding: 22px 20px;
+      }
+      .cap-card h2 {
+        margin: 0 0 18px;
+        font-size: 11px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--c-text-faint);
+        font-weight: 600;
+      }
+
+      .cap-row {
+        display: flex;
+        gap: 18px;
+        justify-content: center;
+        align-items: flex-end;
+      }
+
+      .cap {
+        position: relative;
+        width: 56px;
+        height: 200px;
+        border-radius: 28px;
+        background: linear-gradient(180deg, var(--c-surface-deep), var(--c-surface-lift));
+        border: 1px solid var(--c-border);
+        box-shadow:
+          inset 0 0 12px rgba(0, 0, 0, 0.45),
+          inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        overflow: hidden;
+        cursor: ns-resize;
+        user-select: none;
+      }
+      .cap-fill {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 75%;
+        background: linear-gradient(
+          180deg,
+          var(--c-hp),
+          color-mix(in srgb, var(--c-hp) 75%, black)
+        );
+        transition: height 160ms ease-out;
+      }
+      .cap-fill::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 6%;
+        right: 6%;
+        height: 8px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent);
+        border-radius: 50%;
+      }
+      .cap-hp .cap-fill {
+        background: linear-gradient(
+          180deg,
+          var(--c-hp),
+          color-mix(in srgb, var(--c-hp) 65%, black)
+        );
+      }
+      .cap-mn .cap-fill {
+        background: linear-gradient(
+          180deg,
+          var(--c-mn),
+          color-mix(in srgb, var(--c-mn) 65%, black)
+        );
+      }
+      .cap-mv .cap-fill {
+        background: linear-gradient(
+          180deg,
+          var(--c-mv),
+          color-mix(in srgb, var(--c-mv) 65%, black)
+        );
+      }
+      .cap-gloss {
+        position: absolute;
+        top: 6px;
+        bottom: 6px;
+        left: 6px;
+        width: 8px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 60%);
+        border-radius: 4px;
+        pointer-events: none;
+      }
+      .cap-readout {
+        position: absolute;
+        top: 14px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        z-index: 2;
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+      }
+      .cap-readout .v-label {
+        font-size: 10px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.6);
+      }
+      .cap-readout .v-pct {
+        font-size: 16px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        display: block;
+        margin-top: 2px;
+      }
+      .cap-foot {
+        text-align: center;
+        margin-top: 8px;
+        font-size: 11px;
+        color: var(--c-text-faint);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* MICRO CAPSULE
+         Smaller pill, no readouts, used as a side strip ornament. */
+      .mini-card {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 4px;
+        padding: 22px 20px;
+      }
+      .mini-card h2 {
+        margin: 0 0 18px;
+        font-size: 11px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--c-text-faint);
+        font-weight: 600;
+      }
+      .mini-row {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        align-items: flex-end;
+      }
+      .mini {
+        position: relative;
+        width: 14px;
+        height: 110px;
+        border-radius: 7px;
+        background: var(--c-border-soft);
+        border: 1px solid var(--c-border);
+        overflow: hidden;
+        cursor: ns-resize;
+      }
+      .mini-fill {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--c-hp);
+        transition: height 120ms ease-out;
+      }
+      .mini-mn .mini-fill {
+        background: var(--c-mn);
+      }
+      .mini-mv .mini-fill {
+        background: var(--c-mv);
+      }
+      .mini-label {
+        margin-top: 6px;
+        text-align: center;
+        font-size: 9px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--c-text-faint);
+      }
+
+      .footnote {
+        margin-top: 30px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        max-width: 720px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vertical vitals · orb / capsule family</h1>
+    <p class="lede">
+      CSS-rendered. no glyph dependency — every fill percent looks smooth at any pixel size. denser
+      visual weight than the thermometer variants; reads as ornament more than info. drag a capsule
+      up or down to scrub.
+    </p>
+
+    <div class="stage">
+      <div class="cap-card">
+        <h2>full · label + percent inside the capsule</h2>
+        <div class="cap-row">
+          <div>
+            <div class="cap cap-hp" data-key="hp" data-max="1000" data-pct="75">
+              <div class="cap-fill"></div>
+              <div class="cap-gloss"></div>
+              <div class="cap-readout">
+                <span class="v-label">hp</span><span class="v-pct">75</span>
+              </div>
+            </div>
+            <div class="cap-foot">750 / 1000</div>
+          </div>
+          <div>
+            <div class="cap cap-mn" data-key="mn" data-max="300" data-pct="50">
+              <div class="cap-fill" style="height: 50%"></div>
+              <div class="cap-gloss"></div>
+              <div class="cap-readout">
+                <span class="v-label">mn</span><span class="v-pct">50</span>
+              </div>
+            </div>
+            <div class="cap-foot">150 / 300</div>
+          </div>
+          <div>
+            <div class="cap cap-mv" data-key="mv" data-max="200" data-pct="25">
+              <div class="cap-fill" style="height: 25%"></div>
+              <div class="cap-gloss"></div>
+              <div class="cap-readout">
+                <span class="v-label">mv</span><span class="v-pct">25</span>
+              </div>
+            </div>
+            <div class="cap-foot">50 / 200</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mini-card">
+        <h2>micro · ornament strip</h2>
+        <div class="mini-row" style="align-items: flex-end">
+          <div style="display: flex; flex-direction: column; align-items: center">
+            <div class="mini" data-key="hp"><div class="mini-fill" style="height: 75%"></div></div>
+            <span class="mini-label">hp</span>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center">
+            <div class="mini mini-mn" data-key="mn">
+              <div class="mini-fill" style="height: 50%"></div>
+            </div>
+            <span class="mini-label">mn</span>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: center">
+            <div class="mini mini-mv" data-key="mv">
+              <div class="mini-fill" style="height: 25%"></div>
+            </div>
+            <span class="mini-label">mv</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="footnote">
+      drawback: capsules don't blend with Vosh's terminal-glyph aesthetic the way thermometer or
+      bracketed variants do. better suited to a docked HUD strip than embedded in the main
+      scrollback. percent text inside the capsule competes with the fill at low percent (text sits
+      above the empty zone where contrast is weakest).
+    </p>
+
+    <script>
+      function attachDrag(selector, fillSel) {
+        document.querySelectorAll(selector).forEach((cap) => {
+          cap.addEventListener('mousedown', (e) => {
+            const rect = cap.getBoundingClientRect();
+            const fill = cap.querySelector(fillSel);
+            const readout = cap.querySelector('.v-pct');
+            const foot = cap.parentElement.querySelector('.cap-foot');
+            const max = +(cap.dataset.max || 0);
+            const set = (clientY) => {
+              const y = clientY - rect.top;
+              const pct = Math.max(0, Math.min(100, Math.round(100 - (y / rect.height) * 100)));
+              fill.style.height = pct + '%';
+              if (readout) readout.textContent = pct;
+              if (foot && max) foot.textContent = Math.round((pct / 100) * max) + ' / ' + max;
+            };
+            set(e.clientY);
+            const onMove = (ev) => set(ev.clientY);
+            const onUp = () => {
+              window.removeEventListener('mousemove', onMove);
+              window.removeEventListener('mouseup', onUp);
+            };
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+          });
+        });
+      }
+      attachDrag('.cap', '.cap-fill');
+      attachDrag('.mini', '.mini-fill');
+    </script>
+  </body>
+</html>

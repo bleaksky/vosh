@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals settings · tabbed redesign</title>
+    <style>
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-surface-emphasis: #1d1d24;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+        --c-accent-soft: rgba(255, 51, 153, 0.09);
+        --c-hp: #a3e635;
+        --c-mn: #38bdf8;
+        --c-mv: #fb923c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 48px 32px;
+        background: var(--c-surface-deep);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .frame {
+        max-width: 920px;
+        margin: 0 auto;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      .frame-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--c-border);
+        background: var(--c-surface-lift);
+      }
+
+      .frame-head h1 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+        letter-spacing: 0.04em;
+      }
+
+      .frame-head .hint {
+        color: var(--c-text-faint);
+        font-size: 12px;
+      }
+
+      /* PREVIEW PIN ----------------------------------------------------
+         Top region. Always visible. The thing that matters most stays in
+         view no matter which tab the user is on. Drag any bar to scrub
+         the value and see the colors react. */
+      .preview {
+        padding: 16px 20px 14px;
+        background: linear-gradient(180deg, var(--c-surface-lift) 0%, var(--c-surface) 100%);
+        border-bottom: 1px solid var(--c-border);
+      }
+
+      .preview-head {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        color: var(--c-text-faint);
+        font-size: 12px;
+        margin-bottom: 10px;
+      }
+
+      .preview-head strong {
+        color: var(--c-text);
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: lowercase;
+      }
+
+      .preview-grid {
+        display: grid;
+        grid-template-columns: 24px 220px 48px 96px 40px;
+        column-gap: 14px;
+        row-gap: 6px;
+        align-items: center;
+      }
+
+      .pv-label {
+        color: var(--c-text-faint);
+      }
+      .pv-bar {
+        cursor: ew-resize;
+        height: 14px;
+        position: relative;
+      }
+      .pv-bar-track {
+        position: absolute;
+        inset: 0;
+        background: var(--c-border-soft);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .pv-bar-fill {
+        height: 100%;
+        transition: width 120ms ease-out;
+      }
+      .pv-pct {
+        font-weight: 700;
+        text-align: right;
+      }
+      .pv-num {
+        color: var(--c-text-muted);
+      }
+      .pv-delta {
+        color: var(--c-hp);
+        font-weight: 600;
+      }
+      .pv-delta.down {
+        color: #f87171;
+      }
+
+      /* TAB STRIP ------------------------------------------------------ */
+      .tabs {
+        display: flex;
+        border-bottom: 1px solid var(--c-border);
+        background: var(--c-surface);
+      }
+
+      .tab {
+        flex: 1;
+        padding: 12px 16px;
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        color: var(--c-text-faint);
+        font: inherit;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: lowercase;
+        cursor: pointer;
+        transition:
+          color 120ms,
+          border-color 120ms,
+          background 120ms;
+      }
+
+      .tab:hover {
+        color: var(--c-text);
+        background: var(--c-surface-lift);
+      }
+
+      .tab.is-active {
+        color: var(--c-text-strong);
+        border-bottom-color: var(--c-accent);
+        background: var(--c-surface-lift);
+      }
+
+      .tab .tab-count {
+        margin-left: 6px;
+        color: var(--c-text-dim);
+        font-size: 11px;
+      }
+
+      .tab.is-active .tab-count {
+        color: var(--c-accent);
+      }
+
+      /* PANEL BODY ----------------------------------------------------- */
+      .panel {
+        padding: 20px;
+        min-height: 280px;
+      }
+
+      .panel:not(.is-active) {
+        display: none;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 110px 1fr;
+        gap: 14px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .row > label.field-label {
+        color: var(--c-text-faint);
+        font-size: 12px;
+        text-align: right;
+      }
+
+      select,
+      input[type='text'],
+      input[type='number'] {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        border-radius: 2px;
+        color: var(--c-text);
+        font: inherit;
+        font-size: 13px;
+        padding: 6px 10px;
+        width: 100%;
+      }
+
+      input[type='number'] {
+        width: 80px;
+      }
+
+      select:focus,
+      input:focus {
+        outline: none;
+        border-color: var(--c-accent);
+      }
+
+      .check-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px 18px;
+      }
+
+      .check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        padding: 6px 10px;
+        border-radius: 2px;
+        transition: background 120ms;
+      }
+      .check:hover {
+        background: var(--c-surface-lift);
+      }
+      .check input {
+        accent-color: var(--c-accent);
+      }
+      .check .label {
+        color: var(--c-text);
+      }
+      .check .hint {
+        color: var(--c-text-faint);
+        font-size: 11px;
+        margin-left: auto;
+      }
+
+      .status-line {
+        color: var(--c-text-faint);
+        font-size: 11px;
+        padding: 4px 0 0 124px;
+      }
+      .status-line.ok {
+        color: #6ee7b7;
+      }
+
+      /* color row */
+      .color-row {
+        display: grid;
+        grid-template-columns: 110px 28px 1fr 70px;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .color-swatch {
+        width: 26px;
+        height: 22px;
+        border-radius: 2px;
+        border: 1px solid var(--c-border-strong);
+        background: var(--c-hp);
+      }
+      .color-row.mn .color-swatch {
+        background: var(--c-mn);
+      }
+      .color-row.mv .color-swatch {
+        background: var(--c-mv);
+      }
+      .bracket-btn {
+        background: none;
+        border: none;
+        color: var(--c-text-faint);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+        padding: 4px 6px;
+      }
+      .bracket-btn:hover {
+        color: var(--c-accent);
+      }
+
+      textarea {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        border-radius: 2px;
+        color: var(--c-text);
+        font: inherit;
+        font-size: 13px;
+        padding: 10px;
+        width: 100%;
+        min-height: 78px;
+        resize: vertical;
+      }
+
+      .token-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 8px;
+        margin-top: 10px;
+      }
+      .token-chip {
+        font-size: 11px;
+        color: var(--c-text-faint);
+        background: var(--c-surface-lift);
+        border-radius: 2px;
+        padding: 3px 7px;
+        cursor: pointer;
+      }
+      .token-chip:hover {
+        color: var(--c-text);
+        background: var(--c-surface-emphasis);
+      }
+
+      details.help {
+        margin-top: 12px;
+        font-size: 12px;
+        color: var(--c-text-faint);
+      }
+      details.help summary {
+        cursor: pointer;
+        list-style: none;
+        color: var(--c-text-muted);
+        padding: 4px 0;
+      }
+      details.help summary::before {
+        content: '▸ ';
+        color: var(--c-text-dim);
+      }
+      details.help[open] summary::before {
+        content: '▾ ';
+      }
+
+      .footer {
+        padding: 10px 20px;
+        border-top: 1px solid var(--c-border);
+        text-align: right;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <div class="frame-head">
+        <h1>vitals</h1>
+        <span class="hint">how the hp / mn / mv rows render</span>
+      </div>
+
+      <div class="preview">
+        <div class="preview-head">
+          <strong>preview</strong>
+          <span
+            >hp <span id="pvHp">75</span>% / mn <span id="pvMn">50</span>% / mv
+            <span id="pvMv">25</span>%</span
+          >
+          <span>· drag a bar</span>
+        </div>
+        <div class="preview-grid">
+          <span class="pv-label">hp</span>
+          <div class="pv-bar" data-key="hp">
+            <div class="pv-bar-track">
+              <div class="pv-bar-fill" style="width: 75%; background: var(--c-hp)"></div>
+            </div>
+          </div>
+          <span class="pv-pct" style="color: var(--c-hp)">75%</span>
+          <span class="pv-num">750/1000</span>
+          <span class="pv-delta">+12</span>
+
+          <span class="pv-label">mn</span>
+          <div class="pv-bar" data-key="mn">
+            <div class="pv-bar-track">
+              <div class="pv-bar-fill" style="width: 50%; background: var(--c-mn)"></div>
+            </div>
+          </div>
+          <span class="pv-pct" style="color: var(--c-mn)">50%</span>
+          <span class="pv-num">150/300</span>
+          <span class="pv-delta down">-8</span>
+
+          <span class="pv-label">mv</span>
+          <div class="pv-bar" data-key="mv">
+            <div class="pv-bar-track">
+              <div class="pv-bar-fill" style="width: 25%; background: var(--c-mv)"></div>
+            </div>
+          </div>
+          <span class="pv-pct" style="color: var(--c-mv)">25%</span>
+          <span class="pv-num">50/200</span>
+          <span></span>
+        </div>
+      </div>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab is-active" data-tab="show">show <span class="tab-count">4</span></button>
+        <button class="tab" data-tab="style">style</button>
+        <button class="tab" data-tab="layout">layout</button>
+        <button class="tab" data-tab="colors">colors</button>
+        <button class="tab" data-tab="template">template <span class="tab-count">off</span></button>
+      </nav>
+
+      <section class="panel is-active" data-panel="show">
+        <div class="check-grid">
+          <label class="check"
+            ><input type="checkbox" checked /> <span class="label">bar glyphs</span
+            ><span class="hint">the colored fill</span></label
+          >
+          <label class="check"
+            ><input type="checkbox" checked /> <span class="label">percent</span
+            ><span class="hint">75% / 50% / 25%</span></label
+          >
+          <label class="check"
+            ><input type="checkbox" checked /> <span class="label">numeric</span
+            ><span class="hint">750 / 1000</span></label
+          >
+          <label class="check"
+            ><input type="checkbox" checked /> <span class="label">per-tick delta</span
+            ><span class="hint">+12 / -8</span></label
+          >
+        </div>
+      </section>
+
+      <section class="panel" data-panel="style">
+        <div class="row">
+          <label class="field-label">bar style</label>
+          <select>
+            <option>dark / light shade · ▓ ░</option>
+            <option>block · █ ░</option>
+            <option>parallelogram · ▰ ▱</option>
+            <option>track (smooth)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label class="field-label">bar width</label>
+          <input type="number" min="4" max="60" value="20" />
+        </div>
+        <div class="row">
+          <label class="field-label">bar font</label>
+          <select>
+            <option>use the app font</option>
+            <option>Berkeley Mono (bundled)</option>
+            <option>JetBrains Mono (bundled)</option>
+            <option selected>MonoLisa (must be installed locally)</option>
+          </select>
+        </div>
+        <div class="status-line ok">MonoLisa detected as "MonoLisa" · bars are using it</div>
+
+        <details class="help">
+          <summary>advanced · custom CSS font-family</summary>
+          <input type="text" value='"MonoLisa", monospace' style="margin-top: 8px" />
+        </details>
+      </section>
+
+      <section class="panel" data-panel="layout">
+        <div class="row">
+          <label class="field-label">layout</label>
+          <select>
+            <option>stacked rows (hp / mn / mv per row)</option>
+            <option>inline (single row, compact)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label class="field-label">percent color</label>
+          <select>
+            <option>per-vital (matches bar)</option>
+            <option>gradient (red → green by percent)</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="colors">
+        <div class="color-row">
+          <label class="field-label" style="text-align: right">hp color</label>
+          <div class="color-swatch"></div>
+          <input type="text" value="built-in green" />
+          <button class="bracket-btn">[clear]</button>
+        </div>
+        <div class="color-row mn">
+          <label class="field-label" style="text-align: right">mn color</label>
+          <div class="color-swatch"></div>
+          <input type="text" value="built-in blue" />
+          <button class="bracket-btn">[clear]</button>
+        </div>
+        <div class="color-row mv">
+          <label class="field-label" style="text-align: right">mv color</label>
+          <div class="color-swatch"></div>
+          <input type="text" value="built-in orange" />
+          <button class="bracket-btn">[clear]</button>
+        </div>
+        <label class="check" style="margin-top: 10px"
+          ><input type="checkbox" checked />
+          <span class="label">drain through red as the bar empties</span></label
+        >
+      </section>
+
+      <section class="panel" data-panel="template">
+        <label class="check"
+          ><input type="checkbox" />
+          <span class="label">use a custom template (overrides layout above)</span></label
+        >
+        <textarea style="margin-top: 12px">
+%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v - (%tick) - %time</textarea
+        >
+        <div class="token-chips">
+          <span class="token-chip">%hp</span>
+          <span class="token-chip">%mhp</span>
+          <span class="token-chip">%mn</span>
+          <span class="token-chip">%mmn</span>
+          <span class="token-chip">%mv</span>
+          <span class="token-chip">%mmv</span>
+          <span class="token-chip">%pct_hp</span>
+          <span class="token-chip">%pct_mn</span>
+          <span class="token-chip">%pct_mv</span>
+          <span class="token-chip">%bar_hp</span>
+          <span class="token-chip">%bar_mn</span>
+          <span class="token-chip">%bar_mv</span>
+          <span class="token-chip">%tick</span>
+          <span class="token-chip">%time</span>
+        </div>
+        <details class="help">
+          <summary>how tokens work · pass-through · escaping</summary>
+          <p>
+            pass-through: any field your server pushes via Char.Vitals or Char.Worth can be used as
+            %fieldname. Try a token; if the field exists it renders, otherwise it shows in red.
+          </p>
+          <p>
+            explicit braces: use %{name} when the token is immediately followed by letters or digits
+            that would otherwise be consumed by the greedy match. e.g. %{cp}cp renders the cp field
+            then literal "cp". %% is a literal "%".
+          </p>
+        </details>
+      </section>
+
+      <div class="footer">
+        <button class="bracket-btn">[reset vitals]</button>
+      </div>
+    </div>
+
+    <script>
+      // Tab switching.
+      const tabs = document.querySelectorAll('.tab');
+      const panels = document.querySelectorAll('.panel');
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          tabs.forEach((t) => t.classList.toggle('is-active', t === tab));
+          const key = tab.dataset.tab;
+          panels.forEach((p) => p.classList.toggle('is-active', p.dataset.panel === key));
+        });
+      });
+
+      // Bar drag scrubber.
+      document.querySelectorAll('.pv-bar').forEach((bar) => {
+        bar.addEventListener('mousedown', (e) => {
+          const rect = bar.getBoundingClientRect();
+          const key = bar.dataset.key;
+          const set = (clientX) => {
+            const pct = Math.max(
+              0,
+              Math.min(100, Math.round(((clientX - rect.left) / rect.width) * 100)),
+            );
+            const fill = bar.querySelector('.pv-bar-fill');
+            fill.style.width = pct + '%';
+            document.getElementById('pv' + key[0].toUpperCase() + key[1]).textContent = pct;
+            const pctEl = bar.parentElement.querySelectorAll('.pv-pct, .pv-num');
+            pctEl[0].textContent = pct + '%';
+          };
+          set(e.clientX);
+          const onMove = (ev) => set(ev.clientX);
+          const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+          };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        });
+      });
+    </script>
+  </body>
+</html>

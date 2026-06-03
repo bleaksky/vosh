@@ -13,6 +13,7 @@ import { useCharStats } from '../lib/useCharStats';
 import { useCombat, type CombatState } from '../lib/useCombat';
 import { tokenizeTemplate, type TemplateSegment } from '../lib/vitalsTemplate';
 import { colorForVital, colorForPercent } from '../lib/vitalsColor';
+import { loadFontStack } from '../lib/fontLoader';
 
 interface Vitals {
   hp: number;
@@ -342,6 +343,17 @@ export function VitalsBar() {
     };
   }, []);
 
+  // Inject @font-face for any system font the user names in the bar
+  // font stack. macOS WKWebView (since Sonoma) refuses to match user-
+  // installed fonts by CSS family name alone, so a plain `font-family:
+  // "MonoLisa"` silently falls through to the next font in the stack.
+  // loadFontStack walks the stack, skips generics + bundled families,
+  // and registers each system family it finds with a runtime @font-face
+  // block so the bar's inline style can actually resolve to it.
+  useEffect(() => {
+    if (config.bar_font) loadFontStack(config.bar_font);
+  }, [config.bar_font]);
+
   useEffect(() => {
     let unsubVitals: (() => void) | undefined;
     let unsubTime: (() => void) | undefined;
@@ -434,12 +446,25 @@ export function VitalsBar() {
     segs.push({ label: 'mv', cur: vitals.move, max: vitals.maxmove, delta: deltas.move });
   if (segs.length === 0) return null;
 
+  // "One with Erelei" is additive — when on, render a soft red
+  // vignette that pulses at the window periphery whenever hp drops
+  // below 30%. The bar / template / inline layouts keep rendering
+  // normally; the overlay sits on top via position:fixed so it does
+  // not affect bar layout. The overlay is appended at the end of
+  // each return branch below.
+  const erelei = config.one_with_erelei ? <OneWithEreleiOverlay segs={segs} /> : null;
+
   // Template-driven layout takes priority over the built-in
   // stacked / inline layouts so a user who has authored a custom
   // template can replace the entire row shape without disabling
   // any of the underlying toggles.
   if (config.template_enabled) {
-    return <TemplateVitalsRow config={config} vitals={vitals} deltas={deltas} combat={combat} />;
+    return (
+      <>
+        <TemplateVitalsRow config={config} vitals={vitals} deltas={deltas} combat={combat} />
+        {erelei}
+      </>
+    );
   }
 
   // Inline layout packs every vital onto a single horizontal row in
@@ -447,40 +472,49 @@ export function VitalsBar() {
   //   850(85%)h 230(76%)m 120(60%)v
   if (config.layout === 'inline') {
     return (
-      <div className="vitals-bar vitals-bar-inline" aria-label="vitals">
-        {combat && (
-          <div className="vitals-row vitals-row-combat-top">
-            <CombatChip combat={combat} />
+      <>
+        <div className="vitals-bar vitals-bar-inline" aria-label="vitals">
+          {combat && (
+            <div className="vitals-row vitals-row-combat-top">
+              <CombatChip combat={combat} />
+            </div>
+          )}
+          <div className="vitals-row vitals-row-inline">
+            {segs.map((s, i) => (
+              <InlineVitalChip key={s.label} config={config} compact={i > 0} {...s} />
+            ))}
           </div>
-        )}
-        <div className="vitals-row vitals-row-inline">
-          {segs.map((s, i) => (
-            <InlineVitalChip key={s.label} config={config} compact={i > 0} {...s} />
-          ))}
         </div>
-      </div>
+        {erelei}
+      </>
     );
   }
 
   return (
-    <div className={`vitals-bar${config.show_bar ? '' : ' vitals-bar-no-bar'}`} aria-label="vitals">
-      {/* Stacked rows + a side combat chip vertically centered to the
-          right of the vitals stack. Without the row-flex wrapper,
-          combat would land below the rows; here it sits beside them
-          centered against the middle (mana) row. */}
-      <div className="vitals-stacked-wrap">
-        <div className="vitals-stacked-rows">
-          {segs.map((s) => (
-            <VitalRow key={s.label} config={config} {...s} />
-          ))}
-        </div>
-        {combat && (
-          <div className="vitals-stacked-combat">
-            <CombatChip combat={combat} />
+    <>
+      <div
+        className={`vitals-bar${config.show_bar ? '' : ' vitals-bar-no-bar'}`}
+        aria-label="vitals"
+      >
+        {/* Stacked rows + a side combat chip vertically centered to the
+            right of the vitals stack. Without the row-flex wrapper,
+            combat would land below the rows; here it sits beside them
+            centered against the middle (mana) row. */}
+        <div className="vitals-stacked-wrap">
+          <div className="vitals-stacked-rows">
+            {segs.map((s) => (
+              <VitalRow key={s.label} config={config} {...s} />
+            ))}
           </div>
-        )}
+          {combat && (
+            <div className="vitals-stacked-combat">
+              <CombatChip combat={combat} />
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+      {erelei}
+    </>
   );
 }
 
@@ -888,6 +922,30 @@ function TemplateLineFlexRow({
           </span>
         );
       })}
+    </div>
+  );
+}
+
+// "One with Erelei" — replaces the entire vitals widget with a
+// soft red peripheral vignette that pulses when hp drops below 30%.
+// No bar, no readouts, no brackets; danger is conveyed only by the
+// glow at the window edges. The vignette opacity ramps linearly
+// from 0 (at hp=30) to 0.6 (at hp=0).
+function OneWithEreleiOverlay({
+  segs,
+}: {
+  segs: Array<{ label: string; cur: number; max: number; delta: number | null }>;
+}) {
+  const hpSeg = segs.find((s) => s.label === 'hp');
+  const hp = hpSeg ? pct(hpSeg.cur, hpSeg.max) : 100;
+  const danger = hp >= 30 ? 0 : ((30 - hp) / 30) * 0.6;
+  return (
+    <div
+      className="one-with-erelei"
+      style={{ '--owe-danger': danger.toFixed(3) } as React.CSSProperties}
+      aria-hidden="true"
+    >
+      <span className="owe-danger" />
     </div>
   );
 }
