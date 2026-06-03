@@ -630,6 +630,17 @@ export interface VitalsConfig {
   percent_color: VitalsPercentColor;
   template_enabled: boolean;
   template: string;
+  /** Override the bar color for the corresponding vital. Empty string
+   *  keeps the built-in ramp (green-to-red for hp, blue-to-red for
+   *  mn, orange-to-red for mv). Non-empty values are any CSS color. */
+  hp_color: string;
+  mn_color: string;
+  mv_color: string;
+  /** When true (the default), bars drain through red as the value
+   *  drops — preserves the "low value reads as danger" cue. When
+   *  false, the configured color (or the built-in's full color when
+   *  no override) is used at every fill percentage. */
+  use_color_ramp: boolean;
 }
 
 export const DEFAULT_VITALS_TEMPLATE =
@@ -648,6 +659,10 @@ export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
   percent_color: 'fill',
   template_enabled: false,
   template: DEFAULT_VITALS_TEMPLATE,
+  hp_color: '',
+  mn_color: '',
+  mv_color: '',
+  use_color_ramp: true,
 };
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -734,6 +749,13 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
       typeof v.template === 'string' && v.template.length > 0
         ? v.template
         : DEFAULT_VITALS_CONFIG.template,
+    hp_color: typeof v.hp_color === 'string' ? v.hp_color : DEFAULT_VITALS_CONFIG.hp_color,
+    mn_color: typeof v.mn_color === 'string' ? v.mn_color : DEFAULT_VITALS_CONFIG.mn_color,
+    mv_color: typeof v.mv_color === 'string' ? v.mv_color : DEFAULT_VITALS_CONFIG.mv_color,
+    use_color_ramp:
+      typeof v.use_color_ramp === 'boolean'
+        ? v.use_color_ramp
+        : DEFAULT_VITALS_CONFIG.use_color_ramp,
   };
 }
 
