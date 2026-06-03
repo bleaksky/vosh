@@ -615,7 +615,7 @@ export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
 
 export type VitalsLayout = 'stacked' | 'inline';
 export type VitalsPercentColor = 'fill' | 'gradient';
-export type VitalsBarStyle = 'solid' | 'track';
+export type VitalsBarStyle = 'solid' | 'track' | 'ramped';
 
 export interface VitalsConfig {
   show_bar: boolean;
@@ -737,7 +737,10 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
       typeof v.bar_width === 'number' && Number.isFinite(v.bar_width)
         ? Math.max(4, Math.min(60, Math.floor(v.bar_width)))
         : DEFAULT_VITALS_CONFIG.bar_width,
-    bar_style: v.bar_style === 'track' ? 'track' : DEFAULT_VITALS_CONFIG.bar_style,
+    bar_style:
+      v.bar_style === 'track' || v.bar_style === 'ramped'
+        ? v.bar_style
+        : DEFAULT_VITALS_CONFIG.bar_style,
     layout: v.layout === 'inline' ? 'inline' : DEFAULT_VITALS_CONFIG.layout,
     percent_color:
       v.percent_color === 'gradient' ? 'gradient' : DEFAULT_VITALS_CONFIG.percent_color,

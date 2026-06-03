@@ -1523,11 +1523,12 @@ pub(crate) async fn ui_set_config(
         if v.percent_color != "fill" && v.percent_color != "gradient" {
             v.percent_color = "fill".to_string();
         }
-        if v.bar_style != "solid" && v.bar_style != "track" {
-            // "ramped" was an earlier mode that used Unicode 1/8-step
-            // partial-block glyphs. It rendered ugly in most fonts so
-            // the option got dropped; coerce any leftover config back
-            // to "solid".
+        if v.bar_style != "solid" && v.bar_style != "track" && v.bar_style != "ramped" {
+            // Unknown values get coerced to "solid". The historical
+            // "ramped" mode was re-introduced in v0.3.11 now that
+            // Vosh bundles fonts (Berkeley Mono / JetBrains Mono)
+            // whose 1/8 partial-block characters render with proper
+            // cell alignment.
             v.bar_style = "solid".to_string();
         }
         p.ui.vitals = v;

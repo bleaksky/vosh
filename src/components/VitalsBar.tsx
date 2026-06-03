@@ -197,6 +197,87 @@ function SolidBar({
   );
 }
 
+// 1/8-step partial block characters for the ramped bar's boundary
+// cell. Index 0 means "no partial" (boundary is empty), index 8 means
+// "full" (boundary is the filledGlyph itself); indices 1..7 are the
+// progressive partial blocks. Lets the bar move at sub-character
+// resolution — a 53% bar at width 20 shows 10 full cells + a ▍
+// (3/8 partial) for the boundary instead of snapping to 50% or 55%.
+const RAMP_PARTIALS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
+
+// Ramped bar. Same ResizeObserver-driven cell-fit pattern as SolidBar
+// but the boundary cell renders as a partial block keyed off the
+// fractional remainder of (value × cells / 100). Looks smooth across
+// the full 0..100 range, especially at narrow bar widths where the
+// solid variant's 5%-per-cell granularity reads as blocky.
+function RampedBar({
+  value,
+  cells,
+  filledGlyph,
+  emptyGlyph,
+  color,
+}: {
+  value: number;
+  cells: number;
+  filledGlyph: string;
+  emptyGlyph: string;
+  color: string;
+}) {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const [renderCells, setRenderCells] = useState(cells);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let sample: HTMLSpanElement | null = null;
+    const measure = () => {
+      if (!ref.current) return;
+      if (!sample) {
+        sample = document.createElement('span');
+        sample.style.visibility = 'hidden';
+        sample.style.position = 'absolute';
+        sample.style.whiteSpace = 'pre';
+        sample.style.letterSpacing = '0';
+        sample.style.fontWeight = '700';
+        sample.textContent = filledGlyph;
+        ref.current.appendChild(sample);
+      } else if (sample.parentNode !== ref.current) {
+        ref.current.appendChild(sample);
+      }
+      const charWidth = sample.getBoundingClientRect().width;
+      if (charWidth <= 0) return;
+      const available = ref.current.clientWidth;
+      const fits = Math.max(1, Math.floor(available / charWidth));
+      const next = Math.min(cells, fits);
+      setRenderCells((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      if (sample && sample.parentNode) sample.parentNode.removeChild(sample);
+    };
+  }, [cells, filledGlyph]);
+
+  const exact = (Math.max(0, Math.min(100, value)) / 100) * renderCells;
+  const wholeFilled = Math.floor(exact);
+  const fraction = exact - wholeFilled;
+  const stepIdx = Math.round(fraction * 8); // 0..8
+  let boundary = '';
+  if (wholeFilled < renderCells && stepIdx > 0) {
+    boundary = stepIdx === 8 ? filledGlyph : RAMP_PARTIALS[stepIdx];
+  }
+  const emptyCount = Math.max(0, renderCells - wholeFilled - (boundary ? 1 : 0));
+  return (
+    <span ref={ref} className="vitals-glyphs" style={{ maxWidth: `${cells}ch` }} aria-hidden="true">
+      {wholeFilled > 0 && <span style={{ color }}>{filledGlyph.repeat(wholeFilled)}</span>}
+      {boundary && <span style={{ color }}>{boundary}</span>}
+      {emptyCount > 0 && <span className="vitals-empty">{emptyGlyph.repeat(emptyCount)}</span>}
+    </span>
+  );
+}
+
 // Stacked vitals — one row per hp/mana/move. Tick and mud time render
 // in the LineChip on the input row's top border; this component no
 // longer hosts them. Each row is
@@ -446,7 +527,6 @@ function VitalRow({
   const value = pct(cur, max);
   const fill = colorForVital(label, value, config);
   const total = Math.max(4, Math.min(60, config.bar_width));
-  const track = config.bar_style === 'track';
   const showDelta = config.show_delta && delta !== null && delta !== 0;
   const deltaPositive = (delta ?? 0) > 0;
 
@@ -454,8 +534,16 @@ function VitalRow({
     <div className="vitals-row">
       <span className="vitals-label">{label}</span>
       {config.show_bar &&
-        (track ? (
+        (config.bar_style === 'track' ? (
           <TrackBar value={value} cells={total} color={fill} />
+        ) : config.bar_style === 'ramped' ? (
+          <RampedBar
+            value={value}
+            cells={total}
+            filledGlyph={config.bar_filled}
+            emptyGlyph={config.bar_empty}
+            color={fill}
+          />
         ) : (
           <SolidBar
             value={value}
@@ -585,6 +673,17 @@ function TemplateVitalsRow({
         const fill = colorForVital(label, v, config);
         if (config.bar_style === 'track') {
           return <TrackBar value={v} cells={width} color={fill} />;
+        }
+        if (config.bar_style === 'ramped') {
+          return (
+            <RampedBar
+              value={v}
+              cells={width}
+              filledGlyph={config.bar_filled}
+              emptyGlyph={config.bar_empty}
+              color={fill}
+            />
+          );
         }
         return (
           <SolidBar
