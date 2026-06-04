@@ -61,41 +61,136 @@ function pct(current: number, max: number): number {
 // (the natural place to glance when something is hitting you).
 // Renders nothing when no combat is in progress, so the vitals row
 // reads identically when out of combat.
-function CombatChip({ combat }: { combat: CombatState }) {
+function CombatChip({
+  combat,
+  config = DEFAULT_VITALS_CONFIG,
+}: {
+  combat: CombatState;
+  config?: VitalsConfig;
+  /** Deprecated — kept for callers that still pass it. Use `config`
+   *  so the combat bar can pick up bar_style + bar_font together. */
+  font?: string;
+}) {
   const hp = combat.hp;
-  const fill = hp !== undefined ? combatHpColor(hp) : '#7aa89f';
+  // Combat bar reuses whichever bar_style the user picked for vitals
+  // but in a single-hue drain-red palette: bright at full hp, fading
+  // through a mid stop to near-black. 12 cells is a compact width
+  // that fits inside the chip without dominating the row.
+  const fill = hp !== undefined ? combatDrainRed(hp) : combatDrainEmpty(0);
+  const cells = 12;
   return (
     <div className="vitals-combat">
-      <div className="vitals-combat-head">
+      <div className="vitals-combat-line">
         <span className="vitals-combat-swords" aria-hidden="true">
           ⚔
         </span>
         <span className="vitals-combat-name">{combat.name}</span>
+        {hp !== undefined ? (
+          <>
+            {config.bar_style === 'track' ? (
+              <TrackBar value={hp} cells={cells} color={fill} font={config.bar_font} />
+            ) : config.bar_style === 'ramped' ? (
+              <RampedBar
+                value={hp}
+                cells={cells}
+                filledGlyph={config.bar_filled}
+                emptyGlyph={config.bar_empty}
+                color={fill}
+                font={config.bar_font}
+              />
+            ) : (
+              <SolidBar
+                value={hp}
+                cells={cells}
+                filledGlyph={config.bar_filled}
+                emptyGlyph={config.bar_empty}
+                color={fill}
+                font={config.bar_font}
+              />
+            )}
+            <span className="vitals-combat-pct" style={{ color: fill }}>
+              {hp}%
+            </span>
+          </>
+        ) : (
+          <span className="vitals-combat-unknown">hp unknown</span>
+        )}
       </div>
-      {hp !== undefined ? (
-        <div className="vitals-combat-bar-row">
-          <TrackBar value={hp} cells={12} color={fill} />
-          <span className="vitals-combat-pct" style={{ color: fill }}>
-            {hp}%
-          </span>
-        </div>
-      ) : (
-        <div className="vitals-combat-unknown">hp unknown</div>
-      )}
-      {combat.condition && <div className="vitals-combat-condition">{combat.condition}</div>}
     </div>
   );
 }
 
-// Color ramp for the combat target's hp%. Greens at high, red at
-// low — same ramp the old status-bar combat seg used so the move
-// from one panel to the other doesn't change the visual.
-function combatHpColor(value: number): string {
-  if (value >= 80) return '#87a987';
-  if (value >= 60) return '#e6c384';
-  if (value >= 40) return '#d99a6c';
-  if (value >= 20) return '#e46876';
-  return '#7d1d1d';
+// Drain ramp for the combat target — bright red at full hp, fading
+// through a mid stop to near-black as the opponent dies. Replaces
+// the older green/yellow/red threshold ramp; the user wanted a
+// single-hue "getting dimmer" curve so the bar reads as "how much
+// life left" at a glance.
+function combatDrainRed(value: number): string {
+  const v = Math.max(0, Math.min(100, value));
+  const stops: Array<[number, [number, number, number]]> = [
+    [0, [58, 13, 13]],
+    [50, [168, 40, 40]],
+    [100, [255, 77, 77]],
+  ];
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [a, ac] = stops[i];
+    const [b, bc] = stops[i + 1];
+    if (v >= a && v <= b) {
+      const t = (v - a) / (b - a);
+      const r = Math.round(ac[0] + (bc[0] - ac[0]) * t);
+      const g = Math.round(ac[1] + (bc[1] - ac[1]) * t);
+      const bl = Math.round(ac[2] + (bc[2] - ac[2]) * t);
+      return `rgb(${r}, ${g}, ${bl})`;
+    }
+  }
+  return 'rgb(255, 77, 77)';
+}
+
+// Empty-trough color for the bar. Always near-black red so the
+// trough reads as "missing hp" regardless of the current fill
+// brightness.
+function combatDrainEmpty(_value: number): string {
+  return 'rgb(38, 8, 8)';
+}
+
+// Combat pane — standalone panel that renders the combat chip in its
+// own zone (top/bottom/left/right) instead of inline next to the
+// vitals stack. Returns null when no target is set so the panel
+// collapses to zero height out of combat. Pairs with the
+// `hideCombat` prop on VitalsBar (App.tsx wires the two together by
+// reading panelLayout.placements.combat.zone).
+export function CombatPane({ chip = false }: { chip?: boolean } = {}) {
+  const combat = useCombat();
+  // Read bar_font so the combat target's hp bar uses the same font as
+  // the user's vital bars instead of inheriting from the parent panel
+  // (whose font may resolve `ch` to a too-small width and collapse
+  // the bar to zero).
+  const [config, setConfig] = useState<VitalsConfig>(DEFAULT_VITALS_CONFIG);
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    getUiConfig()
+      .then((cfg) => {
+        if (!cancelled) setConfig(cfg.vitals);
+      })
+      .catch(() => {});
+    subscribeVitalsConfigChanged((next) => {
+      if (!cancelled) setConfig(next);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+  if (!combat) return null;
+  return (
+    <div className={`combat-pane${chip ? ' combat-pane-chip' : ''}`} aria-label="combat">
+      <CombatChip combat={combat} config={config} />
+    </div>
+  );
 }
 
 // CSS-tinted track bar. Renders as a fixed-width div (sized in `ch`
@@ -109,11 +204,17 @@ function TrackBar({
   cells,
   color,
   font,
+  wrapped = false,
 }: {
   value: number;
   cells: number;
   color: string;
   font?: string;
+  /** When true, this bar is nested inside HistoryWrapper which owns
+   *  the cells×ch flex sizing. Skip the inline flex-basis / max-width
+   *  so the parent column flex sizes us by cross-axis stretch
+   *  instead of treating our cells×ch as our main-axis height. */
+  wrapped?: boolean;
 }) {
   const pct = Math.max(0, Math.min(100, value));
   // `flex-basis` (not `width`) lets the bar shrink first when the row
@@ -125,11 +226,11 @@ function TrackBar({
   return (
     <span
       className="vitals-glyphs vitals-glyphs-track"
-      style={{
-        flexBasis: `${cells}ch`,
-        maxWidth: `${cells}ch`,
-        fontFamily: font || undefined,
-      }}
+      style={
+        wrapped
+          ? { fontFamily: font || undefined }
+          : { flexBasis: `${cells}ch`, maxWidth: `${cells}ch`, fontFamily: font || undefined }
+      }
       aria-hidden="true"
     >
       <span className="vitals-glyphs-track-fill" style={{ width: `${pct}%`, background: color }} />
@@ -150,6 +251,7 @@ function SolidBar({
   emptyGlyph,
   color,
   font,
+  wrapped = false,
 }: {
   value: number;
   cells: number;
@@ -157,6 +259,7 @@ function SolidBar({
   emptyGlyph: string;
   color: string;
   font?: string;
+  wrapped?: boolean;
 }) {
   const ref = useRef<HTMLSpanElement | null>(null);
   // Start at the configured cell count so the first paint shows the
@@ -210,7 +313,11 @@ function SolidBar({
     <span
       ref={ref}
       className="vitals-glyphs"
-      style={{ maxWidth: `${cells}ch`, fontFamily: font || undefined }}
+      style={
+        wrapped
+          ? { fontFamily: font || undefined }
+          : { maxWidth: `${cells}ch`, fontFamily: font || undefined }
+      }
       aria-hidden="true"
     >
       {filledCount > 0 && <span style={{ color }}>{filledGlyph.repeat(filledCount)}</span>}
@@ -239,6 +346,7 @@ function RampedBar({
   emptyGlyph,
   color,
   font,
+  wrapped = false,
 }: {
   value: number;
   cells: number;
@@ -246,6 +354,7 @@ function RampedBar({
   emptyGlyph: string;
   color: string;
   font?: string;
+  wrapped?: boolean;
 }) {
   const ref = useRef<HTMLSpanElement | null>(null);
   const [renderCells, setRenderCells] = useState(cells);
@@ -297,12 +406,114 @@ function RampedBar({
     <span
       ref={ref}
       className="vitals-glyphs"
-      style={{ maxWidth: `${cells}ch`, fontFamily: font || undefined }}
+      style={
+        wrapped
+          ? { fontFamily: font || undefined }
+          : { maxWidth: `${cells}ch`, fontFamily: font || undefined }
+      }
       aria-hidden="true"
     >
       {wholeFilled > 0 && <span style={{ color }}>{filledGlyph.repeat(wholeFilled)}</span>}
       {boundary && <span style={{ color }}>{boundary}</span>}
       {emptyCount > 0 && <span className="vitals-empty">{emptyGlyph.repeat(emptyCount)}</span>}
+    </span>
+  );
+}
+
+// HistoryWrapper — `bar_layout: 'with_history'` wraps any bar element
+// (SolidBar / TrackBar / RampedBar) in a flex column with a braille
+// trend grid below it. The wrapper owns the outer cells×ch sizing
+// for the row's flex layout; the inner bar receives a `wrapped` hint
+// so it skips its own flex-basis / max-width inline styles (those
+// would otherwise set the bar's main-axis height in the column flex,
+// blowing the row to 100s of px tall). Grid runs at the bar's font-
+// size with -2px letter-spacing, so sparkW = 1.3× cells fits the
+// bar's width across the common 12–14px row font range.
+// Single-row braille dot bits — one cell carries 2 samples (one per
+// dot column) across 4 dot rows of vertical resolution. Pure function
+// of two sample values; used by both the live HistoryWrapper and the
+// Settings preview to render one cell at a time so flex layout can
+// own cell positioning instead of CSS letter-spacing math.
+const DOTS_LEFT_TOP_DOWN = [0x01, 0x02, 0x04, 0x40];
+const DOTS_RIGHT_TOP_DOWN = [0x08, 0x10, 0x20, 0x80];
+const DOTS_PER_COL = 4;
+export function brailleCell(v0: number, v1: number): string {
+  const lit0 = Math.max(0, Math.min(DOTS_PER_COL, Math.round(v0 * DOTS_PER_COL)));
+  const lit1 = Math.max(0, Math.min(DOTS_PER_COL, Math.round(v1 * DOTS_PER_COL)));
+  let bits = 0;
+  for (let d = 0; d < 4; d++) {
+    const fromBottom = DOTS_PER_COL - 1 - d;
+    if (fromBottom < lit0) bits |= DOTS_LEFT_TOP_DOWN[d];
+    if (fromBottom < lit1) bits |= DOTS_RIGHT_TOP_DOWN[d];
+  }
+  return String.fromCodePoint(0x2800 | bits);
+}
+
+function HistoryWrapper({
+  values,
+  cells,
+  filledGlyph,
+  emptyGlyph,
+  currentValue,
+  color,
+  font,
+}: {
+  values: number[];
+  cells: number;
+  filledGlyph: string;
+  emptyGlyph: string;
+  currentValue: number;
+  color: string;
+  font?: string;
+}) {
+  // Per-cell flex grid for both bar and trend rows. Each row has
+  // exactly `cells` children with `flex: 1 1 0`, so the bar cells
+  // and grid cells share identical column boundaries regardless of
+  // font metrics or letter-spacing. The bar inside the spark
+  // wrapper does NOT use the SolidBar / TrackBar / RampedBar
+  // components — those bake in their own ch-based sizing that
+  // can't be reconciled with a per-cell-flex grid. Spark mode
+  // always renders bar as ▓░ glyphs (or whichever bar_filled /
+  // bar_empty the user configured); bar_style branching can come
+  // back later if needed.
+  const filledCount = Math.max(0, Math.min(cells, Math.round((currentValue / 100) * cells)));
+  // Pad history with the oldest known sample (or 0 if empty) so a
+  // steady value reads as a fully lit grid rather than empty cells
+  // on the left.
+  const need = cells * 2;
+  const samples = values.slice(-need);
+  const pad = samples.length > 0 ? samples[0] : 0;
+  while (samples.length < need) samples.unshift(pad);
+  return (
+    <span
+      className="vitals-glyphs vitals-spark"
+      style={{
+        flexBasis: `${cells}ch`,
+        maxWidth: `${cells}ch`,
+        fontFamily: font || undefined,
+      }}
+      aria-hidden="true"
+    >
+      <span className="vitals-spark-row vitals-spark-bar-row">
+        {Array.from({ length: cells }, (_, i) => {
+          const filled = i < filledCount;
+          return (
+            <span key={i} className="vitals-spark-cell" style={filled ? { color } : undefined}>
+              {filled ? filledGlyph : emptyGlyph}
+            </span>
+          );
+        })}
+      </span>
+      <span className="vitals-spark-row vitals-spark-grid-row">
+        {Array.from({ length: cells }, (_, i) => (
+          <span key={i} className="vitals-spark-cell vitals-spark-grid-cell">
+            <span className="vitals-spark-grid-base">⣿</span>
+            <span className="vitals-spark-grid-trace" style={{ color }}>
+              {brailleCell(samples[i * 2], samples[i * 2 + 1])}
+            </span>
+          </span>
+        ))}
+      </span>
     </span>
   );
 }
@@ -313,12 +524,22 @@ function RampedBar({
 // `label · bar (20 cells) · % · cur/max · delta`. Subscribes to
 // Char.Vitals + World.Time; World.Time hour-change rebases the
 // per-tick delta snapshot.
-export function VitalsBar() {
+export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {}) {
   const [vitals, setVitals] = useState<Vitals | null>(null);
   const [deltas, setDeltas] = useState<VitalDeltas>(NO_DELTAS);
   const [config, setConfig] = useState<VitalsConfig>(DEFAULT_VITALS_CONFIG);
   const vitalsSnapRef = useRef<Vitals | null>(null);
   const prevHourRef = useRef<number | string | null>(null);
+  // Per-vital history ring buffer used by the spark bar style. Each
+  // Char.Vitals event pushes a new percent (0..1) to each ring; the
+  // SparkBar slices the last N samples to draw. We use a ref + state
+  // counter to update history without re-renders piling up — the
+  // existing setVitals re-render is what makes the spark redraw.
+  const sparkHistoryRef = useRef<{ hp: number[]; mana: number[]; move: number[] }>({
+    hp: [],
+    mana: [],
+    move: [],
+  });
 
   // Vitals appearance config. Read once on mount then live-updated via
   // vosh://vitals-config-changed so Settings edits land without a
@@ -371,6 +592,19 @@ export function VitalsBar() {
         maxmove: num(d.maxmove, 0),
       };
       setVitals(next);
+      // Push the current percent into each vital's spark history
+      // ring. The ring is capped at 320 samples — sparkW maxes out
+      // at 2.5× the user's bar_width (capped at 60 cells), so up to
+      // 150 grid cells × 2 samples = 300 samples needed.
+      const SPARK_HISTORY_MAX = 320;
+      const push = (arr: number[], v: number) => {
+        arr.push(v);
+        while (arr.length > SPARK_HISTORY_MAX) arr.shift();
+      };
+      const ring = sparkHistoryRef.current;
+      push(ring.hp, next.maxhp > 0 ? next.hp / next.maxhp : 0);
+      push(ring.mana, next.maxmana > 0 ? next.mana / next.maxmana : 0);
+      push(ring.move, next.maxmove > 0 ? next.move / next.maxmove : 0);
       const snap = vitalsSnapRef.current;
       if (snap === null) {
         vitalsSnapRef.current = next;
@@ -433,7 +667,12 @@ export function VitalsBar() {
     };
   }, []);
 
-  const combat = useCombat();
+  // When the combat panel is in a non-hidden zone (App.tsx passes
+  // hideCombat=true in that case), the CombatChip is rendered there
+  // instead of inline — null out the local subscription so all four
+  // inline `combat && <CombatChip ... />` slots collapse.
+  const rawCombat = useCombat();
+  const combat = hideCombat ? null : rawCombat;
 
   if (!vitals) return null;
 
@@ -446,13 +685,13 @@ export function VitalsBar() {
     segs.push({ label: 'mv', cur: vitals.move, max: vitals.maxmove, delta: deltas.move });
   if (segs.length === 0) return null;
 
-  // "One with Erelei" is additive — when on, render a soft red
-  // vignette that pulses at the window periphery whenever hp drops
-  // below 30%. The bar / template / inline layouts keep rendering
-  // normally; the overlay sits on top via position:fixed so it does
-  // not affect bar layout. The overlay is appended at the end of
-  // each return branch below.
-  const erelei = config.one_with_erelei ? <OneWithEreleiOverlay segs={segs} /> : null;
+  // Low HP vignette — when on, render a soft red vignette that
+  // pulses at the window periphery whenever hp drops below 30%.
+  // Additive — the bar / template / inline layouts keep rendering
+  // normally and the overlay sits on top via position:fixed so it
+  // does not affect bar layout. Appended at the end of each return
+  // branch below.
+  const erelei = config.low_hp_vignette ? <LowHpVignetteOverlay segs={segs} /> : null;
 
   // Template-driven layout takes priority over the built-in
   // stacked / inline layouts so a user who has authored a custom
@@ -476,7 +715,7 @@ export function VitalsBar() {
         <div className="vitals-bar vitals-bar-inline" aria-label="vitals">
           {combat && (
             <div className="vitals-row vitals-row-combat-top">
-              <CombatChip combat={combat} />
+              <CombatChip combat={combat} config={config} />
             </div>
           )}
           <div className="vitals-row vitals-row-inline">
@@ -503,12 +742,23 @@ export function VitalsBar() {
         <div className="vitals-stacked-wrap">
           <div className="vitals-stacked-rows">
             {segs.map((s) => (
-              <VitalRow key={s.label} config={config} {...s} />
+              <VitalRow
+                key={s.label}
+                config={config}
+                history={
+                  s.label === 'hp'
+                    ? sparkHistoryRef.current.hp
+                    : s.label === 'mn'
+                      ? sparkHistoryRef.current.mana
+                      : sparkHistoryRef.current.move
+                }
+                {...s}
+              />
             ))}
           </div>
           {combat && (
             <div className="vitals-stacked-combat">
-              <CombatChip combat={combat} />
+              <CombatChip combat={combat} config={config} />
             </div>
           )}
         </div>
@@ -579,12 +829,14 @@ function VitalRow({
   max,
   delta,
   config,
+  history,
 }: {
   label: string;
   cur: number;
   max: number;
   delta: number | null;
   config: VitalsConfig;
+  history: number[];
 }) {
   const value = pct(cur, max);
   const fill = colorForVital(label, value, config);
@@ -592,30 +844,54 @@ function VitalRow({
   const showDelta = config.show_delta && delta !== null && delta !== 0;
   const deltaPositive = (delta ?? 0) > 0;
 
+  // Compose bar style × layout. For `bar_layout: 'plain'` we pick a
+  // bar component by bar_style (track / ramped / solid). For
+  // `with_history` we use the per-cell-flex HistoryWrapper which
+  // ALWAYS renders the bar as solid ▓░ glyphs (or whatever the user
+  // set bar_filled / bar_empty to) — track/ramped variants don't
+  // survive the per-cell layout cleanly and would need their own
+  // rendering paths. The trade-off is worth it for guaranteed
+  // alignment between the bar row and the trend grid row below.
+  const withHistory = config.bar_layout === 'with_history';
+  const barElement =
+    config.bar_style === 'track' ? (
+      <TrackBar value={value} cells={total} color={fill} font={config.bar_font} />
+    ) : config.bar_style === 'ramped' ? (
+      <RampedBar
+        value={value}
+        cells={total}
+        filledGlyph={config.bar_filled}
+        emptyGlyph={config.bar_empty}
+        color={fill}
+        font={config.bar_font}
+      />
+    ) : (
+      <SolidBar
+        value={value}
+        cells={total}
+        filledGlyph={config.bar_filled}
+        emptyGlyph={config.bar_empty}
+        color={fill}
+        font={config.bar_font}
+      />
+    );
+
   return (
-    <div className="vitals-row">
+    <div className={`vitals-row${withHistory ? ' vitals-row-spark' : ''}`}>
       <span className="vitals-label">{label}</span>
       {config.show_bar &&
-        (config.bar_style === 'track' ? (
-          <TrackBar value={value} cells={total} color={fill} font={config.bar_font} />
-        ) : config.bar_style === 'ramped' ? (
-          <RampedBar
-            value={value}
+        (withHistory ? (
+          <HistoryWrapper
+            values={history}
             cells={total}
             filledGlyph={config.bar_filled}
             emptyGlyph={config.bar_empty}
+            currentValue={value}
             color={fill}
             font={config.bar_font}
           />
         ) : (
-          <SolidBar
-            value={value}
-            cells={total}
-            filledGlyph={config.bar_filled}
-            emptyGlyph={config.bar_empty}
-            color={fill}
-            font={config.bar_font}
-          />
+          barElement
         ))}
       {config.show_percent && (
         <span
@@ -803,7 +1079,7 @@ function TemplateVitalsRow({
       <div className="vitals-bar vitals-bar-template" aria-label="vitals">
         {combat && (
           <div className="vitals-row vitals-row-combat-top">
-            <CombatChip combat={combat} />
+            <CombatChip combat={combat} config={config} />
           </div>
         )}
         <div className="vitals-row vitals-row-template">
@@ -926,12 +1202,11 @@ function TemplateLineFlexRow({
   );
 }
 
-// "One with Erelei" — replaces the entire vitals widget with a
-// soft red peripheral vignette that pulses when hp drops below 30%.
-// No bar, no readouts, no brackets; danger is conveyed only by the
-// glow at the window edges. The vignette opacity ramps linearly
-// from 0 (at hp=30) to 0.6 (at hp=0).
-function OneWithEreleiOverlay({
+// Low HP vignette — soft red peripheral glow that pulses on the
+// window edges when hp drops below 30%. Vignette opacity ramps
+// linearly from 0 (at hp=30) to 0.6 (at hp=0). Sits on top of the
+// regular bar via position:fixed so it does not affect layout.
+function LowHpVignetteOverlay({
   segs,
 }: {
   segs: Array<{ label: string; cur: number; max: number; delta: number | null }>;
@@ -941,11 +1216,11 @@ function OneWithEreleiOverlay({
   const danger = hp >= 30 ? 0 : ((30 - hp) / 30) * 0.6;
   return (
     <div
-      className="one-with-erelei"
-      style={{ '--owe-danger': danger.toFixed(3) } as React.CSSProperties}
+      className="low-hp-vignette"
+      style={{ '--lhv-danger': danger.toFixed(3) } as React.CSSProperties}
       aria-hidden="true"
     >
-      <span className="owe-danger" />
+      <span className="lhv-pulse" />
     </div>
   );
 }

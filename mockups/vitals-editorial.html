@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals · editorial</title>
+    <style>
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'JetBrainsMono Bundled';
+        src: url('../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #0a0e13;
+        --c-surface-lift: #14141a;
+        --c-text-strong: #f4f5f3;
+        --c-text: #c5c9c7;
+        --c-text-muted: #999c98;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #3e4248;
+        --c-rule: #1a1d22;
+        --c-rule-soft: #14171b;
+
+        /* Restrained palette — desaturated and warmer than the
+           saturated-game-HUD reds/blues. Reads as ink, not paint. */
+        --c-hp: #e16264;
+        --c-mn: #6bb0d0;
+        --c-mv: #d3a85b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 48px 32px 80px;
+        background: #05080c;
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        font-feature-settings:
+          'tnum' 1,
+          'ss01' 1;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+        letter-spacing: 0.04em;
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 720px;
+        margin: 0 0 36px;
+        line-height: 1.65;
+      }
+
+      .scrubber {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin: 0 -32px 36px;
+        padding: 12px 32px;
+        background: rgba(5, 8, 12, 0.94);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--c-rule);
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .scrubber span.lbl {
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+      }
+      .scrubber button {
+        background: transparent;
+        border: 1px solid var(--c-rule);
+        color: var(--c-text-muted);
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 12px;
+        cursor: pointer;
+      }
+      .scrubber button:hover {
+        color: var(--c-text-strong);
+        border-color: var(--c-text-dim);
+      }
+      .scrubber button.is-on {
+        background: transparent;
+        border-color: var(--c-text-strong);
+        color: var(--c-text-strong);
+      }
+
+      .stack {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 56px;
+        max-width: 980px;
+        margin: 0 auto;
+      }
+      .demo-label {
+        font-size: 10px;
+        letter-spacing: 0.36em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--c-rule);
+        margin-bottom: 22px;
+      }
+      .demo-name {
+        margin-left: 6px;
+        color: var(--c-text);
+        font-weight: 700;
+        letter-spacing: 0.06em;
+      }
+
+      /* ============================================================
+         DESIGN A — EDITORIAL (typographic ledger)
+         Three rows of one row each. Big confident value as the
+         hero, dim "of MAX" beneath, then a quiet horizontal scale
+         with a tick mark at the current position, then a small
+         percentage, then a six-bar sparkline of recent history.
+         Generous tracking, soft rule dividers, restrained palette.
+         All in one harmonious grid that doesn't shout. */
+      .editorial {
+        background: linear-gradient(180deg, rgba(20, 20, 26, 0.4), rgba(10, 14, 19, 0.4));
+        border: 1px solid var(--c-rule);
+        padding: 28px 34px;
+      }
+      .editorial .row {
+        display: grid;
+        grid-template-columns: 32px minmax(76px, auto) 1fr 56px minmax(120px, auto);
+        align-items: baseline;
+        gap: 28px;
+        padding: 14px 0;
+      }
+      .editorial .row + .row {
+        border-top: 1px solid var(--c-rule-soft);
+      }
+      .editorial .nm {
+        font-size: 10px;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        color: var(--c-text-faint);
+      }
+      .editorial .val {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: -0.01em;
+        color: var(--c-text-strong);
+        font-variant-numeric: tabular-nums;
+      }
+      .editorial .val .max {
+        font-size: 12px;
+        font-weight: 400;
+        color: var(--c-text-dim);
+        margin-left: 2px;
+        letter-spacing: 0;
+      }
+      .editorial .scale {
+        position: relative;
+        height: 8px;
+        align-self: center;
+      }
+      .editorial .scale .rule {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 50%;
+        height: 1px;
+        background: var(--c-rule);
+      }
+      .editorial .scale .tick {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        transform: translateX(-50%);
+        transition: left 600ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      }
+      .editorial .scale .marker {
+        position: absolute;
+        top: 50%;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        transition:
+          left 600ms cubic-bezier(0.22, 0.61, 0.36, 1),
+          background 200ms;
+      }
+      .editorial .row-hp .tick,
+      .editorial .row-hp .marker {
+        background: var(--c-hp);
+      }
+      .editorial .row-mn .tick,
+      .editorial .row-mn .marker {
+        background: var(--c-mn);
+      }
+      .editorial .row-mv .tick,
+      .editorial .row-mv .marker {
+        background: var(--c-mv);
+      }
+      .editorial .pct {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--c-text-muted);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .editorial .spark {
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 15px;
+        line-height: 1;
+        letter-spacing: 0.02em;
+        white-space: pre;
+        text-align: right;
+        opacity: 0.55;
+      }
+      .editorial .row-hp .spark {
+        color: var(--c-hp);
+      }
+      .editorial .row-mn .spark {
+        color: var(--c-mn);
+      }
+      .editorial .row-mv .spark {
+        color: var(--c-mv);
+      }
+
+      /* ============================================================
+         DESIGN B — CHRONOGRAPH
+         Three small subdials in a row. Each is a thin circular
+         outline with sparse tick marks at the cardinal positions.
+         The current value reads as a single colored arc tracing the
+         outline; the number sits dead center. Tiny vital label
+         below. Reads like a chronograph watch face — quiet,
+         confident, precise. */
+      .chrono {
+        background: linear-gradient(180deg, rgba(20, 20, 26, 0.4), rgba(10, 14, 19, 0.4));
+        border: 1px solid var(--c-rule);
+        padding: 30px;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+      }
+      .chrono .dial {
+        position: relative;
+        width: 144px;
+        height: 144px;
+        display: grid;
+        place-items: center;
+      }
+      .chrono .dial svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .chrono .dial-track {
+        fill: none;
+        stroke: var(--c-rule);
+        stroke-width: 1;
+      }
+      .chrono .dial-tick {
+        stroke: var(--c-text-dim);
+        stroke-width: 1;
+      }
+      .chrono .dial-tick.major {
+        stroke: var(--c-text-faint);
+        stroke-width: 1.2;
+      }
+      .chrono .dial-arc {
+        fill: none;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        transition: d 600ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      }
+      .chrono .dial-hp .dial-arc {
+        stroke: var(--c-hp);
+      }
+      .chrono .dial-mn .dial-arc {
+        stroke: var(--c-mn);
+      }
+      .chrono .dial-mv .dial-arc {
+        stroke: var(--c-mv);
+      }
+      .chrono .dial-body {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .chrono .dial-val {
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: -0.01em;
+        color: var(--c-text-strong);
+        font-variant-numeric: tabular-nums;
+      }
+      .chrono .dial-max {
+        font-size: 10px;
+        letter-spacing: 0.04em;
+        color: var(--c-text-dim);
+      }
+      .chrono .dial-nm {
+        position: absolute;
+        bottom: -22px;
+        font-size: 10px;
+        letter-spacing: 0.36em;
+        text-transform: uppercase;
+        color: var(--c-text-faint);
+      }
+      .chrono .dial-hp .dial-nm {
+        color: var(--c-hp);
+      }
+      .chrono .dial-mn .dial-nm {
+        color: var(--c-mn);
+      }
+      .chrono .dial-mv .dial-nm {
+        color: var(--c-mv);
+      }
+
+      .footnote {
+        margin: 56px auto 0;
+        max-width: 980px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        line-height: 1.7;
+      }
+      .footnote strong {
+        color: var(--c-text);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vitals · two restrained designs</h1>
+    <p class="lede">
+      both designs treat the vitals as data, not decoration. the same readouts (current of max,
+      percentage, recent history) are present in each; what differs is which element the composition
+      leans on. left to keep your head up — a glance gives the value, a longer look gives the
+      context.
+    </p>
+
+    <div class="scrubber">
+      <span class="lbl">scenario</span>
+      <button data-scenario="calm" class="is-on">calm</button>
+      <button data-scenario="combat">combat</button>
+      <button data-scenario="boss">boss</button>
+      <button data-scenario="idle">idle</button>
+    </div>
+
+    <div class="stack">
+      <!-- =====================================================
+           A — EDITORIAL
+           ===================================================== -->
+      <div>
+        <div class="demo-label">a · <span class="demo-name">editorial ledger</span></div>
+        <div class="editorial">
+          <div class="row row-hp">
+            <span class="nm">hp</span>
+            <span class="val"> <span data-r="hp">750</span><span class="max">/ 1000</span> </span>
+            <span class="scale">
+              <span class="rule"></span>
+              <span class="tick" style="left: 75%"></span>
+              <span class="marker" style="left: 75%"></span>
+            </span>
+            <span class="pct" data-r="hp-pct">75%</span>
+            <span class="spark" data-r="hp-spark">▂▃▃▄▅▆▆▅▅▄</span>
+          </div>
+          <div class="row row-mn">
+            <span class="nm">mn</span>
+            <span class="val"> <span data-r="mn">150</span><span class="max">/ 300</span> </span>
+            <span class="scale">
+              <span class="rule"></span>
+              <span class="tick" style="left: 50%"></span>
+              <span class="marker" style="left: 50%"></span>
+            </span>
+            <span class="pct" data-r="mn-pct">50%</span>
+            <span class="spark" data-r="mn-spark">▄▅▅▄▃▃▂▃▄▄</span>
+          </div>
+          <div class="row row-mv">
+            <span class="nm">mv</span>
+            <span class="val"> <span data-r="mv">50</span><span class="max">/ 200</span> </span>
+            <span class="scale">
+              <span class="rule"></span>
+              <span class="tick" style="left: 25%"></span>
+              <span class="marker" style="left: 25%"></span>
+            </span>
+            <span class="pct" data-r="mv-pct">25%</span>
+            <span class="spark" data-r="mv-spark">▃▃▂▂▁▁▂▃▃▃</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- =====================================================
+           B — CHRONOGRAPH
+           ===================================================== -->
+      <div>
+        <div class="demo-label">b · <span class="demo-name">chronograph</span></div>
+        <div class="chrono">
+          <div class="dial dial-hp">
+            <svg viewBox="0 0 144 144">
+              <circle class="dial-track" cx="72" cy="72" r="58" />
+              <!-- 12 ticks around the dial -->
+              <g id="ticks-hp"></g>
+              <circle
+                id="arc-hp"
+                class="dial-arc"
+                cx="72"
+                cy="72"
+                r="58"
+                transform="rotate(-90 72 72)"
+              />
+            </svg>
+            <div class="dial-body">
+              <span class="dial-val" data-r="hp">750</span>
+              <span class="dial-max">of 1000</span>
+            </div>
+            <span class="dial-nm">hp</span>
+          </div>
+
+          <div class="dial dial-mn">
+            <svg viewBox="0 0 144 144">
+              <circle class="dial-track" cx="72" cy="72" r="58" />
+              <g id="ticks-mn"></g>
+              <circle
+                id="arc-mn"
+                class="dial-arc"
+                cx="72"
+                cy="72"
+                r="58"
+                transform="rotate(-90 72 72)"
+              />
+            </svg>
+            <div class="dial-body">
+              <span class="dial-val" data-r="mn">150</span>
+              <span class="dial-max">of 300</span>
+            </div>
+            <span class="dial-nm">mn</span>
+          </div>
+
+          <div class="dial dial-mv">
+            <svg viewBox="0 0 144 144">
+              <circle class="dial-track" cx="72" cy="72" r="58" />
+              <g id="ticks-mv"></g>
+              <circle
+                id="arc-mv"
+                class="dial-arc"
+                cx="72"
+                cy="72"
+                r="58"
+                transform="rotate(-90 72 72)"
+              />
+            </svg>
+            <div class="dial-body">
+              <span class="dial-val" data-r="mv">50</span>
+              <span class="dial-max">of 200</span>
+            </div>
+            <span class="dial-nm">mv</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="footnote">
+      <strong>palette:</strong> desaturated red / cool blue / warm ochre, deliberately ink-toned
+      rather than HUD-bright. they sit beside the page's text instead of competing with it.
+      <strong>type:</strong> numerals carry tabular-nums + ss01 stylistic alternates so values don't
+      shift width as digits change. <strong>weight contrast:</strong> hero value at 700, supporting
+      labels at small caps with generous tracking. nothing else asks for attention; the data is the
+      design.
+    </p>
+
+    <script>
+      // ============================================================
+      // SIMULATOR
+      // ============================================================
+      let values = { hp: 0.75, mn: 0.5, mv: 0.25 };
+      const max = { hp: 1000, mn: 300, mv: 200 };
+
+      // 10-sample history per vital for the editorial sparkline
+      const histLen = 10;
+      const hist = {
+        hp: new Array(histLen).fill(0.75),
+        mn: new Array(histLen).fill(0.5),
+        mv: new Array(histLen).fill(0.25),
+      };
+      const SPARK_BLOCKS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+      const SCENARIOS = {
+        calm: [800, 2500],
+        combat: [200, 800],
+        boss: [100, 350],
+        idle: null,
+      };
+      let scenario = 'calm';
+      let timer = null;
+      function clamp(v, lo, hi) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+      function rand(a, b) {
+        return a + Math.random() * (b - a);
+      }
+      function fireEvent() {
+        const drift = scenario === 'calm' ? 0.01 : scenario === 'combat' ? -0.02 : -0.045;
+        const jit = scenario === 'calm' ? 0.04 : scenario === 'combat' ? 0.12 : 0.2;
+        for (const k of ['hp', 'mn', 'mv']) {
+          let v = values[k] + drift + (Math.random() - 0.5) * jit;
+          if (Math.random() < 0.08) v += (Math.random() - 0.5) * jit * 4;
+          if (v < 0.08) v += Math.random() * 0.12;
+          values[k] = clamp(v, 0, 1);
+          hist[k].shift();
+          hist[k].push(values[k]);
+        }
+        render();
+      }
+      function schedule() {
+        if (timer) clearTimeout(timer);
+        if (scenario === 'idle') return;
+        const cfg = SCENARIOS[scenario];
+        timer = setTimeout(
+          () => {
+            fireEvent();
+            schedule();
+          },
+          rand(cfg[0], cfg[1]),
+        );
+      }
+
+      // ============================================================
+      // CHRONOGRAPH TICK MARKS
+      // ============================================================
+      // 12 thin ticks around each dial: every 3rd is "major" (a
+      // slightly heavier mark at the cardinal positions 0/3/6/9
+      // o'clock). Drawn once at startup.
+      function buildTicks(parentId) {
+        const g = document.getElementById(parentId);
+        const cx = 72,
+          cy = 72,
+          rOuter = 64,
+          rInnerMinor = 60,
+          rInnerMajor = 56;
+        for (let i = 0; i < 12; i++) {
+          const angle = ((i * 30 - 90) * Math.PI) / 180;
+          const isMajor = i % 3 === 0;
+          const r1 = isMajor ? rInnerMajor : rInnerMinor;
+          const x1 = cx + r1 * Math.cos(angle);
+          const y1 = cy + r1 * Math.sin(angle);
+          const x2 = cx + rOuter * Math.cos(angle);
+          const y2 = cy + rOuter * Math.sin(angle);
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', x1);
+          line.setAttribute('y1', y1);
+          line.setAttribute('x2', x2);
+          line.setAttribute('y2', y2);
+          line.setAttribute('class', 'dial-tick' + (isMajor ? ' major' : ''));
+          g.appendChild(line);
+        }
+      }
+      buildTicks('ticks-hp');
+      buildTicks('ticks-mn');
+      buildTicks('ticks-mv');
+
+      function setDialArc(el, r, v) {
+        const c = 2 * Math.PI * r;
+        const lit = v * c;
+        el.setAttribute('stroke-dasharray', lit + ' ' + (c - lit));
+      }
+
+      // ============================================================
+      // EDITORIAL SPARKLINE
+      // ============================================================
+      function spark(arr) {
+        return arr.map((v) => SPARK_BLOCKS[Math.min(7, Math.max(0, Math.round(v * 7)))]).join('');
+      }
+
+      // ============================================================
+      // RENDER
+      // ============================================================
+      function render() {
+        // numbers
+        for (const k of ['hp', 'mn', 'mv']) {
+          document.querySelectorAll('[data-r="' + k + '"]').forEach((el) => {
+            el.textContent = Math.round(values[k] * max[k]);
+          });
+          document.querySelectorAll('[data-r="' + k + '-pct"]').forEach((el) => {
+            el.textContent = Math.round(values[k] * 100) + '%';
+          });
+          document.querySelectorAll('[data-r="' + k + '-spark"]').forEach((el) => {
+            el.textContent = spark(hist[k]);
+          });
+        }
+
+        // editorial: tick + marker positions
+        document.querySelectorAll('.editorial .row').forEach((row) => {
+          const k = row.classList.contains('row-hp')
+            ? 'hp'
+            : row.classList.contains('row-mn')
+              ? 'mn'
+              : 'mv';
+          const v = values[k] * 100;
+          row.querySelector('.tick').style.left = v + '%';
+          row.querySelector('.marker').style.left = v + '%';
+        });
+
+        // chronograph arcs
+        setDialArc(document.getElementById('arc-hp'), 58, values.hp);
+        setDialArc(document.getElementById('arc-mn'), 58, values.mn);
+        setDialArc(document.getElementById('arc-mv'), 58, values.mv);
+      }
+
+      document.querySelectorAll('.scrubber button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.scrubber button').forEach((b) => b.classList.remove('is-on'));
+          btn.classList.add('is-on');
+          scenario = btn.dataset.scenario;
+          schedule();
+        });
+      });
+
+      render();
+      schedule();
+    </script>
+  </body>
+</html>

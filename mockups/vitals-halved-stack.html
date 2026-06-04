@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals · halved bar + spark</title>
+    <style>
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'JetBrainsMono Bundled';
+        src: url('../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+
+        /* Vosh's built-in vital colors (full top of each ramp) */
+        --c-hp: #87a987;
+        --c-mn: #7fb4ca;
+        --c-mv: #d99a6c;
+        /* The bar's empty cells and the sparkline's gray base are
+           rendered at the SAME color so the bar and the spark read
+           as the same width — without it the bar looks narrower
+           than the spark because the empty cells are too dim to
+           see. */
+        --c-empty: #4a4e57;
+        --c-base: #4a4e57;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 36px 32px 80px;
+        background: radial-gradient(ellipse at top, #0d0a0e 0%, #04060a 60%, #000 100%);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        min-height: 100vh;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 760px;
+        margin: 0 0 24px;
+        line-height: 1.6;
+      }
+      .lede code {
+        background: var(--c-surface-deep);
+        padding: 1px 6px;
+        border-radius: 2px;
+        color: var(--c-text);
+      }
+
+      .scrubber {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin: 0 -32px 28px;
+        padding: 12px 32px;
+        background: rgba(9, 14, 19, 0.94);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--c-border);
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .scrubber span.lbl {
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+      }
+      .scrubber button {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 12px;
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      .scrubber button:hover {
+        color: var(--c-text-strong);
+        border-color: var(--c-border-strong);
+      }
+      .scrubber button.is-on {
+        background: var(--c-accent);
+        border-color: var(--c-accent);
+        color: var(--c-surface-deep);
+      }
+
+      .stack {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 36px;
+        max-width: 1080px;
+        margin: 0 auto;
+      }
+      .demo {
+        position: relative;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 5px;
+        padding: 34px 26px 22px;
+      }
+      .demo-label {
+        position: absolute;
+        top: 12px;
+        left: 18px;
+        font-size: 10px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+      }
+      .demo-name {
+        color: var(--c-text-strong);
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        margin-left: 6px;
+      }
+      .demo-desc {
+        color: var(--c-text-faint);
+        font-size: 12px;
+        margin: 14px 0 0;
+        line-height: 1.6;
+      }
+
+      /* ============================================================
+         FAUX VOSH SHELL */
+      .vosh {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        font-size: 12px;
+      }
+      .vosh-topbar {
+        display: flex;
+        align-items: center;
+        flex: 0 0 24px;
+        padding: 0 10px;
+        background: var(--c-surface);
+        border-bottom: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font-size: 11px;
+      }
+      .vosh-topbar .aux {
+        display: flex;
+        gap: 2px;
+      }
+      .vosh-topbar .aux span {
+        padding: 2px 8px;
+      }
+      .vosh-topbar .loadouts {
+        margin-left: 6px;
+        padding: 2px 8px;
+        color: var(--c-accent);
+      }
+      .vosh-topbar .spacer {
+        flex: 1;
+      }
+      .vosh-topbar .controls {
+        font-size: 13px;
+      }
+      .vosh-topbar .controls span {
+        padding: 0 8px;
+      }
+      .vosh-term {
+        padding: 10px 14px;
+        line-height: 1.55;
+        flex: 1 1 0;
+        min-height: 140px;
+        overflow: hidden;
+      }
+      .vosh-term p {
+        margin: 0;
+        color: var(--c-text);
+      }
+      .vosh-term p.dim {
+        color: var(--c-text-faint);
+      }
+      .vosh-term p.dmg {
+        color: #c98d8d;
+      }
+      .vosh-term p.cmd {
+        color: var(--c-text-dim);
+        font-style: italic;
+      }
+      .vosh-vitals {
+        flex: 0 0 auto;
+        /* extra top padding pushes the bar+spark stack downward
+           inside the vitals slot for breathing room above */
+        padding: 12px 14px 6px;
+        background: var(--c-surface);
+      }
+      .vosh-input {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 32px;
+        padding: 6px 14px;
+        background: var(--c-surface);
+        border-top: 1px solid var(--c-border);
+        position: relative;
+      }
+      .vosh-input .prompt {
+        color: var(--c-accent);
+        font-weight: 700;
+      }
+      .vosh-input .caret {
+        display: inline-block;
+        width: 6px;
+        height: 13px;
+        background: var(--c-text);
+        animation: caret-blink 1s steps(1, end) infinite;
+      }
+      @keyframes caret-blink {
+        50% {
+          background: transparent;
+        }
+      }
+      .vosh-chip {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 1px 10px;
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 3px;
+        color: var(--c-text);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        white-space: nowrap;
+        display: inline-flex;
+        gap: 8px;
+      }
+      .vosh-chip .caption {
+        color: var(--c-text-faint);
+        font-weight: 400;
+      }
+      .vosh-chip .sep {
+        color: var(--c-text-dim);
+        font-weight: 400;
+      }
+      .vosh-chip .time {
+        color: var(--c-accent);
+      }
+
+      /* ============================================================
+         VITALS — halved bar + spark stack
+         Each vital row carries: label · stack(bar / spark) · pct
+         · num · delta. The stack is a flex column of TWO half-height
+         rows (bar above, spark below). Total height of the stack
+         equals one current bar's height because each child is
+         rendered at line-height: 1 with reduced font-size, and the
+         column collapses tight. */
+      .vital {
+        display: grid;
+        grid-template-columns: 20px 1fr 36px 70px 28px;
+        align-items: center;
+        column-gap: 10px;
+        padding: 0;
+        line-height: 1.1;
+        font-variant-numeric: tabular-nums;
+      }
+      .vital + .vital {
+        margin-top: 1px;
+      }
+      .vital .label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: lowercase;
+        letter-spacing: 0.06em;
+      }
+      .vital .pct {
+        font-size: 11px;
+        font-weight: 700;
+        text-align: right;
+      }
+      .vital .num {
+        font-size: 11px;
+        color: var(--c-text-muted);
+      }
+      .vital .delta {
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .vital .delta.up {
+        color: #87a987;
+      }
+      .vital .delta.down {
+        color: #c98d8d;
+      }
+      .vital .delta.zero {
+        color: transparent;
+      }
+      .vital-hp .label,
+      .vital-hp .pct,
+      .vital-hp .bar .filled {
+        color: var(--c-hp);
+      }
+      .vital-mn .label,
+      .vital-mn .pct,
+      .vital-mn .bar .filled {
+        color: var(--c-mn);
+      }
+      .vital-mv .label,
+      .vital-mv .pct,
+      .vital-mv .bar .filled {
+        color: var(--c-mv);
+      }
+
+      /* The stack: bar above, spark below. Both rendered at the same
+         smaller font so two of them total roughly the height of one
+         standard 13px bar line. The `lh-tight` clamp gets line-height
+         to 1 so the two rows sit flush against each other without
+         leading. */
+      /* .barspark is now just a plain wrapper around the spark
+         (the bar is gone). Default block display so the spark
+         inside renders at its natural size; no flex column. */
+      .barspark {
+        display: block;
+        line-height: 1;
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        letter-spacing: 0;
+      }
+
+      /* Spark row. Two stacked BRAILLE layers in the same
+         character grid:
+         - .spark-base — gray ⣿ (all 8 dots lit) in EVERY cell,
+                          always. This is the "never nothing in
+                          the background" floor — a full braille
+                          dot grid in gray.
+         - .spark-trace — braille chars in vital color where each
+                          cell carries 2 samples (left + right
+                          columns) and dots light bottom-up from
+                          the sample value. Where the trace lights
+                          a dot, vital color paints on top of the
+                          gray; where it doesn't, the base's gray
+                          dot shows through. Density of the trace
+                          rises with the value.
+         Braille font stack must put JetBrains first because
+         Berkeley Mono Nerd Font has empty glyphs in the U+2800
+         range. */
+      .barspark .spark {
+        position: relative;
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        /* font-size MUST be non-zero so the `ch` unit on width has
+           a meaningful value (ch is relative to the element's
+           own font). */
+        font-size: 9px;
+        line-height: 1;
+        /* Use inline-block so the .spark's height grows to its
+           multi-row content. Flex was previously used to strip
+           inter-tag whitespace; the .spark-base block now does
+           that on its own because it's a block-level element with
+           its own newline content (whitespace text nodes between
+           sibling spans collapse harmlessly into block flow). */
+        display: inline-block;
+        width: 20ch;
+        overflow: hidden;
+      }
+      .barspark .spark-base,
+      .barspark .spark-trace {
+        font-size: 9px;
+        line-height: 1;
+        white-space: pre;
+        /* JetBrains Mono braille glyphs sit inside cells that have
+           ~2px of horizontal padding around the dot pattern. To
+           collapse the gap and read as one continuous braille
+           field, pull each character ~2px closer to its neighbor. */
+        letter-spacing: -2px;
+        margin: 0;
+        padding: 0;
+        display: block;
+      }
+      .barspark .spark-base {
+        color: var(--c-base);
+      }
+      .barspark .spark-trace {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+      }
+      .vital-hp .spark-trace {
+        color: var(--c-hp);
+      }
+      .vital-mn .spark-trace {
+        color: var(--c-mn);
+      }
+      .vital-mv .spark-trace {
+        color: var(--c-mv);
+      }
+
+      .footnote {
+        margin: 40px auto 0;
+        max-width: 1080px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        line-height: 1.7;
+      }
+      .footnote strong {
+        color: var(--c-text);
+      }
+      .footnote code {
+        background: var(--c-surface-deep);
+        padding: 1px 6px;
+        border-radius: 2px;
+        color: var(--c-text);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vitals · halved bar + sparkline (same footprint)</h1>
+    <p class="lede">
+      the dotted bar gets compressed to half height; a half-height sparkline lives directly below
+      it; the total takes the same vertical space the single bar does today. the sparkline always
+      renders a gray dotted base in every cell, and the vital-color trace rises out of it from the
+      bottom of each cell. nothing is ever blank — at low sample values the gray base shows above
+      the short trace; at high values the vital color fills the cell entirely.
+    </p>
+
+    <div class="scrubber">
+      <span class="lbl">scenario</span>
+      <button data-scenario="calm" class="is-on">calm regen</button>
+      <button data-scenario="combat">combat</button>
+      <button data-scenario="boss">boss</button>
+      <button data-scenario="idle">idle</button>
+    </div>
+
+    <div class="stack">
+      <div class="demo">
+        <span class="demo-label">vitals · <span class="demo-name">halved bar + spark</span></span>
+        <div class="vosh">
+          <div class="vosh-topbar">
+            <div class="aux">
+              <span>profiles</span><span>panels</span><span>triggers</span><span>aliases</span>
+            </div>
+            <span class="loadouts">[ no loadout ]</span>
+            <span class="spacer"></span>
+            <div class="controls"><span>−</span><span>□</span><span>✕</span></div>
+          </div>
+          <div class="vosh-term">
+            <p class="dim">A grim hall opens before you, its ribs of stone arching overhead.</p>
+            <p>A wraith hisses, "you stink of bone-dust."</p>
+            <p class="dmg">The wraith claws at you for 47.</p>
+            <p>You ready your blade.</p>
+            <p class="cmd">&gt; cast firebolt wraith</p>
+            <p>Your firebolt strikes the wraith for 86 damage.</p>
+          </div>
+          <div class="vosh-vitals">
+            <div class="vital vital-hp">
+              <span class="label">hp</span>
+              <div class="barspark">
+                <span class="spark">
+                  <span class="spark-base" id="base-hp"></span>
+                  <span class="spark-trace" id="trace-hp"></span>
+                </span>
+              </div>
+              <span class="pct" id="pct-hp">75%</span>
+              <span class="num" id="num-hp">750/1000</span>
+              <span class="delta up" id="delta-hp">+12</span>
+            </div>
+            <div class="vital vital-mn">
+              <span class="label">mn</span>
+              <div class="barspark">
+                <span class="spark">
+                  <span class="spark-base" id="base-mn"></span>
+                  <span class="spark-trace" id="trace-mn"></span>
+                </span>
+              </div>
+              <span class="pct" id="pct-mn">50%</span>
+              <span class="num" id="num-mn">150/300</span>
+              <span class="delta down" id="delta-mn">-8</span>
+            </div>
+            <div class="vital vital-mv">
+              <span class="label">mv</span>
+              <div class="barspark">
+                <span class="spark">
+                  <span class="spark-base" id="base-mv"></span>
+                  <span class="spark-trace" id="trace-mv"></span>
+                </span>
+              </div>
+              <span class="pct" id="pct-mv">25%</span>
+              <span class="num" id="num-mv">50/200</span>
+              <span class="delta zero">+0</span>
+            </div>
+          </div>
+          <div class="vosh-input">
+            <div class="vosh-chip">
+              <span class="caption">tick</span><span>12s</span>
+              <span class="sep">·</span>
+              <span class="caption">time</span><span class="time">14:32</span>
+            </div>
+            <span class="prompt">&gt;</span>
+            <span>cast firebolt wrai</span>
+            <span class="caret"></span>
+          </div>
+        </div>
+        <p class="demo-desc">
+          each vital row is the same height as a current single-bar row. inside that slot, the bar
+          is rendered at 11px on top, the sparkline at 11px below, line-height: 1 so they stack
+          flush. the dotted-shade glyphs (<code>▓</code> filled, <code>░</code> empty) carry over
+          from your current style. the sparkline overlays <code>▁▂▃▄▅▆▇█</code> in the vital color
+          on top of an always-gray <code>░░░░</code> base — the trace lights up bottom-up from a
+          permanent baseline, never an empty cell.
+        </p>
+      </div>
+    </div>
+
+    <p class="footnote">
+      <strong>read order:</strong> headline number (the bar's fill ratio) at a glance; trend (the
+      sparkline beneath) when you look for context. <strong>always-on base:</strong> the sparkline
+      cell is never blank — gray dotted texture is the floor, vital-colored block character is the
+      trace above it. at full vital value the cell is pure vital color (the trace's
+      <code>█</code> covers the base); at zero value the cell is pure gray (the base shows alone).
+      everything in between gradates between the two.
+      <strong>same footprint as today:</strong> per-vital height unchanged, sparkline is gained from
+      compressing the bar to half height.
+    </p>
+
+    <script>
+      // ============================================================
+      // BAR (current vosh dotted-shade style, ▓ / ░ glyphs)
+      // ============================================================
+      const BAR_W = 20;
+      const BAR_FILLED = '▓';
+      const BAR_EMPTY = '░';
+      function plainBar(v) {
+        const filled = Math.round(v * BAR_W);
+        const empty = BAR_W - filled;
+        return (
+          '<span class="filled">' +
+          BAR_FILLED.repeat(filled) +
+          '</span><span class="empty">' +
+          BAR_EMPTY.repeat(empty) +
+          '</span>'
+        );
+      }
+
+      // ============================================================
+      // SPARKLINE — braille, two stacked layers per cell:
+      //   base: ⣿ (all 8 dots lit) in every cell, gray. The
+      //         "never nothing in the background" floor — a full
+      //         braille dot grid in gray.
+      //   trace: per-cell braille char where each cell carries 2
+      //          samples (left + right columns) and dots light
+      //          BOTTOM-UP based on sample value. Trace overlays
+      //          the base; where its dots are lit, vital color
+      //          shows; where they aren't, the gray base shows
+      //          through dot-for-dot.
+      // Each braille cell carries 2 samples → SPARK_W cells holds
+      // 2 × SPARK_W samples of history.
+      // The sparkline uses tight (-2px) letter-spacing so adjacent
+      // braille cells read as a continuous dot field, which means
+      // each char takes less effective horizontal space. To still
+      // span the same width as the bar (20ch = ~108px at 9px
+      // JetBrains Mono), we render ~32 braille chars instead of 20.
+      // The spark's box is constrained to 20ch and overflow: hidden
+      // so any rounding mismatch clips harmlessly at the right edge.
+      const SPARK_W = 32;
+      // SPARK_ROWS = number of character rows in the sparkline.
+      // Each row = 4 dot rows of vertical resolution, so 2 rows =
+      // 8-level sample fill (range 0..1 maps to 0..8 lit dot rows
+      // from the bottom).
+      const SPARK_ROWS = 2;
+      const SPARK_BASE_CHAR = '⣿'; // U+28FF, all 8 dots
+      // Per-dot bits within a single braille cell, indexed by
+      // local dot row (0 = top of cell, 3 = bottom).
+      const DOTS_LEFT_TOP_DOWN = [0x01, 0x02, 0x04, 0x40];
+      const DOTS_RIGHT_TOP_DOWN = [0x08, 0x10, 0x20, 0x80];
+
+      function baseString() {
+        // SPARK_ROWS lines of full ⣿ separated by newlines so the
+        // base renders as a multi-row dot floor.
+        const line = SPARK_BASE_CHAR.repeat(SPARK_W);
+        return Array(SPARK_ROWS).fill(line).join('\n');
+      }
+      function traceString(values) {
+        const need = SPARK_W * 2;
+        const samples = values.slice(-need);
+        while (samples.length < need) samples.unshift(0);
+        const totalDots = SPARK_ROWS * 4; // total dot rows of resolution
+        // For each character row (top → bottom), build a line of
+        // SPARK_W braille characters. Each cell carries 2 samples;
+        // dots light bottom-up by global-dot-row position.
+        const lines = [];
+        for (let charRow = 0; charRow < SPARK_ROWS; charRow++) {
+          let line = '';
+          for (let i = 0; i < SPARK_W; i++) {
+            const v0 = samples[i * 2];
+            const v1 = samples[i * 2 + 1];
+            const lit0 = Math.min(totalDots, Math.max(0, Math.round(v0 * totalDots)));
+            const lit1 = Math.min(totalDots, Math.max(0, Math.round(v1 * totalDots)));
+            let bits = 0;
+            // For each of the 4 dot rows in this character cell,
+            // determine the GLOBAL dot row (counted top-down) and
+            // check whether it should be lit (i.e., it falls within
+            // the bottom `lit` rows).
+            for (let dotInChar = 0; dotInChar < 4; dotInChar++) {
+              const globalDotRow = charRow * 4 + dotInChar;
+              const distFromBottom = totalDots - 1 - globalDotRow;
+              if (distFromBottom < lit0) bits |= DOTS_LEFT_TOP_DOWN[dotInChar];
+              if (distFromBottom < lit1) bits |= DOTS_RIGHT_TOP_DOWN[dotInChar];
+            }
+            line += String.fromCodePoint(0x2800 | bits);
+          }
+          lines.push(line);
+        }
+        return lines.join('\n');
+      }
+
+      // ============================================================
+      // SIMULATOR
+      // ============================================================
+      let values = { hp: 0.75, mn: 0.5, mv: 0.25 };
+      const max = { hp: 1000, mn: 300, mv: 200 };
+      // HISTORY must be at least SPARK_W * 2 (64 with SPARK_W = 32)
+      // or traceString pads its front with zeros and the leftmost
+      // cells of the spark never receive real data.
+      const HISTORY = 80;
+      const hist = {
+        hp: new Array(HISTORY).fill(0.75),
+        mn: new Array(HISTORY).fill(0.5),
+        mv: new Array(HISTORY).fill(0.25),
+      };
+      const SCENARIOS = {
+        calm: [800, 2500],
+        combat: [200, 800],
+        boss: [100, 350],
+        idle: null,
+      };
+      let scenario = 'calm';
+      let timer = null;
+      const deltas = { hp: 12, mn: -8, mv: 0 };
+
+      function clamp(v, lo, hi) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+      function rand(a, b) {
+        return a + Math.random() * (b - a);
+      }
+      function fireEvent() {
+        const drift = scenario === 'calm' ? 0.01 : scenario === 'combat' ? -0.02 : -0.045;
+        const jit = scenario === 'calm' ? 0.04 : scenario === 'combat' ? 0.12 : 0.2;
+        const prev = { ...values };
+        for (const k of ['hp', 'mn', 'mv']) {
+          let v = values[k] + drift + (Math.random() - 0.5) * jit;
+          if (Math.random() < 0.08) v += (Math.random() - 0.5) * jit * 4;
+          if (v < 0.08) v += Math.random() * 0.12;
+          values[k] = clamp(v, 0, 1);
+          hist[k].shift();
+          hist[k].push(values[k]);
+        }
+        deltas.hp = Math.round((values.hp - prev.hp) * max.hp);
+        deltas.mn = Math.round((values.mn - prev.mn) * max.mn);
+        deltas.mv = Math.round((values.mv - prev.mv) * max.mv);
+        render();
+      }
+      function schedule() {
+        if (timer) clearTimeout(timer);
+        if (scenario === 'idle') return;
+        const cfg = SCENARIOS[scenario];
+        timer = setTimeout(
+          () => {
+            fireEvent();
+            schedule();
+          },
+          rand(cfg[0], cfg[1]),
+        );
+      }
+
+      function render() {
+        for (const k of ['hp', 'mn', 'mv']) {
+          const v = values[k];
+          document.getElementById('base-' + k).textContent = baseString();
+          document.getElementById('trace-' + k).textContent = traceString(hist[k]);
+          document.getElementById('pct-' + k).textContent = Math.round(v * 100) + '%';
+          document.getElementById('num-' + k).textContent = Math.round(v * max[k]) + '/' + max[k];
+        }
+        renderDelta('delta-hp', deltas.hp);
+        renderDelta('delta-mn', deltas.mn);
+      }
+      function renderDelta(id, n) {
+        const el = document.getElementById(id);
+        if (n === 0) {
+          el.className = 'delta zero';
+          el.textContent = '+0';
+        } else if (n > 0) {
+          el.className = 'delta up';
+          el.textContent = '+' + n;
+        } else {
+          el.className = 'delta down';
+          el.textContent = String(n);
+        }
+      }
+
+      document.querySelectorAll('.scrubber button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.scrubber button').forEach((b) => b.classList.remove('is-on'));
+          btn.classList.add('is-on');
+          scenario = btn.dataset.scenario;
+          schedule();
+        });
+      });
+
+      render();
+      schedule();
+    </script>
+  </body>
+</html>

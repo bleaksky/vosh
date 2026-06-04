@@ -616,6 +616,11 @@ export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
 export type VitalsLayout = 'stacked' | 'inline';
 export type VitalsPercentColor = 'fill' | 'gradient';
 export type VitalsBarStyle = 'solid' | 'track' | 'ramped';
+/** Whether to stack a braille history grid below the bar. Independent
+ *  from `bar_style` — pair any bar style with any layout. Legacy
+ *  `bar_style: 'spark'` migrates to `bar_style: 'solid'` +
+ *  `bar_layout: 'with_history'` on load. */
+export type VitalsBarLayout = 'plain' | 'with_history';
 
 export interface VitalsConfig {
   show_bar: boolean;
@@ -626,6 +631,7 @@ export interface VitalsConfig {
   bar_empty: string;
   bar_width: number;
   bar_style: VitalsBarStyle;
+  bar_layout: VitalsBarLayout;
   layout: VitalsLayout;
   percent_color: VitalsPercentColor;
   template_enabled: boolean;
@@ -645,11 +651,10 @@ export interface VitalsConfig {
    *  surrounding label / percent / numeric / delta columns stay in
    *  the app font. Empty falls through to the parent font. */
   bar_font: string;
-  /** Replaces the entire vitals bar with three corner L-brackets
-   *  drawn on the main window's chrome (top-left = hp, top-right =
-   *  mn, bottom-right = mv) plus a soft red peripheral vignette
-   *  that pulses when hp drops below 30%. */
-  one_with_erelei: boolean;
+  /** Pulses a soft red peripheral vignette on the main window's
+   *  edges when hp drops below 30%. Additive — sits on top of the
+   *  regular vitals bar rather than replacing it. */
+  low_hp_vignette: boolean;
 }
 
 export const DEFAULT_VITALS_TEMPLATE =
@@ -664,6 +669,7 @@ export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
   bar_empty: '▱',
   bar_width: 20,
   bar_style: 'solid',
+  bar_layout: 'plain',
   layout: 'stacked',
   percent_color: 'fill',
   template_enabled: false,
@@ -673,7 +679,7 @@ export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
   mv_color: '',
   use_color_ramp: true,
   bar_font: '',
-  one_with_erelei: false,
+  low_hp_vignette: false,
 };
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -749,9 +755,19 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
         ? Math.max(4, Math.min(60, Math.floor(v.bar_width)))
         : DEFAULT_VITALS_CONFIG.bar_width,
     bar_style:
-      v.bar_style === 'track' || v.bar_style === 'ramped'
+      v.bar_style === 'track' || v.bar_style === 'ramped' || v.bar_style === 'solid'
         ? v.bar_style
-        : DEFAULT_VITALS_CONFIG.bar_style,
+        : // Legacy `bar_style: 'spark'` migrates to solid + history
+          // layout. Anything unrecognized falls back to the default.
+          DEFAULT_VITALS_CONFIG.bar_style,
+    bar_layout:
+      // Migrate legacy spark style → with_history layout. Otherwise
+      // honor the persisted layout if it is in range.
+      (v as { bar_style?: unknown }).bar_style === 'spark'
+        ? 'with_history'
+        : v.bar_layout === 'with_history' || v.bar_layout === 'plain'
+          ? v.bar_layout
+          : DEFAULT_VITALS_CONFIG.bar_layout,
     layout: v.layout === 'inline' ? 'inline' : DEFAULT_VITALS_CONFIG.layout,
     percent_color:
       v.percent_color === 'gradient' ? 'gradient' : DEFAULT_VITALS_CONFIG.percent_color,
@@ -771,10 +787,15 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
         ? v.use_color_ramp
         : DEFAULT_VITALS_CONFIG.use_color_ramp,
     bar_font: typeof v.bar_font === 'string' ? v.bar_font : DEFAULT_VITALS_CONFIG.bar_font,
-    one_with_erelei:
-      typeof v.one_with_erelei === 'boolean'
-        ? v.one_with_erelei
-        : DEFAULT_VITALS_CONFIG.one_with_erelei,
+    low_hp_vignette:
+      // Accept the new field name, then fall back to the legacy
+      // `one_with_erelei` so existing configs preserve the user's
+      // choice across the rename.
+      typeof v.low_hp_vignette === 'boolean'
+        ? v.low_hp_vignette
+        : typeof (v as { one_with_erelei?: unknown }).one_with_erelei === 'boolean'
+          ? ((v as { one_with_erelei: boolean }).one_with_erelei as boolean)
+          : DEFAULT_VITALS_CONFIG.low_hp_vignette,
   };
 }
 

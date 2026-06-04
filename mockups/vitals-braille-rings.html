@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals · braille concentric arcs</title>
+    <style>
+      @font-face {
+        font-family: 'JetBrainsMono Bundled';
+        src: url('../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+
+        --c-hp: #ef4444;
+        --c-mn: #38bdf8;
+        --c-mv: #fbbf24;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 36px 32px 64px;
+        background: radial-gradient(ellipse at top, #0d0a0e 0%, #04060a 60%, #000 100%);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        min-height: 100vh;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 760px;
+        margin: 0 0 22px;
+        line-height: 1.55;
+      }
+
+      .scrubber {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin: 0 -32px 28px;
+        padding: 12px 32px;
+        background: rgba(9, 14, 19, 0.94);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--c-border);
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .scrubber span.lbl {
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+      }
+      .scrubber button {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 12px;
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      .scrubber button:hover {
+        color: var(--c-text-strong);
+        border-color: var(--c-border-strong);
+      }
+      .scrubber button.is-on {
+        background: var(--c-accent);
+        border-color: var(--c-accent);
+        color: var(--c-surface-deep);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      .demo {
+        position: relative;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 5px;
+        padding: 30px 22px 18px;
+      }
+      .demo-label {
+        position: absolute;
+        top: 10px;
+        left: 16px;
+        font-size: 10px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+      }
+      .demo-name {
+        margin-left: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--c-text-strong);
+        letter-spacing: 0.08em;
+      }
+      .demo-stage {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 8px 0;
+      }
+      .demo-desc {
+        color: var(--c-text-faint);
+        font-size: 11px;
+        margin: 14px 0 0;
+        line-height: 1.5;
+      }
+
+      /* ============================================================
+         BRAILLE CONCENTRIC ARCS
+         The ring shapes themselves are drawn in braille — a fixed
+         grid of cells where each dot is lit based on whether it
+         falls inside one of three ring annuli AND within that
+         ring's lit arc (clockwise from top, scaled by the vital's
+         value). Three overlapping text layers (one per vital, each
+         in its own color); the three rings live at different radii
+         so their dots never collide, so colors stay pure with no
+         blend mode. */
+      .braille-rings {
+        position: relative;
+        flex: 0 0 auto;
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        line-height: 1;
+        letter-spacing: 0;
+        white-space: pre;
+      }
+      .braille-rings .layer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        white-space: pre;
+      }
+      .braille-rings .layer-spacer {
+        position: relative;
+        visibility: hidden;
+      }
+      .braille-rings .layer-track {
+        color: var(--c-border-soft);
+      }
+      .braille-rings .layer-hp {
+        color: var(--c-hp);
+      }
+      .braille-rings .layer-mn {
+        color: var(--c-mn);
+      }
+      .braille-rings .layer-mv {
+        color: var(--c-mv);
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: 18px auto auto;
+        gap: 4px 8px;
+        align-items: baseline;
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+      }
+      .stats .row {
+        display: contents;
+      }
+      .stats .lbl {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+      }
+      .stats .val {
+        font-weight: 700;
+      }
+      .stats .max {
+        color: var(--c-text-dim);
+        font-size: 10px;
+      }
+      .stats .row-hp .lbl,
+      .stats .row-hp .val {
+        color: var(--c-hp);
+      }
+      .stats .row-mn .lbl,
+      .stats .row-mn .val {
+        color: var(--c-mn);
+      }
+      .stats .row-mv .lbl,
+      .stats .row-mv .val {
+        color: var(--c-mv);
+      }
+
+      /* Size variants */
+      .size-s .braille-rings {
+        font-size: 14px;
+      }
+      .size-m .braille-rings {
+        font-size: 18px;
+      }
+      .size-l .braille-rings {
+        font-size: 22px;
+      }
+
+      .footnote {
+        margin: 36px auto 0;
+        max-width: 1100px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      .footnote strong {
+        color: var(--c-text);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vitals · braille concentric arcs</h1>
+    <p class="lede">
+      same concentric-arc geometry as the SVG version, but the dots are real braille — each
+      character cell is a 2×4 dot patch, and the renderer lights only the dots that fall inside one
+      of the three ring annuli AND within that ring's lit arc (clockwise from top, scaled by the
+      vital's value). three text layers overlap at the same position, one per vital; since the three
+      rings live at different radii, the dots never collide so colors stay pure with no blend mode.
+      shown at three sizes so you can see how it scales.
+    </p>
+
+    <div class="scrubber">
+      <span class="lbl">scenario</span>
+      <button data-scenario="calm" class="is-on">calm regen</button>
+      <button data-scenario="combat">combat</button>
+      <button data-scenario="boss">boss fight</button>
+      <button data-scenario="idle">idle (no events)</button>
+    </div>
+
+    <div class="grid">
+      <div class="demo size-s">
+        <span class="demo-label">small · <span class="demo-name">9×5 cells</span></span>
+        <div class="demo-stage">
+          <div class="braille-rings" data-size="s">
+            <pre class="layer layer-spacer" id="bs-spacer"></pre>
+            <pre class="layer layer-track" id="bs-track"></pre>
+            <pre class="layer layer-hp" id="bs-hp"></pre>
+            <pre class="layer layer-mn" id="bs-mn"></pre>
+            <pre class="layer layer-mv" id="bs-mv"></pre>
+          </div>
+          <div class="stats">
+            <span class="row row-hp"
+              ><span class="lbl">hp</span><span class="val" data-r="hp">750</span
+              ><span class="max">/1000</span></span
+            >
+            <span class="row row-mn"
+              ><span class="lbl">mn</span><span class="val" data-r="mn">150</span
+              ><span class="max">/300</span></span
+            >
+            <span class="row row-mv"
+              ><span class="lbl">mv</span><span class="val" data-r="mv">50</span
+              ><span class="max">/200</span></span
+            >
+          </div>
+        </div>
+        <p class="demo-desc">
+          tight grid — fits in a narrow panel. dots are visibly chunky; the ring shape is
+          approximate but reads clearly.
+        </p>
+      </div>
+
+      <div class="demo size-m">
+        <span class="demo-label">medium · <span class="demo-name">11×6 cells</span></span>
+        <div class="demo-stage">
+          <div class="braille-rings" data-size="m">
+            <pre class="layer layer-spacer" id="bm-spacer"></pre>
+            <pre class="layer layer-track" id="bm-track"></pre>
+            <pre class="layer layer-hp" id="bm-hp"></pre>
+            <pre class="layer layer-mn" id="bm-mn"></pre>
+            <pre class="layer layer-mv" id="bm-mv"></pre>
+          </div>
+          <div class="stats">
+            <span class="row row-hp"
+              ><span class="lbl">hp</span><span class="val" data-r="hp">750</span
+              ><span class="max">/1000</span></span
+            >
+            <span class="row row-mn"
+              ><span class="lbl">mn</span><span class="val" data-r="mn">150</span
+              ><span class="max">/300</span></span
+            >
+            <span class="row row-mv"
+              ><span class="lbl">mv</span><span class="val" data-r="mv">50</span
+              ><span class="max">/200</span></span
+            >
+          </div>
+        </div>
+        <p class="demo-desc">
+          more dot resolution. ring curves read smoother. fits a standard vitals slot at a larger
+          font setting.
+        </p>
+      </div>
+
+      <div class="demo size-l">
+        <span class="demo-label">large · <span class="demo-name">13×7 cells</span></span>
+        <div class="demo-stage">
+          <div class="braille-rings" data-size="l">
+            <pre class="layer layer-spacer" id="bl-spacer"></pre>
+            <pre class="layer layer-track" id="bl-track"></pre>
+            <pre class="layer layer-hp" id="bl-hp"></pre>
+            <pre class="layer layer-mn" id="bl-mn"></pre>
+            <pre class="layer layer-mv" id="bl-mv"></pre>
+          </div>
+          <div class="stats">
+            <span class="row row-hp"
+              ><span class="lbl">hp</span><span class="val" data-r="hp">750</span
+              ><span class="max">/1000</span></span
+            >
+            <span class="row row-mn"
+              ><span class="lbl">mn</span><span class="val" data-r="mn">150</span
+              ><span class="max">/300</span></span
+            >
+            <span class="row row-mv"
+              ><span class="lbl">mv</span><span class="val" data-r="mv">50</span
+              ><span class="max">/200</span></span
+            >
+          </div>
+        </div>
+        <p class="demo-desc">
+          maximum detail. ring outlines are noticeably circular. uses more vertical space; would
+          want to live in a docked panel zone, not the bottom strip.
+        </p>
+      </div>
+    </div>
+
+    <p class="footnote">
+      <strong>how the rendering works:</strong> each cell carries 2×4 dot positions. the algorithm
+      walks every dot, computes its radius from the ring's center, and lights it if it falls inside
+      that vital's annulus. arc fill: angle from top (12 o'clock), clockwise, compared against
+      <code>value × 2π</code>. <strong>three layers:</strong> hp / mn / mv each render their full
+      grid with only their ring's dots lit. layered at the same position with
+      <code>position: absolute</code>; since the rings have different radii, no two layers ever
+      light a dot at the same pixel.
+    </p>
+
+    <script>
+      // ============================================================
+      // BRAILLE RING RENDERER
+      // ============================================================
+      // Standard braille dot layout per cell:
+      //   col 0          col 1
+      //   dot 1 (0x01)   dot 4 (0x08)   row 0 (top)
+      //   dot 2 (0x02)   dot 5 (0x10)   row 1
+      //   dot 3 (0x04)   dot 6 (0x20)   row 2
+      //   dot 7 (0x40)   dot 8 (0x80)   row 3 (bottom)
+      const DOTS_LEFT = [0x01, 0x02, 0x04, 0x40];
+      const DOTS_RIGHT = [0x08, 0x10, 0x20, 0x80];
+
+      // y aspect — braille dot is wider than tall in screen pixels.
+      // JetBrains Mono at line-height 1 has dots roughly 4.8px wide
+      // and 4px tall, so scaling y by ~0.83 keeps the ring round.
+      const Y_ASPECT = 0.83;
+
+      // Render a single ring as a braille text grid. Only dots inside
+      // the [rInner, rOuter] annulus AND within the lit clockwise arc
+      // are set. Other cells render as the empty braille char U+2800.
+      function renderRing(cw, ch, cx, cy, rInner, rOuter, value) {
+        const dotW = cw * 2;
+        const dotH = ch * 4;
+        const bits = new Array(cw * ch).fill(0);
+        const target = value * 2 * Math.PI;
+        for (let dy = 0; dy < dotH; dy++) {
+          for (let dx = 0; dx < dotW; dx++) {
+            const x = dx - cx;
+            const y = (dy - cy) * Y_ASPECT;
+            const r = Math.sqrt(x * x + y * y);
+            if (r < rInner || r > rOuter) continue;
+            // angle 0 = right, +π/2 = down. Convert to "clockwise from top":
+            //   0 at 12 o'clock, π at 6 o'clock, increases clockwise.
+            let theta = Math.atan2(y, x) + Math.PI / 2;
+            if (theta < 0) theta += 2 * Math.PI;
+            if (theta > 2 * Math.PI) theta -= 2 * Math.PI;
+            if (theta > target) continue;
+            const cc = Math.floor(dx / 2);
+            const cr = Math.floor(dy / 4);
+            const lc = dx % 2;
+            const lr = dy % 4;
+            const idx = cr * cw + cc;
+            bits[idx] |= lc === 0 ? DOTS_LEFT[lr] : DOTS_RIGHT[lr];
+          }
+        }
+        const lines = [];
+        for (let r = 0; r < ch; r++) {
+          let line = '';
+          for (let c = 0; c < cw; c++) {
+            line += String.fromCodePoint(0x2800 | bits[r * cw + c]);
+          }
+          lines.push(line);
+        }
+        return lines.join('\n');
+      }
+
+      // ============================================================
+      // SIZE PRESETS
+      // ============================================================
+      // each size carries grid dims + center coords + per-ring
+      // annulus radii. radii are in dot units; cx/cy too. for a
+      // square-feeling ring with Y_ASPECT correction, the visible
+      // proportions read approximately circular.
+      const SIZES = {
+        s: {
+          cw: 9,
+          ch: 5,
+          cx: 9,
+          cy: 10,
+          rings: {
+            hp: { inner: 6.5, outer: 8.5 },
+            mn: { inner: 3.5, outer: 5.5 },
+            mv: { inner: 0.6, outer: 2.6 },
+          },
+        },
+        m: {
+          cw: 11,
+          ch: 6,
+          cx: 11,
+          cy: 12,
+          rings: {
+            hp: { inner: 8.0, outer: 10.5 },
+            mn: { inner: 4.5, outer: 7.0 },
+            mv: { inner: 0.8, outer: 3.2 },
+          },
+        },
+        l: {
+          cw: 13,
+          ch: 7,
+          cx: 13,
+          cy: 14,
+          rings: {
+            hp: { inner: 9.5, outer: 12.5 },
+            mn: { inner: 5.5, outer: 8.5 },
+            mv: { inner: 1.0, outer: 4.0 },
+          },
+        },
+      };
+
+      // ============================================================
+      // SIMULATOR
+      // ============================================================
+      let values = { hp: 0.75, mn: 0.5, mv: 0.25 };
+      const max = { hp: 1000, mn: 300, mv: 200 };
+      const SCENARIOS = {
+        calm: [800, 2500],
+        combat: [200, 800],
+        boss: [100, 350],
+        idle: null,
+      };
+      let scenario = 'calm';
+      let timer = null;
+      function clamp(v, lo, hi) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+      function rand(a, b) {
+        return a + Math.random() * (b - a);
+      }
+      function fireEvent() {
+        const drift = scenario === 'calm' ? 0.01 : scenario === 'combat' ? -0.02 : -0.045;
+        const jit = scenario === 'calm' ? 0.04 : scenario === 'combat' ? 0.12 : 0.2;
+        for (const k of ['hp', 'mn', 'mv']) {
+          let v = values[k] + drift + (Math.random() - 0.5) * jit;
+          if (Math.random() < 0.08) v += (Math.random() - 0.5) * jit * 4;
+          if (v < 0.08) v += Math.random() * 0.12;
+          values[k] = clamp(v, 0, 1);
+        }
+        renderAll();
+      }
+      function schedule() {
+        if (timer) clearTimeout(timer);
+        if (scenario === 'idle') return;
+        const cfg = SCENARIOS[scenario];
+        timer = setTimeout(
+          () => {
+            fireEvent();
+            schedule();
+          },
+          rand(cfg[0], cfg[1]),
+        );
+      }
+
+      // ============================================================
+      // RENDER each size's three vital layers + a faint track layer
+      // (track = each ring drawn at value=1, in border-soft color)
+      // ============================================================
+      function renderSize(prefix, key) {
+        const s = SIZES[key];
+        // spacer reserves the layout box (since the colored layers
+        // are absolutely positioned and would otherwise collapse)
+        const spacerLines = new Array(s.ch).fill(' '.repeat(s.cw)).join('\n');
+        document.getElementById(prefix + '-spacer').textContent = spacerLines;
+        // track: all three rings at value=1, dim
+        const track = renderRing(
+          s.cw,
+          s.ch,
+          s.cx,
+          s.cy,
+          s.rings.hp.inner,
+          s.rings.hp.outer,
+          1,
+        ).split('\n');
+        const trackMn = renderRing(
+          s.cw,
+          s.ch,
+          s.cx,
+          s.cy,
+          s.rings.mn.inner,
+          s.rings.mn.outer,
+          1,
+        ).split('\n');
+        const trackMv = renderRing(
+          s.cw,
+          s.ch,
+          s.cx,
+          s.cy,
+          s.rings.mv.inner,
+          s.rings.mv.outer,
+          1,
+        ).split('\n');
+        // OR the three track strings together
+        const trackCombined = track
+          .map((line, i) => {
+            let out = '';
+            for (let c = 0; c < line.length; c++) {
+              const a = line.charCodeAt(c) - 0x2800;
+              const b = trackMn[i].charCodeAt(c) - 0x2800;
+              const cc = trackMv[i].charCodeAt(c) - 0x2800;
+              out += String.fromCodePoint(0x2800 | a | b | cc);
+            }
+            return out;
+          })
+          .join('\n');
+        document.getElementById(prefix + '-track').textContent = trackCombined;
+        // live arcs
+        document.getElementById(prefix + '-hp').textContent = renderRing(
+          s.cw,
+          s.ch,
+          s.cx,
+          s.cy,
+          s.rings.hp.inner,
+          s.rings.hp.outer,
+          values.hp,
+        );
+        document.getElementById(prefix + '-mn').textContent = renderRing(
+          s.cw,
+          s.ch,
+          s.cx,
+          s.cy,
+          s.rings.mn.inner,
+          s.rings.mn.outer,
+          values.mn,
+        );
+        document.getElementById(prefix + '-mv').textContent = renderRing(
+          s.cw,
+          s.ch,
+          s.cx,
+          s.cy,
+          s.rings.mv.inner,
+          s.rings.mv.outer,
+          values.mv,
+        );
+      }
+
+      function renderNumbers() {
+        document.querySelectorAll('[data-r="hp"]').forEach((el) => {
+          el.textContent = Math.round(values.hp * max.hp);
+        });
+        document.querySelectorAll('[data-r="mn"]').forEach((el) => {
+          el.textContent = Math.round(values.mn * max.mn);
+        });
+        document.querySelectorAll('[data-r="mv"]').forEach((el) => {
+          el.textContent = Math.round(values.mv * max.mv);
+        });
+      }
+
+      function renderAll() {
+        renderSize('bs', 's');
+        renderSize('bm', 'm');
+        renderSize('bl', 'l');
+        renderNumbers();
+      }
+
+      document.querySelectorAll('.scrubber button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.scrubber button').forEach((b) => b.classList.remove('is-on'));
+          btn.classList.add('is-on');
+          scenario = btn.dataset.scenario;
+          schedule();
+        });
+      });
+
+      renderAll();
+      schedule();
+    </script>
+  </body>
+</html>

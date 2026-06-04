@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals · dotted arc rings</title>
+    <style>
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+
+        --c-hp: #ef4444;
+        --c-mn: #38bdf8;
+        --c-mv: #fbbf24;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 36px 32px 64px;
+        background: radial-gradient(ellipse at top, #0d0a0e 0%, #04060a 60%, #000 100%);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        min-height: 100vh;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 760px;
+        margin: 0 0 22px;
+        line-height: 1.55;
+      }
+
+      .scrubber {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin: 0 -32px 28px;
+        padding: 12px 32px;
+        background: rgba(9, 14, 19, 0.94);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--c-border);
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .scrubber span.lbl {
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+      }
+      .scrubber button {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 12px;
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      .scrubber button:hover {
+        color: var(--c-text-strong);
+        border-color: var(--c-border-strong);
+      }
+      .scrubber button.is-on {
+        background: var(--c-accent);
+        border-color: var(--c-accent);
+        color: var(--c-surface-deep);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      .demo {
+        position: relative;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 5px;
+        padding: 30px 22px 18px;
+      }
+      .demo-label {
+        position: absolute;
+        top: 10px;
+        left: 16px;
+        font-size: 10px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+      }
+      .demo-name {
+        margin-left: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--c-text-strong);
+        letter-spacing: 0.08em;
+      }
+      .demo-stage {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 8px 0;
+      }
+      .demo-desc {
+        color: var(--c-text-faint);
+        font-size: 11px;
+        margin: 14px 0 0;
+        line-height: 1.5;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: 18px auto auto;
+        gap: 4px 8px;
+        align-items: baseline;
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+      }
+      .stats .row {
+        display: contents;
+      }
+      .stats .lbl {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+      }
+      .stats .val {
+        font-weight: 700;
+      }
+      .stats .max {
+        color: var(--c-text-dim);
+        font-size: 10px;
+      }
+      .stats .row-hp .lbl,
+      .stats .row-hp .val {
+        color: var(--c-hp);
+      }
+      .stats .row-mn .lbl,
+      .stats .row-mn .val {
+        color: var(--c-mn);
+      }
+      .stats .row-mv .lbl,
+      .stats .row-mv .val {
+        color: var(--c-mv);
+      }
+
+      svg {
+        width: 110px;
+        height: 110px;
+        flex: 0 0 110px;
+      }
+
+      /* The dotted arc is just a path stroked with a tight
+         dasharray. `stroke-linecap: round` rounds each dash into a
+         small circle; `stroke-linecap: butt` (with a square dash
+         pattern) keeps them square — which looks more like braille
+         dots. The active arc draws only from 0 to value × 360°; a
+         dim track arc behind shows the full ring outline so empty
+         arcs still read as "a ring not yet filled." */
+      .arc {
+        fill: none;
+        transition: d 500ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      }
+      .arc.track {
+        opacity: 0.18;
+      }
+
+      .footnote {
+        margin: 36px auto 0;
+        max-width: 1100px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      .footnote code {
+        background: var(--c-surface-deep);
+        padding: 1px 6px;
+        border-radius: 2px;
+        color: var(--c-text);
+        font-family: inherit;
+      }
+      .footnote strong {
+        color: var(--c-text);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vitals · dotted arc rings</h1>
+    <p class="lede">
+      same concentric-arc geometry as before, but the strokes are dotted instead of solid. SVG, not
+      braille — that gives perfectly round arcs while keeping the chunky character-grid texture
+      you're after. three styles below: round dots tight, round dots loose, square (pixel-style)
+      dots. all driven by the same simulator.
+    </p>
+
+    <div class="scrubber">
+      <span class="lbl">scenario</span>
+      <button data-scenario="calm" class="is-on">calm regen</button>
+      <button data-scenario="combat">combat</button>
+      <button data-scenario="boss">boss fight</button>
+      <button data-scenario="idle">idle (no events)</button>
+    </div>
+
+    <div class="grid">
+      <!-- ROUND DOTS · TIGHT -->
+      <div class="demo">
+        <span class="demo-label">a · <span class="demo-name">round · tight</span></span>
+        <div class="demo-stage">
+          <svg viewBox="0 0 110 110" data-style="round-tight">
+            <path class="arc track track-hp" data-r="46" />
+            <path class="arc track track-mn" data-r="34" />
+            <path class="arc track track-mv" data-r="22" />
+            <path class="arc live live-hp" data-r="46" />
+            <path class="arc live live-mn" data-r="34" />
+            <path class="arc live live-mv" data-r="22" />
+          </svg>
+          <div class="stats">
+            <span class="row row-hp">
+              <span class="lbl">hp</span>
+              <span class="val" data-r="hp">750</span>
+              <span class="max">/1000</span>
+            </span>
+            <span class="row row-mn">
+              <span class="lbl">mn</span>
+              <span class="val" data-r="mn">150</span>
+              <span class="max">/300</span>
+            </span>
+            <span class="row row-mv">
+              <span class="lbl">mv</span>
+              <span class="val" data-r="mv">50</span>
+              <span class="max">/200</span>
+            </span>
+          </div>
+        </div>
+        <p class="demo-desc">
+          round dots at tight spacing (4px between dot centers). reads almost continuous but you can
+          still see the discrete dot texture up close.
+        </p>
+      </div>
+
+      <!-- ROUND DOTS · LOOSE -->
+      <div class="demo">
+        <span class="demo-label">b · <span class="demo-name">round · loose</span></span>
+        <div class="demo-stage">
+          <svg viewBox="0 0 110 110" data-style="round-loose">
+            <path class="arc track track-hp" data-r="46" />
+            <path class="arc track track-mn" data-r="34" />
+            <path class="arc track track-mv" data-r="22" />
+            <path class="arc live live-hp" data-r="46" />
+            <path class="arc live live-mn" data-r="34" />
+            <path class="arc live live-mv" data-r="22" />
+          </svg>
+          <div class="stats">
+            <span class="row row-hp">
+              <span class="lbl">hp</span>
+              <span class="val" data-r="hp">750</span>
+              <span class="max">/1000</span>
+            </span>
+            <span class="row row-mn">
+              <span class="lbl">mn</span>
+              <span class="val" data-r="mn">150</span>
+              <span class="max">/300</span>
+            </span>
+            <span class="row row-mv">
+              <span class="lbl">mv</span>
+              <span class="val" data-r="mv">50</span>
+              <span class="max">/200</span>
+            </span>
+          </div>
+        </div>
+        <p class="demo-desc">
+          round dots, wider gaps (~7px between). each dot is its own visible mark; reads as a ring
+          made of beads. this is closest to the chunky braille feel.
+        </p>
+      </div>
+
+      <!-- SQUARE PIXEL DOTS -->
+      <div class="demo">
+        <span class="demo-label">c · <span class="demo-name">square · pixel</span></span>
+        <div class="demo-stage">
+          <svg viewBox="0 0 110 110" data-style="square">
+            <path class="arc track track-hp" data-r="46" />
+            <path class="arc track track-mn" data-r="34" />
+            <path class="arc track track-mv" data-r="22" />
+            <path class="arc live live-hp" data-r="46" />
+            <path class="arc live live-mn" data-r="34" />
+            <path class="arc live live-mv" data-r="22" />
+          </svg>
+          <div class="stats">
+            <span class="row row-hp">
+              <span class="lbl">hp</span>
+              <span class="val" data-r="hp">750</span>
+              <span class="max">/1000</span>
+            </span>
+            <span class="row row-mn">
+              <span class="lbl">mn</span>
+              <span class="val" data-r="mn">150</span>
+              <span class="max">/300</span>
+            </span>
+            <span class="row row-mv">
+              <span class="lbl">mv</span>
+              <span class="val" data-r="mv">50</span>
+              <span class="max">/200</span>
+            </span>
+          </div>
+        </div>
+        <p class="demo-desc">
+          square dots, pixel-art look. <code>stroke-linecap: butt</code> with short dash + gap gives
+          the chunky terminal-grid feel without literally being braille.
+        </p>
+      </div>
+    </div>
+
+    <p class="footnote">
+      <strong>how it works:</strong> each ring is an SVG <code>&lt;path&gt;</code> arc from
+      <code>0°</code> (top) to <code>value × 360°</code>. the dotted look is just
+      <code>stroke-dasharray</code> with very short dashes. round dots →
+      <code>stroke-linecap: round</code> with dash length 0. square dots →
+      <code>stroke-linecap: butt</code> with a small square dash length. a dim track arc behind (the
+      full circle at low opacity) keeps the ring shape visible when the live arc hasn't filled it.
+      no font issues — pure SVG.
+    </p>
+
+    <script>
+      // ============================================================
+      // ARC PATH BUILDER
+      // ============================================================
+      // 0° at 12 o'clock, increasing clockwise. We pass start = 0 and
+      // end = value × 360, building an SVG path that traces just the
+      // lit arc. Track paths use end = 360 (full circle drawn as two
+      // half-arcs since SVG can't render a single 360° arc).
+      function polar(cx, cy, r, deg) {
+        const rad = ((deg - 90) * Math.PI) / 180;
+        return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+      }
+      function arcPath(cx, cy, r, startDeg, endDeg) {
+        if (endDeg <= startDeg + 0.01) return '';
+        // For a true full circle, split into two half-arcs to avoid
+        // the SVG "endpoints equal → renders nothing" quirk.
+        if (endDeg - startDeg >= 359.99) {
+          const a = polar(cx, cy, r, startDeg);
+          const m = polar(cx, cy, r, startDeg + 180);
+          return `M ${a.x} ${a.y} A ${r} ${r} 0 0 1 ${m.x} ${m.y} A ${r} ${r} 0 0 1 ${a.x} ${a.y}`;
+        }
+        const large = endDeg - startDeg > 180 ? 1 : 0;
+        const s = polar(cx, cy, r, startDeg);
+        const e = polar(cx, cy, r, endDeg);
+        return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`;
+      }
+
+      // ============================================================
+      // DOT-STYLE PROFILES
+      // ============================================================
+      // Each style picks stroke-width + dasharray + linecap so the
+      // arc renders as a row of discrete dots. The active arcs reuse
+      // the same dasharray as the track, so the dots LINE UP between
+      // track and live — when value grows, dots fill in over the
+      // existing dim track pattern.
+      const STYLES = {
+        'round-tight': { strokeWidth: 4, dash: '0.01 4', linecap: 'round' },
+        'round-loose': { strokeWidth: 4, dash: '0.01 7', linecap: 'round' },
+        square: { strokeWidth: 4, dash: '2.5 4.5', linecap: 'butt' },
+      };
+
+      // Color lookup per arc class
+      function arcColor(classes) {
+        if (classes.includes('live-hp') || classes.includes('track-hp')) return 'var(--c-hp)';
+        if (classes.includes('live-mn') || classes.includes('track-mn')) return 'var(--c-mn)';
+        if (classes.includes('live-mv') || classes.includes('track-mv')) return 'var(--c-mv)';
+        return 'var(--c-text-dim)';
+      }
+
+      function configureSvgs() {
+        document.querySelectorAll('svg[data-style]').forEach((svg) => {
+          const style = STYLES[svg.dataset.style];
+          svg.querySelectorAll('path.arc').forEach((path) => {
+            path.setAttribute('stroke-width', style.strokeWidth);
+            path.setAttribute('stroke-dasharray', style.dash);
+            path.setAttribute('stroke-linecap', style.linecap);
+            path.setAttribute('stroke', arcColor(path.getAttribute('class')));
+          });
+        });
+      }
+
+      // ============================================================
+      // SIMULATOR
+      // ============================================================
+      let values = { hp: 0.75, mn: 0.5, mv: 0.25 };
+      const max = { hp: 1000, mn: 300, mv: 200 };
+      const SCENARIOS = {
+        calm: [800, 2500],
+        combat: [200, 800],
+        boss: [100, 350],
+        idle: null,
+      };
+      let scenario = 'calm';
+      let timer = null;
+      function clamp(v, lo, hi) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+      function rand(a, b) {
+        return a + Math.random() * (b - a);
+      }
+      function fireEvent() {
+        const drift = scenario === 'calm' ? 0.01 : scenario === 'combat' ? -0.02 : -0.045;
+        const jit = scenario === 'calm' ? 0.04 : scenario === 'combat' ? 0.12 : 0.2;
+        for (const k of ['hp', 'mn', 'mv']) {
+          let v = values[k] + drift + (Math.random() - 0.5) * jit;
+          if (Math.random() < 0.08) v += (Math.random() - 0.5) * jit * 4;
+          if (v < 0.08) v += Math.random() * 0.12;
+          values[k] = clamp(v, 0, 1);
+        }
+        renderAll();
+      }
+      function schedule() {
+        if (timer) clearTimeout(timer);
+        if (scenario === 'idle') return;
+        const cfg = SCENARIOS[scenario];
+        timer = setTimeout(
+          () => {
+            fireEvent();
+            schedule();
+          },
+          rand(cfg[0], cfg[1]),
+        );
+      }
+
+      // ============================================================
+      // RENDER
+      // ============================================================
+      function renderAll() {
+        document.querySelectorAll('svg[data-style]').forEach((svg) => {
+          svg.querySelectorAll('path.arc').forEach((p) => {
+            const r = parseFloat(p.dataset.r);
+            const isLive = p.getAttribute('class').includes('live');
+            const cls = p.getAttribute('class');
+            let v = 1;
+            if (isLive) {
+              if (cls.includes('live-hp')) v = values.hp;
+              else if (cls.includes('live-mn')) v = values.mn;
+              else if (cls.includes('live-mv')) v = values.mv;
+            }
+            const end = v * 360;
+            p.setAttribute('d', arcPath(55, 55, r, 0, end));
+          });
+        });
+        document.querySelectorAll('[data-r="hp"]').forEach((el) => {
+          el.textContent = Math.round(values.hp * max.hp);
+        });
+        document.querySelectorAll('[data-r="mn"]').forEach((el) => {
+          el.textContent = Math.round(values.mn * max.mn);
+        });
+        document.querySelectorAll('[data-r="mv"]').forEach((el) => {
+          el.textContent = Math.round(values.mv * max.mv);
+        });
+      }
+
+      document.querySelectorAll('.scrubber button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.scrubber button').forEach((b) => b.classList.remove('is-on'));
+          btn.classList.add('is-on');
+          scenario = btn.dataset.scenario;
+          schedule();
+        });
+      });
+
+      configureSvgs();
+      renderAll();
+      schedule();
+    </script>
+  </body>
+</html>

@@ -38,9 +38,17 @@ export interface PanelPlacement {
   align: Align;
 }
 
-export type PanelId = 'map' | 'group' | 'vitals' | 'roomstrip' | 'chat' | 'affects';
+export type PanelId = 'map' | 'group' | 'vitals' | 'roomstrip' | 'chat' | 'affects' | 'combat';
 
-export const ALL_PANEL_IDS: PanelId[] = ['map', 'group', 'vitals', 'roomstrip', 'chat', 'affects'];
+export const ALL_PANEL_IDS: PanelId[] = [
+  'map',
+  'group',
+  'vitals',
+  'roomstrip',
+  'chat',
+  'affects',
+  'combat',
+];
 
 export interface PanelMeta {
   id: PanelId;
@@ -120,6 +128,16 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     description: 'Tracked-affect pills with remaining duration.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
     defaultZone: 'bottom',
+    homeZone: 'bottom',
+    defaultAlign: 'bottom',
+  },
+  combat: {
+    id: 'combat',
+    label: 'combat',
+    description:
+      'Current target name and hp bar. Hidden = inline inside the vitals bar (legacy). Bottom = chip variant flush with whatever sits below. Other zones = standalone pane.',
+    allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
+    defaultZone: 'hidden',
     homeZone: 'bottom',
     defaultAlign: 'bottom',
   },

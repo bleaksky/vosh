@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals · sparkline + bar in client</title>
+    <style>
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'JetBrainsMono Bundled';
+        src: url('../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+
+        /* Vosh's actual built-in vital colors (top of each ramp,
+           from vitalsColor.ts). Muted, ink-toned — deliberately
+           NOT saturated game-HUD reds. Reads beside text instead
+           of competing with it. */
+        --c-hp: #87a987;
+        --c-mn: #7fb4ca;
+        --c-mv: #d99a6c;
+        --c-empty: #2a2f36;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 36px 32px 80px;
+        background: radial-gradient(ellipse at top, #0d0a0e 0%, #04060a 60%, #000 100%);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        min-height: 100vh;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 760px;
+        margin: 0 0 24px;
+        line-height: 1.6;
+      }
+
+      .scrubber {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin: 0 -32px 28px;
+        padding: 12px 32px;
+        background: rgba(9, 14, 19, 0.94);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--c-border);
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .scrubber span.lbl {
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+      }
+      .scrubber button {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 12px;
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      .scrubber button:hover {
+        color: var(--c-text-strong);
+        border-color: var(--c-border-strong);
+      }
+      .scrubber button.is-on {
+        background: var(--c-accent);
+        border-color: var(--c-accent);
+        color: var(--c-surface-deep);
+      }
+
+      .stack {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 36px;
+        max-width: 1080px;
+        margin: 0 auto;
+      }
+      .demo {
+        position: relative;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 5px;
+        padding: 34px 26px 22px;
+      }
+      .demo-label {
+        position: absolute;
+        top: 12px;
+        left: 18px;
+        font-size: 10px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+      }
+      .demo-name {
+        color: var(--c-text-strong);
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        margin-left: 6px;
+      }
+      .demo-desc {
+        color: var(--c-text-faint);
+        font-size: 12px;
+        margin: 14px 0 0;
+        line-height: 1.6;
+      }
+
+      /* ============================================================
+         FAUX VOSH SHELL — modeled on the real one.
+         topbar (24px tall) — aux btns left, loadout indicator,
+                              window controls right.
+         terminal area — surface bg, monospace combat text.
+         vitals slot — surface bg, between term and input.
+         input row (32px) — '>' prompt + input + caret, with the
+                            LineChip pill centered on its top border. */
+      .vosh {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        font-size: 12px;
+      }
+      .vosh-topbar {
+        display: flex;
+        align-items: center;
+        flex: 0 0 24px;
+        padding: 0 10px;
+        background: var(--c-surface);
+        border-bottom: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font-size: 11px;
+      }
+      .vosh-topbar .aux {
+        display: flex;
+        gap: 2px;
+      }
+      .vosh-topbar .aux span {
+        padding: 2px 8px;
+      }
+      .vosh-topbar .loadouts {
+        margin-left: 6px;
+        padding: 2px 8px;
+        color: var(--c-accent);
+      }
+      .vosh-topbar .spacer {
+        flex: 1;
+      }
+      .vosh-topbar .controls {
+        font-size: 13px;
+      }
+      .vosh-topbar .controls span {
+        padding: 0 8px;
+      }
+
+      .vosh-term {
+        padding: 10px 14px;
+        line-height: 1.55;
+        flex: 1 1 0;
+        min-height: 140px;
+        overflow: hidden;
+      }
+      .vosh-term p {
+        margin: 0;
+        color: var(--c-text);
+      }
+      .vosh-term p.dim {
+        color: var(--c-text-faint);
+      }
+      .vosh-term p.dmg {
+        color: #c98d8d;
+      }
+      .vosh-term p.cmd {
+        color: var(--c-text-dim);
+        font-style: italic;
+      }
+
+      .vosh-vitals {
+        flex: 0 0 auto;
+        padding: 8px 14px;
+        background: var(--c-surface);
+      }
+
+      .vosh-input {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 32px;
+        padding: 6px 14px;
+        background: var(--c-surface);
+        border-top: 1px solid var(--c-border);
+        position: relative;
+      }
+      .vosh-input .prompt {
+        color: var(--c-accent);
+        font-weight: 700;
+      }
+      .vosh-input .caret {
+        display: inline-block;
+        width: 6px;
+        height: 13px;
+        background: var(--c-text);
+        animation: caret-blink 1s steps(1, end) infinite;
+      }
+      @keyframes caret-blink {
+        50% {
+          background: transparent;
+        }
+      }
+      .vosh-chip {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 1px 10px;
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 3px;
+        color: var(--c-text);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        white-space: nowrap;
+        display: inline-flex;
+        gap: 8px;
+      }
+      .vosh-chip .caption {
+        color: var(--c-text-faint);
+        font-weight: 400;
+      }
+      .vosh-chip .sep {
+        color: var(--c-text-dim);
+        font-weight: 400;
+      }
+      .vosh-chip .time {
+        color: var(--c-accent);
+      }
+
+      /* ============================================================
+         VITALS COMMON
+         shared row pattern, same as current Vosh. label · bar ·
+         percent · numeric · delta. font matches the term/scrollback
+         font so the bar lives in the same character grid as the
+         output. */
+      .vital {
+        display: grid;
+        align-items: baseline;
+        column-gap: 12px;
+        padding: 2px 0;
+        font-variant-numeric: tabular-nums;
+      }
+      .vital .label {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: lowercase;
+        letter-spacing: 0.06em;
+      }
+      .vital .bar {
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        line-height: 1;
+        letter-spacing: 0;
+        white-space: pre;
+      }
+      .vital .bar .filled {
+        font-weight: 700;
+      }
+      .vital .bar .empty {
+        color: var(--c-empty);
+      }
+      .vital .pct {
+        font-size: 12px;
+        font-weight: 700;
+        text-align: right;
+      }
+      .vital .num {
+        font-size: 12px;
+        color: var(--c-text-muted);
+      }
+      .vital .delta {
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .vital .delta.up {
+        color: #87a987;
+      }
+      .vital .delta.down {
+        color: #c98d8d;
+      }
+      .vital .delta.zero {
+        color: transparent;
+      }
+
+      .vital-hp .label,
+      .vital-hp .pct,
+      .vital-hp .bar .filled {
+        color: var(--c-hp);
+      }
+      .vital-mn .label,
+      .vital-mn .pct,
+      .vital-mn .bar .filled {
+        color: var(--c-mn);
+      }
+      .vital-mv .label,
+      .vital-mv .pct,
+      .vital-mv .bar .filled {
+        color: var(--c-mv);
+      }
+
+      /* ============================================================
+         VARIANT A — stacked: bar on top, sparkline below */
+      .demo-a .vitals-stack .vital {
+        grid-template-columns: 24px 1fr 48px 84px 36px;
+      }
+      .demo-a .vitals-stack .vital + .vital {
+        margin-top: 6px;
+      }
+      .demo-a .vitals-stack .spark-row {
+        margin: 2px 0 0;
+        padding-left: 36px;
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 11px;
+        line-height: 1;
+        letter-spacing: 0;
+        white-space: pre;
+        opacity: 0.55;
+      }
+      .demo-a .vital-hp .spark-row {
+        color: var(--c-hp);
+      }
+      .demo-a .vital-mn .spark-row {
+        color: var(--c-mn);
+      }
+      .demo-a .vital-mv .spark-row {
+        color: var(--c-mv);
+      }
+
+      /* ============================================================
+         VARIANT B — inline: bar | sparkline | numbers */
+      .demo-b .vitals-stack .vital {
+        grid-template-columns: 24px auto auto 48px 84px 36px;
+      }
+      .demo-b .vitals-stack .vital + .vital {
+        margin-top: 2px;
+      }
+      .demo-b .vitals-stack .spark-inline {
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        line-height: 1;
+        letter-spacing: 0;
+        white-space: pre;
+        opacity: 0.55;
+      }
+      .demo-b .vital-hp .spark-inline {
+        color: var(--c-hp);
+      }
+      .demo-b .vital-mn .spark-inline {
+        color: var(--c-mn);
+      }
+      .demo-b .vital-mv .spark-inline {
+        color: var(--c-mv);
+      }
+
+      /* ============================================================
+         VARIANT C — sparkline in empty space */
+      .demo-c .vitals-stack .vital {
+        grid-template-columns: 24px auto 48px 84px 36px;
+      }
+      .demo-c .vitals-stack .vital + .vital {
+        margin-top: 2px;
+      }
+      .demo-c .vitals-stack .bar .trail {
+        opacity: 0.5;
+      }
+
+      .footnote {
+        margin: 40px auto 0;
+        max-width: 1080px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        line-height: 1.7;
+      }
+      .footnote strong {
+        color: var(--c-text);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vitals · sparkline + bar (in-client preview)</h1>
+    <p class="lede">
+      same vosh shell, three different ways to combine the existing bar with a sparkline that tells
+      you the trend the bar can't. each variant uses the actual built-in vital colors and the
+      default <code>▰/▱</code> glyphs so this is a realistic preview, not a redesign. drive the
+      scenarios and watch how each reads under calm vs combat vs boss pacing.
+    </p>
+
+    <div class="scrubber">
+      <span class="lbl">scenario</span>
+      <button data-scenario="calm" class="is-on">calm regen</button>
+      <button data-scenario="combat">combat</button>
+      <button data-scenario="boss">boss</button>
+      <button data-scenario="idle">idle</button>
+    </div>
+
+    <div class="stack">
+      <!-- ======================================================
+           A — STACKED (bar above, sparkline below)
+           ====================================================== -->
+      <div class="demo demo-a">
+        <span class="demo-label">a · <span class="demo-name">stacked</span></span>
+        <div class="vosh">
+          <div class="vosh-topbar">
+            <div class="aux">
+              <span>profiles</span><span>panels</span><span>triggers</span><span>aliases</span>
+            </div>
+            <span class="loadouts">[ no loadout ]</span>
+            <span class="spacer"></span>
+            <div class="controls"><span>−</span><span>□</span><span>✕</span></div>
+          </div>
+          <div class="vosh-term">
+            <p class="dim">A grim hall opens before you, its ribs of stone arching overhead.</p>
+            <p>A wraith hisses, "you stink of bone-dust."</p>
+            <p class="dmg">The wraith claws at you for 47.</p>
+            <p>You ready your blade.</p>
+            <p class="cmd">&gt; cast firebolt wraith</p>
+            <p>Your firebolt strikes the wraith for 86 damage.</p>
+          </div>
+          <div class="vosh-vitals">
+            <div class="vitals-stack" data-variant="a">
+              <div class="vital vital-hp">
+                <span class="label">hp</span>
+                <span class="bar" id="a-bar-hp"></span>
+                <span class="pct" id="a-pct-hp">75%</span>
+                <span class="num" id="a-num-hp">750/1000</span>
+                <span class="delta up" id="a-delta-hp">+12</span>
+              </div>
+              <div class="spark-row" id="a-spark-hp"></div>
+              <div class="vital vital-mn">
+                <span class="label">mn</span>
+                <span class="bar" id="a-bar-mn"></span>
+                <span class="pct" id="a-pct-mn">50%</span>
+                <span class="num" id="a-num-mn">150/300</span>
+                <span class="delta down" id="a-delta-mn">-8</span>
+              </div>
+              <div class="spark-row" id="a-spark-mn"></div>
+              <div class="vital vital-mv">
+                <span class="label">mv</span>
+                <span class="bar" id="a-bar-mv"></span>
+                <span class="pct" id="a-pct-mv">25%</span>
+                <span class="num" id="a-num-mv">50/200</span>
+                <span class="delta zero">+0</span>
+              </div>
+              <div class="spark-row" id="a-spark-mv"></div>
+            </div>
+          </div>
+          <div class="vosh-input">
+            <div class="vosh-chip">
+              <span class="caption">tick</span><span>12s</span>
+              <span class="sep">·</span>
+              <span class="caption">time</span><span class="time">14:32</span>
+            </div>
+            <span class="prompt">&gt;</span>
+            <span>cast firebolt wrai</span>
+            <span class="caret"></span>
+          </div>
+        </div>
+        <p class="demo-desc">
+          bar on top (unchanged from today). sparkline directly under it, aligned to the bar's width
+          and dimmed to 55% so the headline number stays the hero. the trend reads as a footnote —
+          your eye finds the bar first, drops down for context only when something feels off. costs
+          +1 line of vertical height per vital.
+        </p>
+      </div>
+
+      <!-- ======================================================
+           B — INLINE (bar | sparkline | numbers)
+           ====================================================== -->
+      <div class="demo demo-b">
+        <span class="demo-label">b · <span class="demo-name">inline</span></span>
+        <div class="vosh">
+          <div class="vosh-topbar">
+            <div class="aux">
+              <span>profiles</span><span>panels</span><span>triggers</span><span>aliases</span>
+            </div>
+            <span class="loadouts">[ no loadout ]</span>
+            <span class="spacer"></span>
+            <div class="controls"><span>−</span><span>□</span><span>✕</span></div>
+          </div>
+          <div class="vosh-term">
+            <p class="dim">A grim hall opens before you, its ribs of stone arching overhead.</p>
+            <p>A wraith hisses, "you stink of bone-dust."</p>
+            <p class="dmg">The wraith claws at you for 47.</p>
+            <p>You ready your blade.</p>
+            <p class="cmd">&gt; cast firebolt wraith</p>
+            <p>Your firebolt strikes the wraith for 86 damage.</p>
+          </div>
+          <div class="vosh-vitals">
+            <div class="vitals-stack" data-variant="b">
+              <div class="vital vital-hp">
+                <span class="label">hp</span>
+                <span class="bar" id="b-bar-hp"></span>
+                <span class="spark-inline" id="b-spark-hp"></span>
+                <span class="pct" id="b-pct-hp">75%</span>
+                <span class="num" id="b-num-hp">750/1000</span>
+                <span class="delta up" id="b-delta-hp">+12</span>
+              </div>
+              <div class="vital vital-mn">
+                <span class="label">mn</span>
+                <span class="bar" id="b-bar-mn"></span>
+                <span class="spark-inline" id="b-spark-mn"></span>
+                <span class="pct" id="b-pct-mn">50%</span>
+                <span class="num" id="b-num-mn">150/300</span>
+                <span class="delta down" id="b-delta-mn">-8</span>
+              </div>
+              <div class="vital vital-mv">
+                <span class="label">mv</span>
+                <span class="bar" id="b-bar-mv"></span>
+                <span class="spark-inline" id="b-spark-mv"></span>
+                <span class="pct" id="b-pct-mv">25%</span>
+                <span class="num" id="b-num-mv">50/200</span>
+                <span class="delta zero">+0</span>
+              </div>
+            </div>
+          </div>
+          <div class="vosh-input">
+            <div class="vosh-chip">
+              <span class="caption">tick</span><span>12s</span>
+              <span class="sep">·</span>
+              <span class="caption">time</span><span class="time">14:32</span>
+            </div>
+            <span class="prompt">&gt;</span>
+            <span>cast firebolt wrai</span>
+            <span class="caret"></span>
+          </div>
+        </div>
+        <p class="demo-desc">
+          one row per vital. eight-cell sparkline sits between the bar and the percent, in the row's
+          reading order. takes no extra vertical height. the row grows wider by 8 characters worth
+          of inline space; a packed panel could clip the sparkline first (which is the right thing
+          to drop under pressure).
+        </p>
+      </div>
+
+      <!-- ======================================================
+           C — TRAIL-IN-EMPTY (sparkline lives in the bar's
+                              empty cells, total width unchanged)
+           ====================================================== -->
+      <div class="demo demo-c">
+        <span class="demo-label">c · <span class="demo-name">trail in empty</span></span>
+        <div class="vosh">
+          <div class="vosh-topbar">
+            <div class="aux">
+              <span>profiles</span><span>panels</span><span>triggers</span><span>aliases</span>
+            </div>
+            <span class="loadouts">[ no loadout ]</span>
+            <span class="spacer"></span>
+            <div class="controls"><span>−</span><span>□</span><span>✕</span></div>
+          </div>
+          <div class="vosh-term">
+            <p class="dim">A grim hall opens before you, its ribs of stone arching overhead.</p>
+            <p>A wraith hisses, "you stink of bone-dust."</p>
+            <p class="dmg">The wraith claws at you for 47.</p>
+            <p>You ready your blade.</p>
+            <p class="cmd">&gt; cast firebolt wraith</p>
+            <p>Your firebolt strikes the wraith for 86 damage.</p>
+          </div>
+          <div class="vosh-vitals">
+            <div class="vitals-stack" data-variant="c">
+              <div class="vital vital-hp">
+                <span class="label">hp</span>
+                <span class="bar" id="c-bar-hp"></span>
+                <span class="pct" id="c-pct-hp">75%</span>
+                <span class="num" id="c-num-hp">750/1000</span>
+                <span class="delta up" id="c-delta-hp">+12</span>
+              </div>
+              <div class="vital vital-mn">
+                <span class="label">mn</span>
+                <span class="bar" id="c-bar-mn"></span>
+                <span class="pct" id="c-pct-mn">50%</span>
+                <span class="num" id="c-num-mn">150/300</span>
+                <span class="delta down" id="c-delta-mn">-8</span>
+              </div>
+              <div class="vital vital-mv">
+                <span class="label">mv</span>
+                <span class="bar" id="c-bar-mv"></span>
+                <span class="pct" id="c-pct-mv">25%</span>
+                <span class="num" id="c-num-mv">50/200</span>
+                <span class="delta zero">+0</span>
+              </div>
+            </div>
+          </div>
+          <div class="vosh-input">
+            <div class="vosh-chip">
+              <span class="caption">tick</span><span>12s</span>
+              <span class="sep">·</span>
+              <span class="caption">time</span><span class="time">14:32</span>
+            </div>
+            <span class="prompt">&gt;</span>
+            <span>cast firebolt wrai</span>
+            <span class="caret"></span>
+          </div>
+        </div>
+        <p class="demo-desc">
+          same width as the current bar. the empty cells (the portion you've lost) are filled with
+          the sparkline of how you got here — most-recent sample at the right edge, oldest at the
+          bar boundary. as the vital drops, more history is revealed; at 100% the sparkline
+          disappears entirely (because you don't need to look at history when you're fine). no extra
+          space.
+        </p>
+      </div>
+    </div>
+
+    <p class="footnote">
+      <strong>why a sparkline here:</strong> the bar tells you state, the sparkline tells you
+      derivative. in combat that is the difference between "the healer is keeping up" and "i'm about
+      to die in three seconds." each variant keeps the bar as the headline (your eye finds it first)
+      and lets the sparkline answer follow-up questions only when something feels off.
+      <strong>colors</strong> match vosh's built-in ramps (mn blue, mv amber, hp green) so they fit
+      beside the scrollback rather than competing with it.
+    </p>
+
+    <script>
+      // ============================================================
+      // SIMULATOR
+      // ============================================================
+      let values = { hp: 0.75, mn: 0.5, mv: 0.25 };
+      const max = { hp: 1000, mn: 300, mv: 200 };
+      const SPARK_LEN = 24; // long history; UI slices what it shows
+      const hist = {
+        hp: new Array(SPARK_LEN).fill(0.75),
+        mn: new Array(SPARK_LEN).fill(0.5),
+        mv: new Array(SPARK_LEN).fill(0.25),
+      };
+      const SPARK_BLOCKS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+      const SCENARIOS = {
+        calm: [800, 2500],
+        combat: [200, 800],
+        boss: [100, 350],
+        idle: null,
+      };
+      let scenario = 'calm';
+      let timer = null;
+      function clamp(v, lo, hi) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+      function rand(a, b) {
+        return a + Math.random() * (b - a);
+      }
+      function fireEvent() {
+        const drift = scenario === 'calm' ? 0.01 : scenario === 'combat' ? -0.02 : -0.045;
+        const jit = scenario === 'calm' ? 0.04 : scenario === 'combat' ? 0.12 : 0.2;
+        const prev = { ...values };
+        for (const k of ['hp', 'mn', 'mv']) {
+          let v = values[k] + drift + (Math.random() - 0.5) * jit;
+          if (Math.random() < 0.08) v += (Math.random() - 0.5) * jit * 4;
+          if (v < 0.08) v += Math.random() * 0.12;
+          values[k] = clamp(v, 0, 1);
+          hist[k].shift();
+          hist[k].push(values[k]);
+        }
+        // store the deltas for rendering
+        deltas.hp = Math.round((values.hp - prev.hp) * max.hp);
+        deltas.mn = Math.round((values.mn - prev.mn) * max.mn);
+        deltas.mv = Math.round((values.mv - prev.mv) * max.mv);
+        render();
+      }
+      const deltas = { hp: 12, mn: -8, mv: 0 };
+
+      function schedule() {
+        if (timer) clearTimeout(timer);
+        if (scenario === 'idle') return;
+        const cfg = SCENARIOS[scenario];
+        timer = setTimeout(
+          () => {
+            fireEvent();
+            schedule();
+          },
+          rand(cfg[0], cfg[1]),
+        );
+      }
+
+      // ============================================================
+      // BAR + SPARKLINE BUILDERS
+      // ============================================================
+      const BAR_W = 20; // current vosh default
+      const FILLED = '▰';
+      const EMPTY = '▱';
+      const INLINE_SPARK_W = 8;
+
+      function block(v) {
+        return SPARK_BLOCKS[Math.min(7, Math.max(0, Math.round(v * 7)))];
+      }
+
+      // Plain bar (vosh-default): N filled + M empty.
+      function plainBar(v) {
+        const filled = Math.round(v * BAR_W);
+        const empty = BAR_W - filled;
+        return (
+          '<span class="filled">' +
+          FILLED.repeat(filled) +
+          '</span><span class="empty">' +
+          EMPTY.repeat(empty) +
+          '</span>'
+        );
+      }
+
+      // Sparkline string from a history slice.
+      function sparkText(arr) {
+        return arr.map(block).join('');
+      }
+
+      // Variant C: bar's empty cells are sparkline of recent samples.
+      // Newest sample at rightmost cell, oldest at the boundary with
+      // the filled portion.
+      function trailBar(arr, v) {
+        const filled = Math.round(v * BAR_W);
+        const trailLen = BAR_W - filled;
+        const tail = arr.slice(-trailLen);
+        return (
+          '<span class="filled">' +
+          FILLED.repeat(filled) +
+          '</span><span class="trail">' +
+          tail.map(block).join('') +
+          '</span>'
+        );
+      }
+
+      // ============================================================
+      // RENDER
+      // ============================================================
+      function render() {
+        for (const k of ['hp', 'mn', 'mv']) {
+          const v = values[k];
+
+          // numbers + percent + delta (shared across all variants)
+          for (const p of ['a', 'b', 'c']) {
+            document.getElementById(p + '-pct-' + k).textContent = Math.round(v * 100) + '%';
+            document.getElementById(p + '-num-' + k).textContent =
+              Math.round(v * max[k]) + '/' + max[k];
+          }
+
+          // a: plain bar + sparkline below (20 cells of recent history)
+          document.getElementById('a-bar-' + k).innerHTML = plainBar(v);
+          document.getElementById('a-spark-' + k).textContent = sparkText(hist[k].slice(-BAR_W));
+
+          // b: plain bar + inline 8-cell sparkline
+          document.getElementById('b-bar-' + k).innerHTML = plainBar(v);
+          document.getElementById('b-spark-' + k).textContent = sparkText(
+            hist[k].slice(-INLINE_SPARK_W),
+          );
+
+          // c: trail-in-empty bar
+          document.getElementById('c-bar-' + k).innerHTML = trailBar(hist[k], v);
+        }
+
+        // deltas (only HP + MN render with sign; MV stays at the
+        // static '+0' transparent state because we never tracked it
+        // in the original sample data)
+        renderDelta('a-delta-hp', deltas.hp);
+        renderDelta('a-delta-mn', deltas.mn);
+        renderDelta('b-delta-hp', deltas.hp);
+        renderDelta('b-delta-mn', deltas.mn);
+      }
+
+      function renderDelta(id, n) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (n === 0) {
+          el.classList.add('zero');
+          el.classList.remove('up', 'down');
+          el.textContent = '+0';
+        } else if (n > 0) {
+          el.classList.add('up');
+          el.classList.remove('down', 'zero');
+          el.textContent = '+' + n;
+        } else {
+          el.classList.add('down');
+          el.classList.remove('up', 'zero');
+          el.textContent = String(n);
+        }
+      }
+
+      document.querySelectorAll('.scrubber button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.scrubber button').forEach((b) => b.classList.remove('is-on'));
+          btn.classList.add('is-on');
+          scenario = btn.dataset.scenario;
+          schedule();
+        });
+      });
+
+      render();
+      schedule();
+    </script>
+  </body>
+</html>

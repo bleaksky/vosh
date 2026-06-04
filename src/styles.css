@@ -837,6 +837,42 @@ body {
   z-index: 1;
 }
 
+/* Combat pane — standalone panel that hosts the CombatChip when
+   the user has placed combat in its own zone. Mirrors the affects-
+   bar shell so it sits cleanly in any of the four edge zones.
+   Collapses to zero height when out of combat (CombatPane returns
+   null), so the panel slot does not eat space when idle. */
+.combat-pane {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 4px 14px;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+  position: relative;
+  z-index: 1;
+  /* Standalone pane reserves vertical breathing room so the chip
+     reads as visually centered in its surface rather than glued to
+     the top edge. The chip variant (.combat-pane-chip) opts out of
+     this since it is meant to sit flush against vitals. */
+  min-height: 36px;
+}
+
+/* Chip variant — applied when combat is placed in the bottom zone.
+   Drops the own border-top + bottom padding so combat reads as a
+   chip flush against whatever sits below (typically the vitals bar
+   when both are in the bottom zone). */
+.combat-pane.combat-pane-chip {
+  border-top: none;
+  padding-top: 6px;
+  padding-bottom: 0;
+  /* Chip variant intentionally sizes to content — sitting flush
+     against the adjacent vitals bar is the goal. Override the
+     standalone min-height so the chip does not eat extra vertical
+     space when adjacent. */
+  min-height: 0;
+}
+
 /* Vitals — three stacked rows (hp / mn / mv) plus an optional
    tick row. Whole bar is one grid so columns line up across rows
    without per-row sizing drift. Each row: label · bar · % ·
@@ -1032,7 +1068,21 @@ body {
   color: var(--c-text-faint);
   text-transform: lowercase;
   letter-spacing: 0.04em;
-  min-width: 2.5ch;
+  /* Fixed width (not min-width) so sub-pixel rendering differences
+     between "hp" / "mn" / "mv" can not shift the spark column's
+     left edge between rows. */
+  width: 2.5ch;
+  display: inline-block;
+}
+
+/* Spark variant of the vitals row. The spark element is a two-line
+   block (bar + grid); without override the row's default
+   `align-items: baseline` pins the readouts to the bar's baseline
+   so the percent / numeric columns sit on top of the spark instead
+   of beside it. Center-align so they read as one line floating
+   vertically between bar and grid. */
+.vitals-row.vitals-row-spark {
+  align-items: center;
 }
 
 .vitals-glyphs {
@@ -1069,7 +1119,12 @@ body {
      CSS percent, so it stays accurate at whatever actual width the
      bar settles at. */
   flex: 1 1 auto;
-  min-width: 0;
+  /* Floor at 40px so the bar still renders visibly even when the
+     inherited font resolves `ch` to a near-zero value (some custom
+     fonts ship without the "0" glyph and the WKWebView fallback
+     resolves to font-size/2, which combined with flex-shrink can
+     squeeze the bar out of existence). */
+  min-width: 40px;
   vertical-align: middle;
 }
 
@@ -1080,39 +1135,90 @@ body {
   transition: width 200ms ease-out;
 }
 
+/* Spark bar — two-row braille sparkline that replaces the solid /
+   track / ramped bar when bar_style === 'spark'. Two layered text
+   spans share the same character grid:
+     .vitals-spark-base — gray ⣿ (all 8 dots lit) in every cell,
+                          always visible — the dot-grid floor.
+     .vitals-spark-trace — braille chars in the vital color where
+                          each cell carries 2 samples (left + right
+                          dot columns) and dots light bottom-up
+                          across both character rows.
+   Letter-spacing -2px pulls braille cells together so the dots
+   read as one continuous field instead of separated cells. The
+   spark must NOT use Berkeley Mono for the braille text (Berkeley
+   Nerd Font registers U+2800 codepoints with zero-contour empty
+   glyphs); JetBrains first in the stack falls through to system
+   monos that carry real braille. */
+.vitals-glyphs.vitals-spark {
+  font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+  line-height: 1;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  vertical-align: middle;
+  font-weight: 400;
+}
+/* Each of bar/grid is a flex row with exactly `cells` cells. Per-
+   cell flex: 1 1 0 makes them share equal slices of the wrapper
+   width, so bar cell i and grid cell i are at exactly the same
+   x-range regardless of font glyph widths. This is the only
+   alignment scheme that works robustly across bar_font choices —
+   ch unit + braille fallback font + letter-spacing all conspire
+   to make text-based alignment unreliable. */
+.vitals-spark-row {
+  display: flex;
+  width: 100%;
+}
+.vitals-spark-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  overflow: hidden;
+  position: relative;
+}
+.vitals-spark-grid-base {
+  color: var(--c-text-dim);
+}
+.vitals-spark-grid-trace {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  text-align: center;
+}
+
 .vitals-empty {
   color: var(--c-text-dim);
 }
 
-/* "One with Erelei" mode — three corner L-brackets pinned to the
-   main window's viewport corners (top-left = hp, top-right = mn,
-   bottom-right = mv). Replaces the entire vitals widget; when this
-   class is mounted the regular bar / template / inline layouts are
-   not rendered at all. Pure CSS — the only thing that changes per
-   frame is three custom properties (--owe-hp/mn/mv as unitless
-   0..100 numbers) plus --owe-danger (0..1) for the vignette. */
-.one-with-erelei {
+/* Low HP vignette — soft red glow pinned to the window edges that
+   pulses when hp drops below 30%. Pure CSS — the only thing that
+   changes per frame is --lhv-danger (0..1) written by the React
+   side from the current hp percent. */
+.low-hp-vignette {
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 9000;
 }
 
-/* Danger vignette. Fades in as hp drops below 30 (the React side
-   writes --owe-danger 0..1). Pulses on a 1.2s rhythm so the
-   periphery breathes red, but at the cost of one brightness filter
-   per frame — opacity stays static between bumps so we are not
-   thrashing the compositor. */
-.owe-danger {
+/* Pulse layer. Fades in as hp drops below 30 (the React side writes
+   --lhv-danger 0..1) and pulses on a 1.2s rhythm via a brightness
+   filter so the periphery breathes red without thrashing the
+   compositor with opacity animation. */
+.lhv-pulse {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background: radial-gradient(ellipse at center, transparent 50%, rgba(217, 48, 48, 0.45) 100%);
-  opacity: var(--owe-danger, 0);
-  animation: owe-danger-pulse 1.2s ease-in-out infinite;
+  opacity: var(--lhv-danger, 0);
+  animation: lhv-danger-pulse 1.2s ease-in-out infinite;
 }
 
-@keyframes owe-danger-pulse {
+@keyframes lhv-danger-pulse {
   0%,
   100% {
     filter: brightness(1);
@@ -1749,8 +1855,25 @@ body {
   /* Bound the width so a very long target name wraps rather than
      pushing the chip past the panel edge. Two lines of name at this
      width is plenty for any MUD mob. */
-  max-width: 240px;
+  max-width: 320px;
 }
+
+/* One-line combat layout — swords + name + hp bar (with the
+   percent embedded inside it). Replaces the older 3-row stack so
+   combat takes a single line in the chip, with the optional
+   condition sitting on its own line below. */
+.vitals-combat-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Combat hp bar now reuses the vital bar styles (TrackBar, SolidBar,
+   RampedBar) — no own visual rules needed. The drain-red palette
+   lives in JS (combatDrainRed in VitalsBar.tsx) and is applied as
+   the `color` prop, so whatever bar style the user picked for
+   vitals also renders the combat target with drain-red fill. */
 
 .vitals-combat-head {
   display: flex;
@@ -6258,13 +6381,16 @@ body {
    the latest line as new messages arrive, which only works once
    there is an overflow region to scroll. */
 .chat-pane {
-  flex: 0 0 auto;
+  /* Wrapped in <Resizable> at the call site (App.tsx). The Resizable
+     wrapper carries the actual pixel height; .chat-pane fills it.
+     Without a fixed height here the .chat-pane-body's overflow
+     region resolves against the parent .resizable-content. */
+  flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--c-surface);
-  height: 160px;
-  max-height: 40vh;
 }
 
 .chat-pane-header {

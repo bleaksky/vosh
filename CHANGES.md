@@ -2,6 +2,18 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.3.15 - 2026-06-04
+
+- New vitals layout option stacks a braille trend grid underneath your bar. Each cell carries two samples across four dot rows of vertical fill, drawn in the vital color over a dim base. Recent hp / mn / mv drops read as a falling shape next to the current bar fill. Pick it from the new `layout` dropdown in Settings · Panels · panes · vitals. The bar style (solid / track / ramped) and the layout (plain / with history) are now independent dropdowns so you can pair any bar with the trend grid. The live preview in Settings reflects both selections.
+- The combat target chip can now live in its own panel. Settings · Panels · combat lets you place it in the top, bottom, left, or right zone, with `hidden` (the default) keeping the legacy "inline next to vitals" behavior. When combat AND vitals both land in the bottom zone the combat chip renders flush against the vitals bar with no border between them, so the two read as one block. In any other zone combat gets the full pane treatment and vertically centers in its own surface so a single-line chip never sits glued to the top edge.
+- The combat target's hp bar is redesigned. It now uses whichever bar style you picked for vitals (solid glyphs, track, or ramped) with a single-hue drain-red palette that runs bright red at full hp through to near-black as the opponent dies, and adopts your bar font so combat and vitals render consistently. The chip itself collapses to a single line of swords plus target name plus bar plus percent. The condition word is dropped.
+- The "one with erelei" toggle is renamed "low hp vignette" so the name actually describes what it does. Existing profiles preserve your choice across the rename.
+- Trackpad scrolling on macOS is much calmer. The terminal pane no longer runs away when you swipe. Both the live terminal and the split-scrollback history pane now scale scroll speed by accumulated gesture distance instead of per-event count, so a touchpad swipe scrolls proportional to how far you actually moved rather than how many tiny events the OS fired.
+- Selection ghosts in the terminal pane are fixed. Selecting text in the live pane then watching MUD output scroll your selection off the top of the viewport used to leave a permanent gray highlight ghost in the spot where the selection used to live. The selection now auto-clears the moment it leaves the viewport.
+- Selections across the split-scrollback are exclusive. Selecting in the history pane clears any selection in the live pane (and vice versa), so the copy shortcut always grabs the most recent selection rather than competing across two panes.
+- The chat panel is resizable from whichever edge faces the main content. Drag the divider on top when chat sits at the bottom, or on the bottom when chat sits at the top. The new height persists across launches per zone.
+- Switching between chat channels (all / chat / tell / etc.) now scrolls the body to the latest message instead of preserving the previous channel's scroll position.
+
 ## v0.3.14 - 2026-06-03
 
 - The vitals settings panel is restructured as a two-column console. A dense control rack on the left (mode · show · appearance · layout · colors · template) and a live monitor on the right showing your real bar preview at full width. The monitor footer surfaces the current layout, style, width, and font so you can confirm state at a glance without scrolling. Collapses to a single column under 820px so a half-width Settings window still works.
