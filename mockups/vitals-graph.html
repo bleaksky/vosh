@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals · live history graph</title>
+    <style>
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+
+        --c-hp: #d93030;
+        --c-mn: #38bdf8;
+        --c-mv: #fbbf24;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 36px 32px 64px;
+        background: radial-gradient(ellipse at top, #0d0a0e 0%, #04060a 60%, #000 100%);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        min-height: 100vh;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 760px;
+        margin: 0 0 22px;
+        line-height: 1.55;
+      }
+
+      .scrubber {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin: 0 -32px 28px;
+        padding: 12px 32px;
+        background: rgba(9, 14, 19, 0.94);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--c-border);
+        display: flex;
+        gap: 24px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .scrubber span.lbl {
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+      }
+      .scrubber button {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 12px;
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      .scrubber button:hover {
+        color: var(--c-text-strong);
+        border-color: var(--c-border-strong);
+      }
+      .scrubber button.is-on {
+        background: var(--c-accent);
+        border-color: var(--c-accent);
+        color: var(--c-surface-deep);
+      }
+      .scrubber .tick {
+        margin-left: auto;
+        color: var(--c-text-dim);
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      .stage {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 28px;
+        max-width: 1280px;
+        margin: 0 auto;
+      }
+
+      .panel {
+        position: relative;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 5px;
+        padding: 28px 22px 18px;
+      }
+      .panel-label {
+        position: absolute;
+        top: 10px;
+        left: 16px;
+        font-size: 10px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+      }
+      .panel-desc {
+        color: var(--c-text-faint);
+        font-size: 12px;
+        margin: 14px 0 0;
+        line-height: 1.55;
+      }
+
+      /* ============================================================
+         STACKED VARIANT — three independent lanes
+         ============================================================
+         Each vital owns its own canvas. Label at left, current value
+         and min/max for the visible window at right, graph between.
+         Edge fade: a CSS mask makes the leftmost 12% and rightmost
+         8% fade toward transparent so data entering / exiting reads
+         as "fading in from the future / out into the past." */
+      .lane {
+        display: grid;
+        grid-template-columns: 32px 1fr 88px;
+        gap: 12px;
+        align-items: center;
+        padding: 6px 0;
+      }
+      .lane:not(:last-child) {
+        border-bottom: 1px dashed var(--c-border-soft);
+      }
+      .lane-label {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      .lane-label-hp {
+        color: var(--c-hp);
+      }
+      .lane-label-mn {
+        color: var(--c-mn);
+      }
+      .lane-label-mv {
+        color: var(--c-mv);
+      }
+      .lane-canvas {
+        position: relative;
+        height: 44px;
+      }
+      .lane-canvas canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+        /* Edge fade — left fades to transparent (older data dimming
+           out), right fades to transparent (incoming data not yet
+           fully formed) so the graph feels like a moving slice of
+           a longer continuum, not a hard-bounded box. */
+        mask-image: linear-gradient(90deg, transparent 0%, black 14%, black 88%, transparent 100%);
+        -webkit-mask-image: linear-gradient(
+          90deg,
+          transparent 0%,
+          black 14%,
+          black 88%,
+          transparent 100%
+        );
+      }
+      .lane-readout {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .lane-readout .cur {
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .lane-readout-hp .cur {
+        color: var(--c-hp);
+      }
+      .lane-readout-mn .cur {
+        color: var(--c-mn);
+      }
+      .lane-readout-mv .cur {
+        color: var(--c-mv);
+      }
+      .lane-readout .max {
+        color: var(--c-text-dim);
+        font-size: 11px;
+        margin-left: 3px;
+      }
+      .lane-readout .range {
+        display: block;
+        color: var(--c-text-dim);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        margin-top: 2px;
+      }
+      /* Pulsing dot at the right edge — the "live" beat. Pulses
+         only while a new sample is landing so the eye registers
+         the heartbeat without the dot ever feeling decorative. */
+      .lane-canvas::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translate(50%, -50%);
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: heartbeat 1.4s ease-in-out infinite;
+        opacity: 0.65;
+      }
+      .lane-hp .lane-canvas::after {
+        color: var(--c-hp);
+        box-shadow: 0 0 8px var(--c-hp);
+      }
+      .lane-mn .lane-canvas::after {
+        color: var(--c-mn);
+        box-shadow: 0 0 8px var(--c-mn);
+      }
+      .lane-mv .lane-canvas::after {
+        color: var(--c-mv);
+        box-shadow: 0 0 8px var(--c-mv);
+      }
+      @keyframes heartbeat {
+        0%,
+        100% {
+          transform: translate(50%, -50%) scale(1);
+          opacity: 0.65;
+        }
+        50% {
+          transform: translate(50%, -50%) scale(1.4);
+          opacity: 1;
+        }
+      }
+
+      /* ============================================================
+         COMPOSITE VARIANT — all three on one larger graph
+         ============================================================ */
+      .composite {
+        position: relative;
+        height: 200px;
+        margin-top: 6px;
+      }
+      .composite canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        mask-image: linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%);
+        -webkit-mask-image: linear-gradient(
+          90deg,
+          transparent 0%,
+          black 8%,
+          black 92%,
+          transparent 100%
+        );
+      }
+      .composite-legend {
+        display: flex;
+        gap: 18px;
+        justify-content: center;
+        padding: 10px 0 4px;
+        font-size: 11px;
+      }
+      .composite-legend span {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .composite-legend .swatch {
+        width: 10px;
+        height: 2px;
+        display: inline-block;
+        border-radius: 1px;
+      }
+      .legend-hp .swatch {
+        background: var(--c-hp);
+        box-shadow: 0 0 4px var(--c-hp);
+      }
+      .legend-mn .swatch {
+        background: var(--c-mn);
+        box-shadow: 0 0 4px var(--c-mn);
+      }
+      .legend-mv .swatch {
+        background: var(--c-mv);
+        box-shadow: 0 0 4px var(--c-mv);
+      }
+      .legend-hp .val {
+        color: var(--c-hp);
+      }
+      .legend-mn .val {
+        color: var(--c-mn);
+      }
+      .legend-mv .val {
+        color: var(--c-mv);
+      }
+      .legend-name {
+        color: var(--c-text-faint);
+        letter-spacing: 0.08em;
+        text-transform: lowercase;
+      }
+      .legend-val {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+      }
+
+      .footnote {
+        margin: 36px auto 0;
+        max-width: 1280px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      .footnote code {
+        color: var(--c-text);
+        background: var(--c-surface-deep);
+        padding: 1px 5px;
+        border-radius: 2px;
+        font-size: 0.95em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vitals · live history graph</h1>
+    <p class="lede">
+      btop-style scrolling graphs. each new sample lands on the right edge and pushes the history
+      leftward. both edges fade so the graph reads as a moving slice of a longer continuum, not a
+      hard-bounded box. canvas-rendered for smooth lines + gradient area fill. pick a scenario below
+      to watch the lines respond to combat / boss-fight pacing.
+    </p>
+
+    <div class="scrubber">
+      <span class="lbl">scenario</span>
+      <button data-scenario="calm" class="is-on">calm regen</button>
+      <button data-scenario="combat">combat</button>
+      <button data-scenario="boss">boss fight</button>
+      <span class="tick">tick <span id="tick">0</span>s</span>
+    </div>
+
+    <div class="stage">
+      <!-- STACKED VARIANT -->
+      <div class="panel">
+        <span class="panel-label">stacked · one lane per vital</span>
+        <div class="lane lane-hp">
+          <span class="lane-label lane-label-hp">hp</span>
+          <div class="lane-canvas"><canvas data-graph="hp"></canvas></div>
+          <div class="lane-readout lane-readout-hp">
+            <span class="cur" id="hp-cur">750</span><span class="max">/1000</span>
+            <span class="range" id="hp-range">lo 412 · hi 940</span>
+          </div>
+        </div>
+        <div class="lane lane-mn">
+          <span class="lane-label lane-label-mn">mn</span>
+          <div class="lane-canvas"><canvas data-graph="mn"></canvas></div>
+          <div class="lane-readout lane-readout-mn">
+            <span class="cur" id="mn-cur">150</span><span class="max">/300</span>
+            <span class="range" id="mn-range">lo 80 · hi 300</span>
+          </div>
+        </div>
+        <div class="lane lane-mv">
+          <span class="lane-label lane-label-mv">mv</span>
+          <div class="lane-canvas"><canvas data-graph="mv"></canvas></div>
+          <div class="lane-readout lane-readout-mv">
+            <span class="cur" id="mv-cur">50</span><span class="max">/200</span>
+            <span class="range" id="mv-range">lo 20 · hi 180</span>
+          </div>
+        </div>
+        <p class="panel-desc">
+          three independent canvases stacked on top of each other. each lane carries its own
+          gradient area fill in the vital color, current value + min/max for the visible window on
+          the right, and a pulsing live-beat dot at the rightmost edge. graphs scroll left every
+          200ms (5 samples per second, 120 samples kept = 24 seconds of history visible). easiest to
+          read at a glance because each vital owns its own horizontal slice.
+        </p>
+      </div>
+
+      <!-- COMPOSITE VARIANT -->
+      <div class="panel">
+        <span class="panel-label">composite · all three layered</span>
+        <div class="composite">
+          <canvas data-graph="composite"></canvas>
+        </div>
+        <div class="composite-legend">
+          <span class="legend-hp">
+            <span class="swatch"></span>
+            <span class="legend-name">hp</span>
+            <span class="legend-val val" id="hp-cur-c">750</span>
+          </span>
+          <span class="legend-mn">
+            <span class="swatch"></span>
+            <span class="legend-name">mn</span>
+            <span class="legend-val val" id="mn-cur-c">150</span>
+          </span>
+          <span class="legend-mv">
+            <span class="swatch"></span>
+            <span class="legend-name">mv</span>
+            <span class="legend-val val" id="mv-cur-c">50</span>
+          </span>
+        </div>
+        <p class="panel-desc">
+          all three vitals on a single tall canvas. percent-normalized so a 0% hp and a 0% mana land
+          at the same y-coordinate; the eye can spot correlations directly (mana dropped while hp
+          climbed = healer cast cure light). lines glow with a soft drop shadow in the vital color.
+          denser to read than stacked but better when you want to see resource trades over time.
+        </p>
+      </div>
+    </div>
+
+    <p class="footnote">
+      data model: 120 samples kept per vital (24s of history at 5 samples/s). new samples enter at
+      the right and shift the history one column left. percent (0..100) is the canvas y-axis so each
+      lane uses its full vertical range regardless of the vital's max. the
+      <code>scenario</code>
+      buttons swap which random-walk distribution drives the simulated MUD ticks so you can see how
+      the graph reads under different play states. for the live build the same sampler would
+      subscribe to <code>Char.Vitals</code> GMCP and store its 120-sample circular buffer instead of
+      generating random walks.
+    </p>
+
+    <script>
+      // ============================================================
+      // DATA MODEL
+      // ============================================================
+      // Each vital owns a circular ring of N=120 samples in 0..100
+      // (percent of max). New samples land at the head; on each tick
+      // we draw the ring as a polyline + gradient fill.
+
+      const N = 120;
+      const data = {
+        hp: new Array(N).fill(75),
+        mn: new Array(N).fill(50),
+        mv: new Array(N).fill(25),
+      };
+
+      // Simulated values resolve to display values via per-vital max.
+      const MAX = { hp: 1000, mn: 300, mv: 200 };
+
+      // Scenario controls the magnitude + bias of each tick's drift.
+      const SCENARIOS = {
+        calm: {
+          hp: { drift: 0.4, jitter: 1.2 },
+          mn: { drift: 0.5, jitter: 1.5 },
+          mv: { drift: 0.8, jitter: 1.8 },
+        },
+        combat: {
+          hp: { drift: -1.2, jitter: 6 },
+          mn: { drift: -1.8, jitter: 4 },
+          mv: { drift: -2.5, jitter: 3 },
+        },
+        boss: {
+          hp: { drift: -2.5, jitter: 12 },
+          mn: { drift: -3, jitter: 8 },
+          mv: { drift: -4, jitter: 6 },
+        },
+      };
+      let scenario = 'calm';
+
+      // Range trackers for the per-lane lo / hi text. Track the
+      // visible window only (the 120-sample ring), not all-time.
+      function rangeOf(arr) {
+        let lo = arr[0],
+          hi = arr[0];
+        for (let i = 1; i < arr.length; i++) {
+          if (arr[i] < lo) lo = arr[i];
+          if (arr[i] > hi) hi = arr[i];
+        }
+        return [lo, hi];
+      }
+
+      function clamp(v, lo, hi) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+
+      function step(arr, drift, jitter, regenFloor) {
+        const last = arr[arr.length - 1];
+        // mostly drift + jitter; occasional sharp drop or recovery
+        const shock = Math.random() < 0.06 ? (Math.random() - 0.5) * jitter * 4 : 0;
+        let next = last + drift + (Math.random() - 0.5) * jitter + shock;
+        // soft floor — when a vital bottoms out, the next tick tends
+        // to recover so the graph does not flatline against zero
+        if (next < 12) next += Math.random() * regenFloor;
+        return clamp(next, 0, 100);
+      }
+
+      // ============================================================
+      // RENDERERS
+      // ============================================================
+      const canvases = {
+        hp: document.querySelector('[data-graph="hp"]'),
+        mn: document.querySelector('[data-graph="mn"]'),
+        mv: document.querySelector('[data-graph="mv"]'),
+        composite: document.querySelector('[data-graph="composite"]'),
+      };
+
+      // hi-dpi: read CSS dims, scale canvas backing store
+      function fitCanvas(canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        if (canvas.width !== rect.width * dpr || canvas.height !== rect.height * dpr) {
+          canvas.width = rect.width * dpr;
+          canvas.height = rect.height * dpr;
+        }
+        const ctx = canvas.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        return { ctx, w: rect.width, h: rect.height };
+      }
+
+      function drawLane(canvas, arr, color) {
+        const { ctx, w, h } = fitCanvas(canvas);
+        ctx.clearRect(0, 0, w, h);
+
+        // x positions map sample index to canvas x; newest is rightmost
+        const step = w / (N - 1);
+        const yFor = (v) => h - (v / 100) * h * 0.9 - 2;
+
+        // gradient fill under the line
+        ctx.beginPath();
+        ctx.moveTo(0, h);
+        for (let i = 0; i < N; i++) ctx.lineTo(i * step, yFor(arr[i]));
+        ctx.lineTo(w, h);
+        ctx.closePath();
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, color + '55');
+        grad.addColorStop(1, color + '08');
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // outline
+        ctx.beginPath();
+        for (let i = 0; i < N; i++) {
+          const x = i * step;
+          const y = yFor(arr[i]);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.lineJoin = 'round';
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 6;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+
+      function drawComposite() {
+        const c = canvases.composite;
+        const { ctx, w, h } = fitCanvas(c);
+        ctx.clearRect(0, 0, w, h);
+        const step = w / (N - 1);
+        const yFor = (v) => h - (v / 100) * h * 0.92 - 4;
+
+        // grid: dashed horizontal lines at 25 / 50 / 75 percent
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+        ctx.setLineDash([4, 6]);
+        ctx.lineWidth = 1;
+        for (const pct of [25, 50, 75]) {
+          const y = yFor(pct);
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        const series = [
+          {
+            arr: data.hp,
+            color: getComputedStyle(document.body).getPropertyValue('--c-hp').trim(),
+          },
+          {
+            arr: data.mn,
+            color: getComputedStyle(document.body).getPropertyValue('--c-mn').trim(),
+          },
+          {
+            arr: data.mv,
+            color: getComputedStyle(document.body).getPropertyValue('--c-mv').trim(),
+          },
+        ];
+
+        for (const { arr, color } of series) {
+          // soft area fill
+          ctx.beginPath();
+          ctx.moveTo(0, h);
+          for (let i = 0; i < N; i++) ctx.lineTo(i * step, yFor(arr[i]));
+          ctx.lineTo(w, h);
+          ctx.closePath();
+          const grad = ctx.createLinearGradient(0, 0, 0, h);
+          grad.addColorStop(0, color + '30');
+          grad.addColorStop(1, color + '04');
+          ctx.fillStyle = grad;
+          ctx.fill();
+
+          ctx.beginPath();
+          for (let i = 0; i < N; i++) {
+            const x = i * step;
+            const y = yFor(arr[i]);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.lineJoin = 'round';
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 8;
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+      }
+
+      // ============================================================
+      // TICK LOOP
+      // ============================================================
+      let tickCount = 0;
+      const tickEl = document.getElementById('tick');
+
+      function tick() {
+        const s = SCENARIOS[scenario];
+        data.hp.shift();
+        data.mn.shift();
+        data.mv.shift();
+        data.hp.push(step(data.hp, s.hp.drift, s.hp.jitter, 8));
+        data.mn.push(step(data.mn, s.mn.drift, s.mn.jitter, 6));
+        data.mv.push(step(data.mv, s.mv.drift, s.mv.jitter, 5));
+
+        // readouts (cur value at the rightmost sample)
+        const hpPct = data.hp[N - 1];
+        const mnPct = data.mn[N - 1];
+        const mvPct = data.mv[N - 1];
+        const hpCur = Math.round((hpPct / 100) * MAX.hp);
+        const mnCur = Math.round((mnPct / 100) * MAX.mn);
+        const mvCur = Math.round((mvPct / 100) * MAX.mv);
+        document.getElementById('hp-cur').textContent = hpCur;
+        document.getElementById('mn-cur').textContent = mnCur;
+        document.getElementById('mv-cur').textContent = mvCur;
+        document.getElementById('hp-cur-c').textContent = hpCur;
+        document.getElementById('mn-cur-c').textContent = mnCur;
+        document.getElementById('mv-cur-c').textContent = mvCur;
+
+        const [hpLo, hpHi] = rangeOf(data.hp);
+        const [mnLo, mnHi] = rangeOf(data.mn);
+        const [mvLo, mvHi] = rangeOf(data.mv);
+        document.getElementById('hp-range').textContent =
+          'lo ' + Math.round((hpLo / 100) * MAX.hp) + ' · hi ' + Math.round((hpHi / 100) * MAX.hp);
+        document.getElementById('mn-range').textContent =
+          'lo ' + Math.round((mnLo / 100) * MAX.mn) + ' · hi ' + Math.round((mnHi / 100) * MAX.mn);
+        document.getElementById('mv-range').textContent =
+          'lo ' + Math.round((mvLo / 100) * MAX.mv) + ' · hi ' + Math.round((mvHi / 100) * MAX.mv);
+
+        drawLane(
+          canvases.hp,
+          data.hp,
+          getComputedStyle(document.body).getPropertyValue('--c-hp').trim(),
+        );
+        drawLane(
+          canvases.mn,
+          data.mn,
+          getComputedStyle(document.body).getPropertyValue('--c-mn').trim(),
+        );
+        drawLane(
+          canvases.mv,
+          data.mv,
+          getComputedStyle(document.body).getPropertyValue('--c-mv').trim(),
+        );
+        drawComposite();
+
+        tickCount++;
+        if (tickEl) tickEl.textContent = Math.floor(tickCount / 5);
+      }
+
+      // wire scenario buttons
+      document.querySelectorAll('.scrubber button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.scrubber button').forEach((b) => b.classList.remove('is-on'));
+          btn.classList.add('is-on');
+          scenario = btn.dataset.scenario;
+        });
+      });
+
+      // resize handler — refit canvases when the window changes width
+      window.addEventListener('resize', () => {
+        drawLane(
+          canvases.hp,
+          data.hp,
+          getComputedStyle(document.body).getPropertyValue('--c-hp').trim(),
+        );
+        drawLane(
+          canvases.mn,
+          data.mn,
+          getComputedStyle(document.body).getPropertyValue('--c-mn').trim(),
+        );
+        drawLane(
+          canvases.mv,
+          data.mv,
+          getComputedStyle(document.body).getPropertyValue('--c-mv').trim(),
+        );
+        drawComposite();
+      });
+
+      // first paint immediately so the panels are not empty before
+      // the first 200ms tick lands
+      tick();
+      setInterval(tick, 200);
+    </script>
+  </body>
+</html>

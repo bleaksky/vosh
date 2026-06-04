@@ -12,7 +12,7 @@ import { MapPane } from './components/MapPane';
 import { ChatPane } from './components/ChatPane';
 import { GroupPane } from './components/GroupPane';
 import { RoomStrip } from './components/RoomStrip';
-import { VitalsBar } from './components/VitalsBar';
+import { VitalsBar, CombatPane } from './components/VitalsBar';
 import { UpdateNotice } from './components/UpdateNotice';
 import { HelpView } from './components/HelpView';
 import { FindToolbar, type FindToolbarHandle } from './components/FindToolbar';
@@ -254,6 +254,31 @@ function App() {
     else handle.findPrevious(pending.query, pending.opts);
   }, [splitOpen, historyReady]);
 
+  // Sync selections between the live and history panes so only one
+  // can be active at a time. Without this, dragging a selection in
+  // the history pane while a stale live-pane selection lingers
+  // produces two simultaneous selections that compete for the copy
+  // shortcut (the live pane's wins) — confusing the user who only
+  // sees the history-pane highlight. Reactive cross-clear means
+  // the most recent gesture is always the one that "owns" the
+  // selection.
+  useEffect(() => {
+    if (!historyReady) return;
+    const live = termRef.current;
+    const hist = historyTermRef.current;
+    if (!live || !hist) return;
+    const unsubLive = live.onSelectionChange(() => {
+      if (live.hasSelection()) hist.clearSelection();
+    });
+    const unsubHist = hist.onSelectionChange(() => {
+      if (hist.hasSelection()) live.clearSelection();
+    });
+    return () => {
+      unsubLive();
+      unsubHist();
+    };
+  }, [historyReady]);
+
   // Whenever the panel layout changes (e.g. chat toggled hidden), the
   // terminal-area's available height shifts. FitAddon's own internal
   // observers do not always pick up the change before xterm draws the
@@ -279,27 +304,52 @@ function App() {
   useEffect(() => {
     const el = terminalAreaRef.current;
     if (!el) return;
+    // Accumulate raw deltaY so high-frequency touchpad events
+    // (~60 small deltas/sec on macOS) don't compound into a runaway
+    // scroll. Each PX_PER_LINE pixels of accumulated delta = one
+    // line scrolled in the history pane; CRITICAL: we
+    // preventDefault on every event we're "handling" — even when
+    // the accumulator hasn't ticked over a line yet — otherwise
+    // small touchpad deltas leak through to xterm and scroll the
+    // LIVE pane while the user thinks they're scrolling history.
+    const PX_PER_LINE = 12;
+    let wheelAccum = 0;
     const onWheel = (e: globalThis.WheelEvent) => {
-      const dir = Math.sign(e.deltaY);
-      if (dir === 0) return;
-      const lines = dir * 3;
-      if (lines < 0) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!splitOpenRef.current) {
-          setSplitOpen(true);
-          return;
-        }
-        historyTermRef.current?.scrollLines(lines);
-        return;
-      }
-      if (!splitOpenRef.current) return;
+      if (e.deltaY === 0) return;
+      const scrollingUp = e.deltaY < 0;
+      const splitOpen = splitOpenRef.current;
+      // Decide whether this event belongs to us or to xterm's live
+      // pane handler: up-scroll always belongs to us (it opens the
+      // split or scrolls history); down-scroll belongs to us only
+      // when the split is already open. Anything else falls
+      // through to xterm.
+      const ours = scrollingUp || splitOpen;
+      if (!ours) return;
       e.preventDefault();
       e.stopPropagation();
+      // Direction change resets the accumulator so a fresh swipe
+      // doesn't inherit leftover delta from the previous direction.
+      if (wheelAccum !== 0 && Math.sign(e.deltaY) !== Math.sign(wheelAccum)) {
+        wheelAccum = 0;
+      }
+      // First up-scroll opens the split without consuming the
+      // accumulator — gives the user a single "intent" gesture
+      // before history starts moving.
+      if (scrollingUp && !splitOpen) {
+        setSplitOpen(true);
+        wheelAccum = 0;
+        return;
+      }
+      wheelAccum += e.deltaY;
+      const lines = Math.trunc(wheelAccum / PX_PER_LINE);
+      if (lines === 0) return;
+      wheelAccum -= lines * PX_PER_LINE;
       historyTermRef.current?.scrollLines(lines);
-      queueMicrotask(() => {
-        if (historyTermRef.current?.isAtBottom()) setSplitOpen(false);
-      });
+      if (lines > 0) {
+        queueMicrotask(() => {
+          if (historyTermRef.current?.isAtBottom()) setSplitOpen(false);
+        });
+      }
     };
     el.addEventListener('wheel', onWheel, { passive: false, capture: true });
     return () => el.removeEventListener('wheel', onWheel, { capture: true });
@@ -734,8 +784,26 @@ function App() {
         return <MapPane key="map" />;
       case 'group':
         return <GroupPane key="group" />;
-      case 'vitals':
-        return <VitalsBar key="vitals" />;
+      case 'vitals': {
+        // Combat panel set to `hidden` = inline within the vitals bar
+        // (the legacy default). Any other zone routes combat through
+        // its standalone CombatPane in that zone, so suppress the
+        // inline chip to avoid double-rendering.
+        const combatZone = panelLayout.placements.combat.zone;
+        const hideCombat = combatZone !== 'hidden';
+        return <VitalsBar key="vitals" hideCombat={hideCombat} />;
+      }
+      case 'combat': {
+        // Chip variant only when combat sits IMMEDIATELY ABOVE vitals
+        // — both must be in the bottom zone for them to read as one
+        // attached block. Anywhere else (including bottom-alone) the
+        // pane uses the full treatment with content vertically
+        // centered in its own surface.
+        const combatZone = panelLayout.placements.combat.zone;
+        const vitalsZone = panelLayout.placements.vitals.zone;
+        const chip = combatZone === 'bottom' && vitalsZone === 'bottom';
+        return <CombatPane key="combat" chip={chip} />;
+      }
       case 'roomstrip': {
         const placement = panelLayout.placements.roomstrip;
         const inSideZone = placement.zone === 'left' || placement.zone === 'right';
@@ -761,8 +829,36 @@ function App() {
           </Resizable>
         );
       }
-      case 'chat':
-        return <ChatPane key="chat" onClose={() => setPanelZone('chat', 'hidden')} />;
+      case 'chat': {
+        // Wrap chat in Resizable so the user can grow / shrink it
+        // from whichever edge faces the sibling content. Anchor maps
+        // to the zone: bottom zone -> bottom anchor (handle on top),
+        // top zone -> top anchor (handle on bottom), side zones use
+        // align (top/bottom) the same way RoomStrip does.
+        const chatPlacement = panelLayout.placements.chat;
+        const chatAnchor: 'top' | 'bottom' =
+          chatPlacement.zone === 'top'
+            ? 'top'
+            : chatPlacement.zone === 'bottom'
+              ? 'bottom'
+              : chatPlacement.align === 'top'
+                ? 'top'
+                : 'bottom';
+        return (
+          <Resizable
+            key="chat"
+            storageKey="vosh.layout.chat.height"
+            anchor={chatAnchor}
+            defaultSize={160}
+            minSize={80}
+            maxSize={800}
+            reservePx={160}
+            handleLabel="resize chat panel"
+          >
+            <ChatPane onClose={() => setPanelZone('chat', 'hidden')} />
+          </Resizable>
+        );
+      }
       case 'affects':
         return <AffectsBar key="affects" />;
     }

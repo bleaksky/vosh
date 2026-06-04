@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vosh — combat bar style mockups</title>
+    <style>
+      :root {
+        --c-bg: #15161b;
+        --c-surface: #1c1d24;
+        --c-border: #2a2c34;
+        --c-border-soft: #20222a;
+        --c-text: #cdd0d6;
+        --c-text-faint: #6b6f78;
+        --c-text-dim: #4a4e57;
+        /* drain ramp: bright at high hp, dim/dark at low hp */
+        --c-red-bright: #ff4d4d;
+        --c-red-mid: #c83838;
+        --c-red-low: #7a1d1d;
+        --c-red-dark: #3a0d0d;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 32px;
+        background: var(--c-bg);
+        color: var(--c-text);
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      h1 {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0 0 8px;
+        letter-spacing: 0.02em;
+      }
+      .intro {
+        max-width: 720px;
+        color: var(--c-text-faint);
+        margin-bottom: 32px;
+      }
+      .section {
+        margin-bottom: 40px;
+        padding: 20px;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: 4px;
+      }
+      .section-header {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      .section-name {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--c-text);
+      }
+      .section-desc {
+        color: var(--c-text-faint);
+        font-size: 12px;
+      }
+      .row-grid {
+        display: grid;
+        grid-template-columns: max-content max-content 1fr max-content;
+        gap: 4px 12px;
+        align-items: center;
+      }
+      .swords {
+        color: var(--c-red-bright);
+      }
+      .target-name {
+        color: var(--c-text);
+        font-weight: 600;
+      }
+      .pct {
+        font-weight: 700;
+        text-align: right;
+        min-width: 36px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ===== style 1: track drain ===== */
+      .track-drain {
+        display: inline-block;
+        width: 18ch;
+        height: 0.7em;
+        background: var(--c-border-soft);
+        border-radius: 2px;
+        overflow: hidden;
+        position: relative;
+      }
+      .track-drain-fill {
+        display: block;
+        height: 100%;
+        transition: width 200ms ease-out;
+      }
+
+      /* ===== style 2: shade glyphs, drain ===== */
+      .shade-drain {
+        display: inline-block;
+        width: 18ch;
+        font-weight: 400;
+        letter-spacing: 0;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .shade-drain .filled {
+        /* color set inline */
+      }
+      .shade-drain .empty {
+        color: var(--c-red-dark);
+      }
+
+      /* ===== style 3: per-cell drain (each cell its own shade) ===== */
+      .per-cell {
+        display: inline-flex;
+        width: 18ch;
+        font-weight: 400;
+        letter-spacing: 0;
+        line-height: 1;
+      }
+      .per-cell span {
+        flex: 1 1 0;
+        text-align: center;
+      }
+
+      /* ===== style 4: pulse on low hp ===== */
+      .pulse {
+        display: inline-block;
+        width: 18ch;
+        height: 0.7em;
+        background: var(--c-border-soft);
+        border-radius: 2px;
+        overflow: hidden;
+        position: relative;
+      }
+      .pulse-fill {
+        display: block;
+        height: 100%;
+        transition: width 200ms ease-out;
+      }
+      .pulse-fill.is-critical {
+        animation: pulse-critical 800ms ease-in-out infinite;
+      }
+      .pulse-fill.is-low {
+        animation: pulse-low 1400ms ease-in-out infinite;
+      }
+      @keyframes pulse-critical {
+        0%,
+        100% {
+          background: var(--c-red-bright);
+          box-shadow: 0 0 6px var(--c-red-bright);
+        }
+        50% {
+          background: var(--c-red-low);
+          box-shadow: none;
+        }
+      }
+      @keyframes pulse-low {
+        0%,
+        100% {
+          background: var(--c-red-mid);
+          box-shadow: 0 0 3px var(--c-red-mid);
+        }
+        50% {
+          background: var(--c-red-low);
+          box-shadow: none;
+        }
+      }
+
+      /* ===== style 5: spark combat (top bar + braille history) ===== */
+      .spark {
+        display: inline-flex;
+        flex-direction: column;
+        gap: 1px;
+        width: 18ch;
+        line-height: 1;
+        overflow: hidden;
+        vertical-align: middle;
+      }
+      .spark-bar {
+        display: block;
+        white-space: nowrap;
+        letter-spacing: 0;
+        font-weight: 400;
+      }
+      .spark-bar .empty {
+        color: var(--c-red-dark);
+      }
+      .spark-grid {
+        position: relative;
+        display: block;
+        letter-spacing: -2px;
+        font-weight: 400;
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+      }
+      .spark-grid .base {
+        white-space: pre;
+        display: block;
+        margin: 0;
+        color: var(--c-text-dim);
+      }
+      .spark-grid .trace {
+        white-space: pre;
+        display: block;
+        margin: 0;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Combat bar — style mockups</h1>
+    <p class="intro">
+      Five styles for the combat target's hp bar. Each row shows the same five target states (100% /
+      75% / 50% / 25% / 5%) so you can see how the bar drains as the opponent loses health. All
+      variants share a bright-red → dim-red color ramp. Pick one (or mix two) and I will wire it in.
+    </p>
+
+    <!-- helper: render five rows of a given style -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-name">1. track drain</span>
+        <span class="section-desc">
+          smooth CSS bar, single color drains from bright red at full hp to a dark muddy red as the
+          opponent dies. simplest, matches the current combat track-bar shape.
+        </span>
+      </div>
+      <div class="row-grid" id="track-rows"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-name">2. shade glyphs, drain</span>
+        <span class="section-desc">
+          uses the same ▓░ glyphs as the vitals "spark" bar's top row. filled cells take the drain
+          color (brighter → darker), empty cells stay a near-black red so the trough is always
+          visible.
+        </span>
+      </div>
+      <div class="row-grid" id="shade-rows"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-name">3. per-cell shade ramp</span>
+        <span class="section-desc">
+          every filled cell carries its own shade — leftmost cells stay bright red, rightmost cells
+          fade through the ramp. as cells fall off the right, only the brightest stay lit. reads as
+          "how much damage left to do" at a glance.
+        </span>
+      </div>
+      <div class="row-grid" id="cell-rows"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-name">4. pulse on low</span>
+        <span class="section-desc">
+          track bar that pulses below 30% (slow) and faster + glowing below 10%. signals "kill
+          imminent" without taking extra screen real estate.
+        </span>
+      </div>
+      <div class="row-grid" id="pulse-rows"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-name">5. spark combat</span>
+        <span class="section-desc">
+          mirrors the vitals spark style — drain-colored ▓░ bar on top, two- sample-per-cell braille
+          history below tracking the target's hp over recent ticks. shows both "where the opponent
+          is now" and "how fast they are dropping".
+        </span>
+      </div>
+      <div class="row-grid" id="spark-rows"></div>
+    </div>
+
+    <!-- LAYOUT VARIANTS — same bar (style 2: shade-drain), different
+         chip shapes. addresses "and that layout" — pick a chip shape
+         alongside a bar style. -->
+    <h1 style="margin-top: 48px">Combat chip — layout variants</h1>
+    <p class="intro">
+      Same bar (style #2 — shade drain) shown in four chip shapes. Combat at 55% target hp with a
+      "small wounds" condition.
+    </p>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-name">A. current (3-row stack)</span>
+        <span class="section-desc">
+          today's shape — name on row one, bar + pct on row two, condition on row three. tallest of
+          the four; takes ~3 lines of vertical space.
+        </span>
+      </div>
+      <div class="layout-current"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-name">B. one-line (matches mockups above)</span>
+        <span class="section-desc">
+          swords + name + bar + pct on a single row. condition tucked into the name line as a
+          parenthetical. tightest vertical footprint; long target names truncate with ellipsis.
+        </span>
+      </div>
+      <div class="layout-one-line"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-name">C. two-row, bar-leads</span>
+        <span class="section-desc">
+          bar on row one (full chip width), name + pct + condition on row two. the bar reads first —
+          quickest "how dead is it" glance. name drops to a supporting role.
+        </span>
+      </div>
+      <div class="layout-bar-leads"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-name">D. minimal (no pct, color = hp)</span>
+        <span class="section-desc">
+          drops the percent readout entirely; bar color (bright→dim) IS the hp indicator. condition
+          stays for narrative. cleanest, but loses the precise number.
+        </span>
+      </div>
+      <div class="layout-minimal"></div>
+    </div>
+
+    <!-- requested: one-line with percentage embedded INSIDE the bar,
+         text color is the inverse of whatever pixel is beneath it
+         (mix-blend-mode: difference against white). -->
+    <h1 style="margin-top: 48px">Selected: one-line + percent inside (inverse)</h1>
+    <p class="intro">
+      Percentage sits inside the bar; the text uses
+      <code>mix-blend-mode: difference</code> with white so it auto-inverts against whatever color
+      is behind it — bright red fill on the left becomes teal/cyan, the dark trough on the right
+      becomes near-white. Always readable, no manual color switching.
+    </p>
+    <div class="section">
+      <div class="row-grid" id="inverse-rows"></div>
+    </div>
+
+    <style>
+      .ibar {
+        position: relative;
+        isolation: isolate;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18ch;
+        height: 1.4em;
+        background: var(--c-red-dark);
+        border-radius: 2px;
+        overflow: hidden;
+        font-variant-numeric: tabular-nums;
+      }
+      .ibar-fill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        /* width + background set inline per row */
+        transition:
+          width 200ms ease-out,
+          background 200ms ease-out;
+        z-index: 0;
+      }
+      .ibar-pct {
+        position: relative;
+        z-index: 1;
+        color: #fff;
+        font-weight: 700;
+        mix-blend-mode: difference;
+      }
+    </style>
+
+    <style>
+      .layout-current,
+      .layout-one-line,
+      .layout-bar-leads,
+      .layout-minimal {
+        font-family: inherit;
+      }
+      .layout-current .name-row {
+        display: flex;
+        gap: 6px;
+        align-items: baseline;
+      }
+      .layout-current .bar-row {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        margin-top: 2px;
+      }
+      .layout-current .cond {
+        font-style: italic;
+        color: var(--c-text-faint);
+        margin-top: 2px;
+      }
+      .layout-one-line .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .layout-one-line .cond {
+        font-style: italic;
+        color: var(--c-text-faint);
+        font-size: 12px;
+      }
+      .layout-bar-leads .bar-row {
+        display: block;
+      }
+      .layout-bar-leads .meta-row {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        margin-top: 2px;
+        font-size: 12px;
+      }
+      .layout-bar-leads .meta-row .cond {
+        font-style: italic;
+        color: var(--c-text-faint);
+      }
+      .layout-minimal .name-row {
+        display: flex;
+        gap: 6px;
+        align-items: baseline;
+      }
+      .layout-minimal .bar-row {
+        margin-top: 2px;
+      }
+      .layout-minimal .cond {
+        font-style: italic;
+        color: var(--c-text-faint);
+        font-size: 12px;
+        margin-top: 1px;
+      }
+    </style>
+
+    <script>
+      const TARGETS = [
+        { name: 'a black dragon', hp: 100 },
+        { name: 'The Baron Helgardium', hp: 75 },
+        { name: 'an orc berserker', hp: 50 },
+        { name: 'a dying ghoul', hp: 25 },
+        { name: 'a broken wraith', hp: 5 },
+      ];
+
+      // bright red → dim/dark red ramp by hp percent (0..100)
+      function drainColor(hp) {
+        // lerp through three stops to get a meaningful curve
+        // 100 → #ff4d4d, 50 → #a82828, 0 → #3a0d0d
+        const stops = [
+          { at: 0, rgb: [58, 13, 13] },
+          { at: 50, rgb: [168, 40, 40] },
+          { at: 100, rgb: [255, 77, 77] },
+        ];
+        for (let i = 0; i < stops.length - 1; i++) {
+          const a = stops[i],
+            b = stops[i + 1];
+          if (hp >= a.at && hp <= b.at) {
+            const t = (hp - a.at) / (b.at - a.at);
+            const r = Math.round(a.rgb[0] + (b.rgb[0] - a.rgb[0]) * t);
+            const g = Math.round(a.rgb[1] + (b.rgb[1] - a.rgb[1]) * t);
+            const bl = Math.round(a.rgb[2] + (b.rgb[2] - a.rgb[2]) * t);
+            return `rgb(${r}, ${g}, ${bl})`;
+          }
+        }
+        return 'rgb(255, 77, 77)';
+      }
+
+      // shared row scaffold (swords + name + bar + pct)
+      function rowScaffold(parent, target, barNode) {
+        const swords = document.createElement('span');
+        swords.className = 'swords';
+        swords.textContent = '⚔';
+        parent.appendChild(swords);
+
+        const name = document.createElement('span');
+        name.className = 'target-name';
+        name.textContent = target.name;
+        parent.appendChild(name);
+
+        parent.appendChild(barNode);
+
+        const pct = document.createElement('span');
+        pct.className = 'pct';
+        pct.style.color = drainColor(target.hp);
+        pct.textContent = target.hp + '%';
+        parent.appendChild(pct);
+      }
+
+      // --- style 1: track drain ---
+      function mkTrack(hp) {
+        const wrap = document.createElement('span');
+        wrap.className = 'track-drain';
+        const fill = document.createElement('span');
+        fill.className = 'track-drain-fill';
+        fill.style.width = hp + '%';
+        fill.style.background = drainColor(hp);
+        wrap.appendChild(fill);
+        return wrap;
+      }
+
+      // --- style 2: shade glyphs drain ---
+      function mkShade(hp, cells = 18) {
+        const wrap = document.createElement('span');
+        wrap.className = 'shade-drain';
+        const filledCount = Math.round((hp / 100) * cells);
+        const emptyCount = cells - filledCount;
+        if (filledCount > 0) {
+          const f = document.createElement('span');
+          f.className = 'filled';
+          f.style.color = drainColor(hp);
+          f.textContent = '▓'.repeat(filledCount);
+          wrap.appendChild(f);
+        }
+        if (emptyCount > 0) {
+          const e = document.createElement('span');
+          e.className = 'empty';
+          e.textContent = '░'.repeat(emptyCount);
+          wrap.appendChild(e);
+        }
+        return wrap;
+      }
+
+      // --- style 3: per-cell shade ramp ---
+      function mkPerCell(hp, cells = 18) {
+        const wrap = document.createElement('span');
+        wrap.className = 'per-cell';
+        const filledCount = Math.round((hp / 100) * cells);
+        for (let i = 0; i < cells; i++) {
+          const cell = document.createElement('span');
+          if (i < filledCount) {
+            // each filled cell's shade is a ramp of its OWN position
+            // (leftmost cells stay bright, rightmost cells fade). so as
+            // cells fall off the right, only the brightest stay lit.
+            const pos = ((cells - 1 - i) / (cells - 1)) * 100;
+            cell.style.color = drainColor(pos);
+            cell.textContent = '▓';
+          } else {
+            cell.style.color = 'var(--c-red-dark)';
+            cell.textContent = '░';
+          }
+          wrap.appendChild(cell);
+        }
+        return wrap;
+      }
+
+      // --- style 4: pulse on low ---
+      function mkPulse(hp) {
+        const wrap = document.createElement('span');
+        wrap.className = 'pulse';
+        const fill = document.createElement('span');
+        fill.className = 'pulse-fill';
+        if (hp <= 10) fill.classList.add('is-critical');
+        else if (hp <= 30) fill.classList.add('is-low');
+        else fill.style.background = drainColor(hp);
+        fill.style.width = hp + '%';
+        wrap.appendChild(fill);
+        return wrap;
+      }
+
+      // --- style 5: spark combat ---
+      // tiny braille rendering — single row, 4 dot levels of vertical fill,
+      // 2 samples per cell.
+      const DOTS_L = [0x01, 0x02, 0x04, 0x40];
+      const DOTS_R = [0x08, 0x10, 0x20, 0x80];
+      function brailleCell(v0, v1) {
+        const lit0 = Math.round(Math.max(0, Math.min(1, v0)) * 4);
+        const lit1 = Math.round(Math.max(0, Math.min(1, v1)) * 4);
+        let bits = 0;
+        for (let d = 0; d < 4; d++) {
+          const fromBottom = 3 - d;
+          if (fromBottom < lit0) bits |= DOTS_L[d];
+          if (fromBottom < lit1) bits |= DOTS_R[d];
+        }
+        return String.fromCodePoint(0x2800 | bits);
+      }
+      function fakeHistory(currentHp, n) {
+        // simulate a fight: target was at 100%, dropped roughly linearly
+        // to currentHp with some jitter for visual variety
+        const out = [];
+        for (let i = 0; i < n; i++) {
+          const t = i / (n - 1);
+          const base = 100 - (100 - currentHp) * t;
+          const jitter = (Math.sin(i * 1.7) + Math.cos(i * 0.9)) * 2;
+          out.push(Math.max(0, Math.min(100, base + jitter)) / 100);
+        }
+        return out;
+      }
+      function mkSpark(hp, cells = 18) {
+        const wrap = document.createElement('span');
+        wrap.className = 'spark';
+        // top bar — shade drain
+        const bar = document.createElement('span');
+        bar.className = 'spark-bar';
+        const filledCount = Math.round((hp / 100) * cells);
+        const emptyCount = cells - filledCount;
+        if (filledCount > 0) {
+          const f = document.createElement('span');
+          f.className = 'filled';
+          f.style.color = drainColor(hp);
+          f.textContent = '▓'.repeat(filledCount);
+          bar.appendChild(f);
+        }
+        if (emptyCount > 0) {
+          const e = document.createElement('span');
+          e.className = 'empty';
+          e.textContent = '░'.repeat(emptyCount);
+          bar.appendChild(e);
+        }
+        wrap.appendChild(bar);
+        // bottom grid — base + trace
+        const grid = document.createElement('span');
+        grid.className = 'spark-grid';
+        const sparkW = Math.max(8, Math.round(cells * 1.3));
+        const base = document.createElement('span');
+        base.className = 'base';
+        base.textContent = '⣿'.repeat(sparkW);
+        grid.appendChild(base);
+        const trace = document.createElement('span');
+        trace.className = 'trace';
+        trace.style.color = drainColor(hp);
+        const samples = fakeHistory(hp, sparkW * 2);
+        let traceStr = '';
+        for (let i = 0; i < sparkW; i++) {
+          traceStr += brailleCell(samples[i * 2], samples[i * 2 + 1]);
+        }
+        trace.textContent = traceStr;
+        grid.appendChild(trace);
+        wrap.appendChild(grid);
+        return wrap;
+      }
+
+      // populate every section
+      function fill(parentId, mkBar) {
+        const parent = document.getElementById(parentId);
+        for (const t of TARGETS) rowScaffold(parent, t, mkBar(t.hp));
+      }
+      fill('track-rows', mkTrack);
+      fill('shade-rows', mkShade);
+      fill('cell-rows', mkPerCell);
+      fill('pulse-rows', mkPulse);
+      fill('spark-rows', mkSpark);
+
+      // ===== layout variants =====
+      // shared sample target — mid-fight, partially wounded.
+      const SAMPLE = { name: 'The Baron Helgardium', hp: 55, cond: 'small wounds' };
+      const swordsEl = () => {
+        const s = document.createElement('span');
+        s.className = 'swords';
+        s.textContent = '⚔';
+        return s;
+      };
+      const nameEl = (text) => {
+        const n = document.createElement('span');
+        n.className = 'target-name';
+        n.textContent = text;
+        return n;
+      };
+      const pctEl = (hp) => {
+        const p = document.createElement('span');
+        p.className = 'pct';
+        p.style.color = drainColor(hp);
+        p.textContent = hp + '%';
+        return p;
+      };
+      const condEl = (text) => {
+        const c = document.createElement('span');
+        c.className = 'cond';
+        c.textContent = text;
+        return c;
+      };
+
+      // A: current (3-row stack)
+      {
+        const root = document.querySelector('.layout-current');
+        const nameRow = document.createElement('div');
+        nameRow.className = 'name-row';
+        nameRow.append(swordsEl(), nameEl(SAMPLE.name));
+        const barRow = document.createElement('div');
+        barRow.className = 'bar-row';
+        barRow.append(mkShade(SAMPLE.hp), pctEl(SAMPLE.hp));
+        const cond = condEl(SAMPLE.cond);
+        root.append(nameRow, barRow, cond);
+      }
+
+      // B: one-line
+      {
+        const root = document.querySelector('.layout-one-line');
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.append(
+          swordsEl(),
+          nameEl(SAMPLE.name),
+          mkShade(SAMPLE.hp),
+          pctEl(SAMPLE.hp),
+          condEl('(' + SAMPLE.cond + ')'),
+        );
+        root.append(row);
+      }
+
+      // C: two-row, bar-leads
+      {
+        const root = document.querySelector('.layout-bar-leads');
+        const barRow = document.createElement('div');
+        barRow.className = 'bar-row';
+        // wider bar in this layout since it owns the row
+        const wideBar = mkShade(SAMPLE.hp, 28);
+        barRow.append(wideBar);
+        const metaRow = document.createElement('div');
+        metaRow.className = 'meta-row';
+        metaRow.append(swordsEl(), nameEl(SAMPLE.name), pctEl(SAMPLE.hp), condEl(SAMPLE.cond));
+        root.append(barRow, metaRow);
+      }
+
+      // D: minimal
+      {
+        const root = document.querySelector('.layout-minimal');
+        const nameRow = document.createElement('div');
+        nameRow.className = 'name-row';
+        nameRow.append(swordsEl(), nameEl(SAMPLE.name));
+        const barRow = document.createElement('div');
+        barRow.className = 'bar-row';
+        barRow.append(mkShade(SAMPLE.hp));
+        const cond = condEl(SAMPLE.cond);
+        root.append(nameRow, barRow, cond);
+      }
+
+      // ===== inverse-pct bar (selected style) =====
+      function mkInverseBar(hp) {
+        const wrap = document.createElement('span');
+        wrap.className = 'ibar';
+        const fill = document.createElement('span');
+        fill.className = 'ibar-fill';
+        fill.style.width = hp + '%';
+        fill.style.background = drainColor(hp);
+        wrap.appendChild(fill);
+        const pct = document.createElement('span');
+        pct.className = 'ibar-pct';
+        pct.textContent = hp + '%';
+        wrap.appendChild(pct);
+        return wrap;
+      }
+
+      // populate inverse rows — swords + name + bar (with embedded pct).
+      // no separate pct column since the bar owns it.
+      {
+        const parent = document.getElementById('inverse-rows');
+        for (const t of TARGETS) {
+          parent.appendChild(swordsEl());
+          parent.appendChild(nameEl(t.name));
+          parent.appendChild(mkInverseBar(t.hp));
+          // blank cell to keep the 4-column grid aligned
+          const blank = document.createElement('span');
+          parent.appendChild(blank);
+        }
+      }
+    </script>
+  </body>
+</html>

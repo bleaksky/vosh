@@ -237,6 +237,14 @@ pub(crate) struct VitalsConfig {
     /// "solid" by the command handler.
     #[serde(default = "default_bar_style")]
     pub bar_style: String,
+    /// Composition layout for the bar: "plain" (just the bar) or
+    /// "with_history" (the bar stacked over a braille trend grid of
+    /// recent hp/mn/mv samples). Independent from `bar_style` —
+    /// pair any bar style with either layout. Legacy
+    /// `bar_style: "spark"` migrates to `bar_style: "solid"` +
+    /// `bar_layout: "with_history"` in the command handler.
+    #[serde(default = "default_bar_layout")]
+    pub bar_layout: String,
     /// Row layout: "stacked" puts each vital on its own row (the
     /// historical look); "inline" packs all three vitals into a
     /// single horizontal row like the tintin nprompt
@@ -289,14 +297,13 @@ pub(crate) struct VitalsConfig {
     /// different font for the rest of the UI.
     #[serde(default)]
     pub bar_font: String,
-    /// Replaces the entire vitals bar with three corner L-brackets
-    /// drawn on the main window's chrome (top-left = hp, top-right =
-    /// mn, bottom-right = mv). When hp drops below 30%, a soft red
-    /// vignette pulses at the window periphery. Named "one with
-    /// erelei" because the vitals stop being a panel widget and
-    /// merge into the UI itself.
-    #[serde(default)]
-    pub one_with_erelei: bool,
+    /// Pulses a soft red peripheral vignette on the main window's
+    /// edges when hp drops below 30%. Additive — sits on top of the
+    /// regular vitals bar rather than replacing it. `alias` lets
+    /// configs saved under the older `one_with_erelei` name keep
+    /// the user's choice across the rename.
+    #[serde(default, alias = "one_with_erelei")]
+    pub low_hp_vignette: bool,
 }
 
 impl Default for VitalsConfig {
@@ -310,6 +317,7 @@ impl Default for VitalsConfig {
             bar_empty: default_bar_empty(),
             bar_width: default_bar_width(),
             bar_style: default_bar_style(),
+            bar_layout: default_bar_layout(),
             layout: default_vitals_layout(),
             percent_color: default_percent_color(),
             template_enabled: false,
@@ -319,7 +327,7 @@ impl Default for VitalsConfig {
             mv_color: String::new(),
             use_color_ramp: true,
             bar_font: String::new(),
-            one_with_erelei: false,
+            low_hp_vignette: false,
         }
     }
 }
@@ -346,6 +354,10 @@ fn default_bar_empty() -> String {
 
 fn default_bar_width() -> u32 {
     20
+}
+
+fn default_bar_layout() -> String {
+    "plain".to_string()
 }
 
 fn default_bar_style() -> String {

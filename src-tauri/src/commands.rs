@@ -1523,13 +1523,18 @@ pub(crate) async fn ui_set_config(
         if v.percent_color != "fill" && v.percent_color != "gradient" {
             v.percent_color = "fill".to_string();
         }
-        if v.bar_style != "solid" && v.bar_style != "track" && v.bar_style != "ramped" {
-            // Unknown values get coerced to "solid". The historical
-            // "ramped" mode was re-introduced in v0.3.11 now that
-            // Vosh bundles fonts (Berkeley Mono / JetBrains Mono)
-            // whose 1/8 partial-block characters render with proper
-            // cell alignment.
+        // Legacy `bar_style: "spark"` migrates to solid + history
+        // layout. The spark mode was reframed as a layout that wraps
+        // any bar style with a braille trend grid below.
+        if v.bar_style == "spark" {
             v.bar_style = "solid".to_string();
+            v.bar_layout = "with_history".to_string();
+        }
+        if v.bar_style != "solid" && v.bar_style != "track" && v.bar_style != "ramped" {
+            v.bar_style = "solid".to_string();
+        }
+        if v.bar_layout != "plain" && v.bar_layout != "with_history" {
+            v.bar_layout = "plain".to_string();
         }
         p.ui.vitals = v;
         // Coerce an unknown moons_position value back to "right-edge"

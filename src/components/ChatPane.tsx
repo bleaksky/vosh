@@ -64,6 +64,18 @@ function ChatColumn({ onClose }: { onClose?: () => void }) {
     el.scrollTop = el.scrollHeight;
   }, [lines]);
 
+  // Switching the filter tab is an explicit user gesture that should
+  // always land at the bottom of the new filtered view — same as
+  // opening the panel does. Force-scroll regardless of the sticky
+  // flag, then reset sticky so subsequent incoming lines keep
+  // sticking until the user scrolls up again.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    stickyBottomRef.current = true;
+  }, [filter]);
+
   const panes = Array.from(new Set(lines.map((l) => l.pane))).sort();
   const visible = filter ? lines.filter((l) => l.pane === filter) : lines;
 

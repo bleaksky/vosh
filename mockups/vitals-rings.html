@@ -1,0 +1,941 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals · activity ring variations</title>
+    <style>
+      @font-face {
+        font-family: 'JetBrainsMono Bundled';
+        src: url('../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+
+        --c-hp: #ef4444;
+        --c-mn: #38bdf8;
+        --c-mv: #fbbf24;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 36px 32px 64px;
+        background: radial-gradient(ellipse at top, #0d0a0e 0%, #04060a 60%, #000 100%);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        min-height: 100vh;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 760px;
+        margin: 0 0 22px;
+        line-height: 1.55;
+      }
+
+      .scrubber {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin: 0 -32px 28px;
+        padding: 12px 32px;
+        background: rgba(9, 14, 19, 0.94);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--c-border);
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .scrubber span.lbl {
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+      }
+      .scrubber button {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 12px;
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      .scrubber button:hover {
+        color: var(--c-text-strong);
+        border-color: var(--c-border-strong);
+      }
+      .scrubber button.is-on {
+        background: var(--c-accent);
+        border-color: var(--c-accent);
+        color: var(--c-surface-deep);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .demo {
+        position: relative;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 5px;
+        padding: 30px 22px 18px;
+      }
+      .demo-label {
+        position: absolute;
+        top: 10px;
+        left: 16px;
+        font-size: 10px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+      }
+      .demo-name {
+        margin-left: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--c-text-strong);
+        letter-spacing: 0.08em;
+      }
+      .demo-stage {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        min-height: 110px;
+        padding: 8px 0;
+      }
+      .demo-desc {
+        color: var(--c-text-faint);
+        font-size: 11px;
+        margin: 10px 0 0;
+        line-height: 1.55;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: 18px auto auto;
+        gap: 4px 8px;
+        align-items: baseline;
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+      }
+      .stats .row {
+        display: contents;
+      }
+      .stats .lbl {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+      }
+      .stats .val {
+        font-weight: 700;
+      }
+      .stats .max {
+        color: var(--c-text-dim);
+        font-size: 10px;
+      }
+      .stats .row-hp .lbl,
+      .stats .row-hp .val {
+        color: var(--c-hp);
+      }
+      .stats .row-mn .lbl,
+      .stats .row-mn .val {
+        color: var(--c-mn);
+      }
+      .stats .row-mv .lbl,
+      .stats .row-mv .val {
+        color: var(--c-mv);
+      }
+
+      /* SHARED SVG STYLES */
+      .ring-track {
+        fill: none;
+        stroke: var(--c-border-soft);
+      }
+      .ring-arc {
+        fill: none;
+        stroke-linecap: round;
+        transition: stroke-dasharray 600ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      }
+      .ring-trail {
+        fill: none;
+        stroke-linecap: round;
+        opacity: 0.2;
+      }
+
+      /* ============================================================
+         V1 — CONCENTRIC ARCS (reference, same as option A) */
+      .v1 svg {
+        width: 96px;
+        height: 96px;
+        flex: 0 0 96px;
+      }
+
+      /* ============================================================
+         V2 — SIDE-BY-SIDE SMALL RINGS
+         3 separate circles in a row. Each is its own vital. Reads as
+         3 little dials with distinct identities — no nesting. */
+      .v2 .ring-row {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .v2 .ring-row svg {
+        width: 56px;
+        height: 56px;
+      }
+      .v2 .ring-mini-label {
+        text-anchor: middle;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        fill: currentColor;
+      }
+      .v2 .ring-mini-cap {
+        text-anchor: middle;
+        font-family: inherit;
+        font-size: 8px;
+        letter-spacing: 0.1em;
+        fill: var(--c-text-faint);
+        text-transform: lowercase;
+      }
+
+      /* ============================================================
+         V3 — PIE WEDGES
+         One circle, three 120° colored wedges. Each wedge's arc length
+         scales with the vital. Empty wedge sectors stay dim. */
+      .v3 svg {
+        width: 96px;
+        height: 96px;
+        flex: 0 0 96px;
+      }
+      .v3 .wedge-track {
+        fill: var(--c-border-soft);
+      }
+      .v3 .wedge-fill {
+        transition: d 500ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      }
+
+      /* ============================================================
+         V4 — HALF-GAUGES (fuel-gauge style)
+         Each vital is a half-circle that fills from one side to the
+         other. Stacked top-down. Reads more like cockpit dials. */
+      .v4 svg {
+        width: 110px;
+        height: 64px;
+        flex: 0 0 110px;
+      }
+
+      /* ============================================================
+         V5 — BRAILLE THERMOMETER TOWERS
+         Three vertical braille columns side by side. Each column is
+         a stack of 4 braille chars (16 dot rows of resolution). Fill
+         rises from the bottom; baseline dot always lit. Pure text,
+         no SVG. */
+      .v5 .towers {
+        display: flex;
+        gap: 12px;
+        align-items: flex-end;
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 18px;
+        line-height: 1;
+        letter-spacing: 0;
+      }
+      .v5 .tower {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+      .v5 .tower .col {
+        display: flex;
+        flex-direction: column;
+        line-height: 1;
+      }
+      .v5 .tower .col span {
+        display: block;
+      }
+      .v5 .tower .cap {
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: lowercase;
+        color: var(--c-text-faint);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+      }
+      .v5 .tower-hp .col {
+        color: var(--c-hp);
+      }
+      .v5 .tower-mn .col {
+        color: var(--c-mn);
+      }
+      .v5 .tower-mv .col {
+        color: var(--c-mv);
+      }
+
+      /* ============================================================
+         V6 — BRAILLE CLOCK-FACE
+         12 braille characters arranged in a circle. Each "hour" lights
+         up as the vital fills clockwise from 12 o'clock. Three vitals
+         share the SAME ring but use different DOT POSITIONS within
+         each braille cell, so each vital's lit dots stay in their own
+         color (no overlap). */
+      .v6 .clock-wrap {
+        position: relative;
+        width: 100px;
+        height: 100px;
+        flex: 0 0 100px;
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 18px;
+        line-height: 1;
+      }
+      .v6 .clock-tick {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 22px;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+      .v6 .clock-tick .layer {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .v6 .layer-hp {
+        color: var(--c-hp);
+      }
+      .v6 .layer-mn {
+        color: var(--c-mn);
+      }
+      .v6 .layer-mv {
+        color: var(--c-mv);
+      }
+
+      .footnote {
+        margin: 36px auto 0;
+        max-width: 1200px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      .footnote strong {
+        color: var(--c-text);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vitals · activity ring variations</h1>
+    <p class="lede">
+      same data, six rendering treatments. mixing SVG (geometric, smooth) and braille text
+      (terminal-native, character-grid). all six driven by the same simulator so they tick in
+      lockstep.
+    </p>
+
+    <div class="scrubber">
+      <span class="lbl">scenario</span>
+      <button data-scenario="calm" class="is-on">calm regen</button>
+      <button data-scenario="combat">combat</button>
+      <button data-scenario="boss">boss fight</button>
+      <button data-scenario="idle">idle (no events)</button>
+    </div>
+
+    <div class="grid">
+      <!-- V1: CONCENTRIC ARCS -->
+      <div class="demo v1">
+        <span class="demo-label">v1 · <span class="demo-name">concentric arcs</span></span>
+        <div class="demo-stage">
+          <svg viewBox="0 0 100 100">
+            <circle class="ring-track" cx="50" cy="50" r="40" stroke-width="6" />
+            <circle class="ring-track" cx="50" cy="50" r="28" stroke-width="6" />
+            <circle class="ring-track" cx="50" cy="50" r="16" stroke-width="6" />
+            <circle
+              id="v1-arc-hp"
+              class="ring-arc"
+              cx="50"
+              cy="50"
+              r="40"
+              stroke-width="6"
+              stroke="var(--c-hp)"
+              transform="rotate(-90 50 50)"
+            />
+            <circle
+              id="v1-arc-mn"
+              class="ring-arc"
+              cx="50"
+              cy="50"
+              r="28"
+              stroke-width="6"
+              stroke="var(--c-mn)"
+              transform="rotate(-90 50 50)"
+            />
+            <circle
+              id="v1-arc-mv"
+              class="ring-arc"
+              cx="50"
+              cy="50"
+              r="16"
+              stroke-width="6"
+              stroke="var(--c-mv)"
+              transform="rotate(-90 50 50)"
+            />
+          </svg>
+          <div class="stats">
+            <span class="row row-hp"
+              ><span class="lbl">hp</span><span class="val" data-r="hp">750</span
+              ><span class="max">/1000</span></span
+            >
+            <span class="row row-mn"
+              ><span class="lbl">mn</span><span class="val" data-r="mn">150</span
+              ><span class="max">/300</span></span
+            >
+            <span class="row row-mv"
+              ><span class="lbl">mv</span><span class="val" data-r="mv">50</span
+              ><span class="max">/200</span></span
+            >
+          </div>
+        </div>
+        <p class="demo-desc">
+          three nested arcs around a single 96px circle. classic apple watch shape. compact, but the
+          inner ring is small and hard to read at a glance when mv is low.
+        </p>
+      </div>
+
+      <!-- V2: SIDE-BY-SIDE SMALL RINGS -->
+      <div class="demo v2">
+        <span class="demo-label">v2 · <span class="demo-name">side-by-side rings</span></span>
+        <div class="demo-stage">
+          <div class="ring-row">
+            <svg viewBox="0 0 56 56">
+              <circle class="ring-track" cx="28" cy="28" r="22" stroke-width="5" />
+              <circle
+                id="v2-arc-hp"
+                class="ring-arc"
+                cx="28"
+                cy="28"
+                r="22"
+                stroke-width="5"
+                stroke="var(--c-hp)"
+                transform="rotate(-90 28 28)"
+              />
+              <text
+                class="ring-mini-cap"
+                x="28"
+                y="14"
+                style="color: var(--c-hp); fill: var(--c-hp)"
+              >
+                hp
+              </text>
+              <text
+                class="ring-mini-label"
+                x="28"
+                y="34"
+                style="color: var(--c-hp); fill: var(--c-hp)"
+                data-r="hp"
+              >
+                75
+              </text>
+            </svg>
+            <svg viewBox="0 0 56 56">
+              <circle class="ring-track" cx="28" cy="28" r="22" stroke-width="5" />
+              <circle
+                id="v2-arc-mn"
+                class="ring-arc"
+                cx="28"
+                cy="28"
+                r="22"
+                stroke-width="5"
+                stroke="var(--c-mn)"
+                transform="rotate(-90 28 28)"
+              />
+              <text class="ring-mini-cap" x="28" y="14" style="fill: var(--c-mn)">mn</text>
+              <text class="ring-mini-label" x="28" y="34" style="fill: var(--c-mn)" data-r="mn-pct">
+                50
+              </text>
+            </svg>
+            <svg viewBox="0 0 56 56">
+              <circle class="ring-track" cx="28" cy="28" r="22" stroke-width="5" />
+              <circle
+                id="v2-arc-mv"
+                class="ring-arc"
+                cx="28"
+                cy="28"
+                r="22"
+                stroke-width="5"
+                stroke="var(--c-mv)"
+                transform="rotate(-90 28 28)"
+              />
+              <text class="ring-mini-cap" x="28" y="14" style="fill: var(--c-mv)">mv</text>
+              <text class="ring-mini-label" x="28" y="34" style="fill: var(--c-mv)" data-r="mv-pct">
+                25
+              </text>
+            </svg>
+          </div>
+        </div>
+        <p class="demo-desc">
+          three small dials side by side. each ring has its own label + percent in the center.
+          easier to read individually than the nested variant; takes a bit more horizontal space.
+        </p>
+      </div>
+
+      <!-- V3: PIE WEDGES -->
+      <div class="demo v3">
+        <span class="demo-label">v3 · <span class="demo-name">pie wedges</span></span>
+        <div class="demo-stage">
+          <svg viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="38" class="wedge-track" />
+            <path id="v3-wedge-hp" class="wedge-fill" fill="var(--c-hp)" />
+            <path id="v3-wedge-mn" class="wedge-fill" fill="var(--c-mn)" />
+            <path id="v3-wedge-mv" class="wedge-fill" fill="var(--c-mv)" />
+            <circle cx="50" cy="50" r="20" fill="var(--c-surface)" />
+          </svg>
+          <div class="stats">
+            <span class="row row-hp"
+              ><span class="lbl">hp</span><span class="val" data-r="hp">750</span
+              ><span class="max">/1000</span></span
+            >
+            <span class="row row-mn"
+              ><span class="lbl">mn</span><span class="val" data-r="mn">150</span
+              ><span class="max">/300</span></span
+            >
+            <span class="row row-mv"
+              ><span class="lbl">mv</span><span class="val" data-r="mv">50</span
+              ><span class="max">/200</span></span
+            >
+          </div>
+        </div>
+        <p class="demo-desc">
+          one donut split into three 120° sectors. each wedge fills its slice based on the vital.
+          reads as a single composite shape rather than three rings; visually unified but harder to
+          compare vitals against each other directly.
+        </p>
+      </div>
+
+      <!-- V4: HALF-GAUGES -->
+      <div class="demo v4">
+        <span class="demo-label">v4 · <span class="demo-name">half-gauges</span></span>
+        <div class="demo-stage">
+          <svg viewBox="0 0 110 64">
+            <path d="M 10 54 A 40 40 0 0 1 90 54" class="ring-track" stroke-width="5" />
+            <path
+              id="v4-arc-hp"
+              d="M 10 54 A 40 40 0 0 1 90 54"
+              class="ring-arc"
+              stroke-width="5"
+              stroke="var(--c-hp)"
+            />
+            <path d="M 18 54 A 32 32 0 0 1 82 54" class="ring-track" stroke-width="5" />
+            <path
+              id="v4-arc-mn"
+              d="M 18 54 A 32 32 0 0 1 82 54"
+              class="ring-arc"
+              stroke-width="5"
+              stroke="var(--c-mn)"
+            />
+            <path d="M 26 54 A 24 24 0 0 1 74 54" class="ring-track" stroke-width="5" />
+            <path
+              id="v4-arc-mv"
+              d="M 26 54 A 24 24 0 0 1 74 54"
+              class="ring-arc"
+              stroke-width="5"
+              stroke="var(--c-mv)"
+            />
+          </svg>
+          <div class="stats">
+            <span class="row row-hp"
+              ><span class="lbl">hp</span><span class="val" data-r="hp">750</span
+              ><span class="max">/1000</span></span
+            >
+            <span class="row row-mn"
+              ><span class="lbl">mn</span><span class="val" data-r="mn">150</span
+              ><span class="max">/300</span></span
+            >
+            <span class="row row-mv"
+              ><span class="lbl">mv</span><span class="val" data-r="mv">50</span
+              ><span class="max">/200</span></span
+            >
+          </div>
+        </div>
+        <p class="demo-desc">
+          three nested half-circles. fills sweep left to right. takes half the vertical of the full
+          ring variants — fits a flatter slot. reads like cockpit gauges; left = empty, right =
+          full.
+        </p>
+      </div>
+
+      <!-- V5: BRAILLE THERMOMETER TOWERS -->
+      <div class="demo v5">
+        <span class="demo-label">v5 · <span class="demo-name">braille towers</span></span>
+        <div class="demo-stage">
+          <div class="towers">
+            <div class="tower tower-hp">
+              <div class="col" id="v5-hp"></div>
+              <span class="cap">hp</span>
+            </div>
+            <div class="tower tower-mn">
+              <div class="col" id="v5-mn"></div>
+              <span class="cap">mn</span>
+            </div>
+            <div class="tower tower-mv">
+              <div class="col" id="v5-mv"></div>
+              <span class="cap">mv</span>
+            </div>
+          </div>
+          <div class="stats">
+            <span class="row row-hp"
+              ><span class="lbl">hp</span><span class="val" data-r="hp">750</span
+              ><span class="max">/1000</span></span
+            >
+            <span class="row row-mn"
+              ><span class="lbl">mn</span><span class="val" data-r="mn">150</span
+              ><span class="max">/300</span></span
+            >
+            <span class="row row-mv"
+              ><span class="lbl">mv</span><span class="val" data-r="mv">50</span
+              ><span class="max">/200</span></span
+            >
+          </div>
+        </div>
+        <p class="demo-desc">
+          three thin vertical braille columns. each is 4 braille chars tall (16 dot rows of
+          resolution) and fills bottom-up like a thermometer. pure text. closest braille kin to the
+          ring family — visually distinct, character-grid native.
+        </p>
+      </div>
+
+      <!-- V6: BRAILLE CLOCK-FACE -->
+      <div class="demo v6">
+        <span class="demo-label">v6 · <span class="demo-name">braille clock-face</span></span>
+        <div class="demo-stage">
+          <div class="clock-wrap" id="v6-clock"></div>
+          <div class="stats">
+            <span class="row row-hp"
+              ><span class="lbl">hp</span><span class="val" data-r="hp">750</span
+              ><span class="max">/1000</span></span
+            >
+            <span class="row row-mn"
+              ><span class="lbl">mn</span><span class="val" data-r="mn">150</span
+              ><span class="max">/300</span></span
+            >
+            <span class="row row-mv"
+              ><span class="lbl">mv</span><span class="val" data-r="mv">50</span
+              ><span class="max">/200</span></span
+            >
+          </div>
+        </div>
+        <p class="demo-desc">
+          12 braille chars positioned at clock-face positions around a circle. each cell carries
+          dots for whichever vital's bar reaches that position; the three vitals use non-overlapping
+          dot positions within the cell (hp top, mn middle, mv bottom) so colors never mix. fills
+          clockwise from 12.
+        </p>
+      </div>
+    </div>
+
+    <p class="footnote">
+      v1–v4 use SVG (smooth, geometric, antialiased). v5–v6 use plain braille characters
+      (terminal-native, snaps to the character grid). all six render to the same vitals slot
+      footprint that vosh's current bar occupies. tell me which to pursue and i can wire it in.
+    </p>
+
+    <script>
+      // ============================================================
+      // Shared simulator
+      // ============================================================
+      let values = { hp: 0.75, mn: 0.5, mv: 0.25 };
+      const max = { hp: 1000, mn: 300, mv: 200 };
+      const SCENARIOS = {
+        calm: [800, 2500],
+        combat: [200, 800],
+        boss: [100, 350],
+        idle: null,
+      };
+      let scenario = 'calm';
+      let timer = null;
+
+      function clamp(v, lo, hi) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+      function rand(a, b) {
+        return a + Math.random() * (b - a);
+      }
+
+      function fireEvent() {
+        const drift = scenario === 'calm' ? 0.01 : scenario === 'combat' ? -0.02 : -0.045;
+        const jit = scenario === 'calm' ? 0.04 : scenario === 'combat' ? 0.12 : 0.2;
+        for (const k of ['hp', 'mn', 'mv']) {
+          let v = values[k] + drift + (Math.random() - 0.5) * jit;
+          if (Math.random() < 0.08) v += (Math.random() - 0.5) * jit * 4;
+          if (v < 0.08) v += Math.random() * 0.12;
+          values[k] = clamp(v, 0, 1);
+        }
+        renderAll();
+      }
+      function schedule() {
+        if (timer) clearTimeout(timer);
+        if (scenario === 'idle') return;
+        const cfg = SCENARIOS[scenario];
+        timer = setTimeout(
+          () => {
+            fireEvent();
+            schedule();
+          },
+          rand(cfg[0], cfg[1]),
+        );
+      }
+
+      // ============================================================
+      // V1, V2 — full-circle arcs (stroke-dasharray)
+      // ============================================================
+      function setArc(el, r, v) {
+        const circ = 2 * Math.PI * r;
+        const lit = v * circ;
+        el.setAttribute('stroke-dasharray', lit + ' ' + (circ - lit));
+      }
+      function renderV1() {
+        setArc(document.getElementById('v1-arc-hp'), 40, values.hp);
+        setArc(document.getElementById('v1-arc-mn'), 28, values.mn);
+        setArc(document.getElementById('v1-arc-mv'), 16, values.mv);
+      }
+      function renderV2() {
+        setArc(document.getElementById('v2-arc-hp'), 22, values.hp);
+        setArc(document.getElementById('v2-arc-mn'), 22, values.mn);
+        setArc(document.getElementById('v2-arc-mv'), 22, values.mv);
+        document.querySelector('[data-r="mn-pct"]').textContent = Math.round(values.mn * 100);
+        document.querySelector('[data-r="mv-pct"]').textContent = Math.round(values.mv * 100);
+      }
+
+      // ============================================================
+      // V3 — pie wedges (SVG path arcs)
+      // ============================================================
+      // Each vital owns a 120° sector starting at:
+      //   HP at -90° (top), spanning to +30°
+      //   MN at +30°, spanning to +150°
+      //   MV at +150°, spanning to +270°
+      // Each wedge fills its sector by v * 120 degrees.
+      function polar(cx, cy, r, deg) {
+        const rad = ((deg - 90) * Math.PI) / 180;
+        return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+      }
+      function wedgePath(cx, cy, rOuter, rInner, startDeg, endDeg) {
+        if (endDeg <= startDeg) return '';
+        const large = endDeg - startDeg > 180 ? 1 : 0;
+        const a = polar(cx, cy, rOuter, startDeg);
+        const b = polar(cx, cy, rOuter, endDeg);
+        const c = polar(cx, cy, rInner, endDeg);
+        const d = polar(cx, cy, rInner, startDeg);
+        return `M ${a.x} ${a.y} A ${rOuter} ${rOuter} 0 ${large} 1 ${b.x} ${b.y} L ${c.x} ${c.y} A ${rInner} ${rInner} 0 ${large} 0 ${d.x} ${d.y} Z`;
+      }
+      function renderV3() {
+        const cx = 50,
+          cy = 50,
+          rO = 38,
+          rI = 22;
+        const starts = { hp: 0, mn: 120, mv: 240 };
+        for (const k of ['hp', 'mn', 'mv']) {
+          const s = starts[k];
+          const e = s + values[k] * 120;
+          const path = wedgePath(cx, cy, rO, rI, s, e);
+          document.getElementById('v3-wedge-' + k).setAttribute('d', path);
+        }
+      }
+
+      // ============================================================
+      // V4 — half-gauges (path arcs from left to right)
+      // ============================================================
+      function setHalfArc(el, r, cy, v) {
+        const circ = Math.PI * r; // half circumference
+        const lit = v * circ;
+        el.setAttribute('stroke-dasharray', lit + ' ' + (circ - lit));
+      }
+      function renderV4() {
+        setHalfArc(document.getElementById('v4-arc-hp'), 40, 54, values.hp);
+        setHalfArc(document.getElementById('v4-arc-mn'), 32, 54, values.mn);
+        setHalfArc(document.getElementById('v4-arc-mv'), 24, 54, values.mv);
+      }
+
+      // ============================================================
+      // V5 — braille thermometer towers
+      // ============================================================
+      // Each tower is a vertical stack of 4 braille chars. Total
+      // resolution = 16 dot rows. Fills bottom-up; baseline always lit.
+      const DOTS_LEFT = [0x01, 0x02, 0x04, 0x40]; // top→bottom dots in left col
+      const DOTS_RIGHT = [0x08, 0x10, 0x20, 0x80];
+
+      function towerChar(globalLitFromBottom, charIdx, totalChars) {
+        // globalLitFromBottom: number of dot rows lit, counted from the
+        // very bottom of the tower.
+        // charIdx: 0 = TOP char, totalChars-1 = BOTTOM char.
+        // Each char covers 4 dot rows.
+        const totalDots = totalChars * 4;
+        const charBottomDot = (totalChars - charIdx) * 4 - 1; // global dot row of bottom of this char
+        let bits = 0;
+        for (let lr = 0; lr < 4; lr++) {
+          // local row lr=0 is top of THIS char, lr=3 is bottom.
+          // global dot row index (from top of tower):
+          const globalRowFromTop = charIdx * 4 + lr;
+          const globalRowFromBottom = totalDots - 1 - globalRowFromTop;
+          if (globalRowFromBottom < globalLitFromBottom) {
+            bits |= DOTS_LEFT[lr];
+            bits |= DOTS_RIGHT[lr];
+          }
+        }
+        // baseline: bottom char's bottom dot always lit
+        if (charIdx === totalChars - 1) {
+          bits |= DOTS_LEFT[3];
+          bits |= DOTS_RIGHT[3];
+        }
+        return String.fromCodePoint(0x2800 | bits);
+      }
+      function renderTower(id, v) {
+        const totalChars = 4;
+        const totalDots = totalChars * 4;
+        const lit = Math.max(0, Math.min(totalDots, Math.round(v * totalDots)));
+        const col = document.getElementById(id);
+        col.innerHTML = '';
+        for (let i = 0; i < totalChars; i++) {
+          const span = document.createElement('span');
+          span.textContent = towerChar(lit, i, totalChars);
+          col.appendChild(span);
+        }
+      }
+      function renderV5() {
+        renderTower('v5-hp', values.hp);
+        renderTower('v5-mn', values.mn);
+        renderTower('v5-mv', values.mv);
+      }
+
+      // ============================================================
+      // V6 — braille clock-face
+      // ============================================================
+      // 12 positions arranged around a circle. Each position carries
+      // dots for whichever vitals' bar reaches that hour. Within a
+      // single braille cell:
+      //   HP uses dot 1 (top-left)   — fills hours 0..hp*12 clockwise
+      //   MN uses dot 3 (mid-left)
+      //   MV uses dot 7 (bottom-left)
+      // Each layer is a separate absolutely positioned span colored
+      // for its vital; lit dots never overlap = no color mixing.
+      function setupClock() {
+        const wrap = document.getElementById('v6-clock');
+        wrap.innerHTML = '';
+        const cx = 50,
+          cy = 50,
+          r = 38;
+        for (let h = 0; h < 12; h++) {
+          const angle = ((h * 30 - 90) * Math.PI) / 180; // -90 so 12 is at top
+          const x = cx + r * Math.cos(angle);
+          const y = cy + r * Math.sin(angle);
+          const tick = document.createElement('div');
+          tick.className = 'clock-tick';
+          tick.dataset.hour = h;
+          tick.style.left = x + '%';
+          tick.style.top = y + '%';
+          for (const which of ['hp', 'mn', 'mv']) {
+            const layer = document.createElement('div');
+            layer.className = 'layer layer-' + which;
+            layer.dataset.layer = which;
+            tick.appendChild(layer);
+          }
+          wrap.appendChild(tick);
+        }
+      }
+      function renderV6() {
+        // For each vital, how many of the 12 hours are lit:
+        const ticks = document.querySelectorAll('#v6-clock .clock-tick');
+        const lit = {
+          hp: Math.round(values.hp * 12),
+          mn: Math.round(values.mn * 12),
+          mv: Math.round(values.mv * 12),
+        };
+        ticks.forEach((tick, h) => {
+          const hpDot = h < lit.hp ? 0x01 : 0; // dot 1 (top-left)
+          const mnDot = h < lit.mn ? 0x04 : 0; // dot 3 (mid-left)
+          const mvDot = h < lit.mv ? 0x40 : 0; // dot 7 (bottom-left)
+          const hpCh = String.fromCodePoint(0x2800 | hpDot);
+          const mnCh = String.fromCodePoint(0x2800 | mnDot);
+          const mvCh = String.fromCodePoint(0x2800 | mvDot);
+          const layers = tick.querySelectorAll('.layer');
+          layers.forEach((layer) => {
+            const k = layer.dataset.layer;
+            if (k === 'hp') layer.textContent = hpCh;
+            else if (k === 'mn') layer.textContent = mnCh;
+            else layer.textContent = mvCh;
+          });
+        });
+      }
+
+      // ============================================================
+      // Numbers
+      // ============================================================
+      function renderNumbers() {
+        document.querySelectorAll('[data-r="hp"]').forEach((el) => {
+          el.textContent = Math.round(values.hp * max.hp);
+        });
+        document.querySelectorAll('[data-r="mn"]').forEach((el) => {
+          el.textContent = Math.round(values.mn * max.mn);
+        });
+        document.querySelectorAll('[data-r="mv"]').forEach((el) => {
+          el.textContent = Math.round(values.mv * max.mv);
+        });
+      }
+
+      function renderAll() {
+        renderV1();
+        renderV2();
+        renderV3();
+        renderV4();
+        renderV5();
+        renderV6();
+        renderNumbers();
+      }
+
+      document.querySelectorAll('.scrubber button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.scrubber button').forEach((b) => b.classList.remove('is-on'));
+          btn.classList.add('is-on');
+          scenario = btn.dataset.scenario;
+          schedule();
+        });
+      });
+
+      setupClock();
+      renderAll();
+      schedule();
+    </script>
+  </body>
+</html>

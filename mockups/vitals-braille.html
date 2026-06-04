@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals · btop braille (overlaid)</title>
+    <style>
+      @font-face {
+        font-family: 'JetBrainsMono Bundled';
+        src: url('../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+
+        --c-hp: #ef4444;
+        --c-mn: #38bdf8;
+        --c-mv: #fbbf24;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 36px 32px 64px;
+        background: radial-gradient(ellipse at top, #0d0a0e 0%, #04060a 60%, #000 100%);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        min-height: 100vh;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 760px;
+        margin: 0 0 22px;
+        line-height: 1.55;
+      }
+
+      .scrubber {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin: 0 -32px 28px;
+        padding: 12px 32px;
+        background: rgba(9, 14, 19, 0.94);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--c-border);
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .scrubber span.lbl {
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+      }
+      .scrubber button {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 12px;
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      .scrubber button:hover {
+        color: var(--c-text-strong);
+        border-color: var(--c-border-strong);
+      }
+      .scrubber button.is-on {
+        background: var(--c-accent);
+        border-color: var(--c-accent);
+        color: var(--c-surface-deep);
+      }
+      .scrubber .meta {
+        margin-left: auto;
+        color: var(--c-text-dim);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+      }
+      .scrubber .meta strong {
+        color: var(--c-text-muted);
+        font-weight: 700;
+        margin-right: 4px;
+      }
+
+      /* ============================================================
+         PANEL-SIZED OVERLAID VITALS GRAPH
+         The kind of thing that lives inside a docked Vosh panel,
+         not a full-screen frame. ~480px wide × 60px tall (3 char
+         rows of braille = 12 dot rows of vertical resolution).
+
+         All three vitals (hp / mn / mv) render INTO THE SAME
+         graph rectangle. Each vital is its own layer, each in its
+         own color, positioned with overlay. mix-blend-mode: lighten
+         makes the dots additively combine — where hp's red dot
+         lands on mn's blue dot, the cell reads as magenta. Empty
+         braille cells stay invisible so the dark background bleeds
+         through and the layered series shine in pure color.
+
+         Each column = 2 samples. A 50-char strip carries 100
+         samples of history. When a vital's value is high, its
+         column fills tall (3 dot rows lit up to 12); when low it
+         shows just a thin line of dots at the bottom. */
+      .panel {
+        max-width: none;
+        margin: 0 16px;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: 3px;
+        padding: 10px 14px;
+        position: relative;
+      }
+      .panel-head {
+        display: flex;
+        gap: 12px;
+        align-items: baseline;
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+        margin-bottom: 6px;
+      }
+      .panel-head .legend {
+        margin-left: auto;
+        display: inline-flex;
+        gap: 10px;
+        align-items: baseline;
+        font-size: 10px;
+        letter-spacing: 0.06em;
+      }
+      .panel-head .legend span {
+        font-variant-numeric: tabular-nums;
+      }
+      .legend-hp {
+        color: var(--c-hp);
+      }
+      .legend-mn {
+        color: var(--c-mn);
+      }
+      .legend-mv {
+        color: var(--c-mv);
+      }
+
+      /* Three layered braille canvases occupying the SAME 3-character-
+         row rectangle. Each layer lights dots only in its assigned
+         band of dot rows:
+            HP layer lights dot rows 0-3 (top char row)
+            MN layer lights dot rows 4-7 (middle char row)
+            MV layer lights dot rows 8-11 (bottom char row)
+         No two layers ever light a dot at the same pixel position, so
+         colors stay pure (no blend mode needed). The result reads as
+         ONE 3-row ribbon with a red top band, cyan middle, amber
+         bottom — all the same character cells, one merged graph. */
+      .graph {
+        position: relative;
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 16px;
+        line-height: 1;
+        letter-spacing: 0;
+        white-space: pre;
+        height: 3em;
+        overflow: hidden;
+      }
+      .graph .series {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        white-space: pre;
+        margin: 0;
+        padding: 0;
+      }
+      .graph .series-hp {
+        color: var(--c-hp);
+      }
+      .graph .series-mn {
+        color: var(--c-mn);
+      }
+      .graph .series-mv {
+        color: var(--c-mv);
+      }
+
+      .panel-foot {
+        display: flex;
+        gap: 14px;
+        align-items: baseline;
+        margin-top: 6px;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--c-text-faint);
+      }
+      .panel-foot .val-hp {
+        color: var(--c-hp);
+        font-weight: 700;
+      }
+      .panel-foot .val-mn {
+        color: var(--c-mn);
+        font-weight: 700;
+      }
+      .panel-foot .val-mv {
+        color: var(--c-mv);
+        font-weight: 700;
+      }
+      .panel-foot .max {
+        color: var(--c-text-dim);
+        font-weight: 400;
+      }
+
+      .footnote {
+        margin: 36px auto 0;
+        max-width: 760px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      .footnote code {
+        color: var(--c-text);
+        background: var(--c-surface-deep);
+        padding: 1px 5px;
+        border-radius: 2px;
+        font-size: 0.95em;
+      }
+      .footnote strong {
+        color: var(--c-text);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vitals · panel-sized braille graph</h1>
+    <p class="lede">
+      one graph, three vitals overlaid. each vital owns its own colored layer (hp red · mn cyan · mv
+      amber); overlapping columns blend so a moment where hp and mn dropped together reads as
+      magenta. each column maps to 2 samples; the column's vertical fill scales with the value —
+      thick (3 rows of dots) when full, a thin line at the bottom when low. graphs only redraw when
+      a vital actually updates.
+    </p>
+
+    <div class="scrubber">
+      <span class="lbl">scenario</span>
+      <button data-scenario="calm" class="is-on">calm regen</button>
+      <button data-scenario="combat">combat</button>
+      <button data-scenario="boss">boss fight</button>
+      <button data-scenario="idle">idle (no events)</button>
+      <span class="meta">
+        <strong>events</strong><span id="event-count">0</span> · <strong>last</strong
+        ><span id="last-event">—</span>
+      </span>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span>vitals</span>
+        <span class="legend">
+          <span class="legend-hp">● hp</span>
+          <span class="legend-mn">● mn</span>
+          <span class="legend-mv">● mv</span>
+        </span>
+      </div>
+      <div class="graph">
+        <div class="series series-hp" id="g-hp"></div>
+        <div class="series series-mn" id="g-mn"></div>
+        <div class="series series-mv" id="g-mv"></div>
+      </div>
+      <div class="panel-foot">
+        <span> <span class="val-hp" id="v-hp">750</span><span class="max">/1000</span> </span>
+        <span> <span class="val-mn" id="v-mn">150</span><span class="max">/300</span> </span>
+        <span> <span class="val-mv" id="v-mv">50</span><span class="max">/200</span> </span>
+      </div>
+    </div>
+
+    <p class="footnote">
+      <strong>multi-row braille:</strong> 3 character rows × 4 dot rows per char = 12 dot rows of
+      vertical resolution. for a value v in 0..1 the function lights dots whose global dot row ≥
+      <code>(1 − v) × 12</code>, so a column fills from the bottom up. full = ⣿⣿⣿ (thick), low = ⣀
+      at the bottom (thin).
+      <br />
+      <strong>blend layering:</strong> the three series are absolutely positioned at the same origin
+      inside <code>.graph</code> with <code>mix-blend-mode: lighten</code>. lit dots add to the
+      displayed color (red + blue = magenta); empty cells contribute nothing under lighten so the
+      dark panel background shows through. no canvas, no svg — just three text layers.
+      <br />
+      <strong>font note:</strong> Berkeley Mono Nerd Font's bundled TTF registers the U+2800 braille
+      range with empty (zero-contour) glyphs. The graph font-family stack puts
+      <code>JetBrainsMono Bundled</code> first (zero braille coverage in its cmap, so the browser
+      falls through to Menlo / Consolas which carry real braille glyphs).
+    </p>
+
+    <script>
+      // braille dot positions per cell:
+      //   col 0          col 1
+      //   dot 1 (0x01)   dot 4 (0x08)   row 0 (top)
+      //   dot 2 (0x02)   dot 5 (0x10)   row 1
+      //   dot 3 (0x04)   dot 6 (0x20)   row 2
+      //   dot 7 (0x40)   dot 8 (0x80)   row 3 (bottom)
+      const DOTS_LEFT = [0x01, 0x02, 0x04, 0x40];
+      const DOTS_RIGHT = [0x08, 0x10, 0x20, 0x80];
+
+      // Single-row centered-fill braille series. Each character cell
+      // is 4 dot rows. For each value v in 0..1 the bar grows
+      // symmetrically up + down from the vertical center of the row.
+      // The centerline dot (lr=2, just below mid) is ALWAYS lit in
+      // both columns so an empty / zero vital still shows a thin
+      // baseline of dots — never empty space.
+      //
+      //   v=1.0  ⣿  (full)
+      //   v=0.5  ⠶  (middle pair)
+      //   v=0.25 ⠒  (centerline + one neighbor)
+      //   v=0   ⠐  (centerline only — single dot per column)
+      //
+      // values: 0..1 floats, length = width * 2.
+      function brailleSeries(values, width) {
+        let line = '';
+        const totalDots = 4;
+        const mid = 2;
+        const BASELINE = DOTS_LEFT[2] | DOTS_RIGHT[2]; // always-lit center
+        for (let cc = 0; cc < width; cc++) {
+          const v0 = values[cc * 2] ?? 0;
+          const v1 = values[cc * 2 + 1] ?? 0;
+          const half0 = (v0 * totalDots) / 2;
+          const half1 = (v1 * totalDots) / 2;
+          let bits = BASELINE;
+          for (let lr = 0; lr < 4; lr++) {
+            const rowCenter = lr + 0.5;
+            if (rowCenter >= mid - half0 && rowCenter < mid + half0) bits |= DOTS_LEFT[lr];
+            if (rowCenter >= mid - half1 && rowCenter < mid + half1) bits |= DOTS_RIGHT[lr];
+          }
+          line += String.fromCodePoint(0x2800 | bits);
+        }
+        return line;
+      }
+
+      // ============================================================
+      // DATA RINGS
+      // ============================================================
+      const GRAPH_W = 180; // character width per row (much wider)
+      const N = GRAPH_W * 2; // 360 samples per vital
+
+      function makeRing(seed) {
+        return new Array(N).fill(seed);
+      }
+
+      const rings = {
+        hp: makeRing(0.75),
+        mn: makeRing(0.5),
+        mv: makeRing(0.25),
+      };
+
+      const max = { hp: 1000, mn: 300, mv: 200 };
+
+      const SCENARIOS = {
+        calm: [800, 2500],
+        combat: [150, 800],
+        boss: [80, 300],
+        idle: null,
+      };
+      let scenario = 'calm';
+      let eventCount = 0;
+      let timer = null;
+
+      function clamp(v, lo, hi) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+      function rand(a, b) {
+        return a + Math.random() * (b - a);
+      }
+
+      function stepValue(arr, drift, jitter) {
+        const last = arr[arr.length - 1];
+        const shock = Math.random() < 0.08 ? (Math.random() - 0.5) * jitter * 4 : 0;
+        let next = last + drift + (Math.random() - 0.5) * jitter + shock;
+        if (next < 0.1) next += Math.random() * 0.15;
+        return clamp(next, 0, 1);
+      }
+
+      function fireEvent() {
+        const drift = scenario === 'calm' ? 0.005 : scenario === 'combat' ? -0.02 : -0.04;
+        const jitter = scenario === 'calm' ? 0.04 : scenario === 'combat' ? 0.12 : 0.2;
+        rings.hp.shift();
+        rings.mn.shift();
+        rings.mv.shift();
+        rings.hp.push(stepValue(rings.hp, drift, jitter));
+        rings.mn.push(stepValue(rings.mn, drift * 1.2, jitter * 0.9));
+        rings.mv.push(stepValue(rings.mv, drift * 1.5, jitter * 0.7));
+        render();
+        eventCount++;
+        document.getElementById('event-count').textContent = eventCount;
+        document.getElementById('last-event').textContent = 'hp/mn/mv';
+      }
+
+      function schedule() {
+        if (timer) clearTimeout(timer);
+        if (scenario === 'idle') return;
+        const cfg = SCENARIOS[scenario];
+        timer = setTimeout(
+          () => {
+            fireEvent();
+            schedule();
+          },
+          rand(cfg[0], cfg[1]),
+        );
+      }
+
+      function render() {
+        document.getElementById('g-hp').textContent = brailleSeries(rings.hp, GRAPH_W);
+        document.getElementById('g-mn').textContent = brailleSeries(rings.mn, GRAPH_W);
+        document.getElementById('g-mv').textContent = brailleSeries(rings.mv, GRAPH_W);
+        document.getElementById('v-hp').textContent = Math.round(
+          rings.hp[rings.hp.length - 1] * max.hp,
+        );
+        document.getElementById('v-mn').textContent = Math.round(
+          rings.mn[rings.mn.length - 1] * max.mn,
+        );
+        document.getElementById('v-mv').textContent = Math.round(
+          rings.mv[rings.mv.length - 1] * max.mv,
+        );
+      }
+
+      document.querySelectorAll('.scrubber button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.scrubber button').forEach((b) => b.classList.remove('is-on'));
+          btn.classList.add('is-on');
+          scenario = btn.dataset.scenario;
+          schedule();
+        });
+      });
+
+      render();
+      schedule();
+    </script>
+  </body>
+</html>

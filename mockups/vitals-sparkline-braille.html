@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals · sparkline + bar (braille)</title>
+    <style>
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'JetBrainsMono Bundled';
+        src: url('../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+
+        --c-hp: #87a987;
+        --c-mn: #7fb4ca;
+        --c-mv: #d99a6c;
+        --c-empty: #2a2f36;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 36px 32px 80px;
+        background: radial-gradient(ellipse at top, #0d0a0e 0%, #04060a 60%, #000 100%);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        min-height: 100vh;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 760px;
+        margin: 0 0 24px;
+        line-height: 1.6;
+      }
+      .lede code {
+        background: var(--c-surface-deep);
+        padding: 1px 6px;
+        border-radius: 2px;
+        color: var(--c-text);
+      }
+
+      .scrubber {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin: 0 -32px 28px;
+        padding: 12px 32px;
+        background: rgba(9, 14, 19, 0.94);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--c-border);
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .scrubber span.lbl {
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+      }
+      .scrubber button {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 12px;
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      .scrubber button:hover {
+        color: var(--c-text-strong);
+        border-color: var(--c-border-strong);
+      }
+      .scrubber button.is-on {
+        background: var(--c-accent);
+        border-color: var(--c-accent);
+        color: var(--c-surface-deep);
+      }
+
+      .stack {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 36px;
+        max-width: 1080px;
+        margin: 0 auto;
+      }
+      .demo {
+        position: relative;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 5px;
+        padding: 34px 26px 22px;
+      }
+      .demo-label {
+        position: absolute;
+        top: 12px;
+        left: 18px;
+        font-size: 10px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+      }
+      .demo-name {
+        color: var(--c-text-strong);
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        margin-left: 6px;
+      }
+      .demo-desc {
+        color: var(--c-text-faint);
+        font-size: 12px;
+        margin: 14px 0 0;
+        line-height: 1.6;
+      }
+
+      .vosh {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        font-size: 12px;
+      }
+      .vosh-topbar {
+        display: flex;
+        align-items: center;
+        flex: 0 0 24px;
+        padding: 0 10px;
+        background: var(--c-surface);
+        border-bottom: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font-size: 11px;
+      }
+      .vosh-topbar .aux {
+        display: flex;
+        gap: 2px;
+      }
+      .vosh-topbar .aux span {
+        padding: 2px 8px;
+      }
+      .vosh-topbar .loadouts {
+        margin-left: 6px;
+        padding: 2px 8px;
+        color: var(--c-accent);
+      }
+      .vosh-topbar .spacer {
+        flex: 1;
+      }
+      .vosh-topbar .controls {
+        font-size: 13px;
+      }
+      .vosh-topbar .controls span {
+        padding: 0 8px;
+      }
+      .vosh-term {
+        padding: 10px 14px;
+        line-height: 1.55;
+        flex: 1 1 0;
+        min-height: 140px;
+        overflow: hidden;
+      }
+      .vosh-term p {
+        margin: 0;
+        color: var(--c-text);
+      }
+      .vosh-term p.dim {
+        color: var(--c-text-faint);
+      }
+      .vosh-term p.dmg {
+        color: #c98d8d;
+      }
+      .vosh-term p.cmd {
+        color: var(--c-text-dim);
+        font-style: italic;
+      }
+      .vosh-vitals {
+        flex: 0 0 auto;
+        padding: 8px 14px;
+        background: var(--c-surface);
+      }
+      .vosh-input {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 32px;
+        padding: 6px 14px;
+        background: var(--c-surface);
+        border-top: 1px solid var(--c-border);
+        position: relative;
+      }
+      .vosh-input .prompt {
+        color: var(--c-accent);
+        font-weight: 700;
+      }
+      .vosh-input .caret {
+        display: inline-block;
+        width: 6px;
+        height: 13px;
+        background: var(--c-text);
+        animation: caret-blink 1s steps(1, end) infinite;
+      }
+      @keyframes caret-blink {
+        50% {
+          background: transparent;
+        }
+      }
+      .vosh-chip {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 1px 10px;
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 3px;
+        color: var(--c-text);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        white-space: nowrap;
+        display: inline-flex;
+        gap: 8px;
+      }
+      .vosh-chip .caption {
+        color: var(--c-text-faint);
+        font-weight: 400;
+      }
+      .vosh-chip .sep {
+        color: var(--c-text-dim);
+        font-weight: 400;
+      }
+      .vosh-chip .time {
+        color: var(--c-accent);
+      }
+
+      /* ============================================================
+         VITALS — bar + braille sparkline.
+         Braille font stack puts JetBrains Bundled first because
+         Berkeley Bundled has empty (zero-contour) glyphs in the
+         U+2800 range. JetBrains has no braille coverage in cmap so
+         the browser falls through to Menlo / Consolas which carry
+         real braille glyphs. */
+      .vital {
+        display: grid;
+        align-items: baseline;
+        column-gap: 12px;
+        padding: 2px 0;
+        font-variant-numeric: tabular-nums;
+      }
+      .vital .label {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: lowercase;
+        letter-spacing: 0.06em;
+      }
+      .vital .bar {
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        line-height: 1;
+        letter-spacing: 0;
+        white-space: pre;
+      }
+      .vital .bar .filled {
+        font-weight: 700;
+      }
+      .vital .bar .empty {
+        color: var(--c-empty);
+      }
+      .vital .pct {
+        font-size: 12px;
+        font-weight: 700;
+        text-align: right;
+      }
+      .vital .num {
+        font-size: 12px;
+        color: var(--c-text-muted);
+      }
+      .vital .delta {
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .vital .delta.up {
+        color: #87a987;
+      }
+      .vital .delta.down {
+        color: #c98d8d;
+      }
+      .vital .delta.zero {
+        color: transparent;
+      }
+      .vital-hp .label,
+      .vital-hp .pct,
+      .vital-hp .bar .filled {
+        color: var(--c-hp);
+      }
+      .vital-mn .label,
+      .vital-mn .pct,
+      .vital-mn .bar .filled {
+        color: var(--c-mn);
+      }
+      .vital-mv .label,
+      .vital-mv .pct,
+      .vital-mv .bar .filled {
+        color: var(--c-mv);
+      }
+
+      /* Braille sparkline base style (per-variant overrides set
+         positioning + font size). The font stack here matches the
+         bar so dots and bar glyphs share the same character grid. */
+      .spark {
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        line-height: 1;
+        letter-spacing: 0;
+        white-space: pre;
+        opacity: 0.6;
+      }
+      .vital-hp .spark {
+        color: var(--c-hp);
+      }
+      .vital-mn .spark {
+        color: var(--c-mn);
+      }
+      .vital-mv .spark {
+        color: var(--c-mv);
+      }
+
+      /* a · stacked: sparkline lives in a row beneath the bar */
+      .demo-a .vital {
+        grid-template-columns: 24px 1fr 48px 84px 36px;
+      }
+      .demo-a .vital + .vital {
+        margin-top: 6px;
+      }
+      .demo-a .spark-row {
+        margin: 2px 0 0;
+        padding-left: 36px;
+        font-size: 13px;
+      }
+
+      /* b · inline: sparkline sits between bar and percent */
+      .demo-b .vital {
+        grid-template-columns: 24px auto auto 48px 84px 36px;
+      }
+      .demo-b .vital + .vital {
+        margin-top: 2px;
+      }
+      .demo-b .spark-inline {
+        font-size: 13px;
+      }
+
+      /* c · trail-in-empty: the bar's empty cells render as
+         braille sparkline samples (2 samples per cell) */
+      .demo-c .vital {
+        grid-template-columns: 24px auto 48px 84px 36px;
+      }
+      .demo-c .vital + .vital {
+        margin-top: 2px;
+      }
+      .demo-c .vital .bar .trail {
+        opacity: 0.5;
+      }
+
+      .footnote {
+        margin: 40px auto 0;
+        max-width: 1080px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        line-height: 1.7;
+      }
+      .footnote strong {
+        color: var(--c-text);
+      }
+      .footnote code {
+        background: var(--c-surface-deep);
+        padding: 1px 6px;
+        border-radius: 2px;
+        color: var(--c-text);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vitals · sparkline + bar (braille)</h1>
+    <p class="lede">
+      same three variants as the block-character version, but the sparklines use braille. braille is
+      <strong>denser</strong>, not wider — each character carries 2 samples (one per dot column) so
+      the same horizontal slot holds 2× the history. trade-off: 4 height levels per sample instead
+      of 8. for trend reading that's still plenty; for absolute value you have the bar.
+    </p>
+
+    <div class="scrubber">
+      <span class="lbl">scenario</span>
+      <button data-scenario="calm" class="is-on">calm regen</button>
+      <button data-scenario="combat">combat</button>
+      <button data-scenario="boss">boss</button>
+      <button data-scenario="idle">idle</button>
+    </div>
+
+    <div class="stack">
+      <!-- ======================================================
+           A — STACKED braille sparkline
+           ====================================================== -->
+      <div class="demo demo-a">
+        <span class="demo-label">a · <span class="demo-name">stacked · braille</span></span>
+        <div class="vosh">
+          <div class="vosh-topbar">
+            <div class="aux">
+              <span>profiles</span><span>panels</span><span>triggers</span><span>aliases</span>
+            </div>
+            <span class="loadouts">[ no loadout ]</span>
+            <span class="spacer"></span>
+            <div class="controls"><span>−</span><span>□</span><span>✕</span></div>
+          </div>
+          <div class="vosh-term">
+            <p class="dim">A grim hall opens before you, its ribs of stone arching overhead.</p>
+            <p>A wraith hisses, "you stink of bone-dust."</p>
+            <p class="dmg">The wraith claws at you for 47.</p>
+            <p>You ready your blade.</p>
+            <p class="cmd">&gt; cast firebolt wraith</p>
+            <p>Your firebolt strikes the wraith for 86 damage.</p>
+          </div>
+          <div class="vosh-vitals">
+            <div class="vital vital-hp">
+              <span class="label">hp</span>
+              <span class="bar" id="a-bar-hp"></span>
+              <span class="pct" id="a-pct-hp">75%</span>
+              <span class="num" id="a-num-hp">750/1000</span>
+              <span class="delta up" id="a-delta-hp">+12</span>
+            </div>
+            <div class="spark spark-row" id="a-spark-hp"></div>
+            <div class="vital vital-mn">
+              <span class="label">mn</span>
+              <span class="bar" id="a-bar-mn"></span>
+              <span class="pct" id="a-pct-mn">50%</span>
+              <span class="num" id="a-num-mn">150/300</span>
+              <span class="delta down" id="a-delta-mn">-8</span>
+            </div>
+            <div class="spark spark-row" id="a-spark-mn"></div>
+            <div class="vital vital-mv">
+              <span class="label">mv</span>
+              <span class="bar" id="a-bar-mv"></span>
+              <span class="pct" id="a-pct-mv">25%</span>
+              <span class="num" id="a-num-mv">50/200</span>
+              <span class="delta zero">+0</span>
+            </div>
+            <div class="spark spark-row" id="a-spark-mv"></div>
+          </div>
+          <div class="vosh-input">
+            <div class="vosh-chip">
+              <span class="caption">tick</span><span>12s</span>
+              <span class="sep">·</span>
+              <span class="caption">time</span><span class="time">14:32</span>
+            </div>
+            <span class="prompt">&gt;</span>
+            <span>cast firebolt wrai</span>
+            <span class="caret"></span>
+          </div>
+        </div>
+        <p class="demo-desc">
+          20-cell braille sparkline under each bar = <strong>40 samples of history</strong> in the
+          same horizontal width the bar uses. each cell carries 2 samples; light from the bottom of
+          the cell up based on the value. dots read as discrete pixels rather than the smooth
+          gradient of <code>▁▂▃▄▅▆▇█</code>.
+        </p>
+      </div>
+
+      <!-- ======================================================
+           B — INLINE braille sparkline
+           ====================================================== -->
+      <div class="demo demo-b">
+        <span class="demo-label">b · <span class="demo-name">inline · braille</span></span>
+        <div class="vosh">
+          <div class="vosh-topbar">
+            <div class="aux">
+              <span>profiles</span><span>panels</span><span>triggers</span><span>aliases</span>
+            </div>
+            <span class="loadouts">[ no loadout ]</span>
+            <span class="spacer"></span>
+            <div class="controls"><span>−</span><span>□</span><span>✕</span></div>
+          </div>
+          <div class="vosh-term">
+            <p class="dim">A grim hall opens before you, its ribs of stone arching overhead.</p>
+            <p>A wraith hisses, "you stink of bone-dust."</p>
+            <p class="dmg">The wraith claws at you for 47.</p>
+            <p>You ready your blade.</p>
+            <p class="cmd">&gt; cast firebolt wraith</p>
+            <p>Your firebolt strikes the wraith for 86 damage.</p>
+          </div>
+          <div class="vosh-vitals">
+            <div class="vital vital-hp">
+              <span class="label">hp</span>
+              <span class="bar" id="b-bar-hp"></span>
+              <span class="spark spark-inline" id="b-spark-hp"></span>
+              <span class="pct" id="b-pct-hp">75%</span>
+              <span class="num" id="b-num-hp">750/1000</span>
+              <span class="delta up" id="b-delta-hp">+12</span>
+            </div>
+            <div class="vital vital-mn">
+              <span class="label">mn</span>
+              <span class="bar" id="b-bar-mn"></span>
+              <span class="spark spark-inline" id="b-spark-mn"></span>
+              <span class="pct" id="b-pct-mn">50%</span>
+              <span class="num" id="b-num-mn">150/300</span>
+              <span class="delta down" id="b-delta-mn">-8</span>
+            </div>
+            <div class="vital vital-mv">
+              <span class="label">mv</span>
+              <span class="bar" id="b-bar-mv"></span>
+              <span class="spark spark-inline" id="b-spark-mv"></span>
+              <span class="pct" id="b-pct-mv">25%</span>
+              <span class="num" id="b-num-mv">50/200</span>
+              <span class="delta zero">+0</span>
+            </div>
+          </div>
+          <div class="vosh-input">
+            <div class="vosh-chip">
+              <span class="caption">tick</span><span>12s</span>
+              <span class="sep">·</span>
+              <span class="caption">time</span><span class="time">14:32</span>
+            </div>
+            <span class="prompt">&gt;</span>
+            <span>cast firebolt wrai</span>
+            <span class="caret"></span>
+          </div>
+        </div>
+        <p class="demo-desc">
+          8-cell braille = <strong>16 samples</strong> packed between the bar and the percent. only
+          <strong>3 characters wider</strong> than the bar's row would be with the equivalent
+          block-char sparkline — the density is essentially free.
+        </p>
+      </div>
+
+      <!-- ======================================================
+           C — TRAIL-IN-EMPTY braille
+           ====================================================== -->
+      <div class="demo demo-c">
+        <span class="demo-label">c · <span class="demo-name">trail in empty · braille</span></span>
+        <div class="vosh">
+          <div class="vosh-topbar">
+            <div class="aux">
+              <span>profiles</span><span>panels</span><span>triggers</span><span>aliases</span>
+            </div>
+            <span class="loadouts">[ no loadout ]</span>
+            <span class="spacer"></span>
+            <div class="controls"><span>−</span><span>□</span><span>✕</span></div>
+          </div>
+          <div class="vosh-term">
+            <p class="dim">A grim hall opens before you, its ribs of stone arching overhead.</p>
+            <p>A wraith hisses, "you stink of bone-dust."</p>
+            <p class="dmg">The wraith claws at you for 47.</p>
+            <p>You ready your blade.</p>
+            <p class="cmd">&gt; cast firebolt wraith</p>
+            <p>Your firebolt strikes the wraith for 86 damage.</p>
+          </div>
+          <div class="vosh-vitals">
+            <div class="vital vital-hp">
+              <span class="label">hp</span>
+              <span class="bar" id="c-bar-hp"></span>
+              <span class="pct" id="c-pct-hp">75%</span>
+              <span class="num" id="c-num-hp">750/1000</span>
+              <span class="delta up" id="c-delta-hp">+12</span>
+            </div>
+            <div class="vital vital-mn">
+              <span class="label">mn</span>
+              <span class="bar" id="c-bar-mn"></span>
+              <span class="pct" id="c-pct-mn">50%</span>
+              <span class="num" id="c-num-mn">150/300</span>
+              <span class="delta down" id="c-delta-mn">-8</span>
+            </div>
+            <div class="vital vital-mv">
+              <span class="label">mv</span>
+              <span class="bar" id="c-bar-mv"></span>
+              <span class="pct" id="c-pct-mv">25%</span>
+              <span class="num" id="c-num-mv">50/200</span>
+              <span class="delta zero">+0</span>
+            </div>
+          </div>
+          <div class="vosh-input">
+            <div class="vosh-chip">
+              <span class="caption">tick</span><span>12s</span>
+              <span class="sep">·</span>
+              <span class="caption">time</span><span class="time">14:32</span>
+            </div>
+            <span class="prompt">&gt;</span>
+            <span>cast firebolt wrai</span>
+            <span class="caret"></span>
+          </div>
+        </div>
+        <p class="demo-desc">
+          empty cells of the bar are filled with braille sparkline of recent samples — each empty
+          cell holds 2 samples. mv at 25%: 15 empty cells × 2 = <strong>30 samples</strong>
+          of history visible. as a vital recovers, the sparkline shrinks; at 100% the bar is all
+          filled and no history is shown (because you don't need it).
+        </p>
+      </div>
+    </div>
+
+    <p class="footnote">
+      <strong>density per character:</strong> block (<code>▁▂▃▄▅▆▇█</code>) → 1 sample, 8 height
+      levels. braille → 2 samples, 4 height levels per sample. for a sparkline you read
+      <em>shape</em> not absolute values, so the level reduction barely matters and the sample
+      density doubles. the dots read more like btop / plotext than the smooth area-chart feel of
+      block characters.
+      <br />
+      <strong>font note:</strong> braille requires JetBrains Mono Bundled first in the sparkline
+      stack because Berkeley Mono Nerd Font's bundled TTF registers braille codepoints but stores
+      empty glyphs for them — using berkeley would render nothing.
+    </p>
+
+    <script>
+      // ============================================================
+      // BRAILLE SPARKLINE
+      // ============================================================
+      // Each braille cell carries 2 samples: dots in the LEFT column
+      // (positions 1,2,3,7) represent the older of the pair; dots in
+      // the RIGHT column (4,5,6,8) represent the newer. Light dots
+      // from the bottom up to round(v * 4) rows for each sample.
+      //
+      //   v=1.0 → all 4 dot rows lit
+      //   v=0.5 → bottom 2 rows lit
+      //   v=0.25 → bottom 1 row lit
+      //   v=0   → no rows lit
+      const DOTS_LEFT_BOTTOM_UP = [0x40, 0x04, 0x02, 0x01]; // rows 3→0
+      const DOTS_RIGHT_BOTTOM_UP = [0x80, 0x20, 0x10, 0x08];
+
+      function brailleSpark(values, charCount) {
+        const need = charCount * 2;
+        const samples = values.slice(-need);
+        while (samples.length < need) samples.unshift(0);
+        let out = '';
+        for (let i = 0; i < charCount; i++) {
+          const v0 = samples[i * 2];
+          const v1 = samples[i * 2 + 1];
+          const lvl0 = Math.min(4, Math.max(0, Math.round(v0 * 4)));
+          const lvl1 = Math.min(4, Math.max(0, Math.round(v1 * 4)));
+          let bits = 0;
+          for (let r = 0; r < lvl0; r++) bits |= DOTS_LEFT_BOTTOM_UP[r];
+          for (let r = 0; r < lvl1; r++) bits |= DOTS_RIGHT_BOTTOM_UP[r];
+          out += String.fromCodePoint(0x2800 | bits);
+        }
+        return out;
+      }
+
+      // ============================================================
+      // SIMULATOR
+      // ============================================================
+      let values = { hp: 0.75, mn: 0.5, mv: 0.25 };
+      const max = { hp: 1000, mn: 300, mv: 200 };
+      const SPARK_HISTORY = 60; // long buffer; UI slices what it needs
+      const hist = {
+        hp: new Array(SPARK_HISTORY).fill(0.75),
+        mn: new Array(SPARK_HISTORY).fill(0.5),
+        mv: new Array(SPARK_HISTORY).fill(0.25),
+      };
+
+      const SCENARIOS = {
+        calm: [800, 2500],
+        combat: [200, 800],
+        boss: [100, 350],
+        idle: null,
+      };
+      let scenario = 'calm';
+      let timer = null;
+      const deltas = { hp: 12, mn: -8, mv: 0 };
+
+      function clamp(v, lo, hi) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+      function rand(a, b) {
+        return a + Math.random() * (b - a);
+      }
+      function fireEvent() {
+        const drift = scenario === 'calm' ? 0.01 : scenario === 'combat' ? -0.02 : -0.045;
+        const jit = scenario === 'calm' ? 0.04 : scenario === 'combat' ? 0.12 : 0.2;
+        const prev = { ...values };
+        for (const k of ['hp', 'mn', 'mv']) {
+          let v = values[k] + drift + (Math.random() - 0.5) * jit;
+          if (Math.random() < 0.08) v += (Math.random() - 0.5) * jit * 4;
+          if (v < 0.08) v += Math.random() * 0.12;
+          values[k] = clamp(v, 0, 1);
+          hist[k].shift();
+          hist[k].push(values[k]);
+        }
+        deltas.hp = Math.round((values.hp - prev.hp) * max.hp);
+        deltas.mn = Math.round((values.mn - prev.mn) * max.mn);
+        deltas.mv = Math.round((values.mv - prev.mv) * max.mv);
+        render();
+      }
+      function schedule() {
+        if (timer) clearTimeout(timer);
+        if (scenario === 'idle') return;
+        const cfg = SCENARIOS[scenario];
+        timer = setTimeout(
+          () => {
+            fireEvent();
+            schedule();
+          },
+          rand(cfg[0], cfg[1]),
+        );
+      }
+
+      // ============================================================
+      // BAR BUILDERS
+      // ============================================================
+      const BAR_W = 20;
+      const FILLED = '▰';
+      const EMPTY = '▱';
+      const INLINE_SPARK_W = 8;
+
+      function plainBar(v) {
+        const filled = Math.round(v * BAR_W);
+        const empty = BAR_W - filled;
+        return (
+          '<span class="filled">' +
+          FILLED.repeat(filled) +
+          '</span><span class="empty">' +
+          EMPTY.repeat(empty) +
+          '</span>'
+        );
+      }
+
+      // Trail variant: empty cells are replaced with braille spark.
+      // Each empty cell carries 2 samples, so `trailLen × 2` samples
+      // of history get shown in the empty portion.
+      function trailBar(arr, v) {
+        const filled = Math.round(v * BAR_W);
+        const trailCells = BAR_W - filled;
+        if (trailCells === 0) {
+          return '<span class="filled">' + FILLED.repeat(filled) + '</span>';
+        }
+        const trail = brailleSpark(arr, trailCells);
+        return (
+          '<span class="filled">' +
+          FILLED.repeat(filled) +
+          '</span><span class="trail">' +
+          trail +
+          '</span>'
+        );
+      }
+
+      // ============================================================
+      // RENDER
+      // ============================================================
+      function render() {
+        for (const k of ['hp', 'mn', 'mv']) {
+          const v = values[k];
+
+          for (const p of ['a', 'b', 'c']) {
+            document.getElementById(p + '-pct-' + k).textContent = Math.round(v * 100) + '%';
+            document.getElementById(p + '-num-' + k).textContent =
+              Math.round(v * max[k]) + '/' + max[k];
+          }
+
+          // a: plain bar + braille spark beneath (20 cells = 40 samples)
+          document.getElementById('a-bar-' + k).innerHTML = plainBar(v);
+          document.getElementById('a-spark-' + k).textContent = brailleSpark(hist[k], BAR_W);
+
+          // b: plain bar + 8-cell inline braille (16 samples)
+          document.getElementById('b-bar-' + k).innerHTML = plainBar(v);
+          document.getElementById('b-spark-' + k).textContent = brailleSpark(
+            hist[k],
+            INLINE_SPARK_W,
+          );
+
+          // c: trail-in-empty braille
+          document.getElementById('c-bar-' + k).innerHTML = trailBar(hist[k], v);
+        }
+
+        renderDelta('a-delta-hp', deltas.hp);
+        renderDelta('a-delta-mn', deltas.mn);
+        renderDelta('b-delta-hp', deltas.hp);
+        renderDelta('b-delta-mn', deltas.mn);
+      }
+      function renderDelta(id, n) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (n === 0) {
+          el.classList.add('zero');
+          el.classList.remove('up', 'down');
+          el.textContent = '+0';
+        } else if (n > 0) {
+          el.classList.add('up');
+          el.classList.remove('down', 'zero');
+          el.textContent = '+' + n;
+        } else {
+          el.classList.add('down');
+          el.classList.remove('up', 'zero');
+          el.textContent = String(n);
+        }
+      }
+
+      document.querySelectorAll('.scrubber button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.scrubber button').forEach((b) => b.classList.remove('is-on'));
+          btn.classList.add('is-on');
+          scenario = btn.dataset.scenario;
+          schedule();
+        });
+      });
+
+      render();
+      schedule();
+    </script>
+  </body>
+</html>

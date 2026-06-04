@@ -1,0 +1,969 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vitals · options A / B / C</title>
+    <style>
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'BerkeleyMono Bundled';
+        src: url('../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf') format('truetype');
+        font-weight: 700;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'JetBrainsMono Bundled';
+        src: url('../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf') format('truetype');
+        font-weight: 400;
+        font-display: block;
+      }
+
+      :root {
+        --c-surface-deep: #06090d;
+        --c-surface: #090e13;
+        --c-surface-lift: #14141a;
+        --c-text-strong: #f0f3f1;
+        --c-text: #c5c9c7;
+        --c-text-muted: #a4a7a4;
+        --c-text-faint: #6e7681;
+        --c-text-dim: #4a4e57;
+        --c-border-soft: #161b22;
+        --c-border: #1a1f26;
+        --c-border-strong: #393b44;
+        --c-accent: #ff3399;
+
+        --c-hp: #ef4444;
+        --c-mn: #38bdf8;
+        --c-mv: #fbbf24;
+        --c-hp-dim: rgba(239, 68, 68, 0.18);
+        --c-mn-dim: rgba(56, 189, 248, 0.18);
+        --c-mv-dim: rgba(251, 191, 36, 0.18);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 36px 32px 64px;
+        background: radial-gradient(ellipse at top, #0d0a0e 0%, #04060a 60%, #000 100%);
+        color: var(--c-text);
+        font-family: 'BerkeleyMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 13px;
+        min-height: 100vh;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--c-text-strong);
+      }
+      .lede {
+        color: var(--c-text-faint);
+        max-width: 760px;
+        margin: 0 0 22px;
+        line-height: 1.55;
+      }
+
+      .scrubber {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin: 0 -32px 28px;
+        padding: 12px 32px;
+        background: rgba(9, 14, 19, 0.94);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--c-border);
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .scrubber span.lbl {
+        color: var(--c-text-faint);
+        text-transform: lowercase;
+        letter-spacing: 0.1em;
+      }
+      .scrubber button {
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 12px;
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      .scrubber button:hover {
+        color: var(--c-text-strong);
+        border-color: var(--c-border-strong);
+      }
+      .scrubber button.is-on {
+        background: var(--c-accent);
+        border-color: var(--c-accent);
+        color: var(--c-surface-deep);
+      }
+      .scrubber .meta {
+        margin-left: auto;
+        color: var(--c-text-dim);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+      }
+      .scrubber .meta strong {
+        color: var(--c-text-muted);
+        font-weight: 700;
+        margin-right: 4px;
+      }
+
+      .demos {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 30px;
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      .demo {
+        position: relative;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 5px;
+        padding: 30px 24px 18px;
+      }
+      .demo-label {
+        position: absolute;
+        top: 10px;
+        left: 16px;
+        font-size: 10px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--c-text-dim);
+      }
+      .demo-name {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--c-text-strong);
+        margin-left: 6px;
+        letter-spacing: 0.08em;
+      }
+      .demo-desc {
+        color: var(--c-text-faint);
+        font-size: 12px;
+        margin: 12px 0 0;
+        line-height: 1.55;
+      }
+
+      /* ============================================================
+         FAUX VOSH SHELL — used identically for all three demos so
+         the comparison is apples to apples. Topbar at top, terminal
+         area in the middle, vitals slot beneath, input row at
+         bottom with the LineChip pill on its top border. */
+      .vosh {
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        font-size: 12px;
+        height: 320px;
+      }
+      .vosh-topbar {
+        display: flex;
+        align-items: center;
+        flex: 0 0 24px;
+        padding: 0 10px;
+        background: var(--c-surface);
+        border-bottom: 1px solid var(--c-border);
+        color: var(--c-text-muted);
+        font-size: 11px;
+      }
+      .vosh-topbar .aux {
+        display: flex;
+        gap: 2px;
+      }
+      .vosh-topbar .aux span {
+        padding: 2px 8px;
+      }
+      .vosh-topbar .loadouts {
+        margin-left: 6px;
+        padding: 2px 8px;
+        color: var(--c-accent);
+      }
+      .vosh-topbar .spacer {
+        flex: 1;
+      }
+      .vosh-topbar .controls {
+        color: var(--c-text-muted);
+        font-size: 13px;
+      }
+      .vosh-topbar .controls span {
+        padding: 0 8px;
+      }
+
+      .vosh-term {
+        flex: 1 1 0;
+        padding: 8px 12px;
+        line-height: 1.55;
+        overflow: hidden;
+      }
+      .vosh-term p {
+        margin: 0;
+        color: var(--c-text);
+      }
+      .vosh-term p.dim {
+        color: var(--c-text-faint);
+      }
+      .vosh-term p.dmg {
+        color: #f87171;
+      }
+      .vosh-term p.cmd {
+        color: var(--c-text-dim);
+        font-style: italic;
+      }
+
+      .vosh-vitals {
+        flex: 0 0 auto;
+        padding: 6px 12px;
+        background: var(--c-surface);
+        border-top: 1px solid var(--c-border-soft);
+        border-bottom: 1px solid var(--c-border-soft);
+      }
+
+      .vosh-input {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 32px;
+        padding: 6px 14px;
+        background: var(--c-surface);
+        border-top: 1px solid var(--c-border);
+        position: relative;
+      }
+      .vosh-input .prompt {
+        color: var(--c-accent);
+        font-weight: 700;
+      }
+      .vosh-input .caret {
+        display: inline-block;
+        width: 6px;
+        height: 13px;
+        background: var(--c-text);
+        animation: caret-blink 1s steps(1, end) infinite;
+      }
+      @keyframes caret-blink {
+        50% {
+          background: transparent;
+        }
+      }
+      .vosh-chip {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 1px 10px;
+        background: var(--c-surface-deep);
+        border: 1px solid var(--c-border-strong);
+        border-radius: 3px;
+        color: var(--c-text);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        white-space: nowrap;
+        display: inline-flex;
+        gap: 8px;
+      }
+      .vosh-chip .caption {
+        color: var(--c-text-faint);
+        font-weight: 400;
+      }
+      .vosh-chip .sep {
+        color: var(--c-text-dim);
+        font-weight: 400;
+      }
+      .vosh-chip .time {
+        color: var(--c-accent);
+      }
+
+      /* ============================================================
+         VARIANT A — ACTIVITY RING TRIO
+         3 concentric arcs (HP outer, MN middle, MV inner). Each
+         arc's length is the current value; an attenuated trail of
+         the recent samples sits BEHIND the current endpoint and
+         fades over a couple of seconds, so the ring carries a
+         visible "ghost" of where the value was just a moment ago.
+         Compact circular footprint + numeric column to the right. */
+      .ringbox {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      .ringbox svg {
+        width: 72px;
+        height: 72px;
+        flex: 0 0 72px;
+      }
+      .ringbox .ring-trail {
+        fill: none;
+        stroke-linecap: round;
+        opacity: 0.22;
+      }
+      .ringbox .ring-arc {
+        fill: none;
+        stroke-linecap: round;
+        transition:
+          stroke-dasharray 600ms cubic-bezier(0.22, 0.61, 0.36, 1),
+          stroke-dashoffset 600ms cubic-bezier(0.22, 0.61, 0.36, 1);
+      }
+      .ringbox .ring-track {
+        fill: none;
+        stroke: var(--c-border-soft);
+      }
+      .ringbox .stats {
+        display: grid;
+        grid-template-columns: 22px 1fr 64px;
+        gap: 6px 10px;
+        align-items: baseline;
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+      }
+      .ringbox .stats .lbl {
+        color: var(--c-text-faint);
+      }
+      .ringbox .stats .val {
+        font-weight: 700;
+        text-align: right;
+      }
+      .ringbox .stats .max {
+        color: var(--c-text-dim);
+        font-size: 11px;
+      }
+      .ringbox .stats .row-hp .lbl,
+      .ringbox .stats .row-hp .val {
+        color: var(--c-hp);
+      }
+      .ringbox .stats .row-mn .lbl,
+      .ringbox .stats .row-mn .val {
+        color: var(--c-mn);
+      }
+      .ringbox .stats .row-mv .lbl,
+      .ringbox .stats .row-mv .val {
+        color: var(--c-mv);
+      }
+      .ringbox .row {
+        display: contents;
+      }
+
+      /* ============================================================
+         VARIANT B — PER-VITAL SPARKBAR STRIP
+         Three thin rows of vertical-block characters (▁▂▃▄▅▆▇█).
+         Each character = one sample at a discrete height (8 steps).
+         Rows colored hp/mn/mv. Width = recent history; rightmost is
+         newest. Numbers on the right. Compact, doesn't need a custom
+         font (the block chars are in every monospace). */
+      .barbox {
+        display: grid;
+        grid-template-columns: 24px 1fr 80px;
+        column-gap: 10px;
+        row-gap: 1px;
+        align-items: center;
+        font-variant-numeric: tabular-nums;
+      }
+      .barbox .lbl {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: lowercase;
+        letter-spacing: 0.08em;
+      }
+      .barbox .strip {
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 16px;
+        line-height: 1;
+        letter-spacing: 0;
+        white-space: pre;
+        overflow: hidden;
+      }
+      .barbox .val {
+        font-size: 12px;
+        font-weight: 700;
+        text-align: right;
+      }
+      .barbox .max {
+        color: var(--c-text-dim);
+        font-weight: 400;
+        font-size: 11px;
+      }
+      .barbox .row-hp .lbl,
+      .barbox .row-hp .strip,
+      .barbox .row-hp .val {
+        color: var(--c-hp);
+      }
+      .barbox .row-mn .lbl,
+      .barbox .row-mn .strip,
+      .barbox .row-mn .val {
+        color: var(--c-mn);
+      }
+      .barbox .row-mv .lbl,
+      .barbox .row-mv .strip,
+      .barbox .row-mv .val {
+        color: var(--c-mv);
+      }
+      .barbox .row {
+        display: contents;
+      }
+
+      /* ============================================================
+         VARIANT C — ECG TRACE
+         Single horizontal strip; each character cell is a colored
+         glyph encoding a recent event. ▾ red = hp loss, ▴ red = hp
+         heal, ▾ cyan = mn spend, ▾ amber = mv spend, ─ dim = idle
+         tick. Strip scrolls left; rightmost is "now." Glow pulses
+         on the rightmost cell while it's active. Inline numeric
+         readouts beneath. */
+      .ecgbox {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .ecgbox .trace {
+        font-family: 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
+        font-size: 16px;
+        line-height: 1;
+        letter-spacing: 0.04em;
+        white-space: pre;
+        overflow: hidden;
+        padding: 4px 0;
+      }
+      .ecgbox .trace .ev-hp-drop {
+        color: var(--c-hp);
+      }
+      .ecgbox .trace .ev-hp-heal {
+        color: var(--c-hp);
+        opacity: 0.7;
+      }
+      .ecgbox .trace .ev-mn {
+        color: var(--c-mn);
+      }
+      .ecgbox .trace .ev-mv {
+        color: var(--c-mv);
+      }
+      .ecgbox .trace .ev-idle {
+        color: var(--c-text-dim);
+      }
+      .ecgbox .trace .now {
+        text-shadow: 0 0 8px currentColor;
+        animation: ecg-pulse 0.8s ease-in-out;
+      }
+      @keyframes ecg-pulse {
+        0% {
+          opacity: 0.4;
+          transform: scale(0.9);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.05);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      .ecgbox .readouts {
+        display: flex;
+        gap: 16px;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .ecgbox .readouts span {
+        font-weight: 700;
+      }
+      .ecgbox .readouts .lbl-hp {
+        color: var(--c-hp);
+      }
+      .ecgbox .readouts .lbl-mn {
+        color: var(--c-mn);
+      }
+      .ecgbox .readouts .lbl-mv {
+        color: var(--c-mv);
+      }
+      .ecgbox .readouts .max {
+        color: var(--c-text-dim);
+        font-weight: 400;
+      }
+
+      .footnote {
+        margin: 36px auto 0;
+        max-width: 1100px;
+        color: var(--c-text-faint);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      .footnote strong {
+        color: var(--c-text);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>vitals · three approaches in context</h1>
+    <p class="lede">
+      each demo shows a tiny vosh shell (topbar, terminal area, vitals slot, input row with line
+      chip) with one of the three vitals-visualization options in the panel slot. drive the scenario
+      buttons and watch all three respond simultaneously so you can compare how each reads under
+      calm / combat / boss-fight cadences.
+    </p>
+
+    <div class="scrubber">
+      <span class="lbl">scenario</span>
+      <button data-scenario="calm" class="is-on">calm regen</button>
+      <button data-scenario="combat">combat</button>
+      <button data-scenario="boss">boss fight</button>
+      <button data-scenario="idle">idle (no events)</button>
+      <span class="meta">
+        <strong>events</strong><span id="event-count">0</span> · <strong>last</strong
+        ><span id="last-event">—</span>
+      </span>
+    </div>
+
+    <div class="demos">
+      <!-- VARIANT A: ACTIVITY RING TRIO -->
+      <div class="demo">
+        <span class="demo-label">A · <span class="demo-name">activity ring trio</span></span>
+        <div class="vosh">
+          <div class="vosh-topbar">
+            <div class="aux">
+              <span>profiles</span><span>panels</span><span>triggers</span><span>aliases</span>
+            </div>
+            <span class="loadouts">[ no loadout ]</span>
+            <span class="spacer"></span>
+            <div class="controls"><span>−</span><span>□</span><span>✕</span></div>
+          </div>
+          <div class="vosh-term">
+            <p class="dim">A grim hall opens before you, its ribs of stone arching overhead.</p>
+            <p>A wraith hisses, "you stink of bone-dust."</p>
+            <p class="dmg">The wraith claws at you for 47.</p>
+            <p>You ready your blade.</p>
+            <p class="cmd">&gt; cast firebolt wraith</p>
+            <p>Your firebolt strikes the wraith for 86 damage.</p>
+          </div>
+          <div class="vosh-vitals">
+            <div class="ringbox">
+              <svg viewBox="0 0 80 80">
+                <!-- tracks (background rings) -->
+                <circle class="ring-track" cx="40" cy="40" r="32" stroke-width="5" />
+                <circle class="ring-track" cx="40" cy="40" r="22" stroke-width="5" />
+                <circle class="ring-track" cx="40" cy="40" r="12" stroke-width="5" />
+                <!-- trail (ghost of recent position) -->
+                <circle
+                  class="ring-trail"
+                  id="ring-trail-hp"
+                  cx="40"
+                  cy="40"
+                  r="32"
+                  stroke="var(--c-hp)"
+                  stroke-width="5"
+                  transform="rotate(-90 40 40)"
+                />
+                <circle
+                  class="ring-trail"
+                  id="ring-trail-mn"
+                  cx="40"
+                  cy="40"
+                  r="22"
+                  stroke="var(--c-mn)"
+                  stroke-width="5"
+                  transform="rotate(-90 40 40)"
+                />
+                <circle
+                  class="ring-trail"
+                  id="ring-trail-mv"
+                  cx="40"
+                  cy="40"
+                  r="12"
+                  stroke="var(--c-mv)"
+                  stroke-width="5"
+                  transform="rotate(-90 40 40)"
+                />
+                <!-- live arcs -->
+                <circle
+                  class="ring-arc"
+                  id="ring-arc-hp"
+                  cx="40"
+                  cy="40"
+                  r="32"
+                  stroke="var(--c-hp)"
+                  stroke-width="5"
+                  transform="rotate(-90 40 40)"
+                />
+                <circle
+                  class="ring-arc"
+                  id="ring-arc-mn"
+                  cx="40"
+                  cy="40"
+                  r="22"
+                  stroke="var(--c-mn)"
+                  stroke-width="5"
+                  transform="rotate(-90 40 40)"
+                />
+                <circle
+                  class="ring-arc"
+                  id="ring-arc-mv"
+                  cx="40"
+                  cy="40"
+                  r="12"
+                  stroke="var(--c-mv)"
+                  stroke-width="5"
+                  transform="rotate(-90 40 40)"
+                />
+              </svg>
+              <div class="stats">
+                <span class="row row-hp">
+                  <span class="lbl">hp</span>
+                  <span class="val"><span data-r="hp">750</span></span>
+                  <span class="max">/ 1000</span>
+                </span>
+                <span class="row row-mn">
+                  <span class="lbl">mn</span>
+                  <span class="val"><span data-r="mn">150</span></span>
+                  <span class="max">/ 300</span>
+                </span>
+                <span class="row row-mv">
+                  <span class="lbl">mv</span>
+                  <span class="val"><span data-r="mv">50</span></span>
+                  <span class="max">/ 200</span>
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="vosh-input">
+            <div class="vosh-chip">
+              <span class="caption">tick</span><span>12s</span>
+              <span class="sep">·</span>
+              <span class="caption">time</span><span class="time">14:32</span>
+            </div>
+            <span class="prompt">&gt;</span>
+            <span>cast firebolt wrai</span>
+            <span class="caret"></span>
+          </div>
+        </div>
+        <p class="demo-desc">
+          three concentric arcs around a single 72px circle. outer is hp, middle is mn, inner is mv.
+          each arc length tracks the current value. a faint trail ring sits behind the live arc and
+          lags it by ~1s, so a recent drop reads as the gap between two arcs of the same color.
+          compact, distinctive, but the visible "history" is only the last second or two.
+        </p>
+      </div>
+
+      <!-- VARIANT B: PER-VITAL SPARKBAR STRIP -->
+      <div class="demo">
+        <span class="demo-label">B · <span class="demo-name">per-vital sparkbar strip</span></span>
+        <div class="vosh">
+          <div class="vosh-topbar">
+            <div class="aux">
+              <span>profiles</span><span>panels</span><span>triggers</span><span>aliases</span>
+            </div>
+            <span class="loadouts">[ no loadout ]</span>
+            <span class="spacer"></span>
+            <div class="controls"><span>−</span><span>□</span><span>✕</span></div>
+          </div>
+          <div class="vosh-term">
+            <p class="dim">A grim hall opens before you, its ribs of stone arching overhead.</p>
+            <p>A wraith hisses, "you stink of bone-dust."</p>
+            <p class="dmg">The wraith claws at you for 47.</p>
+            <p>You ready your blade.</p>
+            <p class="cmd">&gt; cast firebolt wraith</p>
+            <p>Your firebolt strikes the wraith for 86 damage.</p>
+          </div>
+          <div class="vosh-vitals">
+            <div class="barbox">
+              <span class="row row-hp">
+                <span class="lbl">hp</span>
+                <span class="strip" id="bar-hp"></span>
+                <span class="val"><span data-r="hp">750</span><span class="max">/1000</span></span>
+              </span>
+              <span class="row row-mn">
+                <span class="lbl">mn</span>
+                <span class="strip" id="bar-mn"></span>
+                <span class="val"><span data-r="mn">150</span><span class="max">/300</span></span>
+              </span>
+              <span class="row row-mv">
+                <span class="lbl">mv</span>
+                <span class="strip" id="bar-mv"></span>
+                <span class="val"><span data-r="mv">50</span><span class="max">/200</span></span>
+              </span>
+            </div>
+          </div>
+          <div class="vosh-input">
+            <div class="vosh-chip">
+              <span class="caption">tick</span><span>12s</span>
+              <span class="sep">·</span>
+              <span class="caption">time</span><span class="time">14:32</span>
+            </div>
+            <span class="prompt">&gt;</span>
+            <span>cast firebolt wrai</span>
+            <span class="caret"></span>
+          </div>
+        </div>
+        <p class="demo-desc">
+          three thin rows of vertical-block characters (▁▂▃▄▅▆▇█). each character is one discrete
+          sample, height = 1 of 8 steps; rightmost is the most recent. rows are colored per vital,
+          no color mixing because each row is a single solid color. uses block characters that exist
+          in every monospace font, no braille empty-glyph traps. ~50 samples of explicit history.
+        </p>
+      </div>
+
+      <!-- VARIANT C: ECG TRACE -->
+      <div class="demo">
+        <span class="demo-label">C · <span class="demo-name">ecg event trace</span></span>
+        <div class="vosh">
+          <div class="vosh-topbar">
+            <div class="aux">
+              <span>profiles</span><span>panels</span><span>triggers</span><span>aliases</span>
+            </div>
+            <span class="loadouts">[ no loadout ]</span>
+            <span class="spacer"></span>
+            <div class="controls"><span>−</span><span>□</span><span>✕</span></div>
+          </div>
+          <div class="vosh-term">
+            <p class="dim">A grim hall opens before you, its ribs of stone arching overhead.</p>
+            <p>A wraith hisses, "you stink of bone-dust."</p>
+            <p class="dmg">The wraith claws at you for 47.</p>
+            <p>You ready your blade.</p>
+            <p class="cmd">&gt; cast firebolt wraith</p>
+            <p>Your firebolt strikes the wraith for 86 damage.</p>
+          </div>
+          <div class="vosh-vitals">
+            <div class="ecgbox">
+              <div class="trace" id="ecg-trace"></div>
+              <div class="readouts">
+                <span class="lbl-hp"
+                  >hp <span data-r="hp">750</span><span class="max">/1000</span></span
+                >
+                <span class="lbl-mn"
+                  >mn <span data-r="mn">150</span><span class="max">/300</span></span
+                >
+                <span class="lbl-mv"
+                  >mv <span data-r="mv">50</span><span class="max">/200</span></span
+                >
+              </div>
+            </div>
+          </div>
+          <div class="vosh-input">
+            <div class="vosh-chip">
+              <span class="caption">tick</span><span>12s</span>
+              <span class="sep">·</span>
+              <span class="caption">time</span><span class="time">14:32</span>
+            </div>
+            <span class="prompt">&gt;</span>
+            <span>cast firebolt wrai</span>
+            <span class="caret"></span>
+          </div>
+        </div>
+        <p class="demo-desc">
+          a single line of colored event glyphs. each cell encodes the most recent event: ▾ red = hp
+          loss, ▴ red = hp heal, ▾ cyan = mn spend, ▾ amber = mv spend, ─ dim = idle tick. strip
+          scrolls left; the rightmost cell is "now" and pulses briefly when an event lands. less
+          about "how much" and more about "what just happened" — busy strip = chaotic turn, calm
+          strip = nothing fired.
+        </p>
+      </div>
+    </div>
+
+    <p class="footnote">
+      <strong>shared simulation:</strong> all three demos read from the same event stream, so a
+      single combat tick fires all three to update simultaneously. swap scenarios and watch the
+      cadence differ. <strong>integration footprint:</strong> the vitals slot in each shell is the
+      same vertical band where vosh's current vitals bar lives — between scrollback and the input
+      row. nothing here would change the rest of the chrome.
+    </p>
+
+    <script>
+      // ============================================================
+      // SIMULATION
+      // ============================================================
+      let values = { hp: 0.75, mn: 0.5, mv: 0.25 };
+      const max = { hp: 1000, mn: 300, mv: 200 };
+
+      // SPARKBAR history rings (variant B)
+      const STRIP = 50;
+      const histB = {
+        hp: new Array(STRIP).fill(0.75),
+        mn: new Array(STRIP).fill(0.5),
+        mv: new Array(STRIP).fill(0.25),
+      };
+      const BLOCKS = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+      // ECG event history (variant C)
+      const ECG_W = 50;
+      // each event: { glyph: '▾', cls: 'ev-hp-drop' }
+      const ecgHist = new Array(ECG_W).fill({ glyph: '─', cls: 'ev-idle' });
+
+      // RING ghost (variant A) — delayed value tracked with a setTimeout chain
+      const ringGhost = { hp: 0.75, mn: 0.5, mv: 0.25 };
+
+      const SCENARIOS = {
+        calm: { vitals: [800, 2500] },
+        combat: { vitals: [200, 800] },
+        boss: { vitals: [100, 350] },
+        idle: null,
+      };
+      let scenario = 'calm';
+      let eventCount = 0;
+      let timer = null;
+
+      function clamp(v, lo, hi) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+      function rand(a, b) {
+        return a + Math.random() * (b - a);
+      }
+
+      function fireEvent() {
+        // step each vital with a scenario-dependent drift + jitter
+        const drift = scenario === 'calm' ? 0.01 : scenario === 'combat' ? -0.02 : -0.045;
+        const jit = scenario === 'calm' ? 0.04 : scenario === 'combat' ? 0.12 : 0.2;
+        const prev = { ...values };
+        for (const k of ['hp', 'mn', 'mv']) {
+          let v = values[k] + drift + (Math.random() - 0.5) * jit;
+          if (Math.random() < 0.08) v += (Math.random() - 0.5) * jit * 4; // shock
+          if (v < 0.08) v += Math.random() * 0.12;
+          values[k] = clamp(v, 0, 1);
+        }
+
+        // pick a dominant event for the ECG glyph
+        const drops = [];
+        for (const k of ['hp', 'mn', 'mv']) {
+          const d = values[k] - prev[k];
+          drops.push({ k, d });
+        }
+        drops.sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
+        let glyph = '─';
+        let cls = 'ev-idle';
+        const biggest = drops[0];
+        if (Math.abs(biggest.d) > 0.015) {
+          const up = biggest.d > 0;
+          if (biggest.k === 'hp') {
+            glyph = up ? '▴' : '▾';
+            cls = up ? 'ev-hp-heal' : 'ev-hp-drop';
+          } else if (biggest.k === 'mn') {
+            glyph = up ? '▴' : '▾';
+            cls = 'ev-mn';
+          } else if (biggest.k === 'mv') {
+            glyph = up ? '▴' : '▾';
+            cls = 'ev-mv';
+          }
+        }
+
+        // push into history rings
+        for (const k of ['hp', 'mn', 'mv']) {
+          histB[k].shift();
+          histB[k].push(values[k]);
+        }
+        ecgHist.shift();
+        ecgHist.push({ glyph, cls });
+
+        renderAll();
+        eventCount++;
+        document.getElementById('event-count').textContent = eventCount;
+        document.getElementById('last-event').textContent = cls;
+
+        // Ring ghost: 1s after the event, the trail catches up to the
+        // current value. So immediately after, the trail still reflects
+        // the OLD value, and the gap reads as recent change.
+        setTimeout(() => {
+          for (const k of ['hp', 'mn', 'mv']) ringGhost[k] = values[k];
+          renderRings();
+        }, 900);
+      }
+
+      function schedule() {
+        if (timer) clearTimeout(timer);
+        if (scenario === 'idle') return;
+        const cfg = SCENARIOS[scenario];
+        timer = setTimeout(
+          () => {
+            fireEvent();
+            schedule();
+          },
+          rand(cfg.vitals[0], cfg.vitals[1]),
+        );
+      }
+
+      // ============================================================
+      // RENDERERS
+      // ============================================================
+      function renderNumbers() {
+        document.querySelectorAll('[data-r]').forEach((el) => {
+          const k = el.dataset.r;
+          el.textContent = Math.round(values[k] * max[k]);
+        });
+      }
+
+      // VARIANT A — RING ARCS
+      // Each ring is a full circle with circumference 2πr; we set
+      // stroke-dasharray so the lit portion length = value × circ.
+      const RING_R = { hp: 32, mn: 22, mv: 12 };
+      function ringSetArc(arcEl, r, v) {
+        const circ = 2 * Math.PI * r;
+        const lit = v * circ;
+        arcEl.setAttribute('stroke-dasharray', lit + ' ' + (circ - lit));
+        arcEl.setAttribute('stroke-dashoffset', 0);
+      }
+      function renderRings() {
+        ringSetArc(document.getElementById('ring-arc-hp'), RING_R.hp, values.hp);
+        ringSetArc(document.getElementById('ring-arc-mn'), RING_R.mn, values.mn);
+        ringSetArc(document.getElementById('ring-arc-mv'), RING_R.mv, values.mv);
+        ringSetArc(document.getElementById('ring-trail-hp'), RING_R.hp, ringGhost.hp);
+        ringSetArc(document.getElementById('ring-trail-mn'), RING_R.mn, ringGhost.mn);
+        ringSetArc(document.getElementById('ring-trail-mv'), RING_R.mv, ringGhost.mv);
+      }
+
+      // VARIANT B — SPARKBAR
+      function renderBars() {
+        for (const k of ['hp', 'mn', 'mv']) {
+          const s = histB[k]
+            .map((v) => {
+              const idx = Math.max(0, Math.min(8, Math.round(v * 8)));
+              return BLOCKS[idx];
+            })
+            .join('');
+          document.getElementById('bar-' + k).textContent = s;
+        }
+      }
+
+      // VARIANT C — ECG
+      function renderEcg() {
+        const el = document.getElementById('ecg-trace');
+        let html = '';
+        ecgHist.forEach((e, i) => {
+          const isNow = i === ecgHist.length - 1 && e.cls !== 'ev-idle';
+          html += `<span class="${e.cls}${isNow ? ' now' : ''}">${e.glyph}</span>`;
+        });
+        el.innerHTML = html;
+      }
+
+      function renderAll() {
+        renderNumbers();
+        renderRings();
+        renderBars();
+        renderEcg();
+      }
+
+      document.querySelectorAll('.scrubber button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.scrubber button').forEach((b) => b.classList.remove('is-on'));
+          btn.classList.add('is-on');
+          scenario = btn.dataset.scenario;
+          schedule();
+        });
+      });
+
+      renderAll();
+      schedule();
+    </script>
+  </body>
+</html>

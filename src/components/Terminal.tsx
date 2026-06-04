@@ -49,6 +49,17 @@ export interface TerminalHandle {
   findPrevious: (term: string, options?: FindOptions) => boolean;
   /** Clear search decorations (called when the find toolbar closes). */
   clearSearch: () => void;
+  /** Drop any current selection. Used to enforce "one selection across
+   *  panes" when the split is open — when one pane gets a selection
+   *  the other pane's selection is cleared. */
+  clearSelection: () => void;
+  /** True when this pane currently has a non-empty selection. */
+  hasSelection: () => boolean;
+  /** Subscribe to selection-change events on this terminal. Returns
+   *  an unsubscribe function. */
+  onSelectionChange: (cb: () => void) => () => void;
+  /** Current selected text, or empty string when no selection. */
+  getSelection: () => string;
 }
 
 interface Props {
@@ -196,6 +207,15 @@ export function Terminal({
       scrollback: 10000,
       allowProposedApi: true,
       convertEol: false,
+      // High-precision touchpads emit many small deltaY events per
+      // gesture; xterm's default scrollSensitivity (1) compounds
+      // these into a runaway scroll on macOS. 0.5 halves the per-
+      // event step so trackpad scrolling feels controllable. Smooth-
+      // scroll animation was tried (smoothScrollDuration) but stacking
+      // consecutive scrollLines animations broke the scrolling feel —
+      // discrete instant steps via the App.tsx accumulator works
+      // better in practice.
+      scrollSensitivity: 0.75,
       theme: xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColorsRef.current),
     });
 
@@ -447,8 +467,37 @@ export function Terminal({
           decorations: searchDecorations(),
         }),
       clearSearch: () => searchAddon.clearDecorations(),
+      clearSelection: () => term.clearSelection(),
+      hasSelection: () => term.hasSelection(),
+      getSelection: () => term.getSelection(),
+      onSelectionChange: (cb) => {
+        const disposable = term.onSelectionChange(cb);
+        return () => disposable.dispose();
+      },
     };
     onReadyRef.current?.(handle);
+
+    // Auto-clear selection when it scrolls off the viewport.
+    // xterm's canvas renderer paints the selection overlay at the
+    // selection's current row in the viewport, but the underlying
+    // selection POSITION stays anchored to its original buffer rows
+    // even when new data scrolls the buffer up — the paint then
+    // happens at a stale screen position ("ghost"). Subscribing to
+    // onScroll lets us notice when the selection range has fallen
+    // outside [viewportY, viewportY + rows] and clear it before the
+    // ghost can render.
+    const onScrollClearStaleSelection = () => {
+      const sel = term.getSelectionPosition();
+      if (!sel) return;
+      const top = term.buffer.active.viewportY;
+      const bottom = top + term.rows - 1;
+      const offTop = sel.end.y < top;
+      const offBottom = sel.start.y > bottom;
+      if (offTop || offBottom) {
+        term.clearSelection();
+      }
+    };
+    const scrollDisposable = term.onScroll(onScrollClearStaleSelection);
 
     // Ctrl/Cmd + C or X copies the xterm selection. The keystroke
     // almost always lands while focus is in the Input box (the user
@@ -489,6 +538,7 @@ export function Terminal({
       if (naws_timer) clearTimeout(naws_timer);
       unsubOutput?.();
       resultsSub.dispose();
+      scrollDisposable.dispose();
       searchAddon.dispose();
       term.dispose();
       termRef.current = null;

@@ -1258,6 +1258,9 @@ function TickConfigEditor({ onError }: TickConfigEditorProps) {
  *  Returns `track`, `solid|<filled>|<empty>`, `ramped|<filled>|<empty>`,
  *  or `__custom` when the glyph pair does not match a known preset. */
 function styleKeyFor(v: VitalsConfig): string {
+  // Style dropdown reflects bar_style + glyph preset only — the
+  // bar_layout (plain / with_history) lives in its own dropdown
+  // beside this one, so this returns the same key for both layouts.
   if (v.bar_style === 'track') return 'track';
   const preset = VITALS_GLYPH_PRESETS.find(
     (p) => p.filled === v.bar_filled && p.empty === v.bar_empty,
@@ -1276,7 +1279,8 @@ function applyStyleKey(key: string, current: VitalsConfig): Partial<VitalsConfig
     // Selecting "custom" from the dropdown leaves bar_filled / bar_empty
     // alone (the user is presumably about to edit them) and snaps the
     // bar_style off track since track has no glyph customization.
-    return { bar_style: current.bar_style === 'track' ? 'solid' : current.bar_style };
+    const fallback = current.bar_style === 'track' ? 'solid' : current.bar_style;
+    return { bar_style: fallback };
   }
   const [style, filled, empty] = key.split('|');
   return {
@@ -1425,9 +1429,9 @@ function VitalsConfigSection({
           <div className="vsplit-group-label">mode</div>
           <div className="vsplit-pip-grid vsplit-pip-grid-one">
             <PipToggle
-              label="one with erelei"
-              checked={v.one_with_erelei}
-              onChange={(c) => apply({ one_with_erelei: c })}
+              label="low hp vignette"
+              checked={v.low_hp_vignette}
+              onChange={(c) => apply({ low_hp_vignette: c })}
             />
           </div>
         </div>
@@ -1490,6 +1494,18 @@ function VitalsConfigSection({
                   <option value="__custom">custom · set glyphs below</option>
                 </optgroup>
               )}
+            </select>
+          </div>
+          <div className="vsplit-knob">
+            <span className="vsplit-knob-label">layout</span>
+            <select
+              value={v.bar_layout}
+              disabled={!v.show_bar}
+              onChange={(e) => apply({ bar_layout: e.target.value as 'plain' | 'with_history' })}
+              aria-label="bar layout"
+            >
+              <option value="plain">plain · bar only</option>
+              <option value="with_history">history · bar + braille trend grid</option>
             </select>
           </div>
           <div className="vsplit-knob">
@@ -1867,6 +1883,73 @@ function PreviewTrackBar({
 // VitalsBar.tsx so the preview matches the runtime exactly.
 const PREVIEW_RAMP_PARTIALS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
 
+/** Mirrors HistoryWrapper from VitalsBar.tsx for the Settings
+ *  preview — per-cell flex grid so each bar cell and grid cell
+ *  share identical x-ranges by construction. */
+function PreviewHistoryWrapper({
+  cells,
+  color,
+  fillValue,
+  filled,
+  empty,
+  font,
+}: {
+  cells: number;
+  color: string;
+  fillValue: number;
+  filled: string;
+  empty: string;
+  font?: string;
+}) {
+  const filledCount = Math.max(0, Math.min(cells, Math.round((fillValue / 100) * cells)));
+  return (
+    <span
+      className="vitals-glyphs vitals-spark"
+      style={{
+        flexBasis: `${cells}ch`,
+        maxWidth: `${cells}ch`,
+        fontFamily: font || undefined,
+      }}
+      aria-hidden="true"
+    >
+      <span className="vitals-spark-row vitals-spark-bar-row">
+        {Array.from({ length: cells }, (_, i) => {
+          const isFilled = i < filledCount;
+          return (
+            <span key={i} className="vitals-spark-cell" style={isFilled ? { color } : undefined}>
+              {isFilled ? filled : empty}
+            </span>
+          );
+        })}
+      </span>
+      <span className="vitals-spark-row vitals-spark-grid-row">
+        {Array.from({ length: cells }, (_, i) => (
+          <span key={i} className="vitals-spark-cell vitals-spark-grid-cell">
+            <span className="vitals-spark-grid-base">⣿</span>
+            <span className="vitals-spark-grid-trace" style={{ color }}>
+              {previewBrailleCell(fillValue / 100, fillValue / 100)}
+            </span>
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+const PREVIEW_DOTS_L = [0x01, 0x02, 0x04, 0x40];
+const PREVIEW_DOTS_R = [0x08, 0x10, 0x20, 0x80];
+function previewBrailleCell(v0: number, v1: number): string {
+  const lit0 = Math.max(0, Math.min(4, Math.round(v0 * 4)));
+  const lit1 = Math.max(0, Math.min(4, Math.round(v1 * 4)));
+  let bits = 0;
+  for (let d = 0; d < 4; d++) {
+    const fromBottom = 3 - d;
+    if (fromBottom < lit0) bits |= PREVIEW_DOTS_L[d];
+    if (fromBottom < lit1) bits |= PREVIEW_DOTS_R[d];
+  }
+  return String.fromCodePoint(0x2800 | bits);
+}
+
 function previewRampedBar({
   value,
   cells,
@@ -2157,7 +2240,7 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
           const filled = Math.round((s.value / 100) * width);
           const empty = width - filled;
           const percentColor = gradient ? s.color : colorForVital(s.label, s.value, config);
-          const bar = track ? (
+          const innerBar = track ? (
             <PreviewTrackBar
               value={s.value}
               cells={width}
@@ -2183,8 +2266,30 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
               <span className="vitals-empty">{config.bar_empty.repeat(empty)}</span>
             </span>
           );
+          // history layout: render the per-cell-flex bar + grid.
+          // Per-cell layout means the bar is always rendered as
+          // bar_filled / bar_empty glyphs (any chosen bar_style
+          // collapses to solid in spark mode) — the trade-off for
+          // guaranteed cell-by-cell alignment between bar and grid
+          // rows regardless of font metrics.
+          const bar =
+            config.bar_layout === 'with_history' ? (
+              <PreviewHistoryWrapper
+                cells={width}
+                color={percentColor}
+                fillValue={s.value}
+                filled={config.bar_filled}
+                empty={config.bar_empty}
+                font={config.bar_font}
+              />
+            ) : (
+              innerBar
+            );
           return (
-            <div key={s.label} className="vitals-row">
+            <div
+              key={s.label}
+              className={`vitals-row${config.bar_layout === 'with_history' ? ' vitals-row-spark' : ''}`}
+            >
               <span className="vitals-label">{s.label}</span>
               {config.show_bar && draggableBar(s.label as PreviewLabel, width, bar)}
               {config.show_percent && (
