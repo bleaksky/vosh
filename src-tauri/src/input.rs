@@ -602,6 +602,7 @@ fn slash_trigger(profile: &mut Profile, args: &str) -> InputResult {
         actions: vec![action],
         preset: None,
         group: None,
+        target: vosh_trigger::TriggerTarget::Line,
     };
     match profile.triggers.set(trigger) {
         Ok(()) => echo_one(format!("trigger {name} set")),

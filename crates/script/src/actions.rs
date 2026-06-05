@@ -31,6 +31,16 @@ pub enum Action {
         value: String,
     },
     RemoveVar(String),
+    /// Insert or replace a session-scoped "prompt var" — a key/value pair
+    /// the vitals template resolver reads with priority over GMCP. Used
+    /// by `#prompt`-style triggers to feed hp/mn/mv etc. directly from
+    /// parsed prompt text.
+    SetPromptVar {
+        name: String,
+        value: String,
+    },
+    /// Remove a prompt var by name.
+    RemovePromptVar(String),
     /// Insert or replace a regex trigger that fires a Lua callback by id.
     SetLuaTrigger {
         name: String,

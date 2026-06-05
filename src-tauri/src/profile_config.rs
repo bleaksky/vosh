@@ -1100,6 +1100,7 @@ mod tests {
             }],
             preset: None,
             group: None,
+            target: vosh_trigger::TriggerTarget::Line,
         });
         let text = config.to_toml().unwrap();
         let parsed = ProfileConfig::from_toml(&text).unwrap();
@@ -1231,6 +1232,7 @@ name = "haste"
             actions: vec![TriggerAction::Gag],
             preset: None,
             group: None,
+            target: vosh_trigger::TriggerTarget::Line,
         });
         let mut profile = Profile::default();
         let warnings = config.apply_to(&mut profile);

@@ -218,6 +218,7 @@ fn mushclient_trigger_from(e: &BytesStart, report: &mut ImportReport) -> Option<
         group: None,
         actions,
         preset: None,
+        target: vosh_trigger::TriggerTarget::Line,
     })
 }
 
@@ -428,6 +429,7 @@ fn commit_mudlet_trigger(item: MudletItem, report: &mut ImportReport) {
         actions,
         preset: None,
         group: None,
+        target: vosh_trigger::TriggerTarget::Line,
     });
 }
 
@@ -874,6 +876,7 @@ fn commit_cmud_trigger(t: CmudTriggerInProgress, report: &mut ImportReport) {
         actions,
         preset: None,
         group: None,
+        target: vosh_trigger::TriggerTarget::Line,
     });
 }
 

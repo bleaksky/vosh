@@ -41,6 +41,12 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
     mud.set("set_profile_var", lua.create_function(mud_set_profile_var)?)?;
     mud.set("unset_var", lua.create_function(mud_unset_var)?)?;
 
+    mud.set("set_prompt_var", lua.create_function(mud_set_prompt_var)?)?;
+    mud.set(
+        "unset_prompt_var",
+        lua.create_function(mud_unset_prompt_var)?,
+    )?;
+
     mud.set("trigger", lua.create_function(mud_trigger)?)?;
     mud.set("untrigger", lua.create_function(mud_untrigger)?)?;
 
@@ -146,6 +152,20 @@ fn mud_unset_var(lua: &Lua, name: String) -> LuaResult<()> {
     with_state(lua, |s| {
         s.var_snapshot.remove(&name);
         s.pending.push(Action::RemoveVar(name));
+        Ok(())
+    })
+}
+
+fn mud_set_prompt_var(lua: &Lua, (name, value): (String, String)) -> LuaResult<()> {
+    with_state(lua, |s| {
+        s.pending.push(Action::SetPromptVar { name, value });
+        Ok(())
+    })
+}
+
+fn mud_unset_prompt_var(lua: &Lua, name: String) -> LuaResult<()> {
+    with_state(lua, |s| {
+        s.pending.push(Action::RemovePromptVar(name));
         Ok(())
     })
 }

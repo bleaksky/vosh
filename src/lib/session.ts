@@ -130,7 +130,16 @@ export interface TriggerRecord {
    *  Triggers tab without losing their individual `enabled` flags.
    *  Undefined / null means ungrouped. */
   group?: string | null;
+  /** Which dispatch lane the trigger runs in. 'line' (default) fires
+   *  on every completed line of server output. 'prompt' fires on
+   *  the partial-prompt buffer the telnet parser flushes on GA/EOR
+   *  so #prompt-style triggers can capture from prompt text that
+   *  arrives without a trailing newline. Omitted on the wire when
+   *  the value is 'line' (the backend's default). */
+  target?: TriggerTarget;
 }
+
+export type TriggerTarget = 'line' | 'prompt';
 
 /** Read a `patterns:` list out of a raw wire-shape object, falling
  *  back to the legacy `pattern:` string the backend still emits
@@ -308,6 +317,21 @@ export interface TickPayload {
 
 export async function onTick(cb: (payload: TickPayload) => void): Promise<UnlistenFn> {
   return listen<TickPayload>('session://tick', (event) => {
+    cb(event.payload);
+  });
+}
+
+// Prompt vars — session-scoped key/value pairs the backend writes
+// when a `prompt`-targeted trigger fires `mud.set_prompt_var(...)`.
+// The vitals template resolver reads these with priority over
+// GMCP, so a tintin-style #prompt regex can feed hp/mn/mv etc.
+// directly from parsed prompt text. The payload is the full
+// snapshot map; the frontend replaces its local state so
+// deletions are reflected naturally.
+export type PromptVarsPayload = Record<string, string>;
+
+export async function onPromptVars(cb: (payload: PromptVarsPayload) => void): Promise<UnlistenFn> {
+  return listen<PromptVarsPayload>('session://prompt-vars', (event) => {
     cb(event.payload);
   });
 }

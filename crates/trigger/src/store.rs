@@ -21,6 +21,22 @@ pub struct TriggerPattern {
     pub enabled: bool,
 }
 
+/// Which side of the line pipeline a trigger matches against.
+///
+/// - `Line` (default) — runs once per completed line of MUD output,
+///   the historical behavior every trigger used.
+/// - `Prompt` — runs against the partial-prompt buffer the telnet
+///   parser flushes on `GA` / `EOR`. Used by tintin-style `#prompt`
+///   triggers that need to capture from prompt text that arrives
+///   without a trailing newline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TriggerTarget {
+    #[default]
+    Line,
+    Prompt,
+}
+
 /// User-visible trigger record. Serializes cleanly to JSON for the editor UI
 /// and for import or export. A trigger fires every action in `actions` in
 /// order whenever ANY of its enabled patterns matches the line.
@@ -47,6 +63,11 @@ pub struct Trigger {
     /// preset library and removed when the preset is uninstalled,
     /// while `group` is user-authored and persists across edits.
     pub group: Option<String>,
+    /// Which dispatch lane this trigger runs in. Defaults to `Line`;
+    /// flipping to `Prompt` makes it fire against the partial-prompt
+    /// buffer (telnet GA/EOR) instead of completed lines. See
+    /// [`TriggerTarget`] for details.
+    pub target: TriggerTarget,
 }
 
 fn default_enabled() -> bool {
@@ -80,6 +101,8 @@ struct TriggerRaw {
     preset: Option<String>,
     #[serde(default)]
     group: Option<String>,
+    #[serde(default)]
+    target: TriggerTarget,
 }
 
 impl<'de> Deserialize<'de> for Trigger {
@@ -121,6 +144,7 @@ impl<'de> Deserialize<'de> for Trigger {
             actions,
             preset: raw.preset,
             group: raw.group,
+            target: raw.target,
         })
     }
 }
@@ -133,9 +157,14 @@ impl Serialize for Trigger {
         // Emit BOTH `pattern` (first entry, for older Vosh builds /
         // tools that only know the legacy shape) and `patterns` (the
         // canonical list). `group` is omitted when unset so older
-        // builds and grep-friendly diffs stay clean.
-        let field_count =
-            6 + usize::from(self.preset.is_some()) + usize::from(self.group.is_some());
+        // builds and grep-friendly diffs stay clean. `target` is
+        // omitted when it is the default Line so the on-disk shape
+        // for the overwhelming majority of triggers stays unchanged.
+        let emit_target = self.target != TriggerTarget::default();
+        let field_count = 6
+            + usize::from(self.preset.is_some())
+            + usize::from(self.group.is_some())
+            + usize::from(emit_target);
         let mut state = serializer.serialize_struct("Trigger", field_count)?;
         state.serialize_field("name", &self.name)?;
         let first_pattern = self.patterns.first().map_or("", |p| p.pattern.as_str());
@@ -149,6 +178,9 @@ impl Serialize for Trigger {
         }
         if let Some(group) = &self.group {
             state.serialize_field("group", group)?;
+        }
+        if emit_target {
+            state.serialize_field("target", &self.target)?;
         }
         state.end()
     }

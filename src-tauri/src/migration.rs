@@ -338,6 +338,7 @@ mod tests {
             }],
             preset: None,
             group: None,
+            target: vosh_trigger::TriggerTarget::Line,
         }
     }
 

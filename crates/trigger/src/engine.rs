@@ -5,7 +5,27 @@ use regex::Regex;
 use vosh_ansi::plain_text;
 
 use crate::action::{HighlightStyle, TriggerAction};
-use crate::store::TriggerStore;
+use crate::store::{TriggerStore, TriggerTarget};
+
+/// Which dispatch lane the engine is running. Mirrors
+/// [`TriggerTarget`]: a `Line` pass only fires triggers with
+/// `target=Line`; a `Prompt` pass only fires triggers with
+/// `target=Prompt`. Lets the session loop reuse the same engine
+/// for both completed lines and partial-prompt buffers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchScope {
+    Line,
+    Prompt,
+}
+
+impl MatchScope {
+    fn matches(self, target: TriggerTarget) -> bool {
+        matches!(
+            (self, target),
+            (MatchScope::Line, TriggerTarget::Line) | (MatchScope::Prompt, TriggerTarget::Prompt)
+        )
+    }
+}
 
 /// What the engine produced for one line of MUD output.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -38,7 +58,17 @@ pub struct ScriptInvocation {
 /// `original` is the raw bytes of the line as the server sent it, including
 /// any embedded ANSI escapes. The trigger engine matches against the plain
 /// text (escapes stripped) and rebuilds the display string from there.
+///
+/// Equivalent to `process_scoped(store, original, MatchScope::Line)`.
 pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
+    process_scoped(store, original, MatchScope::Line)
+}
+
+/// Run the trigger store against a buffer, only firing triggers whose
+/// `target` matches the given scope. Used by the session loop to
+/// dispatch the same engine for both completed lines (`MatchScope::Line`)
+/// and partial-prompt buffers (`MatchScope::Prompt`).
+pub fn process_scoped(store: &TriggerStore, original: &[u8], scope: MatchScope) -> LineResult {
     let plain = plain_text(original);
 
     if store.is_empty() {
@@ -60,6 +90,9 @@ pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
 
     for compiled in store.iter_compiled() {
         if !compiled.trigger.enabled {
+            continue;
+        }
+        if !scope.matches(compiled.trigger.target) {
             continue;
         }
         // A trigger can hold many patterns (Mudlet-style). Each enabled
@@ -250,6 +283,7 @@ mod tests {
             }],
             preset: None,
             group: None,
+            target: TriggerTarget::Line,
         }
     }
 
@@ -295,6 +329,7 @@ mod tests {
             actions: vec![TriggerAction::Gag],
             preset: None,
             group: None,
+            target: TriggerTarget::Line,
         }]);
         let r = process(&s, b"You feel a tingle.");
         assert!(r.display.is_none());
@@ -312,6 +347,7 @@ mod tests {
             }],
             preset: None,
             group: None,
+            target: TriggerTarget::Line,
         }]);
         let r = process(&s, b"You see a goblin.");
         assert_eq!(r.display.as_deref(), Some("You see a wolf."));
@@ -329,6 +365,7 @@ mod tests {
             }],
             preset: None,
             group: None,
+            target: TriggerTarget::Line,
         }]);
         let r = process(&s, b"Bob yells");
         assert_eq!(r.display.as_deref(), Some("Bob calmly says"));
@@ -346,6 +383,7 @@ mod tests {
             }],
             preset: None,
             group: None,
+            target: TriggerTarget::Line,
         }]);
         let r = process(&s, b"The goblin is DEAD!");
         assert_eq!(r.sends, vec!["loot goblin".to_string()]);
@@ -363,6 +401,7 @@ mod tests {
             }],
             preset: None,
             group: None,
+            target: TriggerTarget::Line,
         }]);
         let r = process(&s, b"Bob tells you 'hi'");
         assert_eq!(r.routes, vec!["chat".to_string()]);
@@ -381,6 +420,7 @@ mod tests {
             }],
             preset: None,
             group: None,
+            target: TriggerTarget::Line,
         })
         .unwrap();
         s.set(Trigger {
@@ -393,6 +433,7 @@ mod tests {
             }],
             preset: None,
             group: None,
+            target: TriggerTarget::Line,
         })
         .unwrap();
         // High runs first on plain text "x". After high replaces to "H",
@@ -436,6 +477,7 @@ mod tests {
             actions: vec![TriggerAction::Gag],
             preset: None,
             group: None,
+            target: TriggerTarget::Line,
         };
         assert!(s.set(bad).is_err());
     }
@@ -464,6 +506,7 @@ mod tests {
             }],
             preset: None,
             group: None,
+            target: TriggerTarget::Line,
         }]);
         let r1 = process(&s, b"You see a goblin.");
         assert!(r1.display.unwrap().contains("\x1b[31m"));
@@ -490,6 +533,7 @@ mod tests {
             actions: vec![TriggerAction::Gag],
             preset: None,
             group: None,
+            target: TriggerTarget::Line,
         }]);
         // goblin pattern (enabled) gags.
         assert!(process(&s, b"You see a goblin.").display.is_none());
@@ -513,6 +557,7 @@ mod tests {
             actions: vec![TriggerAction::Gag],
             preset: None,
             group: None,
+            target: TriggerTarget::Line,
         })
         .unwrap();
         let json = s.export_json().unwrap();
@@ -521,5 +566,55 @@ mod tests {
         let count = s2.import_json(&json).unwrap();
         assert_eq!(count, 2);
         assert_eq!(s.list(), s2.list());
+    }
+
+    #[test]
+    fn prompt_target_skipped_on_line_scope() {
+        let s = store(vec![Trigger {
+            name: "p".into(),
+            patterns: single_pattern("hp"),
+            priority: 0,
+            enabled: true,
+            actions: vec![TriggerAction::Gag],
+            preset: None,
+            group: None,
+            target: TriggerTarget::Prompt,
+        }]);
+        // Line-scope pass MUST NOT fire a prompt-target trigger.
+        let r = process_scoped(&s, b"100/100 hp", MatchScope::Line);
+        assert_eq!(r.display.as_deref(), Some("100/100 hp"));
+    }
+
+    #[test]
+    fn prompt_target_fires_on_prompt_scope() {
+        let s = store(vec![Trigger {
+            name: "p".into(),
+            patterns: single_pattern("hp"),
+            priority: 0,
+            enabled: true,
+            actions: vec![TriggerAction::Gag],
+            preset: None,
+            group: None,
+            target: TriggerTarget::Prompt,
+        }]);
+        let r = process_scoped(&s, b"100/100 hp", MatchScope::Prompt);
+        assert!(r.display.is_none());
+    }
+
+    #[test]
+    fn line_target_skipped_on_prompt_scope() {
+        let s = store(vec![Trigger {
+            name: "l".into(),
+            patterns: single_pattern("hp"),
+            priority: 0,
+            enabled: true,
+            actions: vec![TriggerAction::Gag],
+            preset: None,
+            group: None,
+            target: TriggerTarget::Line,
+        }]);
+        // Prompt-scope pass MUST NOT fire a line-target trigger.
+        let r = process_scoped(&s, b"100/100 hp", MatchScope::Prompt);
+        assert_eq!(r.display.as_deref(), Some("100/100 hp"));
     }
 }
