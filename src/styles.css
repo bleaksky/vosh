@@ -5102,6 +5102,24 @@ body {
   color: var(--c-text);
 }
 
+/* Trigger-card target dropdown: same chrome as the group input so
+   the head row reads as one consistent line of compact metadata.
+   Sits between priority and group. */
+.trigger-card-target {
+  background: var(--c-surface-emphasis);
+  color: var(--c-text-faint);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font: inherit;
+}
+
+.trigger-card-target:focus {
+  outline: none;
+  border-color: var(--c-accent);
+  color: var(--c-text);
+}
+
 /* Alias group input: sits between expansion and remove. */
 .alias-row-group {
   width: 110px;

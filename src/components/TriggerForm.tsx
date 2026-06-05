@@ -203,6 +203,7 @@ export function TriggerForm({ load, save, onError }: Props) {
                 };
                 if (typeof r.preset === 'string') out.preset = r.preset;
                 if (typeof r.group === 'string' && r.group.length > 0) out.group = r.group;
+                if (r.target === 'prompt') out.target = 'prompt';
                 return out;
               })
             : [];
@@ -501,6 +502,16 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
           onChange={(e) => onChange({ priority: Number(e.target.value) || 0 })}
           title="priority"
         />
+        <select
+          className="trigger-card-target"
+          value={trigger.target ?? 'line'}
+          disabled={readOnly}
+          title="dispatch lane: 'line' fires on every completed line; 'prompt' fires only on partial-prompt buffers flushed at GA/EOR"
+          onChange={(e) => onChange({ target: e.target.value as 'line' | 'prompt' })}
+        >
+          <option value="line">line</option>
+          <option value="prompt">prompt</option>
+        </select>
         <input
           className="trigger-card-group"
           type="text"

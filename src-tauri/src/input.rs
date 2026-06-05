@@ -39,6 +39,9 @@ slash commands:
   #trigger <name> {pattern} <action>   define or replace a trigger
   #untrigger <name>                    remove a trigger
   #triggers                            list triggers
+  #prompt {regex}                      capture prompt vars from named groups
+                                       like (?<hp>...) (?<mn>...) etc.
+  #unprompt                            remove the prompt-capture trigger
   #tick                                show tick timer state
   #tick interval <secs>                set the tick interval
   #tick reset                          reset the timer now
@@ -188,6 +191,8 @@ fn handle_slash(profile: &mut Profile, rest: &str) -> InputResult {
         "trigger" => slash_trigger(profile, args),
         "untrigger" => slash_untrigger(profile, args),
         "triggers" => slash_triggers_list(profile),
+        "prompt" => slash_prompt(profile, args),
+        "unprompt" => slash_unprompt(profile),
         "tick" => slash_tick(profile, args),
         "script" => slash_script(profile, args),
         "scripts" => slash_scripts_list(profile),
@@ -607,6 +612,91 @@ fn slash_trigger(profile: &mut Profile, args: &str) -> InputResult {
     match profile.triggers.set(trigger) {
         Ok(()) => echo_one(format!("trigger {name} set")),
         Err(e) => error_echo(format!("trigger {name} rejected: {e}")),
+    }
+}
+
+/// `#prompt {regex}` — create or replace a single prompt-capture
+/// trigger named "prompt-capture". Auto-generates a Lua body that
+/// binds every named capture group in the regex to a prompt var of
+/// the same name via `mud.set_prompt_var(...)`. The vitals template
+/// resolver reads these with priority over GMCP, so a tintin-style
+/// `#prompt {(?<hp>\d+)/(?<maxhp>\d+) hp}` immediately drives the
+/// chip from parsed prompt text.
+///
+/// Defaults to `target=line` because ROM-derived MUDs (including
+/// Aabahran) send prompts with newlines and so they flow through the
+/// line dispatch. Power users can flip the resulting trigger to
+/// `target=prompt` via the Triggers drawer if their MUD only sends
+/// prompts via GA/EOR.
+fn slash_prompt(profile: &mut Profile, args: &str) -> InputResult {
+    let Some((pattern, _rest)) = parse_braced_pattern(args) else {
+        return error_echo(
+            "usage #prompt {regex with named captures like (?<hp>\\d+)}".to_string(),
+        );
+    };
+    let regex = match regex::Regex::new(&pattern) {
+        Ok(r) => r,
+        Err(e) => return error_echo(format!("invalid regex: {e}")),
+    };
+    // Walk capture groups and translate named ones into
+    // `mud.set_prompt_var("name", captures[N+1])` lines. `captures[1]`
+    // is the full match (see `eval_with_captures` in script_state);
+    // numbered groups start at `[2]`. Unnamed groups are skipped —
+    // there is no var name to bind them to.
+    let mut lines: Vec<String> = Vec::new();
+    let mut bound: Vec<String> = Vec::new();
+    for (idx, name) in regex.capture_names().enumerate() {
+        if idx == 0 {
+            continue;
+        }
+        if let Some(name) = name {
+            lines.push(format!(
+                "mud.set_prompt_var(\"{name}\", captures[{}])",
+                idx + 1
+            ));
+            bound.push(name.to_string());
+        }
+    }
+    if lines.is_empty() {
+        return error_echo(
+            "regex has no named captures; nothing to bind. use (?<name>...) syntax.".to_string(),
+        );
+    }
+    let body = lines.join("\n");
+    let trigger = Trigger {
+        name: "prompt-capture".to_string(),
+        patterns: vec![vosh_trigger::TriggerPattern {
+            pattern,
+            enabled: true,
+        }],
+        priority: 100,
+        enabled: true,
+        actions: vec![
+            vosh_trigger::TriggerAction::Gag,
+            vosh_trigger::TriggerAction::Script { body },
+        ],
+        preset: None,
+        group: None,
+        target: vosh_trigger::TriggerTarget::Line,
+    };
+    match profile.triggers.set(trigger) {
+        Ok(()) => InputResult {
+            bytes: Vec::new(),
+            echo: vec![
+                "prompt-capture trigger set (target=line)".to_string(),
+                format!("  bound prompt vars: {}", bound.join(", ")),
+            ],
+            scripts: Vec::new(),
+        },
+        Err(e) => error_echo(format!("trigger rejected: {e}")),
+    }
+}
+
+fn slash_unprompt(profile: &mut Profile) -> InputResult {
+    if profile.triggers.remove("prompt-capture") {
+        echo_one("prompt-capture trigger removed".to_string())
+    } else {
+        error_echo("no prompt-capture trigger found".to_string())
     }
 }
 
