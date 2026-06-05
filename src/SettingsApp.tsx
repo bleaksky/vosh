@@ -2238,35 +2238,126 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
   }
 
   if (config.layout === 'inline') {
+    // Mirror the runtime resolvePercentColor in VitalsBar.tsx so the
+    // preview shows what the user is about to see.
+    const previewPercentColor = (label: string, value: number): string => {
+      switch (config.percent_color_mode) {
+        case 'stat':
+          return colorForVital(label, 100, config);
+        case 'accent':
+          return 'var(--c-accent)';
+        case 'drain':
+        default:
+          if (value >= 75) return colorForVital(label, 100, config);
+          if (value >= 50) return '#e6c384';
+          if (value >= 25) return '#d99268';
+          return '#e46876';
+      }
+    };
     return (
       <>
         <div className="vitals-preview-head">{headerText}</div>
-        <div className="vitals-bar vitals-bar-inline">
+        <div className={`vitals-bar vitals-bar-inline vitals-inline-${config.inline_style}`}>
           <div className="vitals-row vitals-row-inline">
-            {sample.map((s) => (
-              <span key={s.label} className="vitals-inline-chip">
-                {config.show_numeric && <span className="vitals-numeric">{s.cur}</span>}
-                {config.show_percent && (
+            {sample.map((s) => {
+              const statColor = colorForVital(s.label, 100, config);
+              const pctColor =
+                config.inline_style === 'plain'
+                  ? gradient
+                    ? s.color
+                    : colorForVital(s.label, s.value, config)
+                  : previewPercentColor(s.label, s.value);
+              if (config.inline_style === 'badge') {
+                const isDanger = s.value < 20;
+                return (
                   <span
-                    className="vitals-inline-pct"
-                    style={{
-                      color: gradient ? s.color : colorForVital(s.label, s.value, config),
-                    }}
+                    key={s.label}
+                    className={`vitals-inline-badge${isDanger ? ' is-danger' : ''}`}
+                    style={{ color: statColor }}
                   >
-                    ({s.value}%)
+                    <span className="vitals-inline-badge-cap">{s.label}</span>
+                    {(config.show_numeric || !config.show_percent) && (
+                      <span className="vitals-inline-badge-val" style={{ color: statColor }}>
+                        {s.cur}
+                        <span className="vitals-inline-badge-max">/{s.max}</span>
+                      </span>
+                    )}
+                    {config.show_percent && (
+                      <span
+                        className="vitals-inline-badge-pct"
+                        style={{
+                          color: pctColor,
+                          borderColor: isDanger ? 'var(--c-danger)' : undefined,
+                        }}
+                      >
+                        {s.value}%
+                      </span>
+                    )}
+                    {config.show_delta && s.delta !== 0 && (
+                      <span
+                        className={`vitals-delta${s.delta > 0 ? ' vitals-delta-up' : ' vitals-delta-down'}`}
+                      >
+                        {s.delta > 0 ? '+' : ''}
+                        {s.delta}
+                      </span>
+                    )}
                   </span>
-                )}
-                <span className="vitals-inline-letter">{s.label[0]}</span>
-                {config.show_delta && s.delta !== 0 && (
+                );
+              }
+              if (config.inline_style === 'underline') {
+                return (
                   <span
-                    className={`vitals-delta${s.delta > 0 ? ' vitals-delta-up' : ' vitals-delta-down'}`}
+                    key={s.label}
+                    className="vitals-inline-underline"
+                    style={
+                      {
+                        ['--vital-color']: statColor,
+                        ['--vital-fill']: `${s.value}%`,
+                      } as React.CSSProperties
+                    }
                   >
-                    {s.delta > 0 ? '+' : ''}
-                    {s.delta}
+                    {config.show_numeric && (
+                      <span className="vitals-numeric" style={{ color: statColor }}>
+                        {s.cur}
+                      </span>
+                    )}
+                    {config.show_percent && (
+                      <span className="vitals-inline-pct" style={{ color: pctColor }}>
+                        ({s.value}%)
+                      </span>
+                    )}
+                    <span className="vitals-inline-letter">{s.label[0]}</span>
+                    {config.show_delta && s.delta !== 0 && (
+                      <span
+                        className={`vitals-delta${s.delta > 0 ? ' vitals-delta-up' : ' vitals-delta-down'}`}
+                      >
+                        {s.delta > 0 ? '+' : ''}
+                        {s.delta}
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-            ))}
+                );
+              }
+              return (
+                <span key={s.label} className="vitals-inline-chip">
+                  {config.show_numeric && <span className="vitals-numeric">{s.cur}</span>}
+                  {config.show_percent && (
+                    <span className="vitals-inline-pct" style={{ color: pctColor }}>
+                      ({s.value}%)
+                    </span>
+                  )}
+                  <span className="vitals-inline-letter">{s.label[0]}</span>
+                  {config.show_delta && s.delta !== 0 && (
+                    <span
+                      className={`vitals-delta${s.delta > 0 ? ' vitals-delta-up' : ' vitals-delta-down'}`}
+                    >
+                      {s.delta > 0 ? '+' : ''}
+                      {s.delta}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
           </div>
         </div>
       </>
