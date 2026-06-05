@@ -306,6 +306,26 @@ export function Terminal({
     };
     term.onScroll(notifyPosition);
 
+    // Pre-pad the buffer with blank lines so the first content write
+    // appears at the bottom of the viewport instead of the top.
+    // Without this, a fresh session shows MUD output anchored to the
+    // top with empty rows below — which reads as a giant gap between
+    // the latest prompt and the room strip / vitals chip at the
+    // bottom of the window. Padding pushes the cursor to the last
+    // viewport row; subsequent writes then scroll content up from
+    // the bottom like every other MUD client.
+    //
+    // We do this only when scrollback restore comes up empty — when
+    // there IS persisted scrollback, it already fills the buffer past
+    // the viewport and `scrollToBottom` does the right thing.
+    const padToBottom = () => {
+      const cursorY = term.buffer.active.cursorY;
+      const rowsBelow = term.rows - 1 - cursorY;
+      if (rowsBelow > 0) {
+        term.write('\r\n'.repeat(rowsBelow));
+      }
+    };
+
     loadScrollback()
       .then((bytes) => {
         if (bytes.length > 0) {
@@ -313,6 +333,8 @@ export function Terminal({
           if (!quietRef.current) {
             term.write('\r\n\x1b[2m[scrollback restored]\x1b[0m\r\n');
           }
+        } else if (!quietRef.current) {
+          padToBottom();
         }
         // xterm.write batches into an internal queue; flush before
         // notifying so any onScrollbackLoaded handler that adjusts
@@ -332,6 +354,7 @@ export function Terminal({
         // No scrollback yet, or backend not ready; still notify so
         // the host can apply its initial scroll gesture (no-op on
         // an empty terminal, but does not lose the user intent).
+        if (!quietRef.current) padToBottom();
         notifyPosition();
         onScrollbackLoadedRef.current?.();
       });
@@ -360,6 +383,11 @@ export function Terminal({
       // dragged the divider, then waited — no write would have
       // otherwise unstuck the viewport until the next server line).
       if (!quietRef.current) {
+        // When the viewport grows taller, the bottom-anchor pad
+        // from mount no longer reaches the new last row, leaving
+        // a gap below the cursor. Re-pad so the cursor lands on
+        // the new bottom row before any subsequent content writes.
+        padToBottom();
         term.scrollToBottom();
       }
     });
