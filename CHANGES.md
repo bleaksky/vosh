@@ -2,6 +2,17 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.4.0 - 2026-06-05
+
+- New tintin-style `#prompt {regex}` slash command turns any server prompt into a vitals source. Every named capture group like `(?<hp>\d+)` gets bound to a prompt var of the same name that the vitals bar reads with priority over GMCP, so the same chip styling you pick in Settings drives the values from your parsed prompt text. The matching line gets gagged. Run `#unprompt` to remove it. Works without GMCP, so MUDs that do not push `Char.Vitals` can still drive a bar from prompt text alone.
+- Triggers gain a `target` dropdown in the editor (line or prompt) so any trigger can be tagged to fire only on the partial-prompt buffer the server flushes at GA / EOR instead of completed lines. The line option (the historical behavior) is the default.
+- A trigger that gags the matched line AND echoes via Lua now renders the echo in the gagged-line row instead of below it with extra spacing. Before this, a gag plus an echo read as a blank row followed by the echo on a new line.
+- Percent values in the inline and template vitals layouts can now wrap in a styled chip. Pick `pill`, `soft tint`, `glow ring`, or `drain fill` from the new `% chip` dropdown in Settings · Panels · panes · vitals. The chip applies to the plain inline layout and to the `%pct_hp`, `%pct_mn`, `%pct_mv` template tokens alike. Default stays plain so existing layouts render unchanged.
+- Fresh sessions with no scrollback now anchor MUD output at the bottom of the terminal pane instead of the top. The cursor pads to the last row on mount and re-pads on resize, so subsequent writes scroll content up from a full buffer and the giant gap between the latest prompt and the room strip and vitals chip is gone.
+- `#profile load` and `#profile save` now route to the active profile under `profiles/<active>.toml` instead of the legacy single-file path they were stuck on after the multi-profile migration. The legacy path is still consulted as a fallback for pre-migration layouts.
+- Per-profile triggers, aliases, and macros overlay on top of the shared catalog (Path B mode) instead of getting silently replaced by it. A trigger you author in your per-profile file or via `#prompt` survives the next launch. Same-name entries from your per-profile file win, new per-profile names are added.
+- Typed commands now mirror to the split-scrollback history pane so scrolling up shows your own commands alongside server output. Persisted scrollback restored on next launch is still server-only.
+
 ## v0.3.15 - 2026-06-04
 
 - New vitals layout option stacks a braille trend grid underneath your bar. Each cell carries two samples across four dot rows of vertical fill, drawn in the vital color over a dim base. Recent hp / mn / mv drops read as a falling shape next to the current bar fill. Pick it from the new `layout` dropdown in Settings · Panels · panes · vitals. The bar style (solid / track / ramped) and the layout (plain / with history) are now independent dropdowns so you can pair any bar with the trend grid. The live preview in Settings reflects both selections.
