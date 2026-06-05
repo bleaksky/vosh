@@ -2,7 +2,7 @@
 //! store; lives across reconnects so user customization survives disconnect
 //! cycles.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use vosh_alias::AliasStore;
 use vosh_script::ScriptEngine;
@@ -45,6 +45,11 @@ pub(crate) struct Profile {
     /// `TriggerStore` but lives here directly because there is no
     /// `MacroStore` wrapper.
     pub(crate) disabled_macro_groups: BTreeSet<String>,
+    /// Live "prompt vars" — written by user triggers via
+    /// `mud.set_prompt_var(name, value)` and read with priority
+    /// over GMCP by the vitals template resolver. Session-only;
+    /// reset on reconnect like vitals snapshots.
+    pub(crate) prompt_vars: BTreeMap<String, String>,
 }
 
 /// One keyboard binding: a canonical key string mapped to a

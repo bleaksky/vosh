@@ -182,7 +182,7 @@ mod tests {
     use std::fs;
 
     use vosh_alias::Alias;
-    use vosh_trigger::{Trigger, TriggerAction, TriggerPattern};
+    use vosh_trigger::{Trigger, TriggerAction, TriggerPattern, TriggerTarget};
 
     use crate::loadout::Loadout;
     use crate::profile::Macro;
@@ -201,6 +201,7 @@ mod tests {
             }],
             preset: None,
             group: group.map(String::from),
+            target: TriggerTarget::Line,
         }
     }
 

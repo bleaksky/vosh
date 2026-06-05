@@ -3,6 +3,7 @@ import {
   DEFAULT_VITALS_CONFIG,
   getUiConfig,
   onGmcpPackage,
+  onPromptVars,
   onState,
   subscribeVitalsConfigChanged,
   type VitalsConfig,
@@ -525,9 +526,13 @@ function HistoryWrapper({
 // Char.Vitals + World.Time; World.Time hour-change rebases the
 // per-tick delta snapshot.
 export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {}) {
-  const [vitals, setVitals] = useState<Vitals | null>(null);
+  const [gmcpVitals, setVitals] = useState<Vitals | null>(null);
   const [deltas, setDeltas] = useState<VitalDeltas>(NO_DELTAS);
   const [config, setConfig] = useState<VitalsConfig>(DEFAULT_VITALS_CONFIG);
+  // Prompt vars — replaces / overlays GMCP values for the
+  // template + inline resolvers. Written by user triggers via
+  // `mud.set_prompt_var(name, value)` on the Lua side.
+  const [promptVars, setPromptVars] = useState<Record<string, string>>({});
   const vitalsSnapRef = useRef<Vitals | null>(null);
   const prevHourRef = useRef<number | string | null>(null);
   // Per-vital history ring buffer used by the spark bar style. Each
@@ -653,10 +658,19 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
         setDeltas(NO_DELTAS);
         vitalsSnapRef.current = null;
         prevHourRef.current = null;
+        setPromptVars({});
       }
     }).then((fn) => {
       if (cancelled) fn();
       else unsubState = fn;
+    });
+
+    let unsubPromptVars: (() => void) | undefined;
+    onPromptVars((payload) => {
+      setPromptVars(payload || {});
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsubPromptVars = fn;
     });
 
     return () => {
@@ -664,6 +678,7 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
       unsubVitals?.();
       unsubTime?.();
       unsubState?.();
+      unsubPromptVars?.();
     };
   }, []);
 
@@ -674,6 +689,41 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
   const rawCombat = useCombat();
   const combat = hideCombat ? null : rawCombat;
 
+  // Merge prompt_vars on top of GMCP vitals. Any of the six
+  // canonical keys (hp/maxhp/mana/maxmana/move/maxmove) that exist
+  // in prompt_vars override the GMCP value, so a `#prompt`-style
+  // trigger that calls `mud.set_prompt_var("hp", captures[1])`
+  // immediately moves the bar without waiting for a GMCP push.
+  // If neither GMCP nor prompt_vars have anything, we render
+  // nothing.
+  const vitals: Vitals | null = (() => {
+    const fromVar = (k: string): number | null => {
+      const raw = promptVars[k];
+      if (raw === undefined) return null;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    };
+    const base: Vitals = gmcpVitals ?? {
+      hp: 0,
+      maxhp: 0,
+      mana: 0,
+      maxmana: 0,
+      move: 0,
+      maxmove: 0,
+    };
+    const merged: Vitals = {
+      hp: fromVar('hp') ?? base.hp,
+      maxhp: fromVar('maxhp') ?? base.maxhp,
+      mana: fromVar('mana') ?? base.mana,
+      maxmana: fromVar('maxmana') ?? base.maxmana,
+      move: fromVar('move') ?? base.move,
+      maxmove: fromVar('maxmove') ?? base.maxmove,
+    };
+    if (merged.maxhp === 0 && merged.maxmana === 0 && merged.maxmove === 0 && gmcpVitals === null) {
+      return null;
+    }
+    return merged;
+  })();
   if (!vitals) return null;
 
   const segs: Array<{ label: string; cur: number; max: number; delta: number | null }> = [];
@@ -700,7 +750,13 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
   if (config.template_enabled) {
     return (
       <>
-        <TemplateVitalsRow config={config} vitals={vitals} deltas={deltas} combat={combat} />
+        <TemplateVitalsRow
+          config={config}
+          vitals={vitals}
+          deltas={deltas}
+          combat={combat}
+          promptVars={promptVars}
+        />
         {erelei}
       </>
     );
@@ -1126,11 +1182,13 @@ function TemplateVitalsRow({
   vitals,
   deltas,
   combat,
+  promptVars,
 }: {
   config: VitalsConfig;
   vitals: Vitals;
   deltas: VitalDeltas;
   combat: CombatState | null;
+  promptVars: Record<string, string>;
 }) {
   // Phase 6 perf fix: TemplateVitalsRow no longer subscribes to
   // tick state. The `%tick` token resolves to a `<TickSecondsToken
@@ -1243,12 +1301,18 @@ function TemplateVitalsRow({
           <span style={timeColor ? { color: timeColor } : undefined}>{mudTime}</span>
         ) : null;
       default: {
-        // Pass-through: any %name that matches a field in the merged
-        // Char.Vitals + Char.Worth snapshot renders that field's
-        // value. So `%xp`, `%gold`, `%align`, `%pos`, etc. all just
-        // work without curated logic. If nothing matches, we render
-        // the literal `%name` so the user sees their typo instead of
-        // a silent drop.
+        // Resolution priority: prompt_vars (written by user
+        // triggers) override GMCP fields, so a `#prompt`-style
+        // trigger can repaint `%anything` without needing the
+        // server to push a matching package. After that, fall
+        // back to the merged Char.Vitals + Char.Worth snapshot so
+        // `%xp`, `%gold`, `%align`, `%pos`, etc. still work
+        // without curated logic. Unknown tokens render as the red
+        // `%name` literal so typos surface instead of dropping
+        // silently.
+        if (Object.prototype.hasOwnProperty.call(promptVars, name)) {
+          return promptVars[name];
+        }
         const fallback = stats[name];
         if (fallback === undefined || fallback === null) {
           return <span className="vitals-template-unknown">%{name}</span>;

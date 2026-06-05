@@ -1,6 +1,7 @@
 //! Per-session task. Wires the connection, the telnet parser, the line
 //! accumulator, and the trigger engine together. Emits Tauri events.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -746,6 +747,27 @@ async fn handle_event(
                             (result, tick_payload, apply)
                         };
                         perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
+                        // In-place echo replacement. When a trigger gags the
+                        // line AND its Script action emits one or more
+                        // `mud.echo(...)` outputs, drain those echoes into
+                        // the display batch right where the gagged line
+                        // would have rendered. Without this, the echoes
+                        // fall through to `apply_script_result` which
+                        // frames each echo with leading and trailing
+                        // `\r\n` for non-trigger contexts (timers, async
+                        // scripts) — and against a gagged prompt that
+                        // reads as a blank row followed by the echo on a
+                        // new line. Replacement makes the echo land at
+                        // the exact row of the gagged content, which is
+                        // what users mean by "the trigger replaced the
+                        // prompt with my echo."
+                        let mut script_apply = script_apply;
+                        if result.display.is_none() && !script_apply.echoes.is_empty() {
+                            for line in script_apply.echoes.drain(..) {
+                                display_batch.extend_from_slice(line.as_bytes());
+                                display_batch.extend_from_slice(b"\r\n");
+                            }
+                        }
                         append_line_result(&mut display_batch, &result, clear_first);
                         if !result.routes.is_empty() {
                             perf.routed_emits += result.routes.len() as u64;
@@ -800,11 +822,21 @@ async fn handle_event(
             Ok(())
         }
         TelnetEvent::Command(byte) if byte == telnet_codes::EOR || byte == telnet_codes::GA => {
-            // The server marked the end of a prompt. Flush any partial we
-            // had buffered so the prompt sits on its own line and the
-            // next chunk's first complete line lands cleanly below it
-            // instead of merging into the prompt.
-            flush_partial_prompt(app, accumulator);
+            // The server marked the end of a prompt. Two jobs:
+            //
+            // 1. Run any `target=prompt` triggers against the partial
+            //    buffer so `#prompt`-style triggers can gag the
+            //    prompt and capture vars via `mud.set_prompt_var`.
+            // 2. Drop the cursor onto its own line so the next
+            //    complete line lands cleanly below the prompt
+            //    instead of merging into it.
+            //
+            // The trigger pass uses the same `process_scoped` engine
+            // as the line pass, so all action kinds (Gag, Replace,
+            // Highlight, Send, Route, Script) work identically.
+            // Gag here means the on-screen partial is erased with
+            // `ESC[2K\r` before the trailing newline ends the row.
+            dispatch_prompt_buffer(app, profile, stream, timers, accumulator).await?;
             Ok(())
         }
         TelnetEvent::Will(opt) if opt == telnet_option::GMCP => {
@@ -1104,7 +1136,24 @@ async fn apply_script_result(
         }
         guard.extend(apply.new_timers);
     }
+    if apply.prompt_vars_changed {
+        emit_prompt_vars(app, profile).await;
+    }
     Ok(())
+}
+
+/// Push the current `Profile::prompt_vars` map to the frontend as a
+/// single snapshot. Re-emitted whenever a Lua action mutates the
+/// map. The frontend's `usePromptVars()` hook replaces its local
+/// state with the payload, so deletions are reflected naturally.
+async fn emit_prompt_vars(app: &AppHandle, profile: &Arc<Mutex<Profile>>) {
+    let snapshot: BTreeMap<String, String> = {
+        let p = profile.lock().await;
+        p.prompt_vars.clone()
+    };
+    if let Err(e) = app.emit("session://prompt-vars", &snapshot) {
+        warn!(error = %e, "failed to emit prompt vars");
+    }
 }
 
 async fn fire_due_script_timers(
@@ -1140,22 +1189,106 @@ async fn fire_due_script_timers(
     apply_script_result(app, stream, profile, timers, apply).await
 }
 
-/// Treat any buffered partial as a complete prompt line. The prompt is
-/// already on screen as raw text (the `LineAccumulator` emitted it as a
-/// `RawDisplay` chunk when the bytes first arrived). All we need to do
-/// is push the cursor past it so the next chunk's content lands on a
-/// fresh row. Skipping the trigger reprocess and clear-rewrite avoids
-/// the visible flicker that previously read as input lag.
+/// Run `target=prompt` triggers against the partial-prompt buffer the
+/// telnet parser just flushed (GA / EOR / idle timeout). Handles:
+///   * Gag — erases the on-screen partial with `ESC[2K\r` so the
+///     prompt does not stay visible after the trigger consumes it.
+///   * Replace — re-emits the substituted text in place of the
+///     original partial.
+///   * Script — evaluates Lua bodies with the regex captures, the
+///     primary mechanism for `mud.set_prompt_var(...)` to populate
+///     vitals from a parsed prompt.
+///   * Send / Route — same semantics as the line pass.
 ///
-/// Called both when the telnet parser reports a GA or EOR command and
-/// when the user submits typed input.
-fn flush_partial_prompt(app: &AppHandle, accumulator: &mut LineAccumulator) {
-    let Some((_bytes, already_shown)) = accumulator.flush_partial() else {
-        return;
+/// When no prompt trigger fires (display matches original), the only
+/// observable effect is the trailing `\r\n` that drops the cursor
+/// onto the next line — same as the legacy partial-flush behavior.
+async fn dispatch_prompt_buffer(
+    app: &AppHandle,
+    profile: &Arc<Mutex<Profile>>,
+    stream: &mut Stream,
+    timers: &SharedTimers,
+    accumulator: &mut LineAccumulator,
+) -> std::io::Result<()> {
+    let Some((bytes, already_shown)) = accumulator.flush_partial() else {
+        return Ok(());
     };
+    let (result, script_apply) = {
+        let mut p = profile.lock().await;
+        let r = vosh_trigger::process_scoped(&p.triggers, &bytes, vosh_trigger::MatchScope::Prompt);
+        // Fast path: no prompt-target trigger affected the output.
+        // The trigger engine returns `display = lossy(original)`
+        // when nothing matched, so a byte-for-byte equality check
+        // here distinguishes "no effect" from "highlight / replace
+        // rewrote the line." Without this check we would erase and
+        // re-emit the prompt on every GA/EOR, stacking an extra
+        // row per server prompt.
+        let trigger_changed_output = match &r.display {
+            None => true, // gagged
+            Some(text) => text.as_bytes() != bytes.as_slice(),
+        };
+        let any_effect = trigger_changed_output
+            || !r.sends.is_empty()
+            || !r.routes.is_empty()
+            || !r.scripts.is_empty();
+        if !any_effect {
+            drop(p);
+            if already_shown {
+                emit_output(app, b"\r\n".to_vec());
+            }
+            return Ok(());
+        }
+        // A trigger fired. Evaluate any Script bodies the same way
+        // the line pass does so `mud.set_prompt_var` lands.
+        script_state::snapshot_vars(&p.script, &p.vars);
+        let mut outcome = vosh_script::ScriptOutcome::default();
+        for call in &r.scripts {
+            match script_state::eval_with_captures(
+                &mut p.script,
+                &call.body,
+                &call.captures,
+                "prompt-trigger-script",
+            ) {
+                Ok(o) => outcome.actions.extend(o.actions),
+                Err(err) => {
+                    warn!(error = %err, "prompt-trigger script eval failed");
+                }
+            }
+        }
+        let apply = script_state::apply_actions(&mut p, outcome);
+        (r, apply)
+    };
+    // Repaint the visible partial. If gagged, erase. If replaced,
+    // erase then write the new text. Either way append `\r\n` to
+    // land the cursor on the next row, matching the legacy flush.
     if already_shown {
+        emit_output(app, b"\x1b[2K\r".to_vec());
+    }
+    let mut script_apply = script_apply;
+    if let Some(text) = &result.display {
+        // No `\r\n` before the text — we already cleared the line.
+        let mut out = Vec::with_capacity(text.len() + 2);
+        out.extend_from_slice(text.as_bytes());
+        out.extend_from_slice(b"\r\n");
+        emit_output(app, out);
+    } else if !script_apply.echoes.is_empty() {
+        // Gag + echoes: render the echoes where the prompt was,
+        // matching the line-pipeline replacement semantics. Drain
+        // them so `apply_script_result` does not also frame them
+        // with leading + trailing newlines.
+        let mut out = Vec::new();
+        for line in script_apply.echoes.drain(..) {
+            out.extend_from_slice(line.as_bytes());
+            out.extend_from_slice(b"\r\n");
+        }
+        emit_output(app, out);
+    } else if already_shown {
+        // Gag with no echo replacement: just terminate the (now-blank)
+        // line so the next chunk does not paint into the cleared row.
         emit_output(app, b"\r\n".to_vec());
     }
+    send_trigger_outputs(stream, &result.sends).await?;
+    apply_script_result(app, stream, profile, timers, script_apply).await
 }
 
 async fn send_trigger_outputs(stream: &mut Stream, sends: &[String]) -> std::io::Result<()> {

@@ -97,6 +97,10 @@ pub(crate) struct ApplyResult {
     pub echoes: Vec<String>,
     /// Lines of input to feed back through the input pipeline.
     pub inputs: Vec<String>,
+    /// True when any prompt var changed during apply — the session
+    /// emits a `session://prompt-vars` snapshot to the frontend
+    /// once per apply rather than once per individual set.
+    pub prompt_vars_changed: bool,
     pub new_timers: Vec<PendingTimer>,
     pub cancel_timers: Vec<u32>,
 }
@@ -131,6 +135,17 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
             }
             Action::RemoveVar(name) => {
                 profile.vars.remove(&name);
+            }
+            Action::SetPromptVar { name, value } => {
+                let prev = profile.prompt_vars.insert(name, value.clone());
+                if prev.as_deref() != Some(value.as_str()) {
+                    result.prompt_vars_changed = true;
+                }
+            }
+            Action::RemovePromptVar(name) => {
+                if profile.prompt_vars.remove(&name).is_some() {
+                    result.prompt_vars_changed = true;
+                }
             }
             Action::SetLuaTrigger { .. }
             | Action::RemoveLuaTrigger(_)
