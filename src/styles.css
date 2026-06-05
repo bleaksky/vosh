@@ -1050,9 +1050,18 @@ body {
   font-variant-numeric: tabular-nums;
   padding: 0 5px;
   border-radius: 2px;
-  line-height: 1.45;
+  /* Inherit the surrounding line-height so an `inline-block` chip
+     does not push the line box taller than the plain text around
+     it. In the inline plain layout the chip sits inside a flex
+     baseline row so its own line-height never affected layout;
+     the template layout is a plain block of inline text, and a
+     fixed 1.45 line-height there stretched the entire row's
+     vertical rhythm — every `750`, `h`, `(19s)`, `3PM` next to a
+     chip appeared taller. Inheriting collapses the box back into
+     the surrounding line. */
+  line-height: inherit;
+  vertical-align: baseline;
   margin: 0 3px;
-  transform: translateY(-0.06em);
   color: var(--pct-color, var(--c-text));
 }
 
