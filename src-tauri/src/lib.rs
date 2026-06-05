@@ -230,10 +230,14 @@ pub fn run() {
                 }
 
                 // Path B startup hook. Detect catalog.toml; if present,
-                // overlay catalog content onto the live Profile (replacing
-                // whatever per-profile load just put there) and apply the
-                // active loadouts' enabled_groups. global.toml stays as the
-                // shared UI surface either way.
+                // start from the catalog (shared defaults) and overlay
+                // per-profile triggers/aliases/macros ON TOP — same-name
+                // entries from the per-profile file win, new names are
+                // added. Before this, the catalog overlay outright
+                // replaced per-profile state, which silently wiped any
+                // trigger or alias a user authored against their per-
+                // profile file. Loadouts still apply on top to gate
+                // catalog groups by the active enabled_groups set.
                 if loadout_store::path_b_mode_active(&path) {
                     let catalog_load = loadout_store::load_global_catalog(&path);
                     let set_load = loadout_store::load_loadout_set(&path);
@@ -244,19 +248,50 @@ pub fn run() {
                             let set_for_state = set.clone();
                             tauri::async_runtime::block_on(async move {
                                 let mut p = profile.lock().await;
+                                // Snapshot what the per-profile load
+                                // just put into the live stores so we
+                                // can replay it on top of the catalog.
+                                let per_profile_aliases: Vec<_> =
+                                    p.aliases.list().into_iter().cloned().collect();
+                                let per_profile_triggers: Vec<_> = p.triggers.list();
+                                let per_profile_macros = p.macros.clone();
+
+                                // Catalog first.
                                 let mut aliases = vosh_alias::AliasStore::new();
                                 for a in &catalog.aliases {
                                     aliases.set(a.clone());
                                 }
+                                // Per-profile overrides by name.
+                                for a in per_profile_aliases {
+                                    aliases.set(a);
+                                }
                                 p.aliases = aliases;
+
                                 let mut triggers = vosh_trigger::TriggerStore::new();
                                 for t in &catalog.triggers {
                                     if let Err(e) = triggers.set(t.clone()) {
                                         info!(error = %e, "catalog trigger rejected at startup");
                                     }
                                 }
+                                for t in per_profile_triggers {
+                                    if let Err(e) = triggers.set(t) {
+                                        info!(error = %e, "per-profile trigger rejected at startup");
+                                    }
+                                }
                                 p.triggers = triggers;
-                                p.macros.clone_from(&catalog.macros);
+
+                                // Macros: catalog defaults, per-profile
+                                // overrides by `key` (the canonical
+                                // keypress identifier). Per-profile
+                                // entries with no catalog match are
+                                // simply appended.
+                                let mut macros = catalog.macros.clone();
+                                for m in per_profile_macros {
+                                    macros.retain(|x| x.key != m.key);
+                                    macros.push(m);
+                                }
+                                p.macros = macros;
+
                                 loadout_store::apply_loadout_state(&set, &mut p);
                             });
                             let catalog_arc = state.global_catalog.clone();
