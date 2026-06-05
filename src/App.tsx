@@ -914,7 +914,16 @@ function App() {
       ref={inputRef}
       enabled={connected}
       onError={handleError}
-      onLocalEcho={(text) => termRef.current?.write(text)}
+      onLocalEcho={(text) => {
+        termRef.current?.write(text);
+        // Mirror to the split history pane so typed lines appear
+        // there too. Without this, scrolling up in split view
+        // shows server output but none of your own commands. The
+        // history Terminal is lazy-mounted and may be null between
+        // splitOpen=true and onReady; the optional chain absorbs
+        // that gap.
+        historyTermRef.current?.write(text);
+      }}
       onScrollTerminal={(pages) => {
         // Split-scrollback gesture. The live pane (termRef) stays
         // anchored to the tail. PageUp opens the split if closed;
