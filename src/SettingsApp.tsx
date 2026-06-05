@@ -42,8 +42,10 @@ import {
   type UiConfig,
   type VitalsBarStyle,
   type VitalsConfig,
+  type VitalsInlineStyle,
   type VitalsLayout,
   type VitalsPercentColor,
+  type VitalsPercentColorMode,
 } from './lib/session';
 import { applyTheme } from './lib/theme';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
@@ -1621,6 +1623,20 @@ function VitalsConfigSection({
               <option value="inline">inline (one row, prompt-style)</option>
             </select>
           </div>
+          {v.layout === 'inline' && (
+            <div className="vsplit-knob">
+              <span className="vsplit-knob-label">inline style</span>
+              <select
+                value={v.inline_style}
+                disabled={v.template_enabled}
+                onChange={(e) => apply({ inline_style: e.target.value as VitalsInlineStyle })}
+              >
+                <option value="plain">plain (tintin nprompt text)</option>
+                <option value="underline">underline (drain bar beneath each)</option>
+                <option value="badge">badge (chip + corner percent)</option>
+              </select>
+            </div>
+          )}
           <div className="vsplit-knob">
             <span className="vsplit-knob-label">% color</span>
             <select
@@ -1631,6 +1647,21 @@ function VitalsConfigSection({
               <option value="gradient">red → green gradient</option>
             </select>
           </div>
+          {v.layout === 'inline' && v.inline_style !== 'plain' && (
+            <div className="vsplit-knob">
+              <span className="vsplit-knob-label">% mode</span>
+              <select
+                value={v.percent_color_mode}
+                onChange={(e) =>
+                  apply({ percent_color_mode: e.target.value as VitalsPercentColorMode })
+                }
+              >
+                <option value="drain">drain to red as low (default)</option>
+                <option value="stat">match stat color</option>
+                <option value="accent">brand pink</option>
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="vsplit-group">
