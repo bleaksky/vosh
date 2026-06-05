@@ -629,6 +629,17 @@ export type VitalsBarStyle = 'solid' | 'track' | 'ramped';
  *  `bar_style: 'spark'` migrates to `bar_style: 'solid'` +
  *  `bar_layout: 'with_history'` on load. */
 export type VitalsBarLayout = 'plain' | 'with_history';
+/** Sub-style of the inline vitals layout. Applies when
+ *  `layout === 'inline'`. `plain` is the historical tintin nprompt
+ *  rendering; `underline` adds a colored 1px drain bar beneath each
+ *  unit; `badge` wraps each vital in a chip with a percent pill
+ *  hanging off the upper-right corner. */
+export type VitalsInlineStyle = 'plain' | 'underline' | 'badge';
+/** How the percent text gets colored in the underline / badge inline
+ *  styles. `stat` mirrors the numeric stat color; `drain` ramps
+ *  through warn-gold → orange → danger-red as the value drops;
+ *  `accent` forces the brand pink at every fill. */
+export type VitalsPercentColorMode = 'stat' | 'drain' | 'accent';
 
 export interface VitalsConfig {
   show_bar: boolean;
@@ -641,6 +652,12 @@ export interface VitalsConfig {
   bar_style: VitalsBarStyle;
   bar_layout: VitalsBarLayout;
   layout: VitalsLayout;
+  /** Sub-style for `layout: inline` only. Ignored for stacked. */
+  inline_style: VitalsInlineStyle;
+  /** Percent text color across the inline underline / badge styles.
+   *  Independent of `percent_color` (which still drives the stacked
+   *  layout's percent rendering). */
+  percent_color_mode: VitalsPercentColorMode;
   percent_color: VitalsPercentColor;
   template_enabled: boolean;
   template: string;
@@ -679,6 +696,8 @@ export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
   bar_style: 'solid',
   bar_layout: 'plain',
   layout: 'stacked',
+  inline_style: 'plain',
+  percent_color_mode: 'drain',
   percent_color: 'fill',
   template_enabled: false,
   template: DEFAULT_VITALS_TEMPLATE,
@@ -779,6 +798,14 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
           ? v.bar_layout
           : DEFAULT_VITALS_CONFIG.bar_layout,
     layout: v.layout === 'inline' ? 'inline' : DEFAULT_VITALS_CONFIG.layout,
+    inline_style:
+      v.inline_style === 'underline' || v.inline_style === 'badge'
+        ? v.inline_style
+        : DEFAULT_VITALS_CONFIG.inline_style,
+    percent_color_mode:
+      v.percent_color_mode === 'stat' || v.percent_color_mode === 'accent'
+        ? v.percent_color_mode
+        : DEFAULT_VITALS_CONFIG.percent_color_mode,
     percent_color:
       v.percent_color === 'gradient' ? 'gradient' : DEFAULT_VITALS_CONFIG.percent_color,
     template_enabled:
