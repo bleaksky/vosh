@@ -961,15 +961,36 @@ fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputResult {
     }
 }
 
+/// Resolve the active profile's on-disk path. Reads the profile
+/// index (`profiles.toml`) to learn which profile is active and
+/// returns `<app_data>/profiles/<active>.toml`. Falls back to the
+/// legacy `<app_data>/profile.toml` only when no `profiles.toml`
+/// index exists — which is the pre-multi-profile layout.
+///
+/// Before this resolver, `#profile load` and `#profile save`
+/// silently routed to the legacy single-file path even after
+/// migration, so a "load" overwrote in-memory state with whatever
+/// the empty legacy file had (and a "save" wrote the active
+/// profile's state into the wrong file). Now they hit the file the
+/// user is actually editing.
 fn profile_path() -> Option<std::path::PathBuf> {
     let home = std::env::var_os("HOME")?;
-    let base = std::path::PathBuf::from(home);
-    Some(
-        base.join("Library")
-            .join("Application Support")
-            .join("com.aabahran.vosh")
-            .join("profile.toml"),
-    )
+    let app_data = std::path::PathBuf::from(home)
+        .join("Library")
+        .join("Application Support")
+        .join("com.aabahran.vosh");
+    let index = app_data.join("profiles.toml");
+    if let Ok(body) = std::fs::read_to_string(&index) {
+        if let Ok(value) = body.parse::<toml::Value>() {
+            if let Some(active) = value.get("active").and_then(|v| v.as_str()) {
+                let path = app_data.join("profiles").join(format!("{active}.toml"));
+                if path.exists() {
+                    return Some(path);
+                }
+            }
+        }
+    }
+    Some(app_data.join("profile.toml"))
 }
 
 fn expand_home(path: &str) -> std::path::PathBuf {
