@@ -315,9 +315,12 @@ export function Terminal({
     // viewport row; subsequent writes then scroll content up from
     // the bottom like every other MUD client.
     //
-    // We do this only when scrollback restore comes up empty — when
-    // there IS persisted scrollback, it already fills the buffer past
-    // the viewport and `scrollToBottom` does the right thing.
+    // Runs after EVERY initial-mount path — empty scrollback, short
+    // scrollback that did not fill the viewport, or a scrollback
+    // restore failure — because the bug surfaces whenever the
+    // post-restore cursor position lands above the viewport bottom.
+    // No-op when the cursor is already at the bottom (large
+    // scrollback that overfilled).
     const padToBottom = () => {
       const cursorY = term.buffer.active.cursorY;
       const rowsBelow = term.rows - 1 - cursorY;
@@ -333,14 +336,15 @@ export function Terminal({
           if (!quietRef.current) {
             term.write('\r\n\x1b[2m[scrollback restored]\x1b[0m\r\n');
           }
-        } else if (!quietRef.current) {
-          padToBottom();
         }
         // xterm.write batches into an internal queue; flush before
         // notifying so any onScrollbackLoaded handler that adjusts
         // the viewport sees the final row count, not the count
-        // before the buffered bytes were rendered.
+        // before the buffered bytes were rendered. The flush also
+        // matters for padToBottom: cursorY only reflects the
+        // post-restore position after the queued bytes are drained.
         const notify = () => {
+          if (!quietRef.current) padToBottom();
           notifyPosition();
           onScrollbackLoadedRef.current?.();
         };
