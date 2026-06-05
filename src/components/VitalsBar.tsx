@@ -810,6 +810,39 @@ function resolvePercentColor(label: string, value: number, config: VitalsConfig)
   }
 }
 
+// Renders a percent value either as historical `(NN%)` text or
+// wrapped in a small styled chip per `config.pct_chip_style`. Used
+// by the plain inline layout (where the percent currently sits in
+// parens) and by the `%pct_*` template expansion so the user can
+// drop the chip anywhere they place the token in their template.
+function PercentChip({
+  value,
+  color,
+  style,
+}: {
+  value: number;
+  color: string;
+  style: VitalsConfig['pct_chip_style'];
+}) {
+  if (style === 'none') {
+    return (
+      <span className="vitals-inline-pct" style={{ color }}>
+        ({value}%)
+      </span>
+    );
+  }
+  const styleVars: React.CSSProperties = {
+    color,
+    ['--pct-color' as string]: color,
+    ['--pct-fill' as string]: `${Math.max(0, Math.min(100, value))}%`,
+  };
+  return (
+    <span className={`vitals-pct-chip vitals-pct-chip-${style}`} style={styleVars}>
+      {value}%
+    </span>
+  );
+}
+
 // Inline `drain` style. Each vital is a chip with caption upper-
 // left, percent upper-right (color-shifted by percent_color_mode),
 // and a big numeric value on the main line. Behind the text, a
@@ -962,9 +995,7 @@ function InlineVitalChip({
     <span className="vitals-inline-chip">
       {config.show_numeric && <span className="vitals-numeric">{cur}</span>}
       {config.show_percent && (
-        <span className="vitals-inline-pct" style={{ color: percentColor }}>
-          ({value}%)
-        </span>
+        <PercentChip value={value} color={percentColor} style={config.pct_chip_style} />
       )}
       <span className="vitals-inline-letter">{letter}</span>
       {!config.show_numeric && !config.show_percent && (
@@ -1147,6 +1178,13 @@ function TemplateVitalsRow({
           label === 'hp' ? vitals.maxhp : label === 'mn' ? vitals.maxmana : vitals.maxmove;
         const v = valueFor(cur, max);
         const color = gradient ? colorForPercent(v) : colorForVital(label, v, config);
+        // When a chip style is configured, wrap the token in a
+        // chip so the user can place chip-styled percents anywhere
+        // in their template. Otherwise emit the value as plain
+        // text (no parens — the template author writes those).
+        if (config.pct_chip_style !== 'none') {
+          return <PercentChip value={v} color={color} style={config.pct_chip_style} />;
+        }
         return <span style={{ color }}>{v}%</span>;
       }
       case 'dhp':
