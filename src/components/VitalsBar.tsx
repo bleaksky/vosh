@@ -710,19 +710,27 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
   // the tintin nprompt shape:
   //   850(85%)h 230(76%)m 120(60%)v
   if (config.layout === 'inline') {
+    // Sub-style switch. `plain` keeps the historical InlineVitalChip
+    // text; `underline` adds the colored drain bar beneath each unit;
+    // `badge` wraps each vital in a chip with a percent pill (phase 3).
+    const renderUnit = (s: (typeof segs)[number], i: number) => {
+      if (config.inline_style === 'underline') {
+        return <InlineVitalUnderline key={s.label} config={config} {...s} />;
+      }
+      return <InlineVitalChip key={s.label} config={config} compact={i > 0} {...s} />;
+    };
     return (
       <>
-        <div className="vitals-bar vitals-bar-inline" aria-label="vitals">
+        <div
+          className={`vitals-bar vitals-bar-inline vitals-inline-${config.inline_style}`}
+          aria-label="vitals"
+        >
           {combat && (
             <div className="vitals-row vitals-row-combat-top">
               <CombatChip combat={combat} config={config} />
             </div>
           )}
-          <div className="vitals-row vitals-row-inline">
-            {segs.map((s, i) => (
-              <InlineVitalChip key={s.label} config={config} compact={i > 0} {...s} />
-            ))}
-          </div>
+          <div className="vitals-row vitals-row-inline">{segs.map(renderUnit)}</div>
         </div>
         {erelei}
       </>
@@ -773,6 +781,87 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
 // to its first character, and sits AFTER the percent group so the
 // value reads first and the label disambiguates after. Percent color
 // follows config.percent_color (per-vital fill or 0–100 gradient).
+// Resolve the percent text color for the underline / badge inline
+// styles. `stat` mirrors the per-stat numeric color, `drain` ramps
+// through warn → orange → danger-red as the value drops, `accent`
+// is the brand pink at every fill.
+function resolvePercentColor(label: string, value: number, config: VitalsConfig): string {
+  switch (config.percent_color_mode) {
+    case 'stat':
+      // Use the stat color at full saturation, regardless of value.
+      return colorForVital(label, 100, config);
+    case 'accent':
+      return 'var(--c-accent)';
+    case 'drain':
+    default:
+      if (value >= 75) return colorForVital(label, 100, config);
+      if (value >= 50) return '#e6c384';
+      if (value >= 25) return '#d99268';
+      return '#e46876';
+  }
+}
+
+// Inline `underline` style. Numeric in per-stat color, small
+// percent in parens (still tinted via percent_color_mode), trailing
+// letter dimmed to dim text, and a 1px colored drain bar beneath
+// the whole unit. Hairline track shows the empty portion.
+function InlineVitalUnderline({
+  label,
+  cur,
+  max,
+  delta,
+  config,
+}: {
+  label: string;
+  cur: number;
+  max: number;
+  delta: number | null;
+  config: VitalsConfig;
+}) {
+  const value = pct(cur, max);
+  const numericColor = colorForVital(label, 100, config);
+  const percentColor = resolvePercentColor(label, value, config);
+  const showDelta = config.show_delta && delta !== null && delta !== 0;
+  const deltaPositive = (delta ?? 0) > 0;
+  const letter = label[0] ?? '?';
+  return (
+    <span
+      className="vitals-inline-underline"
+      style={
+        {
+          ['--vital-color']: numericColor,
+          ['--vital-fill']: `${Math.max(0, Math.min(100, value))}%`,
+        } as React.CSSProperties
+      }
+    >
+      {config.show_numeric && (
+        <span className="vitals-numeric" style={{ color: numericColor }}>
+          {cur}
+        </span>
+      )}
+      {config.show_percent && (
+        <span className="vitals-inline-pct" style={{ color: percentColor }}>
+          ({value}%)
+        </span>
+      )}
+      <span className="vitals-inline-letter">{letter}</span>
+      {!config.show_numeric && !config.show_percent && (
+        <span className="vitals-numeric" style={{ color: numericColor }}>
+          {cur}
+        </span>
+      )}
+      {showDelta && (
+        <span
+          className={`vitals-delta${deltaPositive ? ' vitals-delta-up' : ' vitals-delta-down'}`}
+        >
+          {deltaPositive ? '+' : ''}
+          {delta}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function InlineVitalChip({
   label,
   cur,

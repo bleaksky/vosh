@@ -1038,6 +1038,52 @@ body {
   letter-spacing: 0;
 }
 
+/* Inline `underline` style — numeric tinted per stat, percent
+   colored by percent_color_mode, and a 1px colored drain bar
+   beneath the whole unit on top of a hairline track. Per-unit
+   --vital-color / --vital-fill come from the React component. */
+.vitals-inline-underline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  white-space: nowrap;
+  position: relative;
+  padding-bottom: 4px;
+}
+
+.vitals-inline-underline::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--c-border-soft);
+}
+
+.vitals-inline-underline::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 1px;
+  width: var(--vital-fill, 0%);
+  background: var(--vital-color, var(--c-text));
+  z-index: 1;
+  transition:
+    width 240ms ease-out,
+    background 240ms ease-out;
+}
+
+.vitals-inline-underline .vitals-inline-letter {
+  color: var(--c-text-dim);
+}
+
+.vitals-inline-underline .vitals-numeric {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Tail cluster at the end of the inline row, separated from vitals
    by ` - ` like the tintin layout. Hosts the tick countdown and the
    MUD time chip. */
