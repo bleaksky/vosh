@@ -714,8 +714,8 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
     // text; `underline` adds the colored drain bar beneath each unit;
     // `badge` wraps each vital in a chip with a percent pill (phase 3).
     const renderUnit = (s: (typeof segs)[number], i: number) => {
-      if (config.inline_style === 'underline') {
-        return <InlineVitalUnderline key={s.label} config={config} {...s} />;
+      if (config.inline_style === 'drain') {
+        return <InlineVitalDrain key={s.label} config={config} {...s} />;
       }
       if (config.inline_style === 'badge') {
         return <InlineVitalBadge key={s.label} config={config} {...s} />;
@@ -785,30 +785,40 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
 // value reads first and the label disambiguates after. Percent color
 // follows config.percent_color (per-vital fill or 0–100 gradient).
 // Resolve the percent text color for the underline / badge inline
-// styles. `stat` mirrors the per-stat numeric color, `drain` ramps
-// through warn → orange → danger-red as the value drops, `accent`
-// is the brand pink at every fill.
+// styles. `stat` mirrors the per-stat numeric color (so numeric +
+// percent read as one block); `drain` keeps the percent quiet
+// while things are fine and ramps through warn → orange → red as
+// the value drops, so the percent itself becomes the alarm
+// signal; `accent` forces the brand pink at every fill.
+//
+// In `drain` mode the high-health color is text-faint (not the
+// stat color) so percent and numeric stay visually distinct
+// during the calm. Only when things go wrong does percent start
+// to color, and it ramps independently of the stat hue.
 function resolvePercentColor(label: string, value: number, config: VitalsConfig): string {
   switch (config.percent_color_mode) {
     case 'stat':
-      // Use the stat color at full saturation, regardless of value.
       return colorForVital(label, 100, config);
     case 'accent':
       return 'var(--c-accent)';
     case 'drain':
     default:
-      if (value >= 75) return colorForVital(label, 100, config);
+      if (value >= 75) return 'var(--c-text-faint)';
       if (value >= 50) return '#e6c384';
       if (value >= 25) return '#d99268';
       return '#e46876';
   }
 }
 
-// Inline `underline` style. Numeric in per-stat color, small
-// percent in parens (still tinted via percent_color_mode), trailing
-// letter dimmed to dim text, and a 1px colored drain bar beneath
-// the whole unit. Hairline track shows the empty portion.
-function InlineVitalUnderline({
+// Inline `drain` style. Each vital is a chip with caption upper-
+// left, percent upper-right (color-shifted by percent_color_mode),
+// and a big numeric value on the main line. Behind the text, a
+// drain background fills inside a small inset from the chip
+// border — the bar gets room to breathe so it never touches the
+// edges. The leading edge of the drain carries a soft color-matched
+// glow that pops the "current value" boundary without adding hard
+// chrome. Matches mockup C from vosh-vitals-chip-scale.html.
+function InlineVitalDrain({
   label,
   cur,
   max,
@@ -826,10 +836,10 @@ function InlineVitalUnderline({
   const percentColor = resolvePercentColor(label, value, config);
   const showDelta = config.show_delta && delta !== null && delta !== 0;
   const deltaPositive = (delta ?? 0) > 0;
-  const letter = label[0] ?? '?';
+  const isDanger = value < 20;
   return (
     <span
-      className="vitals-inline-underline"
+      className={`vitals-inline-drain${isDanger ? ' is-danger' : ''}`}
       style={
         {
           ['--vital-color']: numericColor,
@@ -837,30 +847,33 @@ function InlineVitalUnderline({
         } as React.CSSProperties
       }
     >
-      {config.show_numeric && (
-        <span className="vitals-numeric" style={{ color: numericColor }}>
-          {cur}
-        </span>
-      )}
-      {config.show_percent && (
-        <span className="vitals-inline-pct" style={{ color: percentColor }}>
-          ({value}%)
-        </span>
-      )}
-      <span className="vitals-inline-letter">{letter}</span>
-      {!config.show_numeric && !config.show_percent && (
-        <span className="vitals-numeric" style={{ color: numericColor }}>
-          {cur}
-        </span>
-      )}
-      {showDelta && (
-        <span
-          className={`vitals-delta${deltaPositive ? ' vitals-delta-up' : ' vitals-delta-down'}`}
-        >
-          {deltaPositive ? '+' : ''}
-          {delta}
-        </span>
-      )}
+      <span className="vitals-inline-drain-bg" aria-hidden="true" />
+      <span className="vitals-inline-drain-top">
+        <span className="vitals-inline-drain-cap">{label}</span>
+        {config.show_percent && (
+          <span className="vitals-inline-drain-pct" style={{ color: percentColor }}>
+            {value}%
+          </span>
+        )}
+      </span>
+      <span className="vitals-inline-drain-val" style={{ color: numericColor }}>
+        {config.show_numeric ? (
+          <>
+            {cur}
+            <span className="vitals-inline-drain-max">/{max}</span>
+          </>
+        ) : (
+          `${value}%`
+        )}
+        {showDelta && (
+          <span
+            className={`vitals-delta${deltaPositive ? ' vitals-delta-up' : ' vitals-delta-down'}`}
+          >
+            {deltaPositive ? '+' : ''}
+            {delta}
+          </span>
+        )}
+      </span>
     </span>
   );
 }

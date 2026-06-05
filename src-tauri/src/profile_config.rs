@@ -262,11 +262,13 @@ pub(crate) struct VitalsConfig {
     pub layout: String,
     /// Inline-only sub-style. Applies when `layout == "inline"`:
     /// "plain" keeps the historical tintin nprompt text;
-    /// "underline" tints the numeric per stat and adds a 1px
-    /// colored drain bar beneath each unit; "badge" wraps each
-    /// vital in a tick/time-style chip with the percent floating
-    /// as its own small bordered pill above the upper-right
-    /// corner. Frontend falls back to "plain" on unknown strings.
+    /// "drain" renders each vital in a chip with caption +
+    /// percent in the top corners and an inset drain background
+    /// that glows along its leading edge as it shrinks;
+    /// "badge" wraps each vital in a simpler chip with the
+    /// percent floating as its own small bordered pill above the
+    /// upper-right corner. Frontend falls back to "plain" on
+    /// unknown strings.
     #[serde(default = "default_inline_style")]
     pub inline_style: String,
     /// How the percent text gets colored across the inline

@@ -1038,50 +1038,107 @@ body {
   letter-spacing: 0;
 }
 
-/* Inline `underline` style — numeric tinted per stat, percent
-   colored by percent_color_mode, and a 1px colored drain bar
-   beneath the whole unit on top of a hairline track. Per-unit
-   --vital-color / --vital-fill come from the React component. */
-.vitals-inline-underline {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0;
-  white-space: nowrap;
+/* Inline `drain` style — each vital is a chip with the same chrome
+   as the tick + time chip today (1px border-strong, surface-deep
+   fill, 3px radius, soft inset highlight). Caption + percent
+   ride along the top edge inside the chip; the numeric value sits
+   on the main line. A drain background fills inside an inset
+   margin so the bar never touches the chip border — its leading
+   edge carries a soft color-matched glow that pops the current
+   value boundary. */
+.vitals-inline-drain {
   position: relative;
-  padding-bottom: 4px;
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  background: var(--c-surface-deep);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 4px;
+  padding: 0.3em 0.72em 0.4em;
+  min-width: 7em;
+  overflow: hidden;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-.vitals-inline-underline::after {
-  content: '';
+.vitals-inline-drain-bg {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 1px;
-  background: var(--c-border-soft);
+  left: 0.3em;
+  right: 0.3em;
+  top: 0.3em;
+  bottom: 0.3em;
+  border-radius: 2px;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
 }
 
-.vitals-inline-underline::before {
+.vitals-inline-drain-bg::before {
   content: '';
   position: absolute;
-  left: 0;
+  top: 0;
   bottom: 0;
-  height: 1px;
+  left: 0;
   width: var(--vital-fill, 0%);
-  background: var(--vital-color, var(--c-text));
-  z-index: 1;
+  background: color-mix(in srgb, var(--vital-color) 22%, transparent);
+  box-shadow: 0 0 6px 0 var(--vital-color);
   transition:
     width 240ms ease-out,
     background 240ms ease-out;
 }
 
-.vitals-inline-underline .vitals-inline-letter {
-  color: var(--c-text-dim);
+.vitals-inline-drain-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  position: relative;
+  z-index: 1;
+  margin-bottom: 0.08em;
 }
 
-.vitals-inline-underline .vitals-numeric {
+.vitals-inline-drain-cap {
+  font-size: 0.74em;
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.06em;
+  font-weight: 400;
+}
+
+.vitals-inline-drain-pct {
+  font-size: 0.74em;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.vitals-inline-drain-val {
+  font-size: 0.98em;
+  font-weight: 700;
+  position: relative;
+  z-index: 1;
+  line-height: 1;
+}
+
+.vitals-inline-drain-max {
+  color: var(--c-text-faint);
+  font-weight: 400;
+}
+
+@keyframes vitals-drain-danger-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.vitals-inline-drain.is-danger .vitals-inline-drain-pct {
+  animation: vitals-drain-danger-pulse 900ms ease-in-out infinite;
 }
 
 /* Inline `badge` style — main chip uses the same chrome as the
