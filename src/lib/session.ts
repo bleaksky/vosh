@@ -642,6 +642,16 @@ export type VitalsInlineStyle = 'plain' | 'drain' | 'badge';
  *  through warn-gold → orange → danger-red as the value drops;
  *  `accent` forces the brand pink at every fill. */
 export type VitalsPercentColorMode = 'stat' | 'drain' | 'accent';
+/** Chip wrapper for the percent value in the plain inline layout and
+ *  in `%pct_*` template tokens. `none` keeps the historical `(75%)`
+ *  parens text. The styled variants wrap the percent in a small
+ *  chip — `pill` is the bordered tick/time chrome, `soft` is a
+ *  borderless wash of the percent color, `glow` adds a color-tinted
+ *  border plus an outer glow, `drain` fills the chip body
+ *  proportional to the percent so the chip doubles as a tiny bar.
+ *  The drain and badge inline styles use their own built-in percent
+ *  rendering and ignore this setting. */
+export type VitalsPctChipStyle = 'none' | 'pill' | 'soft' | 'glow' | 'drain';
 
 export interface VitalsConfig {
   show_bar: boolean;
@@ -660,6 +670,10 @@ export interface VitalsConfig {
    *  Independent of `percent_color` (which still drives the stacked
    *  layout's percent rendering). */
   percent_color_mode: VitalsPercentColorMode;
+  /** Wrap the percent value in a styled chip in the plain inline
+   *  layout and in `%pct_*` template tokens. `none` keeps the
+   *  historical parens. */
+  pct_chip_style: VitalsPctChipStyle;
   percent_color: VitalsPercentColor;
   template_enabled: boolean;
   template: string;
@@ -700,6 +714,7 @@ export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
   layout: 'stacked',
   inline_style: 'plain',
   percent_color_mode: 'drain',
+  pct_chip_style: 'none',
   percent_color: 'fill',
   template_enabled: false,
   template: DEFAULT_VITALS_TEMPLATE,
@@ -812,6 +827,13 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
       v.percent_color_mode === 'stat' || v.percent_color_mode === 'accent'
         ? v.percent_color_mode
         : DEFAULT_VITALS_CONFIG.percent_color_mode,
+    pct_chip_style:
+      v.pct_chip_style === 'pill' ||
+      v.pct_chip_style === 'soft' ||
+      v.pct_chip_style === 'glow' ||
+      v.pct_chip_style === 'drain'
+        ? v.pct_chip_style
+        : DEFAULT_VITALS_CONFIG.pct_chip_style,
     percent_color:
       v.percent_color === 'gradient' ? 'gradient' : DEFAULT_VITALS_CONFIG.percent_color,
     template_enabled:

@@ -44,6 +44,7 @@ import {
   type VitalsConfig,
   type VitalsInlineStyle,
   type VitalsLayout,
+  type VitalsPctChipStyle,
   type VitalsPercentColor,
   type VitalsPercentColorMode,
 } from './lib/session';
@@ -1662,6 +1663,21 @@ function VitalsConfigSection({
               </select>
             </div>
           )}
+          {(v.template_enabled || (v.layout === 'inline' && v.inline_style === 'plain')) && (
+            <div className="vsplit-knob">
+              <span className="vsplit-knob-label">% chip</span>
+              <select
+                value={v.pct_chip_style}
+                onChange={(e) => apply({ pct_chip_style: e.target.value as VitalsPctChipStyle })}
+              >
+                <option value="none">plain (no chip)</option>
+                <option value="pill">pill (bordered)</option>
+                <option value="soft">soft tint</option>
+                <option value="glow">glow ring</option>
+                <option value="drain">drain fill</option>
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="vsplit-group">
@@ -2064,6 +2080,9 @@ function previewTemplate(
         const label = name.slice(4);
         const s = get(label);
         const c = gradient ? s.color : colorForVital(label, s.value, config);
+        if (config.pct_chip_style !== 'none') {
+          return <PreviewPercentChip value={s.value} color={c} style={config.pct_chip_style} />;
+        }
         return <span style={{ color: c }}>{s.value}%</span>;
       }
       case 'dhp':
@@ -2155,6 +2174,38 @@ function previewSample(label: PreviewLabel, value: number): PreviewSample {
     delta: PREVIEW_DELTA[label],
     color: colorForPercent(v),
   };
+}
+
+// Mirrors the runtime PercentChip from VitalsBar.tsx so the
+// Settings preview shows the user the exact chip they will see
+// in-game. Kept here (rather than imported) to avoid pulling the
+// runtime component's session-related deps into Settings.
+function PreviewPercentChip({
+  value,
+  color,
+  style,
+}: {
+  value: number;
+  color: string;
+  style: VitalsPctChipStyle;
+}) {
+  if (style === 'none') {
+    return (
+      <span className="vitals-inline-pct" style={{ color }}>
+        ({value}%)
+      </span>
+    );
+  }
+  const styleVars: React.CSSProperties = {
+    color,
+    ['--pct-color' as string]: color,
+    ['--pct-fill' as string]: `${Math.max(0, Math.min(100, value))}%`,
+  };
+  return (
+    <span className={`vitals-pct-chip vitals-pct-chip-${style}`} style={styleVars}>
+      {value}%
+    </span>
+  );
 }
 
 function VitalsPreview({ config }: { config: VitalsConfig }) {
@@ -2351,9 +2402,11 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
                 <span key={s.label} className="vitals-inline-chip">
                   {config.show_numeric && <span className="vitals-numeric">{s.cur}</span>}
                   {config.show_percent && (
-                    <span className="vitals-inline-pct" style={{ color: pctColor }}>
-                      ({s.value}%)
-                    </span>
+                    <PreviewPercentChip
+                      value={s.value}
+                      color={pctColor}
+                      style={config.pct_chip_style}
+                    />
                   )}
                   <span className="vitals-inline-letter">{s.label[0]}</span>
                   {config.show_delta && s.delta !== 0 && (

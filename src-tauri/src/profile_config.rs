@@ -281,6 +281,20 @@ pub(crate) struct VitalsConfig {
     /// stacked-row percent rendering.
     #[serde(default = "default_percent_color_mode")]
     pub percent_color_mode: String,
+    /// Wraps the percent value in a small styled chip when set to
+    /// anything other than "none". Applies to the plain inline
+    /// layout (today's `(75%)` parens become a chip) and to
+    /// `%pct_*` tokens in template mode (wherever the user
+    /// placed them). Values: "none" (default — historical parens
+    /// text), "pill" (bordered chip with the tick/time chrome),
+    /// "soft" (no border, 16% wash of the percent color),
+    /// "glow" (color-tinted border + soft outer glow),
+    /// "drain" (chip body drains in the percent color, doubles as
+    /// a tiny horizontal bar). Drain and badge inline styles
+    /// have their own built-in percent rendering and ignore this
+    /// setting.
+    #[serde(default = "default_pct_chip_style")]
+    pub pct_chip_style: String,
     /// Color source for the percent text: "fill" (the per-vital
     /// color ramp; matches the bar color) or "gradient" (a 0-100
     /// red-to-green ramp; the percent itself becomes the at-a-glance
@@ -349,6 +363,7 @@ impl Default for VitalsConfig {
             layout: default_vitals_layout(),
             inline_style: default_inline_style(),
             percent_color_mode: default_percent_color_mode(),
+            pct_chip_style: default_pct_chip_style(),
             percent_color: default_percent_color(),
             template_enabled: false,
             template: default_template(),
@@ -380,6 +395,10 @@ fn default_inline_style() -> String {
 
 fn default_percent_color_mode() -> String {
     "drain".to_string()
+}
+
+fn default_pct_chip_style() -> String {
+    "none".to_string()
 }
 
 fn default_bar_filled() -> String {
