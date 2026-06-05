@@ -30,6 +30,13 @@ pub struct Alias {
     /// alias is ungrouped and only its own `enabled` controls it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    /// Optional Lua body. When `Some`, the alias evaluates the body
+    /// via the session's `ScriptEngine` with capture args bound to a
+    /// local `args` table, and `expansion` is ignored. Lets aliases
+    /// branch / loop / call `mud.send` rather than just expand a
+    /// template. `None` keeps the legacy template-substitution path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub script: Option<String>,
 }
 
 fn default_enabled() -> bool {
@@ -43,7 +50,15 @@ impl Alias {
             expansion: expansion.into(),
             enabled: true,
             group: None,
+            script: None,
         }
+    }
+
+    /// Builder-style setter for the optional Lua script body.
+    #[must_use]
+    pub fn with_script(mut self, script: impl Into<String>) -> Self {
+        self.script = Some(script.into());
+        self
     }
 
     /// Builder-style setter for the optional group tag.
@@ -52,6 +67,23 @@ impl Alias {
         self.group = Some(group.into());
         self
     }
+}
+
+/// One Lua body invocation queued by a script-bodied alias.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AliasScriptCall {
+    pub body: String,
+    /// Capture vector. `[0]` is the entire input line; `[1..]` are
+    /// whitespace-split positional args (analogous to `%1`, `%2`, …
+    /// in the legacy template expansion).
+    pub captures: Vec<String>,
+}
+
+/// Full expansion result combining send commands and script calls.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ExpandResult {
+    pub commands: Vec<String>,
+    pub scripts: Vec<AliasScriptCall>,
 }
 
 #[derive(Debug, Error)]
@@ -184,27 +216,35 @@ impl AliasStore {
         self.separator
     }
 
-    /// Expand a single command line. Splits on the configured separator,
-    /// then resolves each piece through aliases until either no alias
-    /// matches or the recursion limit is hit. Returns the resulting list of
-    /// commands ready to send to the server.
+    /// Expand a single command line and return only the resulting send
+    /// commands. Script aliases that fire during expansion are discarded
+    /// — for the full result including script bodies, call
+    /// [`expand_line_full`](Self::expand_line_full).
     pub fn expand_line(&self, line: &str) -> Result<Vec<String>, ExpandError> {
-        let mut out = Vec::new();
+        Ok(self.expand_line_full(line)?.commands)
+    }
+
+    /// Full expansion result: both the commands to send and any
+    /// `AliasScriptCall` invocations queued by script-bodied aliases.
+    /// The session loop dispatches scripts through the shared
+    /// `ScriptEngine` after the commands flush.
+    pub fn expand_line_full(&self, line: &str) -> Result<ExpandResult, ExpandError> {
+        let mut result = ExpandResult::default();
         for raw in split_commands(line, self.separator) {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
                 continue;
             }
-            self.expand_into(trimmed, 0, &mut out)?;
+            self.expand_into(trimmed, 0, &mut result)?;
         }
-        Ok(out)
+        Ok(result)
     }
 
     fn expand_into(
         &self,
         command: &str,
         depth: usize,
-        out: &mut Vec<String>,
+        out: &mut ExpandResult,
     ) -> Result<(), ExpandError> {
         if depth >= self.max_depth {
             return Err(ExpandError::RecursionLimit(self.max_depth));
@@ -224,9 +264,26 @@ impl AliasStore {
                     .as_deref()
                     .map_or(true, |g| !self.disabled_groups.contains(g))
         }) else {
-            out.push(command.to_string());
+            out.commands.push(command.to_string());
             return Ok(());
         };
+
+        // Script-bodied aliases bypass template expansion entirely.
+        // The captures vector mirrors trigger captures: [0] is the
+        // whole input, [1..] are whitespace-split positional args.
+        // Lua callers reach them as `captures[1]`, `captures[2]`, ...
+        if let Some(body) = &alias.script {
+            let mut captures = Vec::with_capacity(1 + rest.split_whitespace().count());
+            captures.push(command.to_string());
+            for arg in rest.split_whitespace() {
+                captures.push(arg.to_string());
+            }
+            out.scripts.push(AliasScriptCall {
+                body: body.clone(),
+                captures,
+            });
+            return Ok(());
+        }
 
         let expanded = substitute_params(&alias.expansion, rest);
         for raw in split_commands(&expanded, self.separator) {
@@ -260,7 +317,7 @@ fn split_commands(input: &str, sep: char) -> Vec<String> {
     while let Some(ch) = chars.next() {
         if ch == '\\' {
             if let Some(&next) = chars.peek() {
-                if next == sep || next == '\\' {
+                if next == sep || next == '\\' || next == '\n' {
                     current.push(next);
                     chars.next();
                     continue;
@@ -269,7 +326,15 @@ fn split_commands(input: &str, sep: char) -> Vec<String> {
             current.push(ch);
             continue;
         }
-        if ch == sep {
+        // Newlines split commands the same way `;` does — lets aliases
+        // authored in the multi-line code editor read one command per
+        // line without the user needing to thread semicolons. Carriage
+        // returns are dropped (no separate command) so Windows-style
+        // input does not produce a stray blank command.
+        if ch == '\r' {
+            continue;
+        }
+        if ch == sep || ch == '\n' {
             out.push(std::mem::take(&mut current));
             continue;
         }

@@ -17,6 +17,20 @@ pub struct LineResult {
     /// Pane names to route the line to. Phase 5 wires the panes; until then
     /// the session loop logs these.
     pub routes: Vec<String>,
+    /// Lua script bodies queued by `TriggerAction::Script` actions,
+    /// each paired with the positional regex captures from the
+    /// matching pattern (group 0 is the whole match; `[1..]` are the
+    /// numbered groups). The session loop evaluates these against
+    /// its shared `ScriptEngine` after the line is displayed.
+    pub scripts: Vec<ScriptInvocation>,
+}
+
+/// One Lua body queued by a trigger's `Script` action, with the
+/// capture groups it should run against.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScriptInvocation {
+    pub body: String,
+    pub captures: Vec<String>,
 }
 
 /// Run the trigger store against a single line of MUD output.
@@ -32,6 +46,7 @@ pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
             display: Some(bytes_to_string_lossy(original)),
             sends: Vec::new(),
             routes: Vec::new(),
+            scripts: Vec::new(),
         };
     }
 
@@ -40,6 +55,7 @@ pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
     let mut highlights: Vec<(Regex, HighlightStyle)> = Vec::new();
     let mut sends = Vec::new();
     let mut routes = Vec::new();
+    let mut scripts: Vec<ScriptInvocation> = Vec::new();
     let mut any_match = false;
 
     for compiled in store.iter_compiled() {
@@ -76,11 +92,42 @@ pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
                         for caps in regex.captures_iter(&plain) {
                             let mut buf = String::new();
                             caps.expand(template, &mut buf);
-                            sends.push(buf);
+                            // Split the expanded template into one
+                            // command per `;` or newline so a Send
+                            // template like `get 1.;wield 1.` fires
+                            // as two separate commands on the wire
+                            // — matching what the user gets when
+                            // typing the same line into the prompt
+                            // (which the input pipeline splits via
+                            // the alias engine). Without this the
+                            // server sees a single line whose item
+                            // name is `1.;wield 1.`.
+                            for piece in split_send_template(&buf) {
+                                let trimmed = piece.trim();
+                                if trimmed.is_empty() {
+                                    continue;
+                                }
+                                sends.push(trimmed.to_string());
+                            }
                         }
                     }
                     TriggerAction::Route { pane } => {
                         routes.push(pane.clone());
+                    }
+                    TriggerAction::Script { body } => {
+                        for caps in regex.captures_iter(&plain) {
+                            let captures = (0..caps.len())
+                                .map(|i| {
+                                    caps.get(i)
+                                        .map(|m| m.as_str().to_string())
+                                        .unwrap_or_default()
+                                })
+                                .collect();
+                            scripts.push(ScriptInvocation {
+                                body: body.clone(),
+                                captures,
+                            });
+                        }
                     }
                 }
             }
@@ -92,6 +139,7 @@ pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
             display: None,
             sends,
             routes,
+            scripts,
         };
     }
 
@@ -110,7 +158,43 @@ pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
         display,
         sends,
         routes,
+        scripts,
     }
+}
+
+/// Split a Send-action template into one command per `;` / `\n`.
+/// Mirrors `vosh_alias::AliasEngine::expand_line`'s splitter so a
+/// trigger-driven `get 1.;wield 1.` fires the same way as a typed
+/// `get 1.;wield 1.`. `\;` and `\\` are escape-passthroughs so the
+/// user can embed a literal semicolon when a server actually wants
+/// one in a single argument. CRs are dropped (Windows-safe).
+fn split_send_template(input: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut current = String::new();
+    let mut chars = input.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            if let Some(&next) = chars.peek() {
+                if next == ';' || next == '\\' || next == '\n' {
+                    current.push(next);
+                    chars.next();
+                    continue;
+                }
+            }
+            current.push(ch);
+            continue;
+        }
+        if ch == '\r' {
+            continue;
+        }
+        if ch == ';' || ch == '\n' {
+            out.push(std::mem::take(&mut current));
+            continue;
+        }
+        current.push(ch);
+    }
+    out.push(current);
+    out
 }
 
 fn wrap_matches(text: &str, regex: &Regex, style: &HighlightStyle) -> String {

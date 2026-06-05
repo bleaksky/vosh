@@ -176,6 +176,56 @@ function hasExit(cell: ServerCell, dir: 'n' | 's' | 'e' | 'w'): boolean {
   return Boolean(cell.e && cell.e.toLowerCase().includes(dir));
 }
 
+/// Possible door states reported by the server in `cell.d[dir]`.
+/// Aabahran's MAP_DOOR constants (minimap.h): open / closed / locked /
+/// hidden. The "hidden" value only ever reaches non-immortals if the
+/// server gate at `map_compute_doors` is flipped; the client still
+/// needs to recognize and render it for immortals (and for any future
+/// game that exposes secret doors to mortals).
+type DoorState = 'open' | 'closed' | 'locked' | 'hidden';
+
+function doorStateAt(cell: ServerCell, dir: 'n' | 's' | 'e' | 'w'): DoorState | null {
+  const raw = cell.d?.[dir];
+  if (typeof raw !== 'string') return null;
+  if (raw === 'open' || raw === 'closed' || raw === 'locked' || raw === 'hidden') return raw;
+  return null;
+}
+
+/// Resolve a connector's effective door state by checking both ends
+/// of the link. "Worst" state wins — hidden > locked > closed > open
+/// — because a connector is only as easy to traverse as its more-
+/// restrictive door. Hidden is treated as the most-restrictive because
+/// it implies you need to find it first. `null` means no door state
+/// reported on either side.
+function combineDoorStates(a: DoorState | null, b: DoorState | null): DoorState | null {
+  const rank: Record<DoorState, number> = { open: 0, closed: 1, locked: 2, hidden: 3 };
+  if (a === null && b === null) return null;
+  if (a === null) return b;
+  if (b === null) return a;
+  return rank[a] >= rank[b] ? a : b;
+}
+
+/// Pixel color for a door state in the canvas-based renderers
+/// (squares / tileset). Open uses the existing corridor gray so
+/// regular maps look unchanged. Closed/locked share solid lines in
+/// their own colors; hidden pairs its pink with the dashed line
+/// pattern set in the renderer.
+const DOOR_COLORS: Record<DoorState, string> = {
+  open: '#474b55',
+  closed: '#d4a14a',
+  locked: '#c64545',
+  hidden: '#e07fb8',
+};
+
+/// Glyph-mode connector char per state. Hidden uses the dashed
+/// box-drawing pair (╌ / ╎); the others use solid (─ / │).
+const DOOR_GLYPHS: Record<DoorState, { horizontal: string; vertical: string }> = {
+  open: { horizontal: '─', vertical: '│' },
+  closed: { horizontal: '─', vertical: '│' },
+  locked: { horizontal: '─', vertical: '│' },
+  hidden: { horizontal: '╌', vertical: '╎' },
+};
+
 // Aabahran's GMCP payload serializes digit sector codes (0..9) as
 // JSON numbers and letter codes (a..c) as strings. Without this
 // coercion the `0` cells (Inside rooms — the most common terrain
@@ -663,35 +713,79 @@ function drawSquares(
   const ox = Math.floor(playerX - centerC * pitch);
   const oy = Math.floor(playerY - centerR * pitch);
 
-  // Corridors under the squares, single thin pass like the FL web map.
-  ctx.strokeStyle = '#474b55';
-  ctx.lineWidth = 1.25;
-  ctx.beginPath();
+  // Corridors under the squares, bucketed by door state so we render
+  // one stroke per color. Hidden doors get special handling: the
+  // server omits the direction from `cell.e` AND the hidden room
+  // beyond may be absent from the grid (the immortal-only `d[dir]
+  // = "hidden"` flag is the ONLY signal we have). So the hidden
+  // path (a) ignores `hasExit`, (b) accepts a null neighbor and
+  // draws a half-pitch stub so the line says "secret exit" without
+  // claiming a room that is not actually rendered.
+  type Segment = { cx: number; cy: number; nx: number; ny: number };
+  const buckets: Record<'open' | 'closed' | 'locked' | 'hidden', Segment[]> = {
+    open: [],
+    closed: [],
+    locked: [],
+    hidden: [],
+  };
+  const dirOffsets: Array<['n' | 's' | 'e' | 'w', 'n' | 's' | 'e' | 'w', number, number]> = [
+    ['n', 's', 0, -1],
+    ['e', 'w', 1, 0],
+    ['s', 'n', 0, 1],
+    ['w', 'e', -1, 0],
+  ];
   for (let r = 1; r <= rows; r++) {
     for (let c = 1; c <= cols; c++) {
       const cell = getCell(payload, r, c);
       if (!cell) continue;
       const cx = ox + c * pitch;
       const cy = oy + r * pitch;
-      if (hasExit(cell, 'n') && getCell(payload, r - 1, c)) {
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx, cy - pitch);
-      }
-      if (hasExit(cell, 'e') && getCell(payload, r, c + 1)) {
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + pitch, cy);
-      }
-      if (hasExit(cell, 's') && getCell(payload, r + 1, c)) {
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx, cy + pitch);
-      }
-      if (hasExit(cell, 'w') && getCell(payload, r, c - 1)) {
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx - pitch, cy);
+      for (const [dir, opp, dx, dy] of dirOffsets) {
+        const neighbor = getCell(payload, r + dy, c + dx);
+        const here = doorStateAt(cell, dir);
+        const there = neighbor ? doorStateAt(neighbor, opp) : null;
+        const state = combineDoorStates(here, there);
+        const isHidden = state === 'hidden';
+        if (!hasExit(cell, dir) && !isHidden) continue;
+        if (!isHidden && !neighbor) continue;
+        const reach = neighbor ? pitch : pitch * 0.5;
+        const segment: Segment = {
+          cx,
+          cy,
+          nx: cx + dx * reach,
+          ny: cy + dy * reach,
+        };
+        buckets[state ?? 'open'].push(segment);
       }
     }
   }
-  ctx.stroke();
+  ctx.lineWidth = 1.25;
+  const flushSolid = (state: 'open' | 'closed' | 'locked') => {
+    const segs = buckets[state];
+    if (segs.length === 0) return;
+    ctx.strokeStyle = DOOR_COLORS[state];
+    ctx.beginPath();
+    for (const s of segs) {
+      ctx.moveTo(s.cx, s.cy);
+      ctx.lineTo(s.nx, s.ny);
+    }
+    ctx.stroke();
+  };
+  flushSolid('open');
+  flushSolid('closed');
+  flushSolid('locked');
+  if (buckets.hidden.length > 0) {
+    ctx.save();
+    ctx.strokeStyle = DOOR_COLORS.hidden;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    for (const s of buckets.hidden) {
+      ctx.moveTo(s.cx, s.cy);
+      ctx.lineTo(s.nx, s.ny);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // Off-floor: cells THEN lines, both drawn BEFORE same-floor cells.
   // Same-floor cells render last and wipe their cell area, so any
@@ -1084,7 +1178,12 @@ const GlyphsOverlay = memo(function GlyphsOverlay({
   // single-cell grid cannot carry. The exit-string check is
   // bidirectional so a one-way exit does not light up the line
   // (otherwise the map would imply a connection that does not
-  // travel both ways).
+  // travel both ways). Door state (cell.d) picks the connector
+  // color: open → gray, closed → amber, locked → red, hidden →
+  // pink + dashed glyph (see DOOR_COLORS / DOOR_GLYPHS).
+  const OPEN_COLOR = 'var(--c-border-strong, var(--c-border))';
+  const connectorColor = (state: DoorState | null): string =>
+    state && state !== 'open' ? DOOR_COLORS[state] : OPEN_COLOR;
   for (let r = 1; r <= rows; r++) {
     for (let c = 1; c <= cols; c++) {
       const here = hasGrid ? getCell(payload, r, c) : null;
@@ -1095,9 +1194,11 @@ const GlyphsOverlay = memo(function GlyphsOverlay({
         if (east && hasExit(here, 'e') && hasExit(east, 'w')) {
           const or = 2 * (r - 1);
           const oc = 2 * (c - 1) + 1;
+          const state = combineDoorStates(doorStateAt(here, 'e'), doorStateAt(east, 'w'));
+          const effective = state ?? 'open';
           out[or][oc] = {
-            glyph: '─',
-            color: 'var(--c-border-strong, var(--c-border))',
+            glyph: DOOR_GLYPHS[effective].horizontal,
+            color: connectorColor(state),
             isPlayer: false,
             floor: 'same',
           };
@@ -1109,13 +1210,49 @@ const GlyphsOverlay = memo(function GlyphsOverlay({
         if (south && hasExit(here, 's') && hasExit(south, 'n')) {
           const or = 2 * (r - 1) + 1;
           const oc = 2 * (c - 1);
+          const state = combineDoorStates(doorStateAt(here, 's'), doorStateAt(south, 'n'));
+          const effective = state ?? 'open';
           out[or][oc] = {
-            glyph: '│',
-            color: 'var(--c-border-strong, var(--c-border))',
+            glyph: DOOR_GLYPHS[effective].vertical,
+            color: connectorColor(state),
             isPlayer: false,
             floor: 'same',
           };
         }
+      }
+    }
+  }
+
+  // Pass 3b: hidden doors. The server omits the direction from
+  // `cell.e` and the hidden room beyond is normally absent from the
+  // grid — `cell.d[dir] === 'hidden'` is the only signal we have.
+  // Iterate all four directions of every cell and place a dashed
+  // connector in the slot pointing toward the secret exit. Only
+  // writes if the slot is still empty so a regular connector from
+  // pass 3 (when both sides happen to be visible AND flagged
+  // hidden) wins.
+  const hiddenDirOffsets: Array<['n' | 's' | 'e' | 'w', number, number, string]> = [
+    ['n', 0, -1, '╎'],
+    ['e', 1, 0, '╌'],
+    ['s', 0, 1, '╎'],
+    ['w', -1, 0, '╌'],
+  ];
+  for (let r = 1; r <= rows; r++) {
+    for (let c = 1; c <= cols; c++) {
+      const here = hasGrid ? getCell(payload, r, c) : null;
+      if (!here) continue;
+      for (const [dir, dx, dy, glyph] of hiddenDirOffsets) {
+        if (doorStateAt(here, dir) !== 'hidden') continue;
+        const or = 2 * (r - 1) + dy;
+        const oc = 2 * (c - 1) + dx;
+        if (or < 0 || or >= outRows || oc < 0 || oc >= outCols) continue;
+        if (out[or][oc] !== EMPTY_CELL) continue;
+        out[or][oc] = {
+          glyph,
+          color: DOOR_COLORS.hidden,
+          isPlayer: false,
+          floor: 'same',
+        };
       }
     }
   }
@@ -1219,27 +1356,62 @@ function drawTileset(
   const oy = Math.floor(playerY - centerR * pitch);
 
   // Edges underneath the tiles so the connectivity still reads.
-  ctx.strokeStyle = '#474b55';
+  // Buckets per door state so the four colors share one render
+  // pass each (see drawSquares for the same logic).
   ctx.lineWidth = 1.25;
+  type EdgeSeg = { x1: number; y1: number; x2: number; y2: number };
+  const buckets: Record<'open' | 'closed' | 'locked' | 'hidden', EdgeSeg[]> = {
+    open: [],
+    closed: [],
+    locked: [],
+    hidden: [],
+  };
+  const dirOffsets: Array<['n' | 's' | 'e' | 'w', 'n' | 's' | 'e' | 'w', number, number]> = [
+    ['n', 's', 0, -1],
+    ['e', 'w', 1, 0],
+    ['s', 'n', 0, 1],
+    ['w', 'e', -1, 0],
+  ];
   for (let r = 1; r <= rows; r++) {
     for (let c = 1; c <= cols; c++) {
       const cell = getCell(payload, r, c);
       if (!cell) continue;
       const cx = ox + c * pitch;
       const cy = oy + r * pitch;
-      if (hasExit(cell, 'n') && getCell(payload, r - 1, c)) {
-        line(ctx, cx, cy, cx, cy - pitch);
-      }
-      if (hasExit(cell, 'e') && getCell(payload, r, c + 1)) {
-        line(ctx, cx, cy, cx + pitch, cy);
-      }
-      if (hasExit(cell, 's') && getCell(payload, r + 1, c)) {
-        line(ctx, cx, cy, cx, cy + pitch);
-      }
-      if (hasExit(cell, 'w') && getCell(payload, r, c - 1)) {
-        line(ctx, cx, cy, cx - pitch, cy);
+      for (const [dir, opp, dx, dy] of dirOffsets) {
+        const neighbor = getCell(payload, r + dy, c + dx);
+        const here = doorStateAt(cell, dir);
+        const there = neighbor ? doorStateAt(neighbor, opp) : null;
+        const state = combineDoorStates(here, there);
+        const isHidden = state === 'hidden';
+        if (!hasExit(cell, dir) && !isHidden) continue;
+        if (!isHidden && !neighbor) continue;
+        const reach = neighbor ? pitch : pitch * 0.5;
+        const seg: EdgeSeg = {
+          x1: cx,
+          y1: cy,
+          x2: cx + dx * reach,
+          y2: cy + dy * reach,
+        };
+        buckets[state ?? 'open'].push(seg);
       }
     }
+  }
+  const flushSolid = (state: 'open' | 'closed' | 'locked') => {
+    const segs = buckets[state];
+    if (segs.length === 0) return;
+    ctx.strokeStyle = DOOR_COLORS[state];
+    for (const s of segs) line(ctx, s.x1, s.y1, s.x2, s.y2);
+  };
+  flushSolid('open');
+  flushSolid('closed');
+  flushSolid('locked');
+  if (buckets.hidden.length > 0) {
+    ctx.save();
+    ctx.strokeStyle = DOOR_COLORS.hidden;
+    ctx.setLineDash([3, 3]);
+    for (const s of buckets.hidden) line(ctx, s.x1, s.y1, s.x2, s.y2);
+    ctx.restore();
   }
 
   for (let r = 1; r <= rows; r++) {

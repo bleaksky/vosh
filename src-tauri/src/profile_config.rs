@@ -182,6 +182,13 @@ pub(crate) struct UiConfig {
     /// 500ms = ~2 lines/sec, safe for most worlds.
     #[serde(default = "default_paste_line_delay_ms")]
     pub paste_line_delay_ms: u32,
+    /// Enable the webview's native spell check on the prompt input,
+    /// but only when the current line starts with a chat verb (say,
+    /// tell, chat, gossip, ooc, clan, immtalk, reply, `'`, `"`).
+    /// MUD verbs / aliases stay un-checked. Default off — opt-in
+    /// for roleplay-heavy users.
+    #[serde(default)]
+    pub spellcheck_prompt: bool,
     /// Per-row appearance of the vitals panel. Toggles which columns
     /// render (bar / percent / numeric / delta) and overrides the
     /// bar glyphs and width. Default mirrors the historical look.
@@ -237,8 +244,8 @@ pub(crate) struct VitalsConfig {
     /// "solid" by the command handler.
     #[serde(default = "default_bar_style")]
     pub bar_style: String,
-    /// Composition layout for the bar: "plain" (just the bar) or
-    /// "with_history" (the bar stacked over a braille trend grid of
+    /// Composition layout for the bar: `"plain"` (just the bar) or
+    /// `"with_history"` (the bar stacked over a braille trend grid of
     /// recent hp/mn/mv samples). Independent from `bar_style` —
     /// pair any bar style with either layout. Legacy
     /// `bar_style: "spark"` migrates to `bar_style: "solid"` +
@@ -435,6 +442,7 @@ impl Default for UiConfig {
             split_divider_color: None,
             side_panels_fill_height: false,
             paste_line_delay_ms: default_paste_line_delay_ms(),
+            spellcheck_prompt: false,
             vitals: VitalsConfig::default(),
             moons_position: default_moons_position(),
             chip_style: default_chip_style(),
@@ -557,6 +565,7 @@ impl ProfileConfig {
             split_divider_color: profile.ui.split_divider_color.clone(),
             side_panels_fill_height: profile.ui.side_panels_fill_height,
             paste_line_delay_ms: profile.ui.paste_line_delay_ms,
+            spellcheck_prompt: profile.ui.spellcheck_prompt,
             vitals: profile.ui.vitals.clone(),
             moons_position: profile.ui.moons_position.clone(),
             chip_style: profile.ui.chip_style.clone(),
@@ -666,6 +675,7 @@ impl ProfileConfig {
             split_divider_color: self.ui.split_divider_color.clone(),
             side_panels_fill_height: self.ui.side_panels_fill_height,
             paste_line_delay_ms: self.ui.paste_line_delay_ms,
+            spellcheck_prompt: self.ui.spellcheck_prompt,
             vitals: self.ui.vitals.clone(),
             moons_position: self.ui.moons_position.clone(),
             chip_style: self.ui.chip_style.clone(),

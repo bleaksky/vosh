@@ -352,6 +352,36 @@ async fn io_loop(
                     // so the next chunk from the server starts fresh on a
                     // new row instead of merging with the displayed prompt.
                     accumulator.forget_partial();
+                    // Append the input line(s) to the same log session
+                    // as server output so transcripts include both
+                    // directions. The wire payload is one or more
+                    // commands terminated by `\r\n`; split on those
+                    // boundaries, prefix each line with `> ` so a
+                    // future viewer can distinguish input from output
+                    // at a glance, and skip empty lines (a bare Enter
+                    // shows up here as `\r\n` with no command body).
+                    if let Some(sid) = log_session_id {
+                        let text = String::from_utf8_lossy(&bytes);
+                        let mut to_append: Vec<String> = Vec::new();
+                        for raw in text.split('\n') {
+                            let line = raw.trim_end_matches('\r').trim_end();
+                            if line.is_empty() {
+                                continue;
+                            }
+                            to_append.push(format!("> {line}"));
+                        }
+                        if !to_append.is_empty() {
+                            let mut guard = logs.lock().await;
+                            if let Some(store) = guard.as_mut() {
+                                let ts = now_ms();
+                                for line in &to_append {
+                                    if let Err(e) = store.append(sid, ts, line, None) {
+                                        warn!(error = %e, "log append (input) failed");
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if let Err(e) = stream.write_all(&bytes).await {
                         error!(error = %e, "write failed");
                         break Some(format!("write failed: {e}"));
@@ -683,13 +713,35 @@ async fn handle_event(
                             // patterns can match without worrying about
                             // ANSI escape bytes.
                             script_state::snapshot_vars(&p.script, &p.vars);
-                            let outcome = match p.script.match_line(&plain) {
+                            let mut outcome = match p.script.match_line(&plain) {
                                 Ok(o) => o,
                                 Err(err) => {
                                     warn!(error = %err, "lua match_line failed");
                                     vosh_script::ScriptOutcome::default()
                                 }
                             };
+                            // Execute Lua bodies queued by
+                            // `TriggerAction::Script` actions on this
+                            // line. The trigger engine collects the
+                            // body + capture vector per fire; we run
+                            // each here and merge the produced
+                            // actions into the same outcome the Lua-
+                            // registered triggers wrote, so a single
+                            // apply_actions call below picks them
+                            // both up.
+                            for call in &result.scripts {
+                                match script_state::eval_with_captures(
+                                    &mut p.script,
+                                    &call.body,
+                                    &call.captures,
+                                    "trigger-script",
+                                ) {
+                                    Ok(o) => outcome.actions.extend(o.actions),
+                                    Err(err) => {
+                                        warn!(error = %err, "trigger script eval failed");
+                                    }
+                                }
+                            }
                             let apply = script_state::apply_actions(&mut p, outcome);
                             (result, tick_payload, apply)
                         };

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { UnsavedDot } from './UnsavedDot';
+import { CodeEditor } from './CodeEditor';
 import { useUnsavedWarning } from '../lib/unsaved';
 import {
   listAliasGroups,
@@ -13,6 +14,11 @@ interface Alias {
   expansion: string;
   enabled: boolean;
   group?: string | null;
+  /** Optional Lua body. When present (any non-empty string), the
+   *  alias runs the body via the session's `ScriptEngine` with
+   *  `captures[1..]` bound to the positional args, and `expansion`
+   *  is ignored. Null / missing keeps the legacy template path. */
+  script?: string | null;
 }
 
 interface Props {
@@ -231,73 +237,104 @@ export function AliasForm({ load, save, onError }: Props) {
               </header>
               {!isCollapsed && (
                 <div className="group-section-body">
-                  {entries.map(({ index, alias }) => (
-                    <div key={index} className="alias-row">
-                      <label className="alias-row-enabled">
+                  {entries.map(({ index, alias }) => {
+                    const isScript = alias.script !== undefined && alias.script !== null;
+                    return (
+                      <div key={index} className="alias-row">
+                        <label className="alias-row-enabled">
+                          <input
+                            type="checkbox"
+                            checked={alias.enabled}
+                            onChange={(e) => update(index, { enabled: e.target.checked })}
+                          />
+                        </label>
                         <input
-                          type="checkbox"
-                          checked={alias.enabled}
-                          onChange={(e) => update(index, { enabled: e.target.checked })}
+                          className="alias-row-name"
+                          type="text"
+                          placeholder="name"
+                          value={alias.name}
+                          onChange={(e) => update(index, { name: e.target.value })}
                         />
-                      </label>
-                      <input
-                        className="alias-row-name"
-                        type="text"
-                        placeholder="name"
-                        value={alias.name}
-                        onChange={(e) => update(index, { name: e.target.value })}
-                      />
-                      <input
-                        className="alias-row-expansion"
-                        type="text"
-                        placeholder="expansion"
-                        spellCheck={false}
-                        value={alias.expansion}
-                        onChange={(e) => update(index, { expansion: e.target.value })}
-                      />
-                      <input
-                        className="alias-row-group"
-                        type="text"
-                        placeholder="group"
-                        title="optional folder; aliases sharing a group can be bulk-disabled"
-                        value={groupDrafts[index] ?? alias.group ?? ''}
-                        onChange={(e) =>
-                          setGroupDrafts((prev) => ({ ...prev, [index]: e.target.value }))
-                        }
-                        onBlur={() => {
-                          const draft = groupDrafts[index];
-                          if (draft === undefined) return;
-                          const next = draft.trim().length > 0 ? draft.trim() : null;
-                          setGroupDrafts((prev) => {
-                            const copy = { ...prev };
-                            delete copy[index];
-                            return copy;
-                          });
-                          if (next !== (alias.group ?? null)) update(index, { group: next });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            (e.currentTarget as HTMLInputElement).blur();
-                          } else if (e.key === 'Escape') {
+                        {isScript ? (
+                          <CodeEditor
+                            className="alias-row-expansion"
+                            ariaLabel={`Lua script for alias ${alias.name || 'untitled'}`}
+                            placeholder="-- captures[1..n] are the alias args; e.g. mud.send('look ' .. captures[1])"
+                            minHeight="180px"
+                            maxHeight="60vh"
+                            language="lua"
+                            value={alias.script ?? ''}
+                            onChange={(next) => update(index, { script: next })}
+                          />
+                        ) : (
+                          <CodeEditor
+                            className="alias-row-expansion"
+                            ariaLabel={`expansion for alias ${alias.name || 'untitled'}`}
+                            placeholder="expansion (separator: ; or newline)"
+                            minHeight="2.2em"
+                            language="lua"
+                            value={alias.expansion}
+                            onChange={(next) => update(index, { expansion: next })}
+                          />
+                        )}
+                        <button
+                          type="button"
+                          className={`alias-row-mode${isScript ? ' is-script' : ''}`}
+                          title={
+                            isScript
+                              ? 'switch back to template expansion'
+                              : 'switch to Lua script body'
+                          }
+                          onClick={() =>
+                            update(index, isScript ? { script: null } : { script: '' })
+                          }
+                        >
+                          {isScript ? 'lua' : 'tpl'}
+                        </button>
+                        <input
+                          className="alias-row-group"
+                          type="text"
+                          placeholder="group"
+                          title="optional folder; aliases sharing a group can be bulk-disabled"
+                          value={groupDrafts[index] ?? alias.group ?? ''}
+                          onChange={(e) =>
+                            setGroupDrafts((prev) => ({ ...prev, [index]: e.target.value }))
+                          }
+                          onBlur={() => {
+                            const draft = groupDrafts[index];
+                            if (draft === undefined) return;
+                            const next = draft.trim().length > 0 ? draft.trim() : null;
                             setGroupDrafts((prev) => {
                               const copy = { ...prev };
                               delete copy[index];
                               return copy;
                             });
-                            (e.currentTarget as HTMLInputElement).blur();
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="alias-row-remove"
-                        onClick={() => remove(index)}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+                            if (next !== (alias.group ?? null)) update(index, { group: next });
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              (e.currentTarget as HTMLInputElement).blur();
+                            } else if (e.key === 'Escape') {
+                              setGroupDrafts((prev) => {
+                                const copy = { ...prev };
+                                delete copy[index];
+                                return copy;
+                              });
+                              (e.currentTarget as HTMLInputElement).blur();
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="alias-row-remove"
+                          onClick={() => remove(index)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
                   {entries.length === 0 && (
                     <div className="settings-font-empty">empty group — delete or add a row</div>
                   )}

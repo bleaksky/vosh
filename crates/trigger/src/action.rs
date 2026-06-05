@@ -74,4 +74,10 @@ pub enum TriggerAction {
     /// Route the line to a named pane. Phase 5 wires panes; until then the
     /// session loop logs the route.
     Route { pane: String },
+    /// Evaluate a Lua body in the session's `ScriptEngine` with regex
+    /// captures bound as a local `captures` table (`captures[1]`,
+    /// `[2]`, … plus named captures by key). The body has access to
+    /// the same sandboxed `mud.*` API as standalone Lua scripts —
+    /// `mud.send`, `mud.echo`, `mud.log`, etc.
+    Script { body: String },
 }

@@ -98,7 +98,8 @@ export type TriggerAction =
   | { kind: 'gag' }
   | { kind: 'replace'; template: string }
   | { kind: 'send'; template: string }
-  | { kind: 'route'; pane: string };
+  | { kind: 'route'; pane: string }
+  | { kind: 'script'; body: string };
 
 /** One row inside a multi-pattern trigger. Mirrors Mudlet's
  *  per-pattern editor so a user can keep, e.g., a list of mob names
@@ -596,6 +597,13 @@ export interface UiConfig {
    *  paste. 0 = no pacing; non-zero spreads sends out so the MUD
    *  flood filter does not kick. Clamped server-side to [0, 10000]. */
   paste_line_delay_ms: number;
+  /** When true, the prompt input enables the webview's native spell
+   *  check, but only when the current line starts with a chat verb
+   *  (say / tell / chat / gossip / ooc / clan / immtalk / reply /
+   *  ' / "). Plain commands stay un-checked so MUD verbs like
+   *  `kill` / `oload` / alias names do not light up red. Default
+   *  off; opt-in for roleplayers. */
+  spellcheck_prompt: boolean;
   /** Vitals panel appearance. Toggles which columns render and lets
    *  the user pick their own bar glyphs and width. */
   vitals: VitalsConfig;
@@ -696,6 +704,7 @@ export async function getUiConfig(): Promise<UiConfig> {
     split_divider_color?: string | null;
     side_panels_fill_height?: boolean;
     paste_line_delay_ms?: number;
+    spellcheck_prompt?: boolean;
     vitals?: Partial<VitalsConfig>;
     moons_position?: string;
     chip_style?: string;
@@ -721,6 +730,7 @@ export async function getUiConfig(): Promise<UiConfig> {
       typeof cfg.paste_line_delay_ms === 'number' && cfg.paste_line_delay_ms >= 0
         ? Math.min(10_000, Math.floor(cfg.paste_line_delay_ms))
         : 500,
+    spellcheck_prompt: Boolean(cfg.spellcheck_prompt),
     vitals: normalizeVitalsConfig(cfg.vitals),
     moons_position:
       cfg.moons_position === 'before-time' || cfg.moons_position === 'after-time'
@@ -873,6 +883,11 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     config.paste_line_delay_ms,
     prev?.paste_line_delay_ms,
   );
+  await emitChanged(
+    'vosh://spellcheck-prompt-changed',
+    config.spellcheck_prompt,
+    prev?.spellcheck_prompt,
+  );
   await emitChanged('vosh://vitals-config-changed', config.vitals, prev?.vitals, deepEqual);
   await emitChanged('vosh://moons-position-changed', config.moons_position, prev?.moons_position);
   await emitChanged('vosh://chip-style-changed', config.chip_style, prev?.chip_style);
@@ -903,6 +918,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     splitDividerColor: config.split_divider_color,
     sidePanelsFillHeight: config.side_panels_fill_height,
     pasteLineDelayMs: config.paste_line_delay_ms,
+    spellcheckPrompt: config.spellcheck_prompt,
     vitals: config.vitals,
     moonsPosition: config.moons_position,
     chipStyle: config.chip_style,

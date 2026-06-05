@@ -2214,22 +2214,12 @@ body {
 }
 
 .settings-triggers-text {
+  /* Wrapper for the CodeMirror editor that renders the JSON store
+     view. The editor owns its own border, background, and focus
+     ring through the CodeEditor theme — this wrapper only owns
+     flex layout so it stretches to fill the available height. */
   flex: 1 1 auto;
-  min-height: 200px;
-  background: var(--c-surface);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
-  padding: 8px 10px;
-  font-family: inherit;
-  line-height: 1.4;
-  resize: none;
-  outline: none;
-  tab-size: 2;
-}
-
-.settings-triggers-text:focus {
-  border-color: var(--c-accent);
+  min-height: 0;
 }
 
 /* Form / JSON view toggle at the top of triggers + aliases tabs */
@@ -2674,13 +2664,41 @@ body {
 
 .alias-row {
   display: grid;
-  grid-template-columns: auto 160px 1fr auto;
+  /* enabled · name · body editor · mode toggle · group · remove
+     The mode-toggle column flips the body editor between template
+     and Lua script modes. Overridden in the alias-form scope below. */
+  grid-template-columns: auto 160px 1fr auto 110px auto;
   gap: 8px;
   align-items: center;
   padding: 6px 10px;
   background: var(--c-surface-pane);
   border: 1px solid var(--c-border);
   border-radius: 3px;
+}
+
+/* Mode toggle (tpl ↔ lua) — sits between the group and remove
+   columns. Pill-style so it visually grades the row without
+   competing with the name input. */
+.alias-row-mode {
+  background: transparent;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 2px;
+  color: var(--c-text-faint);
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  cursor: pointer;
+}
+.alias-row-mode:hover {
+  border-color: var(--c-accent);
+  color: var(--c-text);
+}
+.alias-row-mode.is-script {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent);
+  color: var(--c-accent);
 }
 
 .alias-row-enabled {
@@ -2691,8 +2709,7 @@ body {
   accent-color: var(--c-accent);
 }
 
-.alias-row-name,
-.alias-row-expansion {
+.alias-row-name {
   background: var(--c-surface);
   color: var(--c-text);
   border: 1px solid var(--c-border-strong);
@@ -2703,10 +2720,20 @@ body {
   min-width: 0;
 }
 
-.alias-row-name:focus,
-.alias-row-expansion:focus {
+.alias-row-name:focus {
   outline: none;
   border-color: var(--c-accent);
+}
+
+/* The expansion column hosts a CodeMirror editor wrapped in a div
+   (.alias-row-expansion). The editor brings its own border/background
+   via theme so this wrapper only owns layout — min-width: 0 lets the
+   grid track shrink under narrow Settings windows, vertical align
+   keeps multi-line scripts from pushing the row's other controls
+   off-center. */
+.alias-row-expansion {
+  min-width: 0;
+  align-self: stretch;
 }
 
 .alias-row-remove {
@@ -4855,11 +4882,11 @@ body {
   color: var(--c-text);
 }
 
-/* The alias-row grid was 4 columns (enabled, name, expansion, remove);
-   add a 5th for the group input. Stays tightly aligned without
-   per-row overrides. */
+/* The alias-row grid has 6 columns now:
+   enabled · name · body editor (expansion / Lua script) · mode toggle
+   · group · remove. Stays tightly aligned without per-row overrides. */
 .alias-row {
-  grid-template-columns: auto 160px 1fr 110px auto;
+  grid-template-columns: auto 160px 1fr auto 110px auto;
 }
 
 /* Collapsible group section shared by trigger/alias/macro forms.

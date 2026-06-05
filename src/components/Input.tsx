@@ -43,11 +43,45 @@ interface Props {
   onExitSplit?: () => void;
 }
 
+// Regex set for "is this line chat-like?" — when the toggle in
+// Settings is on and one of these matches the current input, the
+// webview's native spell-check flips on for the prompt. Otherwise
+// MUD verbs like `kill` / `oload` would light up red on every line.
+const CHAT_PREFIXES: RegExp[] = [
+  /^say\b/i,
+  /^'/, // `'hello` = say hello (FL-style say shortcut)
+  /^"/, // `"hello` = say hello on some MUDs
+  /^tell\s+\S+\s/i,
+  /^t\s+\S+\s/i,
+  /^reply\b/i,
+  /^r\s+/i,
+  /^whisper\s+\S+\s/i,
+  /^chat\b/i,
+  /^gossip\b/i,
+  /^;/, // `;hello` = gossip on some servers
+  /^ooc\b/i,
+  /^clan\b/i,
+  /^cb\b/i,
+  /^imm(talk)?\b/i,
+  /^immchat\b/i,
+  /^immtell\b/i,
+  /^quote\b/i,
+  /^emote\b/i,
+  /^pmote\b/i,
+];
+
+function looksLikeChat(line: string): boolean {
+  const trimmed = line.trimStart();
+  if (trimmed.length === 0) return false;
+  return CHAT_PREFIXES.some((re) => re.test(trimmed));
+}
+
 export const Input = forwardRef<InputHandle, Props>(function Input(
   { enabled, onError, onLocalEcho, onScrollTerminal, onExitSplit }: Props,
   ref,
 ) {
   const [value, setValue] = useState('');
+  const [spellcheckPrompt, setSpellcheckPrompt] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const [passwordMode, setPasswordMode] = useState(false);
   // When the user starts arrow-key navigation with non-empty input, we
@@ -157,11 +191,13 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     let cancelled = false;
     let unlistenKeep: (() => void) | undefined;
     let unlistenPaste: (() => void) | undefined;
+    let unlistenSpell: (() => void) | undefined;
     getUiConfig()
       .then((cfg) => {
         if (cancelled) return;
         keepLastRef.current = cfg.keep_last_command;
         pasteDelayRef.current = cfg.paste_line_delay_ms;
+        setSpellcheckPrompt(cfg.spellcheck_prompt);
       })
       .catch(() => {});
     listen<boolean>('vosh://keep-last-changed', (event) => {
@@ -179,10 +215,17 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       if (cancelled) fn();
       else unlistenPaste = fn;
     });
+    listen<boolean>('vosh://spellcheck-prompt-changed', (event) => {
+      setSpellcheckPrompt(Boolean(event.payload));
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlistenSpell = fn;
+    });
     return () => {
       cancelled = true;
       unlistenKeep?.();
       unlistenPaste?.();
+      unlistenSpell?.();
     };
   }, []);
 
@@ -664,7 +707,16 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         // commands ahead of a reconnect. The backend echoes
         // [not connected] when Enter fires without a session, which
         // is friendlier than a dead input field.
-        spellCheck={false}
+        //
+        // Spell-check fires when (a) the user opted in via Settings
+        // AND (b) the current line matches a chat verb. The
+        // underlying WKWebView's continuous spell-checking is
+        // enabled at app startup (lib.rs) so the HTML attribute
+        // actually triggers the squiggle pass — without that
+        // native enable, the attribute is silently ignored. Plain
+        // MUD commands skip the check so the prompt stays clean.
+        // Passwords always opt out.
+        spellCheck={!passwordMode && spellcheckPrompt && looksLikeChat(value)}
         autoCapitalize="off"
         autoCorrect="off"
         autoComplete={passwordMode ? 'current-password' : 'off'}
