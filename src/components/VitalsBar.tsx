@@ -717,6 +717,9 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
       if (config.inline_style === 'underline') {
         return <InlineVitalUnderline key={s.label} config={config} {...s} />;
       }
+      if (config.inline_style === 'badge') {
+        return <InlineVitalBadge key={s.label} config={config} {...s} />;
+      }
       return <InlineVitalChip key={s.label} config={config} compact={i > 0} {...s} />;
     };
     return (
@@ -848,6 +851,62 @@ function InlineVitalUnderline({
       {!config.show_numeric && !config.show_percent && (
         <span className="vitals-numeric" style={{ color: numericColor }}>
           {cur}
+        </span>
+      )}
+      {showDelta && (
+        <span
+          className={`vitals-delta${deltaPositive ? ' vitals-delta-up' : ' vitals-delta-down'}`}
+        >
+          {deltaPositive ? '+' : ''}
+          {delta}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// Inline `badge` style. Main chip uses the same chrome as the
+// tick + time chips today (border-strong outline, surface-deep
+// fill, 3px radius, inset highlight). Inside: caption + numeric
+// value tinted per stat. The percent rides as its own small
+// bordered pill that hangs outside the upper-right corner.
+function InlineVitalBadge({
+  label,
+  cur,
+  max,
+  delta,
+  config,
+}: {
+  label: string;
+  cur: number;
+  max: number;
+  delta: number | null;
+  config: VitalsConfig;
+}) {
+  const value = pct(cur, max);
+  const numericColor = colorForVital(label, 100, config);
+  const percentColor = resolvePercentColor(label, value, config);
+  const showDelta = config.show_delta && delta !== null && delta !== 0;
+  const deltaPositive = (delta ?? 0) > 0;
+  const isDanger = value < 20;
+  return (
+    <span
+      className={`vitals-inline-badge${isDanger ? ' is-danger' : ''}`}
+      style={{ color: numericColor }}
+    >
+      <span className="vitals-inline-badge-cap">{label}</span>
+      {(config.show_numeric || !config.show_percent) && (
+        <span className="vitals-inline-badge-val" style={{ color: numericColor }}>
+          {cur}
+          <span className="vitals-inline-badge-max">/{max}</span>
+        </span>
+      )}
+      {config.show_percent && (
+        <span
+          className="vitals-inline-badge-pct"
+          style={{ color: percentColor, borderColor: isDanger ? 'var(--c-danger)' : undefined }}
+        >
+          {value}%
         </span>
       )}
       {showDelta && (
