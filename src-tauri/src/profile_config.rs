@@ -260,6 +260,25 @@ pub(crate) struct VitalsConfig {
     /// strings.
     #[serde(default = "default_vitals_layout")]
     pub layout: String,
+    /// Inline-only sub-style. Applies when `layout == "inline"`:
+    /// "plain" keeps the historical tintin nprompt text;
+    /// "underline" tints the numeric per stat and adds a 1px
+    /// colored drain bar beneath each unit; "badge" wraps each
+    /// vital in a tick/time-style chip with the percent floating
+    /// as its own small bordered pill above the upper-right
+    /// corner. Frontend falls back to "plain" on unknown strings.
+    #[serde(default = "default_inline_style")]
+    pub inline_style: String,
+    /// How the percent text gets colored across the inline
+    /// underline / badge styles. "stat" mirrors the per-stat
+    /// numeric color; "drain" ramps the stat color through
+    /// warn-gold and orange to danger-red as the value drops
+    /// (default — the visual alarm); "accent" forces the brand
+    /// pink regardless of stat or value. Independent of the
+    /// existing `percent_color` field, which still governs the
+    /// stacked-row percent rendering.
+    #[serde(default = "default_percent_color_mode")]
+    pub percent_color_mode: String,
     /// Color source for the percent text: "fill" (the per-vital
     /// color ramp; matches the bar color) or "gradient" (a 0-100
     /// red-to-green ramp; the percent itself becomes the at-a-glance
@@ -326,6 +345,8 @@ impl Default for VitalsConfig {
             bar_style: default_bar_style(),
             bar_layout: default_bar_layout(),
             layout: default_vitals_layout(),
+            inline_style: default_inline_style(),
+            percent_color_mode: default_percent_color_mode(),
             percent_color: default_percent_color(),
             template_enabled: false,
             template: default_template(),
@@ -349,6 +370,14 @@ fn default_vitals_layout() -> String {
 
 fn default_percent_color() -> String {
     "fill".to_string()
+}
+
+fn default_inline_style() -> String {
+    "plain".to_string()
+}
+
+fn default_percent_color_mode() -> String {
+    "drain".to_string()
 }
 
 fn default_bar_filled() -> String {
