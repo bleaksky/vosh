@@ -1084,6 +1084,87 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Inline `badge` style — main chip uses the same chrome as the
+   tick + time chip today (1px border-strong outline, surface-deep
+   fill, 3px radius, soft inset highlight). Caption + numeric
+   value inside; the percent rides as its own bordered pill that
+   hangs off the upper-right corner (fully outside, placement A). */
+.vitals-bar-inline .vitals-row-inline {
+  /* Badge style needs vertical room for the corner pill above the
+     chip top edge. Adding row-gap here keeps the row from
+     clipping when the chip pokes up. */
+  row-gap: 8px;
+}
+
+.vitals-inline-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  background: var(--c-surface-deep);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 3px;
+  padding: 3px 10px;
+  font-variant-numeric: tabular-nums;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.vitals-inline-badge-cap {
+  color: var(--c-text-faint);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  font-weight: 400;
+  font-size: 0.85em;
+}
+
+.vitals-inline-badge-val {
+  font-weight: 700;
+}
+
+.vitals-inline-badge-max {
+  color: var(--c-text-faint);
+  font-weight: 400;
+}
+
+/* Percent pill — its own border, its own fill, hangs outside the
+   chip up and to the right. font-size is em-based so the badge
+   scales with the surrounding text. */
+.vitals-inline-badge-pct {
+  position: absolute;
+  top: -0.6em;
+  right: -0.5em;
+  padding: 0 5px;
+  border: 1px solid var(--c-border-strong);
+  background: var(--c-surface-deep);
+  border-radius: 2px;
+  font-size: 0.62em;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.025),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+  z-index: 2;
+}
+
+/* Danger pulse when a vital drops below 20%. */
+@keyframes vitals-badge-danger-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.vitals-inline-badge.is-danger .vitals-inline-badge-pct {
+  animation: vitals-badge-danger-pulse 900ms ease-in-out infinite;
+}
+
 /* Tail cluster at the end of the inline row, separated from vitals
    by ` - ` like the tintin layout. Hosts the tick countdown and the
    MUD time chip. */
