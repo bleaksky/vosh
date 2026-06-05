@@ -6,6 +6,7 @@ import { TopBar } from './components/TopBar';
 import { TriggerForm } from './components/TriggerForm';
 import { AliasForm } from './components/AliasForm';
 import { UnsavedDot } from './components/UnsavedDot';
+import { CodeEditor } from './components/CodeEditor';
 import { useUnsavedWarning } from './lib/unsaved';
 import { LogsTab } from './components/LogsTab';
 import { TrackedAffectsEditor } from './components/TrackedAffectsEditor';
@@ -426,6 +427,14 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           />
           <span>keep last command (press enter to repeat)</span>
         </label>
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={config.spellcheck_prompt}
+            onChange={(e) => update({ spellcheck_prompt: e.target.checked })}
+          />
+          <span>spell check chat lines (say / tell / chat / ooc / clan / etc.)</span>
+        </label>
       </Row>
       <Row label="paste pacing">
         <span className="settings-paste-row">
@@ -657,11 +666,12 @@ function JsonTab({ kind, singular, plural, load, save, onError }: JsonTabProps) 
           json edit; save replaces the whole {singular} store
         </span>
       </div>
-      <textarea
+      <CodeEditor
         className="settings-triggers-text"
-        spellCheck={false}
+        ariaLabel={`${noun} json store`}
+        fill
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(next) => setText(next)}
       />
       <div className="settings-actions">
         <button type="button" className="settings-btn" onClick={() => void doSave()}>

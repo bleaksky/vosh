@@ -28,6 +28,7 @@ use crate::map_state::SharedMap;
 use crate::plugins::{PluginRecord, SharedPluginManager};
 use crate::profile::{Macro, Profile};
 use crate::profile_config::{strip_global_fields, DockEntryPersist, GlobalConfig, ProfileConfig};
+use crate::script_state;
 use crate::script_state::SharedTimers;
 use crate::session::{self, OutputPayload, SessionHandle, TargetPayload};
 
@@ -374,7 +375,7 @@ pub(crate) async fn session_send_input(
     state: State<'_, SharedState>,
     line: String,
 ) -> Result<(), String> {
-    let (result, target_after) = {
+    let (mut result, target_after, script_apply) = {
         let mut profile = state.profile.lock().await;
         let before_name = profile.target.name.clone();
         let before_idx = profile.target.room_idx;
@@ -394,8 +395,43 @@ pub(crate) async fn session_send_input(
         } else {
             None
         };
-        (result, payload)
+        // Run any Lua bodies queued by script-bodied aliases that
+        // fired during expansion. The actions they produce (sends,
+        // echoes, var sets, etc.) fold into the same ScriptOutcome
+        // pipeline that the Lua-registered triggers use, and the
+        // resulting ApplyResult is appended to this input's
+        // bytes / echo so the user sees one coherent response.
+        let script_apply = if result.scripts.is_empty() {
+            None
+        } else {
+            let mut combined = vosh_script::ScriptOutcome::default();
+            for call in &result.scripts {
+                match script_state::eval_with_captures(
+                    &mut profile.script,
+                    &call.body,
+                    &call.captures,
+                    "alias-script",
+                ) {
+                    Ok(o) => combined.actions.extend(o.actions),
+                    Err(err) => {
+                        tracing::warn!(error = %err, "alias script eval failed");
+                    }
+                }
+            }
+            Some(script_state::apply_actions(&mut profile, combined))
+        };
+        (result, payload, script_apply)
     };
+
+    if let Some(apply) = script_apply {
+        // Lua actions append AFTER the alias's template output (which
+        // is currently empty for script-bodied aliases since the
+        // body owns the response). Echoes go through the same local
+        // echo path as the alias's own echoes; send bytes append to
+        // the wire payload.
+        result.echo.extend(apply.echoes);
+        result.bytes.extend(apply.send_bytes);
+    }
 
     if let Some(payload) = target_after {
         let _ = app.emit("session://target", payload);
@@ -1408,6 +1444,7 @@ pub(crate) struct UiConfigPayload {
     pub split_divider_color: Option<String>,
     pub side_panels_fill_height: bool,
     pub paste_line_delay_ms: u32,
+    pub spellcheck_prompt: bool,
     pub vitals: crate::profile_config::VitalsConfig,
     pub moons_position: String,
     pub chip_style: String,
@@ -1431,6 +1468,7 @@ pub(crate) async fn ui_get_config(
         split_divider_color: p.ui.split_divider_color.clone(),
         side_panels_fill_height: p.ui.side_panels_fill_height,
         paste_line_delay_ms: p.ui.paste_line_delay_ms,
+        spellcheck_prompt: p.ui.spellcheck_prompt,
         vitals: p.ui.vitals.clone(),
         moons_position: p.ui.moons_position.clone(),
         chip_style: p.ui.chip_style.clone(),
@@ -1454,6 +1492,7 @@ pub(crate) async fn ui_set_config(
     split_divider_color: Option<String>,
     side_panels_fill_height: bool,
     paste_line_delay_ms: u32,
+    spellcheck_prompt: bool,
     vitals: crate::profile_config::VitalsConfig,
     moons_position: String,
     chip_style: String,
@@ -1503,6 +1542,7 @@ pub(crate) async fn ui_set_config(
         // Clamp to a sane range so a malformed input cannot freeze the
         // paste indicator (0–10s per line is plenty).
         p.ui.paste_line_delay_ms = paste_line_delay_ms.min(10_000);
+        p.ui.spellcheck_prompt = spellcheck_prompt;
         // Normalize vitals glyphs + width. Empty glyph strings would
         // render zero-width bars; collapse to the default in that case
         // so the user cannot accidentally hide the bar via a typo.

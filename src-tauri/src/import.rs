@@ -174,6 +174,7 @@ fn mushclient_alias_from(e: &BytesStart) -> Option<Alias> {
         expansion: send,
         enabled,
         group: None,
+        script: None,
     })
 }
 
@@ -455,6 +456,7 @@ fn commit_mudlet_alias(item: MudletItem, report: &mut ImportReport) {
         expansion,
         enabled: item.is_active,
         group: None,
+        script: None,
     });
 }
 
@@ -508,6 +510,7 @@ fn parse_gmud(text: &str) -> ImportReport {
                     expansion: command.clone(),
                     enabled: true,
                     group: None,
+                    script: None,
                 });
             }
             ("macro", [key, command]) if !key.is_empty() && !command.is_empty() => {
@@ -840,6 +843,7 @@ fn commit_cmud_alias(a: CmudAliasInProgress, report: &mut ImportReport) {
         expansion: a.value,
         enabled: a.enabled,
         group: None,
+        script: None,
     });
 }
 

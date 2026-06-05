@@ -12,5 +12,5 @@ pub mod store;
 
 pub use action::{HighlightStyle, TriggerAction};
 pub use color::NamedColor;
-pub use engine::{process, LineResult};
+pub use engine::{process, LineResult, ScriptInvocation};
 pub use store::{Trigger, TriggerError, TriggerPattern, TriggerStore};

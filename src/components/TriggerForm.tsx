@@ -16,6 +16,7 @@ import {
 } from '../lib/session';
 import { colorize, decolorize } from '../lib/colorTokens';
 import { UnsavedDot } from './UnsavedDot';
+import { CodeEditor } from './CodeEditor';
 import { useUnsavedWarning } from '../lib/unsaved';
 
 const UNGROUPED_LABEL = '(no group)';
@@ -32,7 +33,7 @@ interface Props {
 }
 
 type VisualKind = 'none' | 'highlight' | 'replace' | 'gag';
-type EffectKind = 'send' | 'route';
+type EffectKind = 'send' | 'route' | 'script';
 
 const COLORS: NamedColor[] = [
   'black',
@@ -67,13 +68,13 @@ function blankTrigger(): TriggerRecord {
 // and zero-or-more Effects entries. Mirrors the form's two
 // sections; reverse on save reconstitutes the vec.
 function splitActions(actions: TriggerAction[]): {
-  visual: Exclude<TriggerAction, { kind: 'send' } | { kind: 'route' }> | null;
-  effects: Extract<TriggerAction, { kind: 'send' } | { kind: 'route' }>[];
+  visual: Exclude<TriggerAction, { kind: 'send' } | { kind: 'route' } | { kind: 'script' }> | null;
+  effects: Extract<TriggerAction, { kind: 'send' } | { kind: 'route' } | { kind: 'script' }>[];
 } {
   let visual: ReturnType<typeof splitActions>['visual'] = null;
   const effects: ReturnType<typeof splitActions>['effects'] = [];
   for (const a of actions) {
-    if (a.kind === 'send' || a.kind === 'route') {
+    if (a.kind === 'send' || a.kind === 'route' || a.kind === 'script') {
       effects.push(a);
     } else if (visual === null) {
       visual = a;
@@ -106,7 +107,9 @@ function blankVisual(kind: VisualKind): ReturnType<typeof splitActions>['visual'
 }
 
 function blankEffect(kind: EffectKind): TriggerAction {
-  return kind === 'send' ? { kind: 'send', template: '' } : { kind: 'route', pane: 'chat' };
+  if (kind === 'send') return { kind: 'send', template: '' };
+  if (kind === 'route') return { kind: 'route', pane: 'chat' };
+  return { kind: 'script', body: '' };
 }
 
 function decolorizeTemplates(t: TriggerRecord): TriggerRecord {
@@ -620,21 +623,39 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
           {effects.map((eff, i) => (
             <div key={i} className="trigger-card-effect-row">
               <span className="trigger-card-effect-label">{eff.kind}</span>
-              <input
-                type="text"
-                spellCheck={false}
-                placeholder={eff.kind === 'send' ? 'get 1.;wield 1.' : 'chat'}
-                value={eff.kind === 'send' ? eff.template : eff.pane}
-                disabled={readOnly}
-                onChange={(e) =>
-                  setEffectAt(
-                    i,
-                    eff.kind === 'send'
-                      ? { kind: 'send', template: e.target.value }
-                      : { kind: 'route', pane: e.target.value },
-                  )
-                }
-              />
+              {eff.kind === 'send' ? (
+                <CodeEditor
+                  className="trigger-card-effect-editor"
+                  ariaLabel="send template"
+                  minHeight="2.2em"
+                  language="lua"
+                  placeholder="get 1.; wield 1.  (separator: ; or newline)"
+                  value={eff.template}
+                  readOnly={readOnly}
+                  onChange={(next) => setEffectAt(i, { kind: 'send', template: next })}
+                />
+              ) : eff.kind === 'script' ? (
+                <CodeEditor
+                  className="trigger-card-effect-editor"
+                  ariaLabel="Lua script body"
+                  minHeight="180px"
+                  maxHeight="60vh"
+                  language="lua"
+                  placeholder="-- captures[1..n] are regex groups; e.g. if captures[1] == 'low' then mud.send('quaff yellow') end"
+                  value={eff.body}
+                  readOnly={readOnly}
+                  onChange={(next) => setEffectAt(i, { kind: 'script', body: next })}
+                />
+              ) : (
+                <input
+                  type="text"
+                  spellCheck={false}
+                  placeholder="chat"
+                  value={eff.pane}
+                  disabled={readOnly}
+                  onChange={(e) => setEffectAt(i, { kind: 'route', pane: e.target.value })}
+                />
+              )}
               {!readOnly && (
                 <button
                   type="button"
@@ -662,6 +683,13 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
               >
                 [+ route]
               </button>
+              <button
+                type="button"
+                className="trigger-card-effect-add"
+                onClick={() => addEffect('script')}
+              >
+                [+ script]
+              </button>
             </div>
           )}
         </div>
@@ -683,13 +711,15 @@ function VisualFields({ visual, onChange, readOnly }: VisualFieldsProps) {
   if (visual.kind === 'replace') {
     return (
       <div className="trigger-card-template">
-        <input
-          type="text"
-          spellCheck={false}
+        <CodeEditor
+          className="trigger-card-template-editor"
+          ariaLabel="replace template"
+          minHeight="2.2em"
+          language="lua"
           placeholder="{fg:244}$1{reset}{fg:210}$2{reset}"
           value={visual.template}
-          disabled={readOnly}
-          onChange={(e) => onChange({ kind: 'replace', template: e.target.value })}
+          readOnly={readOnly}
+          onChange={(next) => onChange({ kind: 'replace', template: next })}
         />
         <span className="trigger-card-hint">
           tokens: {'{red}'} {'{bold_red}'} {'{fg:244}'} {'{#ff3399}'} {'{reset}'}; $1 $2 … reference

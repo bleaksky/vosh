@@ -20,6 +20,11 @@ pub(crate) struct InputResult {
     /// Local lines to echo back to the terminal pane (without CRLF added).
     /// The session layer wraps each line in CRLF before emitting.
     pub(crate) echo: Vec<String>,
+    /// Lua bodies queued by script-bodied aliases that fired during
+    /// expansion. The session loop runs each through its shared
+    /// `ScriptEngine` with `captures[1..]` bound to the alias args.
+    /// Empty for non-alias inputs and for template-only aliases.
+    pub(crate) scripts: Vec<vosh_alias::AliasScriptCall>,
 }
 
 const HELP_TEXT: &str = "\
@@ -96,6 +101,7 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
         return InputResult {
             bytes: b"\r\n".to_vec(),
             echo: Vec::new(),
+            scripts: Vec::new(),
         };
     }
 
@@ -166,6 +172,7 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
     InputResult {
         bytes,
         echo: Vec::new(),
+        scripts: Vec::new(),
     }
 }
 
@@ -428,6 +435,7 @@ fn list_targets(profile: &Profile) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
+        scripts: Vec::new(),
     }
 }
 
@@ -510,6 +518,7 @@ fn slash_qkeys_list(profile: &Profile) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
+        scripts: Vec::new(),
     }
 }
 
@@ -539,6 +548,7 @@ fn slash_aliases_list(profile: &Profile) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
+        scripts: Vec::new(),
     }
 }
 
@@ -636,6 +646,7 @@ fn slash_triggers_list(profile: &Profile) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
+        scripts: Vec::new(),
     }
 }
 
@@ -765,6 +776,11 @@ fn describe_action(action: &TriggerAction) -> String {
         TriggerAction::Replace { template } => format!("replace `{template}`"),
         TriggerAction::Send { template } => format!("send `{template}`"),
         TriggerAction::Route { pane } => format!("route {pane}"),
+        TriggerAction::Script { body } => {
+            let preview: String = body.chars().take(40).collect();
+            let ellipsis = if body.chars().count() > 40 { "…" } else { "" };
+            format!("script `{preview}{ellipsis}`")
+        }
     }
 }
 
@@ -792,6 +808,7 @@ fn slash_profile(profile: &mut Profile, args: &str) -> InputResult {
                     InputResult {
                         bytes: Vec::new(),
                         echo: lines,
+                        scripts: Vec::new(),
                     }
                 }
                 Err(e) => error_echo(format!("load failed: {e}")),
@@ -849,6 +866,7 @@ fn slash_import_tintin(profile: &mut Profile, args: &str) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
+        scripts: Vec::new(),
     }
 }
 
@@ -905,6 +923,7 @@ fn slash_script_load(profile: &mut Profile, args: &str) -> InputResult {
     InputResult {
         bytes: apply.send_bytes,
         echo: echoes,
+        scripts: Vec::new(),
     }
 }
 
@@ -920,6 +939,7 @@ fn slash_script_reload(profile: &mut Profile) -> InputResult {
     InputResult {
         bytes: apply.send_bytes,
         echo: echoes,
+        scripts: Vec::new(),
     }
 }
 
@@ -948,6 +968,7 @@ fn slash_scripts_list(profile: &Profile) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
+        scripts: Vec::new(),
     }
 }
 
@@ -965,6 +986,7 @@ fn slash_lua(profile: &mut Profile, args: &str) -> InputResult {
     InputResult {
         bytes: apply.send_bytes,
         echo: apply.echoes,
+        scripts: Vec::new(),
     }
 }
 
@@ -1077,6 +1099,7 @@ fn slash_tick_warn(profile: &mut Profile, args: &str) -> InputResult {
             InputResult {
                 bytes: Vec::new(),
                 echo: lines,
+                scripts: Vec::new(),
             }
         }
         "at" => match rest.trim().parse::<u64>() {
@@ -1151,6 +1174,7 @@ fn slash_tick_show(profile: &Profile, now: Instant) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
+        scripts: Vec::new(),
     }
 }
 
@@ -1176,6 +1200,7 @@ fn slash_vars_list(profile: &Profile) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines,
+        scripts: Vec::new(),
     }
 }
 
@@ -1194,6 +1219,7 @@ fn error_echo(message: String) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: vec![format!("[{message}]")],
+        scripts: Vec::new(),
     }
 }
 
@@ -1201,6 +1227,7 @@ fn echo_one(message: String) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: vec![message],
+        scripts: Vec::new(),
     }
 }
 
@@ -1208,6 +1235,7 @@ fn echo_lines<'a>(lines: impl IntoIterator<Item = &'a str>) -> InputResult {
     InputResult {
         bytes: Vec::new(),
         echo: lines.into_iter().map(str::to_string).collect(),
+        scripts: Vec::new(),
     }
 }
 

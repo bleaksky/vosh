@@ -28,6 +28,48 @@ pub(crate) struct PendingTimer {
 /// 250 ms tick; expired entries fire their callbacks.
 pub(crate) type SharedTimers = Arc<Mutex<Vec<PendingTimer>>>;
 
+/// Evaluate a body with `captures` bound as a local table. Used by
+/// `TriggerAction::Script` and script-bodied aliases — the user's
+/// Lua body sees `captures[1]`, `captures[2]`, ... as if the body
+/// were the inside of a callback. `chunk_name` is shown in error
+/// traces. Returns the script's outcome (a list of `Action`s) so the
+/// caller can fold it into the surrounding apply.
+pub(crate) fn eval_with_captures(
+    engine: &mut ScriptEngine,
+    body: &str,
+    captures: &[String],
+    chunk_name: &str,
+) -> Result<ScriptOutcome, vosh_script::ScriptError> {
+    let mut buf = String::with_capacity(body.len() + 64 + captures.len() * 8);
+    buf.push_str("do local captures = {");
+    for (i, c) in captures.iter().enumerate() {
+        if i > 0 {
+            buf.push_str(", ");
+        }
+        push_lua_string(&mut buf, c);
+    }
+    buf.push_str("}\n");
+    buf.push_str(body);
+    buf.push_str("\nend");
+    engine.eval(&buf, chunk_name)
+}
+
+fn push_lua_string(buf: &mut String, s: &str) {
+    buf.push('"');
+    for c in s.chars() {
+        match c {
+            '\\' => buf.push_str("\\\\"),
+            '"' => buf.push_str("\\\""),
+            '\n' => buf.push_str("\\n"),
+            '\r' => buf.push_str("\\r"),
+            '\t' => buf.push_str("\\t"),
+            '\0' => buf.push_str("\\0"),
+            _ => buf.push(c),
+        }
+    }
+    buf.push('"');
+}
+
 /// Refresh the script engine's view of session vars so `mud.var(name)`
 /// returns up-to-date values. Skipped entirely when the engine has
 /// no registered triggers / GMCP subs / loaded scripts — without

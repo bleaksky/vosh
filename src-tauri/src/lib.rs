@@ -6,6 +6,62 @@ use tracing_subscriber::EnvFilter;
 use vosh_log::LogStore;
 use vosh_map::MapStore;
 
+// macOS-only: WKWebView ignores the HTML `spellcheck` attribute
+// until continuous spell-checking is enabled at the NSView level.
+// The context-menu "Check Spelling While Typing" item works, which
+// means the action `toggleContinuousSpellChecking:` is dispatchable
+// through the responder chain. We mirror that path: query
+// isContinuousSpellCheckingEnabled first, then send the toggle
+// action only if it is off, so we never flip it back off. All
+// sends are gated with respondsToSelector: — earlier unguarded
+// sends of NSTextView-only selectors crashed the app at launch.
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(), tauri::Error> {
+    use objc2::runtime::{AnyObject, Bool, Sel};
+    window.with_webview(|webview| {
+        let raw = webview.inner().cast::<AnyObject>();
+        if raw.is_null() {
+            tracing::warn!("macos spellcheck: webview.inner() was null");
+            return;
+        }
+        unsafe {
+            let setter: Sel = objc2::sel!(setContinuousSpellCheckingEnabled:);
+            let getter: Sel = objc2::sel!(isContinuousSpellCheckingEnabled);
+            let toggler: Sel = objc2::sel!(toggleContinuousSpellChecking:);
+            let r_set: Bool = objc2::msg_send![raw, respondsToSelector: setter];
+            let r_get: Bool = objc2::msg_send![raw, respondsToSelector: getter];
+            let r_tog: Bool = objc2::msg_send![raw, respondsToSelector: toggler];
+            tracing::info!(
+                set = r_set.as_bool(),
+                get = r_get.as_bool(),
+                toggle = r_tog.as_bool(),
+                "macos spellcheck: selectors reachable on WKWebView"
+            );
+            if r_set.as_bool() {
+                let _: () = objc2::msg_send![raw, setContinuousSpellCheckingEnabled: true];
+                tracing::info!("macos spellcheck: setContinuousSpellCheckingEnabled:YES sent");
+                return;
+            }
+            if r_tog.as_bool() {
+                let enabled: Bool = if r_get.as_bool() {
+                    objc2::msg_send![raw, isContinuousSpellCheckingEnabled]
+                } else {
+                    Bool::NO
+                };
+                if enabled.as_bool() {
+                    tracing::info!("macos spellcheck: already enabled, no toggle needed");
+                } else {
+                    let _: () = objc2::msg_send![raw, toggleContinuousSpellChecking: raw];
+                    tracing::info!("macos spellcheck: toggleContinuousSpellChecking: sent");
+                }
+            } else {
+                tracing::warn!("macos spellcheck: no reachable setter or toggle on WKWebView");
+            }
+        }
+    })
+}
+
 mod commands;
 mod connection;
 mod fonts;
@@ -275,6 +331,12 @@ pub fn run() {
                         }
                     }
                 });
+            }
+            #[cfg(target_os = "macos")]
+            {
+                for (_, window) in app.webview_windows() {
+                    let _ = enable_macos_spellcheck(&window);
+                }
             }
             Ok(())
         })
