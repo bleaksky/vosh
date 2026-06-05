@@ -631,10 +631,12 @@ export type VitalsBarStyle = 'solid' | 'track' | 'ramped';
 export type VitalsBarLayout = 'plain' | 'with_history';
 /** Sub-style of the inline vitals layout. Applies when
  *  `layout === 'inline'`. `plain` is the historical tintin nprompt
- *  rendering; `underline` adds a colored 1px drain bar beneath each
- *  unit; `badge` wraps each vital in a chip with a percent pill
- *  hanging off the upper-right corner. */
-export type VitalsInlineStyle = 'plain' | 'underline' | 'badge';
+ *  rendering; `drain` renders each vital as a chip with caption +
+ *  percent in the top corners and an inset drain background that
+ *  glows along its leading edge as it shrinks; `badge` wraps each
+ *  vital in a simpler chip with the percent floating as its own
+ *  small bordered pill above the upper-right corner. */
+export type VitalsInlineStyle = 'plain' | 'drain' | 'badge';
 /** How the percent text gets colored in the underline / badge inline
  *  styles. `stat` mirrors the numeric stat color; `drain` ramps
  *  through warn-gold → orange → danger-red as the value drops;
@@ -799,9 +801,13 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
           : DEFAULT_VITALS_CONFIG.bar_layout,
     layout: v.layout === 'inline' ? 'inline' : DEFAULT_VITALS_CONFIG.layout,
     inline_style:
-      v.inline_style === 'underline' || v.inline_style === 'badge'
+      v.inline_style === 'drain' || v.inline_style === 'badge'
         ? v.inline_style
-        : DEFAULT_VITALS_CONFIG.inline_style,
+        : // Accept legacy `underline` value from the first
+          // implementation pass and silently migrate to `drain`.
+          (v.inline_style as unknown) === 'underline'
+          ? 'drain'
+          : DEFAULT_VITALS_CONFIG.inline_style,
     percent_color_mode:
       v.percent_color_mode === 'stat' || v.percent_color_mode === 'accent'
         ? v.percent_color_mode

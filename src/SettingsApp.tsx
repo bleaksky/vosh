@@ -1632,7 +1632,7 @@ function VitalsConfigSection({
                 onChange={(e) => apply({ inline_style: e.target.value as VitalsInlineStyle })}
               >
                 <option value="plain">plain (tintin nprompt text)</option>
-                <option value="underline">underline (drain bar beneath each)</option>
+                <option value="drain">drain (chip with inset glowing fill)</option>
                 <option value="badge">badge (chip + corner percent)</option>
               </select>
             </div>
@@ -2304,11 +2304,12 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
                   </span>
                 );
               }
-              if (config.inline_style === 'underline') {
+              if (config.inline_style === 'drain') {
+                const isDanger = s.value < 20;
                 return (
                   <span
                     key={s.label}
-                    className="vitals-inline-underline"
+                    className={`vitals-inline-drain${isDanger ? ' is-danger' : ''}`}
                     style={
                       {
                         ['--vital-color']: statColor,
@@ -2316,25 +2317,33 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
                       } as React.CSSProperties
                     }
                   >
-                    {config.show_numeric && (
-                      <span className="vitals-numeric" style={{ color: statColor }}>
-                        {s.cur}
-                      </span>
-                    )}
-                    {config.show_percent && (
-                      <span className="vitals-inline-pct" style={{ color: pctColor }}>
-                        ({s.value}%)
-                      </span>
-                    )}
-                    <span className="vitals-inline-letter">{s.label[0]}</span>
-                    {config.show_delta && s.delta !== 0 && (
-                      <span
-                        className={`vitals-delta${s.delta > 0 ? ' vitals-delta-up' : ' vitals-delta-down'}`}
-                      >
-                        {s.delta > 0 ? '+' : ''}
-                        {s.delta}
-                      </span>
-                    )}
+                    <span className="vitals-inline-drain-bg" aria-hidden="true" />
+                    <span className="vitals-inline-drain-top">
+                      <span className="vitals-inline-drain-cap">{s.label}</span>
+                      {config.show_percent && (
+                        <span className="vitals-inline-drain-pct" style={{ color: pctColor }}>
+                          {s.value}%
+                        </span>
+                      )}
+                    </span>
+                    <span className="vitals-inline-drain-val" style={{ color: statColor }}>
+                      {config.show_numeric ? (
+                        <>
+                          {s.cur}
+                          <span className="vitals-inline-drain-max">/{s.max}</span>
+                        </>
+                      ) : (
+                        `${s.value}%`
+                      )}
+                      {config.show_delta && s.delta !== 0 && (
+                        <span
+                          className={`vitals-delta${s.delta > 0 ? ' vitals-delta-up' : ' vitals-delta-down'}`}
+                        >
+                          {s.delta > 0 ? '+' : ''}
+                          {s.delta}
+                        </span>
+                      )}
+                    </span>
                   </span>
                 );
               }
