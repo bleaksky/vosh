@@ -147,6 +147,9 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                     result.prompt_vars_changed = true;
                 }
             }
+            Action::SetGroupEnabled { name, enabled } => {
+                toggle_group(profile, &name, enabled);
+            }
             Action::SetLuaTrigger { .. }
             | Action::RemoveLuaTrigger(_)
             | Action::SubscribeGmcp { .. }
@@ -195,4 +198,51 @@ fn scope_to_internal(scope: VarScope) -> Scope {
         VarScope::Profile => Scope::Profile,
         VarScope::Session => Scope::Session,
     }
+}
+
+/// Outcome of `toggle_group`. Reports which stores actually carried
+/// at least one entry tagged with the requested group, so callers
+/// (the `#group` slash command, the `mud.set_group_enabled` Lua API)
+/// can echo something useful rather than silently no-op.
+#[derive(Debug, Default)]
+pub(crate) struct GroupToggleReport {
+    pub aliases: bool,
+    pub triggers: bool,
+    pub macros: bool,
+}
+
+impl GroupToggleReport {
+    pub(crate) fn touched(&self) -> bool {
+        self.aliases || self.triggers || self.macros
+    }
+}
+
+/// Flip a group's enabled state across triggers, aliases, and macros
+/// in one shot. The group lives independently in each store, so this
+/// only touches the stores that actually have a matching entry —
+/// asking to disable a group that exists only in triggers won't
+/// stamp an empty group name into the macro disabled set.
+pub(crate) fn toggle_group(profile: &mut Profile, name: &str, enabled: bool) -> GroupToggleReport {
+    let mut report = GroupToggleReport::default();
+    if profile.aliases.groups().iter().any(|(g, _)| g == name) {
+        profile.aliases.set_group_enabled(name, enabled);
+        report.aliases = true;
+    }
+    if profile.triggers.groups().iter().any(|(g, _)| g == name) {
+        profile.triggers.set_group_enabled(name, enabled);
+        report.triggers = true;
+    }
+    let has_macro_group = profile
+        .macros
+        .iter()
+        .any(|m| m.group.as_deref() == Some(name));
+    if has_macro_group {
+        if enabled {
+            profile.disabled_macro_groups.remove(name);
+        } else {
+            profile.disabled_macro_groups.insert(name.to_string());
+        }
+        report.macros = true;
+    }
+    report
 }

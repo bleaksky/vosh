@@ -41,6 +41,14 @@ pub enum Action {
     },
     /// Remove a prompt var by name.
     RemovePromptVar(String),
+    /// Toggle a group across the trigger / alias / macro stores. Same
+    /// as the `#group <name> on|off` slash command. Mirrors the
+    /// unified scope so a single Lua call flips every store sharing
+    /// that group name.
+    SetGroupEnabled {
+        name: String,
+        enabled: bool,
+    },
     /// Insert or replace a regex trigger that fires a Lua callback by id.
     SetLuaTrigger {
         name: String,
