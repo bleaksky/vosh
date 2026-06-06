@@ -1238,10 +1238,18 @@ function TemplateVitalsRow({
         const color = gradient ? colorForPercent(v) : colorForVital(label, v, config);
         // When a chip style is configured, wrap the token in a
         // chip so the user can place chip-styled percents anywhere
-        // in their template. Otherwise emit the value as plain
-        // text (no parens — the template author writes those).
+        // in their template. The flex-baseline host span mirrors
+        // what the inline plain layout already does via
+        // .vitals-inline-chip — without it the bare inline-block
+        // chip floats above the template row's baseline because
+        // its line-height computes against the chip's smaller font
+        // and ends up taller than the surrounding text.
         if (config.pct_chip_style !== 'none') {
-          return <PercentChip value={v} color={color} style={config.pct_chip_style} />;
+          return (
+            <span className="vitals-pct-chip-host">
+              <PercentChip value={v} color={color} style={config.pct_chip_style} />
+            </span>
+          );
         }
         return <span style={{ color }}>{v}%</span>;
       }

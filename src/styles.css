@@ -1050,19 +1050,23 @@ body {
   font-variant-numeric: tabular-nums;
   padding: 0 5px;
   border-radius: 2px;
-  /* Inherit the surrounding line-height so an `inline-block` chip
-     does not push the line box taller than the plain text around
-     it. In the inline plain layout the chip sits inside a flex
-     baseline row so its own line-height never affected layout;
-     the template layout is a plain block of inline text, and a
-     fixed 1.45 line-height there stretched the entire row's
-     vertical rhythm — every `750`, `h`, `(19s)`, `3PM` next to a
-     chip appeared taller. Inheriting collapses the box back into
-     the surrounding line. */
   line-height: inherit;
   vertical-align: baseline;
   margin: 0 3px;
   color: var(--pct-color, var(--c-text));
+}
+
+/* Template wrapper: mimics the inline plain layout flex baseline
+   row that already makes the chip sit on the surrounding text's
+   baseline. Used only by the `%pct_*` template token render path
+   so the inline plain layout (which has its own .vitals-inline-chip
+   flex row) is untouched. Without this, the bare inline-block chip
+   adopts the template row's "normal" line-height which makes its
+   box taller than the surrounding text and the chip visibly floats
+   up off the line. */
+.vitals-pct-chip-host {
+  display: inline-flex;
+  align-items: baseline;
 }
 
 .vitals-pct-chip-pill {

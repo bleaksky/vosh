@@ -2081,7 +2081,11 @@ function previewTemplate(
         const s = get(label);
         const c = gradient ? s.color : colorForVital(label, s.value, config);
         if (config.pct_chip_style !== 'none') {
-          return <PreviewPercentChip value={s.value} color={c} style={config.pct_chip_style} />;
+          return (
+            <span className="vitals-pct-chip-host">
+              <PreviewPercentChip value={s.value} color={c} style={config.pct_chip_style} />
+            </span>
+          );
         }
         return <span style={{ color: c }}>{s.value}%</span>;
       }
