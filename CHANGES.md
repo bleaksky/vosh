@@ -2,6 +2,15 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.4.1 - 2026-06-06
+
+- Five new built-in themes. Dracula at Night carries the iconic Dracula ANSI palette (purple #bd93f9, green #50fa7b, pink #ff79c6) on a deeper chrome for late-session reading. Monokai is the classic Sublime palette with the signature magenta accent. One Dark is the Atom editor cool slate with a blue accent and soft pastel semantics. One Half Dark is the brighter foreground variant of One Dark with cooler surfaces. Tango Dark is the GNOME Terminal classic with saturated CGA-style primaries on a warm dark background. Pick any from Settings · General · Theme.
+- New `${target}` session variable that resolves to whoever the `tar` command set most recently. Use it in alias templates (`kill ${target}`), trigger Send templates (`bash ${target}`), or Lua bodies via `mud.var("target")`. Clears on disconnect or `tarclear`. Does not affect trigger patterns or highlight matching, which compile once.
+- New `#group <name> on|off` slash command flips a group's enabled state across triggers, aliases, and macros in one shot. Useful for turning a highlight or gag group on around a single fight and back off afterward. `#group <name>` with no arg shows the current state per store. `#groups` lists every group across the profile. The Lua counterpart is `mud.set_group_enabled(name, enabled)`.
+- Vitals percent chip in the template layout sits on the surrounding text's baseline. Before this, the bare `inline-block` chip adopted the row's normal line-height computed against its smaller font and the chip box floated above the line, with the surrounding `750(`, `)h`, `(19s)`, `3PM` characters looking taller and looser than they did in the inline plain layout. A flex baseline host span around each `%pct_*` token render gives the chip the same baseline behavior the inline layout already had.
+- Terminal cursor pads to the bottom of the viewport after every initial-mount path, not only when the scrollback restore comes back empty. Any saved scrollback that was shorter than the viewport used to leave the cursor mid-screen and the next chunk from the MUD piled into the middle, surfacing the big gap on connect. The pad now runs after the post-restore writes flush, so a short or empty scrollback both anchor cleanly.
+- Typed commands mirror into the split-scrollback history pane so scrolling up shows your own commands alongside server output. No backend round-trip and no added latency. Persisted scrollback restored on next launch is still server-only.
+
 ## v0.4.0 - 2026-06-05
 
 - Lua scripting for aliases (mode toggle template / lua) and trigger actions (Script effect), with a CodeMirror 6 editor in the Settings drawers. The backend evaluates the body in a sandboxed engine with capture groups bound to a `captures` table.
