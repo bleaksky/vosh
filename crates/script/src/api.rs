@@ -47,6 +47,11 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
         lua.create_function(mud_unset_prompt_var)?,
     )?;
 
+    mud.set(
+        "set_group_enabled",
+        lua.create_function(mud_set_group_enabled)?,
+    )?;
+
     mud.set("trigger", lua.create_function(mud_trigger)?)?;
     mud.set("untrigger", lua.create_function(mud_untrigger)?)?;
 
@@ -166,6 +171,13 @@ fn mud_set_prompt_var(lua: &Lua, (name, value): (String, String)) -> LuaResult<(
 fn mud_unset_prompt_var(lua: &Lua, name: String) -> LuaResult<()> {
     with_state(lua, |s| {
         s.pending.push(Action::RemovePromptVar(name));
+        Ok(())
+    })
+}
+
+fn mud_set_group_enabled(lua: &Lua, (name, enabled): (String, bool)) -> LuaResult<()> {
+    with_state(lua, |s| {
+        s.pending.push(Action::SetGroupEnabled { name, enabled });
         Ok(())
     })
 }

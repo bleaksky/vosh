@@ -42,6 +42,10 @@ slash commands:
   #prompt {regex}                      capture prompt vars from named groups
                                        like (?<hp>...) (?<mn>...) etc.
   #unprompt                            remove the prompt-capture trigger
+  #group <name> on|off                 enable/disable a group across
+                                       triggers + aliases + macros
+  #group <name>                        show current state of a group
+  #groups                              list every group and its state
   #tick                                show tick timer state
   #tick interval <secs>                set the tick interval
   #tick reset                          reset the timer now
@@ -193,6 +197,8 @@ fn handle_slash(profile: &mut Profile, rest: &str) -> InputResult {
         "triggers" => slash_triggers_list(profile),
         "prompt" => slash_prompt(profile, args),
         "unprompt" => slash_unprompt(profile),
+        "group" => slash_group(profile, args),
+        "groups" => slash_groups_list(profile),
         "tick" => slash_tick(profile, args),
         "script" => slash_script(profile, args),
         "scripts" => slash_scripts_list(profile),
@@ -342,6 +348,24 @@ pub(crate) fn set_room_chars(profile: &mut Profile, chars: Vec<RoomChar>) {
     refresh_target_idx(profile);
 }
 
+/// Mirror `profile.target.name` into a session var named `target` so
+/// `${target}` interpolation in alias / trigger templates and Lua
+/// `mud.var("target")` resolve to the live target. Called by every
+/// path that sets or clears `profile.target.name`. Removing the var
+/// when the target clears (rather than leaving an empty string)
+/// matches the alias engine's "unknown var → leave the token
+/// alone" semantics.
+fn sync_target_var(profile: &mut Profile) {
+    match profile.target.name.clone() {
+        Some(name) => {
+            profile.vars.set(Scope::Session, "target", name);
+        }
+        None => {
+            profile.vars.remove("target");
+        }
+    }
+}
+
 fn run_target_set(profile: &mut Profile, args: &str) -> InputResult {
     let arg = args.trim();
     if arg.is_empty() {
@@ -360,6 +384,7 @@ fn run_target_set(profile: &mut Profile, args: &str) -> InputResult {
         let name = profile.room_chars[n - 1].name.clone();
         profile.target.name = Some(name.clone());
         refresh_target_idx(profile);
+        sync_target_var(profile);
         return echo_one(format!("target: {name}"));
     }
     // Non-numeric → use the literal string the user typed. The MUD
@@ -370,6 +395,7 @@ fn run_target_set(profile: &mut Profile, args: &str) -> InputResult {
     // marker on the room chip but don't substitute the name.
     profile.target.name = Some(arg.to_string());
     refresh_target_idx(profile);
+    sync_target_var(profile);
     if profile.target.room_idx.is_some() {
         echo_one(format!("target: {arg}"))
     } else {
@@ -404,6 +430,7 @@ fn run_target_cycle(profile: &mut Profile, step: i32) -> InputResult {
     let name = profile.room_chars[(next - 1) as usize].name.clone();
     profile.target.name = Some(name.clone());
     refresh_target_idx(profile);
+    sync_target_var(profile);
     echo_one(format!("target: {name} (#{next}/{count})"))
 }
 
@@ -413,6 +440,7 @@ fn run_target_clear(profile: &mut Profile) -> InputResult {
     }
     profile.target.name = None;
     refresh_target_idx(profile);
+    sync_target_var(profile);
     echo_one("target cleared".to_string())
 }
 
@@ -697,6 +725,161 @@ fn slash_unprompt(profile: &mut Profile) -> InputResult {
         echo_one("prompt-capture trigger removed".to_string())
     } else {
         error_echo("no prompt-capture trigger found".to_string())
+    }
+}
+
+/// `#group <name> [on|off]` — flip a group's enabled state across
+/// triggers, aliases, and macros in one call. With no on/off arg,
+/// echo the current state in each store the group appears in.
+fn slash_group(profile: &mut Profile, args: &str) -> InputResult {
+    let (name, rest) = split_first_word(args);
+    if name.is_empty() {
+        return error_echo("usage #group <name> [on|off]".to_string());
+    }
+    let state = rest.trim();
+    match state {
+        "" => slash_group_show(profile, name),
+        "on" | "off" => {
+            let enabled = state == "on";
+            let report = crate::script_state::toggle_group(profile, name, enabled);
+            if !report.touched() {
+                return error_echo(format!(
+                    "group `{name}` not found in triggers, aliases, or macros"
+                ));
+            }
+            let mut stores: Vec<&str> = Vec::with_capacity(3);
+            if report.triggers {
+                stores.push("triggers");
+            }
+            if report.aliases {
+                stores.push("aliases");
+            }
+            if report.macros {
+                stores.push("macros");
+            }
+            echo_one(format!(
+                "group `{name}` {} for {}",
+                if enabled { "enabled" } else { "disabled" },
+                stores.join(" + "),
+            ))
+        }
+        other => error_echo(format!(
+            "unknown group state `{other}`. usage #group <name> [on|off]"
+        )),
+    }
+}
+
+fn slash_group_show(profile: &Profile, name: &str) -> InputResult {
+    let trigger_state = profile
+        .triggers
+        .groups()
+        .into_iter()
+        .find(|(g, _)| g == name)
+        .map(|(_, enabled)| enabled);
+    let alias_state = profile
+        .aliases
+        .groups()
+        .into_iter()
+        .find(|(g, _)| g == name)
+        .map(|(_, enabled)| enabled);
+    let has_macros = profile
+        .macros
+        .iter()
+        .any(|m| m.group.as_deref() == Some(name));
+    let macro_state = if has_macros {
+        Some(!profile.disabled_macro_groups.contains(name))
+    } else {
+        None
+    };
+    if trigger_state.is_none() && alias_state.is_none() && macro_state.is_none() {
+        return error_echo(format!(
+            "group `{name}` not found in triggers, aliases, or macros"
+        ));
+    }
+    let mut lines = vec![format!("group `{name}`:")];
+    let fmt = |store: &str, state: Option<bool>| match state {
+        Some(true) => format!("  {store}: on"),
+        Some(false) => format!("  {store}: off"),
+        None => format!("  {store}: (none tagged)"),
+    };
+    lines.push(fmt("triggers", trigger_state));
+    lines.push(fmt("aliases ", alias_state));
+    lines.push(fmt("macros  ", macro_state));
+    InputResult {
+        bytes: Vec::new(),
+        echo: lines,
+        scripts: Vec::new(),
+    }
+}
+
+/// `#groups` — every group that any store has at least one entry
+/// tagged with, plus the current on/off state per store.
+fn slash_groups_list(profile: &Profile) -> InputResult {
+    use std::collections::BTreeSet;
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    let trigger_map: std::collections::BTreeMap<String, bool> =
+        profile.triggers.groups().into_iter().collect();
+    let alias_map: std::collections::BTreeMap<String, bool> =
+        profile.aliases.groups().into_iter().collect();
+    for g in trigger_map.keys() {
+        names.insert(g.clone());
+    }
+    for g in alias_map.keys() {
+        names.insert(g.clone());
+    }
+    for m in &profile.macros {
+        if let Some(g) = &m.group {
+            if !g.is_empty() {
+                names.insert(g.clone());
+            }
+        }
+    }
+    if names.is_empty() {
+        return echo_one("no groups defined".to_string());
+    }
+    let mut lines = vec![format!("{} group(s):", names.len())];
+    for name in &names {
+        let has_macros = profile
+            .macros
+            .iter()
+            .any(|m| m.group.as_deref() == Some(name.as_str()));
+        let parts: Vec<String> = [
+            (
+                "triggers",
+                trigger_map
+                    .get(name)
+                    .copied()
+                    .map(|e| if e { "on" } else { "off" }),
+            ),
+            (
+                "aliases",
+                alias_map
+                    .get(name)
+                    .copied()
+                    .map(|e| if e { "on" } else { "off" }),
+            ),
+            (
+                "macros",
+                if has_macros {
+                    Some(if profile.disabled_macro_groups.contains(name) {
+                        "off"
+                    } else {
+                        "on"
+                    })
+                } else {
+                    None
+                },
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(store, state)| state.map(|s| format!("{store}={s}")))
+        .collect();
+        lines.push(format!("  {name}: {}", parts.join(", ")));
+    }
+    InputResult {
+        bytes: Vec::new(),
+        echo: lines,
+        scripts: Vec::new(),
     }
 }
 
