@@ -2,6 +2,10 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.4.3 - 2026-06-07
+
+- Split-scrollback divider now drags as a true CMUD-style curtain. As you drag the line, the top pane grows or shrinks over the live pane in real time and content stays anchored — the new rows the top pane exposes match what was at the top of the live pane, because both panes share the same scrollback. The earlier per-snap jitter and post-release refresh are gone, the wrapper resize and the xterm fit and the scroll-anchor restore all commit in one synchronous paint per snap, and closing the split (auto-close on scroll-bottom, ESC, middle-click) no longer triggers any visible re-fit.
+
 ## v0.4.2 - 2026-06-07
 
 - Split-scrollback divider now drags smoothly and feels like CMUD's split. The live pane sits behind as an always-present background and the history pane is laid on top with its height controlled by the divider. Dragging slides the divider over the live tail in real time, both panes stay anchored, and on release nothing reflows. The divider snaps to terminal row heights so it always lands on a row boundary and never clips a half-line of content at the bottom of the history pane. The previous build's row-by-row jitter and post-release resize jump are gone.
