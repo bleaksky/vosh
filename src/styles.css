@@ -733,24 +733,15 @@ body {
 }
 
 /* Overlay split. Live fills the entire terminal-area as the
-   "always there" background; history pane is laid on top with
-   a height the Resizable controls. Dragging the divider grows
-   or shrinks the history pane over the live pane in real time
-   without reflowing either xterm — content in both panes
-   stays anchored for the whole gesture, the way CMUD's split
-   reads against a live MUD tail. */
-.terminal-area-split {
-  position: relative;
-}
-
-/* Insets match .terminal-area's padding (8 14 6 14) so the
-   absolutely-positioned panes sit inside the content area
-   instead of overlapping the padding strip. Absolute children
-   are positioned relative to their containing block's PADDING
-   BOX, so left:0 / right:0 would slap them flush against the
-   padding edge — visibly eating the 14px gutter that the live
-   layout normally leaves around the terminal. */
-.terminal-area-split .terminal-pane-live {
+   "always there" background regardless of split state; history
+   pane is laid on top when the split is open. Keeping live
+   absolute even when the split is closed means closing the
+   split (auto-close-on-bottom, ESC, middle-click) only
+   unmounts the history overlay — the live pane does not
+   transition between absolute and flex, so its xterm never
+   re-fits and the user never sees a refresh when the split
+   closes. */
+.terminal-area .terminal-pane-live {
   position: absolute;
   top: 8px;
   left: 14px;
@@ -760,6 +751,13 @@ body {
   z-index: 1;
 }
 
+/* Insets match .terminal-area's padding (8 14 6 14) so the
+   absolutely-positioned panes sit inside the content area
+   instead of overlapping the padding strip. Absolute children
+   are positioned relative to their containing block's PADDING
+   BOX, so left:0 / right:0 would slap them flush against the
+   padding edge — visibly eating the 14px gutter that the live
+   layout normally leaves around the terminal. */
 .terminal-area-split .terminal-pane-history {
   position: absolute;
   top: 8px;

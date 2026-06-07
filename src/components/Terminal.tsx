@@ -249,27 +249,7 @@ export function Terminal({
     // its final dimensions until after one or two layout/paint
     // cycles (viewport units, fonts, etc). Schedule fit() across
     // several deadlines so at least one lands on the settled layout.
-    //
-    // Gated by the Resizable drag broadcast below: when a divider
-    // is being dragged the wrapper slides smoothly in real time
-    // but we hold off on the actual xterm.resize / row-count
-    // change until the drag releases. That lets the host pane
-    // grow / shrink over its sibling without the content inside
-    // reflowing — the "anchored content over the sibling" UX
-    // matches CMUD's split.
-    //
-    // Frozen panes (quiet=true, used by the split-scrollback
-    // history pane) lock their host size after the initial fit
-    // settles. From that point on, dragging the divider grows /
-    // shrinks the wrapper without ever resizing the inner xterm.
-    // The user sees the divider slide over the live pane and the
-    // history snapshot stays exactly where it was, no reflow
-    // either during the drag OR on release.
-    let dragSuspend = false;
-    let frozen = false;
     const safeFit = () => {
-      if (dragSuspend) return;
-      if (frozen) return;
       try {
         fit.fit();
       } catch {
@@ -281,14 +261,6 @@ export function Terminal({
     setTimeout(safeFit, 50);
     setTimeout(safeFit, 200);
     setTimeout(safeFit, 800);
-    // After the initial-fit storm settles, the history pane's
-    // host has its right size locked in. Freeze the pane so the
-    // overlay drag UX never moves that size.
-    if (quietRef.current) {
-      setTimeout(() => {
-        frozen = true;
-      }, 900);
-    }
     termRef.current = term;
     fitRef.current = fit;
 
@@ -305,8 +277,6 @@ export function Terminal({
     const host = containerRef.current;
     const sync = () => {
       if (!sizer || !host) return;
-      if (dragSuspend) return;
-      if (frozen) return;
       const rect = sizer.getBoundingClientRect();
       const w = Math.floor(rect.width);
       const h = Math.floor(rect.height);
@@ -318,20 +288,53 @@ export function Terminal({
       safeFit();
     };
 
-    // Resizable broadcasts `vosh:resize-drag` { active } on
-    // pointer-down and pointer-up. Gate sync + fit while active
-    // so xterm content stays anchored for the full gesture. On
-    // release sync runs IF this pane is not frozen — frozen
-    // panes (the history pane) just stay at their committed
-    // size.
-    const onResizeDrag = (event: Event) => {
-      const detail = (event as CustomEvent<{ active: boolean }>).detail;
-      dragSuspend = detail.active;
-      if (!detail.active && !frozen) {
-        sync();
+    // Resizable broadcasts `vosh:resize-progress` { size } from
+    // its pointermove handler — fires synchronously inside the
+    // same JS task that just set the wrapper's CSS height. We
+    // run sync + fit + anchor restore in that same task so
+    // wrapper, xterm, and scroll all update before the browser
+    // paints. Anything async (React state, ResizeObserver) would
+    // land in a separate paint and the user would see a brief
+    // mismatched intermediate frame — the "jitter" that every
+    // previous attempt produced. For quiet panes (split-scrollback
+    // history) the viewport top is saved before fit and restored
+    // after so the larger viewport exposes new rows BELOW the old
+    // bottom instead of pushing old content down. That's what
+    // makes the drag look like a continuous curtain: the new
+    // rows xterm exposes match the rows that were just at the
+    // top of the live pane (both buffers are in sync because
+    // they both consume the same session://output stream).
+    const onResizeProgress = (_event: Event) => {
+      if (!sizer || !host) return;
+      const rect = sizer.getBoundingClientRect();
+      const w = Math.floor(rect.width);
+      const h = Math.floor(rect.height);
+      // The drag broadcasts to EVERY Terminal instance, but
+      // panels whose wrapper did not change (the live pane while
+      // the history pane is being dragged in overlay mode) have
+      // the same sizer rect as before. Bail out before any fit
+      // work so the unaffected pane never re-renders and the
+      // drag stays as cheap as possible.
+      if (w === lastW && h === lastH) return;
+      const savedViewportY = quietRef.current ? term.buffer.active.viewportY : -1;
+      lastW = w;
+      lastH = h;
+      host.style.width = `${w}px`;
+      host.style.height = `${h}px`;
+      try {
+        fit.fit();
+      } catch {
+        return;
+      }
+      if (savedViewportY >= 0) {
+        const current = term.buffer.active.viewportY;
+        const delta = savedViewportY - current;
+        if (delta !== 0) {
+          term.scrollLines(delta);
+        }
       }
     };
-    window.addEventListener('vosh:resize-drag', onResizeDrag);
+    window.addEventListener('vosh:resize-progress', onResizeProgress);
 
     const handleWindowResize = sync;
     window.addEventListener('resize', handleWindowResize);
@@ -627,7 +630,7 @@ export function Terminal({
       cancelAnimationFrame(rafId);
       observer.disconnect();
       window.removeEventListener('resize', handleWindowResize);
-      window.removeEventListener('vosh:resize-drag', onResizeDrag);
+      window.removeEventListener('vosh:resize-progress', onResizeProgress);
       window.removeEventListener('keydown', onCopyKey, true);
       if (naws_timer) clearTimeout(naws_timer);
       unsubOutput?.();
