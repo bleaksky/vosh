@@ -1005,6 +1005,7 @@ function App() {
           reservePx={120}
           className="terminal-pane terminal-pane-history"
           handleLabel="resize scrollback split"
+          snapPx={() => termRef.current?.cellHeight() ?? 0}
         >
           <Terminal
             fontFamily={fontFamily}

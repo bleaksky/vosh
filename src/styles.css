@@ -731,14 +731,51 @@ body {
 .terminal-pane-live {
   flex: 1 1 0;
 }
-.terminal-area-split .terminal-pane-history {
-  /* The Resizable handle inside this wrapper is now the visible
-     divider, so the old border-bottom + margin-bottom would just
-     stack a second line below it. Keep position:relative so the
-     scrollback-indicator (position:absolute) anchors to the
-     history pane. */
+
+/* Overlay split. Live fills the entire terminal-area as the
+   "always there" background; history pane is laid on top with
+   a height the Resizable controls. Dragging the divider grows
+   or shrinks the history pane over the live pane in real time
+   without reflowing either xterm — content in both panes
+   stays anchored for the whole gesture, the way CMUD's split
+   reads against a live MUD tail. */
+.terminal-area-split {
   position: relative;
-  margin-bottom: 4px;
+}
+
+/* Insets match .terminal-area's padding (8 14 6 14) so the
+   absolutely-positioned panes sit inside the content area
+   instead of overlapping the padding strip. Absolute children
+   are positioned relative to their containing block's PADDING
+   BOX, so left:0 / right:0 would slap them flush against the
+   padding edge — visibly eating the 14px gutter that the live
+   layout normally leaves around the terminal. */
+.terminal-area-split .terminal-pane-live {
+  position: absolute;
+  top: 8px;
+  left: 14px;
+  right: 14px;
+  bottom: 6px;
+  flex: none;
+  z-index: 1;
+}
+
+.terminal-area-split .terminal-pane-history {
+  position: absolute;
+  top: 8px;
+  left: 14px;
+  right: 14px;
+  z-index: 2;
+  /* Background stays transparent so any gap the wrapper has
+     beyond the inner xterm host (when a drag grows the wrapper
+     past the gated xterm size) reveals the live pane below
+     instead of an opaque surface fill. Without this, growing
+     the history pane during a drag leaves a black band between
+     the bottom of the frozen xterm content and the new bottom
+     edge of the wrapper. */
+  background: transparent;
+  overflow: hidden;
+  margin-bottom: 0;
 }
 
 /* Style the resizable handle so it reads as the split divider. The
