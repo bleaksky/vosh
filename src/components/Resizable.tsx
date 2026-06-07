@@ -115,6 +115,7 @@ export function Resizable({
   const [size, setSize] = useState<number>(() => loadSize(storageKey, defaultSize));
   const [viewport, setViewport] = useState<number>(() => viewportDim(effectiveDirection));
   const dragStateRef = useRef<{ start: number; startSize: number } | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     try {
@@ -141,15 +142,6 @@ export function Resizable({
     const start = isVertical ? event.clientY : event.clientX;
     dragStateRef.current = { start, startSize: clamped };
     document.body.style.cursor = isVertical ? 'row-resize' : 'col-resize';
-    // Tell xterm hosts to freeze their fit work for the drag.
-    // The wrapper still resizes pixel-by-pixel so the user sees
-    // the panel slide in real time (the overlay model lets that
-    // grow + shrink "over" the sibling content), but xterm itself
-    // does not re-fit or reflow until pointer-up. That means
-    // content inside the dragged pane stays anchored — same row
-    // count, same word wrap, same scroll position — for the whole
-    // gesture.
-    window.dispatchEvent(new CustomEvent('vosh:resize-drag', { detail: { active: true } }));
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -161,6 +153,22 @@ export function Resizable({
     const snap = typeof snapPx === 'function' ? snapPx() : snapPx;
     const snapped = snap && snap > 0 ? Math.round(raw / snap) * snap : raw;
     const bounded = Math.max(minSize, Math.min(effectiveMax, snapped));
+    // Update the wrapper synchronously via direct style assignment
+    // and broadcast the new size so listeners (Terminal) can fit +
+    // anchor in the same task. Going through React state would
+    // schedule an async render, and the wrapper resize would land
+    // in a different paint from the xterm fit — that staggered
+    // sequence is what made every previous drag jitter. The state
+    // setter still fires so React tracks the value, but the DOM
+    // is already at the right size by the time React commits.
+    if (wrapperRef.current) {
+      if (isVertical) {
+        wrapperRef.current.style.height = `${bounded}px`;
+      } else {
+        wrapperRef.current.style.width = `${bounded}px`;
+      }
+    }
+    window.dispatchEvent(new CustomEvent('vosh:resize-progress', { detail: { size: bounded } }));
     setSize(bounded);
   };
 
@@ -171,7 +179,6 @@ export function Resizable({
     }
     dragStateRef.current = null;
     document.body.style.cursor = '';
-    window.dispatchEvent(new CustomEvent('vosh:resize-drag', { detail: { active: false } }));
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -205,6 +212,7 @@ export function Resizable({
 
   return (
     <div
+      ref={wrapperRef}
       className={`resizable resizable-${effectiveDirection} resizable-anchor-${effectiveAnchor} ${className ?? ''}`}
       style={wrapperStyle}
     >
