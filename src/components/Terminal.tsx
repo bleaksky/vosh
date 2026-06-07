@@ -41,6 +41,12 @@ export interface TerminalHandle {
   /** Current cols × rows. Used by the host to push the size to the
    *  backend via NAWS after a (re)connect. */
   getSize: () => { cols: number; rows: number };
+  /** Height of one terminal cell in CSS pixels, derived from the
+   *  host's pixel height divided by the current row count. Used
+   *  by the split-scrollback Resizable to snap the divider to
+   *  row boundaries so it never lands mid-row and clips a half
+   *  line of content. */
+  cellHeight: () => number;
   /** Search forward from the current selection (or top of buffer). Returns
    *  true when a match was found and scrolled into view. Highlights every
    *  match across the entire scrollback as a side effect. */
@@ -243,7 +249,27 @@ export function Terminal({
     // its final dimensions until after one or two layout/paint
     // cycles (viewport units, fonts, etc). Schedule fit() across
     // several deadlines so at least one lands on the settled layout.
+    //
+    // Gated by the Resizable drag broadcast below: when a divider
+    // is being dragged the wrapper slides smoothly in real time
+    // but we hold off on the actual xterm.resize / row-count
+    // change until the drag releases. That lets the host pane
+    // grow / shrink over its sibling without the content inside
+    // reflowing — the "anchored content over the sibling" UX
+    // matches CMUD's split.
+    //
+    // Frozen panes (quiet=true, used by the split-scrollback
+    // history pane) lock their host size after the initial fit
+    // settles. From that point on, dragging the divider grows /
+    // shrinks the wrapper without ever resizing the inner xterm.
+    // The user sees the divider slide over the live pane and the
+    // history snapshot stays exactly where it was, no reflow
+    // either during the drag OR on release.
+    let dragSuspend = false;
+    let frozen = false;
     const safeFit = () => {
+      if (dragSuspend) return;
+      if (frozen) return;
       try {
         fit.fit();
       } catch {
@@ -255,6 +281,14 @@ export function Terminal({
     setTimeout(safeFit, 50);
     setTimeout(safeFit, 200);
     setTimeout(safeFit, 800);
+    // After the initial-fit storm settles, the history pane's
+    // host has its right size locked in. Freeze the pane so the
+    // overlay drag UX never moves that size.
+    if (quietRef.current) {
+      setTimeout(() => {
+        frozen = true;
+      }, 900);
+    }
     termRef.current = term;
     fitRef.current = fit;
 
@@ -271,6 +305,8 @@ export function Terminal({
     const host = containerRef.current;
     const sync = () => {
       if (!sizer || !host) return;
+      if (dragSuspend) return;
+      if (frozen) return;
       const rect = sizer.getBoundingClientRect();
       const w = Math.floor(rect.width);
       const h = Math.floor(rect.height);
@@ -281,6 +317,21 @@ export function Terminal({
       host.style.height = `${h}px`;
       safeFit();
     };
+
+    // Resizable broadcasts `vosh:resize-drag` { active } on
+    // pointer-down and pointer-up. Gate sync + fit while active
+    // so xterm content stays anchored for the full gesture. On
+    // release sync runs IF this pane is not frozen — frozen
+    // panes (the history pane) just stay at their committed
+    // size.
+    const onResizeDrag = (event: Event) => {
+      const detail = (event as CustomEvent<{ active: boolean }>).detail;
+      dragSuspend = detail.active;
+      if (!detail.active && !frozen) {
+        sync();
+      }
+    };
+    window.addEventListener('vosh:resize-drag', onResizeDrag);
 
     const handleWindowResize = sync;
     window.addEventListener('resize', handleWindowResize);
@@ -484,6 +535,16 @@ export function Terminal({
       // viewport is anchored to the live tail.
       isAtBottom: () => term.buffer.active.viewportY === term.buffer.active.baseY,
       getSize: () => ({ cols: term.cols, rows: term.rows }),
+      cellHeight: () => {
+        // Read the host's pixel height (set by sync) and divide by
+        // xterm's current row count. xterm does not expose actual
+        // cell height in its public API; this derivation matches
+        // FitAddon's own row computation so the snap value lines
+        // up with whatever row pitch xterm just rendered at.
+        const h = host && host.style.height ? parseFloat(host.style.height) : 0;
+        const rows = term.rows;
+        return rows > 0 ? h / rows : 0;
+      },
       findNext: (query, opts) =>
         searchAddon.findNext(query, {
           regex: opts?.regex ?? false,
@@ -566,6 +627,7 @@ export function Terminal({
       cancelAnimationFrame(rafId);
       observer.disconnect();
       window.removeEventListener('resize', handleWindowResize);
+      window.removeEventListener('vosh:resize-drag', onResizeDrag);
       window.removeEventListener('keydown', onCopyKey, true);
       if (naws_timer) clearTimeout(naws_timer);
       unsubOutput?.();

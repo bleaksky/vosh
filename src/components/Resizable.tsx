@@ -34,6 +34,13 @@ interface Props {
   /** Direction. Optional — derived from `anchor` when present. Kept
    *  for legacy callers that supplied direction without anchor. */
   direction?: Direction;
+  /** When provided, the size snaps to multiples of this value while
+   *  dragging. Used by the split-scrollback divider so it always
+   *  lands on a terminal row boundary and never clips a half-line
+   *  of content. The function form lets callers compute the snap
+   *  lazily from a live source (e.g. the xterm cell height). 0,
+   *  negative, or undefined disables snapping. */
+  snapPx?: number | (() => number);
 }
 
 const DEFAULT_MIN = 80;
@@ -82,6 +89,7 @@ export function Resizable({
   reservePx,
   className,
   handleLabel = 'resize panel',
+  snapPx,
 }: Props) {
   // Anchor is the source of truth. When omitted, derive from the
   // legacy `direction` prop: horizontal -> right, vertical -> bottom.
@@ -133,6 +141,15 @@ export function Resizable({
     const start = isVertical ? event.clientY : event.clientX;
     dragStateRef.current = { start, startSize: clamped };
     document.body.style.cursor = isVertical ? 'row-resize' : 'col-resize';
+    // Tell xterm hosts to freeze their fit work for the drag.
+    // The wrapper still resizes pixel-by-pixel so the user sees
+    // the panel slide in real time (the overlay model lets that
+    // grow + shrink "over" the sibling content), but xterm itself
+    // does not re-fit or reflow until pointer-up. That means
+    // content inside the dragged pane stays anchored — same row
+    // count, same word wrap, same scroll position — for the whole
+    // gesture.
+    window.dispatchEvent(new CustomEvent('vosh:resize-drag', { detail: { active: true } }));
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -140,11 +157,10 @@ export function Resizable({
     if (!drag) return;
     const current = isVertical ? event.clientY : event.clientX;
     const delta = current - drag.start;
-    // Leading-anchor panel: cursor moves AWAY from anchor (positive
-    // delta on horizontal-left or vertical-top) grows the panel.
-    // Trailing-anchor: cursor moving INTO the panel shrinks it.
-    const next = isLeadingAnchor ? drag.startSize + delta : drag.startSize - delta;
-    const bounded = Math.max(minSize, Math.min(effectiveMax, next));
+    const raw = isLeadingAnchor ? drag.startSize + delta : drag.startSize - delta;
+    const snap = typeof snapPx === 'function' ? snapPx() : snapPx;
+    const snapped = snap && snap > 0 ? Math.round(raw / snap) * snap : raw;
+    const bounded = Math.max(minSize, Math.min(effectiveMax, snapped));
     setSize(bounded);
   };
 
@@ -155,6 +171,7 @@ export function Resizable({
     }
     dragStateRef.current = null;
     document.body.style.cursor = '';
+    window.dispatchEvent(new CustomEvent('vosh:resize-drag', { detail: { active: false } }));
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
