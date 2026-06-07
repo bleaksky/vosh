@@ -2,6 +2,10 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.4.2 - 2026-06-07
+
+- Split-scrollback divider now drags smoothly and feels like CMUD's split. The live pane sits behind as an always-present background and the history pane is laid on top with its height controlled by the divider. Dragging slides the divider over the live tail in real time, both panes stay anchored, and on release nothing reflows. The divider snaps to terminal row heights so it always lands on a row boundary and never clips a half-line of content at the bottom of the history pane. The previous build's row-by-row jitter and post-release resize jump are gone.
+
 ## v0.4.1 - 2026-06-06
 
 - Five new built-in themes. Dracula at Night carries the iconic Dracula ANSI palette (purple #bd93f9, green #50fa7b, pink #ff79c6) on a deeper chrome for late-session reading. Monokai is the classic Sublime palette with the signature magenta accent. One Dark is the Atom editor cool slate with a blue accent and soft pastel semantics. One Half Dark is the brighter foreground variant of One Dark with cooler surfaces. Tango Dark is the GNOME Terminal classic with saturated CGA-style primaries on a warm dark background. Pick any from Settings · General · Theme.
