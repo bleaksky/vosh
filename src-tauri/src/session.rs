@@ -1288,6 +1288,16 @@ async fn dispatch_prompt_buffer(
         emit_output(app, b"\r\n".to_vec());
     }
     send_trigger_outputs(stream, &result.sends).await?;
+    // Always emit prompt-vars after a prompt-scope trigger has
+    // had effect, even when none of the captured values changed.
+    // The frontend's custom prompt renderer needs to re-paint on
+    // every prompt as a "server is ready for input" indicator;
+    // gating on value-change suppresses the emit when the player
+    // is at full vitals and the prompt repeats unchanged. Clear
+    // the apply flag so apply_script_result doesn't double-emit
+    // when values DID change.
+    emit_prompt_vars(app, profile).await;
+    script_apply.prompt_vars_changed = false;
     apply_script_result(app, stream, profile, timers, script_apply).await
 }
 

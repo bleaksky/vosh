@@ -23,6 +23,7 @@ import {
   getUiConfig,
   setWindowSize,
   listTriggers,
+  onPromptVars,
   onState,
   presetsInstall,
   presetsRemove,
@@ -31,8 +32,10 @@ import {
   subscribeProfileSwitched,
   subscribeSidePanelsFillHeightChanged,
   subscribeSplitDividerChanged,
+  subscribePromptTemplateChanged,
   type StatePayload,
 } from './lib/session';
+import { renderPromptTemplate } from './lib/promptTemplate';
 import { applyAndBroadcastTheme } from './lib/theme';
 import { loadFontStack } from './lib/fontLoader';
 import { defaultEnabledIds, PRESETS, presetTriggers } from './lib/presets';
@@ -145,6 +148,15 @@ function App() {
   // mirror search through pendingFindRef until the history is ready,
   // since findNext on an empty buffer would silently return no match.
   const [historyReady, setHistoryReady] = useState(false);
+  // Live-pane row count captured at the moment the split opens, before
+  // the live pane refits to its post-split smaller height. Used by
+  // onScrollbackLoaded to position the history viewport so its bottom
+  // row is the line that was immediately above the live pane's top
+  // row — i.e. opening the split produces zero apparent motion.
+  // Reading termRef.getSize().rows inside onScrollbackLoaded was
+  // unreliable: that callback may fire before or after the live pane
+  // refits, and the answer is different in each case.
+  const preSplitLiveRowsRef = useRef(0);
   const pendingFindRef = useRef<{
     query: string;
     opts: { caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean };
@@ -336,6 +348,7 @@ function App() {
       // accumulator — gives the user a single "intent" gesture
       // before history starts moving.
       if (scrollingUp && !splitOpen) {
+        preSplitLiveRowsRef.current = termRef.current?.getSize().rows ?? 0;
         setSplitOpen(true);
         wheelAccum = 0;
         return;
@@ -632,6 +645,54 @@ function App() {
     return () => {
       cancelled = true;
       unlisten?.();
+    };
+  }, []);
+
+  // Custom prompt rendering. When the trigger pipeline detects a
+  // prompt (and gags it), the backend emits prompt-vars with the
+  // captured values. If the user enabled the custom prompt
+  // template, we render that template against the vars and write
+  // the result to the live terminal — landing at the cursor
+  // position where the gagged prompt would have appeared. Held in
+  // refs so the long-lived prompt-vars listener picks up live
+  // changes without resubscribing.
+  const promptTemplateEnabledRef = useRef(false);
+  const promptTemplateRef = useRef('');
+  useEffect(() => {
+    let unsubVars: (() => void) | undefined;
+    let unsubChanged: (() => void) | undefined;
+    let cancelled = false;
+    getUiConfig()
+      .then((cfg) => {
+        if (cancelled) return;
+        promptTemplateEnabledRef.current = cfg.prompt_template_enabled;
+        promptTemplateRef.current = cfg.prompt_template;
+      })
+      .catch(() => {
+        // ignore — first-paint defaults are already empty/disabled
+      });
+    onPromptVars((vars) => {
+      if (!promptTemplateEnabledRef.current) return;
+      const template = promptTemplateRef.current;
+      if (template.length === 0) return;
+      const rendered = renderPromptTemplate(template, vars);
+      if (rendered.length === 0) return;
+      termRef.current?.write(rendered);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsubVars = fn;
+    });
+    subscribePromptTemplateChanged((value) => {
+      promptTemplateEnabledRef.current = value.enabled;
+      promptTemplateRef.current = value.template;
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsubChanged = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsubVars?.();
+      unsubChanged?.();
     };
   }, []);
 
@@ -1003,7 +1064,7 @@ function App() {
           minSize={80}
           maxSize={1200}
           reservePx={120}
-          className="terminal-pane terminal-pane-history"
+          className={`terminal-pane terminal-pane-history${historyReady ? '' : ' terminal-pane-history-priming'}`}
           handleLabel="resize scrollback split"
           snapPx={() => termRef.current?.cellHeight() ?? 0}
         >
@@ -1016,7 +1077,21 @@ function App() {
               historyTermRef.current = handle;
             }}
             onScrollbackLoaded={() => {
-              historyTermRef.current?.scrollPages(-1);
+              // Position the history pane so its bottom row is the
+              // line immediately above the live pane's full row
+              // range. The live pane is `position: absolute` with
+              // both top and bottom pinned (overlay model), so its
+              // xterm renders the full terminal-area row count even
+              // while the history overlay covers part of it. If
+              // history's bottom landed inside live's row range the
+              // same lines would render in both panes — opaque
+              // overlay hides that visually, but the scroll-depth
+              // indicator still makes more sense when the panes
+              // describe disjoint buffer regions. Pre-split live
+              // rows captured in the wheel handler because reading
+              // the live pane's size here is racey.
+              const scrollBack = preSplitLiveRowsRef.current;
+              if (scrollBack > 0) historyTermRef.current?.scrollLines(-scrollBack);
               setHistoryReady(true);
             }}
             onScrollPosition={(back, max) => setHistoryScrollPos({ back, max })}

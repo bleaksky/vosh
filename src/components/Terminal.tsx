@@ -8,6 +8,7 @@ import {
   type ISearchOptions,
   type ISearchResultChangeEvent,
 } from '@xterm/addon-search';
+import { WebglAddon } from '@xterm/addon-webgl';
 
 import '@xterm/xterm/css/xterm.css';
 import { loadScrollback, onOutput, setWindowSize } from '../lib/session';
@@ -241,14 +242,16 @@ export function Terminal({
     });
 
     term.open(containerRef.current);
-    // DECTCEM: hide the cursor entirely. Belt-and-suspenders alongside
-    // the cursor* options above; some terminals re-show it on certain
-    // sequences and we want the read-only pane to stay clean.
-    term.write('\x1b[?25l');
-    // Initial fit is a moving target — the container may not have
-    // its final dimensions until after one or two layout/paint
-    // cycles (viewport units, fonts, etc). Schedule fit() across
-    // several deadlines so at least one lands on the settled layout.
+
+    // GPU renderer. xterm's WebGL addon must run after term.open() and
+    // it reads the host element's pixel size when it allocates the
+    // glyph atlas — load it after one fit so the host has nonzero
+    // dimensions. The earlier rAF-deferred attempt crashed in
+    // syncScrollArea because the renderer swap and a scheduled fit()
+    // ran in the same frame, leaving `_renderer.value` undefined; the
+    // straightforward order (sync + fit, then swap) avoids that.
+    // Escape hatch: set `window.__voshDisableWebGL = true` in the
+    // console before reload to force the DOM renderer.
     const safeFit = () => {
       try {
         fit.fit();
@@ -257,6 +260,70 @@ export function Terminal({
       }
     };
     safeFit();
+    // WebGL is opt-in via `localStorage.setItem('vosh.webgl', '1')`
+    // (persists across reloads) or `window.__voshEnableWebGL = true`
+    // (one-shot for the current page). Default-off so a broken WebGL
+    // path can't make the window invisible — the WebGL renderer paints
+    // into a canvas and, combined with Tauri's `transparent: true`
+    // window, an unpainted GL canvas reads as see-through desktop.
+    let webglAddon: WebglAddon | null = null;
+    const lsFlag =
+      typeof localStorage !== 'undefined' && localStorage.getItem('vosh.webgl') === '1';
+    const winFlag =
+      typeof window !== 'undefined' &&
+      (window as { __voshEnableWebGL?: boolean }).__voshEnableWebGL === true;
+    const enableWebgl = lsFlag || winFlag;
+    if (enableWebgl) {
+      // Probe webgl2 in a throwaway canvas first. If the WebView
+      // can't allocate a context, the addon would load, immediately
+      // fire onContextLoss, and (per xterm 5.5.0 bug) leave the
+      // terminal renderer in an unrenderable state. Cheaper to
+      // detect now and stay on DOM.
+      let probeOk = false;
+      try {
+        const probe = document.createElement('canvas');
+        const ctx = probe.getContext('webgl2') as WebGL2RenderingContext | null;
+        if (ctx) {
+          probeOk = true;
+          try {
+            ctx.getExtension('WEBGL_lose_context')?.loseContext();
+          } catch {
+            // ignore probe cleanup failure
+          }
+        }
+      } catch {
+        probeOk = false;
+      }
+      if (!probeOk) {
+        console.log('[vosh] webgl2 unavailable in this WebView, staying on DOM');
+      }
+      try {
+        if (!probeOk) throw new Error('webgl2 probe failed');
+        // xterm 6.1.0-beta's WebglAddon takes an options object and
+        // also ships PR #5529 — synchronous redraw on resize — which
+        // is what fixes the 1px-canvas-width oscillation that made
+        // the divider drag wobble on the previous (5.5.0) line.
+        // No options needed; the defaults match what we want.
+        const addon = new WebglAddon();
+        // DO NOT dispose on context loss. xterm 5.5.0 has four
+        // unchecked `_renderer.value.dimensions` accesses; disposing
+        // the WebGL addon nulls `_renderer.value`, and the next
+        // syncScrollArea (fired by the scheduled fits below) reads
+        // undefined.dimensions and crashes the whole pane. Logging
+        // is the most we can do — the user can reload to reset.
+        addon.onContextLoss(() => {
+          console.warn('[vosh] webgl context lost — DOM fallback skipped');
+        });
+        term.loadAddon(addon);
+        webglAddon = addon;
+        console.log('[vosh] webgl renderer active');
+      } catch (err) {
+        console.log('[vosh] webgl renderer failed, staying on DOM', err);
+        webglAddon = null;
+      }
+    } else {
+      console.log('[vosh] webgl off — enable with localStorage.setItem("vosh.webgl","1")');
+    }
     requestAnimationFrame(safeFit);
     setTimeout(safeFit, 50);
     setTimeout(safeFit, 200);
@@ -309,14 +376,7 @@ export function Terminal({
       const rect = sizer.getBoundingClientRect();
       const w = Math.floor(rect.width);
       const h = Math.floor(rect.height);
-      // The drag broadcasts to EVERY Terminal instance, but
-      // panels whose wrapper did not change (the live pane while
-      // the history pane is being dragged in overlay mode) have
-      // the same sizer rect as before. Bail out before any fit
-      // work so the unaffected pane never re-renders and the
-      // drag stays as cheap as possible.
       if (w === lastW && h === lastH) return;
-      const savedViewportY = quietRef.current ? term.buffer.active.viewportY : -1;
       lastW = w;
       lastH = h;
       host.style.width = `${w}px`;
@@ -324,15 +384,17 @@ export function Terminal({
       try {
         fit.fit();
       } catch {
-        return;
+        // ignore resize before layout settles
       }
-      if (savedViewportY >= 0) {
-        const current = term.buffer.active.viewportY;
-        const delta = savedViewportY - current;
-        if (delta !== 0) {
-          term.scrollLines(delta);
-        }
-      }
+      // No explicit refresh or viewport restore. xterm's resize
+      // adjusts the buffer dimensions; the WebGL renderer's own
+      // debounced redraw paints once after the drag settles, which
+      // matches what the DOM renderer does — both panes look
+      // stationary during the drag and the divider slides cleanly
+      // between them. Forcing a per-frame refresh produced the
+      // curtain effect (content shifted per drag frame); doing
+      // scrollLines or scrollToLine produced oscillation. Leaving
+      // it alone gives the right visual.
     };
     window.addEventListener('vosh:resize-progress', onResizeProgress);
 
@@ -539,14 +601,25 @@ export function Terminal({
       isAtBottom: () => term.buffer.active.viewportY === term.buffer.active.baseY,
       getSize: () => ({ cols: term.cols, rows: term.rows }),
       cellHeight: () => {
-        // Read the host's pixel height (set by sync) and divide by
-        // xterm's current row count. xterm does not expose actual
-        // cell height in its public API; this derivation matches
-        // FitAddon's own row computation so the snap value lines
-        // up with whatever row pitch xterm just rendered at.
+        // Read the host's pixel height (set by sync), divide by
+        // xterm's current row count, and round UP to whole pixels.
+        // xterm does not expose actual cell height in its public
+        // API; this derivation matches FitAddon's own row math.
+        // Ceiling matters: the snap pitch is the wrapper-height
+        // delta per row. With fractional cellHeight the wrapper
+        // height between two snap points is `N * cellHeight`, but
+        // the DOM rounds it to whole pixels — drag near a snap
+        // boundary then oscillates between two pixel rows of
+        // remainder space at the bottom of xterm and the line near
+        // the divider looks like its height is changing. Ceiling
+        // guarantees `N * snap > N * actualCellHeight`, so xterm
+        // always fits N rows comfortably with a constant tiny
+        // remainder, and that remainder doesn't move as snaps
+        // change. A few unused pixels at the bottom is cheaper
+        // than a visible jitter.
         const h = host && host.style.height ? parseFloat(host.style.height) : 0;
         const rows = term.rows;
-        return rows > 0 ? h / rows : 0;
+        return rows > 0 ? Math.ceil(h / rows) : 0;
       },
       findNext: (query, opts) =>
         searchAddon.findNext(query, {
@@ -637,6 +710,19 @@ export function Terminal({
       resultsSub.dispose();
       scrollDisposable.dispose();
       searchAddon.dispose();
+      // WebglAddon's dispose reads `_terminal._core._store._isDisposed`
+      // and throws when xterm has already torn down its core. The
+      // history pane mounts/unmounts on split open/close so this fires
+      // routinely. The renderer still releases its GL resources before
+      // the throw, so the silent swallow is safe — there's nothing
+      // useful for us to do here and printing pollutes the console
+      // every time the split toggles.
+      try {
+        webglAddon?.dispose();
+      } catch {
+        // intentional swallow — see comment above
+      }
+      webglAddon = null;
       term.dispose();
       termRef.current = null;
       fitRef.current = null;

@@ -628,6 +628,14 @@ export interface UiConfig {
    *  `kill` / `oload` / alias names do not light up red. Default
    *  off; opt-in for roleplayers. */
   spellcheck_prompt: boolean;
+  /** When true, gagged prompts get replaced with a frontend-rendered
+   *  string built from `prompt_template`. Off by default. */
+  prompt_template_enabled: boolean;
+  /** Template string for the custom prompt. Uses the same `%name`
+   *  / `%{name}` / `%name_bar:width:color` token grammar as the
+   *  vitals template. Empty string means no rendering even when
+   *  enabled. */
+  prompt_template: string;
   /** Vitals panel appearance. Toggles which columns render and lets
    *  the user pick their own bar glyphs and width. */
   vitals: VitalsConfig;
@@ -765,6 +773,8 @@ export async function getUiConfig(): Promise<UiConfig> {
     side_panels_fill_height?: boolean;
     paste_line_delay_ms?: number;
     spellcheck_prompt?: boolean;
+    prompt_template_enabled?: boolean;
+    prompt_template?: string;
     vitals?: Partial<VitalsConfig>;
     moons_position?: string;
     chip_style?: string;
@@ -791,6 +801,8 @@ export async function getUiConfig(): Promise<UiConfig> {
         ? Math.min(10_000, Math.floor(cfg.paste_line_delay_ms))
         : 500,
     spellcheck_prompt: Boolean(cfg.spellcheck_prompt),
+    prompt_template_enabled: Boolean(cfg.prompt_template_enabled),
+    prompt_template: typeof cfg.prompt_template === 'string' ? cfg.prompt_template : '',
     vitals: normalizeVitalsConfig(cfg.vitals),
     moons_position:
       cfg.moons_position === 'before-time' || cfg.moons_position === 'after-time'
@@ -967,6 +979,12 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     config.spellcheck_prompt,
     prev?.spellcheck_prompt,
   );
+  await emitChanged(
+    'vosh://prompt-template-changed',
+    { enabled: config.prompt_template_enabled, template: config.prompt_template },
+    { enabled: prev?.prompt_template_enabled, template: prev?.prompt_template },
+    deepEqual,
+  );
   await emitChanged('vosh://vitals-config-changed', config.vitals, prev?.vitals, deepEqual);
   await emitChanged('vosh://moons-position-changed', config.moons_position, prev?.moons_position);
   await emitChanged('vosh://chip-style-changed', config.chip_style, prev?.chip_style);
@@ -998,6 +1016,8 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
     sidePanelsFillHeight: config.side_panels_fill_height,
     pasteLineDelayMs: config.paste_line_delay_ms,
     spellcheckPrompt: config.spellcheck_prompt,
+    promptTemplateEnabled: config.prompt_template_enabled,
+    promptTemplate: config.prompt_template,
     vitals: config.vitals,
     moonsPosition: config.moons_position,
     chipStyle: config.chip_style,
@@ -1049,6 +1069,25 @@ export async function subscribeSplitDividerChanged(
   return listen<string | null>('vosh://split-divider-changed', (event) => {
     cb(typeof event.payload === 'string' && event.payload.length > 0 ? event.payload : null);
   });
+}
+
+export interface PromptTemplateConfig {
+  enabled: boolean;
+  template: string;
+}
+
+export async function subscribePromptTemplateChanged(
+  cb: (value: PromptTemplateConfig) => void,
+): Promise<UnlistenFn> {
+  return listen<{ enabled?: boolean; template?: string }>(
+    'vosh://prompt-template-changed',
+    (event) => {
+      cb({
+        enabled: Boolean(event.payload?.enabled),
+        template: typeof event.payload?.template === 'string' ? event.payload.template : '',
+      });
+    },
+  );
 }
 
 export async function subscribeCustomThemesChanged(

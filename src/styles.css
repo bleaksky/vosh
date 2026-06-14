@@ -732,16 +732,16 @@ body {
   flex: 1 1 0;
 }
 
-/* Overlay split. Live fills the entire terminal-area as the
-   "always there" background regardless of split state; history
-   pane is laid on top when the split is open. Keeping live
-   absolute even when the split is closed means closing the
-   split (auto-close-on-bottom, ESC, middle-click) only
-   unmounts the history overlay — the live pane does not
-   transition between absolute and flex, so its xterm never
-   re-fits and the user never sees a refresh when the split
-   closes. */
-.terminal-area .terminal-pane-live {
+/* Overlay split. The live pane sits at full terminal-area height
+   and the history pane is laid on top with a height the Resizable
+   controls. Live keeps its real row count and the backend NAWS
+   size stays correct; the opaque xterm-viewport bg below ensures
+   the history overlay can't reveal live's hidden rows. We tried a
+   shrink model (live's top tracking history's bottom via a CSS
+   variable) — it shifted live's content down on open and made the
+   drag refit xterm + GL atlas every pointermove, both visibly
+   janky. */
+.terminal-area-split .terminal-pane-live {
   position: absolute;
   top: 8px;
   left: 14px;
@@ -764,16 +764,39 @@ body {
   left: 14px;
   right: 14px;
   z-index: 2;
-  /* Background stays transparent so any gap the wrapper has
-     beyond the inner xterm host (when a drag grows the wrapper
-     past the gated xterm size) reveals the live pane below
-     instead of an opaque surface fill. Without this, growing
-     the history pane during a drag leaves a black band between
-     the bottom of the frozen xterm content and the new bottom
-     edge of the wrapper. */
+  /* Wrapper background stays transparent so any gap beyond the
+     inner xterm host (when a drag grows the wrapper past the
+     gated xterm size) reveals the live pane below instead of an
+     opaque surface fill. Without this, growing the history pane
+     during a drag leaves a black band between the bottom of the
+     frozen xterm content and the new bottom edge of the wrapper. */
   background: transparent;
   overflow: hidden;
   margin-bottom: 0;
+}
+
+/* xterm.css hardcodes `.xterm-viewport` to `background-color: #000`
+   so the scroll container is solid black against any transparent
+   wrapper. During scroll the WebGL canvas redraws and there's a
+   sub-frame window where that black peeks through — reads as a
+   flash. Override the viewport background on both split panes (and
+   on the live pane in single-pane mode too, since the same gap
+   exists when only one pane is present). */
+.terminal-pane .xterm .xterm-viewport,
+.terminal-pane .xterm .xterm-screen {
+  background-color: var(--xterm-bg, var(--c-surface));
+}
+
+/* Hide the history pane content while it primes (mounts, loads
+   scrollback, snaps to its target position). Without this the user
+   sees the just-loaded live tail for one frame before
+   onScrollbackLoaded fires and scrolls the viewport back to the
+   pre-split alignment. The class is removed once historyReady flips
+   to true. Visibility hidden rather than opacity 0 so the pane
+   still reserves its layout space and the splitter geometry stays
+   correct from the first frame. */
+.terminal-pane-history-priming .xterm {
+  visibility: hidden;
 }
 
 /* Style the resizable handle so it reads as the split divider. The
@@ -1089,6 +1112,19 @@ body {
   vertical-align: baseline;
   margin: 0 3px;
   color: var(--pct-color, var(--c-text));
+}
+
+/* Container for the inline prompt-chip strip drawn into an xterm
+   decoration overlay. The decoration's host element is positioned
+   in cell coordinates by xterm; this just lays the chips out
+   horizontally and removes pointer interactivity so the chips
+   never swallow text-selection clicks. */
+.vosh-inline-prompt-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 /* Template wrapper: mimics the inline plain layout flex baseline
