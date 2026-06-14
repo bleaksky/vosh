@@ -24,6 +24,12 @@ function applyToRoot(theme: AppTheme) {
   for (const [key, value] of Object.entries(vars)) {
     root.style.setProperty(key, value);
   }
+  // Expose the xterm background as a CSS var so the split history
+  // overlay can paint an opaque undercoat that matches the renderer's
+  // own background — covers xterm's sub-frame render gap during scroll.
+  if (theme.xterm.background) {
+    root.style.setProperty('--xterm-bg', theme.xterm.background);
+  }
   currentThemeId = theme.id;
 }
 

@@ -189,6 +189,19 @@ pub(crate) struct UiConfig {
     /// for roleplay-heavy users.
     #[serde(default)]
     pub spellcheck_prompt: bool,
+    /// When true, gagged prompts captured via prompt-vars triggers
+    /// are replaced with a frontend-rendered string built from
+    /// `prompt_template`. The template uses the same `%name` /
+    /// `%{name}` / `%name_bar:width:color` syntax as the vitals
+    /// template. Off by default — opt-in.
+    #[serde(default)]
+    pub prompt_template_enabled: bool,
+    /// Template string for the custom prompt renderer. Empty means
+    /// no rendering even if enabled. See vitalsTemplate.ts for the
+    /// token syntax. Captured prompt vars (whatever the user's
+    /// trigger names them) plus the bar tokens are available.
+    #[serde(default)]
+    pub prompt_template: String,
     /// Per-row appearance of the vitals panel. Toggles which columns
     /// render (bar / percent / numeric / delta) and overrides the
     /// bar glyphs and width. Default mirrors the historical look.
@@ -493,6 +506,8 @@ impl Default for UiConfig {
             side_panels_fill_height: false,
             paste_line_delay_ms: default_paste_line_delay_ms(),
             spellcheck_prompt: false,
+            prompt_template_enabled: false,
+            prompt_template: String::new(),
             vitals: VitalsConfig::default(),
             moons_position: default_moons_position(),
             chip_style: default_chip_style(),
@@ -616,6 +631,8 @@ impl ProfileConfig {
             side_panels_fill_height: profile.ui.side_panels_fill_height,
             paste_line_delay_ms: profile.ui.paste_line_delay_ms,
             spellcheck_prompt: profile.ui.spellcheck_prompt,
+            prompt_template_enabled: profile.ui.prompt_template_enabled,
+            prompt_template: profile.ui.prompt_template.clone(),
             vitals: profile.ui.vitals.clone(),
             moons_position: profile.ui.moons_position.clone(),
             chip_style: profile.ui.chip_style.clone(),
@@ -726,6 +743,8 @@ impl ProfileConfig {
             side_panels_fill_height: self.ui.side_panels_fill_height,
             paste_line_delay_ms: self.ui.paste_line_delay_ms,
             spellcheck_prompt: self.ui.spellcheck_prompt,
+            prompt_template_enabled: self.ui.prompt_template_enabled,
+            prompt_template: self.ui.prompt_template.clone(),
             vitals: self.ui.vitals.clone(),
             moons_position: self.ui.moons_position.clone(),
             chip_style: self.ui.chip_style.clone(),

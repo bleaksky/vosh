@@ -137,10 +137,16 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                 profile.vars.remove(&name);
             }
             Action::SetPromptVar { name, value } => {
-                let prev = profile.prompt_vars.insert(name, value.clone());
-                if prev.as_deref() != Some(value.as_str()) {
-                    result.prompt_vars_changed = true;
-                }
+                profile.prompt_vars.insert(name, value);
+                // Always flag as changed. The previous "only fire on
+                // value change" semantics suppressed every emit after
+                // the first one when the player was at full vitals
+                // and the prompt repeated unchanged — which means the
+                // frontend never re-rendered the custom prompt template
+                // on subsequent prompts. The change-gate optimization
+                // saved a few IPC events per second; the trade-off is
+                // not worth losing the prompt-as-ready-indicator UX.
+                result.prompt_vars_changed = true;
             }
             Action::RemovePromptVar(name) => {
                 if profile.prompt_vars.remove(&name).is_some() {

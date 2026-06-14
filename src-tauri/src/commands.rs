@@ -1445,6 +1445,8 @@ pub(crate) struct UiConfigPayload {
     pub side_panels_fill_height: bool,
     pub paste_line_delay_ms: u32,
     pub spellcheck_prompt: bool,
+    pub prompt_template_enabled: bool,
+    pub prompt_template: String,
     pub vitals: crate::profile_config::VitalsConfig,
     pub moons_position: String,
     pub chip_style: String,
@@ -1469,6 +1471,8 @@ pub(crate) async fn ui_get_config(
         side_panels_fill_height: p.ui.side_panels_fill_height,
         paste_line_delay_ms: p.ui.paste_line_delay_ms,
         spellcheck_prompt: p.ui.spellcheck_prompt,
+        prompt_template_enabled: p.ui.prompt_template_enabled,
+        prompt_template: p.ui.prompt_template.clone(),
         vitals: p.ui.vitals.clone(),
         moons_position: p.ui.moons_position.clone(),
         chip_style: p.ui.chip_style.clone(),
@@ -1493,6 +1497,8 @@ pub(crate) async fn ui_set_config(
     side_panels_fill_height: bool,
     paste_line_delay_ms: u32,
     spellcheck_prompt: bool,
+    prompt_template_enabled: bool,
+    prompt_template: String,
     vitals: crate::profile_config::VitalsConfig,
     moons_position: String,
     chip_style: String,
@@ -1543,6 +1549,8 @@ pub(crate) async fn ui_set_config(
         // paste indicator (0–10s per line is plenty).
         p.ui.paste_line_delay_ms = paste_line_delay_ms.min(10_000);
         p.ui.spellcheck_prompt = spellcheck_prompt;
+        p.ui.prompt_template_enabled = prompt_template_enabled;
+        p.ui.prompt_template = prompt_template;
         // Normalize vitals glyphs + width. Empty glyph strings would
         // render zero-width bars; collapse to the default in that case
         // so the user cannot accidentally hide the bar via a typo.

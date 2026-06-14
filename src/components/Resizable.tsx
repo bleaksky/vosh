@@ -41,6 +41,13 @@ interface Props {
    *  lazily from a live source (e.g. the xterm cell height). 0,
    *  negative, or undefined disables snapping. */
   snapPx?: number | (() => number);
+  /** Fires synchronously every time the size changes — during
+   *  pointer drag, on keyboard nudge, and once on mount with the
+   *  initial value. Used by callers that need to keep a sibling
+   *  element's geometry in lockstep (e.g. the split-scrollback
+   *  layout writes the history height to a CSS variable so the
+   *  live pane shrinks in the same paint frame). */
+  onSizeChange?: (size: number) => void;
 }
 
 const DEFAULT_MIN = 80;
@@ -90,6 +97,7 @@ export function Resizable({
   className,
   handleLabel = 'resize panel',
   snapPx,
+  onSizeChange,
 }: Props) {
   // Anchor is the source of truth. When omitted, derive from the
   // legacy `direction` prop: horizontal -> right, vertical -> bottom.
@@ -114,7 +122,9 @@ export function Resizable({
 
   const [size, setSize] = useState<number>(() => loadSize(storageKey, defaultSize));
   const [viewport, setViewport] = useState<number>(() => viewportDim(effectiveDirection));
-  const dragStateRef = useRef<{ start: number; startSize: number } | null>(null);
+  const dragStateRef = useRef<{ start: number; startSize: number; lastSnapped: number } | null>(
+    null,
+  );
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -135,12 +145,28 @@ export function Resizable({
   const effectiveMax = Math.max(minSize, Math.min(maxSize, viewport - reserve));
   const clamped = Math.max(minSize, Math.min(effectiveMax, size));
 
+  // Forward size changes that didn't originate from pointer-drag
+  // (keyboard nudge, mount with persisted value). Pointer-drag
+  // already calls onSizeChange synchronously inside the move
+  // handler, so callers get every drag frame. Don't dispatch
+  // vosh:resize-progress here — Terminal.tsx's ResizeObserver
+  // handles non-drag size changes the next frame, and broadcasting
+  // here in addition to from pointermove makes the event fire
+  // twice per drag frame (once sync from the move handler, once
+  // async after React commits the state). Sibling consumers refit
+  // against subtly different dimensions on each fire and the
+  // pane wobbles.
+  useEffect(() => {
+    onSizeChange?.(clamped);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clamped]);
+
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
     const start = isVertical ? event.clientY : event.clientX;
-    dragStateRef.current = { start, startSize: clamped };
+    dragStateRef.current = { start, startSize: clamped, lastSnapped: clamped };
     document.body.style.cursor = isVertical ? 'row-resize' : 'col-resize';
   };
 
@@ -151,7 +177,27 @@ export function Resizable({
     const delta = current - drag.start;
     const raw = isLeadingAnchor ? drag.startSize + delta : drag.startSize - delta;
     const snap = typeof snapPx === 'function' ? snapPx() : snapPx;
-    const snapped = snap && snap > 0 ? Math.round(raw / snap) * snap : raw;
+    // Hysteresis around the snap boundary. With a plain Math.round
+    // the cursor sitting near a row threshold flips the wrapper
+    // between two adjacent snap values every pointermove and the
+    // text under the divider visibly jitters up and down. Require
+    // the cursor to move >60% of a snap step away from the
+    // currently-snapped value before we commit to a new one.
+    let snapped = raw;
+    if (snap && snap > 0) {
+      const candidate = Math.round(raw / snap) * snap;
+      const last = drag.lastSnapped;
+      if (Math.abs(candidate - last) <= snap / 2 + 0.01) {
+        // Candidate is the same snap target as `last` (or differs
+        // by exactly one step at the half-boundary). Apply
+        // hysteresis: only switch if the raw cursor is well past
+        // the dead zone around `last`.
+        snapped = Math.abs(raw - last) > snap * 0.6 ? candidate : last;
+      } else {
+        snapped = candidate;
+      }
+      drag.lastSnapped = snapped;
+    }
     const bounded = Math.max(minSize, Math.min(effectiveMax, snapped));
     // Update the wrapper synchronously via direct style assignment
     // and broadcast the new size so listeners (Terminal) can fit +
@@ -168,6 +214,13 @@ export function Resizable({
         wrapperRef.current.style.width = `${bounded}px`;
       }
     }
+    // onSizeChange first so any sibling-coupling work (e.g. the
+    // split-scrollback CSS variable that resizes the live pane)
+    // lands BEFORE the event listeners read fresh dimensions.
+    // Reverse order would leave live's onResizeProgress reading
+    // stale wrapper geometry on every drag frame and the live
+    // pane would jitter against the dragged history pane.
+    onSizeChange?.(bounded);
     window.dispatchEvent(new CustomEvent('vosh:resize-progress', { detail: { size: bounded } }));
     setSize(bounded);
   };

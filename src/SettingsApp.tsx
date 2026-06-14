@@ -255,6 +255,38 @@ interface GeneralProps {
   onError: (e: string | null) => void;
 }
 
+// GPU rendering toggle. Backed by localStorage rather than the
+// profile-synced UiConfig because WebGL availability is a property of
+// the host machine, not the user's profile. Toggling writes the flag
+// and shows a reload hint; the renderer swap requires a fresh terminal
+// mount because xterm 5.5 has no clean way to hot-swap renderers.
+function WebglToggle() {
+  const [enabled, setEnabled] = useState(() =>
+    typeof localStorage !== 'undefined' ? localStorage.getItem('vosh.webgl') === '1' : false,
+  );
+  const [dirty, setDirty] = useState(false);
+  return (
+    <label className="settings-checkbox" title="GPU rendering via WebGL2 (experimental)">
+      <input
+        type="checkbox"
+        checked={enabled}
+        onChange={(e) => {
+          const next = e.target.checked;
+          setEnabled(next);
+          setDirty(true);
+          try {
+            if (next) localStorage.setItem('vosh.webgl', '1');
+            else localStorage.removeItem('vosh.webgl');
+          } catch {
+            // localStorage may be disabled in some Tauri contexts; ignore
+          }
+        }}
+      />
+      <span>GPU rendering (experimental, reload to apply{dirty ? ' — pending' : ''})</span>
+    </label>
+  );
+}
+
 function GeneralTab({ config, setConfig, onError }: GeneralProps) {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [updateStatus, setUpdateStatus] = useState<{
@@ -361,6 +393,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           />
           <span>tint server output with theme palette</span>
         </label>
+        <WebglToggle />
       </Row>
       <Row label="updates">
         <span className="settings-updates-row">
@@ -458,6 +491,30 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           <span className="settings-paste-hint">
             0 = no pacing. higher values dodge MUD flood filters when pasting long scripts.
           </span>
+        </span>
+      </Row>
+      <Row label="prompt">
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={config.prompt_template_enabled}
+            onChange={(e) => update({ prompt_template_enabled: e.target.checked })}
+          />
+          <span>replace gagged prompts with custom template</span>
+        </label>
+        <input
+          type="text"
+          className="settings-font-input"
+          spellCheck={false}
+          value={config.prompt_template}
+          placeholder="[%hp_bar:10 %hp/%maxhp hp] > "
+          onChange={(e) => update({ prompt_template: e.target.value })}
+          aria-label="custom prompt template"
+        />
+        <span className="settings-paste-hint">
+          tokens %hp %mhp %mn %mmn %mv %mmv %pct_hp %hp_bar (or %bar_hp). bar params
+          %name_bar:WIDTH:COLOR — color is auto / green / yellow / red / blue / cyan / magenta /
+          white. requires a prompt-capture trigger that gags + emits vars.
         </span>
       </Row>
       <Row label="font">
