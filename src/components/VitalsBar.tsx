@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   DEFAULT_VITALS_CONFIG,
   getUiConfig,
@@ -1204,7 +1204,9 @@ function TemplateVitalsRow({
   // can interpolate ANY field the server pushes (xp, gold, alignment,
   // position, ...) — not just the curated hp/mn/mv tokens.
   const stats = useCharStats();
-  const segments = tokenizeTemplate(config.template);
+  // Re-tokenize only when the template string changes, not on every
+  // vitals push.
+  const segments = useMemo(() => tokenizeTemplate(config.template), [config.template]);
   const gradient = config.percent_color === 'gradient';
   const width = Math.max(4, Math.min(60, config.bar_width));
 

@@ -55,6 +55,12 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
   const [wholeWord, setWholeWord] = useState(false);
   const [regex, setRegex] = useState(false);
   const [status, setStatus] = useState<'idle' | 'hit' | 'miss'>('idle');
+  // Track the active match position locally. The SearchAddon re-fires
+  // (and resets) its own resultIndex on every terminal write while it
+  // refreshes live highlights, so that index cannot be trusted while
+  // MUD output is streaming. Its resultCount is reliable, so we step a
+  // local index on each navigation and wrap it against that count.
+  const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useImperativeHandle(
@@ -88,14 +94,26 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
   }, []);
 
   const options: FindOptions = { caseSensitive, wholeWord, regex };
+  const count = results?.count ?? 0;
 
   const runNext = () => {
     if (query.length === 0) return;
-    setStatus(onFindNext(query, options) ? 'hit' : 'miss');
+    const hit = onFindNext(query, options);
+    setStatus(hit ? 'hit' : 'miss');
+    if (hit) setActiveIndex((i) => (count > 0 ? (i + 1 + count) % count : 0));
   };
   const runPrevious = () => {
     if (query.length === 0) return;
-    setStatus(onFindPrevious(query, options) ? 'hit' : 'miss');
+    const hit = onFindPrevious(query, options);
+    setStatus(hit ? 'hit' : 'miss');
+    if (hit) setActiveIndex((i) => (count > 0 ? (i - 1 + count) % count : 0));
+  };
+
+  // Any change to the query or match options restarts the search, so
+  // the next navigation should land on the first hit again.
+  const resetSearch = () => {
+    setStatus('idle');
+    setActiveIndex(-1);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -134,7 +152,7 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
-          setStatus('idle');
+          resetSearch();
         }}
         onKeyDown={handleKeyDown}
         aria-label="search term"
@@ -142,8 +160,8 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
       <span className={`find-toolbar-status find-toolbar-status-${status}`} aria-live="polite">
         {status === 'miss'
           ? 'no match'
-          : results && results.count > 0
-            ? `${Math.max(0, results.index) + 1} / ${results.count}`
+          : count > 0
+            ? `${Math.max(0, activeIndex) + 1} / ${count}`
             : status === 'hit'
               ? 'found'
               : ''}
@@ -177,7 +195,7 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
           checked={caseSensitive}
           onChange={(e) => {
             setCaseSensitive(e.target.checked);
-            setStatus('idle');
+            resetSearch();
           }}
         />
         case
@@ -191,7 +209,7 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
           checked={wholeWord}
           onChange={(e) => {
             setWholeWord(e.target.checked);
-            setStatus('idle');
+            resetSearch();
           }}
         />
         word
@@ -205,7 +223,7 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
           checked={regex}
           onChange={(e) => {
             setRegex(e.target.checked);
-            setStatus('idle');
+            resetSearch();
           }}
         />
         regex

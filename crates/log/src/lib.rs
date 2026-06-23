@@ -59,6 +59,16 @@ pub struct SearchOptions {
     pub session_id: Option<i64>,
 }
 
+/// One pending log line, owned so the session loop can collect a
+/// socket read's worth before flushing them via [`LogStore::append_batch`].
+#[derive(Debug, Clone)]
+pub struct LogEntry {
+    pub session_id: i64,
+    pub ts_ms: i64,
+    pub text: String,
+    pub raw: Option<Vec<u8>>,
+}
+
 pub struct LogStore {
     conn: Connection,
 }
@@ -172,11 +182,35 @@ impl LogStore {
         text: &str,
         raw: Option<&[u8]>,
     ) -> Result<i64> {
-        self.conn.execute(
-            "INSERT INTO log_lines (session_id, ts_ms, text, raw) VALUES (?1, ?2, ?3, ?4)",
-            params![session_id, ts_ms, text, raw],
-        )?;
+        // `prepare_cached` keeps the parsed statement in the connection's
+        // statement cache, so repeated appends skip the SQL parse.
+        self.conn
+            .prepare_cached(
+                "INSERT INTO log_lines (session_id, ts_ms, text, raw) VALUES (?1, ?2, ?3, ?4)",
+            )?
+            .execute(params![session_id, ts_ms, text, raw])?;
         Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Append many lines in a single transaction with one cached
+    /// statement. The session loop collects a socket read's worth of
+    /// lines and flushes them here, turning N per-line transactions +
+    /// N lock acquisitions into one of each. Empty input is a no-op.
+    pub fn append_batch(&mut self, entries: &[LogEntry]) -> Result<()> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+        let tx = self.conn.transaction()?;
+        {
+            let mut stmt = tx.prepare_cached(
+                "INSERT INTO log_lines (session_id, ts_ms, text, raw) VALUES (?1, ?2, ?3, ?4)",
+            )?;
+            for e in entries {
+                stmt.execute(params![e.session_id, e.ts_ms, e.text, e.raw])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     /// Append a line by raw ANSI-bearing bytes; the plain-text form is
@@ -353,6 +387,45 @@ mod tests {
         assert_eq!(row.port, 1234);
         assert_eq!(row.line_count, 2);
         assert_eq!(row.ended_at_ms, Some(200));
+    }
+
+    #[test]
+    fn append_batch_persists_all_rows_in_one_transaction() {
+        let mut s = store();
+        let id = s.start_session("h", 1, 0).unwrap();
+        s.append_batch(&[
+            LogEntry {
+                session_id: id,
+                ts_ms: 1,
+                text: "alpha".into(),
+                raw: None,
+            },
+            LogEntry {
+                session_id: id,
+                ts_ms: 2,
+                text: "beta".into(),
+                raw: Some(b"\x1b[31mbeta".to_vec()),
+            },
+            LogEntry {
+                session_id: id,
+                ts_ms: 3,
+                text: "gamma".into(),
+                raw: None,
+            },
+        ])
+        .unwrap();
+        assert_eq!(s.get_session(id).unwrap().unwrap().line_count, 3);
+        let hits = s.search("beta", &SearchOptions::default()).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].raw.as_deref(), Some(&b"\x1b[31mbeta"[..]));
+    }
+
+    #[test]
+    fn append_batch_empty_is_noop() {
+        let mut s = store();
+        let id = s.start_session("h", 1, 0).unwrap();
+        s.append_batch(&[]).unwrap();
+        assert_eq!(s.get_session(id).unwrap().unwrap().line_count, 0);
     }
 
     #[test]

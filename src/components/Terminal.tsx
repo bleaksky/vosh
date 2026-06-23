@@ -16,6 +16,7 @@ import { findTheme, type AppTheme } from '../lib/themes';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 import { WordWrapper } from '../lib/wordWrap';
 import { ingestRecentNames } from '../lib/recentNames';
+import { hexToRgba } from '../lib/mapPalette';
 
 export interface FindOptions {
   /** Treat the term as a regex. Default false (plain substring). */
@@ -148,18 +149,22 @@ const CANONICAL_ANSI_16: Pick<
 };
 
 function xtermThemeFor(theme: AppTheme, themeTerminalColors: boolean): ITheme {
-  if (themeTerminalColors) {
-    // Legacy behavior: the chrome theme also colors server output.
-    return { ...theme.xterm };
+  // Legacy behavior (themeTerminalColors) lets the chrome theme color
+  // server output; the default keeps the canonical xterm-256 ANSI
+  // palette so output reads like a stock xterm. Either way the chrome
+  // theme owns the surfaces (background, foreground, cursor, selection).
+  const base: ITheme = themeTerminalColors
+    ? { ...theme.xterm }
+    : { ...theme.xterm, ...CANONICAL_ANSI_16 };
+  // Make the selection translucent. Some themes ship a solid (and light)
+  // selectionBackground; the search addon selects every active match, so
+  // a washed-out selection means an unreadable search hit. Blending over
+  // the dark terminal surface keeps the cell dark enough that the line's
+  // own text stays legible, while still marking the selection.
+  if (theme.xterm.selectionBackground) {
+    base.selectionBackground = hexToRgba(theme.xterm.selectionBackground, 0.4);
   }
-  // Default: chrome theme controls the surfaces (background, default
-  // foreground, cursor, selection) but the 16 ANSI palette stays at
-  // the canonical xterm-256 values so server output reads identically
-  // to a stock xterm.
-  return {
-    ...theme.xterm,
-    ...CANONICAL_ANSI_16,
-  };
+  return base;
 }
 
 export function Terminal({
@@ -260,19 +265,28 @@ export function Terminal({
       }
     };
     safeFit();
-    // WebGL is opt-in via `localStorage.setItem('vosh.webgl', '1')`
-    // (persists across reloads) or `window.__voshEnableWebGL = true`
-    // (one-shot for the current page). Default-off so a broken WebGL
-    // path can't make the window invisible — the WebGL renderer paints
-    // into a canvas and, combined with Tauri's `transparent: true`
-    // window, an unpainted GL canvas reads as see-through desktop.
+    // WebGL is on by default: the GPU renderer is far smoother for
+    // scroll and burst output than xterm's DOM renderer. The webgl2
+    // probe below still falls back to DOM when the WebView can't
+    // allocate a context. Opt out persistently with
+    // `localStorage.setItem('vosh.webgl', '0')` (or the Settings
+    // toggle), or for the current page only with
+    // `window.__voshDisableWebGL = true` before reload — the escape
+    // hatch for the rare case where a context allocates but paints
+    // nothing, which against Tauri's `transparent: true` window reads
+    // as see-through desktop.
     let webglAddon: WebglAddon | null = null;
-    const lsFlag =
-      typeof localStorage !== 'undefined' && localStorage.getItem('vosh.webgl') === '1';
-    const winFlag =
+    const lsVal = typeof localStorage !== 'undefined' ? localStorage.getItem('vosh.webgl') : null;
+    const winEnable =
       typeof window !== 'undefined' &&
       (window as { __voshEnableWebGL?: boolean }).__voshEnableWebGL === true;
-    const enableWebgl = lsFlag || winFlag;
+    const winDisable =
+      typeof window !== 'undefined' &&
+      (window as { __voshDisableWebGL?: boolean }).__voshDisableWebGL === true;
+    // Enabled unless explicitly turned off via localStorage '0' or the
+    // per-page escape hatch. `__voshEnableWebGL` forces it on even when
+    // localStorage says '0'.
+    const enableWebgl = !winDisable && (winEnable || lsVal !== '0');
     if (enableWebgl) {
       // Probe webgl2 in a throwaway canvas first. If the WebView
       // can't allocate a context, the addon would load, immediately
@@ -305,14 +319,37 @@ export function Terminal({
         // the divider drag wobble on the previous (5.5.0) line.
         // No options needed; the defaults match what we want.
         const addon = new WebglAddon();
-        // DO NOT dispose on context loss. xterm 5.5.0 has four
-        // unchecked `_renderer.value.dimensions` accesses; disposing
-        // the WebGL addon nulls `_renderer.value`, and the next
-        // syncScrollArea (fired by the scheduled fits below) reads
-        // undefined.dimensions and crashes the whole pane. Logging
-        // is the most we can do — the user can reload to reset.
+        // On context loss (GPU reset, sleep/wake, too many live GL
+        // contexts) dispose the addon so xterm hands rendering back to
+        // its DOM renderer. Without this the pane keeps a dead GL
+        // canvas, which against Tauri's transparent window reads as a
+        // blank see-through hole until the user reloads — worse now
+        // that WebGL is the default. Disposing is xterm's documented
+        // context-loss fallback. The crash that blocked this on the
+        // 5.5.0 line was a fit() racing a half-disposed renderer
+        // (unguarded `_renderer.value.dimensions`); we sidestep that
+        // regardless of version by deferring the repaint to the next
+        // frame, so nothing touches the renderer in the same tick as
+        // the swap inside dispose().
         addon.onContextLoss(() => {
-          console.warn('[vosh] webgl context lost — DOM fallback skipped');
+          console.warn('[vosh] webgl context lost — falling back to DOM renderer');
+          try {
+            addon.dispose();
+          } catch (err) {
+            console.warn('[vosh] webgl dispose after context loss failed', err);
+          }
+          webglAddon = null;
+          // Force the DOM renderer to paint the visible rows once the
+          // swap settles. The buffer is untouched by the renderer
+          // change, so this just makes the content reappear immediately
+          // instead of on the next server write.
+          requestAnimationFrame(() => {
+            try {
+              term.refresh(0, term.rows - 1);
+            } catch {
+              // ignore — the DOM renderer repaints on the next write
+            }
+          });
         });
         term.loadAddon(addon);
         webglAddon = addon;
@@ -322,7 +359,7 @@ export function Terminal({
         webglAddon = null;
       }
     } else {
-      console.log('[vosh] webgl off — enable with localStorage.setItem("vosh.webgl","1")');
+      console.log('[vosh] webgl off — re-enable with localStorage.removeItem("vosh.webgl")');
     }
     requestAnimationFrame(safeFit);
     setTimeout(safeFit, 50);
@@ -404,14 +441,17 @@ export function Terminal({
     if (sizer) observer.observe(sizer);
     observer.observe(document.body);
 
-    // Per-frame sync as belt-and-suspenders for Tauri/WebKit cases
-    // where ResizeObserver doesn't fire on sibling chrome growth.
-    let rafId = 0;
-    const pollLoop = () => {
-      sync();
-      rafId = requestAnimationFrame(pollLoop);
-    };
-    rafId = requestAnimationFrame(pollLoop);
+    // Safety-net poll for the rare Tauri/WebKit case where
+    // ResizeObserver doesn't fire on sibling chrome growth. The instant
+    // paths above (resize event, vosh:resize-progress, ResizeObserver)
+    // already catch every normal size change the moment it happens, and
+    // the panel zones snap with no width transition, so there is no
+    // animation to track frame-by-frame. A low-frequency interval is
+    // enough to pick up a missed one-shot change within 250ms. Unlike a
+    // per-frame rAF, it never forces a synchronous getBoundingClientRect
+    // right after a write, which was stacking a layout reflow onto every
+    // combat-round output and stealing frames from the terminal.
+    const pollId = window.setInterval(sync, 250);
 
     let unsubOutput: (() => void) | undefined;
     // Replay persisted scrollback before any live output lands so the
@@ -574,14 +614,26 @@ export function Terminal({
     // returns empty (early-mount race in WKWebView).
     const searchDecorations = (): NonNullable<ISearchOptions['decorations']> => {
       const rootStyle = getComputedStyle(document.documentElement);
-      const accent = rootStyle.getPropertyValue('--c-accent').trim() || '#ff3399';
-      const accentSoft =
-        rootStyle.getPropertyValue('--c-accent-soft').trim() || 'rgba(255, 51, 153, 0.25)';
+      const accent = rootStyle.getPropertyValue('--c-accent').trim() || '#7aa2f7';
+      const toRgba = (hex: string, alpha: number): string => {
+        const m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
+        if (!m) return hex;
+        const n = parseInt(m[1], 16);
+        return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+      };
+      // The SearchAddon draws non-active matches BELOW the text and the
+      // active match ABOVE it. So a non-active match can carry an accent
+      // tint (the glyphs paint on top and stay legible), but the active
+      // match must have NO top fill — any fill there sits over the
+      // glyphs and washes them out, which is the unreadable highlight
+      // bug. The active match is marked instead by a solid accent
+      // outline (and its own tint shows through from the below-text
+      // highlight layer the addon also draws for it).
       return {
-        matchBackground: accentSoft,
-        matchBorder: accent,
+        matchBackground: toRgba(accent, 0.28),
+        matchBorder: toRgba(accent, 0.5),
         matchOverviewRuler: accent,
-        activeMatchBackground: accent,
+        activeMatchBackground: 'transparent',
         activeMatchBorder: accent,
         activeMatchColorOverviewRuler: accent,
       };
@@ -700,7 +752,7 @@ export function Terminal({
     window.addEventListener('keydown', onCopyKey, true);
 
     return () => {
-      cancelAnimationFrame(rafId);
+      window.clearInterval(pollId);
       observer.disconnect();
       window.removeEventListener('resize', handleWindowResize);
       window.removeEventListener('vosh:resize-progress', onResizeProgress);

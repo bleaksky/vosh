@@ -41,10 +41,6 @@ pub(crate) struct ProfileConfig {
     pub triggers: Vec<Trigger>,
     #[serde(default)]
     pub tick: TickPersistConfig,
-    /// Script names to load automatically on startup. Each name resolves
-    /// to `<app_data_dir>/scripts/<name>.lua`.
-    #[serde(default)]
-    pub autoload_scripts: Vec<String>,
     #[serde(default)]
     pub ui: UiConfig,
     #[serde(default)]
@@ -108,10 +104,12 @@ where
         .collect())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct UiConfig {
-    /// `default`, `high-contrast`, or `system`. `system` follows the OS
-    /// `prefers-contrast` media query.
+    /// Active theme id. Matches a built-in theme (`kanso-zen`,
+    /// `tokyo-night`, ...) or a user `custom_themes` entry. The
+    /// frontend owns the theme registry and falls back to the first
+    /// theme if the id no longer resolves.
     #[serde(default = "default_theme")]
     pub theme: String,
     /// Opt in to background update checks. Off by default.
@@ -516,7 +514,7 @@ impl Default for UiConfig {
 }
 
 fn default_theme() -> String {
-    "default".to_string()
+    "kanso-zen".to_string()
 }
 
 fn default_font_family() -> String {
@@ -616,27 +614,11 @@ impl ProfileConfig {
             warn_color: profile.tick.config.warn_color.clone(),
         };
 
-        let ui = UiConfig {
-            theme: profile.ui.theme.clone(),
-            auto_update: profile.ui.auto_update,
-            font_family: profile.ui.font_family.clone(),
-            font_size: profile.ui.font_size,
-            tracked_affects: profile.ui.tracked_affects.clone(),
-            enabled_presets: profile.ui.enabled_presets.clone(),
-            dock_layout: profile.ui.dock_layout.clone(),
-            keep_last_command: profile.ui.keep_last_command,
-            theme_terminal_colors: profile.ui.theme_terminal_colors,
-            custom_themes: profile.ui.custom_themes.clone(),
-            split_divider_color: profile.ui.split_divider_color.clone(),
-            side_panels_fill_height: profile.ui.side_panels_fill_height,
-            paste_line_delay_ms: profile.ui.paste_line_delay_ms,
-            spellcheck_prompt: profile.ui.spellcheck_prompt,
-            prompt_template_enabled: profile.ui.prompt_template_enabled,
-            prompt_template: profile.ui.prompt_template.clone(),
-            vitals: profile.ui.vitals.clone(),
-            moons_position: profile.ui.moons_position.clone(),
-            chip_style: profile.ui.chip_style.clone(),
-        };
+        // `UiConfig` is Clone, so the snapshot is a direct copy. Keeping
+        // this a single clone (rather than a hand-listed field copy)
+        // means a new UI setting only needs to be added to the struct
+        // definition, not mirrored here and in `apply_to`.
+        let ui = profile.ui.clone();
 
         let plugins = PluginsPersist {
             enabled: profile.plugins.enabled.clone(),
@@ -653,7 +635,6 @@ impl ProfileConfig {
             profile_vars,
             triggers,
             tick,
-            autoload_scripts: Vec::new(),
             ui,
             plugins,
             macros: profile.macros.clone(),
@@ -727,28 +708,9 @@ impl ProfileConfig {
         }
         profile.tick = tick;
 
-        // UI preferences carry across.
-        profile.ui = UiConfig {
-            theme: self.ui.theme.clone(),
-            auto_update: self.ui.auto_update,
-            font_family: self.ui.font_family.clone(),
-            font_size: self.ui.font_size,
-            tracked_affects: self.ui.tracked_affects.clone(),
-            enabled_presets: self.ui.enabled_presets.clone(),
-            dock_layout: self.ui.dock_layout.clone(),
-            keep_last_command: self.ui.keep_last_command,
-            theme_terminal_colors: self.ui.theme_terminal_colors,
-            custom_themes: self.ui.custom_themes.clone(),
-            split_divider_color: self.ui.split_divider_color.clone(),
-            side_panels_fill_height: self.ui.side_panels_fill_height,
-            paste_line_delay_ms: self.ui.paste_line_delay_ms,
-            spellcheck_prompt: self.ui.spellcheck_prompt,
-            prompt_template_enabled: self.ui.prompt_template_enabled,
-            prompt_template: self.ui.prompt_template.clone(),
-            vitals: self.ui.vitals.clone(),
-            moons_position: self.ui.moons_position.clone(),
-            chip_style: self.ui.chip_style.clone(),
-        };
+        // UI preferences carry across as a single clone (see the
+        // matching note in `from_profile`).
+        profile.ui = self.ui.clone();
 
         // Plugin enabled-set is persisted; the actual load happens in the
         // PluginManager wired into AppState.

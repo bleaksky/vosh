@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { tokenizeTemplate } from './lib/vitalsTemplate';
-import { colorForVital, colorForPercent } from './lib/vitalsColor';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TopBar } from './components/TopBar';
 import { TriggerForm } from './components/TriggerForm';
@@ -15,6 +13,7 @@ import { ImportTab } from './components/ImportTab';
 import { ProfilesTab } from './components/ProfilesTab';
 import { LoadoutsTab } from './components/LoadoutsTab';
 import { ThemesTab } from './components/ThemesTab';
+import { VitalsConfigSection } from './components/VitalsSettings';
 import {
   loadoutsGetState,
   subscribeLoadoutsChanged,
@@ -25,8 +24,6 @@ import {
 } from './lib/session';
 import {
   checkForUpdate,
-  DEFAULT_VITALS_CONFIG,
-  DEFAULT_VITALS_TEMPLATE,
   dockLayoutGet,
   dockLayoutSet,
   exportAliases,
@@ -40,13 +37,6 @@ import {
   subscribeDockLayoutChanged,
   type SystemFontEntry,
   type UiConfig,
-  type VitalsBarStyle,
-  type VitalsConfig,
-  type VitalsInlineStyle,
-  type VitalsLayout,
-  type VitalsPctChipStyle,
-  type VitalsPercentColor,
-  type VitalsPercentColorMode,
 } from './lib/session';
 import { applyTheme } from './lib/theme';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
@@ -88,6 +78,8 @@ const PREVIEW_TEXT = 'The quick brown fox 0123456789  |  hp 850/1000  IlOo1';
 type TabId =
   | 'general'
   | 'themes'
+  | 'vitals'
+  | 'tick'
   | 'panels'
   | 'profiles'
   | 'loadouts'
@@ -96,22 +88,27 @@ type TabId =
   | 'macros'
   | 'import'
   | 'logs';
-// Tab list with a `groupEnd` marker between buckets. The nav renders
-// a divider after any tab flagged `groupEnd: true` so the three
-// logical groups (look & layout / content / tools) read as distinct
-// sections without changing the labels themselves. `pathBOnly` tabs
-// only appear when Path B mode is active.
-const TABS: { id: TabId; label: string; groupEnd?: boolean; pathBOnly?: boolean }[] = [
-  { id: 'general', label: 'general' },
-  { id: 'themes', label: 'themes' },
-  { id: 'panels', label: 'panels', groupEnd: true },
-  { id: 'profiles', label: 'profiles' },
-  { id: 'loadouts', label: 'loadouts', pathBOnly: true },
-  { id: 'triggers', label: 'triggers' },
-  { id: 'aliases', label: 'aliases' },
-  { id: 'macros', label: 'macros', groupEnd: true },
-  { id: 'import', label: 'import' },
-  { id: 'logs', label: 'logs' },
+// Tab list grouped into three labeled buckets. The nav prints the
+// `group` name as an uppercase header above the first tab of each
+// bucket and a hairline between buckets, so look & layout / content /
+// tools read as distinct sections. `vitals` and `tick` are top-level
+// tabs (promoted out of the old Panels sub-toggle); `panels` keeps the
+// placement map and chip routing. `pathBOnly` tabs only appear when
+// Path B mode is active.
+type TabGroup = 'look & layout' | 'content' | 'tools';
+const TABS: { id: TabId; label: string; group: TabGroup; pathBOnly?: boolean }[] = [
+  { id: 'general', label: 'general', group: 'look & layout' },
+  { id: 'themes', label: 'themes', group: 'look & layout' },
+  { id: 'vitals', label: 'vitals', group: 'look & layout' },
+  { id: 'tick', label: 'tick', group: 'look & layout' },
+  { id: 'panels', label: 'panels', group: 'look & layout' },
+  { id: 'profiles', label: 'profiles', group: 'content' },
+  { id: 'loadouts', label: 'loadouts', group: 'content', pathBOnly: true },
+  { id: 'triggers', label: 'triggers', group: 'content' },
+  { id: 'aliases', label: 'aliases', group: 'content' },
+  { id: 'macros', label: 'macros', group: 'content' },
+  { id: 'import', label: 'import', group: 'tools' },
+  { id: 'logs', label: 'logs', group: 'tools' },
 ];
 
 // Settings window. Frameless Ghostty chrome via the shared TopBar;
@@ -174,22 +171,29 @@ export function SettingsApp() {
       <TopBar brand="[vosh : settings]" showAuxButtons={false} />
       <div className="settings-shell">
         <nav className="settings-tabs settings-tabs-vertical">
-          {visibleTabs.map((t) => (
-            <span key={t.id} className="settings-tab-wrap">
-              <button
-                type="button"
-                className={`settings-tab${tab === t.id ? ' settings-tab-active' : ''}`}
-                aria-pressed={tab === t.id}
-                onClick={() => {
-                  setError(null);
-                  setTab(t.id);
-                }}
-              >
-                {t.label}
-              </button>
-              {t.groupEnd && <span className="settings-tab-divider" aria-hidden="true" />}
-            </span>
-          ))}
+          {visibleTabs.map((t, i) => {
+            const groupStart = i === 0 || visibleTabs[i - 1].group !== t.group;
+            return (
+              <span key={t.id} className="settings-tab-wrap">
+                {groupStart && (
+                  <span className="settings-tab-group" aria-hidden="true">
+                    {t.group}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className={`settings-tab${tab === t.id ? ' settings-tab-active' : ''}`}
+                  aria-pressed={tab === t.id}
+                  onClick={() => {
+                    setError(null);
+                    setTab(t.id);
+                  }}
+                >
+                  {t.label}
+                </button>
+              </span>
+            );
+          })}
         </nav>
         <div className="settings-body">
           {error && <div className="settings-error">error: {error}</div>}
@@ -234,6 +238,27 @@ export function SettingsApp() {
           {tab === 'themes' && (
             <ThemesTab config={config} setConfig={setConfig} onError={setError} />
           )}
+          {tab === 'vitals' &&
+            (config ? (
+              <div className="settings-pane">
+                <div className="settings-pane-title">vitals</div>
+                <div className="settings-pane-sub">
+                  how the hp / mn / mv readout looks. changes save automatically.
+                </div>
+                <VitalsConfigSection config={config} setConfig={setConfig} onError={setError} />
+              </div>
+            ) : (
+              <div className="settings-loading">loading…</div>
+            ))}
+          {tab === 'tick' && (
+            <div className="settings-pane">
+              <div className="settings-pane-title">tick timer</div>
+              <div className="settings-pane-sub">
+                the ROM tick countdown. changes save automatically.
+              </div>
+              <TickConfigEditor onError={setError} />
+            </div>
+          )}
           {tab === 'panels' && (
             <PanelsTab config={config} setConfig={setConfig} onError={setError} />
           )}
@@ -262,11 +287,11 @@ interface GeneralProps {
 // mount because xterm 5.5 has no clean way to hot-swap renderers.
 function WebglToggle() {
   const [enabled, setEnabled] = useState(() =>
-    typeof localStorage !== 'undefined' ? localStorage.getItem('vosh.webgl') === '1' : false,
+    typeof localStorage !== 'undefined' ? localStorage.getItem('vosh.webgl') !== '0' : true,
   );
   const [dirty, setDirty] = useState(false);
   return (
-    <label className="settings-checkbox" title="GPU rendering via WebGL2 (experimental)">
+    <label className="settings-checkbox" title="GPU rendering via WebGL2 (on by default)">
       <input
         type="checkbox"
         checked={enabled}
@@ -275,14 +300,16 @@ function WebglToggle() {
           setEnabled(next);
           setDirty(true);
           try {
-            if (next) localStorage.setItem('vosh.webgl', '1');
-            else localStorage.removeItem('vosh.webgl');
+            // On is the default, so clear the flag; off writes an
+            // explicit '0' that the terminal reads as opt-out.
+            if (next) localStorage.removeItem('vosh.webgl');
+            else localStorage.setItem('vosh.webgl', '0');
           } catch {
             // localStorage may be disabled in some Tauri contexts; ignore
           }
         }}
       />
-      <span>GPU rendering (experimental, reload to apply{dirty ? ' — pending' : ''})</span>
+      <span>GPU rendering{dirty ? ' (reload pending)' : ' (on by default)'}</span>
     </label>
   );
 }
@@ -391,7 +418,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
             checked={config.theme_terminal_colors}
             onChange={(e) => update({ theme_terminal_colors: e.target.checked })}
           />
-          <span>tint server output with theme palette</span>
+          <span>tint output with theme</span>
         </label>
         <WebglToggle />
       </Row>
@@ -461,7 +488,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
             checked={config.keep_last_command}
             onChange={(e) => update({ keep_last_command: e.target.checked })}
           />
-          <span>keep last command (press enter to repeat)</span>
+          <span>keep last command</span>
         </label>
         <label className="settings-checkbox">
           <input
@@ -469,7 +496,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
             checked={config.spellcheck_prompt}
             onChange={(e) => update({ spellcheck_prompt: e.target.checked })}
           />
-          <span>spell check chat lines (say / tell / chat / ooc / clan / etc.)</span>
+          <span>spell check chat lines</span>
         </label>
       </Row>
       <Row label="paste pacing">
@@ -488,9 +515,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
             aria-label="delay between pasted lines in milliseconds"
           />
           <span className="settings-paste-unit">ms between lines</span>
-          <span className="settings-paste-hint">
-            0 = no pacing. higher values dodge MUD flood filters when pasting long scripts.
-          </span>
+          <span className="settings-paste-hint">0 = no pacing. raise to dodge flood filters.</span>
         </span>
       </Row>
       <Row label="prompt">
@@ -500,7 +525,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
             checked={config.prompt_template_enabled}
             onChange={(e) => update({ prompt_template_enabled: e.target.checked })}
           />
-          <span>replace gagged prompts with custom template</span>
+          <span>replace gagged prompts</span>
         </label>
         <input
           type="text"
@@ -512,9 +537,8 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           aria-label="custom prompt template"
         />
         <span className="settings-paste-hint">
-          tokens %hp %mhp %mn %mmn %mv %mmv %pct_hp %hp_bar (or %bar_hp). bar params
-          %name_bar:WIDTH:COLOR — color is auto / green / yellow / red / blue / cyan / magenta /
-          white. requires a prompt-capture trigger that gags + emits vars.
+          tokens %hp %mn %mv %pct_hp %hp_bar and %name_bar:WIDTH:COLOR. needs a prompt-capture
+          trigger that gags and emits vars.
         </span>
       </Row>
       <Row label="font">
@@ -978,7 +1002,7 @@ interface PanesSubviewProps {
   onError: (e: string | null) => void;
 }
 function PanelsPanesSubview({ config, setConfig, onError }: PanesSubviewProps) {
-  const [open, setOpen] = useState<Set<PanelId>>(new Set<PanelId>(['vitals']));
+  const [open, setOpen] = useState<Set<PanelId>>(new Set<PanelId>(['affects']));
   const toggle = (id: PanelId) => {
     setOpen((prev) => {
       const next = new Set(prev);
@@ -995,15 +1019,6 @@ function PanelsPanesSubview({ config, setConfig, onError }: PanesSubviewProps) {
   };
   return (
     <div className="panes-accordion">
-      <PaneAccordionRow
-        id="vitals"
-        label="vitals"
-        description="your hp / mn / mv bars and any GMCP fields you template in"
-        open={open.has('vitals')}
-        onToggle={() => toggle('vitals')}
-      >
-        <VitalsConfigSection config={config} setConfig={setConfig} onError={onError} />
-      </PaneAccordionRow>
       <PaneAccordionRow
         id="affects"
         label="affects"
@@ -1123,12 +1138,6 @@ function PanelsChipsSubview({ config, setConfig, onError }: ChipsSubviewProps) {
           </button>
         ))}
       </div>
-
-      <div className="panels-tab-header" style={{ marginTop: 18 }}>
-        <span>tick timer</span>
-        <span className="panels-tab-header-dim">interval, auto-fire, sound, warning</span>
-      </div>
-      <TickConfigEditor onError={onError} />
     </>
   );
 }
@@ -1316,1264 +1325,6 @@ function TickConfigEditor({ onError }: TickConfigEditorProps) {
         </label>
       </div>
     </div>
-  );
-}
-
-// Vitals appearance section. Lives at the bottom of the Panels tab so
-// the user can dial in column toggles, custom bar glyphs, and bar
-// width next to the rest of the panel-related layout knobs. Each
-// edit autosaves through setUiConfig and broadcasts via
-// vosh://vitals-config-changed so VitalsBar redraws live.
-/** Resolve the unified style dropdown value from a live `VitalsConfig`.
- *  Returns `track`, `solid|<filled>|<empty>`, `ramped|<filled>|<empty>`,
- *  or `__custom` when the glyph pair does not match a known preset. */
-function styleKeyFor(v: VitalsConfig): string {
-  // Style dropdown reflects bar_style + glyph preset only — the
-  // bar_layout (plain / with_history) lives in its own dropdown
-  // beside this one, so this returns the same key for both layouts.
-  if (v.bar_style === 'track') return 'track';
-  const preset = VITALS_GLYPH_PRESETS.find(
-    (p) => p.filled === v.bar_filled && p.empty === v.bar_empty,
-  );
-  if ((v.bar_style === 'solid' || v.bar_style === 'ramped') && preset) {
-    return `${v.bar_style}|${preset.filled}|${preset.empty}`;
-  }
-  return '__custom';
-}
-
-/** Translate a `styleKeyFor` value back into a partial `VitalsConfig`
- *  patch. Used by the unified style dropdown's onChange. */
-function applyStyleKey(key: string, current: VitalsConfig): Partial<VitalsConfig> {
-  if (key === 'track') return { bar_style: 'track' };
-  if (key === '__custom') {
-    // Selecting "custom" from the dropdown leaves bar_filled / bar_empty
-    // alone (the user is presumably about to edit them) and snaps the
-    // bar_style off track since track has no glyph customization.
-    const fallback = current.bar_style === 'track' ? 'solid' : current.bar_style;
-    return { bar_style: fallback };
-  }
-  const [style, filled, empty] = key.split('|');
-  return {
-    bar_style: style as VitalsBarStyle,
-    bar_filled: filled,
-    bar_empty: empty,
-  };
-}
-
-/** Quick-pick bar font stacks. Empty string means "inherit the app font"
- *  (the historical behavior). Berkeley and JetBrains are bundled with
- *  Vosh; MonoLisa, Menlo, Consolas, Courier are looked up from the
- *  system font catalog and registered via the font:// URI scheme on
- *  pick. Users can also paste a custom CSS font-family stack via the
- *  text input that shows when "custom" is selected. */
-const BAR_FONT_PRESETS: { key: string; label: string; stack: string }[] = [
-  { key: '', label: 'use the app font', stack: '' },
-  {
-    key: 'berkeley',
-    label: 'Berkeley Mono (bundled)',
-    stack:
-      '"BerkeleyMono Bundled", "JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace',
-  },
-  {
-    key: 'jetbrains',
-    label: 'JetBrains Mono (bundled)',
-    stack: '"JetBrainsMono Bundled", Menlo, Consolas, ui-monospace, monospace',
-  },
-  {
-    key: 'monolisa',
-    label: 'MonoLisa (must be installed locally)',
-    // MonoLisa ships under several family names depending on which
-    // build you have (regular, Variable, the trial). List every common
-    // variant so CSS picks the first one your OS exposes.
-    stack:
-      '"MonoLisa", "MonoLisa Variable", "MonoLisaVariable", "MonoLisa Script", "MonoLisa Trial", monospace',
-  },
-  { key: 'menlo', label: 'Menlo (macOS default)', stack: 'Menlo, monospace' },
-  { key: 'consolas', label: 'Consolas (Windows default)', stack: 'Consolas, monospace' },
-  { key: 'courier', label: 'Courier New', stack: '"Courier New", monospace' },
-];
-
-/** Family-name candidates for the MonoLisa-detection helper. Picks up
- *  every common installer variant; the first one document.fonts.check
- *  approves is the family the CSS stack will actually resolve to. */
-const MONOLISA_CANDIDATES = [
-  'MonoLisa',
-  'MonoLisa Variable',
-  'MonoLisaVariable',
-  'MonoLisa Script',
-  'MonoLisa Trial',
-];
-
-function detectMonoLisaFamily(): string | null {
-  for (const name of MONOLISA_CANDIDATES) {
-    try {
-      if (document.fonts.check(`12px "${name}"`)) return name;
-    } catch {
-      // Some browsers throw on bare names; ignore and try the next.
-    }
-  }
-  return null;
-}
-
-function barFontKeyFor(v: VitalsConfig): string {
-  if (!v.bar_font) return '';
-  const match = BAR_FONT_PRESETS.find((p) => p.stack === v.bar_font);
-  return match ? match.key : '__custom';
-}
-
-/** Status line under the bar-font dropdown when the user picks MonoLisa.
- *  Re-runs detection every time the FontFaceSet emits `loadingdone` so
- *  the line flips from "not found" to "detected as X" once the runtime-
- *  injected @font-face for the matching family finishes loading. */
-function BarFontMonoLisaStatus() {
-  const [matched, setMatched] = useState<string | null>(() => detectMonoLisaFamily());
-  useEffect(() => {
-    const recheck = () => setMatched(detectMonoLisaFamily());
-    recheck();
-    const fonts = document.fonts as FontFaceSet | undefined;
-    if (!fonts) return;
-    fonts.addEventListener('loadingdone', recheck);
-    return () => fonts.removeEventListener('loadingdone', recheck);
-  }, []);
-  return (
-    <span className={matched ? 'panels-vitals-style-ok' : 'panels-vitals-style-warn'}>
-      {matched
-        ? `MonoLisa detected as "${matched}" · bars are using it`
-        : 'no MonoLisa family found yet · install MonoLisa and reopen Settings, or check the bars visually since some installers use a name not in the probe list'}
-    </span>
-  );
-}
-
-const VITALS_GLYPH_PRESETS: { label: string; filled: string; empty: string }[] = [
-  { label: 'parallelogram', filled: '▰', empty: '▱' },
-  { label: 'block', filled: '█', empty: '░' },
-  { label: 'block / medium shade', filled: '█', empty: '▒' },
-  { label: 'dark / light shade', filled: '▓', empty: '░' },
-  { label: 'heavy / light line', filled: '━', empty: '─' },
-  { label: 'circle', filled: '●', empty: '○' },
-  { label: 'square', filled: '◼', empty: '◻' },
-  { label: 'vertical bar', filled: '▮', empty: '▯' },
-  { label: 'braille full', filled: '⣿', empty: '⣀' },
-  { label: 'braille mid', filled: '⠿', empty: '⠤' },
-  { label: 'braille thin', filled: '⠶', empty: '⠀' },
-];
-
-function VitalsConfigSection({
-  config,
-  setConfig,
-  onError,
-}: {
-  config: UiConfig | null;
-  setConfig: (updater: (prev: UiConfig | null) => UiConfig | null) => void;
-  onError: (e: string | null) => void;
-}) {
-  // Inject @font-face for any system font named in the bar font
-  // stack so the in-Settings preview can actually resolve it. WKWebView
-  // refuses bare family names without @font-face registration. Mirrors
-  // the same call inside VitalsBar so live + preview stay in sync.
-  useEffect(() => {
-    if (config?.vitals.bar_font) loadFontStack(config.vitals.bar_font);
-  }, [config?.vitals.bar_font]);
-  if (!config) return null;
-  const v = config.vitals;
-  const apply = (patch: Partial<VitalsConfig>) => {
-    const nextVitals: VitalsConfig = { ...v, ...patch };
-    const next: UiConfig = { ...config, vitals: nextVitals };
-    setConfig(() => next);
-    void setUiConfig(next).catch((e) => onError(String(e)));
-  };
-  const fontPresetKey = barFontKeyFor(v);
-  const fontPresetLabel =
-    fontPresetKey === ''
-      ? 'app font'
-      : (BAR_FONT_PRESETS.find((p) => p.key === fontPresetKey)?.label.split(' (')[0] ?? 'custom');
-  return (
-    <section className="vsplit-frame">
-      <aside className="vsplit-rack">
-        <header className="vsplit-rack-head">
-          <h2>vitals · console</h2>
-          <span className="vsplit-led" aria-hidden="true" />
-        </header>
-
-        <div className="vsplit-group">
-          <div className="vsplit-group-label">mode</div>
-          <div className="vsplit-pip-grid vsplit-pip-grid-one">
-            <PipToggle
-              label="low hp vignette"
-              checked={v.low_hp_vignette}
-              onChange={(c) => apply({ low_hp_vignette: c })}
-            />
-          </div>
-        </div>
-
-        <div className="vsplit-group">
-          <div className="vsplit-group-label">show</div>
-          <div className="vsplit-pip-grid">
-            <PipToggle label="bars" checked={v.show_bar} onChange={(c) => apply({ show_bar: c })} />
-            <PipToggle
-              label="percent"
-              checked={v.show_percent}
-              onChange={(c) => apply({ show_percent: c })}
-            />
-            <PipToggle
-              label="numeric"
-              checked={v.show_numeric}
-              onChange={(c) => apply({ show_numeric: c })}
-            />
-            <PipToggle
-              label="delta"
-              checked={v.show_delta}
-              onChange={(c) => apply({ show_delta: c })}
-            />
-          </div>
-        </div>
-
-        <div className={`vsplit-group${v.show_bar ? '' : ' is-disabled'}`}>
-          <div className="vsplit-group-label">appearance</div>
-          <div className="vsplit-knob">
-            <span className="vsplit-knob-label">style</span>
-            <select
-              value={styleKeyFor(v)}
-              disabled={!v.show_bar}
-              onChange={(e) => apply(applyStyleKey(e.target.value, v))}
-            >
-              {styleKeyFor(v) === '__custom' && (
-                <option value="__custom">
-                  custom · {v.bar_style} · {v.bar_filled} {v.bar_empty}
-                </option>
-              )}
-              <optgroup label="solid · one glyph per cell">
-                {VITALS_GLYPH_PRESETS.map((p) => (
-                  <option key={`solid|${p.label}`} value={`solid|${p.filled}|${p.empty}`}>
-                    {p.label} · {p.filled} {p.empty}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="ramped · sub-character smoothness">
-                {VITALS_GLYPH_PRESETS.map((p) => (
-                  <option key={`ramped|${p.label}`} value={`ramped|${p.filled}|${p.empty}`}>
-                    {p.label} · {p.filled} {p.empty}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="track">
-                <option value="track">track · smooth CSS bar, no glyphs</option>
-              </optgroup>
-              {styleKeyFor(v) !== '__custom' && (
-                <optgroup label="other">
-                  <option value="__custom">custom · set glyphs below</option>
-                </optgroup>
-              )}
-            </select>
-          </div>
-          <div className="vsplit-knob">
-            <span className="vsplit-knob-label">layout</span>
-            <select
-              value={v.bar_layout}
-              disabled={!v.show_bar}
-              onChange={(e) => apply({ bar_layout: e.target.value as 'plain' | 'with_history' })}
-              aria-label="bar layout"
-            >
-              <option value="plain">plain · bar only</option>
-              <option value="with_history">history · bar + braille trend grid</option>
-            </select>
-          </div>
-          <div className="vsplit-knob">
-            <span className="vsplit-knob-label">width</span>
-            <input
-              type="number"
-              className="settings-num-input vsplit-num"
-              min={4}
-              max={60}
-              step={1}
-              value={v.bar_width}
-              disabled={!v.show_bar}
-              onChange={(e) => {
-                const n = Math.max(4, Math.min(60, Math.floor(Number(e.target.value) || 20)));
-                apply({ bar_width: n });
-              }}
-              aria-label="bar width in glyphs"
-            />
-          </div>
-          <div className="vsplit-knob">
-            <span className="vsplit-knob-label">bar font</span>
-            <select
-              value={fontPresetKey}
-              disabled={!v.show_bar}
-              onChange={(e) => {
-                const key = e.target.value;
-                if (key === '__custom') return;
-                const preset = BAR_FONT_PRESETS.find((p) => p.key === key);
-                if (preset) apply({ bar_font: preset.stack });
-              }}
-            >
-              {BAR_FONT_PRESETS.map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.label}
-                </option>
-              ))}
-              {fontPresetKey === '__custom' && (
-                <option value="__custom">custom · (edit below)</option>
-              )}
-            </select>
-          </div>
-          {fontPresetKey === 'monolisa' && (
-            <div className="vsplit-knob-hint">
-              <BarFontMonoLisaStatus />
-            </div>
-          )}
-          {styleKeyFor(v) === '__custom' && v.bar_style !== 'track' && (
-            <>
-              <div className="vsplit-knob">
-                <span className="vsplit-knob-label">filled</span>
-                <input
-                  type="text"
-                  className="panels-vitals-glyph-input"
-                  value={v.bar_filled}
-                  disabled={!v.show_bar}
-                  spellCheck={false}
-                  onChange={(e) =>
-                    apply({ bar_filled: e.target.value.length > 0 ? e.target.value : '▰' })
-                  }
-                  aria-label="filled glyph"
-                />
-              </div>
-              <div className="vsplit-knob">
-                <span className="vsplit-knob-label">empty</span>
-                <input
-                  type="text"
-                  className="panels-vitals-glyph-input"
-                  value={v.bar_empty}
-                  disabled={!v.show_bar}
-                  spellCheck={false}
-                  onChange={(e) =>
-                    apply({ bar_empty: e.target.value.length > 0 ? e.target.value : '▱' })
-                  }
-                  aria-label="empty glyph"
-                />
-              </div>
-            </>
-          )}
-          <details className="vsplit-adv">
-            <summary>custom CSS font-family</summary>
-            <input
-              type="text"
-              className="panels-vitals-glyph-input vsplit-adv-input"
-              spellCheck={false}
-              value={v.bar_font}
-              disabled={!v.show_bar}
-              placeholder='blank = use the app font · or "MonoLisa", "Iosevka", monospace'
-              onChange={(e) => apply({ bar_font: e.target.value })}
-            />
-          </details>
-        </div>
-
-        <div className="vsplit-group">
-          <div className="vsplit-group-label">layout</div>
-          <div className="vsplit-knob">
-            <span className="vsplit-knob-label">arrange</span>
-            <select
-              value={v.layout}
-              disabled={v.template_enabled}
-              onChange={(e) => apply({ layout: e.target.value as VitalsLayout })}
-            >
-              <option value="stacked">stacked rows (hp / mn / mv per row)</option>
-              <option value="inline">inline (one row, prompt-style)</option>
-            </select>
-          </div>
-          {v.layout === 'inline' && (
-            <div className="vsplit-knob">
-              <span className="vsplit-knob-label">inline style</span>
-              <select
-                value={v.inline_style}
-                disabled={v.template_enabled}
-                onChange={(e) => apply({ inline_style: e.target.value as VitalsInlineStyle })}
-              >
-                <option value="plain">plain (tintin nprompt text)</option>
-                <option value="drain">drain (chip with inset glowing fill)</option>
-                <option value="badge">badge (chip + corner percent)</option>
-              </select>
-            </div>
-          )}
-          <div className="vsplit-knob">
-            <span className="vsplit-knob-label">% color</span>
-            <select
-              value={v.percent_color}
-              onChange={(e) => apply({ percent_color: e.target.value as VitalsPercentColor })}
-            >
-              <option value="fill">per-vital (matches bar)</option>
-              <option value="gradient">red → green gradient</option>
-            </select>
-          </div>
-          {v.layout === 'inline' && v.inline_style !== 'plain' && (
-            <div className="vsplit-knob">
-              <span className="vsplit-knob-label">% mode</span>
-              <select
-                value={v.percent_color_mode}
-                onChange={(e) =>
-                  apply({ percent_color_mode: e.target.value as VitalsPercentColorMode })
-                }
-              >
-                <option value="drain">drain to red as low (default)</option>
-                <option value="stat">match stat color</option>
-                <option value="accent">brand pink</option>
-              </select>
-            </div>
-          )}
-          {(v.template_enabled || (v.layout === 'inline' && v.inline_style === 'plain')) && (
-            <div className="vsplit-knob">
-              <span className="vsplit-knob-label">% chip</span>
-              <select
-                value={v.pct_chip_style}
-                onChange={(e) => apply({ pct_chip_style: e.target.value as VitalsPctChipStyle })}
-              >
-                <option value="none">plain (no chip)</option>
-                <option value="pill">pill (bordered)</option>
-                <option value="soft">soft tint</option>
-                <option value="glow">glow ring</option>
-                <option value="drain">drain fill</option>
-              </select>
-            </div>
-          )}
-        </div>
-
-        <div className="vsplit-group">
-          <div className="vsplit-group-label">colors</div>
-          <VitalColorRow
-            label="hp"
-            value={v.hp_color}
-            fallback="green"
-            onChange={(c) => apply({ hp_color: c })}
-          />
-          <VitalColorRow
-            label="mn"
-            value={v.mn_color}
-            fallback="blue"
-            onChange={(c) => apply({ mn_color: c })}
-          />
-          <VitalColorRow
-            label="mv"
-            value={v.mv_color}
-            fallback="orange"
-            onChange={(c) => apply({ mv_color: c })}
-          />
-          <div className="vsplit-pip-grid vsplit-pip-grid-one">
-            <PipToggle
-              label="drain through red as the bar empties"
-              checked={v.use_color_ramp}
-              onChange={(c) => apply({ use_color_ramp: c })}
-            />
-          </div>
-        </div>
-
-        <div className="vsplit-group vsplit-group-template">
-          <details className="vsplit-adv">
-            <summary>template · advanced</summary>
-            <VitalsTemplateEditor config={v} apply={apply} />
-          </details>
-        </div>
-
-        <footer className="vsplit-rack-foot">
-          <span className="vsplit-rack-foot-live">live</span>
-          <button
-            type="button"
-            className="settings-btn settings-btn-mute"
-            onClick={() => apply(DEFAULT_VITALS_CONFIG)}
-          >
-            [reset vitals]
-          </button>
-        </footer>
-      </aside>
-
-      <main className="vsplit-monitor">
-        <header className="vsplit-monitor-head">
-          <h3>live monitor</h3>
-          <span className="vsplit-monitor-hint">
-            drag a bar to scrub · changes reflect in the running HUD
-          </span>
-        </header>
-        <div className="vsplit-monitor-stage" aria-label="vitals preview">
-          <VitalsPreview config={v} />
-        </div>
-        <footer className="vsplit-monitor-foot">
-          <span>
-            <strong>layout</strong> {v.template_enabled ? 'template' : v.layout}
-          </span>
-          <span>
-            <strong>style</strong> {v.bar_style}
-          </span>
-          <span>
-            <strong>width</strong> {v.bar_width} cells
-          </span>
-          <span>
-            <strong>font</strong> {fontPresetLabel}
-          </span>
-        </footer>
-      </main>
-    </section>
-  );
-}
-
-function PipToggle({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={`vsplit-pip${checked ? ' is-on' : ''}`}
-      onClick={() => onChange(!checked)}
-      role="switch"
-      aria-checked={checked}
-    >
-      {label}
-    </button>
-  );
-}
-
-function VitalColorRow({
-  label,
-  value,
-  fallback,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  fallback: string;
-  onChange: (next: string) => void;
-}) {
-  const hex =
-    value.trim().length > 0 && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim())
-      ? value.trim()
-      : '#888888';
-  return (
-    <label className="panels-vitals-color-row">
-      <span className="panels-vitals-color-label">{label}</span>
-      <input
-        type="color"
-        value={hex}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label={`${label} swatch`}
-      />
-      <input
-        type="text"
-        className="panels-vitals-color-hex"
-        spellCheck={false}
-        value={value}
-        placeholder={`built-in ${fallback}`}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      <button
-        type="button"
-        className="settings-btn settings-btn-mute"
-        onClick={() => onChange('')}
-        disabled={value.trim().length === 0}
-      >
-        [clear]
-      </button>
-    </label>
-  );
-}
-
-function VitalsTemplateEditor({
-  config,
-  apply,
-}: {
-  config: VitalsConfig;
-  apply: (patch: Partial<VitalsConfig>) => void;
-}) {
-  // Plain div + Toggle (not <details>/<summary>) because nesting an
-  // interactive checkbox inside <summary> caused the section to
-  // collapse every time the user clicked the checkbox — the summary's
-  // default toggle and the checkbox's onChange fired together. With
-  // the body always rendered and conditionally disabled, the layout
-  // is predictable and the toggle behaves as the single source of
-  // truth.
-  return (
-    <div className="panels-vitals-template">
-      <Toggle
-        label="custom template (overrides layout)"
-        checked={config.template_enabled}
-        onChange={(c) => apply({ template_enabled: c })}
-      />
-      <div
-        className={`panels-vitals-template-body${config.template_enabled ? '' : ' is-disabled'}`}
-      >
-        <textarea
-          className="panels-vitals-template-input"
-          spellCheck={false}
-          value={config.template}
-          disabled={!config.template_enabled}
-          onChange={(e) => apply({ template: e.target.value })}
-          rows={2}
-          aria-label="vitals template"
-        />
-        <div className="panels-vitals-template-help">
-          <span className="panels-vitals-template-help-title">curated tokens:</span>
-          <code>%hp</code> <code>%mhp</code> <code>%mn</code> <code>%mmn</code> <code>%mv</code>{' '}
-          <code>%mmv</code> <code>%pct_hp</code> <code>%pct_mn</code> <code>%pct_mv</code>{' '}
-          <code>%dhp</code> <code>%dmn</code> <code>%dmv</code> <code>%bar_hp</code>{' '}
-          <code>%bar_mn</code> <code>%bar_mv</code> <code>%tick</code> <code>%time</code>
-          <br />
-          <span className="panels-vitals-template-help-title">pass-through:</span>
-          any field your server actually pushes via <code>Char.Vitals</code> or{' '}
-          <code>Char.Worth</code> can be used as <code>%fieldname</code>. Available fields depend on
-          the server — try a token; if the field exists, it renders; if not, it shows in red.
-          <br />
-          <span className="panels-vitals-template-help-title">explicit braces:</span>
-          use <code>{'%{name}'}</code> when the token is immediately followed by letters / digits
-          that would otherwise be consumed by the greedy match. e.g. <code>{'%{cp}cp'}</code>{' '}
-          renders the <code>cp</code> field then literal <code>cp</code>, whereas <code>%cpcp</code>{' '}
-          would look up the field <code>cpcp</code>. <code>%%</code> = literal <code>%</code>.
-        </div>
-        <div className="settings-actions">
-          <button
-            type="button"
-            className="settings-btn settings-btn-mute"
-            disabled={!config.template_enabled}
-            onClick={() => apply({ template: DEFAULT_VITALS_TEMPLATE })}
-          >
-            [reset template]
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Toggle({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <label className="settings-checkbox panels-vitals-toggle">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      <span>{label}</span>
-    </label>
-  );
-}
-
-// Static preview that mirrors the real VitalsBar render. Three vitals
-// at 75 / 50 / 25% so the user can see the effect of toggles, glyphs,
-// layout, and percent color in one glance.
-// Tiny inline track-bar component for the Settings preview. Mirrors
-// the `TrackBar` in VitalsBar.tsx; kept local to avoid a circular
-// dep (VitalsBar imports session, SettingsApp imports both).
-function PreviewTrackBar({
-  value,
-  cells,
-  color,
-  font,
-}: {
-  value: number;
-  cells: number;
-  color: string;
-  font?: string;
-}) {
-  const pct = Math.max(0, Math.min(100, value));
-  return (
-    <span
-      className="vitals-glyphs vitals-glyphs-track"
-      style={{ width: `${cells}ch`, fontFamily: font || undefined }}
-      aria-hidden="true"
-    >
-      <span className="vitals-glyphs-track-fill" style={{ width: `${pct}%`, background: color }} />
-    </span>
-  );
-}
-
-// 1/8-step partial-block ladder used to render the boundary cell of a
-// ramped bar in the Settings preview. Mirrors `RAMP_PARTIALS` in
-// VitalsBar.tsx so the preview matches the runtime exactly.
-const PREVIEW_RAMP_PARTIALS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
-
-/** Mirrors HistoryWrapper from VitalsBar.tsx for the Settings
- *  preview — per-cell flex grid so each bar cell and grid cell
- *  share identical x-ranges by construction. */
-function PreviewHistoryWrapper({
-  cells,
-  color,
-  fillValue,
-  filled,
-  empty,
-  font,
-}: {
-  cells: number;
-  color: string;
-  fillValue: number;
-  filled: string;
-  empty: string;
-  font?: string;
-}) {
-  const filledCount = Math.max(0, Math.min(cells, Math.round((fillValue / 100) * cells)));
-  return (
-    <span
-      className="vitals-glyphs vitals-spark"
-      style={{
-        flexBasis: `${cells}ch`,
-        maxWidth: `${cells}ch`,
-        fontFamily: font || undefined,
-      }}
-      aria-hidden="true"
-    >
-      <span className="vitals-spark-row vitals-spark-bar-row">
-        {Array.from({ length: cells }, (_, i) => {
-          const isFilled = i < filledCount;
-          return (
-            <span key={i} className="vitals-spark-cell" style={isFilled ? { color } : undefined}>
-              {isFilled ? filled : empty}
-            </span>
-          );
-        })}
-      </span>
-      <span className="vitals-spark-row vitals-spark-grid-row">
-        {Array.from({ length: cells }, (_, i) => (
-          <span key={i} className="vitals-spark-cell vitals-spark-grid-cell">
-            <span className="vitals-spark-grid-base">⣿</span>
-            <span className="vitals-spark-grid-trace" style={{ color }}>
-              {previewBrailleCell(fillValue / 100, fillValue / 100)}
-            </span>
-          </span>
-        ))}
-      </span>
-    </span>
-  );
-}
-
-const PREVIEW_DOTS_L = [0x01, 0x02, 0x04, 0x40];
-const PREVIEW_DOTS_R = [0x08, 0x10, 0x20, 0x80];
-function previewBrailleCell(v0: number, v1: number): string {
-  const lit0 = Math.max(0, Math.min(4, Math.round(v0 * 4)));
-  const lit1 = Math.max(0, Math.min(4, Math.round(v1 * 4)));
-  let bits = 0;
-  for (let d = 0; d < 4; d++) {
-    const fromBottom = 3 - d;
-    if (fromBottom < lit0) bits |= PREVIEW_DOTS_L[d];
-    if (fromBottom < lit1) bits |= PREVIEW_DOTS_R[d];
-  }
-  return String.fromCodePoint(0x2800 | bits);
-}
-
-function previewRampedBar({
-  value,
-  cells,
-  filled,
-  empty,
-  color,
-  font,
-}: {
-  value: number;
-  cells: number;
-  filled: string;
-  empty: string;
-  color: string;
-  font?: string;
-}): ReactNode {
-  const exact = (Math.max(0, Math.min(100, value)) / 100) * cells;
-  const whole = Math.floor(exact);
-  const fraction = exact - whole;
-  const stepIdx = Math.round(fraction * 8);
-  let boundary = '';
-  if (whole < cells && stepIdx > 0) {
-    boundary = stepIdx === 8 ? filled : PREVIEW_RAMP_PARTIALS[stepIdx];
-  }
-  const emptyCount = Math.max(0, cells - whole - (boundary ? 1 : 0));
-  return (
-    <span className="vitals-glyphs" style={{ fontFamily: font || undefined }} aria-hidden="true">
-      {whole > 0 && <span style={{ color }}>{filled.repeat(whole)}</span>}
-      {boundary && <span style={{ color }}>{boundary}</span>}
-      {emptyCount > 0 && <span className="vitals-empty">{empty.repeat(emptyCount)}</span>}
-    </span>
-  );
-}
-
-interface PreviewSample {
-  label: string;
-  cur: number;
-  max: number;
-  value: number;
-  delta: number;
-  color: string;
-}
-
-// Token reference for the Settings preview render path. Imported
-// from session.ts wouldn't pull the live values; we mock them with
-// the same sample fixture used by stacked/inline previews.
-function previewTemplate(
-  config: VitalsConfig,
-  sample: PreviewSample[],
-  track: boolean,
-  gradient: boolean,
-): ReactNode {
-  const width = Math.max(4, Math.min(60, config.bar_width));
-  const get = (label: string) => sample.find((s) => s.label === label)!;
-  const resolveToken = (name: string): ReactNode => {
-    switch (name) {
-      case 'hp':
-        return get('hp').cur;
-      case 'mhp':
-        return get('hp').max;
-      case 'mn':
-        return get('mn').cur;
-      case 'mmn':
-        return get('mn').max;
-      case 'mv':
-        return get('mv').cur;
-      case 'mmv':
-        return get('mv').max;
-      case 'pct_hp':
-      case 'pct_mn':
-      case 'pct_mv': {
-        const label = name.slice(4);
-        const s = get(label);
-        const c = gradient ? s.color : colorForVital(label, s.value, config);
-        if (config.pct_chip_style !== 'none') {
-          return (
-            <span className="vitals-pct-chip-host">
-              <PreviewPercentChip value={s.value} color={c} style={config.pct_chip_style} />
-            </span>
-          );
-        }
-        return <span style={{ color: c }}>{s.value}%</span>;
-      }
-      case 'dhp':
-      case 'dmn':
-      case 'dmv': {
-        const s = get(name.slice(1));
-        if (s.delta === 0) return null;
-        const cls = s.delta > 0 ? 'vitals-delta vitals-delta-up' : 'vitals-delta vitals-delta-down';
-        return (
-          <span className={cls}>
-            {s.delta > 0 ? '+' : ''}
-            {s.delta}
-          </span>
-        );
-      }
-      case 'bar_hp':
-      case 'bar_mn':
-      case 'bar_mv': {
-        const label = name.slice(4);
-        const s = get(label);
-        const fill = gradient ? s.color : colorForVital(label, s.value, config);
-        if (track) {
-          return (
-            <PreviewTrackBar value={s.value} cells={width} color={fill} font={config.bar_font} />
-          );
-        }
-        if (config.bar_style === 'ramped') {
-          return previewRampedBar({
-            value: s.value,
-            cells: width,
-            filled: config.bar_filled,
-            empty: config.bar_empty,
-            color: fill,
-            font: config.bar_font,
-          });
-        }
-        const filled = Math.round((s.value / 100) * width);
-        const empty = width - filled;
-        return (
-          <span
-            className="vitals-glyphs"
-            style={{ fontFamily: config.bar_font || undefined }}
-            aria-hidden="true"
-          >
-            <span style={{ color: fill }}>{config.bar_filled.repeat(filled)}</span>
-            <span className="vitals-empty">{config.bar_empty.repeat(empty)}</span>
-          </span>
-        );
-      }
-      case 'tick':
-        return '19s';
-      case 'time':
-        return '3PM';
-      default:
-        // Preview has no access to live Char.Vitals / Char.Worth, so
-        // any pass-through token always renders as the red `%name`
-        // literal here — mirroring exactly what the runtime renderer
-        // does when the server hasn't pushed that field. Lets the
-        // user spot in advance which tokens won't resolve.
-        return <span className="vitals-template-unknown">%{name}</span>;
-    }
-  };
-  const segments = tokenizeTemplate(config.template);
-  return segments.map((seg, i) => {
-    if (seg.kind === 'text') return <span key={i}>{seg.text}</span>;
-    const node = resolveToken(seg.name);
-    if (node === null || node === undefined) return null;
-    return <span key={i}>{node}</span>;
-  });
-}
-
-type PreviewLabel = 'hp' | 'mn' | 'mv';
-const PREVIEW_MAX: Record<PreviewLabel, number> = { hp: 1000, mn: 300, mv: 200 };
-const PREVIEW_DELTA: Record<PreviewLabel, number> = { hp: 12, mn: -8, mv: 0 };
-
-/**
- * Build the sample row for one vital from a percent value. Computes
- * `cur` from `value * max / 100` so the numeric column tracks the
- * dragged value, and `color` from `colorForPercent` so the gradient
- * percent-color path follows the live value too.
- */
-function previewSample(label: PreviewLabel, value: number): PreviewSample {
-  const v = Math.max(0, Math.min(100, Math.round(value)));
-  return {
-    label,
-    cur: Math.round((v / 100) * PREVIEW_MAX[label]),
-    max: PREVIEW_MAX[label],
-    value: v,
-    delta: PREVIEW_DELTA[label],
-    color: colorForPercent(v),
-  };
-}
-
-// Mirrors the runtime PercentChip from VitalsBar.tsx so the
-// Settings preview shows the user the exact chip they will see
-// in-game. Kept here (rather than imported) to avoid pulling the
-// runtime component's session-related deps into Settings.
-function PreviewPercentChip({
-  value,
-  color,
-  style,
-}: {
-  value: number;
-  color: string;
-  style: VitalsPctChipStyle;
-}) {
-  if (style === 'none') {
-    return (
-      <span className="vitals-inline-pct" style={{ color }}>
-        ({value}%)
-      </span>
-    );
-  }
-  const styleVars: React.CSSProperties = {
-    color,
-    ['--pct-color' as string]: color,
-    ['--pct-fill' as string]: `${Math.max(0, Math.min(100, value))}%`,
-  };
-  return (
-    <span className={`vitals-pct-chip vitals-pct-chip-${style}`} style={styleVars}>
-      {value}%
-    </span>
-  );
-}
-
-function VitalsPreview({ config }: { config: VitalsConfig }) {
-  // Dragable per-vital fill state. Seed values match the previous
-  // static preview (hp 75% / mn 50% / mv 25%) so a Settings reopen
-  // starts at the same starting point users were used to.
-  const [values, setValues] = useState<Record<PreviewLabel, number>>({
-    hp: 75,
-    mn: 50,
-    mv: 25,
-  });
-  const sample = (['hp', 'mn', 'mv'] as PreviewLabel[]).map((l) => previewSample(l, values[l]));
-  const width = Math.max(4, Math.min(60, config.bar_width));
-  const gradient = config.percent_color === 'gradient';
-  const track = config.bar_style === 'track';
-
-  // Mouse-drag scrubber. On mousedown we capture the bar wrapper's
-  // bounding rect once and then translate cursor X into a 0..100
-  // percent for the rest of the gesture. window-level listeners catch
-  // moves and releases that drift outside the bar, which matters when
-  // the user drags past either edge.
-  const startDrag = (label: PreviewLabel) => (e: React.MouseEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const setFromX = (clientX: number) => {
-      const x = clientX - rect.left;
-      const pct = Math.max(0, Math.min(100, Math.round((x / rect.width) * 100)));
-      setValues((prev) => (prev[label] === pct ? prev : { ...prev, [label]: pct }));
-    };
-    setFromX(e.clientX);
-    const onMove = (ev: MouseEvent) => setFromX(ev.clientX);
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  };
-
-  const headerText = `preview · hp ${values.hp}% / mn ${values.mn}% / mv ${values.mv}% · drag a bar`;
-
-  // Wrap the rendered bar in a draggable hit-target. The wrapper is
-  // capped at the bar's cell width so its bounding rect matches the
-  // visible bar exactly — dragging at 50% of the wrapper lands at 50%
-  // of the bar, not 50% of the whole row. Without the cap the wrapper
-  // grew into the trailing row whitespace, making fine-grained drag
-  // on narrow bars unusable.
-  const draggableBar = (label: PreviewLabel, cells: number, node: ReactNode) => (
-    <div
-      className="vitals-preview-drag"
-      style={{ flexBasis: `${cells}ch`, maxWidth: `${cells}ch` }}
-      onMouseDown={startDrag(label)}
-      role="slider"
-      aria-label={`${label} fill percent`}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={values[label]}
-    >
-      {node}
-    </div>
-  );
-
-  // Template preview takes priority because the template field
-  // overrides layout. Renders sample values for each token using the
-  // same look the runtime VitalsBar would produce. The template
-  // variant is not dragable in this commit (the bar token lives
-  // anywhere inside an arbitrary template, and the per-line layout
-  // makes the wrapper hit-region ambiguous); the stacked and inline
-  // variants are.
-  if (config.template_enabled) {
-    return (
-      <>
-        <div className="vitals-preview-head">{headerText}</div>
-        <div className="vitals-bar vitals-bar-template">
-          <div className="vitals-row vitals-row-template">
-            {previewTemplate(config, sample, track, gradient)}
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  if (config.layout === 'inline') {
-    // Mirror the runtime resolvePercentColor in VitalsBar.tsx so the
-    // preview shows what the user is about to see.
-    const previewPercentColor = (label: string, value: number): string => {
-      switch (config.percent_color_mode) {
-        case 'stat':
-          return colorForVital(label, 100, config);
-        case 'accent':
-          return 'var(--c-accent)';
-        case 'drain':
-        default:
-          if (value >= 75) return colorForVital(label, 100, config);
-          if (value >= 50) return '#e6c384';
-          if (value >= 25) return '#d99268';
-          return '#e46876';
-      }
-    };
-    return (
-      <>
-        <div className="vitals-preview-head">{headerText}</div>
-        <div className={`vitals-bar vitals-bar-inline vitals-inline-${config.inline_style}`}>
-          <div className="vitals-row vitals-row-inline">
-            {sample.map((s) => {
-              const statColor = colorForVital(s.label, 100, config);
-              const pctColor =
-                config.inline_style === 'plain'
-                  ? gradient
-                    ? s.color
-                    : colorForVital(s.label, s.value, config)
-                  : previewPercentColor(s.label, s.value);
-              if (config.inline_style === 'badge') {
-                const isDanger = s.value < 20;
-                return (
-                  <span
-                    key={s.label}
-                    className={`vitals-inline-badge${isDanger ? ' is-danger' : ''}`}
-                    style={{ color: statColor }}
-                  >
-                    <span className="vitals-inline-badge-cap">{s.label}</span>
-                    {(config.show_numeric || !config.show_percent) && (
-                      <span className="vitals-inline-badge-val" style={{ color: statColor }}>
-                        {s.cur}
-                        <span className="vitals-inline-badge-max">/{s.max}</span>
-                      </span>
-                    )}
-                    {config.show_percent && (
-                      <span
-                        className="vitals-inline-badge-pct"
-                        style={{
-                          color: pctColor,
-                          borderColor: isDanger ? 'var(--c-danger)' : undefined,
-                        }}
-                      >
-                        {s.value}%
-                      </span>
-                    )}
-                    {config.show_delta && s.delta !== 0 && (
-                      <span
-                        className={`vitals-delta${s.delta > 0 ? ' vitals-delta-up' : ' vitals-delta-down'}`}
-                      >
-                        {s.delta > 0 ? '+' : ''}
-                        {s.delta}
-                      </span>
-                    )}
-                  </span>
-                );
-              }
-              if (config.inline_style === 'drain') {
-                const isDanger = s.value < 20;
-                return (
-                  <span
-                    key={s.label}
-                    className={`vitals-inline-drain${isDanger ? ' is-danger' : ''}`}
-                    style={
-                      {
-                        ['--vital-color']: statColor,
-                        ['--vital-fill']: `${s.value}%`,
-                      } as React.CSSProperties
-                    }
-                  >
-                    <span className="vitals-inline-drain-bg" aria-hidden="true" />
-                    <span className="vitals-inline-drain-top">
-                      <span className="vitals-inline-drain-cap">{s.label}</span>
-                      {config.show_percent && (
-                        <span className="vitals-inline-drain-pct" style={{ color: pctColor }}>
-                          {s.value}%
-                        </span>
-                      )}
-                    </span>
-                    <span className="vitals-inline-drain-val" style={{ color: statColor }}>
-                      {config.show_numeric ? (
-                        <>
-                          {s.cur}
-                          <span className="vitals-inline-drain-max">/{s.max}</span>
-                        </>
-                      ) : (
-                        `${s.value}%`
-                      )}
-                      {config.show_delta && s.delta !== 0 && (
-                        <span
-                          className={`vitals-delta${s.delta > 0 ? ' vitals-delta-up' : ' vitals-delta-down'}`}
-                        >
-                          {s.delta > 0 ? '+' : ''}
-                          {s.delta}
-                        </span>
-                      )}
-                    </span>
-                  </span>
-                );
-              }
-              return (
-                <span key={s.label} className="vitals-inline-chip">
-                  {config.show_numeric && <span className="vitals-numeric">{s.cur}</span>}
-                  {config.show_percent && (
-                    <PreviewPercentChip
-                      value={s.value}
-                      color={pctColor}
-                      style={config.pct_chip_style}
-                    />
-                  )}
-                  <span className="vitals-inline-letter">{s.label[0]}</span>
-                  {config.show_delta && s.delta !== 0 && (
-                    <span
-                      className={`vitals-delta${s.delta > 0 ? ' vitals-delta-up' : ' vitals-delta-down'}`}
-                    >
-                      {s.delta > 0 ? '+' : ''}
-                      {s.delta}
-                    </span>
-                  )}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <div className="vitals-preview-head">{headerText}</div>
-      <div className="vitals-bar">
-        {sample.map((s) => {
-          const filled = Math.round((s.value / 100) * width);
-          const empty = width - filled;
-          const percentColor = gradient ? s.color : colorForVital(s.label, s.value, config);
-          const innerBar = track ? (
-            <PreviewTrackBar
-              value={s.value}
-              cells={width}
-              color={percentColor}
-              font={config.bar_font}
-            />
-          ) : config.bar_style === 'ramped' ? (
-            previewRampedBar({
-              value: s.value,
-              cells: width,
-              filled: config.bar_filled,
-              empty: config.bar_empty,
-              color: percentColor,
-              font: config.bar_font,
-            })
-          ) : (
-            <span
-              className="vitals-glyphs"
-              style={{ fontFamily: config.bar_font || undefined }}
-              aria-hidden="true"
-            >
-              <span style={{ color: percentColor }}>{config.bar_filled.repeat(filled)}</span>
-              <span className="vitals-empty">{config.bar_empty.repeat(empty)}</span>
-            </span>
-          );
-          // history layout: render the per-cell-flex bar + grid.
-          // Per-cell layout means the bar is always rendered as
-          // bar_filled / bar_empty glyphs (any chosen bar_style
-          // collapses to solid in spark mode) — the trade-off for
-          // guaranteed cell-by-cell alignment between bar and grid
-          // rows regardless of font metrics.
-          const bar =
-            config.bar_layout === 'with_history' ? (
-              <PreviewHistoryWrapper
-                cells={width}
-                color={percentColor}
-                fillValue={s.value}
-                filled={config.bar_filled}
-                empty={config.bar_empty}
-                font={config.bar_font}
-              />
-            ) : (
-              innerBar
-            );
-          return (
-            <div
-              key={s.label}
-              className={`vitals-row${config.bar_layout === 'with_history' ? ' vitals-row-spark' : ''}`}
-            >
-              <span className="vitals-label">{s.label}</span>
-              {config.show_bar && draggableBar(s.label as PreviewLabel, width, bar)}
-              {config.show_percent && (
-                <span className="vitals-percent" style={{ color: percentColor }}>
-                  {s.value}%
-                </span>
-              )}
-              {config.show_numeric && (
-                <span className="vitals-numeric">
-                  {s.cur}/{s.max}
-                </span>
-              )}
-              {config.show_delta && (
-                <span className="vitals-delta-slot">
-                  {s.delta !== 0 && (
-                    <span
-                      className={`vitals-delta${s.delta > 0 ? ' vitals-delta-up' : ' vitals-delta-down'}`}
-                    >
-                      {s.delta > 0 ? '+' : ''}
-                      {s.delta}
-                    </span>
-                  )}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </>
   );
 }
 

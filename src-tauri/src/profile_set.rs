@@ -24,7 +24,7 @@
 //! - Else create an empty index with one "default" profile entry (its
 //!   file is created on the first save).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
@@ -501,14 +501,6 @@ pub(crate) fn sanitize_name(name: &str) -> Result<String, ProfileSetError> {
         return Err(ProfileSetError::InvalidName(trimmed.to_string()));
     }
     Ok(trimmed.to_string())
-}
-
-/// Reachable from outside the module so the rest of the app can
-/// resolve "where do I persist the active profile to" without
-/// duplicating the layout knowledge.
-#[allow(dead_code)]
-pub(crate) fn legacy_profile_path(root: &Path) -> PathBuf {
-    root.join(LEGACY_PROFILE_FILENAME)
 }
 
 #[cfg(test)]
