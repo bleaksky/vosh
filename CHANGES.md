@@ -2,6 +2,10 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.5.1 - 2026-06-23
+
+- The split-scrollback history pane no longer comes up blank. With GPU rendering on by default in v0.5.0, the top pane could fail to paint the scrollback it receives all at once the moment the split opens, so it showed empty even though the content was there and the scroll-depth counter kept climbing. The history pane now draws with the standard renderer and paints every time, while the live pane keeps GPU rendering.
+
 ## v0.5.0 - 2026-06-23
 
 - The command line is now multi-line. Press Shift+Enter to start another line and the prompt numbers each line down the left edge. When you press Enter, Vosh sends every line as its own command, so you can stack a whole sequence and fire it at once. A single line behaves exactly as before.
