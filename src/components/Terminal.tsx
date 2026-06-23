@@ -449,17 +449,27 @@ export function Terminal({
     if (sizer) observer.observe(sizer);
     observer.observe(document.body);
 
-    // Safety-net poll for the rare Tauri/WebKit case where
-    // ResizeObserver doesn't fire on sibling chrome growth. The instant
-    // paths above (resize event, vosh:resize-progress, ResizeObserver)
-    // already catch every normal size change the moment it happens, and
-    // the panel zones snap with no width transition, so there is no
-    // animation to track frame-by-frame. A low-frequency interval is
-    // enough to pick up a missed one-shot change within 250ms. Unlike a
-    // per-frame rAF, it never forces a synchronous getBoundingClientRect
-    // right after a write, which was stacking a layout reflow onto every
-    // combat-round output and stealing frames from the terminal.
-    const pollId = window.setInterval(sync, 250);
+    // Keep a resize sync alive after mount as a backup for the rare
+    // Tauri/WebKit case where ResizeObserver misses a one-shot chrome
+    // change. The split-scrollback history pane (quiet) needs a
+    // per-frame sync: it mounts transiently when the split opens and
+    // must be fully fit by the time onScrollbackLoaded positions its
+    // viewport, otherwise that first scroll lands on blank rows and only
+    // a second scroll re-renders it. The live pane uses a low-frequency
+    // interval instead, because a per-frame getBoundingClientRect there
+    // stacked a layout reflow onto every combat-round write and stole
+    // frames from the renderer.
+    let rafPoll = 0;
+    let intervalPoll: ReturnType<typeof setInterval> | undefined;
+    if (quietRef.current) {
+      const pollLoop = () => {
+        sync();
+        rafPoll = requestAnimationFrame(pollLoop);
+      };
+      rafPoll = requestAnimationFrame(pollLoop);
+    } else {
+      intervalPoll = setInterval(sync, 250);
+    }
 
     let unsubOutput: (() => void) | undefined;
     // Replay persisted scrollback before any live output lands so the
@@ -760,7 +770,8 @@ export function Terminal({
     window.addEventListener('keydown', onCopyKey, true);
 
     return () => {
-      window.clearInterval(pollId);
+      if (rafPoll) cancelAnimationFrame(rafPoll);
+      if (intervalPoll) clearInterval(intervalPoll);
       observer.disconnect();
       window.removeEventListener('resize', handleWindowResize);
       window.removeEventListener('vosh:resize-progress', onResizeProgress);
