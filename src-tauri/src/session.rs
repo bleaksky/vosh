@@ -108,7 +108,11 @@ impl PerfCounters {
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct OutputPayload {
-    pub bytes: Vec<u8>,
+    /// Output bytes as standard base64. A raw `Vec<u8>` serializes to a
+    /// JSON array of decimal numbers (~4x the wire size, one number per
+    /// byte, plus an N-element JS array to walk on the other side);
+    /// base64 is a single compact string the webview decodes in one pass.
+    pub b64: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -523,6 +527,14 @@ async fn io_loop(
         }
     };
 
+    // Capture the MUD's final partial line before teardown drops it. A
+    // `quit` logout banner usually arrives without a trailing newline,
+    // so it sits in the accumulator as a partial: painted live but never
+    // run through the per-line path that logs and scrollback-records it.
+    // Flush it now, ahead of the scrollback dump and log close below, so
+    // the goodbye is captured like every other client captures it.
+    capture_pending_line(&app, &logs, log_session_id, &scrollback, &mut accumulator).await;
+
     {
         let mut p = profile.lock().await;
         p.tick.disable();
@@ -680,6 +692,10 @@ async fn handle_event(
             // they have ordering semantics (a `gag` action mutates the
             // line's display before it lands in the batch).
             let mut display_batch: Vec<u8> = Vec::new();
+            // Log rows for this socket read, flushed in one batched
+            // transaction after the loop instead of one INSERT + one
+            // lock acquisition per line.
+            let mut log_entries: Vec<vosh_log::LogEntry> = Vec::new();
             for op in accumulator.feed(&bytes) {
                 match op {
                     ChunkOp::RawDisplay(b) => {
@@ -703,7 +719,16 @@ async fn handle_event(
                             let mut p = profile.lock().await;
                             perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
                             perf.mutex_acquires += 1;
-                            let result = vosh_trigger::process(&p.triggers, &bytes);
+                            // Reuse the `plain` strip computed above
+                            // instead of letting the engine strip the
+                            // same bytes a second time (one ANSI pass
+                            // per line, not two).
+                            let result = vosh_trigger::process_with_plain(
+                                &p.triggers,
+                                &bytes,
+                                &plain,
+                                vosh_trigger::MatchScope::Line,
+                            );
                             let tick_payload = if p.tick.check_reset_match(&plain) {
                                 p.tick.reset(Instant::now());
                                 Some(TickPayload::from_runtime(&p.tick, Instant::now(), false))
@@ -774,25 +799,20 @@ async fn handle_event(
                         }
                         emit_line_routes(app, &result);
                         if let Some(text) = &result.display {
-                            // Persist to the searchable SQLite log and the
+                            // Collect the searchable SQLite log row (flushed
+                            // in one transaction after the loop) and push the
                             // ring buffer that becomes scrollback on next
                             // launch. The raw bytes carry ANSI; the plain
-                            // text column drives the regex search.
+                            // text column drives the regex search. `plain`
+                            // and `bytes` are not used past this point, so
+                            // they move into the entry instead of cloning.
                             if let Some(sid) = log_session_id {
-                                let lock_t0 = std::time::Instant::now();
-                                let mut guard = logs.lock().await;
-                                perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
-                                perf.mutex_acquires += 1;
-                                if let Some(store) = guard.as_mut() {
-                                    let append_t0 = std::time::Instant::now();
-                                    let append_res =
-                                        store.append(sid, now_ms(), &plain, Some(&bytes));
-                                    perf.log_append_ns += append_t0.elapsed().as_nanos() as u64;
-                                    perf.log_appends += 1;
-                                    if let Err(e) = append_res {
-                                        warn!(error = %e, "log append failed");
-                                    }
-                                }
+                                log_entries.push(vosh_log::LogEntry {
+                                    session_id: sid,
+                                    ts_ms: now_ms(),
+                                    text: plain,
+                                    raw: Some(bytes),
+                                });
                             }
                             let sb_t0 = std::time::Instant::now();
                             scrollback.lock().await.push(text.as_bytes().to_vec());
@@ -813,6 +833,22 @@ async fn handle_event(
                 perf.output_emits += 1;
                 perf.output_emit_bytes += display_batch.len() as u64;
                 emit_output(app, display_batch);
+            }
+            // Flush this read's log rows in one transaction under one
+            // lock acquisition, instead of per line inside the loop.
+            if !log_entries.is_empty() {
+                let lock_t0 = std::time::Instant::now();
+                let mut guard = logs.lock().await;
+                perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
+                perf.mutex_acquires += 1;
+                if let Some(store) = guard.as_mut() {
+                    let append_t0 = std::time::Instant::now();
+                    perf.log_appends += log_entries.len() as u64;
+                    if let Err(e) = store.append_batch(&log_entries) {
+                        warn!(error = %e, "log append_batch failed");
+                    }
+                    perf.log_append_ns += append_t0.elapsed().as_nanos() as u64;
+                }
             }
             Ok(())
         }
@@ -1203,6 +1239,47 @@ async fn fire_due_script_timers(
 /// When no prompt trigger fires (display matches original), the only
 /// observable effect is the trailing `\r\n` that drops the cursor
 /// onto the next line — same as the legacy partial-flush behavior.
+/// Flush a partial line still buffered when the session ends so the MUD's
+/// final output (a logout banner on `quit`, most often) is captured rather
+/// than discarded by the disconnect `accumulator.reset()`. The partial was
+/// already painted live as it streamed in, so display only needs the
+/// terminating newline; the value of this pass is logging it and pushing it
+/// into the scrollback ring that the dump persists.
+async fn capture_pending_line(
+    app: &AppHandle,
+    logs: &crate::log_state::SharedLogStore,
+    log_session_id: Option<i64>,
+    scrollback: &crate::log_state::SharedScrollback,
+    accumulator: &mut LineAccumulator,
+) {
+    let Some((bytes, already_shown)) = accumulator.flush_partial() else {
+        return;
+    };
+    let plain = vosh_ansi::plain_text(&bytes);
+    // Terminate the line on screen. Re-emit the bytes only in the unlikely
+    // case they were never shown raw, to avoid printing the goodbye twice.
+    let mut out = Vec::with_capacity(bytes.len() + 2);
+    if !already_shown {
+        out.extend_from_slice(&bytes);
+    }
+    out.extend_from_slice(b"\r\n");
+    emit_output(app, out);
+    scrollback.lock().await.push(bytes.clone());
+    if let Some(sid) = log_session_id {
+        let mut guard = logs.lock().await;
+        if let Some(store) = guard.as_mut() {
+            if let Err(e) = store.append_batch(&[vosh_log::LogEntry {
+                session_id: sid,
+                ts_ms: now_ms(),
+                text: plain,
+                raw: Some(bytes),
+            }]) {
+                warn!(error = %e, "disconnect partial log append failed");
+            }
+        }
+    }
+}
+
 async fn dispatch_prompt_buffer(
     app: &AppHandle,
     profile: &Arc<Mutex<Profile>>,
@@ -1333,8 +1410,44 @@ fn format_disconnect_reason(err: &std::io::Error) -> String {
     }
 }
 
+/// Standard base64 (RFC 4648, padded) encoder. Hand-rolled to keep the
+/// output hot path dependency-free; the webview decodes with the
+/// built-in `atob`.
+fn base64_encode(input: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    for chunk in input.chunks(3) {
+        let b0 = u32::from(chunk[0]);
+        let b1 = u32::from(*chunk.get(1).unwrap_or(&0));
+        let b2 = u32::from(*chunk.get(2).unwrap_or(&0));
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(ALPHABET[((n >> 18) & 63) as usize] as char);
+        out.push(ALPHABET[((n >> 12) & 63) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            ALPHABET[((n >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ALPHABET[(n & 63) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+impl OutputPayload {
+    /// Build the wire payload from raw output bytes (base64-encoded).
+    pub(crate) fn from_bytes(bytes: &[u8]) -> Self {
+        Self {
+            b64: base64_encode(bytes),
+        }
+    }
+}
+
 fn emit_output(app: &AppHandle, bytes: Vec<u8>) {
-    if let Err(e) = app.emit("session://output", OutputPayload { bytes }) {
+    if let Err(e) = app.emit("session://output", OutputPayload::from_bytes(&bytes)) {
         warn!(error = %e, "failed to emit session output");
     }
 }
@@ -1348,5 +1461,28 @@ fn emit_state(app: &AppHandle, payload: StatePayload) {
 fn emit_input_mode(app: &AppHandle, password: bool) {
     if let Err(e) = app.emit("session://input-mode", InputModePayload { password }) {
         warn!(error = %e, "failed to emit input mode");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::base64_encode;
+
+    #[test]
+    fn base64_matches_rfc4648_vectors() {
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(b"foob"), "Zm9vYg==");
+        assert_eq!(base64_encode(b"fooba"), "Zm9vYmE=");
+        assert_eq!(base64_encode(b"foobar"), "Zm9vYmFy");
+    }
+
+    #[test]
+    fn base64_handles_raw_ansi_and_high_bytes() {
+        // ESC [ 3 1 m  (a red SGR sequence) plus a high byte.
+        assert_eq!(base64_encode(&[0x1b, 0x5b, 0x33, 0x31, 0x6d]), "G1szMW0=");
+        assert_eq!(base64_encode(&[0xff, 0xfe, 0xfd]), "//79");
     }
 }

@@ -11,7 +11,6 @@ use tokio::sync::Mutex;
 use tokio::time::Instant;
 use vosh_alias::Alias;
 use vosh_script::{Action, ScriptEngine, ScriptOutcome, VarScope};
-use vosh_trigger::{Trigger, TriggerAction};
 use vosh_vars::{Scope, VariableStore};
 
 use crate::profile::Profile;
@@ -180,23 +179,6 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
         }
     }
     result
-}
-
-/// Push a structured trigger from a Lua-produced action into the profile.
-/// Used by the regex trigger engine when the action carries plain data
-/// (highlight, gag, etc.); not needed for the Lua-callback trigger path
-/// since `ScriptEngine` owns those internally.
-#[allow(dead_code)]
-pub(crate) fn push_trigger(profile: &mut Profile, trigger: Trigger) -> Option<String> {
-    match profile.triggers.set(trigger) {
-        Ok(()) => None,
-        Err(e) => Some(e.to_string()),
-    }
-}
-
-#[allow(dead_code)]
-pub(crate) fn highlight_trigger_marker() -> TriggerAction {
-    TriggerAction::Gag
 }
 
 fn scope_to_internal(scope: VarScope) -> Scope {

@@ -89,11 +89,29 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // Null means no active prefix search; cycle the full history.
   const [searchPrefix, setSearchPrefix] = useState<string | null>(null);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  // Line-number gutter next to the multi-line prompt. Kept in its own
+  // ref so the textarea's scroll position can be mirrored onto it once a
+  // compose grows past the visible cap.
+  const gutterRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    // Refocus on enable and whenever the element swaps between the
+    // multi-line textarea and the password <input> so a login prompt
+    // never silently drops focus mid-session.
     if (enabled) inputRef.current?.focus();
-  }, [enabled]);
+  }, [enabled, passwordMode]);
+
+  // Autosize the multi-line prompt: grow the textarea to fit the
+  // composed lines up to the CSS max-height (then it scrolls), and
+  // shrink back as lines are removed. No-op in password mode, where the
+  // element is a single-line <input>.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!(el instanceof HTMLTextAreaElement)) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value, passwordMode]);
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
@@ -465,10 +483,11 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // Multi-line paste. A single-line `<input>` collapses pasted newlines
   // into spaces by default, so pasting an 8-line sequence ends up as
   // one mangled command. Intercept paste, split on newlines, and send
-  // each line as its own command via submitLine. Single-line pastes
-  // fall through to the browser default so the cursor and existing
-  // input value are preserved. Password mode is exempt so passwords
-  // copied with stray whitespace never leak as individual sends.
+  // each line as its own command via submitLine, leaving whatever the
+  // user already composed in the prompt intact. Single-line pastes fall
+  // through to the browser default so they insert at the cursor.
+  // Password mode is exempt so passwords copied with stray whitespace
+  // never leak as individual sends.
   //
   // Lines are spread over time using `paste_line_delay_ms` so MUD
   // flood filters do not kick the connection. Esc cancels the queue
@@ -476,7 +495,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // [paste N/M esc cancels] indicator next to the prompt.
   const pasteCancelRef = useRef<boolean>(false);
   const [pasteBurst, setPasteBurst] = useState<{ sent: number; total: number } | null>(null);
-  const handlePaste = async (event: ClipboardEvent<HTMLInputElement>) => {
+  const handlePaste = async (event: ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (passwordMode) return;
     const text = event.clipboardData.getData('text');
     if (!text.includes('\n') && !text.includes('\r')) return;
@@ -486,9 +505,11 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       .split('\n')
       .filter((l) => l.length > 0);
     if (lines.length === 0) return;
-    setValue('');
-    setSearchPrefix(null);
-    setHistoryIndex(null);
+    // Leave the command line untouched. A multi-line paste force-sends
+    // its lines, but whatever the user had already composed (selected
+    // or not) stays in the prompt instead of being wiped — only the
+    // paste itself is preventDefault'd, so the existing input value and
+    // selection survive the burst.
     // Cancel any in-flight burst before starting a new one so a fresh
     // paste replaces the queue instead of interleaving with the old
     // remainder.
@@ -527,7 +548,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     setPasteBurst(null);
   };
 
-  const handleKeyDown = async (event: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = async (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     // Tab completion. Pressing Tab once builds a candidate list from
     // history words and room characters that prefix-match the word
     // being typed. Pressing Tab again cycles through the matches.
@@ -627,30 +648,53 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     }
 
     if (event.key === 'Enter') {
+      // Shift+Enter composes another line in the multi-line prompt
+      // instead of submitting. Password mode is single-line, so a
+      // Shift+Enter there still submits like a plain Enter.
+      if (event.shiftKey && !passwordMode) {
+        return;
+      }
       event.preventDefault();
-      const line = value;
-      const keepLast = keepLastRef.current && line.length > 0 && !passwordMode;
+      const composed = value;
+      const keepLast = keepLastRef.current && composed.length > 0 && !passwordMode;
       if (keepLast) {
-        // Restore the line and select it after React commits so the
-        // user can press Enter to resend. setSelectionRange selects
-        // the whole value; the OS will paint the standard text-
-        // selection highlight (overridden by .input-row input::
-        // selection in styles.css to use the theme accent).
-        setValue(line);
+        // Restore the composed value and select it after React commits
+        // so the user can press Enter to resend. setSelectionRange
+        // selects the whole value; the OS paints the standard text-
+        // selection highlight (overridden by the ::selection rule in
+        // styles.css to use the theme accent).
+        setValue(composed);
         requestAnimationFrame(() => {
           const el = inputRef.current;
-          if (el) el.setSelectionRange(0, line.length);
+          if (el) el.setSelectionRange(0, composed.length);
         });
       } else {
         setValue('');
       }
       setSearchPrefix(null);
       setHistoryIndex(null);
-      await submitLine(line);
+      // Send each composed line as its own command (the Shift+Enter
+      // lines, plus the backend still splits `;` within each). A bare
+      // Enter on an empty prompt sends one blank line, which advances
+      // MUD prompts and paginated output.
+      const composedLines = composed.split('\n').filter((l) => l.trim().length > 0);
+      if (composedLines.length === 0) {
+        await submitLine('');
+      } else {
+        for (const cmd of composedLines) {
+          await submitLine(cmd);
+        }
+      }
       return;
     }
 
     if (event.key === 'ArrowUp') {
+      // In a multi-line compose, move the caret up a line unless it is
+      // already on the first line; only then recall command history.
+      const elUp = inputRef.current;
+      if (elUp && value.slice(0, elUp.selectionStart ?? 0).includes('\n')) {
+        return;
+      }
       event.preventDefault();
       const matches = startSearchIfNeeded();
       if (matches.length === 0) return;
@@ -665,6 +709,12 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     }
 
     if (event.key === 'ArrowDown') {
+      // Mirror ArrowUp: move the caret down within a multi-line compose
+      // unless it is already on the last line.
+      const elDown = inputRef.current;
+      if (elDown && value.slice(elDown.selectionStart ?? value.length).includes('\n')) {
+        return;
+      }
       event.preventDefault();
       if (historyIndex === null) return;
       const matches = matchingIndices(searchPrefix);
@@ -682,12 +732,28 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     }
   };
 
+  // Logical line count for the gutter. Password prompts are always
+  // single-line. The gutter only renders once a second line exists so a
+  // normal single command prompt stays clean.
+  const lineCount = passwordMode ? 1 : value.split('\n').length;
+
   return (
-    <div className={`input-row${pasteBurst ? ' input-row-pasting' : ''}`}>
+    <div
+      className={`input-row${pasteBurst ? ' input-row-pasting' : ''}${
+        lineCount > 1 ? ' input-row-multiline' : ''
+      }`}
+    >
       <LineChip />
       <span className="prompt" aria-hidden="true">
         &gt;
       </span>
+      {lineCount > 1 && (
+        <div className="input-gutter" aria-hidden="true" ref={gutterRef}>
+          {Array.from({ length: lineCount }, (_, i) => (
+            <span key={i}>{i + 1}</span>
+          ))}
+        </div>
+      )}
       {pasteBurst && (
         <span className="paste-burst" aria-live="polite" aria-label="pasting lines">
           <span className="paste-burst-tag">paste</span>
@@ -699,33 +765,59 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           <span className="paste-burst-hint">esc cancels</span>
         </span>
       )}
-      <input
-        ref={inputRef}
-        type={passwordMode ? 'password' : 'text'}
-        value={value}
-        // Stay enabled even when disconnected so the user can compose
-        // commands ahead of a reconnect. The backend echoes
-        // [not connected] when Enter fires without a session, which
-        // is friendlier than a dead input field.
+      {passwordMode ? (
+        // Password prompts (server WILL ECHO) stay a single-line masked
+        // <input>. Multi-line composing never applies to a password, and
+        // type="password" gives real masking that a textarea cannot.
+        <input
+          ref={(el) => {
+            inputRef.current = el;
+          }}
+          type="password"
+          value={value}
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          autoComplete="current-password"
+          placeholder="password"
+          aria-label="password input"
+          onChange={(e) => handleChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+        />
+      ) : (
+        // Multi-line command prompt. Shift+Enter adds a line and the
+        // textarea autosizes; plain Enter submits each line as its own
+        // command. Stays enabled even when disconnected so the user can
+        // compose ahead of a reconnect — the backend echoes
+        // [not connected] when Enter fires without a session.
         //
-        // Spell-check fires when (a) the user opted in via Settings
-        // AND (b) the current line matches a chat verb. The
-        // underlying WKWebView's continuous spell-checking is
-        // enabled at app startup (lib.rs) so the HTML attribute
-        // actually triggers the squiggle pass — without that
-        // native enable, the attribute is silently ignored. Plain
-        // MUD commands skip the check so the prompt stays clean.
-        // Passwords always opt out.
-        spellCheck={!passwordMode && spellcheckPrompt && looksLikeChat(value)}
-        autoCapitalize="off"
-        autoCorrect="off"
-        autoComplete={passwordMode ? 'current-password' : 'off'}
-        placeholder={passwordMode ? 'password' : ''}
-        aria-label={passwordMode ? 'password input' : 'command input'}
-        onChange={(e) => handleChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onPaste={handlePaste}
-      />
+        // Spell-check fires when (a) the user opted in via Settings AND
+        // (b) the current line matches a chat verb. WKWebView's
+        // continuous spell-checking is enabled at app startup (lib.rs)
+        // so the attribute triggers the squiggle pass; plain MUD
+        // commands skip it so the prompt stays clean.
+        <textarea
+          ref={(el) => {
+            inputRef.current = el;
+          }}
+          rows={1}
+          value={value}
+          spellCheck={spellcheckPrompt && looksLikeChat(value)}
+          autoCapitalize="off"
+          autoCorrect="off"
+          autoComplete="off"
+          aria-label="command input"
+          onChange={(e) => handleChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          // Keep the line-number gutter aligned when a tall compose
+          // scrolls inside the capped textarea.
+          onScroll={(e) => {
+            if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop;
+          }}
+        />
+      )}
     </div>
   );
 });

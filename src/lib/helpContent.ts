@@ -96,6 +96,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       'Type at the prompt, then press Enter. Vosh sends your line to the MUD as one command. The same line shows up at the bottom of the terminal pane so you can see what you sent.\n\n' +
       'Pressing Enter on an empty line sends a blank line, which most MUDs use to advance prompts or step through paginated output.\n\n' +
       'You can chain several commands by separating them with semicolons. `look;score;who` sends three commands in order.\n\n' +
+      'Press Shift+Enter to add a second line instead of sending. The prompt grows and numbers each line down the left edge, and when you press Enter, Vosh sends every line as its own command. A single line behaves exactly as before.\n\n' +
       'Anything starting with `#` is a slash command. Slash commands talk to Vosh itself, not the MUD. They are how you create aliases and triggers, configure the tick timer, and save your profile. Type `#help` to see the full list.',
   },
   {
@@ -127,6 +128,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     section: 'The command line',
     body:
       'Paste a block of text into the command line. Vosh splits it on newlines and sends each non-empty line as its own command. While the burst is in flight, a small `paste N/M esc cancels` indicator sits next to the prompt. Press Esc to drop any unsent lines.\n\n' +
+      'A multi-line paste never clears what you already typed. It sends its lines, and whatever sat in the command line stays put.\n\n' +
       'The General tab has a paste-pacing field. Set it to the number of milliseconds you want Vosh to wait between lines. Zero means no pacing. A few hundred milliseconds dodges MUD flood filters that drop the connection when too many commands arrive too fast.',
   },
   {

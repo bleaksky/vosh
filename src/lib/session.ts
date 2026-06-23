@@ -50,7 +50,10 @@ export function normalizeTrackedAffects(raw: unknown[]): TrackedAffect[] {
 }
 
 export interface OutputPayload {
-  bytes: number[];
+  /** Output bytes as standard base64. Decoded once with `atob` in
+   *  `onOutput`. Replaces the old `number[]` array, which made the
+   *  backend serialize one JSON number per byte. */
+  b64: string;
 }
 
 export type StatePayload =
@@ -516,7 +519,13 @@ export async function setRoomAvoid(roomId: number, avoid: boolean): Promise<void
 
 export async function onOutput(cb: (bytes: Uint8Array) => void): Promise<UnlistenFn> {
   return listen<OutputPayload>('session://output', (event) => {
-    cb(new Uint8Array(event.payload.bytes));
+    // Decode the base64 payload to bytes in one pass. `atob` yields a
+    // binary string (one char per byte); map each char code back to a
+    // byte. Far cheaper than parsing a JSON number[] and copying it.
+    const bin = atob(event.payload.b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    cb(bytes);
   });
 }
 
@@ -758,7 +767,22 @@ export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
   low_hp_vignette: false,
 };
 
-export async function getUiConfig(): Promise<UiConfig> {
+// Dedupe the mount-time burst: App, VitalsBar, CombatPane, AffectsBar,
+// and useChipStyle all call getUiConfig on first render. Sharing one
+// in-flight promise turns that into a single IPC round-trip. The cache
+// clears once resolved, so a later call (after a config change) still
+// re-fetches fresh — no staleness.
+let uiConfigInFlight: Promise<UiConfig> | null = null;
+export function getUiConfig(): Promise<UiConfig> {
+  if (!uiConfigInFlight) {
+    uiConfigInFlight = fetchUiConfig().finally(() => {
+      uiConfigInFlight = null;
+    });
+  }
+  return uiConfigInFlight;
+}
+
+async function fetchUiConfig(): Promise<UiConfig> {
   const cfg = await invoke<{
     theme: string;
     auto_update: boolean;
@@ -997,30 +1021,35 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
 }
 
 export async function setUiConfig(config: UiConfig): Promise<void> {
+  // Single snake_case payload matching the Rust `UiConfigPayload` DTO,
+  // the same shape `ui_get_config` returns. `dock_layout` is omitted on
+  // purpose; it travels through dock_layout_get/set.
   await invoke('ui_set_config', {
-    theme: config.theme,
-    autoUpdate: config.auto_update,
-    fontFamily: config.font_family,
-    fontSize: config.font_size,
-    // Wire format intentionally drops `label: null` to the omitted
-    // form so the backend's `Option<String>` deserializes cleanly.
-    trackedAffects: config.tracked_affects.map((t) => ({
-      name: t.name,
-      ...(t.label ? { label: t.label } : {}),
-    })),
-    enabledPresets: config.enabled_presets,
-    keepLastCommand: config.keep_last_command,
-    themeTerminalColors: config.theme_terminal_colors,
-    customThemes: config.custom_themes,
-    splitDividerColor: config.split_divider_color,
-    sidePanelsFillHeight: config.side_panels_fill_height,
-    pasteLineDelayMs: config.paste_line_delay_ms,
-    spellcheckPrompt: config.spellcheck_prompt,
-    promptTemplateEnabled: config.prompt_template_enabled,
-    promptTemplate: config.prompt_template,
-    vitals: config.vitals,
-    moonsPosition: config.moons_position,
-    chipStyle: config.chip_style,
+    config: {
+      theme: config.theme,
+      auto_update: config.auto_update,
+      font_family: config.font_family,
+      font_size: config.font_size,
+      // Wire format intentionally drops `label: null` to the omitted
+      // form so the backend's `Option<String>` deserializes cleanly.
+      tracked_affects: config.tracked_affects.map((t) => ({
+        name: t.name,
+        ...(t.label ? { label: t.label } : {}),
+      })),
+      enabled_presets: config.enabled_presets,
+      keep_last_command: config.keep_last_command,
+      theme_terminal_colors: config.theme_terminal_colors,
+      custom_themes: config.custom_themes,
+      split_divider_color: config.split_divider_color,
+      side_panels_fill_height: config.side_panels_fill_height,
+      paste_line_delay_ms: config.paste_line_delay_ms,
+      spellcheck_prompt: config.spellcheck_prompt,
+      prompt_template_enabled: config.prompt_template_enabled,
+      prompt_template: config.prompt_template,
+      vitals: config.vitals,
+      moons_position: config.moons_position,
+      chip_style: config.chip_style,
+    },
   });
   // Theme + custom-themes go out first so any other window's theme
   // registry is current by the time `theme-changed` points at a

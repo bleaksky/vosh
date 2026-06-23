@@ -443,7 +443,7 @@ pub(crate) async fn session_send_input(
             buf.extend_from_slice(line.as_bytes());
             buf.extend_from_slice(b"\r\n");
         }
-        let _ = app.emit("session://output", OutputPayload { bytes: buf });
+        let _ = app.emit("session://output", OutputPayload::from_bytes(&buf));
     }
 
     if result.bytes.is_empty() {
@@ -454,9 +454,7 @@ pub(crate) async fn session_send_input(
     let Some(handle) = current.as_ref() else {
         let _ = app.emit(
             "session://output",
-            OutputPayload {
-                bytes: b"\r\n[not connected]\r\n".to_vec(),
-            },
+            OutputPayload::from_bytes(b"\r\n[not connected]\r\n"),
         );
         return Ok(());
     };
@@ -1272,9 +1270,7 @@ pub(crate) async fn handle_char_known_for_auto_switch(
     let line = format!("\r\n\x1b[33m[vosh] auto-switched profile to {new_name}\x1b[0m\r\n");
     let _ = app.emit(
         "session://output",
-        OutputPayload {
-            bytes: line.into_bytes(),
-        },
+        OutputPayload::from_bytes(line.as_bytes()),
     );
 }
 
@@ -1480,29 +1476,35 @@ pub(crate) async fn ui_get_config(
 }
 
 #[tauri::command]
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn ui_set_config(
     app: AppHandle,
     state: State<'_, SharedState>,
-    theme: String,
-    auto_update: bool,
-    font_family: String,
-    font_size: u32,
-    tracked_affects: Vec<crate::profile_config::TrackedAffect>,
-    enabled_presets: Vec<String>,
-    keep_last_command: bool,
-    theme_terminal_colors: bool,
-    custom_themes: Vec<crate::profile_config::CustomTheme>,
-    split_divider_color: Option<String>,
-    side_panels_fill_height: bool,
-    paste_line_delay_ms: u32,
-    spellcheck_prompt: bool,
-    prompt_template_enabled: bool,
-    prompt_template: String,
-    vitals: crate::profile_config::VitalsConfig,
-    moons_position: String,
-    chip_style: String,
+    config: UiConfigPayload,
 ) -> Result<(), String> {
+    // Destructure the single IPC payload into the locals the
+    // validation block below consumes. Get and set now share one
+    // snake_case shape (`UiConfigPayload`); `dock_layout` stays out of
+    // it because it is managed separately via dock_layout_get/set.
+    let UiConfigPayload {
+        theme,
+        auto_update,
+        font_family,
+        font_size,
+        tracked_affects,
+        enabled_presets,
+        keep_last_command,
+        theme_terminal_colors,
+        custom_themes,
+        split_divider_color,
+        side_panels_fill_height,
+        paste_line_delay_ms,
+        spellcheck_prompt,
+        prompt_template_enabled,
+        prompt_template,
+        vitals,
+        moons_position,
+        chip_style,
+    } = config;
     {
         let mut p = state.profile.lock().await;
         p.ui.theme = theme;

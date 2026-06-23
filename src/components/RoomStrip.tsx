@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { onGmcpPackage, onState, onTarget } from '../lib/session';
 import { sectorForTerrain } from '../lib/mapPalette';
 
@@ -239,6 +239,12 @@ export function RoomStrip({ variant = 'strip' }: Props = {}) {
     };
   }, []);
 
+  // Group only when the char / item lists change, not on unrelated
+  // re-renders (e.g. a Map.Tiles area update the strip mostly ignores).
+  // Kept above the early return below to satisfy the rules of hooks.
+  const charGroups = useMemo(() => groupByName(chars), [chars]);
+  const itemGroups = useMemo(() => groupByName(items), [items]);
+
   // Slot stays reserved at fixed height even when empty so xterm
   // doesn't reflow when room info first arrives. Matches the
   // BottomHUD's same trick on the stats row.
@@ -248,8 +254,6 @@ export function RoomStrip({ variant = 'strip' }: Props = {}) {
   const areaColor = room.area ? resolveAreaColor(room.area, areas) : FALLBACK_AREA_COLOR;
   const exits = formatExits(room.exits);
   const sectorColor = room.terrain ? sectorForTerrain(room.terrain).halo : undefined;
-  const charGroups = groupByName(chars);
-  const itemGroups = groupByName(items);
 
   return (
     <div className={`room-strip-wrap${variant === 'column' ? ' room-strip-wrap-column' : ''}`}>

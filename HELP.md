@@ -53,6 +53,8 @@ Pressing Enter on an empty line sends a blank line, which most MUDs use to advan
 
 You can chain several commands by separating them with semicolons. `look;score;who` sends three commands in order.
 
+Press Shift+Enter to add a second line instead of sending. The prompt grows and numbers each line down the left edge, and when you press Enter, Vosh sends every line as its own command. A single line behaves exactly as before.
+
 Anything starting with `#` is a slash command. Slash commands talk to Vosh itself, not the MUD. They are how you create aliases and triggers, configure the tick timer, and save your profile. Type `#help` to see the full list.
 
 ### 2.2 Command history
@@ -76,6 +78,8 @@ Press Tab again to cycle to the next match. Press Shift+Tab to walk the cycle ba
 ### 2.4 Pasting many lines
 
 Paste a block of text into the command line. Vosh splits it on newlines and sends each non-empty line as its own command. While the burst is in flight, a small `paste N/M esc cancels` indicator sits next to the prompt. Press Esc to drop any unsent lines.
+
+A multi-line paste never clears what you already typed. It sends its lines, and whatever sat in the command line stays put.
 
 The General tab has a paste-pacing field. Set it to the number of milliseconds you want Vosh to wait between lines. Zero means no pacing. A few hundred milliseconds dodges MUD flood filters that drop the connection when too many commands arrive too fast.
 

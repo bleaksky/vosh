@@ -69,8 +69,19 @@ pub fn process(store: &TriggerStore, original: &[u8]) -> LineResult {
 /// dispatch the same engine for both completed lines (`MatchScope::Line`)
 /// and partial-prompt buffers (`MatchScope::Prompt`).
 pub fn process_scoped(store: &TriggerStore, original: &[u8], scope: MatchScope) -> LineResult {
-    let plain = plain_text(original);
+    process_with_plain(store, original, &plain_text(original), scope)
+}
 
+/// Like [`process_scoped`] but reuses a caller-computed plain-text strip
+/// instead of recomputing it. The session loop already strips `plain`
+/// for the tick-reset check, so passing it here avoids a second full
+/// ANSI pass + span allocation on every output line.
+pub fn process_with_plain(
+    store: &TriggerStore,
+    original: &[u8],
+    plain: &str,
+    scope: MatchScope,
+) -> LineResult {
     if store.is_empty() {
         return LineResult {
             display: Some(bytes_to_string_lossy(original)),
@@ -81,7 +92,7 @@ pub fn process_scoped(store: &TriggerStore, original: &[u8], scope: MatchScope) 
     }
 
     let mut gagged = false;
-    let mut text = plain.clone();
+    let mut text = plain.to_string();
     let mut highlights: Vec<(Regex, HighlightStyle)> = Vec::new();
     let mut sends = Vec::new();
     let mut routes = Vec::new();
@@ -102,11 +113,17 @@ pub fn process_scoped(store: &TriggerStore, original: &[u8], scope: MatchScope) 
         // Send template with `$1` references the correct capture
         // regardless of which sibling pattern fired.
         for regex in &compiled.regexes {
-            let mut iter = regex.captures_iter(&plain).peekable();
-            if iter.peek().is_none() {
+            if !regex.is_match(plain) {
                 continue;
             }
             any_match = true;
+
+            // Send and Script both need this line's capture groups, and
+            // they are identical, so compute them at most once per
+            // (regex, line) and share. The match gate above is a plain
+            // is_match, so Gag / Highlight / Route / Replace pay nothing
+            // for captures they never read. Filled lazily on first use.
+            let mut caps_cache: Option<Vec<regex::Captures<'_>>> = None;
 
             for action in &compiled.trigger.actions {
                 match action {
@@ -122,7 +139,9 @@ pub fn process_scoped(store: &TriggerStore, original: &[u8], scope: MatchScope) 
                         }
                     }
                     TriggerAction::Send { template } => {
-                        for caps in regex.captures_iter(&plain) {
+                        let caps_list =
+                            caps_cache.get_or_insert_with(|| regex.captures_iter(plain).collect());
+                        for caps in caps_list.iter() {
                             let mut buf = String::new();
                             caps.expand(template, &mut buf);
                             // Split the expanded template into one
@@ -148,7 +167,9 @@ pub fn process_scoped(store: &TriggerStore, original: &[u8], scope: MatchScope) 
                         routes.push(pane.clone());
                     }
                     TriggerAction::Script { body } => {
-                        for caps in regex.captures_iter(&plain) {
+                        let caps_list =
+                            caps_cache.get_or_insert_with(|| regex.captures_iter(plain).collect());
+                        for caps in caps_list.iter() {
                             let captures = (0..caps.len())
                                 .map(|i| {
                                     caps.get(i)

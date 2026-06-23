@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { getAreaSnapshot, onGmcpPackage, onMap, onState, type AreaSnapshot } from '../lib/session';
+import { memo, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { onGmcpPackage, onState } from '../lib/session';
 import {
   MAP_COLORS,
   SECTORS,
@@ -249,12 +249,10 @@ export function ServerMapView() {
   // Snapshot of the persistent mapping store. We use it to translate the
   // player-centric Map.Tiles grid into stable world coordinates so cells
   // do not shift on canvas as the player walks.
-  const [snapshot, setSnapshot] = useState<AreaSnapshot | null>(null);
   // Bumps when the theme changes so the draw effect re-runs and the
   // canvas picks up the new --c-surface / --c-accent CSS vars that
   // MAP_COLORS reads through its getters.
   const [themeVersion, setThemeVersion] = useState(0);
-  const lastRefreshRef = useRef<number>(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -269,15 +267,6 @@ export function ServerMapView() {
       cancelled = true;
       unlisten?.();
     };
-  }, []);
-
-  const refreshSnapshot = useCallback(async () => {
-    try {
-      const snap = await getAreaSnapshot();
-      setSnapshot(snap);
-    } catch {
-      setSnapshot(null);
-    }
   }, []);
 
   useEffect(() => {
@@ -331,43 +320,31 @@ export function ServerMapView() {
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
-    let unsubMap: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
 
+    // Map.Tiles is the sole tile source; updating `tiles` re-runs the
+    // draw effect. The old `onMap` -> getAreaSnapshot round-trip drove
+    // a second full redraw per move with data nothing rendered, so it
+    // is gone.
     onGmcpPackage<MapTilesPayload>('Map.Tiles', (data) => {
       setTiles(data ?? ({} as MapTilesPayload));
     }).then((fn) => {
       unsubGmcp = fn;
     });
 
-    onMap(() => {
-      const now = Date.now();
-      if (now - lastRefreshRef.current < 80) return;
-      lastRefreshRef.current = now;
-      void refreshSnapshot();
-    }).then((fn) => {
-      unsubMap = fn;
-    });
-
     onState((payload) => {
       if (payload.kind === 'disconnected') {
         setTiles(null);
-        setSnapshot(null);
-      } else if (payload.kind === 'connected') {
-        void refreshSnapshot();
       }
     }).then((fn) => {
       unsubState = fn;
     });
 
-    void refreshSnapshot();
-
     return () => {
       unsubGmcp?.();
-      unsubMap?.();
       unsubState?.();
     };
-  }, [refreshSnapshot]);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -449,7 +426,6 @@ export function ServerMapView() {
       // from the rendered tile grid.
       {
         const anchorPitch = computeAnchor(
-          snapshot,
           tiles,
           rows,
           cols,
@@ -477,17 +453,7 @@ export function ServerMapView() {
         );
       }
 
-      const anchor = computeAnchor(
-        snapshot,
-        tiles,
-        rows,
-        cols,
-        centerR,
-        centerC,
-        cssWidth,
-        cssHeight,
-        zoom,
-      );
+      const anchor = computeAnchor(tiles, rows, cols, centerR, centerC, cssWidth, cssHeight, zoom);
 
       if (style === 'tileset') {
         drawTileset(
@@ -529,7 +495,7 @@ export function ServerMapView() {
       observer.disconnect();
       window.removeEventListener('resize', draw);
     };
-  }, [tiles, style, tilesetImage, snapshot, themeVersion, zoom]);
+  }, [tiles, style, tilesetImage, themeVersion, zoom]);
 
   const handleLoadTileset = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -671,7 +637,6 @@ interface Anchor {
 /// frame. The pitch is also integer; multiplying integer cell offsets by
 /// integer pitch lands every neighbor on a clean grid line.
 function computeAnchor(
-  _snapshot: AreaSnapshot | null,
   _payload: MapTilesPayload,
   _rows: number,
   _cols: number,
