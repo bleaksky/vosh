@@ -286,7 +286,15 @@ export function Terminal({
     // Enabled unless explicitly turned off via localStorage '0' or the
     // per-page escape hatch. `__voshEnableWebGL` forces it on even when
     // localStorage says '0'.
-    const enableWebgl = !winDisable && (winEnable || lsVal !== '0');
+    //
+    // The split-scrollback history pane (quiet) always stays on the DOM
+    // renderer. It mounts fresh and is immediately bulk-written its whole
+    // scrollback, and on WebGL that initial content intermittently fails
+    // to paint, leaving the pane blank while the buffer holds the rows
+    // (the scroll-depth indicator still counts them). DOM always paints,
+    // and a frozen scroll view gains nothing from the GPU path. The live
+    // pane keeps WebGL.
+    const enableWebgl = !winDisable && !quietRef.current && (winEnable || lsVal !== '0');
     if (enableWebgl) {
       // Probe webgl2 in a throwaway canvas first. If the WebView
       // can't allocate a context, the addon would load, immediately
