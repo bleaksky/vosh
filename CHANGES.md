@@ -2,6 +2,18 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.5.0 - 2026-06-23
+
+- The command line is now multi-line. Press Shift+Enter to start another line and the prompt numbers each line down the left edge. When you press Enter, Vosh sends every line as its own command, so you can stack a whole sequence and fire it at once. A single line behaves exactly as before.
+- Pasting several lines no longer clears what you already typed. The paste still sends each line, and whatever sat in the command line, selected or not, stays put.
+- The MUD's parting text when you quit now lands in the terminal, the scrollback, and the session log. The last lines a server prints as it closes the connection used to vanish before Vosh captured them. Now they read like every other line and survive into your next launch.
+- GPU rendering is on by default. The terminal draws through WebGL for smoother scrolling and burst output, and falls back to software rendering on its own if the graphics context is ever lost, so the pane never goes blank. Turn it off under Settings and reload if you prefer the old renderer.
+- The Settings window is reorganized. Tabs sit under clear section headers, and the vitals readout and the tick timer each get their own top-level tab. The vitals tab carries a live preview you can drag to scrub the fill and watch your glyph, color, layout, and percent choices update. Many labels and hints across Settings are shorter and plainer.
+- The window stays smooth during heavy output. The terminal no longer measures layout on every animation frame, which used to stack a reflow onto each combat round and steal frames from the renderer.
+- The find toolbar match counter holds steady while output streams. The position no longer jumps around as new lines arrive in the middle of a search.
+- Faster under load. Server output reaches the screen in a more compact form, log writes batch into one transaction per network read, and the trigger engine computes each line's capture groups once instead of several times.
+- New profiles start on the Kanso Zen theme.
+
 ## v0.4.3 - 2026-06-07
 
 - Split-scrollback divider now drags as a true CMUD-style curtain. As you drag the line, the top pane grows or shrinks over the live pane in real time and content stays anchored — the new rows the top pane exposes match what was at the top of the live pane, because both panes share the same scrollback. The earlier per-snap jitter and post-release refresh are gone, the wrapper resize and the xterm fit and the scroll-anchor restore all commit in one synchronous paint per snap, and closing the split (auto-close on scroll-bottom, ESC, middle-click) no longer triggers any visible re-fit.
