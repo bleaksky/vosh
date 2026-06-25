@@ -1,0 +1,105 @@
+# Native terminal renderer (Tier 3)
+
+Goal: render the terminal pane on a native GPU surface so byte-to-pixel
+matches a native terminal (Ghostty-class), while the rest of the app
+stays in the Tauri webview. xterm.js inside WKWebView has a hard latency
+and smoothness ceiling we cannot tune past; this removes it for the one
+pane that matters.
+
+## The simplification that makes this tractable
+
+In Vosh the terminal pane is **output only**. You type into a separate
+HTML input row, not into xterm. So the native surface never has to own
+keyboard input or drive a PTY. It only needs to:
+
+1. Render the server-output grid (text, colors, styles, cursor).
+2. Handle mouse: wheel scroll through scrollback, drag to select, copy.
+
+That cuts out the hardest parts of a native terminal (keymaps, IME, PTY
+write path). Keystrokes stay where they are.
+
+## Architecture: native overlay subview + webview chrome
+
+The webview keeps rendering everything except the terminal grid: top bar,
+input row, panels, map, settings. A **native child surface** is layered
+into the same window, positioned over the terminal region, and draws the
+grid with wgpu.
+
+```
+NSWindow / HWND / GtkWindow
+├─ WKWebView (transparent)        chrome, panels, input, status — unchanged
+└─ native child view (wgpu)       the terminal grid, on top, clipped to the pane
+```
+
+- **On top, not behind.** A child view positioned over the terminal
+  region gets its own mouse events directly, which avoids the painful
+  "transparent hole + input passthrough" routing. The frontend reports
+  the pane's bounds (and dpr) over IPC; the backend keeps the surface
+  aligned on every resize / layout change.
+- **wgpu** is the renderer: Metal on macOS, D3D12 on Windows, Vulkan on
+  Linux — one renderer, all three CI targets. No per-platform graphics
+  code beyond creating the surface.
+
+## Components
+
+1. **Grid model + VTE parser.** Use `alacritty_terminal` (its `Term` +
+   grid + scrollback + battle-tested VTE parser). Vosh's telnet layer
+   already strips IAC negotiation; feed the resulting data stream to the
+   `Term`, which maintains the grid. We keep `vosh-ansi` only for the
+   trigger/highlight pipeline, which operates on lines, not the screen.
+
+2. **wgpu cell renderer.** Instanced quads: one pass for cell
+   backgrounds, one for glyphs from a rasterized atlas (`swash` or
+   `fontdue` for rasterization, dynamic atlas). Cursor and selection are
+   extra quads. This is the Alacritty/WezTerm renderer shape, not a
+   general text layout engine.
+
+3. **Native surface plumbing.** Create a child view on the Tauri window
+   via `raw-window-handle` + a little `objc2`/`windows`/`gtk` glue, hand
+   it to wgpu as a surface. Position + size + clip driven by pane bounds
+   from the frontend.
+
+4. **Mouse.** Wheel → scroll the grid viewport. Drag → cell selection →
+   clipboard. Hover/URL detection later.
+
+5. **Bridge.** Backend already owns the byte stream. It feeds the `Term`,
+   then signals "frame dirty"; the renderer redraws. No new IPC for
+   output — it never crosses into JS anymore, which is the whole point.
+
+## Open decisions to confirm before coding
+
+- **D1. Overlay-on-top vs transparent-hole.** Proposing on-top child
+  view (simpler input). Risk: clipping/rounded-corner/z-order edge cases
+  against the webview, and the panel that can overlap the terminal
+  (none currently do, but the map/chat live beside it).
+- **D2. Grid source.** Proposing `alacritty_terminal`. Alternative: a
+  custom grid fed by `vosh-ansi`. Alacritty's is mature but pulls a dep
+  and its own parser; we would run two ANSI parsers (its for the screen,
+  ours for triggers). Acceptable, but worth a conscious yes.
+- **D3. Split-scrollback.** The frozen-history overlay has to be redone
+  natively (two viewports of one grid, or a second surface). Defer to a
+  later milestone; native scroll-with-follow ships first.
+- **D4. Fallback.** Keep xterm.js behind a flag during the transition so
+  any platform where the native surface misbehaves still has a working
+  terminal. Ship native as opt-in, then flip the default once it is
+  proven on all three OSes.
+
+## Milestones
+
+- **M1 — surface proof of concept.** A wgpu child surface rendering a
+  test pattern, positioned and clipped over the terminal pane, tracking
+  resize, on macOS first. Proves the hardest integration (native view in
+  the Tauri window + compositing + alignment) before any terminal logic.
+- **M2 — grid + static render.** Feed output into `alacritty_terminal`;
+  render the visible screen (text, 16/256/truecolor, bold/italic/
+  underline) with the wgpu cell renderer. No scroll yet.
+- **M3 — scroll + selection.** Wheel scrollback, drag-select, copy.
+- **M4 — parity.** Themes, fonts, cursor styles, link clicks, the
+  per-line trigger/highlight effects, resize/NAWS, opaque vs transparent.
+- **M5 — split-scrollback, native.** Reimplement the frozen-history view.
+- **M6 — cross-platform.** Windows (D3D12) and Linux (Vulkan) surfaces,
+  CI bundles, flip the default.
+
+M1 is the go/no-go gate: if a native surface cannot composite cleanly
+into the Tauri window across the three platforms, the hybrid approach
+is dead and we stay in Tier 1/2. Everything after M1 is "normal" work.
