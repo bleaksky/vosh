@@ -116,11 +116,23 @@ const ANSI_16: [Rgb; 16] = [
     },
 ];
 
+// The wgpu surface is sRGB, so the GPU sRGB-encodes whatever the fragment
+// shader writes. Our palette values are already sRGB (xterm hex), so we
+// linearize them here; the encode on write then round-trips to the
+// intended color. It also makes the glyph-coverage blend correct (linear).
+fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
 fn rgb_to_rgba(c: Rgb) -> Rgba {
     [
-        f32::from(c.r) / 255.0,
-        f32::from(c.g) / 255.0,
-        f32::from(c.b) / 255.0,
+        srgb_to_linear(f32::from(c.r) / 255.0),
+        srgb_to_linear(f32::from(c.g) / 255.0),
+        srgb_to_linear(f32::from(c.b) / 255.0),
         1.0,
     ]
 }
@@ -665,6 +677,18 @@ impl CellRenderer {
         })
     }
 
+    /// Columns and rows that fill a surface of the given pixel size at the
+    /// atlas cell size. Used to size the grid to the pane.
+    pub(crate) fn grid_size_for(&self, surface_w: u32, surface_h: u32) -> (usize, usize) {
+        let cols = (surface_w as f32 / self.atlas.cell_w() as f32)
+            .floor()
+            .max(1.0) as usize;
+        let rows = (surface_h as f32 / self.atlas.cell_h() as f32)
+            .floor()
+            .max(1.0) as usize;
+        (cols, rows)
+    }
+
     /// Build instances from `grid` and draw them into `view`, clearing to
     /// the default background first.
     pub(crate) fn draw(
@@ -712,6 +736,9 @@ impl CellRenderer {
         }
         queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instances));
 
+        // Clear to the terminal background so any sliver beyond the grid
+        // matches the cells (linearized like everything else).
+        let clear = color_to_rgba(Color::Named(NamedColor::Background));
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("cell-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -719,9 +746,9 @@ impl CellRenderer {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.04,
-                        g: 0.05,
-                        b: 0.16,
+                        r: f64::from(clear[0]),
+                        g: f64::from(clear[1]),
+                        b: f64::from(clear[2]),
                         a: 1.0,
                     }),
                     store: wgpu::StoreOp::Store,
@@ -772,9 +799,11 @@ mod tests {
 
     #[test]
     fn indexed_grayscale_ramp_starts_at_eight() {
+        // 232 is the first gray (8,8,8); compare through rgb_to_rgba so the
+        // sRGB linearization applies to both sides.
         assert_eq!(
             color_to_rgba(Color::Indexed(232)),
-            [8.0 / 255.0, 8.0 / 255.0, 8.0 / 255.0, 1.0]
+            rgb_to_rgba(Rgb { r: 8, g: 8, b: 8 })
         );
     }
 
