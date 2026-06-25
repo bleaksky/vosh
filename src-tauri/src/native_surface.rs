@@ -20,7 +20,7 @@
 
 use std::ffi::c_void;
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use objc2::runtime::AnyObject;
@@ -118,6 +118,37 @@ fn redraw_now() {
     if let Ok(mut slot) = surface_slot().lock() {
         if let Some(handle) = slot.as_mut() {
             render(&mut handle.gpu);
+        }
+    }
+}
+
+// Last (cols << 16 | rows) advertised to the MUD, so NAWS is pushed only
+// when the native grid size actually changes (i.e. on window resize).
+static LAST_GRID_SIZE: AtomicU32 = AtomicU32::new(0);
+
+/// When the native surface owns the terminal, advertise its grid size to
+/// the MUD so lines wrap to fill the pane (instead of the xterm width).
+/// Only fires when the size changes.
+fn push_native_size_if_changed(cols: usize, rows: usize) {
+    let cols = cols.min(usize::from(u16::MAX)) as u16;
+    let rows = rows.min(usize::from(u16::MAX)) as u16;
+    let packed = (u32::from(cols) << 16) | u32::from(rows);
+    if LAST_GRID_SIZE.swap(packed, Ordering::AcqRel) == packed {
+        return;
+    }
+    let Some(app) = APP.get() else {
+        return;
+    };
+    let state = app.state::<crate::commands::SharedState>();
+    if let Ok(mut ws) = state.window_size.lock() {
+        *ws = (cols, rows);
+    }
+    // Bound to a named local (not a temporary) so the guard drops before
+    // `state` at end of scope.
+    let session_guard = state.session.try_lock();
+    if let Ok(session) = session_guard {
+        if let Some(handle) = session.as_ref() {
+            handle.set_window_size(cols, rows);
         }
     }
 }
@@ -312,6 +343,7 @@ fn render(state: &mut GpuState) {
         .cell_renderer
         .grid_size_for(state.config.width, state.config.height);
     crate::term_grid::resize_grid(cols, rows);
+    push_native_size_if_changed(cols, rows);
 
     // Disjoint borrows of GpuState fields so the grid-reading closure can
     // hold the renderer mutably and the device/queue immutably.
