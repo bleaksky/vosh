@@ -135,13 +135,19 @@ is dead and we stay in Tier 1/2. Everything after M1 is "normal" work.
 
 ## Resume here
 
-Branch `native-renderer`. M1, M2a, and M2b are done and committed.
-**Next: M2c** — the wgpu cell renderer. Read `term_grid.rs` (its cell
-accessors are the read API: `columns`, `screen_lines`, `char_at`,
-`row_string`, and the grid's fg/bg/flags) and render that grid into the
-surface from `native_surface.rs`: a glyph atlas (rasterize the monospace
-font once, cache per-glyph quads) plus an instanced pipeline drawing a
-background quad and a glyph quad per cell, replacing the test triangle.
-Map alacritty's `Color` (Named/Spec/Indexed) to rgba. Surface still gated
-behind the `vosh.nativesurface` flag; M2a's pane-alignment visual check is
-still pending James. Check `git log --oneline` before starting.
+Branch `native-renderer`. M1, M2a, M2b, and M2c parts 1-2 are done and
+committed. `cell_render.rs` has the color mapping (`color_to_rgba`) and
+the `GlyphAtlas` (font-kit + fontdue; `cell_w`/`cell_h`/`atlas_size`/
+`pixels`/`glyph_uv`), both unit-tested. **Next: M2c part 3** — the wgpu
+pipeline. In `native_surface.rs`/`cell_render.rs`: upload the atlas as an
+A8 texture + sampler + bind group; each frame read the global `TermGrid`
+(via a `term_grid` accessor you add — e.g. `with_grid`), build per-cell
+instances (cell rect from `cell_w`/`cell_h`, bg/fg via `color_to_rgba`,
+glyph UV via `glyph_uv`), and draw an instanced quad pass (bg) + glyph
+pass, replacing the test triangle in `render`. Add a redraw trigger when
+`feed_bytes` updates the grid (e.g. via `run_on_main_thread`), since
+`render` currently only fires on install/resize. Then remove the
+`#![allow(dead_code)]` from `cell_render.rs`. Two visual checks will be
+pending James: M2a pane alignment, and M2c glyph placement/legibility.
+Surface stays gated behind `vosh.nativesurface`. Check `git log --oneline`
+before starting.
