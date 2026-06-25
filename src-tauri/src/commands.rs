@@ -850,6 +850,33 @@ pub(crate) fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// Tier 3 native renderer (macOS). The frontend reports the terminal
+/// pane's screen rectangle (CSS pixels, top-left origin, relative to the
+/// window) and device pixel ratio so the native wgpu surface can track
+/// it. NSView/Metal must be touched on the main thread, so the work is
+/// dispatched there. A no-op on other platforms and when the surface is
+/// not installed.
+#[tauri::command]
+pub(crate) fn native_surface_set_bounds(
+    app: AppHandle,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    dpr: f64,
+) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app.run_on_main_thread(move || {
+            crate::native_surface::set_bounds(x, y, width, height, dpr);
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (&app, x, y, width, height, dpr);
+    }
+}
+
 /// Read the persistent dock layout. Returns the same shape as the
 /// frontend `DockEntry` (id + zone) so the layout editor can render
 /// from it directly.
