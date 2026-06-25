@@ -350,6 +350,54 @@ fn load_monospace_font() -> Option<Font> {
     Font::from_bytes(&data[..], fontdue::FontSettings::default()).ok()
 }
 
+// ---------------------------------------------------------------------------
+// Per-cell GPU instance data
+// ---------------------------------------------------------------------------
+
+/// One quad instance per terminal cell. `offset` is the cell's top-left in
+/// surface pixels; the vertex shader turns the unit quad into the cell
+/// rect and converts to clip space. The fragment shader composites `fg`
+/// over `bg` by the atlas coverage sampled across `uv_min..uv_max`.
+/// `repr(C)` so it maps straight to a wgpu vertex buffer (`bytemuck`
+/// derives are added with the pipeline in part 3b).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct CellInstance {
+    pub offset: [f32; 2],
+    pub bg: Rgba,
+    pub fg: Rgba,
+    pub uv_min: [f32; 2],
+    pub uv_max: [f32; 2],
+}
+
+/// Build one `CellInstance` per cell, row-major. Pure: the grid is read
+/// through `cell` (returns char, fg, bg) and glyph atlas UVs through `uv`,
+/// so it tests without a live grid or GPU.
+fn build_instances(
+    cols: usize,
+    rows: usize,
+    cell_w: f32,
+    cell_h: f32,
+    mut cell: impl FnMut(usize, usize) -> (char, Rgba, Rgba),
+    mut uv: impl FnMut(char) -> ([f32; 2], [f32; 2]),
+) -> Vec<CellInstance> {
+    let mut out = Vec::with_capacity(cols * rows);
+    for row in 0..rows {
+        for col in 0..cols {
+            let (ch, fg, bg) = cell(col, row);
+            let (uv_min, uv_max) = uv(ch);
+            out.push(CellInstance {
+                offset: [col as f32 * cell_w, row as f32 * cell_h],
+                bg,
+                fg,
+                uv_min,
+                uv_max,
+            });
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -429,5 +477,49 @@ mod tests {
         };
         assert!(coverage(&atlas, 0) > 0, "A should have ink");
         assert_eq!(coverage(&atlas, 1), 0, "space should be blank");
+    }
+
+    #[test]
+    fn build_instances_lays_out_row_major_with_colors_and_uv() {
+        let white = [1.0, 1.0, 1.0, 1.0];
+        let black = [0.0, 0.0, 0.0, 1.0];
+        let instances = build_instances(
+            2,
+            1,
+            10.0,
+            20.0,
+            |col, _row| (if col == 0 { 'a' } else { 'b' }, white, black),
+            |ch| {
+                if ch == 'a' {
+                    ([0.0, 0.0], [0.1, 0.1])
+                } else {
+                    ([0.1, 0.0], [0.2, 0.1])
+                }
+            },
+        );
+        assert_eq!(instances.len(), 2);
+        // Cell (0,0) at origin; cell (1,0) one cell to the right.
+        assert_eq!(instances[0].offset, [0.0, 0.0]);
+        assert_eq!(instances[1].offset, [10.0, 0.0]);
+        // Colors and per-char UVs carry through.
+        assert_eq!(instances[0].fg, white);
+        assert_eq!(instances[0].bg, black);
+        assert_eq!(instances[0].uv_min, [0.0, 0.0]);
+        assert_eq!(instances[1].uv_min, [0.1, 0.0]);
+    }
+
+    #[test]
+    fn build_instances_second_row_offsets_down() {
+        let c = [0.5, 0.5, 0.5, 1.0];
+        let instances = build_instances(
+            1,
+            2,
+            8.0,
+            16.0,
+            |_, _| ('x', c, c),
+            |_| ([0.0, 0.0], [0.0, 0.0]),
+        );
+        assert_eq!(instances[0].offset, [0.0, 0.0]);
+        assert_eq!(instances[1].offset, [0.0, 16.0]);
     }
 }
