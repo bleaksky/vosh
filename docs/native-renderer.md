@@ -86,10 +86,13 @@ NSWindow / HWND / GtkWindow
 
 ## Milestones
 
-- **M1 — surface proof of concept.** A wgpu child surface rendering a
-  test pattern, positioned and clipped over the terminal pane, tracking
-  resize, on macOS first. Proves the hardest integration (native view in
-  the Tauri window + compositing + alignment) before any terminal logic.
+- **M1 — surface proof of concept. DONE (macOS).** M1a: a child `NSView`
+  on the window's contentView composites over the `WKWebView`. M1b: a
+  wgpu Metal surface on a `CAMetalLayer`-backed view runs a real shader
+  pipeline (teal triangle on dark blue) into it. The hardest integration
+  — a native GPU surface compositing into the Tauri window — works.
+  Still fixed-position; alignment/clipping to the real pane bounds and
+  resize tracking come with M2. Code in `src-tauri/src/native_surface.rs`.
 - **M2 — grid + static render.** Feed output into `alacritty_terminal`;
   render the visible screen (text, 16/256/truecolor, bold/italic/
   underline) with the wgpu cell renderer. No scroll yet.
