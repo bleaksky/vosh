@@ -833,9 +833,13 @@ async fn handle_event(
                 perf.output_emits += 1;
                 perf.output_emit_bytes += display_batch.len() as u64;
                 // Tier 3: feed the native terminal grid the same ANSI
-                // bytes xterm receives, so the wgpu renderer can draw them.
+                // bytes xterm receives, so the wgpu renderer can draw them,
+                // then ask the surface to repaint.
                 #[cfg(target_os = "macos")]
-                crate::term_grid::feed_bytes(&display_batch);
+                {
+                    crate::term_grid::feed_bytes(&display_batch);
+                    crate::native_surface::request_redraw();
+                }
                 emit_output(app, display_batch);
             }
             // Flush this read's log rows in one transaction under one
