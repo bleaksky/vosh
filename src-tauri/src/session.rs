@@ -832,6 +832,10 @@ async fn handle_event(
             if !display_batch.is_empty() {
                 perf.output_emits += 1;
                 perf.output_emit_bytes += display_batch.len() as u64;
+                // Tier 3: feed the native terminal grid the same ANSI
+                // bytes xterm receives, so the wgpu renderer can draw them.
+                #[cfg(target_os = "macos")]
+                crate::term_grid::feed_bytes(&display_batch);
                 emit_output(app, display_batch);
             }
             // Flush this read's log rows in one transaction under one

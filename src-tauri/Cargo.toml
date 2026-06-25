@@ -57,6 +57,14 @@ objc2 = "0.5"
 wgpu = "0.20"
 pollster = "0.3"
 raw-window-handle = "0.6"
+# Terminal grid model (VTE parser + cell grid + scrollback) fed by the
+# post-telnet byte stream; the wgpu renderer draws this grid (M2b/M2c).
+alacritty_terminal = "0.24"
+# alacritty_terminal compiles a unix tty (PTY) module we never use; it
+# pulls rustix-openpty, whose rustix builds without the `std` feature and
+# its fd types then fail to bridge to std's OwnedFd. Force `std` on so
+# Cargo unifies the feature across the graph and the tty module compiles.
+rustix = { version = "0.38", features = ["std"] }
 
 [dev-dependencies]
 tempfile = "3"

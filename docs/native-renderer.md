@@ -107,8 +107,18 @@ NSWindow / HWND / GtkWindow
     terminal pane and track it on window resize. If it is offset or the
     wrong size, the y-flip or the dpr scaling in `set_bounds` is the
     suspect. Set the flag back to `0` (or remove it) to restore xterm.
-  - **M2b — the grid.** Feed the server byte stream into
-    `alacritty_terminal`'s `Term` so there is a cell grid + scrollback.
+  - **M2b — the grid. DONE (unit-tested).** `term_grid.rs` wraps
+    `alacritty_terminal`'s `Term` + VTE parser; `session.rs` feeds it the
+    same `display_batch` ANSI bytes it hands xterm, so a real cell grid
+    (chars, colors, styles, scrollback) builds alongside the live session.
+    Verified by unit tests (plain text, CRLF, SGR color, wrap, shared
+    feed) rather than by eye. Two dependency-skew fixes were needed:
+    `rustix` gets its `std` feature forced on (alacritty's unused unix tty
+    module otherwise fails to compile), and `vosh-ansi` drops vte's
+    default `no_std` feature (which had unified on across the workspace and
+    broke `alacritty_terminal`'s `vte::ansi::Processor`); vte is pinned to
+    0.13.0. The grid's read API (cell accessors) is marked allow-dead until
+    M2c consumes it.
   - **M2c — the cell renderer.** Glyph atlas (rasterize the font once,
     cache glyphs) + an instanced wgpu pipeline drawing cell backgrounds
     and glyphs. 16/256/truecolor, bold/italic/underline. No scroll yet.
@@ -125,11 +135,13 @@ is dead and we stay in Tier 1/2. Everything after M1 is "normal" work.
 
 ## Resume here
 
-Branch `native-renderer`. M1 and M2a are done and committed. **Next: M2b**
-(feed the server byte stream into `alacritty_terminal`'s `Term` grid).
-Surface code is `src-tauri/src/native_surface.rs` (`install_probe`,
-`set_bounds`, `init_gpu`, `render`); the bounds command is
-`native_surface_set_bounds` in `commands.rs`; the frontend reporter is in
-`Terminal.tsx` `sync`. M2a still draws the test triangle and is gated
-behind the `vosh.nativesurface` flag, awaiting James's visual check that
-the surface aligns to the pane. Check `git log --oneline` before starting.
+Branch `native-renderer`. M1, M2a, and M2b are done and committed.
+**Next: M2c** — the wgpu cell renderer. Read `term_grid.rs` (its cell
+accessors are the read API: `columns`, `screen_lines`, `char_at`,
+`row_string`, and the grid's fg/bg/flags) and render that grid into the
+surface from `native_surface.rs`: a glyph atlas (rasterize the monospace
+font once, cache per-glyph quads) plus an instanced pipeline drawing a
+background quad and a glyph quad per cell, replacing the test triangle.
+Map alacritty's `Color` (Named/Spec/Indexed) to rgba. Surface still gated
+behind the `vosh.nativesurface` flag; M2a's pane-alignment visual check is
+still pending James. Check `git log --oneline` before starting.
