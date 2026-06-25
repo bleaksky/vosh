@@ -74,6 +74,8 @@ mod loadout_store;
 mod log_state;
 mod map_state;
 mod migration;
+#[cfg(target_os = "macos")]
+mod native_surface;
 mod plugins;
 mod profile;
 mod profile_config;
@@ -82,8 +84,6 @@ mod script_state;
 mod session;
 mod tick;
 mod tintin_import;
-#[cfg(target_os = "macos")]
-mod native_surface;
 
 use commands::{
     aliases_export, aliases_groups_list, aliases_import, aliases_set_group_enabled, app_quit,
