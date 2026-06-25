@@ -82,6 +82,8 @@ mod script_state;
 mod session;
 mod tick;
 mod tintin_import;
+#[cfg(target_os = "macos")]
+mod native_surface;
 
 use commands::{
     aliases_export, aliases_groups_list, aliases_import, aliases_set_group_enabled, app_quit,
@@ -371,6 +373,11 @@ pub fn run() {
             {
                 for (_, window) in app.webview_windows() {
                     let _ = enable_macos_spellcheck(&window);
+                }
+                // Tier 3 M1 probe: prove a native child view composites
+                // over the webview in the main window. See native_surface.
+                if let Some(main) = app.get_webview_window("main") {
+                    let _ = native_surface::install_probe(&main);
                 }
             }
             Ok(())
