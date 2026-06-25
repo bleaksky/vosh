@@ -17,7 +17,7 @@ use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::term::{Config, Term};
-use alacritty_terminal::vte::ansi::Processor;
+use alacritty_terminal::vte::ansi::{Color, Processor};
 
 /// `Term` requires an event listener for bell, title, clipboard, and
 /// similar callbacks. The renderer only reads the grid, so every event
@@ -101,6 +101,12 @@ impl TermGrid {
             .map(|c| grid[Line(line as i32)][Column(c)].c)
             .collect()
     }
+
+    /// A cell's character and fg/bg colors, for the renderer.
+    pub(crate) fn cell(&self, line: usize, col: usize) -> (char, Color, Color) {
+        let cell = &self.term.grid()[Line(line as i32)][Column(col)];
+        (cell.c, cell.fg, cell.bg)
+    }
 }
 
 static GRID: OnceLock<Mutex<Option<TermGrid>>> = OnceLock::new();
@@ -118,6 +124,17 @@ pub(crate) fn feed_bytes(bytes: &[u8]) {
     };
     let grid = slot.get_or_insert_with(|| TermGrid::new(80, 24));
     grid.feed(bytes);
+}
+
+/// Read the shared grid (None until the first feed). The renderer calls
+/// this on the main thread to build a frame. Consumed by the pipeline in
+/// M2c part 3b's wiring step.
+#[allow(dead_code)]
+pub(crate) fn with_grid<R>(f: impl FnOnce(Option<&TermGrid>) -> R) -> R {
+    match grid_slot().lock() {
+        Ok(slot) => f(slot.as_ref()),
+        Err(_) => f(None),
+    }
 }
 
 #[cfg(test)]

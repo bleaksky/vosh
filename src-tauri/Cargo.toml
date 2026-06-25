@@ -63,6 +63,8 @@ alacritty_terminal = "0.24"
 # Glyph rasterization for the cell renderer's atlas. font-kit (above)
 # selects/loads the monospace font bytes; fontdue rasterizes them simply.
 fontdue = "0.9"
+# Cast the per-cell instance + uniform structs to bytes for wgpu buffers.
+bytemuck = { version = "1", features = ["derive"] }
 # alacritty_terminal compiles a unix tty (PTY) module we never use; it
 # pulls rustix-openpty, whose rustix builds without the `std` feature and
 # its fd types then fail to bridge to std's OwnedFd. Force `std` on so
