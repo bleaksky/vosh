@@ -59,23 +59,6 @@ unsafe impl Encode for CGRect {
     const ENCODING: Encoding = Encoding::Struct("CGRect", &[CGPoint::ENCODING, CGSize::ENCODING]);
 }
 
-const SHADER: &str = r"
-@vertex
-fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
-    var p = array<vec2<f32>, 3>(
-        vec2<f32>( 0.0,  0.6),
-        vec2<f32>(-0.6, -0.6),
-        vec2<f32>( 0.6, -0.6),
-    );
-    return vec4<f32>(p[i], 0.0, 1.0);
-}
-
-@fragment
-fn fs() -> @location(0) vec4<f32> {
-    return vec4<f32>(0.1, 0.85, 0.78, 1.0); // teal
-}
-";
-
 // Live wgpu objects for the terminal surface.
 struct GpuState {
     _instance: wgpu::Instance,
@@ -83,7 +66,7 @@ struct GpuState {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    pipeline: wgpu::RenderPipeline,
+    cell_renderer: crate::cell_render::CellRenderer,
 }
 
 // The installed surface: its NSView, the CAMetalLayer it hosts, and the
@@ -160,12 +143,12 @@ pub(crate) fn install_probe(window: &tauri::WebviewWindow) -> Result<(), tauri::
             let px_h = (frame.size.height * scale).max(1.0) as u32;
             match init_gpu(view.cast::<c_void>(), px_w, px_h) {
                 Some(gpu) => {
-                    let handle = SurfaceHandle {
+                    let mut handle = SurfaceHandle {
                         view,
                         metal_layer,
                         gpu,
                     };
-                    render(&handle.gpu);
+                    render(&mut handle.gpu);
                     if let Ok(mut slot) = surface_slot().lock() {
                         *slot = Some(handle);
                     }
@@ -222,7 +205,7 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
                 .surface
                 .configure(&handle.gpu.device, &handle.gpu.config);
         }
-        render(&handle.gpu);
+        render(&mut handle.gpu);
     }
 }
 
@@ -256,30 +239,7 @@ unsafe fn init_gpu(ns_view: *mut c_void, width: u32, height: u32) -> Option<GpuS
     let config = surface.get_default_config(&adapter, width, height)?;
     surface.configure(&device, &config);
 
-    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("term-surface"),
-        source: wgpu::ShaderSource::Wgsl(SHADER.into()),
-    });
-    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("term-surface"),
-        layout: None,
-        vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: "vs",
-            buffers: &[],
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: "fs",
-            targets: &[Some(config.format.into())],
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-        }),
-        primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        multiview: None,
-    });
+    let cell_renderer = crate::cell_render::CellRenderer::new(&device, &queue, config.format)?;
 
     Some(GpuState {
         _instance: instance,
@@ -287,11 +247,11 @@ unsafe fn init_gpu(ns_view: *mut c_void, width: u32, height: u32) -> Option<GpuS
         device,
         queue,
         config,
-        pipeline,
+        cell_renderer,
     })
 }
 
-fn render(state: &GpuState) {
+fn render(state: &mut GpuState) {
     let frame = match state.surface.get_current_texture() {
         Ok(f) => f,
         Err(e) => {
@@ -305,9 +265,27 @@ fn render(state: &GpuState) {
     let mut encoder = state
         .device
         .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-    {
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("term-surface"),
+
+    // Disjoint borrows of GpuState fields so the grid-reading closure can
+    // hold the renderer mutably and the device/queue immutably.
+    let device = &state.device;
+    let queue = &state.queue;
+    let width = state.config.width;
+    let height = state.config.height;
+    let cell_renderer = &mut state.cell_renderer;
+    let drew = crate::term_grid::with_grid(|grid| {
+        if let Some(grid) = grid {
+            cell_renderer.draw(device, queue, &mut encoder, &view, grid, width, height);
+            true
+        } else {
+            false
+        }
+    });
+    if !drew {
+        // No grid yet: clear to the default background. The pass records
+        // its clear when dropped at the end of this block.
+        let _clear_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("term-surface-clear"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &view,
                 resolve_target: None,
@@ -325,8 +303,6 @@ fn render(state: &GpuState) {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-        rpass.set_pipeline(&state.pipeline);
-        rpass.draw(0..3, 0..1);
     }
     state.queue.submit(Some(encoder.finish()));
     frame.present();
