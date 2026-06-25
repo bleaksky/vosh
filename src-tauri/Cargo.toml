@@ -51,6 +51,12 @@ quick-xml = "0.36"
 # setter degrades to a no-op instead of an unrecognized-selector
 # crash.
 objc2 = "0.5"
+# Tier 3 native terminal renderer (docs/native-renderer.md). wgpu drives
+# a Metal surface on a CAMetalLayer-backed child NSView; pollster blocks
+# on its async init during setup; raw-window-handle bridges the NSView.
+wgpu = "0.20"
+pollster = "0.3"
+raw-window-handle = "0.6"
 
 [dev-dependencies]
 tempfile = "3"
