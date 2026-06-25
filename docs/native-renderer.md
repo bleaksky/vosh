@@ -146,30 +146,28 @@ is dead and we stay in Tier 1/2. Everything after M1 is "normal" work.
 
 ## Resume here
 
-Branch `native-renderer`. **All of M1 and M2 are done in code** (commits
-`ae7d4e6` M2a, `78d00bb` M2b, `3379f55`/`a8594cb`/`6cb5125`/`2c2ceaf`/
-`246efde`/`c88f0d3` M2c). The native wgpu surface renders the live
-terminal grid. The autonomous loop stopped here on purpose: everything
-past M2 builds on the renderer, and the renderer's pixels have not been
-seen yet, so the next move is James's eyes, not more code.
+Branch `native-renderer`. **M1 and M2 are done and VERIFIED on screen.**
+The native wgpu surface renders the full live terminal (banner, login,
+char list, room text) with accurate ANSI colors, composited into the
+Tauri window beside the webview chrome. The M2c verification pass
+(`910aff2`) fixed sRGB color (linearize the palette for the sRGB surface)
+and sized the grid to the pane (`resize_grid` / `grid_size_for`). Enable
+with `localStorage.setItem('vosh.nativesurface','1')` + reload; `'0'`
+falls back to xterm. Default is off (xterm) until the renderer reaches
+parity.
 
-**Verify M2 first.** In the running app's DevTools:
-`localStorage.setItem('vosh.nativesurface','1')` then reload and connect.
-Expected: the terminal pane is drawn by the native surface showing live
-MUD text — correct glyphs, colors, top-left origin, upright, tracking
-window resize. Set the flag to `0` (or remove it) to fall back to xterm.
+Known gaps before native can be the default:
 
-Likely failure modes if it looks wrong:
-
-- Blank/hidden surface: `CellRenderer::new` or the WGSL failed (naga
-  validates at runtime). Check logs for `native-surface` warnings.
-- Text upside-down or shifted: the y-flip in the shader / `set_bounds`.
-- Glyphs mispositioned in their cells: the baseline math in
-  `rasterize_into` (`cell_render.rs`).
-- Wrong colors: `color_to_rgba` palette or fg/bg swapped in `draw`.
-- Non-ASCII shows blank: expected — only printable ASCII is pre-uploaded;
-  dynamic atlas re-upload is a later refinement.
+- **NAWS width.** Text wraps at the xterm column count, so it fills the
+  left of the pane, not the full width. The MUD needs the native column
+  count (send NAWS sized to `grid_size_for`) so lines wrap to fill. This
+  is the most visible next fix.
+- **Font.** Uses the best system monospace, not Vosh's configured font.
+  Wire the renderer to the same font + size as xterm (M4 parity).
+- **Dynamic atlas.** Only printable ASCII is pre-uploaded; non-ASCII
+  renders blank until the atlas re-uploads on new glyphs.
+- **Styles.** Bold/italic/underline/inverse from the cell flags (M4).
 
 **Then M3** — scroll (wheel through `term_grid` scrollback) + selection
-(drag to select cells, copy). After that, M4 styles/themes, M5 native
+(drag to select cells, copy). After that M4 styles/themes/fonts, M5 native
 split-scrollback, M6 cross-platform. Check `git log --oneline` first.
