@@ -107,12 +107,37 @@ impl TermGrid {
         let cell = &self.term.grid()[Line(line as i32)][Column(col)];
         (cell.c, cell.fg, cell.bg)
     }
+
+    /// Resize the grid to fit the surface; reflows existing content.
+    pub(crate) fn resize(&mut self, columns: usize, screen_lines: usize) {
+        let columns = columns.max(1);
+        let screen_lines = screen_lines.max(1);
+        if columns == self.size.columns && screen_lines == self.size.screen_lines {
+            return;
+        }
+        self.size = GridSize {
+            columns,
+            screen_lines,
+        };
+        self.term.resize(self.size);
+    }
 }
 
 static GRID: OnceLock<Mutex<Option<TermGrid>>> = OnceLock::new();
 
 fn grid_slot() -> &'static Mutex<Option<TermGrid>> {
     GRID.get_or_init(|| Mutex::new(None))
+}
+
+/// Resize the shared grid to fit the native surface (creating it if it does
+/// not exist yet). Called by the renderer before each frame.
+pub(crate) fn resize_grid(columns: usize, screen_lines: usize) {
+    if let Ok(mut slot) = grid_slot().lock() {
+        match slot.as_mut() {
+            Some(grid) => grid.resize(columns, screen_lines),
+            None => *slot = Some(TermGrid::new(columns, screen_lines)),
+        }
+    }
 }
 
 /// Feed the live session's display bytes into the shared grid, creating

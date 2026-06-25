@@ -306,6 +306,13 @@ fn render(state: &mut GpuState) {
         .device
         .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
+    // Size the grid to the surface so the terminal fills the pane instead
+    // of a fixed 80x24 corner.
+    let (cols, rows) = state
+        .cell_renderer
+        .grid_size_for(state.config.width, state.config.height);
+    crate::term_grid::resize_grid(cols, rows);
+
     // Disjoint borrows of GpuState fields so the grid-reading closure can
     // hold the renderer mutably and the device/queue immutably.
     let device = &state.device;
