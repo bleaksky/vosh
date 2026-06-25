@@ -2,6 +2,10 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.5.3 - 2026-06-25
+
+- The split-scrollback history pane shows your scrollback reliably again, the instant you scroll. A rendering race could leave the top pane blank when the split opened, and the earlier attempt to fix it added a visible pause before the content appeared. The pane now reveals and repaints the moment its scrollback loads, so it is never blank and never lags, with GPU rendering on by default.
+
 ## v0.5.2 - 2026-06-23
 
 - The split-scrollback history pane shows content on the very first scroll again. After v0.5.0, opening the split with your first wheel or PageUp gesture could leave the top pane blank until you scrolled a second time, because the pane was positioned before it had finished sizing to its height. The history pane now resizes continuously while the split is open, so its first view always lands on real content.

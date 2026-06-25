@@ -4633,7 +4633,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vosh-alias"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "serde",
  "thiserror 1.0.69",
@@ -4641,14 +4641,14 @@ dependencies = [
 
 [[package]]
 name = "vosh-ansi"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "vte",
 ]
 
 [[package]]
 name = "vosh-app"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "font-kit",
  "objc2 0.5.2",
@@ -4685,7 +4685,7 @@ dependencies = [
 
 [[package]]
 name = "vosh-gmcp"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -4694,7 +4694,7 @@ dependencies = [
 
 [[package]]
 name = "vosh-log"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "regex",
  "rusqlite",
@@ -4705,7 +4705,7 @@ dependencies = [
 
 [[package]]
 name = "vosh-map"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "rusqlite",
  "serde",
@@ -4714,7 +4714,7 @@ dependencies = [
 
 [[package]]
 name = "vosh-script"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "mlua",
  "regex",
@@ -4725,14 +4725,14 @@ dependencies = [
 
 [[package]]
 name = "vosh-telnet"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "thiserror 1.0.69",
 ]
 
 [[package]]
 name = "vosh-trigger"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "regex",
  "serde",
@@ -4743,7 +4743,7 @@ dependencies = [
 
 [[package]]
 name = "vosh-vars"
-version = "0.5.2"
+version = "0.5.3"
 
 [[package]]
 name = "vswhom"
