@@ -157,6 +157,14 @@ function App() {
   // unreliable: that callback may fire before or after the live pane
   // refits, and the answer is different in each case.
   const preSplitLiveRowsRef = useRef(0);
+  // TEMPORARY: counts split opens for the blank-split diagnostic log.
+  const splitDebugCountRef = useRef(0);
+  // On-screen readout of the history pane internals for diagnosing a
+  // blank split from a screenshot without devtools. Off unless turned on
+  // with localStorage.setItem('vosh.splitdebug', '1').
+  const splitDebugEnabled =
+    typeof localStorage !== 'undefined' && localStorage.getItem('vosh.splitdebug') === '1';
+  const [splitDebug, setSplitDebug] = useState<string | null>(null);
   const pendingFindRef = useRef<{
     query: string;
     opts: { caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean };
@@ -248,6 +256,55 @@ function App() {
   // onScrollbackLoaded callback will set this back to true.
   useEffect(() => {
     if (!splitOpen) setHistoryReady(false);
+  }, [splitOpen]);
+
+  // Reveal the split as soon as its scrollback lands, not on a fixed
+  // timer. The history pane's xterm is held at `visibility: hidden` (the
+  // priming class) until `historyReady` flips true, which normally
+  // happens in onScrollbackLoaded — but that runs off an xterm
+  // write-drain callback that intermittently never fires, stranding the
+  // pane hidden and blank. So poll each frame: the moment the buffer
+  // holds real content, position it, reveal it, and repaint a few frames
+  // (the DOM renderer otherwise leaves the freshly shown rows blank).
+  // A ~1.5s ceiling reveals it anyway so an empty or never-arriving
+  // buffer can't strand it hidden. Idempotent with the onScrollbackLoaded
+  // path, which still runs when it does fire.
+  useEffect(() => {
+    if (!splitOpen) return;
+    let raf = 0;
+    let done = false;
+    let tries = 0;
+    const repaintBurst = () => {
+      let frames = 0;
+      const repaint = () => {
+        historyTermRef.current?.refresh();
+        if (++frames < 6) requestAnimationFrame(repaint);
+      };
+      requestAnimationFrame(repaint);
+    };
+    const tick = () => {
+      const h = historyTermRef.current;
+      if (h && !done) {
+        const d = h.debug();
+        if (d.bufferLength > d.rows + 1) {
+          done = true;
+          const scrollBack = preSplitLiveRowsRef.current;
+          h.scrollToBottom();
+          if (scrollBack > 0) h.scrollLines(-scrollBack);
+          setHistoryReady(true);
+          repaintBurst();
+          return;
+        }
+      }
+      if (++tries < 90) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        setHistoryReady(true);
+        repaintBurst();
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [splitOpen]);
 
   // Drain a queued search once the split has opened and the history
@@ -1090,9 +1147,31 @@ function App() {
               // describe disjoint buffer regions. Pre-split live
               // rows captured in the wheel handler because reading
               // the live pane's size here is racey.
+              // Fast path: when the load callback fires, position and
+              // reveal immediately. The frame-polled effect above also
+              // positions / reveals / repaints, so this is idempotent and
+              // a no-op when the callback never fires.
               const scrollBack = preSplitLiveRowsRef.current;
               if (scrollBack > 0) historyTermRef.current?.scrollLines(-scrollBack);
               setHistoryReady(true);
+              // Optional split diagnostic, enabled via
+              // localStorage.setItem('vosh.splitdebug', '1'). Snapshots
+              // the history pane internals into the on-screen overlay.
+              if (splitDebugEnabled) {
+                const openN = (splitDebugCountRef.current += 1);
+                const lines: string[] = [`open#${openN} scrollBack=${scrollBack}`];
+                const snap = (tag: string) => {
+                  const d = historyTermRef.current?.debug();
+                  const line = `${tag} ${JSON.stringify(d)}`;
+                  // eslint-disable-next-line no-console
+                  console.log(`[vosh-split-debug] open#${openN} ${line}`);
+                  lines.push(line);
+                  setSplitDebug(lines.join('\n'));
+                };
+                snap('t0');
+                window.setTimeout(() => snap('t250'), 250);
+                window.setTimeout(() => snap('t600'), 600);
+              }
             }}
             onScrollPosition={(back, max) => setHistoryScrollPos({ back, max })}
           />
@@ -1100,6 +1179,9 @@ function App() {
             <div className="scrollback-indicator" aria-live="polite">
               ↑ {historyScrollPos.back} / {historyScrollPos.max}
             </div>
+          )}
+          {splitDebugEnabled && splitDebug && (
+            <pre className="split-debug-overlay">{splitDebug}</pre>
           )}
         </Resizable>
       )}
