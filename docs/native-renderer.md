@@ -93,9 +93,17 @@ NSWindow / HWND / GtkWindow
   — a native GPU surface compositing into the Tauri window — works.
   Still fixed-position; alignment/clipping to the real pane bounds and
   resize tracking come with M2. Code in `src-tauri/src/native_surface.rs`.
-- **M2 — grid + static render.** Feed output into `alacritty_terminal`;
-  render the visible screen (text, 16/256/truecolor, bold/italic/
-  underline) with the wgpu cell renderer. No scroll yet.
+- **M2 — real pane + grid + static render.** Three steps:
+  - **M2a — align to the pane.** Drop the fixed 360x240 frame. The
+    frontend reports the terminal pane bounds + dpr over IPC (a Tauri
+    command); the backend positions/sizes/clips the `NSView` to match,
+    reconfigures the wgpu surface on resize, and gains a redraw path
+    instead of the single render. Still drawing the test triangle.
+  - **M2b — the grid.** Feed the server byte stream into
+    `alacritty_terminal`'s `Term` so there is a cell grid + scrollback.
+  - **M2c — the cell renderer.** Glyph atlas (rasterize the font once,
+    cache glyphs) + an instanced wgpu pipeline drawing cell backgrounds
+    and glyphs. 16/256/truecolor, bold/italic/underline. No scroll yet.
 - **M3 — scroll + selection.** Wheel scrollback, drag-select, copy.
 - **M4 — parity.** Themes, fonts, cursor styles, link clicks, the
   per-line trigger/highlight effects, resize/NAWS, opaque vs transparent.
@@ -106,3 +114,12 @@ NSWindow / HWND / GtkWindow
 M1 is the go/no-go gate: if a native surface cannot composite cleanly
 into the Tauri window across the three platforms, the hybrid approach
 is dead and we stay in Tier 1/2. Everything after M1 is "normal" work.
+
+## Resume here
+
+Branch `native-renderer`. M1 (a + b) is done and committed. **Next: M2a**
+(align the surface to the real terminal pane). Probe code lives in
+`src-tauri/src/native_surface.rs` (`install_probe` + `init_gpu` +
+`render`), installed from `lib.rs` setup. Check `git log --oneline` for
+the latest state before starting.
+
