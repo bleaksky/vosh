@@ -43,6 +43,24 @@ export interface TerminalHandle {
   /** Current cols × rows. Used by the host to push the size to the
    *  backend via NAWS after a (re)connect. */
   getSize: () => { cols: number; rows: number };
+  /** Force the renderer to redraw the visible rows. The split-scrollback
+   *  history pane can mount sized and positioned on real content yet the
+   *  DOM renderer leaves it blank until the next scroll triggers a draw;
+   *  calling this after it settles paints it immediately. */
+  refresh: () => void;
+  /** TEMPORARY diagnostic snapshot of the xterm internals, for tracing
+   *  the intermittent blank split-scrollback pane. */
+  debug: () => {
+    rows: number;
+    cols: number;
+    viewportY: number;
+    baseY: number;
+    bufferLength: number;
+    hostW: number;
+    hostH: number;
+    webgl: boolean;
+    instances: number;
+  };
   /** Height of one terminal cell in CSS pixels, derived from the
    *  host's pixel height divided by the current row count. Used
    *  by the split-scrollback Resizable to snap the divider to
@@ -167,6 +185,11 @@ function xtermThemeFor(theme: AppTheme, themeTerminalColors: boolean): ITheme {
   return base;
 }
 
+// TEMPORARY: count live xterm instances to catch a mount/dispose leak
+// across split-scrollback open/close cycles (the history pane mounts and
+// unmounts each time the split toggles).
+let liveTerminalInstances = 0;
+
 export function Terminal({
   onReady,
   fontFamily,
@@ -204,6 +227,7 @@ export function Terminal({
   useEffect(() => {
     if (!containerRef.current) return;
 
+    liveTerminalInstances += 1;
     const term = new XTerm({
       // The user types into the bottom input box, not into xterm, so a
       // cursor block in the output pane is just noise (and a confusing
@@ -283,17 +307,11 @@ export function Terminal({
     const winDisable =
       typeof window !== 'undefined' &&
       (window as { __voshDisableWebGL?: boolean }).__voshDisableWebGL === true;
-    // Enabled unless explicitly turned off via localStorage '0' or the
-    // per-page escape hatch. `__voshEnableWebGL` forces it on even when
+    // On by default (opt-out). Only the live pane uses WebGL; the history
+    // pane (quiet) always stays on the DOM renderer so the
+    // split-scrollback overlay paints reliably. `__voshDisableWebGL`
+    // forces it off; `__voshEnableWebGL` forces it on even when
     // localStorage says '0'.
-    //
-    // The split-scrollback history pane (quiet) always stays on the DOM
-    // renderer. It mounts fresh and is immediately bulk-written its whole
-    // scrollback, and on WebGL that initial content intermittently fails
-    // to paint, leaving the pane blank while the buffer holds the rows
-    // (the scroll-depth indicator still counts them). DOM always paints,
-    // and a frozen scroll view gains nothing from the GPU path. The live
-    // pane keeps WebGL.
     const enableWebgl = !winDisable && !quietRef.current && (winEnable || lsVal !== '0');
     if (enableWebgl) {
       // Probe webgl2 in a throwaway canvas first. If the WebView
@@ -665,6 +683,20 @@ export function Terminal({
       scrollPages: (n) => term.scrollPages(n),
       scrollLines: (n) => term.scrollLines(n),
       scrollToBottom: () => term.scrollToBottom(),
+      refresh: () => {
+        if (term.rows > 0) term.refresh(0, term.rows - 1);
+      },
+      debug: () => ({
+        rows: term.rows,
+        cols: term.cols,
+        viewportY: term.buffer.active.viewportY,
+        baseY: term.buffer.active.baseY,
+        bufferLength: term.buffer.active.length,
+        hostW: host && host.style.width ? parseFloat(host.style.width) : 0,
+        hostH: host && host.style.height ? parseFloat(host.style.height) : 0,
+        webgl: webglAddon !== null,
+        instances: liveTerminalInstances,
+      }),
       // viewportY tracks the top of the viewport in scrollback coords;
       // baseY tracks the top of the bottom page. Equal means the
       // viewport is anchored to the live tail.
@@ -797,6 +829,7 @@ export function Terminal({
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
+      liveTerminalInstances -= 1;
     };
     // Setup runs exactly once. Font is read from props on initial mount;
     // later font changes re-apply via the effect below without disposing

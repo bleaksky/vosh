@@ -1708,6 +1708,25 @@ body {
   background: var(--c-accent-soft);
   color: var(--c-text-strong);
 }
+/* TEMPORARY: blank-split diagnostic overlay. Sits on the history pane so
+   a blank occurrence can be screenshotted with its internals visible. */
+.split-debug-overlay {
+  position: absolute;
+  top: 4px;
+  left: 8px;
+  z-index: 50;
+  margin: 0;
+  padding: 4px 6px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #ff79c6;
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid #ff79c6;
+  white-space: pre;
+  pointer-events: none;
+  max-width: 92%;
+  overflow: hidden;
+}
 /* Multi-line command prompt. Mirrors the single-line input but allows
    Shift+Enter to grow the box; Input.tsx autosizes the height to fit
    the composed lines and this caps the growth before it scrolls. */
