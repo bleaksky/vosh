@@ -95,18 +95,18 @@ NSWindow / HWND / GtkWindow
   resize tracking come with M2. Code in `src-tauri/src/native_surface.rs`.
 - **M2 — real pane + grid + static render.** Three steps:
   - **M2a — align to the pane. DONE (needs visual check).** The frontend
-    (`Terminal.tsx` `sync`) reports the live pane's `getBoundingClientRect`
-    - dpr through the `native_surface_set_bounds` command; the backend
-      (`set_bounds`) flips the y to AppKit's bottom-left origin, moves and
-      sizes the `NSView`, reconfigures the wgpu surface, and redraws. The
-      surface installs hidden and is opaque, so it is gated behind the
-      `vosh.nativesurface` localStorage flag (default off, xterm untouched).
-      VISUAL CHECK: in DevTools run
-      `localStorage.setItem('vosh.nativesurface','1')` and reload. The
-      dark-blue rectangle with the teal triangle should cover exactly the
-      terminal pane and track it on window resize. If it is offset or the
-      wrong size, the y-flip or the dpr scaling in `set_bounds` is the
-      suspect. Set the flag back to `0` (or remove it) to restore xterm.
+    (`Terminal.tsx` `sync`) reports the live pane's bounds and dpr through
+    the `native_surface_set_bounds` command; the backend (`set_bounds`)
+    flips the y to AppKit's bottom-left origin, moves and sizes the
+    `NSView`, reconfigures the wgpu surface, and redraws. The surface
+    installs hidden and is opaque, so it is gated behind the
+    `vosh.nativesurface` localStorage flag (default off, xterm untouched).
+    VISUAL CHECK: in DevTools run
+    `localStorage.setItem('vosh.nativesurface','1')` and reload. The
+    dark-blue rectangle with the teal triangle should cover exactly the
+    terminal pane and track it on window resize. If it is offset or the
+    wrong size, the y-flip or the dpr scaling in `set_bounds` is the
+    suspect. Set the flag back to `0` (or remove it) to restore xterm.
   - **M2b — the grid.** Feed the server byte stream into
     `alacritty_terminal`'s `Term` so there is a cell grid + scrollback.
   - **M2c — the cell renderer.** Glyph atlas (rasterize the font once,
