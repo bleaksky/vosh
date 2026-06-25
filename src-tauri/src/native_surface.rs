@@ -20,6 +20,7 @@
 
 use std::ffi::c_void;
 use std::ptr::NonNull;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use objc2::runtime::AnyObject;
@@ -27,6 +28,7 @@ use objc2::{class, msg_send, Encode, Encoding};
 use raw_window_handle::{
     AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
+use tauri::Manager;
 
 // Self-describing CoreGraphics geometry so frame messages can be
 // message-sent without pulling objc2-foundation.
@@ -86,12 +88,47 @@ fn surface_slot() -> &'static Mutex<Option<SurfaceHandle>> {
     SURFACE.get_or_init(|| Mutex::new(None))
 }
 
+// App handle for dispatching redraws to the main thread, set at install.
+static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
+// True once the frontend has positioned the surface (flag on); keeps
+// redraw requests from doing work while the surface is hidden.
+static ACTIVE: AtomicBool = AtomicBool::new(false);
+// Coalesces redraw requests so a burst of output schedules one repaint.
+static REDRAW_PENDING: AtomicBool = AtomicBool::new(false);
+
+/// Request a repaint of the terminal surface. Called from the session loop
+/// after feeding the grid. No-ops until the surface is active; coalesces
+/// bursts; dispatches the actual draw to the main thread (Metal requires
+/// it).
+pub(crate) fn request_redraw() {
+    if !ACTIVE.load(Ordering::Acquire) {
+        return;
+    }
+    let Some(app) = APP.get() else {
+        return;
+    };
+    if REDRAW_PENDING.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let _ = app.run_on_main_thread(redraw_now);
+}
+
+fn redraw_now() {
+    REDRAW_PENDING.store(false, Ordering::Release);
+    if let Ok(mut slot) = surface_slot().lock() {
+        if let Some(handle) = slot.as_mut() {
+            render(&mut handle.gpu);
+        }
+    }
+}
+
 /// Install the native surface over the main window's content view.
 /// Best-effort: logs and returns on any missing handle. Runs on the main
 /// thread (the `with_webview` callback). The surface starts at a
 /// placeholder frame; the frontend's first `set_bounds` call snaps it to
 /// the terminal pane.
 pub(crate) fn install_probe(window: &tauri::WebviewWindow) -> Result<(), tauri::Error> {
+    let _ = APP.set(window.app_handle().clone());
     window.with_webview(|webview| {
         let wk = webview.inner().cast::<AnyObject>();
         if wk.is_null() {
@@ -174,6 +211,9 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
     if width < 1.0 || height < 1.0 {
         return;
     }
+    // The surface is now positioned and visible, so live output should
+    // trigger repaints.
+    ACTIVE.store(true, Ordering::Release);
     unsafe {
         // The view's superview is the content view; AppKit frames use a
         // bottom-left origin, so flip the top-left y the webview reports.
