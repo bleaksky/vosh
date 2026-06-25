@@ -94,11 +94,19 @@ NSWindow / HWND / GtkWindow
   Still fixed-position; alignment/clipping to the real pane bounds and
   resize tracking come with M2. Code in `src-tauri/src/native_surface.rs`.
 - **M2 — real pane + grid + static render.** Three steps:
-  - **M2a — align to the pane.** Drop the fixed 360x240 frame. The
-    frontend reports the terminal pane bounds + dpr over IPC (a Tauri
-    command); the backend positions/sizes/clips the `NSView` to match,
-    reconfigures the wgpu surface on resize, and gains a redraw path
-    instead of the single render. Still drawing the test triangle.
+  - **M2a — align to the pane. DONE (needs visual check).** The frontend
+    (`Terminal.tsx` `sync`) reports the live pane's `getBoundingClientRect`
+    - dpr through the `native_surface_set_bounds` command; the backend
+      (`set_bounds`) flips the y to AppKit's bottom-left origin, moves and
+      sizes the `NSView`, reconfigures the wgpu surface, and redraws. The
+      surface installs hidden and is opaque, so it is gated behind the
+      `vosh.nativesurface` localStorage flag (default off, xterm untouched).
+      VISUAL CHECK: in DevTools run
+      `localStorage.setItem('vosh.nativesurface','1')` and reload. The
+      dark-blue rectangle with the teal triangle should cover exactly the
+      terminal pane and track it on window resize. If it is offset or the
+      wrong size, the y-flip or the dpr scaling in `set_bounds` is the
+      suspect. Set the flag back to `0` (or remove it) to restore xterm.
   - **M2b — the grid.** Feed the server byte stream into
     `alacritty_terminal`'s `Term` so there is a cell grid + scrollback.
   - **M2c — the cell renderer.** Glyph atlas (rasterize the font once,
@@ -117,9 +125,11 @@ is dead and we stay in Tier 1/2. Everything after M1 is "normal" work.
 
 ## Resume here
 
-Branch `native-renderer`. M1 (a + b) is done and committed. **Next: M2a**
-(align the surface to the real terminal pane). Probe code lives in
-`src-tauri/src/native_surface.rs` (`install_probe` + `init_gpu` +
-`render`), installed from `lib.rs` setup. Check `git log --oneline` for
-the latest state before starting.
-
+Branch `native-renderer`. M1 and M2a are done and committed. **Next: M2b**
+(feed the server byte stream into `alacritty_terminal`'s `Term` grid).
+Surface code is `src-tauri/src/native_surface.rs` (`install_probe`,
+`set_bounds`, `init_gpu`, `render`); the bounds command is
+`native_surface_set_bounds` in `commands.rs`; the frontend reporter is in
+`Terminal.tsx` `sync`. M2a still draws the test triangle and is gated
+behind the `vosh.nativesurface` flag, awaiting James's visual check that
+the surface aligns to the pane. Check `git log --oneline` before starting.

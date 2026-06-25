@@ -1,17 +1,17 @@
-//! Tier 3, milestone M1 (see docs/native-renderer.md).
+//! Tier 3 native terminal renderer (see docs/native-renderer.md).
 //!
-//! M1a proved a native child view composites over the `WKWebView` inside
-//! the Tauri window. M1b replaces that flat colored layer with a real
-//! wgpu Metal surface and draws a test scene: clear to dark blue, then a
-//! teal triangle. The signal is graduated: a triangle on blue means the
-//! full GPU pipeline into the native surface works; blue only means the
-//! surface works but the render pipeline failed; nothing means surface
-//! creation failed. That settles whether the terminal can be
-//! GPU-rendered natively; the rest of Tier 3 feeds a real grid into this
-//! surface.
+//! M1 proved a wgpu Metal surface on a child `NSView` composites over the
+//! `WKWebView` inside the Tauri window (teal triangle on dark blue). M2a
+//! makes that surface track the real terminal pane: the frontend reports
+//! the pane's bounds + device-pixel-ratio over IPC, and `set_bounds`
+//! repositions/resizes the view, reconfigures the wgpu surface, and
+//! redraws. Still drawing the test triangle, so the dark-blue rectangle
+//! should now cover exactly the terminal pane.
 //!
 //! macOS only. The view/layer plumbing is raw objc2 message-sends, same
-//! style as `enable_macos_spellcheck`.
+//! style as `enable_macos_spellcheck`. Every NSView/Metal touch happens
+//! on the main thread (creation in `with_webview`, updates via
+//! `AppHandle::run_on_main_thread`).
 
 #![cfg(target_os = "macos")]
 // objc2 message-sends, the CoreGraphics Encode impls, and the wgpu raw
@@ -20,6 +20,7 @@
 
 use std::ffi::c_void;
 use std::ptr::NonNull;
+use std::sync::{Mutex, OnceLock};
 
 use objc2::runtime::AnyObject;
 use objc2::{class, msg_send, Encode, Encoding};
@@ -27,7 +28,7 @@ use raw_window_handle::{
     AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
 
-// Self-describing CoreGraphics geometry so `initWithFrame:` can be
+// Self-describing CoreGraphics geometry so frame messages can be
 // message-sent without pulling objc2-foundation.
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -75,19 +76,38 @@ fn fs() -> @location(0) vec4<f32> {
 }
 ";
 
-// Live wgpu objects. Leaked for the M1 probe so the surface keeps
-// presenting; real lifetime management lands when the renderer is wired
-// to the terminal pane.
+// Live wgpu objects for the terminal surface.
 struct GpuState {
     _instance: wgpu::Instance,
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
+    config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
 }
 
-/// Install the M1 native surface over the main window's content view.
-/// Best-effort: logs and returns on any missing handle.
+// The installed surface: its NSView, the CAMetalLayer it hosts, and the
+// GPU state. Raw pointers are not Send, but every access is funnelled
+// through the main thread (creation in `with_webview`, updates via
+// `run_on_main_thread`), so the marker is sound.
+struct SurfaceHandle {
+    view: *mut AnyObject,
+    metal_layer: *mut AnyObject,
+    gpu: GpuState,
+}
+unsafe impl Send for SurfaceHandle {}
+
+static SURFACE: OnceLock<Mutex<Option<SurfaceHandle>>> = OnceLock::new();
+
+fn surface_slot() -> &'static Mutex<Option<SurfaceHandle>> {
+    SURFACE.get_or_init(|| Mutex::new(None))
+}
+
+/// Install the native surface over the main window's content view.
+/// Best-effort: logs and returns on any missing handle. Runs on the main
+/// thread (the `with_webview` callback). The surface starts at a
+/// placeholder frame; the frontend's first `set_bounds` call snaps it to
+/// the terminal pane.
 pub(crate) fn install_probe(window: &tauri::WebviewWindow) -> Result<(), tauri::Error> {
     window.with_webview(|webview| {
         let wk = webview.inner().cast::<AnyObject>();
@@ -108,10 +128,10 @@ pub(crate) fn install_probe(window: &tauri::WebviewWindow) -> Result<(), tauri::
             }
 
             let frame = CGRect {
-                origin: CGPoint { x: 140.0, y: 160.0 },
+                origin: CGPoint { x: 0.0, y: 0.0 },
                 size: CGSize {
-                    width: 360.0,
-                    height: 240.0,
+                    width: 320.0,
+                    height: 200.0,
                 },
             };
             let scale: f64 = msg_send![ns_window, backingScaleFactor];
@@ -122,7 +142,6 @@ pub(crate) fn install_probe(window: &tauri::WebviewWindow) -> Result<(), tauri::
                 tracing::warn!("native-surface: NSView alloc/init failed");
                 return;
             }
-            // Host a CAMetalLayer so wgpu can target it.
             let metal_layer: *mut AnyObject = msg_send![class!(CAMetalLayer), layer];
             if metal_layer.is_null() {
                 tracing::warn!("native-surface: CAMetalLayer creation failed");
@@ -132,20 +151,79 @@ pub(crate) fn install_probe(window: &tauri::WebviewWindow) -> Result<(), tauri::
             let _: () = msg_send![view, setLayer: metal_layer];
             let _: () = msg_send![view, setWantsLayer: true];
             let _: () = msg_send![content_view, addSubview: view];
+            // Start hidden. The surface is opaque and would occlude xterm,
+            // so it stays invisible until the frontend opts in (flag) and
+            // reports pane bounds, which reveals and positions it.
+            let _: () = msg_send![view, setHidden: true];
 
             let px_w = (frame.size.width * scale).max(1.0) as u32;
             let px_h = (frame.size.height * scale).max(1.0) as u32;
             match init_gpu(view.cast::<c_void>(), px_w, px_h) {
-                Some(state) => {
-                    render(&state);
-                    // Keep it alive for the life of the process (probe only).
-                    Box::leak(Box::new(state));
-                    tracing::info!("native-surface: M1b wgpu surface rendered");
+                Some(gpu) => {
+                    let handle = SurfaceHandle {
+                        view,
+                        metal_layer,
+                        gpu,
+                    };
+                    render(&handle.gpu);
+                    if let Ok(mut slot) = surface_slot().lock() {
+                        *slot = Some(handle);
+                    }
+                    tracing::info!("native-surface: M2a surface installed");
                 }
                 None => tracing::warn!("native-surface: wgpu init failed; native view is blank"),
             }
         }
     })
+}
+
+/// Reposition and resize the surface to the terminal pane. `x`/`y`/`w`/`h`
+/// are CSS pixels in the webview's top-left coordinate space (which maps
+/// 1:1 to the content view's points); `dpr` is the device pixel ratio.
+/// Must run on the main thread.
+pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
+    let Ok(mut slot) = surface_slot().lock() else {
+        return;
+    };
+    let Some(handle) = slot.as_mut() else {
+        return;
+    };
+    if width < 1.0 || height < 1.0 {
+        return;
+    }
+    unsafe {
+        // The view's superview is the content view; AppKit frames use a
+        // bottom-left origin, so flip the top-left y the webview reports.
+        let superview: *mut AnyObject = msg_send![handle.view, superview];
+        let content_h = if superview.is_null() {
+            y + height
+        } else {
+            let cv_bounds: CGRect = msg_send![superview, bounds];
+            cv_bounds.size.height
+        };
+        let frame = CGRect {
+            origin: CGPoint {
+                x,
+                y: content_h - (y + height),
+            },
+            size: CGSize { width, height },
+        };
+        let _: () = msg_send![handle.view, setFrame: frame];
+        let _: () = msg_send![handle.view, setHidden: false];
+        let _: () = msg_send![handle.metal_layer, setContentsScale: dpr];
+
+        let px_w = (width * dpr).max(1.0) as u32;
+        let px_h = (height * dpr).max(1.0) as u32;
+        if px_w != handle.gpu.config.width || px_h != handle.gpu.config.height {
+            handle.gpu.config.width = px_w;
+            handle.gpu.config.height = px_h;
+            handle
+                .gpu
+                .surface
+                .configure(&handle.gpu.device, &handle.gpu.config);
+        }
+        render(&handle.gpu);
+    }
 }
 
 unsafe fn init_gpu(ns_view: *mut c_void, width: u32, height: u32) -> Option<GpuState> {
@@ -179,11 +257,11 @@ unsafe fn init_gpu(ns_view: *mut c_void, width: u32, height: u32) -> Option<GpuS
     surface.configure(&device, &config);
 
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("m1-probe"),
+        label: Some("term-surface"),
         source: wgpu::ShaderSource::Wgsl(SHADER.into()),
     });
     let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("m1-probe"),
+        label: Some("term-surface"),
         layout: None,
         vertex: wgpu::VertexState {
             module: &shader,
@@ -208,6 +286,7 @@ unsafe fn init_gpu(ns_view: *mut c_void, width: u32, height: u32) -> Option<GpuS
         surface,
         device,
         queue,
+        config,
         pipeline,
     })
 }
@@ -228,7 +307,7 @@ fn render(state: &GpuState) {
         .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
     {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("m1-probe"),
+            label: Some("term-surface"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &view,
                 resolve_target: None,

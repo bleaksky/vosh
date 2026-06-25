@@ -10,6 +10,8 @@ import {
 } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
 
+import { invoke } from '@tauri-apps/api/core';
+
 import '@xterm/xterm/css/xterm.css';
 import { loadScrollback, onOutput, setWindowSize } from '../lib/session';
 import { findTheme, type AppTheme } from '../lib/themes';
@@ -405,8 +407,38 @@ export function Terminal({
     let lastH = 0;
     const sizer = sizingRef.current;
     const host = containerRef.current;
+
+    // Tier 3 (docs/native-renderer.md): report this pane's screen
+    // rectangle to the native wgpu surface so it tracks the terminal.
+    // Live pane only, and only when opted in via the localStorage flag,
+    // because the surface is opaque and would otherwise occlude xterm.
+    // Set vosh.nativesurface to "1" and reload to see it.
+    const nativeSurfaceOn =
+      !quietRef.current &&
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('vosh.nativesurface') === '1';
+    let lastNativeBounds = '';
+    const reportNativeBounds = () => {
+      if (!nativeSurfaceOn || !sizer) return;
+      const r = sizer.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const key = `${Math.round(r.left)},${Math.round(r.top)},${Math.round(
+        r.width,
+      )},${Math.round(r.height)},${dpr}`;
+      if (key === lastNativeBounds) return;
+      lastNativeBounds = key;
+      void invoke('native_surface_set_bounds', {
+        x: r.left,
+        y: r.top,
+        width: r.width,
+        height: r.height,
+        dpr,
+      }).catch(() => {});
+    };
+
     const sync = () => {
       if (!sizer || !host) return;
+      reportNativeBounds();
       const rect = sizer.getBoundingClientRect();
       const w = Math.floor(rect.width);
       const h = Math.floor(rect.height);
