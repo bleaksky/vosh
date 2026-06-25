@@ -260,10 +260,11 @@ pub(crate) struct GlyphAtlas {
 }
 
 impl GlyphAtlas {
-    /// Build an atlas from the best system monospace font at `px`. Returns
-    /// `None` if no font can be loaded.
-    pub(crate) fn new(px: f32) -> Option<Self> {
-        let font = load_monospace_font()?;
+    /// Build an atlas from the first loadable family in the CSS
+    /// `family_stack` (falling back to the system monospace) at `px`
+    /// pixels. Returns `None` if no font can be loaded.
+    pub(crate) fn new(family_stack: &str, px: f32) -> Option<Self> {
+        let font = load_font(family_stack)?;
         let line = font.horizontal_line_metrics(px)?;
         let cell_h = (line.new_line_size.ceil() as u32).max(1);
         let cell_w = (font.metrics('M', px).advance_width.ceil() as u32).max(1);
@@ -355,17 +356,97 @@ impl GlyphAtlas {
     }
 }
 
-fn load_monospace_font() -> Option<Font> {
-    use font_kit::family_name::FamilyName;
-    use font_kit::properties::Properties;
-    use font_kit::source::SystemSource;
-    let kit_font = SystemSource::new()
-        .select_best_match(&[FamilyName::Monospace], &Properties::new())
-        .ok()?
-        .load()
-        .ok()?;
+/// Load the first matchable family from a CSS font-family stack, always
+/// falling back to the system monospace. Generic CSS names map to
+/// font-kit's generic families; everything else is a literal title.
+// `select_best_match` mis-ranks faces (it returned Menlo Italic for a
+// Normal request), so pick the upright regular face of a family by hand:
+// load each face, keep the Normal-style one whose weight is closest to
+// 400. font-kit's `copy_font_data` extracts that single face, so fontdue
+// reads it at collection index 0.
+fn regular_face(
+    source: &font_kit::source::SystemSource,
+    family: &str,
+) -> Option<font_kit::handle::Handle> {
+    use font_kit::properties::Style;
+    let fam = source.select_family_by_name(family).ok()?;
+    let mut best: Option<(font_kit::handle::Handle, f32)> = None;
+    for handle in fam.fonts() {
+        let Ok(font) = handle.load() else { continue };
+        let props = font.properties();
+        if props.style != Style::Normal {
+            continue;
+        }
+        let weight_dist = (props.weight.0 - 400.0).abs();
+        if best.as_ref().map_or(true, |(_, d)| weight_dist < *d) {
+            best = Some((handle.clone(), weight_dist));
+        }
+    }
+    best.map(|(handle, _)| handle)
+}
+
+// Vosh ships these two families and the webview renders with them. font-kit
+// often fails to resolve them by their CSS family name (the file's internal
+// family name differs), so load the bundled regular faces directly to match
+// the webview exactly.
+const BERKELEY_REGULAR: &[u8] =
+    include_bytes!("../../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf");
+const JETBRAINS_REGULAR: &[u8] =
+    include_bytes!("../../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf");
+
+fn font_from_handle(handle: &font_kit::handle::Handle) -> Option<Font> {
+    let kit_font = handle.load().ok()?;
+    tracing::info!(font = %kit_font.full_name(), "native-surface: atlas font (system)");
     let data = kit_font.copy_font_data()?;
     Font::from_bytes(&data[..], fontdue::FontSettings::default()).ok()
+}
+
+fn load_font(family_stack: &str) -> Option<Font> {
+    let source = font_kit::source::SystemSource::new();
+
+    for raw in family_stack.split(',') {
+        let name = raw.trim().trim_matches('"').trim_matches('\'').trim();
+        let lower = name.to_ascii_lowercase();
+        // Skip CSS generics; the Menlo/Courier fallback covers them.
+        if matches!(
+            lower.as_str(),
+            "" | "monospace"
+                | "ui-monospace"
+                | "serif"
+                | "ui-serif"
+                | "sans-serif"
+                | "ui-sans-serif"
+                | "system-ui"
+        ) {
+            continue;
+        }
+        // Bundled families, matched by the webview.
+        if lower.contains("berkeley") {
+            if let Ok(font) = Font::from_bytes(BERKELEY_REGULAR, fontdue::FontSettings::default()) {
+                tracing::info!("native-surface: atlas font = bundled BerkeleyMono");
+                return Some(font);
+            }
+        }
+        if lower.contains("jetbrains") {
+            if let Ok(font) = Font::from_bytes(JETBRAINS_REGULAR, fontdue::FontSettings::default())
+            {
+                tracing::info!("native-surface: atlas font = bundled JetBrainsMono");
+                return Some(font);
+            }
+        }
+        // Otherwise a system font, upright regular face.
+        if let Some(font) = regular_face(&source, name)
+            .as_ref()
+            .and_then(font_from_handle)
+        {
+            return Some(font);
+        }
+    }
+
+    regular_face(&source, "Menlo")
+        .or_else(|| regular_face(&source, "Courier New"))
+        .as_ref()
+        .and_then(font_from_handle)
 }
 
 // ---------------------------------------------------------------------------
@@ -494,8 +575,10 @@ impl CellRenderer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
+        font_stack: &str,
+        font_px: f32,
     ) -> Option<Self> {
-        let mut atlas = GlyphAtlas::new(16.0)?;
+        let mut atlas = GlyphAtlas::new(font_stack, font_px)?;
         for code in 0x20u8..0x7f {
             let _ = atlas.glyph_uv(code as char);
         }
@@ -827,7 +910,7 @@ mod tests {
     #[test]
     fn atlas_rasterizes_glyph_coverage() {
         // Skip gracefully if the test host has no loadable monospace font.
-        let Some(mut atlas) = GlyphAtlas::new(16.0) else {
+        let Some(mut atlas) = GlyphAtlas::new("monospace", 16.0) else {
             return;
         };
         assert!(atlas.cell_w() > 0 && atlas.cell_h() > 0);
