@@ -62,6 +62,8 @@ fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(), tauri::E
     })
 }
 
+#[cfg(target_os = "macos")]
+mod cell_render;
 mod commands;
 mod connection;
 mod fonts;
