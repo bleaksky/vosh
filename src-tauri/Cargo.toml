@@ -60,6 +60,9 @@ raw-window-handle = "0.6"
 # Terminal grid model (VTE parser + cell grid + scrollback) fed by the
 # post-telnet byte stream; the wgpu renderer draws this grid (M2b/M2c).
 alacritty_terminal = "0.24"
+# Glyph rasterization for the cell renderer's atlas. font-kit (above)
+# selects/loads the monospace font bytes; fontdue rasterizes them simply.
+fontdue = "0.9"
 # alacritty_terminal compiles a unix tty (PTY) module we never use; it
 # pulls rustix-openpty, whose rustix builds without the `std` feature and
 # its fd types then fail to bridge to std's OwnedFd. Force `std` on so
