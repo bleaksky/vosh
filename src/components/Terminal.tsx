@@ -20,6 +20,13 @@ import { WordWrapper } from '../lib/wordWrap';
 import { ingestRecentNames } from '../lib/recentNames';
 import { hexToRgba } from '../lib/mapPalette';
 
+// Tier 3: the native wgpu terminal surface is opt-in until it reaches
+// parity with xterm. TEMP: default-on for native-renderer testing; commit
+// state is `=== '1'` (opt-in).
+function nativeSurfaceEnabled(): boolean {
+  return typeof localStorage !== 'undefined' && localStorage.getItem('vosh.nativesurface') !== '0';
+}
+
 export interface FindOptions {
   /** Treat the term as a regex. Default false (plain substring). */
   regex?: boolean;
@@ -413,10 +420,7 @@ export function Terminal({
     // Live pane only, and only when opted in via the localStorage flag,
     // because the surface is opaque and would otherwise occlude xterm.
     // Set vosh.nativesurface to "1" and reload to see it.
-    const nativeSurfaceOn =
-      !quietRef.current &&
-      typeof localStorage !== 'undefined' &&
-      localStorage.getItem('vosh.nativesurface') === '1';
+    const nativeSurfaceOn = !quietRef.current && nativeSurfaceEnabled();
     let lastNativeBounds = '';
     const reportNativeBounds = () => {
       if (!nativeSurfaceOn || !sizer) return;
@@ -661,6 +665,10 @@ export function Terminal({
     let naws_timer: ReturnType<typeof setTimeout> | null = null;
     const pushSize = () => {
       if (quietRef.current) return;
+      // When the native surface owns the terminal it advertises its own
+      // (larger) grid size as NAWS; xterm must not fight it with the
+      // webview-font column count.
+      if (nativeSurfaceEnabled()) return;
       void setWindowSize(term.cols, term.rows).catch(() => {
         // Not connected, or session torn down. Either is fine; the
         // initial NAWS handshake on the next connect will send the
