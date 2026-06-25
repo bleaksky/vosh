@@ -361,7 +361,7 @@ fn load_monospace_font() -> Option<Font> {
 /// `repr(C)` so it maps straight to a wgpu vertex buffer (`bytemuck`
 /// derives are added with the pipeline in part 3b).
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct CellInstance {
     pub offset: [f32; 2],
     pub bg: Rgba,
