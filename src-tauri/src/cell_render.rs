@@ -9,10 +9,6 @@
 //! macOS only for now (it targets the Metal surface in `native_surface`).
 
 #![cfg(target_os = "macos")]
-// Built up across several commits; the pieces are wired into the draw
-// path at the end of M2c. Until then some helpers are exercised only by
-// tests, so allow them to sit unused in the lib build.
-#![allow(dead_code)]
 // Pixel-coordinate float math on small integers (atlas dimensions, glyph
 // coords) that are always far inside f32's exact-integer range.
 #![allow(clippy::cast_precision_loss)]
@@ -308,6 +304,16 @@ impl GlyphAtlas {
         rect_to_uv(x, y, w, h, self.atlas_w, self.atlas_h)
     }
 
+    /// UV rect for an already-rasterized glyph, or `None`. Read-only so the
+    /// draw path can look up cached glyphs without mutating the atlas (the
+    /// texture is uploaded once; non-cached chars fall back to blank).
+    pub(crate) fn uv_if_cached(&self, c: char) -> Option<([f32; 2], [f32; 2])> {
+        self.slots.get(&c).map(|&i| {
+            let (x, y, w, h) = slot_rect(i, self.cols, self.cell_w, self.cell_h);
+            rect_to_uv(x, y, w, h, self.atlas_w, self.atlas_h)
+        })
+    }
+
     /// Rasterize `c` and blit its coverage into slot `index`, positioned at
     /// the baseline. NOTE: glyph placement (xmin/ascent math) is the part
     /// that needs a visual check.
@@ -396,6 +402,340 @@ fn build_instances(
         }
     }
     out
+}
+
+// ---------------------------------------------------------------------------
+// wgpu cell renderer
+// ---------------------------------------------------------------------------
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct Uniforms {
+    surface_size: [f32; 2],
+    cell_size: [f32; 2],
+}
+
+const CELL_SHADER: &str = r"
+struct Uniforms { surface_size: vec2<f32>, cell_size: vec2<f32> };
+@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(0) @binding(1) var atlas_tex: texture_2d<f32>;
+@group(0) @binding(2) var atlas_samp: sampler;
+
+struct VsOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) bg: vec4<f32>,
+    @location(2) fg: vec4<f32>,
+};
+
+@vertex
+fn vs(
+    @builtin(vertex_index) vi: u32,
+    @location(0) offset: vec2<f32>,
+    @location(1) bg: vec4<f32>,
+    @location(2) fg: vec4<f32>,
+    @location(3) uv_min: vec2<f32>,
+    @location(4) uv_max: vec2<f32>,
+) -> VsOut {
+    var corners = array<vec2<f32>, 6>(
+        vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
+        vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0),
+    );
+    let corner = corners[vi];
+    let px = offset + corner * u.cell_size;
+    let ndc = vec2<f32>(
+        px.x / u.surface_size.x * 2.0 - 1.0,
+        1.0 - px.y / u.surface_size.y * 2.0,
+    );
+    var out: VsOut;
+    out.pos = vec4<f32>(ndc, 0.0, 1.0);
+    out.uv = mix(uv_min, uv_max, corner);
+    out.bg = bg;
+    out.fg = fg;
+    return out;
+}
+
+@fragment
+fn fs(in: VsOut) -> @location(0) vec4<f32> {
+    let cov = textureSample(atlas_tex, atlas_samp, in.uv).r;
+    return vec4<f32>(mix(in.bg.rgb, in.fg.rgb, cov), 1.0);
+}
+";
+
+/// Owns the glyph atlas texture and the instanced pipeline that draws the
+/// terminal grid. One quad per cell; the fragment shader composites the
+/// glyph over the cell background by atlas coverage.
+pub(crate) struct CellRenderer {
+    atlas: GlyphAtlas,
+    space_uv: ([f32; 2], [f32; 2]),
+    pipeline: wgpu::RenderPipeline,
+    bind_group: wgpu::BindGroup,
+    uniform_buffer: wgpu::Buffer,
+    instance_buffer: wgpu::Buffer,
+    instance_capacity: usize,
+}
+
+impl CellRenderer {
+    /// Build the atlas (printable ASCII pre-rasterized and uploaded once),
+    /// the bind group, and the pipeline. `None` if no font loads.
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+    ) -> Option<Self> {
+        let mut atlas = GlyphAtlas::new(16.0)?;
+        for code in 0x20u8..0x7f {
+            let _ = atlas.glyph_uv(code as char);
+        }
+        let space_uv = atlas.uv_if_cached(' ').unwrap_or(([0.0, 0.0], [0.0, 0.0]));
+        let (atlas_w, atlas_h) = atlas.atlas_size();
+
+        let extent = wgpu::Extent3d {
+            width: atlas_w,
+            height: atlas_h,
+            depth_or_array_layers: 1,
+        };
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("glyph-atlas"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            atlas.pixels(),
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(atlas_w),
+                rows_per_image: Some(atlas_h),
+            },
+            extent,
+        );
+        let tex_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("glyph-sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
+        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("cell-uniforms"),
+            size: std::mem::size_of::<Uniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("cell-bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("cell-bg"),
+            layout: &bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&tex_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("cell-shader"),
+            source: wgpu::ShaderSource::Wgsl(CELL_SHADER.into()),
+        });
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("cell-pl"),
+            bind_group_layouts: &[&bgl],
+            push_constant_ranges: &[],
+        });
+        let instance_layout = wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<CellInstance>() as u64,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: 8,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: 24,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: 40,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: 48,
+                    shader_location: 4,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+            ],
+        };
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("cell-pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs",
+                buffers: &[instance_layout],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs",
+                targets: &[Some(format.into())],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+        });
+
+        let instance_capacity = 4096;
+        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("cell-instances"),
+            size: (instance_capacity * std::mem::size_of::<CellInstance>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        Some(Self {
+            atlas,
+            space_uv,
+            pipeline,
+            bind_group,
+            uniform_buffer,
+            instance_buffer,
+            instance_capacity,
+        })
+    }
+
+    /// Build instances from `grid` and draw them into `view`, clearing to
+    /// the default background first.
+    pub(crate) fn draw(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        grid: &crate::term_grid::TermGrid,
+        surface_w: u32,
+        surface_h: u32,
+    ) {
+        let cell_w = self.atlas.cell_w() as f32;
+        let cell_h = self.atlas.cell_h() as f32;
+        let cols = grid.columns();
+        let rows = grid.screen_lines();
+        let space_uv = self.space_uv;
+        let atlas = &self.atlas;
+        let instances = build_instances(
+            cols,
+            rows,
+            cell_w,
+            cell_h,
+            |col, row| {
+                let (ch, fg, bg) = grid.cell(row, col);
+                (ch, color_to_rgba(fg), color_to_rgba(bg))
+            },
+            |ch| atlas.uv_if_cached(ch).unwrap_or(space_uv),
+        );
+
+        let uniforms = Uniforms {
+            surface_size: [surface_w as f32, surface_h as f32],
+            cell_size: [cell_w, cell_h],
+        };
+        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
+
+        if instances.len() > self.instance_capacity {
+            self.instance_capacity = instances.len().next_power_of_two();
+            self.instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("cell-instances"),
+                size: (self.instance_capacity * std::mem::size_of::<CellInstance>()) as u64,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+        }
+        queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instances));
+
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("cell-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.04,
+                        g: 0.05,
+                        b: 0.16,
+                        a: 1.0,
+                    }),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        rpass.set_pipeline(&self.pipeline);
+        rpass.set_bind_group(0, &self.bind_group, &[]);
+        rpass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+        rpass.draw(0..6, 0..instances.len() as u32);
+    }
 }
 
 #[cfg(test)]

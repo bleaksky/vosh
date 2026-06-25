@@ -127,9 +127,7 @@ pub(crate) fn feed_bytes(bytes: &[u8]) {
 }
 
 /// Read the shared grid (None until the first feed). The renderer calls
-/// this on the main thread to build a frame. Consumed by the pipeline in
-/// M2c part 3b's wiring step.
-#[allow(dead_code)]
+/// this on the main thread to build a frame.
 pub(crate) fn with_grid<R>(f: impl FnOnce(Option<&TermGrid>) -> R) -> R {
     match grid_slot().lock() {
         Ok(slot) => f(slot.as_ref()),
