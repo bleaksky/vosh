@@ -153,6 +153,25 @@ fn push_native_size_if_changed(cols: usize, rows: usize) {
     }
 }
 
+/// The configured terminal font family stack and the atlas pixel size.
+/// Falls back to the system monospace at 14 CSS px. `scale` is the backing
+/// scale factor, so the returned px is physical pixels (crisp at retina)
+/// and the glyphs match the xterm font size.
+#[allow(clippy::cast_precision_loss)]
+fn font_atlas_params(scale: f64) -> (String, f32) {
+    let size_for = |css: f32| (css * scale as f32).max(6.0);
+    let Some(app) = APP.get() else {
+        return ("monospace".to_string(), size_for(14.0));
+    };
+    let state = app.state::<crate::commands::SharedState>();
+    let guard = state.profile.try_lock();
+    if let Ok(p) = guard {
+        (p.ui.font_family.clone(), size_for(p.ui.font_size as f32))
+    } else {
+        ("monospace".to_string(), size_for(14.0))
+    }
+}
+
 /// Install the native surface over the main window's content view.
 /// Best-effort: logs and returns on any missing handle. Runs on the main
 /// thread (the `with_webview` callback). The surface starts at a
@@ -209,7 +228,8 @@ pub(crate) fn install_probe(window: &tauri::WebviewWindow) -> Result<(), tauri::
 
             let px_w = (frame.size.width * scale).max(1.0) as u32;
             let px_h = (frame.size.height * scale).max(1.0) as u32;
-            match init_gpu(view.cast::<c_void>(), px_w, px_h) {
+            let (font_stack, font_px) = font_atlas_params(scale);
+            match init_gpu(view.cast::<c_void>(), px_w, px_h, &font_stack, font_px) {
                 Some(gpu) => {
                     let mut handle = SurfaceHandle {
                         view,
@@ -280,7 +300,13 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
     }
 }
 
-unsafe fn init_gpu(ns_view: *mut c_void, width: u32, height: u32) -> Option<GpuState> {
+unsafe fn init_gpu(
+    ns_view: *mut c_void,
+    width: u32,
+    height: u32,
+    font_stack: &str,
+    font_px: f32,
+) -> Option<GpuState> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::METAL,
         ..Default::default()
@@ -310,7 +336,8 @@ unsafe fn init_gpu(ns_view: *mut c_void, width: u32, height: u32) -> Option<GpuS
     let config = surface.get_default_config(&adapter, width, height)?;
     surface.configure(&device, &config);
 
-    let cell_renderer = crate::cell_render::CellRenderer::new(&device, &queue, config.format)?;
+    let cell_renderer =
+        crate::cell_render::CellRenderer::new(&device, &queue, config.format, font_stack, font_px)?;
 
     Some(GpuState {
         _instance: instance,
