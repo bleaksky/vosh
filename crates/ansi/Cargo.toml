@@ -8,7 +8,11 @@ description = "ANSI escape sequence parser for Vosh triggers and tests."
 rust-version.workspace = true
 
 [dependencies]
-vte = "0.13"
+# default-features off turns off vte's `no_std` feature. We only use the
+# core Parser/Perform/Params (all std-friendly), and leaving no_std on
+# unifies it across the workspace, which breaks alacritty_terminal's
+# vte::ansi::Processor (it needs the std variant with a default type param).
+vte = { version = "0.13", default-features = false }
 
 [lints]
 workspace = true

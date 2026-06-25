@@ -82,6 +82,8 @@ mod profile_config;
 mod profile_set;
 mod script_state;
 mod session;
+#[cfg(target_os = "macos")]
+mod term_grid;
 mod tick;
 mod tintin_import;
 
