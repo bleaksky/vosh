@@ -119,9 +119,20 @@ NSWindow / HWND / GtkWindow
     broke `alacritty_terminal`'s `vte::ansi::Processor`); vte is pinned to
     0.13.0. The grid's read API (cell accessors) is marked allow-dead until
     M2c consumes it.
-  - **M2c — the cell renderer.** Glyph atlas (rasterize the font once,
-    cache glyphs) + an instanced wgpu pipeline drawing cell backgrounds
-    and glyphs. 16/256/truecolor, bold/italic/underline. No scroll yet.
+  - **M2c — the cell renderer. DONE in code (needs visual check).** Built
+    in `cell_render.rs` over four commits: (1) `color_to_rgba` maps
+    alacritty named/256/truecolor to rgba; (2) `GlyphAtlas` rasterizes the
+    system monospace font (font-kit + fontdue) into an A8 slot texture;
+    (3a) `build_instances` turns grid cells into per-cell quad instances;
+    (3b) `CellRenderer` uploads the atlas as an R8Unorm texture and runs an
+    instanced pipeline whose WGSL composites fg over bg by glyph coverage,
+    wired into `native_surface::render` via `term_grid::with_grid`, the M1
+    triangle gone; (3c) the session loop calls `request_redraw` on new
+    output so text updates live (coalesced, dispatched to the main thread).
+    Color, atlas packing/rasterization, and instance layout are all
+    unit-tested. NOT yet verified: WGSL compiles only at runtime in
+    `CellRenderer::new`; glyph placement (baseline math), color fidelity,
+    and orientation (the y-flip) need eyes. No styles/scroll yet.
 - **M3 — scroll + selection.** Wheel scrollback, drag-select, copy.
 - **M4 — parity.** Themes, fonts, cursor styles, link clicks, the
   per-line trigger/highlight effects, resize/NAWS, opaque vs transparent.
@@ -135,19 +146,30 @@ is dead and we stay in Tier 1/2. Everything after M1 is "normal" work.
 
 ## Resume here
 
-Branch `native-renderer`. M1, M2a, M2b, and M2c parts 1-2 are done and
-committed. `cell_render.rs` has the color mapping (`color_to_rgba`) and
-the `GlyphAtlas` (font-kit + fontdue; `cell_w`/`cell_h`/`atlas_size`/
-`pixels`/`glyph_uv`), both unit-tested. **Next: M2c part 3** — the wgpu
-pipeline. In `native_surface.rs`/`cell_render.rs`: upload the atlas as an
-A8 texture + sampler + bind group; each frame read the global `TermGrid`
-(via a `term_grid` accessor you add — e.g. `with_grid`), build per-cell
-instances (cell rect from `cell_w`/`cell_h`, bg/fg via `color_to_rgba`,
-glyph UV via `glyph_uv`), and draw an instanced quad pass (bg) + glyph
-pass, replacing the test triangle in `render`. Add a redraw trigger when
-`feed_bytes` updates the grid (e.g. via `run_on_main_thread`), since
-`render` currently only fires on install/resize. Then remove the
-`#![allow(dead_code)]` from `cell_render.rs`. Two visual checks will be
-pending James: M2a pane alignment, and M2c glyph placement/legibility.
-Surface stays gated behind `vosh.nativesurface`. Check `git log --oneline`
-before starting.
+Branch `native-renderer`. **All of M1 and M2 are done in code** (commits
+`ae7d4e6` M2a, `78d00bb` M2b, `3379f55`/`a8594cb`/`6cb5125`/`2c2ceaf`/
+`246efde`/`c88f0d3` M2c). The native wgpu surface renders the live
+terminal grid. The autonomous loop stopped here on purpose: everything
+past M2 builds on the renderer, and the renderer's pixels have not been
+seen yet, so the next move is James's eyes, not more code.
+
+**Verify M2 first.** In the running app's DevTools:
+`localStorage.setItem('vosh.nativesurface','1')` then reload and connect.
+Expected: the terminal pane is drawn by the native surface showing live
+MUD text — correct glyphs, colors, top-left origin, upright, tracking
+window resize. Set the flag to `0` (or remove it) to fall back to xterm.
+
+Likely failure modes if it looks wrong:
+
+- Blank/hidden surface: `CellRenderer::new` or the WGSL failed (naga
+  validates at runtime). Check logs for `native-surface` warnings.
+- Text upside-down or shifted: the y-flip in the shader / `set_bounds`.
+- Glyphs mispositioned in their cells: the baseline math in
+  `rasterize_into` (`cell_render.rs`).
+- Wrong colors: `color_to_rgba` palette or fg/bg swapped in `draw`.
+- Non-ASCII shows blank: expected — only printable ASCII is pre-uploaded;
+  dynamic atlas re-upload is a later refinement.
+
+**Then M3** — scroll (wheel through `term_grid` scrollback) + selection
+(drag to select cells, copy). After that, M4 styles/themes, M5 native
+split-scrollback, M6 cross-platform. Check `git log --oneline` first.
