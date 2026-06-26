@@ -23,7 +23,7 @@ import { hexToRgba } from '../lib/mapPalette';
 // Tier 3: the native wgpu terminal surface is opt-in until it reaches
 // parity with xterm. TEMP: default-on for native-renderer testing; commit
 // state is `=== '1'` (opt-in).
-function nativeSurfaceEnabled(): boolean {
+export function nativeSurfaceEnabled(): boolean {
   return typeof localStorage !== 'undefined' && localStorage.getItem('vosh.nativesurface') !== '0';
 }
 

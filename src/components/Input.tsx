@@ -25,7 +25,9 @@ import {
 import { canonicalKeyFromEvent } from '../lib/macroKeys';
 import { recentNames } from '../lib/recentNames';
 import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { LineChip } from './LineChip';
+import { nativeSurfaceEnabled } from './Terminal';
 
 export interface InputHandle {
   focus: () => void;
@@ -588,6 +590,11 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     if (event.key === 'PageUp' || event.key === 'PageDown') {
       event.preventDefault();
       onScrollTerminal?.(event.key === 'PageUp' ? -1 : 1);
+      if (nativeSurfaceEnabled()) {
+        void invoke('native_surface_scroll', {
+          kind: event.key === 'PageUp' ? 'pageup' : 'pagedown',
+        }).catch(() => {});
+      }
       return;
     }
 
@@ -602,6 +609,9 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         return;
       }
       onExitSplit?.();
+      if (nativeSurfaceEnabled()) {
+        void invoke('native_surface_scroll', { kind: 'bottom' }).catch(() => {});
+      }
       return;
     }
 
