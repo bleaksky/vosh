@@ -20,9 +20,11 @@ import { WordWrapper } from '../lib/wordWrap';
 import { ingestRecentNames } from '../lib/recentNames';
 import { hexToRgba } from '../lib/mapPalette';
 
-// Tier 3: the native wgpu terminal surface is opt-in until it reaches
-// parity with xterm. TEMP: default-on for native-renderer testing; commit
-// state is `=== '1'` (opt-in).
+// Tier 3: the native wgpu terminal surface. Default-on while it is the
+// daily driver during development. Before merging to main, flip to
+// `=== '1'` so xterm stays the default and native is opt-in — it is not yet
+// at full parity (find-match highlights, URL link clicks, and the
+// Windows/Linux surfaces are still pending).
 export function nativeSurfaceEnabled(): boolean {
   return typeof localStorage !== 'undefined' && localStorage.getItem('vosh.nativesurface') !== '0';
 }
