@@ -832,14 +832,6 @@ async fn handle_event(
             if !display_batch.is_empty() {
                 perf.output_emits += 1;
                 perf.output_emit_bytes += display_batch.len() as u64;
-                // Tier 3: feed the native terminal grid the same ANSI
-                // bytes xterm receives, so the wgpu renderer can draw them,
-                // then ask the surface to repaint.
-                #[cfg(target_os = "macos")]
-                {
-                    crate::term_grid::feed_bytes(&display_batch);
-                    crate::native_surface::request_redraw();
-                }
                 emit_output(app, display_batch);
             }
             // Flush this read's log rows in one transaction under one
@@ -1455,6 +1447,15 @@ impl OutputPayload {
 }
 
 fn emit_output(app: &AppHandle, bytes: Vec<u8>) {
+    // Tier 3: feed the native terminal grid the same bytes xterm receives,
+    // for every output path (line pipeline AND the prompt pipeline's gag
+    // clearing / replaced text / echoes), then repaint. This is the single
+    // choke point so nothing reaches xterm without also reaching the grid.
+    #[cfg(target_os = "macos")]
+    {
+        crate::term_grid::feed_bytes(&bytes);
+        crate::native_surface::request_redraw();
+    }
     if let Err(e) = app.emit("session://output", OutputPayload::from_bytes(&bytes)) {
         warn!(error = %e, "failed to emit session output");
     }
