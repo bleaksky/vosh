@@ -17,8 +17,18 @@ use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
+use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Term};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
+
+/// Render-relevant cell attributes, decoupled from alacritty's `Flags`.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct CellFlags {
+    pub bold: bool,
+    pub dim: bool,
+    pub inverse: bool,
+    pub underline: bool,
+}
 
 /// `Term` requires an event listener for bell, title, clipboard, and
 /// similar callbacks. The renderer only reads the grid, so every event
@@ -124,7 +134,11 @@ impl TermGrid {
     /// negatives are scrollback). Out-of-range lines read as blank. Lets
     /// the split renderer read the top and bottom regions at different
     /// offsets.
-    pub(crate) fn cell_at_line(&self, grid_line: i32, col: usize) -> (char, Color, Color) {
+    pub(crate) fn cell_at_line(
+        &self,
+        grid_line: i32,
+        col: usize,
+    ) -> (char, Color, Color, CellFlags) {
         let grid = self.term.grid();
         let target = Line(grid_line);
         if target < grid.topmost_line() || target > grid.bottommost_line() {
@@ -132,10 +146,18 @@ impl TermGrid {
                 ' ',
                 Color::Named(NamedColor::Foreground),
                 Color::Named(NamedColor::Background),
+                CellFlags::default(),
             );
         }
         let cell = &grid[target][Column(col)];
-        (cell.c, cell.fg, cell.bg)
+        let flags = cell.flags;
+        let cell_flags = CellFlags {
+            bold: flags.contains(Flags::BOLD),
+            dim: flags.contains(Flags::DIM),
+            inverse: flags.contains(Flags::INVERSE),
+            underline: flags.intersects(Flags::ALL_UNDERLINES),
+        };
+        (cell.c, cell.fg, cell.bg, cell_flags)
     }
 
     /// Current scrollback display offset (0 = live tail).

@@ -17,6 +17,8 @@
 
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
 
+use crate::term_grid::CellFlags;
+
 /// Linear-ish rgba in 0..1, ready for a wgpu vertex/instance buffer.
 pub(crate) type Rgba = [f32; 4];
 
@@ -211,6 +213,44 @@ pub(crate) fn color_to_rgba(color: Color) -> Rgba {
         Color::Indexed(i) => indexed_to_rgb(i),
     };
     rgb_to_rgba(rgb)
+}
+
+/// Bold promotes a normal named color to its bright variant (the MUD-common
+/// reading of bold); other colors are unchanged.
+fn brighten(color: Color) -> Color {
+    let Color::Named(named) = color else {
+        return color;
+    };
+    Color::Named(match named {
+        NamedColor::Black => NamedColor::BrightBlack,
+        NamedColor::Red => NamedColor::BrightRed,
+        NamedColor::Green => NamedColor::BrightGreen,
+        NamedColor::Yellow => NamedColor::BrightYellow,
+        NamedColor::Blue => NamedColor::BrightBlue,
+        NamedColor::Magenta => NamedColor::BrightMagenta,
+        NamedColor::Cyan => NamedColor::BrightCyan,
+        NamedColor::White => NamedColor::BrightWhite,
+        NamedColor::Foreground => NamedColor::BrightForeground,
+        other => other,
+    })
+}
+
+/// Apply cell attributes: bold brightens fg, dim darkens it, inverse swaps
+/// fg/bg. Returns (fg, bg) rgba.
+fn styled_colors(fg: Color, bg: Color, flags: CellFlags) -> (Rgba, Rgba) {
+    let fg_color = if flags.bold { brighten(fg) } else { fg };
+    let mut fg_rgba = color_to_rgba(fg_color);
+    if flags.dim {
+        fg_rgba[0] *= 0.6;
+        fg_rgba[1] *= 0.6;
+        fg_rgba[2] *= 0.6;
+    }
+    let bg_rgba = color_to_rgba(bg);
+    if flags.inverse {
+        (bg_rgba, fg_rgba)
+    } else {
+        (fg_rgba, bg_rgba)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -856,6 +896,7 @@ impl CellRenderer {
             b: 0x5e,
         }));
 
+        let mut underlines: Vec<(usize, usize, Rgba)> = Vec::new();
         let mut instances = build_instances(
             cols,
             rows,
@@ -867,16 +908,30 @@ impl CellRenderer {
                 } else {
                     row as i32 - offset // top region / non-split (scrolled)
                 };
-                let (ch, fg, bg) = grid.cell_at_line(grid_line, col);
-                let bg_rgba = if cell_in_selection(selection, grid_line, col) {
-                    selection_bg
-                } else {
-                    color_to_rgba(bg)
-                };
-                (ch, color_to_rgba(fg), bg_rgba)
+                let (ch, fg, bg, flags) = grid.cell_at_line(grid_line, col);
+                let (fg_rgba, mut bg_rgba) = styled_colors(fg, bg, flags);
+                if cell_in_selection(selection, grid_line, col) {
+                    bg_rgba = selection_bg;
+                }
+                if flags.underline {
+                    underlines.push((col, row, fg_rgba));
+                }
+                (ch, fg_rgba, bg_rgba)
             },
             |ch| atlas.uv_if_cached(ch).unwrap_or(space_uv),
         );
+
+        // Underline quads: a thin line at the bottom of each underlined cell.
+        for (col, row, color) in underlines {
+            instances.push(CellInstance {
+                offset: [col as f32 * cell_w, (row + 1) as f32 * cell_h - 2.0],
+                size: [cell_w, 1.5],
+                bg: color,
+                fg: color,
+                uv_min: space_uv.0,
+                uv_max: space_uv.1,
+            });
+        }
 
         // Thin full-width divider line at the split boundary, overlaying
         // the cells (drawn last). No cell row is consumed.
