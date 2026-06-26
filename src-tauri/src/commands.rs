@@ -885,6 +885,55 @@ pub(crate) fn native_surface_copy() {
     crate::native_surface::request_copy();
 }
 
+/// Parse a `#rrggbb` (or `rrggbb`) hex color.
+#[cfg(target_os = "macos")]
+fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
+    let s = s.trim().trim_start_matches('#');
+    if s.len() < 6 {
+        return None;
+    }
+    Some((
+        u8::from_str_radix(&s[0..2], 16).ok()?,
+        u8::from_str_radix(&s[2..4], 16).ok()?,
+        u8::from_str_radix(&s[4..6], 16).ok()?,
+    ))
+}
+
+/// Tier 3 native renderer (macOS): set the surface theme colors so the
+/// background, foreground, and selection follow the active Vosh theme.
+/// Colors are `#rrggbb`. A no-op elsewhere.
+#[tauri::command]
+pub(crate) fn native_surface_set_theme(background: String, foreground: String, selection: String) {
+    #[cfg(target_os = "macos")]
+    {
+        if let (Some(bg), Some(fg), Some(sel)) = (
+            parse_hex(&background),
+            parse_hex(&foreground),
+            parse_hex(&selection),
+        ) {
+            crate::cell_render::set_theme(bg, fg, sel);
+            crate::native_surface::request_redraw();
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (background, foreground, selection);
+    }
+}
+
+/// Tier 3 native renderer (macOS): rebuild the surface atlas at a new font
+/// family and size (CSS px) so it matches the configured Vosh font. A no-op
+/// elsewhere.
+#[tauri::command]
+pub(crate) fn native_surface_set_font(family: String, size: u32) {
+    #[cfg(target_os = "macos")]
+    crate::native_surface::request_set_font(family, size);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (family, size);
+    }
+}
+
 /// Tier 3 native renderer (macOS): keyboard scroll. `kind` is "pageup",
 /// "pagedown", or "bottom". Scrolls the grid and repaints; a no-op
 /// elsewhere.

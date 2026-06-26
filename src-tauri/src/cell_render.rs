@@ -15,6 +15,8 @@
 // Geometry code reads clearest with x/y/w/h destructures.
 #![allow(clippy::many_single_char_names)]
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
 
 use crate::term_grid::CellFlags;
@@ -118,6 +120,55 @@ const ANSI_16: [Rgb; 16] = [
     },
 ];
 
+// Theme colors reported by the frontend (0 = unset, use the defaults).
+// Packed 0x01_rr_gg_bb so a fully-black theme color is still "set".
+static THEME_BG: AtomicU32 = AtomicU32::new(0);
+static THEME_FG: AtomicU32 = AtomicU32::new(0);
+static THEME_SEL: AtomicU32 = AtomicU32::new(0);
+
+fn pack_rgb(r: u8, g: u8, b: u8) -> u32 {
+    0x0100_0000 | (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b)
+}
+
+fn unpack_rgb(bits: u32, default: Rgb) -> Rgb {
+    if bits == 0 {
+        default
+    } else {
+        Rgb {
+            r: (bits >> 16) as u8,
+            g: (bits >> 8) as u8,
+            b: bits as u8,
+        }
+    }
+}
+
+/// Set the terminal surface theme colors (background, foreground,
+/// selection), reported by the frontend on theme change.
+pub(crate) fn set_theme(bg: (u8, u8, u8), fg: (u8, u8, u8), sel: (u8, u8, u8)) {
+    THEME_BG.store(pack_rgb(bg.0, bg.1, bg.2), Ordering::Release);
+    THEME_FG.store(pack_rgb(fg.0, fg.1, fg.2), Ordering::Release);
+    THEME_SEL.store(pack_rgb(sel.0, sel.1, sel.2), Ordering::Release);
+}
+
+fn theme_bg() -> Rgb {
+    unpack_rgb(THEME_BG.load(Ordering::Acquire), DEFAULT_BG)
+}
+
+fn theme_fg() -> Rgb {
+    unpack_rgb(THEME_FG.load(Ordering::Acquire), DEFAULT_FG)
+}
+
+fn theme_selection() -> Rgb {
+    unpack_rgb(
+        THEME_SEL.load(Ordering::Acquire),
+        Rgb {
+            r: 0x2a,
+            g: 0x3b,
+            b: 0x5e,
+        },
+    )
+}
+
 // The wgpu surface is sRGB, so the GPU sRGB-encodes whatever the fragment
 // shader writes. Our palette values are already sRGB (xterm hex), so we
 // linearize them here; the encode on write then round-trips to the
@@ -165,8 +216,8 @@ fn named_to_rgb(n: NamedColor) -> Rgb {
         NamedColor::BrightMagenta => ANSI_16[13],
         NamedColor::BrightCyan => ANSI_16[14],
         NamedColor::BrightWhite => ANSI_16[15],
-        NamedColor::Foreground | NamedColor::BrightForeground | NamedColor::Cursor => DEFAULT_FG,
-        NamedColor::Background => DEFAULT_BG,
+        NamedColor::Foreground | NamedColor::BrightForeground | NamedColor::Cursor => theme_fg(),
+        NamedColor::Background => theme_bg(),
         NamedColor::DimBlack => dim(ANSI_16[0]),
         NamedColor::DimRed => dim(ANSI_16[1]),
         NamedColor::DimGreen => dim(ANSI_16[2]),
@@ -175,7 +226,7 @@ fn named_to_rgb(n: NamedColor) -> Rgb {
         NamedColor::DimMagenta => dim(ANSI_16[5]),
         NamedColor::DimCyan => dim(ANSI_16[6]),
         NamedColor::DimWhite => dim(ANSI_16[7]),
-        NamedColor::DimForeground => dim(DEFAULT_FG),
+        NamedColor::DimForeground => dim(theme_fg()),
     }
 }
 
@@ -888,13 +939,9 @@ impl CellRenderer {
         }));
 
         // Selection highlight: compute the range once, recolor selected
-        // cell backgrounds.
+        // cell backgrounds with the theme selection color.
         let selection = grid.selection_bounds();
-        let selection_bg = color_to_rgba(Color::Spec(Rgb {
-            r: 0x2a,
-            g: 0x3b,
-            b: 0x5e,
-        }));
+        let selection_bg = rgb_to_rgba(theme_selection());
 
         let mut underlines: Vec<(usize, usize, Rgba)> = Vec::new();
         let mut instances = build_instances(
