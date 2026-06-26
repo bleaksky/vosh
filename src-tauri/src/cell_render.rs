@@ -359,8 +359,11 @@ impl GlyphAtlas {
         let line = font.horizontal_line_metrics(px)?;
         let cell_h = (line.new_line_size.ceil() as u32).max(1);
         let cell_w = (font.metrics('M', px).advance_width.ceil() as u32).max(1);
-        let cols = 16;
-        let rows = 16;
+        // 24x24 = 576 slots: printable ASCII plus the box-drawing, block,
+        // and accented glyphs a MUD session accumulates, rasterized on
+        // demand (see the dynamic-atlas pass in CellRenderer::draw).
+        let cols = 24;
+        let rows = 24;
         let atlas_w = cols * cell_w;
         let atlas_h = rows * cell_h;
         Some(Self {
@@ -665,6 +668,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
 /// glyph over the cell background by atlas coverage.
 pub(crate) struct CellRenderer {
     atlas: GlyphAtlas,
+    texture: wgpu::Texture,
     space_uv: ([f32; 2], [f32; 2]),
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
@@ -867,6 +871,7 @@ impl CellRenderer {
 
         Some(Self {
             atlas,
+            texture,
             space_uv,
             pipeline,
             bind_group,
@@ -912,7 +917,6 @@ impl CellRenderer {
         let cols = grid.columns();
         let rows = grid.screen_lines();
         let space_uv = self.space_uv;
-        let atlas = &self.atlas;
 
         // Split-scrollback: when scrolled up, draw the top region from the
         // scroll offset (frozen history) and the bottom from the live tail
@@ -925,6 +929,49 @@ impl CellRenderer {
         } else {
             rows
         };
+
+        // Dynamic atlas: rasterize any visible glyph not yet cached, then
+        // re-upload the atlas texture if it grew. Steady state (every glyph
+        // already cached) costs only the lookups, no upload.
+        let mut atlas_grew = false;
+        for row in 0..rows {
+            for col in 0..cols {
+                let grid_line = if split && row >= top_rows {
+                    row as i32
+                } else {
+                    row as i32 - offset
+                };
+                let (ch, ..) = grid.cell_at_line(grid_line, col);
+                if ch != ' ' && self.atlas.uv_if_cached(ch).is_none() {
+                    self.atlas.glyph_uv(ch);
+                    atlas_grew = true;
+                }
+            }
+        }
+        if atlas_grew {
+            let (aw, ah) = self.atlas.atlas_size();
+            queue.write_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &self.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                self.atlas.pixels(),
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(aw),
+                    rows_per_image: Some(ah),
+                },
+                wgpu::Extent3d {
+                    width: aw,
+                    height: ah,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+
+        let atlas = &self.atlas;
         // The exact fraction of surface height where the divider is drawn,
         // so the cursor rect lines up with the rendered line.
         let divider_frac = if split {
