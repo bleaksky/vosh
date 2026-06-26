@@ -74,7 +74,10 @@ export function tokenizeTemplate(template: string): TemplateSegment[] {
       const closeIdx = template.indexOf('}', i + 2);
       if (closeIdx > i + 2) {
         const rawName = template.slice(i + 2, closeIdx);
-        if (/^[a-z0-9_]+$/i.test(rawName)) {
+        // Allow `:` `,` `#` so color directives like `%{c:196}`,
+        // `%{c:255,128,0}`, and `%{c:#ff8800}` tokenize. Plain names
+        // (the only thing earlier templates used) still match.
+        if (/^[a-z0-9_:,#]+$/i.test(rawName)) {
           if (buffer.length > 0) {
             out.push({ kind: 'text', text: buffer });
             buffer = '';

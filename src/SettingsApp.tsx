@@ -537,8 +537,9 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           aria-label="custom prompt template"
         />
         <span className="settings-paste-hint">
-          tokens %hp %mn %mv %pct_hp %hp_bar and %name_bar:WIDTH:COLOR. needs a prompt-capture
-          trigger that gags and emits vars.
+          {
+            'tokens %hp %pct_hp %hp_bar:W:COLOR %c_hp (auto) %c_red %c_196 %{c:255,128,0} %{c:#ff8800} %c_reset %time %date. needs a prompt-capture trigger that gags and emits vars.'
+          }
         </span>
       </Row>
       <Row label="font">

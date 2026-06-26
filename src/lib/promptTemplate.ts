@@ -16,6 +16,16 @@
 //                         Named colors: green, red, yellow, blue,
 //                         cyan, magenta, white.
 //   %pct_name           — current/max as an integer percent.
+//   %c_<spec>           — set the text color until reset. The spec is a
+//   %{c:<spec>}           named color (red green yellow blue cyan magenta
+//                         white gray), a 256 index (`%{c:196}`), truecolor
+//                         (`%{c:255,128,0}` or `%{c:#ff8800}`), or a stat
+//                         name to auto-color by its percent (`%c_hp`). The
+//                         `%{...}` form is required for the colon/comma
+//                         syntaxes; `%c_red` and `%c_196` also work bare.
+//   %c_reset            — clear color back to the default.
+//   %time               — current local time, HH:MM:SS.
+//   %date               — current local date, YYYY-MM-DD.
 //
 // `name` is the current value; `mname` (or fallback `max_name`,
 // `name_max`, `maxname`) is the cap.
@@ -113,7 +123,60 @@ function consumeBarParams(tail: string): {
   return result;
 }
 
+// Resolve a color spec to an SGR sequence. Accepts a named color, `reset`,
+// a 256-palette index (`196`), truecolor `r,g,b` or `#rrggbb`/`rrggbb`, or a
+// stat name (auto-color by its percent). Returns null when unrecognized.
+function colorCodeFromSpec(spec: string, vars: PromptVars): string | null {
+  if (spec === 'reset') return RESET;
+  if (COLOR_FG[spec]) return COLOR_FG[spec];
+  if (/^\d{1,3}$/.test(spec)) {
+    const n = Number(spec);
+    if (n >= 0 && n <= 255) return `\x1b[38;5;${n}m`;
+  }
+  const hex = /^#?([0-9a-f]{6})$/i.exec(spec);
+  if (hex) {
+    const r = parseInt(hex[1].slice(0, 2), 16);
+    const g = parseInt(hex[1].slice(2, 4), 16);
+    const b = parseInt(hex[1].slice(4, 6), 16);
+    return `\x1b[38;2;${r};${g};${b}m`;
+  }
+  const rgb = /^(\d{1,3}),(\d{1,3}),(\d{1,3})$/.exec(spec);
+  if (rgb) {
+    const clamp = (s: string) => Math.min(255, Math.max(0, Number(s)));
+    return `\x1b[38;2;${clamp(rgb[1])};${clamp(rgb[2])};${clamp(rgb[3])}m`;
+  }
+  const value = parseNumber(vars[spec]);
+  const max = lookupMax(vars, spec);
+  if (value !== null && max !== null && max > 0) {
+    return colorForPercent(Math.max(0, Math.min(1, value / max)));
+  }
+  return null;
+}
+
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
+
+function currentTime(): string {
+  const d = new Date();
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+function currentDate(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
 function renderPlainToken(name: string, raw: string, vars: PromptVars): string {
+  // Color directives. `%c_reset` / `%{c:reset}` clears. The spec after
+  // `c_` or `c:` may be a named color, a 256 index, `r,g,b`, `#rrggbb`, or
+  // a stat name (auto-color by its percent). E.g. `%{c:255,128,0}`,
+  // `%c_196`, `%c_hp%hp/%maxhp%c_reset`.
+  if (name.startsWith('c_') || name.startsWith('c:')) {
+    return colorCodeFromSpec(name.slice(2), vars) ?? raw;
+  }
+  if (name === 'time') return currentTime();
+  if (name === 'date') return currentDate();
   if (name.startsWith('pct_')) {
     const base = name.slice(4);
     const value = parseNumber(vars[base]);
@@ -164,5 +227,8 @@ export function renderPromptTemplate(template: string, vars: PromptVars): string
     }
     out += renderPlainToken(segment.name, segment.raw, vars);
   }
-  return out;
+  // Always reset-terminate so an unclosed color (e.g. a template still
+  // being typed, before `%c_reset` is added) cannot bleed into the
+  // server output that follows the prompt.
+  return out.length > 0 ? out + RESET : out;
 }

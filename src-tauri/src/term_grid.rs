@@ -540,6 +540,31 @@ mod tests {
     }
 
     #[test]
+    fn semicolon_truecolor_sgr_sets_spec_fg() {
+        use alacritty_terminal::vte::ansi::Rgb;
+        let mut g = TermGrid::new(80, 24);
+        g.feed(b"\x1b[38;2;100;100;100mX");
+        assert_eq!(
+            cell_fg(&g, 0, 0),
+            Color::Spec(Rgb {
+                r: 100,
+                g: 100,
+                b: 100
+            })
+        );
+    }
+
+    #[test]
+    fn bracket_right_after_truecolor_renders() {
+        let mut g = TermGrid::new(80, 24);
+        g.feed(b"\x1b[38;2;100;100;100m[\x1b[0mABC");
+        assert_eq!(g.char_at(0, 0), '[');
+        assert_eq!(g.char_at(0, 1), 'A');
+        assert_eq!(g.char_at(0, 2), 'B');
+        assert_eq!(g.char_at(0, 3), 'C');
+    }
+
+    #[test]
     fn long_line_wraps_to_the_next_row() {
         let mut g = TermGrid::new(4, 24);
         g.feed(b"abcdef");
