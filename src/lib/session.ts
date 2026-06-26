@@ -623,6 +623,9 @@ export interface UiConfig {
   /** Override color for the split-scrollback divider. Empty/undefined
    *  means use the theme default (--c-border). */
   split_divider_color: string | null;
+  /** Override color for locally-echoed sent input. Empty/undefined
+   *  means no recoloring (default terminal foreground). */
+  input_echo_color: string | null;
   /** When true, left/right panel zones extend the full window height
    *  and the input + status bar live only under the terminal column. */
   side_panels_fill_height: boolean;
@@ -794,6 +797,7 @@ async function fetchUiConfig(): Promise<UiConfig> {
     theme_terminal_colors?: boolean;
     custom_themes?: CustomTheme[];
     split_divider_color?: string | null;
+    input_echo_color?: string | null;
     side_panels_fill_height?: boolean;
     paste_line_delay_ms?: number;
     spellcheck_prompt?: boolean;
@@ -818,6 +822,10 @@ async function fetchUiConfig(): Promise<UiConfig> {
     split_divider_color:
       typeof cfg.split_divider_color === 'string' && cfg.split_divider_color.length > 0
         ? cfg.split_divider_color
+        : null,
+    input_echo_color:
+      typeof cfg.input_echo_color === 'string' && cfg.input_echo_color.length > 0
+        ? cfg.input_echo_color
         : null,
     side_panels_fill_height: Boolean(cfg.side_panels_fill_height),
     paste_line_delay_ms:
@@ -989,6 +997,11 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     prev?.split_divider_color,
   );
   await emitChanged(
+    'vosh://input-echo-color-changed',
+    config.input_echo_color,
+    prev?.input_echo_color,
+  );
+  await emitChanged(
     'vosh://side-panels-fill-height-changed',
     config.side_panels_fill_height,
     prev?.side_panels_fill_height,
@@ -1041,6 +1054,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
       theme_terminal_colors: config.theme_terminal_colors,
       custom_themes: config.custom_themes,
       split_divider_color: config.split_divider_color,
+      input_echo_color: config.input_echo_color,
       side_panels_fill_height: config.side_panels_fill_height,
       paste_line_delay_ms: config.paste_line_delay_ms,
       spellcheck_prompt: config.spellcheck_prompt,
