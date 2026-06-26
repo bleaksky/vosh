@@ -168,6 +168,12 @@ pub(crate) struct UiConfig {
     /// CSS color is accepted; e.g. `#ff00ff`, `rgb(255, 0, 0)`.
     #[serde(default)]
     pub split_divider_color: Option<String>,
+    /// CSS color applied to locally-echoed sent input so the user can
+    /// spot their own typed commands in the scrollback. Empty or
+    /// missing means no recoloring (default terminal foreground). Any
+    /// `#rrggbb` hex.
+    #[serde(default)]
+    pub input_echo_color: Option<String>,
     /// When true, the left and right panel zones extend the full
     /// height of the window and the terminal input + status bar live
     /// only under the terminal column. When false (default), input
@@ -501,6 +507,7 @@ impl Default for UiConfig {
             theme_terminal_colors: false,
             custom_themes: Vec::new(),
             split_divider_color: None,
+            input_echo_color: None,
             side_panels_fill_height: false,
             paste_line_delay_ms: default_paste_line_delay_ms(),
             spellcheck_prompt: false,

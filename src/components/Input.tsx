@@ -78,6 +78,19 @@ function looksLikeChat(line: string): boolean {
   return CHAT_PREFIXES.some((re) => re.test(trimmed));
 }
 
+// Wrap an echoed input line in a truecolor SGR sequence so the user can
+// spot their own commands. Returns the line unchanged when no color is set
+// or the hex cannot be parsed. The reset closes before the trailing CRLF.
+function colorizeEcho(line: string, color: string | null): string {
+  if (!color) return line;
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(color.trim());
+  if (!m) return line;
+  const r = parseInt(m[1], 16);
+  const g = parseInt(m[2], 16);
+  const b = parseInt(m[3], 16);
+  return `\x1b[38;2;${r};${g};${b}m${line}\x1b[0m`;
+}
+
 export const Input = forwardRef<InputHandle, Props>(function Input(
   { enabled, onError, onLocalEcho, onScrollTerminal, onExitSplit }: Props,
   ref,
@@ -207,16 +220,21 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // Paste-line delay (ms). Same load + subscribe pattern as keepLast
   // so the indicator/pacing picks up Settings edits without a relaunch.
   const pasteDelayRef = useRef<number>(500);
+  // Color applied to locally-echoed sent input (null = default fg). Same
+  // load + subscribe pattern as keepLast.
+  const echoColorRef = useRef<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     let unlistenKeep: (() => void) | undefined;
     let unlistenPaste: (() => void) | undefined;
     let unlistenSpell: (() => void) | undefined;
+    let unlistenEcho: (() => void) | undefined;
     getUiConfig()
       .then((cfg) => {
         if (cancelled) return;
         keepLastRef.current = cfg.keep_last_command;
         pasteDelayRef.current = cfg.paste_line_delay_ms;
+        echoColorRef.current = cfg.input_echo_color;
         setSpellcheckPrompt(cfg.spellcheck_prompt);
       })
       .catch(() => {});
@@ -241,11 +259,19 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       if (cancelled) fn();
       else unlistenSpell = fn;
     });
+    listen<string | null>('vosh://input-echo-color-changed', (event) => {
+      const next = event.payload;
+      echoColorRef.current = typeof next === 'string' && next.length > 0 ? next : null;
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlistenEcho = fn;
+    });
     return () => {
       cancelled = true;
       unlistenKeep?.();
       unlistenPaste?.();
       unlistenSpell?.();
+      unlistenEcho?.();
     };
   }, []);
 
@@ -473,7 +499,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     if (passwordMode) {
       onLocalEcho?.('\r\n');
     } else if (!isQuickKey) {
-      onLocalEcho?.(`${line}\r\n`);
+      onLocalEcho?.(`${colorizeEcho(line, echoColorRef.current)}\r\n`);
     }
     try {
       await sendInput(line);

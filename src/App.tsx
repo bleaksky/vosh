@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Terminal, type TerminalHandle } from './components/Terminal';
+import { invoke } from '@tauri-apps/api/core';
+import { Terminal, nativeSurfaceEnabled, type TerminalHandle } from './components/Terminal';
 import { Input, type InputHandle } from './components/Input';
 import { Connect, type ConnectionStatus } from './components/Connect';
 import { TopBar } from './components/TopBar';
@@ -1041,6 +1042,11 @@ function App() {
         // splitOpen=true and onReady; the optional chain absorbs
         // that gap.
         historyTermRef.current?.write(text);
+        // Mirror into the native grid so typed commands show on the
+        // native surface too (it is fed only backend output otherwise).
+        if (nativeSurfaceEnabled()) {
+          void invoke('native_surface_echo', { text }).catch(() => {});
+        }
       }}
       onScrollTerminal={(pages) => {
         // Split-scrollback gesture. The live pane (termRef) stays

@@ -192,6 +192,7 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
       </div>
 
       <SplitDividerRow config={config} setConfig={setConfig} onError={onError} />
+      <InputEchoColorRow config={config} setConfig={setConfig} onError={onError} />
     </div>
   );
 }
@@ -216,6 +217,47 @@ function SplitDividerRow({ config, setConfig, onError }: Props) {
           value={normalizeForColorInput(value)}
           onChange={(e) => update(e.target.value)}
           aria-label="split divider color"
+        />
+        <input
+          type="text"
+          className="settings-color-text"
+          spellCheck={false}
+          placeholder="theme default (#rrggbb, rgba, named)"
+          value={value}
+          onChange={(e) => update(e.target.value || null)}
+        />
+        <button
+          type="button"
+          className="settings-btn settings-btn-mute"
+          onClick={() => update(null)}
+        >
+          [clear]
+        </button>
+      </span>
+    </div>
+  );
+}
+
+function InputEchoColorRow({ config, setConfig, onError }: Props) {
+  if (!config) return null;
+  const value = config.input_echo_color ?? '';
+  const update = (next: string | null) => {
+    const updated: UiConfig = { ...config, input_echo_color: next };
+    setConfig(() => updated);
+    void setUiConfig(updated).catch((e) => onError(String(e)));
+    // Cross-window emit so the running main window picks up the
+    // new color without a relaunch.
+    void emit('vosh://input-echo-color-changed', next);
+  };
+  return (
+    <div className="settings-row">
+      <span className="settings-row-label">sent command color</span>
+      <span className="settings-color-row">
+        <input
+          type="color"
+          value={normalizeForColorInput(value)}
+          onChange={(e) => update(e.target.value)}
+          aria-label="sent command color"
         />
         <input
           type="text"
