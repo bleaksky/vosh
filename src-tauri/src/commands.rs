@@ -877,6 +877,14 @@ pub(crate) fn native_surface_set_bounds(
     }
 }
 
+/// Tier 3 native renderer (macOS): copy the current selection to the
+/// clipboard. Used by the Cmd+C / Ctrl+C path; a no-op elsewhere.
+#[tauri::command]
+pub(crate) fn native_surface_copy() {
+    #[cfg(target_os = "macos")]
+    crate::native_surface::request_copy();
+}
+
 /// Tier 3 native renderer (macOS): keyboard scroll. `kind` is "pageup",
 /// "pagedown", or "bottom". Scrolls the grid and repaints; a no-op
 /// elsewhere.

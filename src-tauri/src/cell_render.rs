@@ -499,6 +499,17 @@ fn build_instances(
     out
 }
 
+/// Line-major inclusive containment of a cell in a selection range given as
+/// start and end line/column.
+fn cell_in_selection(bounds: Option<(i32, usize, i32, usize)>, line: i32, col: usize) -> bool {
+    match bounds {
+        Some((sl, sc, el, ec)) => {
+            (line > sl || (line == sl && col >= sc)) && (line < el || (line == el && col <= ec))
+        }
+        None => false,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // wgpu cell renderer
 // ---------------------------------------------------------------------------
@@ -786,6 +797,12 @@ impl CellRenderer {
         (cols, rows)
     }
 
+    /// Atlas cell size in pixels, so the mouse handler can map a point to a
+    /// grid cell.
+    pub(crate) fn cell_size_px(&self) -> (f32, f32) {
+        (self.atlas.cell_w() as f32, self.atlas.cell_h() as f32)
+    }
+
     /// Build instances from `grid` and draw them into `view`, clearing to
     /// the default background first.
     pub(crate) fn draw(
@@ -830,6 +847,15 @@ impl CellRenderer {
             b: 0x4c,
         }));
 
+        // Selection highlight: compute the range once, recolor selected
+        // cell backgrounds.
+        let selection = grid.selection_bounds();
+        let selection_bg = color_to_rgba(Color::Spec(Rgb {
+            r: 0x2a,
+            g: 0x3b,
+            b: 0x5e,
+        }));
+
         let mut instances = build_instances(
             cols,
             rows,
@@ -842,7 +868,12 @@ impl CellRenderer {
                     row as i32 - offset // top region / non-split (scrolled)
                 };
                 let (ch, fg, bg) = grid.cell_at_line(grid_line, col);
-                (ch, color_to_rgba(fg), color_to_rgba(bg))
+                let bg_rgba = if cell_in_selection(selection, grid_line, col) {
+                    selection_bg
+                } else {
+                    color_to_rgba(bg)
+                };
+                (ch, color_to_rgba(fg), bg_rgba)
             },
             |ch| atlas.uv_if_cached(ch).unwrap_or(space_uv),
         );

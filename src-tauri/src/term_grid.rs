@@ -15,7 +15,8 @@ use std::sync::{Mutex, OnceLock};
 
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::{Dimensions, Scroll};
-use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::index::{Column, Line, Point, Side};
+use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::{Config, Term};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
 
@@ -142,6 +143,18 @@ impl TermGrid {
         self.term.grid().display_offset()
     }
 
+    /// The active selection as start and end line/column in grid
+    /// coordinates (line-major, inclusive), for highlighting.
+    pub(crate) fn selection_bounds(&self) -> Option<(i32, usize, i32, usize)> {
+        let range = self.term.selection.as_ref()?.to_range(&self.term)?;
+        Some((
+            range.start.line.0,
+            range.start.column.0,
+            range.end.line.0,
+            range.end.column.0,
+        ))
+    }
+
     /// Scroll the display by `delta` lines (positive scrolls up into
     /// scrollback, clamped to history).
     pub(crate) fn scroll(&mut self, delta: i32) {
@@ -226,6 +239,44 @@ pub(crate) fn current_display_offset() -> usize {
         .ok()
         .and_then(|slot| slot.as_ref().map(TermGrid::display_offset))
         .unwrap_or(0)
+}
+
+/// Begin a text selection anchored at a grid cell.
+pub(crate) fn start_selection(line: i32, col: usize) {
+    if let Ok(mut slot) = grid_slot().lock() {
+        if let Some(grid) = slot.as_mut() {
+            let point = Point::new(Line(line), Column(col));
+            grid.term.selection = Some(Selection::new(SelectionType::Simple, point, Side::Left));
+        }
+    }
+}
+
+/// Extend the active selection to a grid cell.
+pub(crate) fn update_selection(line: i32, col: usize) {
+    if let Ok(mut slot) = grid_slot().lock() {
+        if let Some(grid) = slot.as_mut() {
+            if let Some(selection) = grid.term.selection.as_mut() {
+                selection.update(Point::new(Line(line), Column(col)), Side::Left);
+            }
+        }
+    }
+}
+
+/// Drop the active selection.
+pub(crate) fn clear_selection() {
+    if let Ok(mut slot) = grid_slot().lock() {
+        if let Some(grid) = slot.as_mut() {
+            grid.term.selection = None;
+        }
+    }
+}
+
+/// The selected text, or None when there is no selection.
+pub(crate) fn selection_text() -> Option<String> {
+    grid_slot().lock().ok().and_then(|slot| {
+        slot.as_ref()
+            .and_then(|grid| grid.term.selection_to_string())
+    })
 }
 
 /// Read the shared grid (None until the first feed). The renderer calls
