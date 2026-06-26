@@ -133,10 +133,25 @@ NSWindow / HWND / GtkWindow
     unit-tested. NOT yet verified: WGSL compiles only at runtime in
     `CellRenderer::new`; glyph placement (baseline math), color fidelity,
     and orientation (the y-flip) need eyes. No styles/scroll yet.
-- **M3 — scroll + selection.** Wheel scrollback, drag-select, copy.
-- **M4 — parity.** Themes, fonts, cursor styles, link clicks, the
-  per-line trigger/highlight effects, resize/NAWS, opaque vs transparent.
-- **M5 — split-scrollback, native.** Reimplement the frozen-history view.
+- **M3 — scroll + selection. DONE.** The wheel scrolls through scrollback
+  (fractional accumulator so trackpad deltas are not rounded away),
+  PageUp/PageDown page the grid and Escape snaps to the live tail, drag
+  selects cells (highlighted with the theme selection color), and the
+  selection copies on release and on Cmd+C / Ctrl+C via NSPasteboard.
+  Native NAWS sizes the grid to the pane so output fills the width.
+- **M5 — split-scrollback, native. DONE (shipped with M3).** Scrolling up
+  splits the surface into a frozen-history region (top, read at the scroll
+  offset) and a live tail (bottom, offset 0) with a thin divider line. The
+  divider is draggable (split stored as a height fraction) with a tracking
+  vertical-resize cursor that lines up with the drawn line.
+- **M4 — parity. IN PROGRESS.** Done: cell styles (bold promotes to the
+  bright variant, dim, inverse, underline), theme colors (surface
+  background/foreground/selection follow the active Vosh theme and
+  live-update through `native_surface_set_theme`), and font live-update
+  (the atlas rebuilds at the configured family + size through
+  `native_surface_set_font`). Remaining: cursor rendering, italic (no
+  bundled italic face), a dynamic atlas for non-ASCII glyphs, link clicks,
+  and the per-line trigger/highlight effects.
 - **M6 — cross-platform.** Windows (D3D12) and Linux (Vulkan) surfaces,
   CI bundles, flip the default.
 
@@ -146,28 +161,32 @@ is dead and we stay in Tier 1/2. Everything after M1 is "normal" work.
 
 ## Resume here
 
-Branch `native-renderer`. **M1 and M2 are done and VERIFIED on screen.**
-The native wgpu surface renders the full live terminal (banner, login,
-char list, room text) with accurate ANSI colors, composited into the
-Tauri window beside the webview chrome. The M2c verification pass
-(`910aff2`) fixed sRGB color (linearize the palette for the sRGB surface)
-and sized the grid to the pane (`resize_grid` / `grid_size_for`). Enable
-with `localStorage.setItem('vosh.nativesurface','1')` + reload; `'0'`
-falls back to xterm. Default is off (xterm) until the renderer reaches
-parity.
+Branch `native-renderer`. **M1, M2, M3, and M5 are done and verified on
+screen; M4 (parity) is most of the way there.** The native wgpu surface
+renders the full live terminal with the configured Vosh font and size,
+accurate ANSI colors and cell styles (bold/dim/inverse/underline),
+theme-driven surface colors, wheel + keyboard scroll, draggable
+split-scrollback, and drag-select + copy (mouse and Cmd+C). Enable with
+`localStorage.setItem('vosh.nativesurface','1')` + reload; `'0'` falls back
+to xterm.
 
-Known gaps before native can be the default:
+The frontend reports state to the surface through commands:
+`native_surface_set_bounds` (pane geometry + dpr), `native_surface_scroll`
+(PageUp/PageDown/bottom), `native_surface_copy` (Cmd+C),
+`native_surface_set_theme` (bg/fg/selection), `native_surface_set_font`
+(family + size). The backend feeds the grid from `session.rs` and redraws
+via `request_redraw`.
 
-- **NAWS width.** Text wraps at the xterm column count, so it fills the
-  left of the pane, not the full width. The MUD needs the native column
-  count (send NAWS sized to `grid_size_for`) so lines wrap to fill. This
-  is the most visible next fix.
-- **Font.** Uses the best system monospace, not Vosh's configured font.
-  Wire the renderer to the same font + size as xterm (M4 parity).
+Remaining before native can be the default:
+
+- **Cursor.** The block/bar cursor is not drawn yet.
+- **Italic.** No bundled italic face; bold/dim/inverse/underline render.
 - **Dynamic atlas.** Only printable ASCII is pre-uploaded; non-ASCII
   renders blank until the atlas re-uploads on new glyphs.
-- **Styles.** Bold/italic/underline/inverse from the cell flags (M4).
+- **Split selection.** Selecting in the live region of an open split maps
+  as if scrolled; accurate in the history region and when not split.
+- **Cross-platform (M6).** Windows (D3D12) and Linux (Vulkan) surfaces.
 
-**Then M3** — scroll (wheel through `term_grid` scrollback) + selection
-(drag to select cells, copy). After that M4 styles/themes/fonts, M5 native
-split-scrollback, M6 cross-platform. Check `git log --oneline` first.
+The TEMP default-on flag in `nativeSurfaceEnabled` (Terminal.tsx) must flip
+back to opt-in (`=== '1'`) before this branch merges. Check
+`git log --oneline` first.
