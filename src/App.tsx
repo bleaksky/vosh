@@ -118,6 +118,16 @@ function App() {
   const termRef = useRef<TerminalHandle | null>(null);
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
+  // Write frontend-generated terminal content (custom prompt, local echo,
+  // error notices) to xterm AND mirror it into the native grid. The native
+  // surface renders only the backend display stream, so frontend-only
+  // writes are invisible there unless we feed them in too.
+  const writeLive = (text: string) => {
+    termRef.current?.write(text);
+    if (nativeSurfaceEnabled()) {
+      void invoke('native_surface_echo', { text }).catch(() => {});
+    }
+  };
   // Direct ref on the terminal-area wrapper so we can attach a
   // non-passive wheel listener. JSX onWheel is passive in some
   // React versions and silently no-ops preventDefault, which would
@@ -738,7 +748,7 @@ function App() {
       if (template.length === 0) return;
       const rendered = renderPromptTemplate(template, vars);
       if (rendered.length === 0) return;
-      termRef.current?.write(rendered);
+      writeLive(rendered);
     }).then((fn) => {
       if (cancelled) fn();
       else unsubVars = fn;
@@ -800,7 +810,7 @@ function App() {
       if (payload.kind === 'disconnected') {
         setStatus({ kind: 'idle' });
         if (payload.reason && termRef.current) {
-          termRef.current.write(`\r\n\x1b[31m[${payload.reason}]\x1b[0m\r\n`);
+          writeLive(`\r\n\x1b[31m[${payload.reason}]\x1b[0m\r\n`);
         }
       } else {
         setStatus(payload);
@@ -911,7 +921,7 @@ function App() {
 
   const handleError = (message: string) => {
     setStatus({ kind: 'error', message });
-    termRef.current?.write(`\r\n\x1b[31m[${message}]\x1b[0m\r\n`);
+    writeLive(`\r\n\x1b[31m[${message}]\x1b[0m\r\n`);
   };
 
   const connected = status.kind === 'connected' || status.kind === 'connecting';
@@ -1056,7 +1066,7 @@ function App() {
       enabled={connected}
       onError={handleError}
       onLocalEcho={(text) => {
-        termRef.current?.write(text);
+        writeLive(text);
         // Mirror to the split history pane so typed lines appear
         // there too. Without this, scrolling up in split view
         // shows server output but none of your own commands. The
@@ -1064,11 +1074,6 @@ function App() {
         // splitOpen=true and onReady; the optional chain absorbs
         // that gap.
         historyTermRef.current?.write(text);
-        // Mirror into the native grid so typed commands show on the
-        // native surface too (it is fed only backend output otherwise).
-        if (nativeSurfaceEnabled()) {
-          void invoke('native_surface_echo', { text }).catch(() => {});
-        }
       }}
       onScrollTerminal={(pages) => {
         // Split-scrollback gesture. The live pane (termRef) stays
