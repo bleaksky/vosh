@@ -877,6 +877,27 @@ pub(crate) fn native_surface_set_bounds(
     }
 }
 
+/// Tier 3 native renderer (macOS): keyboard scroll. `kind` is "pageup",
+/// "pagedown", or "bottom". Scrolls the grid and repaints; a no-op
+/// elsewhere.
+#[tauri::command]
+pub(crate) fn native_surface_scroll(kind: String) {
+    #[cfg(target_os = "macos")]
+    {
+        match kind.as_str() {
+            "pageup" => crate::term_grid::scroll_page(true),
+            "pagedown" => crate::term_grid::scroll_page(false),
+            "bottom" => crate::term_grid::scroll_to_bottom(),
+            _ => {}
+        }
+        crate::native_surface::request_redraw();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = kind;
+    }
+}
+
 /// Read the persistent dock layout. Returns the same shape as the
 /// frontend `DockEntry` (id + zone) so the layout editor can render
 /// from it directly.

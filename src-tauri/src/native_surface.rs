@@ -119,6 +119,17 @@ fn redraw_now() {
     if let Ok(mut slot) = surface_slot().lock() {
         if let Some(handle) = slot.as_mut() {
             render(&mut handle.gpu);
+            // Refresh the divider cursor rect for the current split state,
+            // except mid-drag (AppKit holds the cursor through the drag).
+            if !DRAGGING.load(Ordering::Acquire) {
+                // SAFETY: main thread; the view and its window are live.
+                unsafe {
+                    let window: *mut AnyObject = msg_send![handle.view, window];
+                    if !window.is_null() {
+                        let _: () = msg_send![window, invalidateCursorRectsForView: handle.view];
+                    }
+                }
+            }
         }
     }
 }
@@ -154,19 +165,142 @@ fn push_native_size_if_changed(cols: usize, rows: usize) {
     }
 }
 
-/// Mouse-wheel handler for the surface view. `AppKit` calls this on the
-/// main thread with a live `NSEvent`; scroll the grid and repaint.
+// Fractional scroll accumulator so precise (trackpad) deltas are not
+// rounded away; the divider position as a fraction of surface height; and
+// whether a divider drag is in progress.
+static SCROLL_ACCUM: Mutex<f64> = Mutex::new(0.0);
+static SPLIT_RATIO: AtomicU32 = AtomicU32::new(0);
+static DRAGGING: AtomicBool = AtomicBool::new(false);
+
+/// Divider position as a fraction of the surface height (0.66 default).
+pub(crate) fn split_ratio() -> f32 {
+    let bits = SPLIT_RATIO.load(Ordering::Acquire);
+    if bits == 0 {
+        0.66
+    } else {
+        f32::from_bits(bits)
+    }
+}
+
+fn set_split_ratio(ratio: f32) {
+    SPLIT_RATIO.store(ratio.to_bits(), Ordering::Release);
+}
+
+// The exact divider fraction the renderer last drew (0 = no split), so the
+// cursor rect aligns with the rendered line rather than the raw ratio.
+static DIVIDER_FRAC: AtomicU32 = AtomicU32::new(0);
+
+fn set_divider_frac(frac: Option<f32>) {
+    DIVIDER_FRAC.store(frac.map_or(0, f32::to_bits), Ordering::Release);
+}
+
+fn divider_frac() -> Option<f32> {
+    let bits = DIVIDER_FRAC.load(Ordering::Acquire);
+    (bits != 0).then(|| f32::from_bits(bits))
+}
+
+/// Mouse-wheel handler. `AppKit` calls this on the main thread with a live
+/// `NSEvent`; accumulate fractional lines and scroll the grid.
 extern "C" fn scroll_wheel(_this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
     if event.is_null() {
         return;
     }
     // SAFETY: AppKit hands us a valid NSEvent for the scrollWheel: selector.
     let delta_y: f64 = unsafe { msg_send![event, scrollingDeltaY] };
-    // Positive deltaY = content pulled down = reveal older lines = scroll up.
-    let lines = (delta_y * 0.25).round() as i32;
+    let Ok(mut acc) = SCROLL_ACCUM.lock() else {
+        return;
+    };
+    // Positive deltaY pulls content down = reveal older lines = scroll up.
+    *acc += delta_y * 0.12;
+    let lines = acc.trunc() as i32;
+    *acc -= f64::from(lines);
+    drop(acc);
     if lines != 0 {
         crate::term_grid::scroll(lines);
         redraw_now();
+    }
+}
+
+/// The event's y location as a fraction of the view height (0 = top).
+fn event_fraction(this: *mut AnyObject, event: *mut AnyObject) -> Option<f64> {
+    if this.is_null() || event.is_null() {
+        return None;
+    }
+    // SAFETY: AppKit hands us a live NSView (`this`) and NSEvent.
+    unsafe {
+        let win_pt: CGPoint = msg_send![event, locationInWindow];
+        let view_pt: CGPoint =
+            msg_send![this, convertPoint: win_pt, fromView: std::ptr::null_mut::<AnyObject>()];
+        let bounds: CGRect = msg_send![this, bounds];
+        if bounds.size.height <= 0.0 {
+            return None;
+        }
+        // NSView uses a bottom-left origin; flip so 0 = top, matching rows.
+        Some(1.0 - view_pt.y / bounds.size.height)
+    }
+}
+
+/// Begin a divider drag if the press lands on the split divider.
+extern "C" fn mouse_down(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
+    if crate::term_grid::current_display_offset() == 0 {
+        return; // not split, no divider to grab
+    }
+    if let Some(frac) = event_fraction(this, event) {
+        if (frac - f64::from(split_ratio())).abs() < 0.03 {
+            DRAGGING.store(true, Ordering::Release);
+        }
+    }
+}
+
+/// Move the divider while dragging.
+extern "C" fn mouse_dragged(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
+    if !DRAGGING.load(Ordering::Acquire) {
+        return;
+    }
+    if let Some(frac) = event_fraction(this, event) {
+        set_split_ratio((frac.clamp(0.15, 0.85)) as f32);
+        redraw_now();
+    }
+}
+
+extern "C" fn mouse_up(_this: *mut AnyObject, _cmd: Sel, _event: *mut AnyObject) {
+    DRAGGING.store(false, Ordering::Release);
+    // Drag is over; redraw so the cursor rect refreshes at the new divider.
+    redraw_now();
+}
+
+/// Cursor rects: an arrow over the surface (so the webview's text cursor
+/// does not bleed through) and a vertical-resize cursor over the divider
+/// band while the split is open. `AppKit` holds the rect's cursor through a
+/// drag started inside it, so the divider drag shows the resize cursor.
+extern "C" fn reset_cursor_rects(this: *mut AnyObject, _cmd: Sel) {
+    if this.is_null() {
+        return;
+    }
+    // SAFETY: AppKit calls this with a live NSView.
+    unsafe {
+        let bounds: CGRect = msg_send![this, bounds];
+        let arrow: *mut AnyObject = msg_send![class!(NSCursor), arrowCursor];
+        let _: () = msg_send![this, addCursorRect: bounds, cursor: arrow];
+
+        if let Some(frac) = divider_frac() {
+            let height = bounds.size.height;
+            let band = 12.0;
+            // Divider is `frac` down from the top; NSView is bottom-left.
+            let bottom_y = height * (1.0 - f64::from(frac)) - band / 2.0;
+            let rect = CGRect {
+                origin: CGPoint {
+                    x: 0.0,
+                    y: bottom_y,
+                },
+                size: CGSize {
+                    width: bounds.size.width,
+                    height: band,
+                },
+            };
+            let resize: *mut AnyObject = msg_send![class!(NSCursor), resizeUpDownCursor];
+            let _: () = msg_send![this, addCursorRect: rect, cursor: resize];
+        }
     }
 }
 
@@ -177,11 +311,28 @@ fn surface_view_class() -> &'static AnyClass {
     let ptr = *CLASS.get_or_init(|| {
         let mut builder = ClassBuilder::new("VoshSurfaceView", class!(NSView))
             .expect("VoshSurfaceView already registered");
-        // SAFETY: the signature matches -[NSResponder scrollWheel:].
+        // SAFETY: the signatures match the overridden NSView/NSResponder
+        // methods.
         unsafe {
             builder.add_method(
                 sel!(scrollWheel:),
                 scroll_wheel as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(mouseDown:),
+                mouse_down as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(mouseDragged:),
+                mouse_dragged as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(mouseUp:),
+                mouse_up as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(resetCursorRects),
+                reset_cursor_rects as extern "C" fn(*mut AnyObject, Sel),
             );
         }
         let cls: &'static AnyClass = builder.register();
@@ -419,7 +570,17 @@ fn render(state: &mut GpuState) {
     let cell_renderer = &mut state.cell_renderer;
     let drew = crate::term_grid::with_grid(|grid| {
         if let Some(grid) = grid {
-            cell_renderer.draw(device, queue, &mut encoder, &view, grid, width, height);
+            let frac = cell_renderer.draw(
+                device,
+                queue,
+                &mut encoder,
+                &view,
+                grid,
+                width,
+                height,
+                split_ratio(),
+            );
+            set_divider_frac(frac);
             true
         } else {
             false

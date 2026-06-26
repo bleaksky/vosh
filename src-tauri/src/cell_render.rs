@@ -453,16 +453,17 @@ fn load_font(family_stack: &str) -> Option<Font> {
 // Per-cell GPU instance data
 // ---------------------------------------------------------------------------
 
-/// One quad instance per terminal cell. `offset` is the cell's top-left in
-/// surface pixels; the vertex shader turns the unit quad into the cell
-/// rect and converts to clip space. The fragment shader composites `fg`
+/// One quad instance. `offset` is the top-left in surface pixels and
+/// `size` its width/height, so most instances are cell-sized but the split
+/// divider can be a thin full-width line. The vertex shader builds the
+/// rect and converts to clip space; the fragment shader composites `fg`
 /// over `bg` by the atlas coverage sampled across `uv_min..uv_max`.
-/// `repr(C)` so it maps straight to a wgpu vertex buffer (`bytemuck`
-/// derives are added with the pipeline in part 3b).
+/// `repr(C)` so it maps straight to a wgpu vertex buffer.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct CellInstance {
     pub offset: [f32; 2],
+    pub size: [f32; 2],
     pub bg: Rgba,
     pub fg: Rgba,
     pub uv_min: [f32; 2],
@@ -487,6 +488,7 @@ fn build_instances(
             let (uv_min, uv_max) = uv(ch);
             out.push(CellInstance {
                 offset: [col as f32 * cell_w, row as f32 * cell_h],
+                size: [cell_w, cell_h],
                 bg,
                 fg,
                 uv_min,
@@ -525,17 +527,18 @@ struct VsOut {
 fn vs(
     @builtin(vertex_index) vi: u32,
     @location(0) offset: vec2<f32>,
-    @location(1) bg: vec4<f32>,
-    @location(2) fg: vec4<f32>,
-    @location(3) uv_min: vec2<f32>,
-    @location(4) uv_max: vec2<f32>,
+    @location(1) size: vec2<f32>,
+    @location(2) bg: vec4<f32>,
+    @location(3) fg: vec4<f32>,
+    @location(4) uv_min: vec2<f32>,
+    @location(5) uv_max: vec2<f32>,
 ) -> VsOut {
     var corners = array<vec2<f32>, 6>(
         vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
         vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0),
     );
     let corner = corners[vi];
-    let px = offset + corner * u.cell_size;
+    let px = offset + corner * size;
     let ndc = vec2<f32>(
         px.x / u.surface_size.x * 2.0 - 1.0,
         1.0 - px.y / u.surface_size.y * 2.0,
@@ -693,29 +696,40 @@ impl CellRenderer {
             array_stride: std::mem::size_of::<CellInstance>() as u64,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &[
+                // offset
                 wgpu::VertexAttribute {
                     offset: 0,
                     shader_location: 0,
                     format: wgpu::VertexFormat::Float32x2,
                 },
+                // size
                 wgpu::VertexAttribute {
                     offset: 8,
                     shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x4,
+                    format: wgpu::VertexFormat::Float32x2,
                 },
+                // bg
                 wgpu::VertexAttribute {
-                    offset: 24,
+                    offset: 16,
                     shader_location: 2,
                     format: wgpu::VertexFormat::Float32x4,
                 },
+                // fg
                 wgpu::VertexAttribute {
-                    offset: 40,
+                    offset: 32,
                     shader_location: 3,
-                    format: wgpu::VertexFormat::Float32x2,
+                    format: wgpu::VertexFormat::Float32x4,
                 },
+                // uv_min
                 wgpu::VertexAttribute {
                     offset: 48,
                     shader_location: 4,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                // uv_max
+                wgpu::VertexAttribute {
+                    offset: 56,
+                    shader_location: 5,
                     format: wgpu::VertexFormat::Float32x2,
                 },
             ],
@@ -783,24 +797,69 @@ impl CellRenderer {
         grid: &crate::term_grid::TermGrid,
         surface_w: u32,
         surface_h: u32,
-    ) {
+        split_ratio: f32,
+    ) -> Option<f32> {
         let cell_w = self.atlas.cell_w() as f32;
         let cell_h = self.atlas.cell_h() as f32;
         let cols = grid.columns();
         let rows = grid.screen_lines();
         let space_uv = self.space_uv;
         let atlas = &self.atlas;
-        let instances = build_instances(
+
+        // Split-scrollback: when scrolled up, draw the top region from the
+        // scroll offset (frozen history) and the bottom from the live tail
+        // (offset 0), with a draggable divider at `split_ratio`. Collapses
+        // to full-live at the bottom (offset 0).
+        let offset = grid.display_offset() as i32;
+        let split = offset > 0 && rows >= 6;
+        let top_rows = if split {
+            ((rows as f32 * split_ratio) as usize).clamp(1, rows - 1)
+        } else {
+            rows
+        };
+        // The exact fraction of surface height where the divider is drawn,
+        // so the cursor rect lines up with the rendered line.
+        let divider_frac = if split {
+            Some(top_rows as f32 * cell_h / surface_h as f32)
+        } else {
+            None
+        };
+        let divider = color_to_rgba(Color::Spec(Rgb {
+            r: 0x3a,
+            g: 0x40,
+            b: 0x4c,
+        }));
+
+        let mut instances = build_instances(
             cols,
             rows,
             cell_w,
             cell_h,
             |col, row| {
-                let (ch, fg, bg) = grid.cell(row, col);
+                let grid_line = if split && row >= top_rows {
+                    row as i32 // live tail (offset 0)
+                } else {
+                    row as i32 - offset // top region / non-split (scrolled)
+                };
+                let (ch, fg, bg) = grid.cell_at_line(grid_line, col);
                 (ch, color_to_rgba(fg), color_to_rgba(bg))
             },
             |ch| atlas.uv_if_cached(ch).unwrap_or(space_uv),
         );
+
+        // Thin full-width divider line at the split boundary, overlaying
+        // the cells (drawn last). No cell row is consumed.
+        if split {
+            let thickness = 2.0_f32;
+            instances.push(CellInstance {
+                offset: [0.0, top_rows as f32 * cell_h - thickness * 0.5],
+                size: [cols as f32 * cell_w, thickness],
+                bg: divider,
+                fg: divider,
+                uv_min: space_uv.0,
+                uv_max: space_uv.1,
+            });
+        }
 
         let uniforms = Uniforms {
             surface_size: [surface_w as f32, surface_h as f32],
@@ -845,6 +904,8 @@ impl CellRenderer {
         rpass.set_bind_group(0, &self.bind_group, &[]);
         rpass.set_vertex_buffer(0, self.instance_buffer.slice(..));
         rpass.draw(0..6, 0..instances.len() as u32);
+        drop(rpass);
+        divider_frac
     }
 }
 

@@ -119,6 +119,29 @@ impl TermGrid {
         (cell.c, cell.fg, cell.bg)
     }
 
+    /// A cell at an explicit grid line (0 = top of the live screen,
+    /// negatives are scrollback). Out-of-range lines read as blank. Lets
+    /// the split renderer read the top and bottom regions at different
+    /// offsets.
+    pub(crate) fn cell_at_line(&self, grid_line: i32, col: usize) -> (char, Color, Color) {
+        let grid = self.term.grid();
+        let target = Line(grid_line);
+        if target < grid.topmost_line() || target > grid.bottommost_line() {
+            return (
+                ' ',
+                Color::Named(NamedColor::Foreground),
+                Color::Named(NamedColor::Background),
+            );
+        }
+        let cell = &grid[target][Column(col)];
+        (cell.c, cell.fg, cell.bg)
+    }
+
+    /// Current scrollback display offset (0 = live tail).
+    pub(crate) fn display_offset(&self) -> usize {
+        self.term.grid().display_offset()
+    }
+
     /// Scroll the display by `delta` lines (positive scrolls up into
     /// scrollback, clamped to history).
     pub(crate) fn scroll(&mut self, delta: i32) {
@@ -175,6 +198,34 @@ pub(crate) fn scroll(delta: i32) {
             grid.scroll(delta);
         }
     }
+}
+
+/// Page the shared grid up or down (PageUp/PageDown).
+pub(crate) fn scroll_page(up: bool) {
+    if let Ok(mut slot) = grid_slot().lock() {
+        if let Some(grid) = slot.as_mut() {
+            grid.term
+                .scroll_display(if up { Scroll::PageUp } else { Scroll::PageDown });
+        }
+    }
+}
+
+/// Snap the shared grid to the live tail (collapses the split).
+pub(crate) fn scroll_to_bottom() {
+    if let Ok(mut slot) = grid_slot().lock() {
+        if let Some(grid) = slot.as_mut() {
+            grid.term.scroll_display(Scroll::Bottom);
+        }
+    }
+}
+
+/// Current scrollback offset of the shared grid (0 = live tail, no split).
+pub(crate) fn current_display_offset() -> usize {
+    grid_slot()
+        .lock()
+        .ok()
+        .and_then(|slot| slot.as_ref().map(TermGrid::display_offset))
+        .unwrap_or(0)
 }
 
 /// Read the shared grid (None until the first feed). The renderer calls
