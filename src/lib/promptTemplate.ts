@@ -24,6 +24,10 @@
 //                         `%{...}` form is required for the colon/comma
 //                         syntaxes; `%c_red` and `%c_196` also work bare.
 //   %c_reset            — clear color back to the default.
+//   %bg_<spec>          — background color, same spec grammar as %c
+//   %{bg:<spec>}          (named/256/rgb/hex/stat).
+//   %s_<style>          — text style: bold dim italic underline inverse
+//   %{s:<style>}          strike. `%s_reset` (or `%c_reset`) clears all.
 //   %time               — current local time, HH:MM:SS.
 //   %date               — current local date, YYYY-MM-DD.
 //
@@ -40,18 +44,37 @@ export type PromptVars = Record<string, string>;
 
 const RESET = '\x1b[0m';
 
-const COLOR_FG: Record<string, string> = {
-  green: '\x1b[38;5;42m',
-  red: '\x1b[38;5;196m',
-  yellow: '\x1b[38;5;220m',
-  blue: '\x1b[38;5;39m',
-  cyan: '\x1b[38;5;51m',
-  magenta: '\x1b[38;5;201m',
-  white: '\x1b[38;5;255m',
-  gray: '\x1b[38;5;240m',
+// Named colors as 256-palette indices, so the same name drives both
+// foreground (38;5) and background (48;5).
+const NAMED_IDX: Record<string, number> = {
+  green: 42,
+  red: 196,
+  yellow: 220,
+  blue: 39,
+  cyan: 51,
+  magenta: 201,
+  white: 255,
+  gray: 240,
 };
 
+const COLOR_FG: Record<string, string> = Object.fromEntries(
+  Object.entries(NAMED_IDX).map(([name, idx]) => [name, `\x1b[38;5;${idx}m`]),
+);
+
 const EMPTY_FG = COLOR_FG.gray;
+
+// SGR attribute codes for the text-style directives.
+const STYLE_SGR: Record<string, string> = {
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  italic: '\x1b[3m',
+  underline: '\x1b[4m',
+  under: '\x1b[4m',
+  inverse: '\x1b[7m',
+  inv: '\x1b[7m',
+  strike: '\x1b[9m',
+  reset: RESET,
+};
 
 function parseNumber(value: string | undefined): number | null {
   if (value === undefined || value === null) return null;
@@ -123,32 +146,36 @@ function consumeBarParams(tail: string): {
   return result;
 }
 
-// Resolve a color spec to an SGR sequence. Accepts a named color, `reset`,
-// a 256-palette index (`196`), truecolor `r,g,b` or `#rrggbb`/`rrggbb`, or a
+// Resolve a color spec to an SGR sequence for foreground (38) or, when
+// `bg` is set, background (48). Accepts a named color, `reset`, a
+// 256-palette index (`196`), truecolor `r,g,b` or `#rrggbb`/`rrggbb`, or a
 // stat name (auto-color by its percent). Returns null when unrecognized.
-function colorCodeFromSpec(spec: string, vars: PromptVars): string | null {
+function colorCodeFromSpec(spec: string, vars: PromptVars, bg = false): string | null {
+  const p = bg ? '48' : '38';
   if (spec === 'reset') return RESET;
-  if (COLOR_FG[spec]) return COLOR_FG[spec];
+  if (NAMED_IDX[spec] !== undefined) return `\x1b[${p};5;${NAMED_IDX[spec]}m`;
   if (/^\d{1,3}$/.test(spec)) {
     const n = Number(spec);
-    if (n >= 0 && n <= 255) return `\x1b[38;5;${n}m`;
+    if (n >= 0 && n <= 255) return `\x1b[${p};5;${n}m`;
   }
   const hex = /^#?([0-9a-f]{6})$/i.exec(spec);
   if (hex) {
     const r = parseInt(hex[1].slice(0, 2), 16);
     const g = parseInt(hex[1].slice(2, 4), 16);
     const b = parseInt(hex[1].slice(4, 6), 16);
-    return `\x1b[38;2;${r};${g};${b}m`;
+    return `\x1b[${p};2;${r};${g};${b}m`;
   }
   const rgb = /^(\d{1,3}),(\d{1,3}),(\d{1,3})$/.exec(spec);
   if (rgb) {
     const clamp = (s: string) => Math.min(255, Math.max(0, Number(s)));
-    return `\x1b[38;2;${clamp(rgb[1])};${clamp(rgb[2])};${clamp(rgb[3])}m`;
+    return `\x1b[${p};2;${clamp(rgb[1])};${clamp(rgb[2])};${clamp(rgb[3])}m`;
   }
   const value = parseNumber(vars[spec]);
   const max = lookupMax(vars, spec);
   if (value !== null && max !== null && max > 0) {
-    return colorForPercent(Math.max(0, Math.min(1, value / max)));
+    const pct = Math.max(0, Math.min(1, value / max));
+    const idx = pct >= 0.66 ? NAMED_IDX.green : pct >= 0.33 ? NAMED_IDX.yellow : NAMED_IDX.red;
+    return `\x1b[${p};5;${idx}m`;
   }
   return null;
 }
@@ -174,6 +201,15 @@ function renderPlainToken(name: string, raw: string, vars: PromptVars): string {
   // `%c_196`, `%c_hp%hp/%maxhp%c_reset`.
   if (name.startsWith('c_') || name.startsWith('c:')) {
     return colorCodeFromSpec(name.slice(2), vars) ?? raw;
+  }
+  // Background color: `%bg_<spec>` / `%{bg:<spec>}`, same spec grammar.
+  if (name.startsWith('bg_') || name.startsWith('bg:')) {
+    return colorCodeFromSpec(name.slice(3), vars, true) ?? raw;
+  }
+  // Style directives: `%s_<style>` / `%{s:<style>}` — bold, dim, italic,
+  // underline, inverse, strike, reset.
+  if (name.startsWith('s_') || name.startsWith('s:')) {
+    return STYLE_SGR[name.slice(2)] ?? raw;
   }
   if (name === 'time') return currentTime();
   if (name === 'date') return currentDate();

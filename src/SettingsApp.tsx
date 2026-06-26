@@ -538,7 +538,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
         />
         <span className="settings-paste-hint">
           {
-            'tokens %hp %pct_hp %hp_bar:W:COLOR %c_hp (auto) %c_red %c_196 %{c:255,128,0} %{c:#ff8800} %c_reset %time %date. needs a prompt-capture trigger that gags and emits vars.'
+            'tokens %hp %pct_hp %hp_bar:W:COLOR %c_hp (auto) %c_red %{c:255,128,0} %{bg:#330033} %s_bold %s_italic %s_underline %c_reset %time %date. needs a prompt-capture trigger that gags and emits vars.'
           }
         </span>
       </Row>
