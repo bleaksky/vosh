@@ -903,7 +903,12 @@ fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
 /// background, foreground, and selection follow the active Vosh theme.
 /// Colors are `#rrggbb`. A no-op elsewhere.
 #[tauri::command]
-pub(crate) fn native_surface_set_theme(background: String, foreground: String, selection: String) {
+pub(crate) fn native_surface_set_theme(
+    background: String,
+    foreground: String,
+    selection: String,
+    ansi: Vec<String>,
+) {
     #[cfg(target_os = "macos")]
     {
         if let (Some(bg), Some(fg), Some(sel)) = (
@@ -912,12 +917,16 @@ pub(crate) fn native_surface_set_theme(background: String, foreground: String, s
             parse_hex(&selection),
         ) {
             crate::cell_render::set_theme(bg, fg, sel);
+            let palette: Vec<(u8, u8, u8)> = ansi.iter().filter_map(|s| parse_hex(s)).collect();
+            if palette.len() == 16 {
+                crate::cell_render::set_palette(&palette);
+            }
             crate::native_surface::request_redraw();
         }
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (background, foreground, selection);
+        let _ = (background, foreground, selection, ansi);
     }
 }
 
