@@ -23,8 +23,9 @@ use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use objc2::runtime::AnyObject;
-use objc2::{class, msg_send, Encode, Encoding};
+use objc2::declare::ClassBuilder;
+use objc2::runtime::{AnyClass, AnyObject, Sel};
+use objc2::{class, msg_send, sel, Encode, Encoding};
 use raw_window_handle::{
     AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
@@ -153,6 +154,43 @@ fn push_native_size_if_changed(cols: usize, rows: usize) {
     }
 }
 
+/// Mouse-wheel handler for the surface view. `AppKit` calls this on the
+/// main thread with a live `NSEvent`; scroll the grid and repaint.
+extern "C" fn scroll_wheel(_this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
+    if event.is_null() {
+        return;
+    }
+    // SAFETY: AppKit hands us a valid NSEvent for the scrollWheel: selector.
+    let delta_y: f64 = unsafe { msg_send![event, scrollingDeltaY] };
+    // Positive deltaY = content pulled down = reveal older lines = scroll up.
+    let lines = (delta_y * 0.25).round() as i32;
+    if lines != 0 {
+        crate::term_grid::scroll(lines);
+        redraw_now();
+    }
+}
+
+/// A minimal `NSView` subclass that forwards mouse-wheel events to the grid.
+/// Registered once; the surface view is an instance of it.
+fn surface_view_class() -> &'static AnyClass {
+    static CLASS: OnceLock<usize> = OnceLock::new();
+    let ptr = *CLASS.get_or_init(|| {
+        let mut builder = ClassBuilder::new("VoshSurfaceView", class!(NSView))
+            .expect("VoshSurfaceView already registered");
+        // SAFETY: the signature matches -[NSResponder scrollWheel:].
+        unsafe {
+            builder.add_method(
+                sel!(scrollWheel:),
+                scroll_wheel as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+        }
+        let cls: &'static AnyClass = builder.register();
+        std::ptr::from_ref(cls) as usize
+    });
+    // SAFETY: the pointer comes from a registered, process-lifetime class.
+    unsafe { &*(ptr as *const AnyClass) }
+}
+
 /// The configured terminal font family stack and the atlas pixel size.
 /// Falls back to the system monospace at 14 CSS px. `scale` is the backing
 /// scale factor, so the returned px is physical pixels (crisp at retina)
@@ -206,7 +244,7 @@ pub(crate) fn install_probe(window: &tauri::WebviewWindow) -> Result<(), tauri::
             };
             let scale: f64 = msg_send![ns_window, backingScaleFactor];
 
-            let view: *mut AnyObject = msg_send![class!(NSView), alloc];
+            let view: *mut AnyObject = msg_send![surface_view_class(), alloc];
             let view: *mut AnyObject = msg_send![view, initWithFrame: frame];
             if view.is_null() {
                 tracing::warn!("native-surface: NSView alloc/init failed");
