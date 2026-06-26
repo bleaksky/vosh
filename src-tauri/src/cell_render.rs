@@ -940,7 +940,11 @@ impl CellRenderer {
         // (offset 0), with a draggable divider at `split_ratio`. Collapses
         // to full-live at the bottom (offset 0).
         let offset = grid.display_offset() as i32;
-        let split = offset > 0 && rows >= 6;
+        // Find matches (and the active one) drive a highlight pass and
+        // suppress the split so the match shows in a single full view.
+        let (find_matches, find_active_match) = crate::term_grid::find_snapshot();
+        let finding = !find_matches.is_empty();
+        let split = offset > 0 && rows >= 6 && !finding;
         let top_rows = if split {
             ((rows as f32 * split_ratio) as usize).clamp(1, rows - 1)
         } else {
@@ -1007,6 +1011,27 @@ impl CellRenderer {
         let selection = grid.selection_bounds();
         let selection_bg = rgb_to_rgba(theme_selection());
 
+        // Find-match highlight: amber for matches, brighter for the active
+        // one. Keyed by grid line for an O(1) lookup per cell.
+        let mut find_by_line: HashMap<i32, Vec<(usize, usize, bool)>> = HashMap::new();
+        for &(line, start, end) in &find_matches {
+            let active = find_active_match == Some((line, start, end));
+            find_by_line
+                .entry(line)
+                .or_default()
+                .push((start, end, active));
+        }
+        let find_bg = color_to_rgba(Color::Spec(Rgb {
+            r: 0x55,
+            g: 0x44,
+            b: 0x12,
+        }));
+        let find_active_bg = color_to_rgba(Color::Spec(Rgb {
+            r: 0x99,
+            g: 0x77,
+            b: 0x22,
+        }));
+
         let mut underlines: Vec<(usize, usize, Rgba)> = Vec::new();
         let mut instances = build_instances(
             cols,
@@ -1023,6 +1048,14 @@ impl CellRenderer {
                 let (fg_rgba, mut bg_rgba) = styled_colors(fg, bg, flags);
                 if cell_in_selection(selection, grid_line, col) {
                     bg_rgba = selection_bg;
+                }
+                if let Some(ranges) = find_by_line.get(&grid_line) {
+                    for &(start, end, active) in ranges {
+                        if col >= start && col < end {
+                            bg_rgba = if active { find_active_bg } else { find_bg };
+                            break;
+                        }
+                    }
                 }
                 if flags.underline {
                     underlines.push((col, row, fg_rgba));

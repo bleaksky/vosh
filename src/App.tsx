@@ -517,6 +517,9 @@ function App() {
       e.stopPropagation();
       termRef.current?.clearSearch();
       historyTermRef.current?.clearSearch();
+      if (nativeSurfaceEnabled()) {
+        void invoke('native_surface_find_clear').catch(() => {});
+      }
       pendingFindRef.current = null;
       setFindResults({ index: -1, count: 0 });
       setFindOpen(false);
@@ -846,6 +849,25 @@ function App() {
     direction: 'next' | 'previous',
   ): boolean => {
     if (query.length === 0) return false;
+
+    // Native surface: the grid owns search, scroll-to-match, and the
+    // highlight. Route to the native command and feed the count back to
+    // the toolbar; no xterm split is involved.
+    if (nativeSurfaceEnabled()) {
+      void invoke<[number, number]>('native_surface_find', {
+        query,
+        regex: opts.regex ?? false,
+        caseSensitive: opts.caseSensitive ?? false,
+        wholeWord: opts.wholeWord ?? false,
+        forward: direction === 'next',
+      })
+        .then(([current, total]) => {
+          setFindResults({ index: total > 0 ? current - 1 : -1, count: total });
+        })
+        .catch(() => {});
+      return true;
+    }
+
     const live = termRef.current;
     if (!live) return false;
 
@@ -1101,6 +1123,9 @@ function App() {
           onClose={() => {
             termRef.current?.clearSearch();
             historyTermRef.current?.clearSearch();
+            if (nativeSurfaceEnabled()) {
+              void invoke('native_surface_find_clear').catch(() => {});
+            }
             pendingFindRef.current = null;
             setFindResults({ index: -1, count: 0 });
             setFindOpen(false);

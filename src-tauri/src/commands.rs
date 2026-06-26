@@ -946,6 +946,42 @@ pub(crate) fn native_surface_echo(text: String) {
     }
 }
 
+/// Tier 3 native renderer (macOS): search the grid and step to the next (or
+/// previous) match, scrolling it into view and highlighting all matches.
+/// Returns `[current, total]` (1-based; `[0, 0]` when no match). A no-op
+/// returning `[0, 0]` elsewhere.
+#[tauri::command]
+pub(crate) fn native_surface_find(
+    query: String,
+    regex: bool,
+    case_sensitive: bool,
+    whole_word: bool,
+    forward: bool,
+) -> (usize, usize) {
+    #[cfg(target_os = "macos")]
+    {
+        let result = crate::term_grid::find_run(&query, regex, case_sensitive, whole_word, forward);
+        crate::native_surface::request_redraw();
+        result
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (query, regex, case_sensitive, whole_word, forward);
+        (0, 0)
+    }
+}
+
+/// Tier 3 native renderer (macOS): clear the find highlight. A no-op
+/// elsewhere.
+#[tauri::command]
+pub(crate) fn native_surface_find_clear() {
+    #[cfg(target_os = "macos")]
+    {
+        crate::term_grid::find_clear();
+        crate::native_surface::request_redraw();
+    }
+}
+
 /// Tier 3 native renderer (macOS): rebuild the surface atlas at a new font
 /// family and size (CSS px) so it matches the configured Vosh font. A no-op
 /// elsewhere.
