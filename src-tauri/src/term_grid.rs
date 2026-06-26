@@ -262,6 +262,39 @@ pub(crate) fn scroll_to_bottom() {
     }
 }
 
+/// Compiled URL matcher, built once.
+fn url_regex() -> &'static regex::Regex {
+    static RE: OnceLock<regex::Regex> = OnceLock::new();
+    RE.get_or_init(|| regex::Regex::new(r"https?://[^\s<>()\[\]]+").expect("valid url regex"))
+}
+
+/// The URL spanning the cell at (`grid_line`, `col`), if any. Trailing
+/// sentence punctuation is trimmed. Used by Cmd+click on the surface.
+pub(crate) fn url_at(grid_line: i32, col: usize) -> Option<String> {
+    let slot = grid_slot().lock().ok()?;
+    let g = slot.as_ref()?;
+    let grid = g.term.grid();
+    if Line(grid_line) < grid.topmost_line() || Line(grid_line) > grid.bottommost_line() {
+        return None;
+    }
+    let cols = grid.columns();
+    let text: String = (0..cols)
+        .map(|c| grid[Line(grid_line)][Column(c)].c)
+        .collect();
+    for m in url_regex().find_iter(&text) {
+        let start_col = text[..m.start()].chars().count();
+        let end_col = text[..m.end()].chars().count();
+        if col >= start_col && col < end_col {
+            return Some(
+                m.as_str()
+                    .trim_end_matches(['.', ',', ')', ']', '!', '?'])
+                    .to_string(),
+            );
+        }
+    }
+    None
+}
+
 /// Current scrollback offset of the shared grid (0 = live tail, no split).
 pub(crate) fn current_display_offset() -> usize {
     grid_slot()

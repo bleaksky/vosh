@@ -361,8 +361,45 @@ fn event_fraction(this: *mut AnyObject, event: *mut AnyObject) -> Option<f64> {
     }
 }
 
+/// True when the event has the Command modifier held.
+fn event_has_command(event: *mut AnyObject) -> bool {
+    if event.is_null() {
+        return false;
+    }
+    // SAFETY: AppKit hands us a live NSEvent.
+    let flags: usize = unsafe { msg_send![event, modifierFlags] };
+    flags & (1 << 20) != 0 // NSEventModifierFlagCommand
+}
+
+/// Open a URL in the default browser via `NSWorkspace`.
+fn open_url(url: &str) {
+    let Ok(cstr) = std::ffi::CString::new(url) else {
+        return;
+    };
+    // SAFETY: standard NSWorkspace openURL on the main thread.
+    unsafe {
+        let ns_str: *mut AnyObject =
+            msg_send![class!(NSString), stringWithUTF8String: cstr.as_ptr()];
+        let ns_url: *mut AnyObject = msg_send![class!(NSURL), URLWithString: ns_str];
+        if ns_url.is_null() {
+            return;
+        }
+        let workspace: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let _: bool = msg_send![workspace, openURL: ns_url];
+    }
+}
+
 /// Grab the divider if the press lands on it, otherwise begin a selection.
+/// Cmd+click opens a URL under the pointer.
 extern "C" fn mouse_down(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
+    if event_has_command(event) {
+        if let Some((line, col)) = point_to_cell(this, event) {
+            if let Some(url) = crate::term_grid::url_at(line, col) {
+                open_url(&url);
+                return;
+            }
+        }
+    }
     if crate::term_grid::current_display_offset() > 0 {
         if let Some(frac) = event_fraction(this, event) {
             if (frac - f64::from(split_ratio())).abs() < 0.03 {
