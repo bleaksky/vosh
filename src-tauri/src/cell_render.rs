@@ -169,6 +169,23 @@ fn theme_selection() -> Rgb {
     )
 }
 
+// The effective ANSI 0-15 palette the frontend last reported. The frontend
+// resolves the `themeTerminalColors` toggle (canonical xterm-256 when off,
+// the theme's ANSI when on), so the surface matches xterm either way.
+// Unset entries (0) fall back to the canonical ANSI_16.
+static THEME_ANSI: [AtomicU32; 16] = [const { AtomicU32::new(0) }; 16];
+
+/// Set the ANSI 0-15 palette from the frontend's resolved theme.
+pub(crate) fn set_palette(ansi: &[(u8, u8, u8)]) {
+    for (slot, c) in THEME_ANSI.iter().zip(ansi.iter()) {
+        slot.store(pack_rgb(c.0, c.1, c.2), Ordering::Release);
+    }
+}
+
+fn ansi16(idx: usize) -> Rgb {
+    unpack_rgb(THEME_ANSI[idx].load(Ordering::Acquire), ANSI_16[idx])
+}
+
 // The wgpu surface is sRGB, so the GPU sRGB-encodes whatever the fragment
 // shader writes. Our palette values are already sRGB (xterm hex), so we
 // linearize them here; the encode on write then round-trips to the
@@ -200,32 +217,32 @@ fn dim(c: Rgb) -> Rgb {
 
 fn named_to_rgb(n: NamedColor) -> Rgb {
     match n {
-        NamedColor::Black => ANSI_16[0],
-        NamedColor::Red => ANSI_16[1],
-        NamedColor::Green => ANSI_16[2],
-        NamedColor::Yellow => ANSI_16[3],
-        NamedColor::Blue => ANSI_16[4],
-        NamedColor::Magenta => ANSI_16[5],
-        NamedColor::Cyan => ANSI_16[6],
-        NamedColor::White => ANSI_16[7],
-        NamedColor::BrightBlack => ANSI_16[8],
-        NamedColor::BrightRed => ANSI_16[9],
-        NamedColor::BrightGreen => ANSI_16[10],
-        NamedColor::BrightYellow => ANSI_16[11],
-        NamedColor::BrightBlue => ANSI_16[12],
-        NamedColor::BrightMagenta => ANSI_16[13],
-        NamedColor::BrightCyan => ANSI_16[14],
-        NamedColor::BrightWhite => ANSI_16[15],
+        NamedColor::Black => ansi16(0),
+        NamedColor::Red => ansi16(1),
+        NamedColor::Green => ansi16(2),
+        NamedColor::Yellow => ansi16(3),
+        NamedColor::Blue => ansi16(4),
+        NamedColor::Magenta => ansi16(5),
+        NamedColor::Cyan => ansi16(6),
+        NamedColor::White => ansi16(7),
+        NamedColor::BrightBlack => ansi16(8),
+        NamedColor::BrightRed => ansi16(9),
+        NamedColor::BrightGreen => ansi16(10),
+        NamedColor::BrightYellow => ansi16(11),
+        NamedColor::BrightBlue => ansi16(12),
+        NamedColor::BrightMagenta => ansi16(13),
+        NamedColor::BrightCyan => ansi16(14),
+        NamedColor::BrightWhite => ansi16(15),
         NamedColor::Foreground | NamedColor::BrightForeground | NamedColor::Cursor => theme_fg(),
         NamedColor::Background => theme_bg(),
-        NamedColor::DimBlack => dim(ANSI_16[0]),
-        NamedColor::DimRed => dim(ANSI_16[1]),
-        NamedColor::DimGreen => dim(ANSI_16[2]),
-        NamedColor::DimYellow => dim(ANSI_16[3]),
-        NamedColor::DimBlue => dim(ANSI_16[4]),
-        NamedColor::DimMagenta => dim(ANSI_16[5]),
-        NamedColor::DimCyan => dim(ANSI_16[6]),
-        NamedColor::DimWhite => dim(ANSI_16[7]),
+        NamedColor::DimBlack => dim(ansi16(0)),
+        NamedColor::DimRed => dim(ansi16(1)),
+        NamedColor::DimGreen => dim(ansi16(2)),
+        NamedColor::DimYellow => dim(ansi16(3)),
+        NamedColor::DimBlue => dim(ansi16(4)),
+        NamedColor::DimMagenta => dim(ansi16(5)),
+        NamedColor::DimCyan => dim(ansi16(6)),
+        NamedColor::DimWhite => dim(ansi16(7)),
         NamedColor::DimForeground => dim(theme_fg()),
     }
 }
@@ -233,7 +250,7 @@ fn named_to_rgb(n: NamedColor) -> Rgb {
 // xterm 256-color cube + grayscale ramp.
 fn indexed_to_rgb(i: u8) -> Rgb {
     match i {
-        0..=15 => ANSI_16[i as usize],
+        0..=15 => ansi16(i as usize),
         16..=231 => {
             let i = i - 16;
             let component = |v: u8| -> u8 {

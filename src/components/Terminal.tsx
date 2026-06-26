@@ -29,15 +29,39 @@ export function nativeSurfaceEnabled(): boolean {
   return typeof localStorage !== 'undefined' && localStorage.getItem('vosh.nativesurface') !== '0';
 }
 
-// Report the active theme's surface colors to the native renderer so its
-// background/foreground/selection follow the Vosh theme and live-update.
-function reportNativeTheme(themeId: string): void {
+// Report the active theme's surface colors and resolved ANSI palette to
+// the native renderer so its background/foreground/selection and the
+// 16-color palette match xterm (including the themeTerminalColors tint),
+// live-updating on theme or toggle change.
+function reportNativeTheme(themeId: string, themeTerminalColors: boolean): void {
   if (!nativeSurfaceEnabled()) return;
-  const t = findTheme(themeId).xterm;
+  const resolved = xtermThemeFor(findTheme(themeId), themeTerminalColors);
+  const ansi = [
+    resolved.black,
+    resolved.red,
+    resolved.green,
+    resolved.yellow,
+    resolved.blue,
+    resolved.magenta,
+    resolved.cyan,
+    resolved.white,
+    resolved.brightBlack,
+    resolved.brightRed,
+    resolved.brightGreen,
+    resolved.brightYellow,
+    resolved.brightBlue,
+    resolved.brightMagenta,
+    resolved.brightCyan,
+    resolved.brightWhite,
+  ].map((c) => c ?? '#000000');
   void invoke('native_surface_set_theme', {
-    background: t.background ?? '#101218',
-    foreground: t.foreground ?? '#cccccc',
-    selection: t.selectionBackground ?? '#2a3b5e',
+    background: resolved.background ?? '#101218',
+    foreground: resolved.foreground ?? '#cccccc',
+    // The raw theme selection hex (resolved.selectionBackground is an
+    // rgba() string after the translucency pass, which the backend hex
+    // parser cannot read).
+    selection: findTheme(themeId).xterm.selectionBackground ?? '#2a3b5e',
+    ansi,
   }).catch(() => {});
 }
 
@@ -922,7 +946,7 @@ export function Terminal({
     const term = termRef.current;
     if (!term) return;
     term.options.theme = xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColors);
-    reportNativeTheme(getCurrentThemeId());
+    reportNativeTheme(getCurrentThemeId(), themeTerminalColors);
   }, [themeTerminalColors]);
 
   // Live-refresh the xterm palette when the user switches themes from
@@ -934,7 +958,7 @@ export function Terminal({
       const term = termRef.current;
       if (!term) return;
       term.options.theme = xtermThemeFor(findTheme(themeId), themeTerminalColorsRef.current);
-      reportNativeTheme(themeId);
+      reportNativeTheme(themeId, themeTerminalColorsRef.current);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
