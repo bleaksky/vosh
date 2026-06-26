@@ -166,6 +166,13 @@ impl TermGrid {
         self.term.grid().display_offset()
     }
 
+    /// Total scrollback length (lines above the live screen). The max the
+    /// display offset can reach; drives the scroll-depth indicator.
+    pub(crate) fn scrollback_len(&self) -> usize {
+        let grid = self.term.grid();
+        grid.total_lines().saturating_sub(grid.screen_lines())
+    }
+
     /// The active selection as start and end line/column in grid
     /// coordinates (line-major, inclusive), for highlighting.
     pub(crate) fn selection_bounds(&self) -> Option<(i32, usize, i32, usize)> {

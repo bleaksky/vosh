@@ -1091,6 +1091,45 @@ impl CellRenderer {
             });
         }
 
+        // Scroll-depth indicator: "<back>/<max>" in a pill at the top-right
+        // when scrolled up. The DOM cannot show this (it sits behind the
+        // opaque surface), so it is drawn here.
+        if offset > 0 {
+            let text = format!("{offset}/{}", grid.scrollback_len());
+            let n = text.chars().count() as f32;
+            let pill_w = (n + 1.0) * cell_w;
+            let x0 = (surface_w as f32 - pill_w).max(0.0);
+            let ind_fg = rgb_to_rgba(Rgb {
+                r: 0xc0,
+                g: 0xc8,
+                b: 0xd4,
+            });
+            let ind_bg = rgb_to_rgba(Rgb {
+                r: 0x1a,
+                g: 0x20,
+                b: 0x2c,
+            });
+            instances.push(CellInstance {
+                offset: [x0, 0.0],
+                size: [pill_w, cell_h],
+                bg: ind_bg,
+                fg: ind_bg,
+                uv_min: space_uv.0,
+                uv_max: space_uv.1,
+            });
+            for (i, ch) in text.chars().enumerate() {
+                let uv = atlas.uv_if_cached(ch).unwrap_or(space_uv);
+                instances.push(CellInstance {
+                    offset: [x0 + (i as f32 + 0.5) * cell_w, 0.0],
+                    size: [cell_w, cell_h],
+                    bg: ind_bg,
+                    fg: ind_fg,
+                    uv_min: uv.0,
+                    uv_max: uv.1,
+                });
+            }
+        }
+
         let uniforms = Uniforms {
             surface_size: [surface_w as f32, surface_h as f32],
             cell_size: [cell_w, cell_h],
