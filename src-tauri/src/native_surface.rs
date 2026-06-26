@@ -199,6 +199,97 @@ fn divider_frac() -> Option<f32> {
     (bits != 0).then(|| f32::from_bits(bits))
 }
 
+// Text selection in progress, plus the backing scale and atlas cell size
+// (set each frame / on bounds) so the mouse handler can map a point to a
+// grid cell without locking the surface.
+static SELECTING: AtomicBool = AtomicBool::new(false);
+static DPR: AtomicU32 = AtomicU32::new(0);
+static CELL_W: AtomicU32 = AtomicU32::new(0);
+static CELL_H: AtomicU32 = AtomicU32::new(0);
+
+fn store_f32(slot: &AtomicU32, value: f32) {
+    slot.store(value.to_bits(), Ordering::Release);
+}
+
+fn load_f32(slot: &AtomicU32, default: f32) -> f32 {
+    let bits = slot.load(Ordering::Acquire);
+    if bits == 0 {
+        default
+    } else {
+        f32::from_bits(bits)
+    }
+}
+
+/// Map a mouse event to a grid cell `(line, col)`. Uses the scrolled view
+/// (row minus the scroll offset); the live region of an open split reads
+/// as if scrolled, which is acceptable for v1.
+fn point_to_cell(this: *mut AnyObject, event: *mut AnyObject) -> Option<(i32, usize)> {
+    if this.is_null() || event.is_null() {
+        return None;
+    }
+    let dpr = f64::from(load_f32(&DPR, 2.0));
+    let cell_w = f64::from(load_f32(&CELL_W, 0.0));
+    let cell_h = f64::from(load_f32(&CELL_H, 0.0));
+    if cell_w <= 0.0 || cell_h <= 0.0 {
+        return None;
+    }
+    // SAFETY: AppKit hands us a live NSView (`this`) and NSEvent.
+    unsafe {
+        let win_pt: CGPoint = msg_send![event, locationInWindow];
+        let view_pt: CGPoint =
+            msg_send![this, convertPoint: win_pt, fromView: std::ptr::null_mut::<AnyObject>()];
+        let bounds: CGRect = msg_send![this, bounds];
+        // NSView is bottom-left; flip to top-down, then scale to pixels.
+        let phys_x = view_pt.x * dpr;
+        let phys_y = (bounds.size.height - view_pt.y) * dpr;
+        let col = (phys_x / cell_w).floor().max(0.0) as usize;
+        let row = (phys_y / cell_h).floor().max(0.0) as i32;
+        let offset = crate::term_grid::current_display_offset() as i32;
+        Some((row - offset, col))
+    }
+}
+
+/// Put `text` on the general pasteboard (UTF-8 plain text).
+fn set_clipboard(text: &str) {
+    let Ok(text_c) = std::ffi::CString::new(text) else {
+        return;
+    };
+    let Ok(type_c) = std::ffi::CString::new("public.utf8-plain-text") else {
+        return;
+    };
+    // SAFETY: standard NSPasteboard string write on the main thread.
+    unsafe {
+        let pasteboard: *mut AnyObject = msg_send![class!(NSPasteboard), generalPasteboard];
+        if pasteboard.is_null() {
+            return;
+        }
+        let _: () = msg_send![pasteboard, clearContents];
+        let ns_text: *mut AnyObject =
+            msg_send![class!(NSString), stringWithUTF8String: text_c.as_ptr()];
+        let ns_type: *mut AnyObject =
+            msg_send![class!(NSString), stringWithUTF8String: type_c.as_ptr()];
+        let _: bool = msg_send![pasteboard, setString: ns_text, forType: ns_type];
+    }
+}
+
+/// Copy the current selection to the clipboard (no-op when empty).
+fn copy_selection() {
+    if let Some(text) = crate::term_grid::selection_text() {
+        if !text.is_empty() {
+            set_clipboard(&text);
+        }
+    }
+}
+
+/// Copy the native selection, dispatched to the main thread. Called by the
+/// Cmd+C / Ctrl+C path from the frontend.
+pub(crate) fn request_copy() {
+    let Some(app) = APP.get() else {
+        return;
+    };
+    let _ = app.run_on_main_thread(copy_selection);
+}
+
 /// Mouse-wheel handler. `AppKit` calls this on the main thread with a live
 /// `NSEvent`; accumulate fractional lines and scroll the grid.
 extern "C" fn scroll_wheel(_this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
@@ -240,33 +331,51 @@ fn event_fraction(this: *mut AnyObject, event: *mut AnyObject) -> Option<f64> {
     }
 }
 
-/// Begin a divider drag if the press lands on the split divider.
+/// Grab the divider if the press lands on it, otherwise begin a selection.
 extern "C" fn mouse_down(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
-    if crate::term_grid::current_display_offset() == 0 {
-        return; // not split, no divider to grab
-    }
-    if let Some(frac) = event_fraction(this, event) {
-        if (frac - f64::from(split_ratio())).abs() < 0.03 {
-            DRAGGING.store(true, Ordering::Release);
+    if crate::term_grid::current_display_offset() > 0 {
+        if let Some(frac) = event_fraction(this, event) {
+            if (frac - f64::from(split_ratio())).abs() < 0.03 {
+                DRAGGING.store(true, Ordering::Release);
+                return;
+            }
         }
     }
-}
-
-/// Move the divider while dragging.
-extern "C" fn mouse_dragged(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
-    if !DRAGGING.load(Ordering::Acquire) {
-        return;
-    }
-    if let Some(frac) = event_fraction(this, event) {
-        set_split_ratio((frac.clamp(0.15, 0.85)) as f32);
+    crate::term_grid::clear_selection();
+    if let Some((line, col)) = point_to_cell(this, event) {
+        crate::term_grid::start_selection(line, col);
+        SELECTING.store(true, Ordering::Release);
         redraw_now();
     }
 }
 
+/// Move the divider, or extend the selection, while dragging.
+extern "C" fn mouse_dragged(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
+    if DRAGGING.load(Ordering::Acquire) {
+        if let Some(frac) = event_fraction(this, event) {
+            set_split_ratio((frac.clamp(0.15, 0.85)) as f32);
+            redraw_now();
+        }
+        return;
+    }
+    if SELECTING.load(Ordering::Acquire) {
+        if let Some((line, col)) = point_to_cell(this, event) {
+            crate::term_grid::update_selection(line, col);
+            redraw_now();
+        }
+    }
+}
+
 extern "C" fn mouse_up(_this: *mut AnyObject, _cmd: Sel, _event: *mut AnyObject) {
-    DRAGGING.store(false, Ordering::Release);
-    // Drag is over; redraw so the cursor rect refreshes at the new divider.
-    redraw_now();
+    if DRAGGING.swap(false, Ordering::AcqRel) {
+        // Divider drag over; redraw so the cursor rect refreshes.
+        redraw_now();
+        return;
+    }
+    if SELECTING.swap(false, Ordering::AcqRel) {
+        // Copy the selection to the clipboard on release.
+        copy_selection();
+    }
 }
 
 /// Cursor rects: an arrow over the surface (so the webview's text cursor
@@ -454,6 +563,7 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
     // The surface is now positioned and visible, so live output should
     // trigger repaints.
     ACTIVE.store(true, Ordering::Release);
+    store_f32(&DPR, dpr as f32);
     unsafe {
         // The view's superview is the content view; AppKit frames use a
         // bottom-left origin, so flip the top-left y the webview reports.
@@ -560,6 +670,10 @@ fn render(state: &mut GpuState) {
         .grid_size_for(state.config.width, state.config.height);
     crate::term_grid::resize_grid(cols, rows);
     push_native_size_if_changed(cols, rows);
+    // Publish the cell size so the mouse handler can map points to cells.
+    let (cw, ch) = state.cell_renderer.cell_size_px();
+    store_f32(&CELL_W, cw);
+    store_f32(&CELL_H, ch);
 
     // Disjoint borrows of GpuState fields so the grid-reading closure can
     // hold the renderer mutably and the device/queue immutably.

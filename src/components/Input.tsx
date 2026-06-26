@@ -584,6 +584,22 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       }
     }
 
+    // Cmd/Ctrl+C copies the native terminal selection, but only when the
+    // input box has nothing selected (so its own copy still works).
+    if (
+      (event.metaKey || event.ctrlKey) &&
+      (event.key === 'c' || event.key === 'C') &&
+      nativeSurfaceEnabled()
+    ) {
+      const el = event.currentTarget;
+      const inputHasSelection = el.selectionStart != null && el.selectionStart !== el.selectionEnd;
+      if (!inputHasSelection) {
+        event.preventDefault();
+        void invoke('native_surface_copy').catch(() => {});
+        return;
+      }
+    }
+
     // Page-scroll the terminal scrollback. macOS sends PageUp/PageDown
     // when the user presses Fn+Up/Fn+Down. Other platforms: PageUp/
     // PageDown directly.
