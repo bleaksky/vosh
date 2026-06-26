@@ -678,6 +678,15 @@ body {
   padding: 8px 14px 6px 14px;
 }
 
+/* When find is open AND the native surface is active, the opaque surface
+   composites above the webview and would hide the floating find toolbar.
+   Inset the live pane (top padding) so the toolbar sits in the gap above
+   the surface. The surface follows the pane's shrunk rect; width is
+   unchanged so the column count (and line wrapping) does not move. */
+.terminal-area-find-inset {
+  padding-top: 44px;
+}
+
 /* Panel zones. The four configurable edges around the terminal where
    user-movable panels (map, group, vitals, roomstrip, chat) land.
    Top/bottom zones are full-width strips; left/right zones share the

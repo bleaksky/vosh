@@ -1111,7 +1111,9 @@ function App() {
   const terminalAreaElement = (
     <div
       ref={terminalAreaRef}
-      className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}`}
+      className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}${
+        findOpen && nativeSurfaceEnabled() ? ' terminal-area-find-inset' : ''
+      }`}
       onMouseUp={handleTerminalMouseUp}
     >
       {findOpen && (
