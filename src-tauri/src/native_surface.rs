@@ -290,6 +290,36 @@ pub(crate) fn request_copy() {
     let _ = app.run_on_main_thread(copy_selection);
 }
 
+/// Rebuild the renderer's glyph atlas with a new font and repaint. Runs on
+/// the main thread; keeps the surface/device, swaps the cell renderer.
+fn rebuild_font(family: &str, font_px: f32) {
+    if let Ok(mut slot) = surface_slot().lock() {
+        if let Some(handle) = slot.as_mut() {
+            if let Some(renderer) = crate::cell_render::CellRenderer::new(
+                &handle.gpu.device,
+                &handle.gpu.queue,
+                handle.gpu.config.format,
+                family,
+                font_px,
+            ) {
+                handle.gpu.cell_renderer = renderer;
+                render(&mut handle.gpu);
+            }
+        }
+    }
+}
+
+/// Re-create the atlas at the configured font/size (CSS px * scale),
+/// dispatched to the main thread. Called when the font setting changes.
+#[allow(clippy::cast_precision_loss)]
+pub(crate) fn request_set_font(family: String, font_size: u32) {
+    let Some(app) = APP.get() else {
+        return;
+    };
+    let font_px = (font_size as f32 * load_f32(&DPR, 2.0)).max(6.0);
+    let _ = app.run_on_main_thread(move || rebuild_font(&family, font_px));
+}
+
 /// Mouse-wheel handler. `AppKit` calls this on the main thread with a live
 /// `NSEvent`; accumulate fractional lines and scroll the grid.
 extern "C" fn scroll_wheel(_this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {

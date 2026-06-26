@@ -27,6 +27,18 @@ export function nativeSurfaceEnabled(): boolean {
   return typeof localStorage !== 'undefined' && localStorage.getItem('vosh.nativesurface') !== '0';
 }
 
+// Report the active theme's surface colors to the native renderer so its
+// background/foreground/selection follow the Vosh theme and live-update.
+function reportNativeTheme(themeId: string): void {
+  if (!nativeSurfaceEnabled()) return;
+  const t = findTheme(themeId).xterm;
+  void invoke('native_surface_set_theme', {
+    background: t.background ?? '#101218',
+    foreground: t.foreground ?? '#cccccc',
+    selection: t.selectionBackground ?? '#2a3b5e',
+  }).catch(() => {});
+}
+
 export interface FindOptions {
   /** Treat the term as a regex. Default false (plain substring). */
   regex?: boolean;
@@ -890,6 +902,16 @@ export function Terminal({
     } catch {
       // ignore
     }
+    if (nativeSurfaceEnabled()) {
+      const primary = fontFamily
+        .split(',')[0]
+        .trim()
+        .replace(/^["']|["']$/g, '');
+      void invoke('native_surface_set_font', {
+        family: primary,
+        size: Math.round(fontSize),
+      }).catch(() => {});
+    }
   }, [fontFamily, fontSize]);
 
   // Re-apply the palette when the canonical-vs-themed toggle flips
@@ -898,6 +920,7 @@ export function Terminal({
     const term = termRef.current;
     if (!term) return;
     term.options.theme = xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColors);
+    reportNativeTheme(getCurrentThemeId());
   }, [themeTerminalColors]);
 
   // Live-refresh the xterm palette when the user switches themes from
@@ -909,6 +932,7 @@ export function Terminal({
       const term = termRef.current;
       if (!term) return;
       term.options.theme = xtermThemeFor(findTheme(themeId), themeTerminalColorsRef.current);
+      reportNativeTheme(themeId);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
