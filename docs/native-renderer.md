@@ -144,14 +144,21 @@ NSWindow / HWND / GtkWindow
   offset) and a live tail (bottom, offset 0) with a thin divider line. The
   divider is draggable (split stored as a height fraction) with a tracking
   vertical-resize cursor that lines up with the drawn line.
-- **M4 — parity. IN PROGRESS.** Done: cell styles (bold promotes to the
-  bright variant, dim, inverse, underline), theme colors (surface
-  background/foreground/selection follow the active Vosh theme and
-  live-update through `native_surface_set_theme`), and font live-update
-  (the atlas rebuilds at the configured family + size through
-  `native_surface_set_font`). Remaining: cursor rendering, italic (no
-  bundled italic face), a dynamic atlas for non-ASCII glyphs, link clicks,
-  and the per-line trigger/highlight effects.
+- **M4 — parity. NEARLY DONE.** Done: cell styles (bold promotes to the
+  bright variant, dim, inverse, underline); theme colors (surface
+  background/foreground/selection plus the ANSI 0-15 palette follow the
+  active theme and the `themeTerminalColors` tint toggle, reported through
+  `native_surface_set_theme`); font live-update (the atlas rebuilds at the
+  configured family + size via `native_surface_set_font`); a dynamic atlas
+  that rasterizes non-ASCII glyphs on demand; find/regex with match
+  highlighting (`native_surface_find`); local echo of sent input with a
+  configurable color (`native_surface_echo` + `input_echo_color`); a
+  scroll-depth indicator drawn on the surface; and Cmd+click to open URLs.
+  The per-line trigger/highlight effects need no work: the trigger engine
+  bakes highlights and gags into the display byte stream that feeds the
+  grid. Remaining: italic (no bundled italic face) and a hover affordance
+  for links. The block cursor is deliberately omitted (the pane is output
+  only; input is a separate row).
 - **M6 — cross-platform.** Windows (D3D12) and Linux (Vulkan) surfaces,
   CI bundles, flip the default.
 
@@ -161,32 +168,35 @@ is dead and we stay in Tier 1/2. Everything after M1 is "normal" work.
 
 ## Resume here
 
-Branch `native-renderer`. **M1, M2, M3, and M5 are done and verified on
-screen; M4 (parity) is most of the way there.** The native wgpu surface
-renders the full live terminal with the configured Vosh font and size,
-accurate ANSI colors and cell styles (bold/dim/inverse/underline),
-theme-driven surface colors, wheel + keyboard scroll, draggable
-split-scrollback, and drag-select + copy (mouse and Cmd+C). Enable with
+Branch `native-renderer`. **M1, M2, M3, and M5 are done; M4 (parity) is
+nearly done.** The native wgpu surface renders the full live terminal with
+the configured Vosh font and size, accurate ANSI colors (theme palette +
+tint toggle), cell styles (bold/dim/inverse/underline), non-ASCII glyphs,
+theme-driven surface colors, trigger highlights and gags (free, via the
+byte stream), wheel + keyboard scroll, draggable split-scrollback, a
+scroll-depth indicator, drag-select + copy (mouse and Cmd+C), find/regex
+with match highlighting, local echo of sent input (configurable color), and
+Cmd+click to open URLs. Enable with
 `localStorage.setItem('vosh.nativesurface','1')` + reload; `'0'` falls back
 to xterm.
 
 The frontend reports state to the surface through commands:
 `native_surface_set_bounds` (pane geometry + dpr), `native_surface_scroll`
 (PageUp/PageDown/bottom), `native_surface_copy` (Cmd+C),
-`native_surface_set_theme` (bg/fg/selection), `native_surface_set_font`
-(family + size). The backend feeds the grid from `session.rs` and redraws
-via `request_redraw`.
+`native_surface_set_theme` (bg/fg/selection + ANSI palette),
+`native_surface_set_font` (family + size), `native_surface_echo` (sent
+input), `native_surface_find` / `native_surface_find_clear` (search). The
+backend feeds the grid from `session.rs` and redraws via `request_redraw`.
 
 Remaining before native can be the default:
 
-- **Cursor.** The block/bar cursor is not drawn yet.
 - **Italic.** No bundled italic face; bold/dim/inverse/underline render.
-- **Dynamic atlas.** Only printable ASCII is pre-uploaded; non-ASCII
-  renders blank until the atlas re-uploads on new glyphs.
+- **Link hover.** Cmd+click opens URLs; no hover underline yet.
 - **Split selection.** Selecting in the live region of an open split maps
   as if scrolled; accurate in the history region and when not split.
 - **Cross-platform (M6).** Windows (D3D12) and Linux (Vulkan) surfaces.
 
-The TEMP default-on flag in `nativeSurfaceEnabled` (Terminal.tsx) must flip
-back to opt-in (`=== '1'`) before this branch merges. Check
-`git log --oneline` first.
+The block cursor is deliberately omitted (output-only pane). The TEMP
+default-on flag in `nativeSurfaceEnabled` (Terminal.tsx) must flip back to
+opt-in (`=== '1'`) before this branch merges. Check `git log --oneline`
+first.
