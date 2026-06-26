@@ -27,8 +27,10 @@ use regex::RegexBuilder;
 pub(crate) struct CellFlags {
     pub bold: bool,
     pub dim: bool,
+    pub italic: bool,
     pub inverse: bool,
     pub underline: bool,
+    pub strikeout: bool,
 }
 
 /// `Term` requires an event listener for bell, title, clipboard, and
@@ -155,8 +157,10 @@ impl TermGrid {
         let cell_flags = CellFlags {
             bold: flags.contains(Flags::BOLD),
             dim: flags.contains(Flags::DIM),
+            italic: flags.contains(Flags::ITALIC),
             inverse: flags.contains(Flags::INVERSE),
             underline: flags.intersects(Flags::ALL_UNDERLINES),
+            strikeout: flags.contains(Flags::STRIKEOUT),
         };
         (cell.c, cell.fg, cell.bg, cell_flags)
     }

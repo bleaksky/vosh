@@ -354,6 +354,7 @@ fn rect_to_uv(x: u32, y: u32, w: u32, h: u32, aw: u32, ah: u32) -> ([f32; 2], [f
 /// per-glyph offset math is needed at draw time.
 pub(crate) struct GlyphAtlas {
     font: Font,
+    bold_font: Font,
     px: f32,
     cell_w: u32,
     cell_h: u32,
@@ -363,7 +364,9 @@ pub(crate) struct GlyphAtlas {
     atlas_w: u32,
     atlas_h: u32,
     pixels: Vec<u8>,
-    slots: HashMap<char, u32>,
+    // Keyed by (char, bold, italic): four faces (regular, bold, and a
+    // synthetic slant of each) share one texture.
+    slots: HashMap<(char, bool, bool), u32>,
     next: u32,
 }
 
@@ -372,19 +375,21 @@ impl GlyphAtlas {
     /// `family_stack` (falling back to the system monospace) at `px`
     /// pixels. Returns `None` if no font can be loaded.
     pub(crate) fn new(family_stack: &str, px: f32) -> Option<Self> {
-        let font = load_font(family_stack)?;
+        let font = load_font(family_stack, false)?;
+        let bold_font = load_font(family_stack, true).or_else(|| load_font(family_stack, false))?;
         let line = font.horizontal_line_metrics(px)?;
         let cell_h = (line.new_line_size.ceil() as u32).max(1);
         let cell_w = (font.metrics('M', px).advance_width.ceil() as u32).max(1);
-        // 24x24 = 576 slots: printable ASCII plus the box-drawing, block,
-        // and accented glyphs a MUD session accumulates, rasterized on
-        // demand (see the dynamic-atlas pass in CellRenderer::draw).
-        let cols = 24;
-        let rows = 24;
+        // 32x32 = 1024 slots: printable ASCII across four faces (regular,
+        // bold, italic, bold-italic) plus box-drawing/accented glyphs a MUD
+        // accumulates, rasterized on demand (see the dynamic-atlas pass).
+        let cols = 32;
+        let rows = 32;
         let atlas_w = cols * cell_w;
         let atlas_h = rows * cell_h;
         Some(Self {
             font,
+            bold_font,
             px,
             cell_w,
             cell_h,
@@ -412,16 +417,18 @@ impl GlyphAtlas {
         &self.pixels
     }
 
-    /// Get (or rasterize on first use) the glyph for `c`, returning its UV
-    /// rect in the atlas. Falls back to the last slot when the grid fills.
-    pub(crate) fn glyph_uv(&mut self, c: char) -> ([f32; 2], [f32; 2]) {
-        let index = if let Some(&i) = self.slots.get(&c) {
+    /// Get (or rasterize on first use) the glyph for `c` in the (bold,
+    /// italic) face, returning its UV rect. Falls back to the last slot when
+    /// the grid fills.
+    pub(crate) fn glyph_uv(&mut self, c: char, bold: bool, italic: bool) -> ([f32; 2], [f32; 2]) {
+        let key = (c, bold, italic);
+        let index = if let Some(&i) = self.slots.get(&key) {
             i
         } else {
             let i = self.next.min(self.cols * self.rows - 1);
             self.next += 1;
-            self.rasterize_into(c, i);
-            self.slots.insert(c, i);
+            self.rasterize_into(c, i, bold, italic);
+            self.slots.insert(key, i);
             i
         };
         let (x, y, w, h) = slot_rect(index, self.cols, self.cell_w, self.cell_h);
@@ -431,18 +438,26 @@ impl GlyphAtlas {
     /// UV rect for an already-rasterized glyph, or `None`. Read-only so the
     /// draw path can look up cached glyphs without mutating the atlas (the
     /// texture is uploaded once; non-cached chars fall back to blank).
-    pub(crate) fn uv_if_cached(&self, c: char) -> Option<([f32; 2], [f32; 2])> {
-        self.slots.get(&c).map(|&i| {
+    pub(crate) fn uv_if_cached(
+        &self,
+        c: char,
+        bold: bool,
+        italic: bool,
+    ) -> Option<([f32; 2], [f32; 2])> {
+        self.slots.get(&(c, bold, italic)).map(|&i| {
             let (x, y, w, h) = slot_rect(i, self.cols, self.cell_w, self.cell_h);
             rect_to_uv(x, y, w, h, self.atlas_w, self.atlas_h)
         })
     }
 
-    /// Rasterize `c` and blit its coverage into slot `index`, positioned at
-    /// the baseline. NOTE: glyph placement (xmin/ascent math) is the part
-    /// that needs a visual check.
-    fn rasterize_into(&mut self, c: char, index: u32) {
-        let (metrics, bitmap) = self.font.rasterize(c, self.px);
+    /// Rasterize `c` (from the bold or regular face) and blit its coverage
+    /// into slot `index` at the baseline. Italic applies a synthetic slant:
+    /// each row shears horizontally, centered on the cell mid-height so the
+    /// overflow clips symmetrically. NOTE: glyph placement needs a visual
+    /// check.
+    fn rasterize_into(&mut self, c: char, index: u32, bold: bool, italic: bool) {
+        let face = if bold { &self.bold_font } else { &self.font };
+        let (metrics, bitmap) = face.rasterize(c, self.px);
         if metrics.width == 0 || metrics.height == 0 {
             return;
         }
@@ -450,16 +465,23 @@ impl GlyphAtlas {
         let gx = metrics.xmin.max(0) as u32;
         let top = (self.ascent - metrics.height as f32 - metrics.ymin as f32).round();
         let gy = top.max(0.0) as u32;
+        let half = self.cell_h as f32 / 2.0;
         for row in 0..metrics.height {
+            let shear = if italic {
+                (0.2 * (half - (gy + row as u32) as f32)).round() as i32
+            } else {
+                0
+            };
             for col in 0..metrics.width {
-                let dst_x = sx + gx + col as u32;
+                let dst_x = sx as i32 + gx as i32 + col as i32 + shear;
                 let dst_y = sy + gy + row as u32;
-                if dst_x < sx + self.cell_w
+                if dst_x >= sx as i32
+                    && (dst_x as u32) < sx + self.cell_w
+                    && (dst_x as u32) < self.atlas_w
                     && dst_y < sy + self.cell_h
-                    && dst_x < self.atlas_w
                     && dst_y < self.atlas_h
                 {
-                    let di = (dst_y * self.atlas_w + dst_x) as usize;
+                    let di = (dst_y * self.atlas_w + dst_x as u32) as usize;
                     self.pixels[di] = bitmap[row * metrics.width + col];
                 }
             }
@@ -475,9 +497,10 @@ impl GlyphAtlas {
 // load each face, keep the Normal-style one whose weight is closest to
 // 400. font-kit's `copy_font_data` extracts that single face, so fontdue
 // reads it at collection index 0.
-fn regular_face(
+fn weighted_face(
     source: &font_kit::source::SystemSource,
     family: &str,
+    target_weight: f32,
 ) -> Option<font_kit::handle::Handle> {
     use font_kit::properties::Style;
     let fam = source.select_family_by_name(family).ok()?;
@@ -488,7 +511,7 @@ fn regular_face(
         if props.style != Style::Normal {
             continue;
         }
-        let weight_dist = (props.weight.0 - 400.0).abs();
+        let weight_dist = (props.weight.0 - target_weight).abs();
         if best.as_ref().map_or(true, |(_, d)| weight_dist < *d) {
             best = Some((handle.clone(), weight_dist));
         }
@@ -502,8 +525,11 @@ fn regular_face(
 // the webview exactly.
 const BERKELEY_REGULAR: &[u8] =
     include_bytes!("../../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf");
+const BERKELEY_BOLD: &[u8] = include_bytes!("../../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf");
 const JETBRAINS_REGULAR: &[u8] =
     include_bytes!("../../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf");
+const JETBRAINS_BOLD: &[u8] =
+    include_bytes!("../../src/assets/fonts/JetBrainsMonoNerdFont-Bold.ttf");
 
 fn font_from_handle(handle: &font_kit::handle::Handle) -> Option<Font> {
     let kit_font = handle.load().ok()?;
@@ -512,8 +538,9 @@ fn font_from_handle(handle: &font_kit::handle::Handle) -> Option<Font> {
     Font::from_bytes(&data[..], fontdue::FontSettings::default()).ok()
 }
 
-fn load_font(family_stack: &str) -> Option<Font> {
+fn load_font(family_stack: &str, bold: bool) -> Option<Font> {
     let source = font_kit::source::SystemSource::new();
+    let weight = if bold { 700.0 } else { 400.0 };
 
     for raw in family_stack.split(',') {
         let name = raw.trim().trim_matches('"').trim_matches('\'').trim();
@@ -533,20 +560,29 @@ fn load_font(family_stack: &str) -> Option<Font> {
         }
         // Bundled families, matched by the webview.
         if lower.contains("berkeley") {
-            if let Ok(font) = Font::from_bytes(BERKELEY_REGULAR, fontdue::FontSettings::default()) {
-                tracing::info!("native-surface: atlas font = bundled BerkeleyMono");
+            let bytes = if bold {
+                BERKELEY_BOLD
+            } else {
+                BERKELEY_REGULAR
+            };
+            if let Ok(font) = Font::from_bytes(bytes, fontdue::FontSettings::default()) {
+                tracing::info!(bold, "native-surface: atlas font = bundled BerkeleyMono");
                 return Some(font);
             }
         }
         if lower.contains("jetbrains") {
-            if let Ok(font) = Font::from_bytes(JETBRAINS_REGULAR, fontdue::FontSettings::default())
-            {
-                tracing::info!("native-surface: atlas font = bundled JetBrainsMono");
+            let bytes = if bold {
+                JETBRAINS_BOLD
+            } else {
+                JETBRAINS_REGULAR
+            };
+            if let Ok(font) = Font::from_bytes(bytes, fontdue::FontSettings::default()) {
+                tracing::info!(bold, "native-surface: atlas font = bundled JetBrainsMono");
                 return Some(font);
             }
         }
-        // Otherwise a system font, upright regular face.
-        if let Some(font) = regular_face(&source, name)
+        // Otherwise a system font, upright face closest to the weight.
+        if let Some(font) = weighted_face(&source, name, weight)
             .as_ref()
             .and_then(font_from_handle)
         {
@@ -554,8 +590,8 @@ fn load_font(family_stack: &str) -> Option<Font> {
         }
     }
 
-    regular_face(&source, "Menlo")
-        .or_else(|| regular_face(&source, "Courier New"))
+    weighted_face(&source, "Menlo", weight)
+        .or_else(|| weighted_face(&source, "Courier New", weight))
         .as_ref()
         .and_then(font_from_handle)
 }
@@ -589,14 +625,14 @@ fn build_instances(
     rows: usize,
     cell_w: f32,
     cell_h: f32,
-    mut cell: impl FnMut(usize, usize) -> (char, Rgba, Rgba),
-    mut uv: impl FnMut(char) -> ([f32; 2], [f32; 2]),
+    mut cell: impl FnMut(usize, usize) -> (char, Rgba, Rgba, bool, bool),
+    mut uv: impl FnMut(char, bool, bool) -> ([f32; 2], [f32; 2]),
 ) -> Vec<CellInstance> {
     let mut out = Vec::with_capacity(cols * rows);
     for row in 0..rows {
         for col in 0..cols {
-            let (ch, fg, bg) = cell(col, row);
-            let (uv_min, uv_max) = uv(ch);
+            let (ch, fg, bg, bold, italic) = cell(col, row);
+            let (uv_min, uv_max) = uv(ch, bold, italic);
             out.push(CellInstance {
                 offset: [col as f32 * cell_w, row as f32 * cell_h],
                 size: [cell_w, cell_h],
@@ -706,9 +742,11 @@ impl CellRenderer {
     ) -> Option<Self> {
         let mut atlas = GlyphAtlas::new(font_stack, font_px)?;
         for code in 0x20u8..0x7f {
-            let _ = atlas.glyph_uv(code as char);
+            let _ = atlas.glyph_uv(code as char, false, false);
         }
-        let space_uv = atlas.uv_if_cached(' ').unwrap_or(([0.0, 0.0], [0.0, 0.0]));
+        let space_uv = atlas
+            .uv_if_cached(' ', false, false)
+            .unwrap_or(([0.0, 0.0], [0.0, 0.0]));
         let (atlas_w, atlas_h) = atlas.atlas_size();
 
         let extent = wgpu::Extent3d {
@@ -962,9 +1000,14 @@ impl CellRenderer {
                 } else {
                     row as i32 - offset
                 };
-                let (ch, ..) = grid.cell_at_line(grid_line, col);
-                if ch != ' ' && self.atlas.uv_if_cached(ch).is_none() {
-                    self.atlas.glyph_uv(ch);
+                let (ch, _, _, flags) = grid.cell_at_line(grid_line, col);
+                if ch != ' '
+                    && self
+                        .atlas
+                        .uv_if_cached(ch, flags.bold, flags.italic)
+                        .is_none()
+                {
+                    self.atlas.glyph_uv(ch, flags.bold, flags.italic);
                     atlas_grew = true;
                 }
             }
@@ -1033,6 +1076,7 @@ impl CellRenderer {
         }));
 
         let mut underlines: Vec<(usize, usize, Rgba)> = Vec::new();
+        let mut strikeouts: Vec<(usize, usize, Rgba)> = Vec::new();
         let mut instances = build_instances(
             cols,
             rows,
@@ -1060,15 +1104,29 @@ impl CellRenderer {
                 if flags.underline {
                     underlines.push((col, row, fg_rgba));
                 }
-                (ch, fg_rgba, bg_rgba)
+                if flags.strikeout {
+                    strikeouts.push((col, row, fg_rgba));
+                }
+                (ch, fg_rgba, bg_rgba, flags.bold, flags.italic)
             },
-            |ch| atlas.uv_if_cached(ch).unwrap_or(space_uv),
+            |ch, bold, italic| atlas.uv_if_cached(ch, bold, italic).unwrap_or(space_uv),
         );
 
         // Underline quads: a thin line at the bottom of each underlined cell.
         for (col, row, color) in underlines {
             instances.push(CellInstance {
                 offset: [col as f32 * cell_w, (row + 1) as f32 * cell_h - 2.0],
+                size: [cell_w, 1.5],
+                bg: color,
+                fg: color,
+                uv_min: space_uv.0,
+                uv_max: space_uv.1,
+            });
+        }
+        // Strikethrough quads: a thin line across the cell mid-height.
+        for (col, row, color) in strikeouts {
+            instances.push(CellInstance {
+                offset: [col as f32 * cell_w, row as f32 * cell_h + cell_h * 0.5],
                 size: [cell_w, 1.5],
                 bg: color,
                 fg: color,
@@ -1118,7 +1176,7 @@ impl CellRenderer {
                 uv_max: space_uv.1,
             });
             for (i, ch) in text.chars().enumerate() {
-                let uv = atlas.uv_if_cached(ch).unwrap_or(space_uv);
+                let uv = atlas.uv_if_cached(ch, false, false).unwrap_or(space_uv);
                 instances.push(CellInstance {
                     offset: [x0 + (i as f32 + 0.5) * cell_w, 0.0],
                     size: [cell_w, cell_h],
@@ -1244,8 +1302,8 @@ mod tests {
             return;
         };
         assert!(atlas.cell_w() > 0 && atlas.cell_h() > 0);
-        let _ = atlas.glyph_uv('A');
-        let _ = atlas.glyph_uv(' ');
+        let _ = atlas.glyph_uv('A', false, false);
+        let _ = atlas.glyph_uv(' ', false, false);
 
         let coverage = |a: &GlyphAtlas, index: u32| -> u32 {
             let (sx, sy, w, h) = slot_rect(index, a.cols, a.cell_w, a.cell_h);
@@ -1270,8 +1328,8 @@ mod tests {
             1,
             10.0,
             20.0,
-            |col, _row| (if col == 0 { 'a' } else { 'b' }, white, black),
-            |ch| {
+            |col, _row| (if col == 0 { 'a' } else { 'b' }, white, black, false, false),
+            |ch, _bold, _italic| {
                 if ch == 'a' {
                     ([0.0, 0.0], [0.1, 0.1])
                 } else {
@@ -1298,8 +1356,8 @@ mod tests {
             2,
             8.0,
             16.0,
-            |_, _| ('x', c, c),
-            |_| ([0.0, 0.0], [0.0, 0.0]),
+            |_, _| ('x', c, c, false, false),
+            |_, _, _| ([0.0, 0.0], [0.0, 0.0]),
         );
         assert_eq!(instances[0].offset, [0.0, 0.0]);
         assert_eq!(instances[1].offset, [0.0, 16.0]);
