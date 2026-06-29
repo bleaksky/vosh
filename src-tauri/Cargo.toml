@@ -60,9 +60,14 @@ raw-window-handle = "0.6"
 # Terminal grid model (VTE parser + cell grid + scrollback) fed by the
 # post-telnet byte stream; the wgpu renderer draws this grid (M2b/M2c).
 alacritty_terminal = "0.24"
-# Glyph rasterization for the cell renderer's atlas. font-kit (above)
-# selects/loads the monospace font bytes; fontdue rasterizes them simply.
-fontdue = "0.9"
+# Glyph rasterization for the cell renderer's atlas. font-kit selects the
+# font and supplies metrics + glyph bounds; we rasterize each glyph through
+# CoreGraphics directly (core-graphics/core-text) with font smoothing OFF so
+# the strokes match the webview's antialiased text instead of the heavier
+# smoothed look. pathfinder_geometry supplies the transform types.
+pathfinder_geometry = "0.5"
+core-graphics = "0.23"
+core-text = "20"
 # Cast the per-cell instance + uniform structs to bytes for wgpu buffers.
 bytemuck = { version = "1", features = ["derive"] }
 # alacritty_terminal compiles a unix tty (PTY) module we never use; it

@@ -539,6 +539,31 @@ function App() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [findOpen]);
 
+  // The native surface is opaque and on top, so DOM popovers (dropdowns,
+  // menus, modals) that overlap the terminal would be occluded by it. Watch
+  // for them and hide the surface while any are open; xterm renders the same
+  // content behind it, so the swap is seamless. Overlays that do not carry a
+  // standard role can opt in with data-occludes-surface.
+  useEffect(() => {
+    if (!nativeSurfaceEnabled()) return;
+    const selector = '[role="menu"],[role="listbox"],[role="dialog"],[data-occludes-surface]';
+    let occluded = false;
+    const check = () => {
+      const present = document.querySelector(selector) !== null;
+      if (present !== occluded) {
+        occluded = present;
+        void invoke('native_surface_set_visible', { visible: !present }).catch(() => {});
+      }
+    };
+    const observer = new MutationObserver(check);
+    observer.observe(document.body, { childList: true, subtree: true });
+    check();
+    return () => {
+      observer.disconnect();
+      void invoke('native_surface_set_visible', { visible: true }).catch(() => {});
+    };
+  }, []);
+
   // Bootstrap the chat + group buffers at app launch so any
   // Comm.Channel / routed / Group.Info / Char.Worth pushes that
   // arrive while the chat-group pane is closed (or has not yet

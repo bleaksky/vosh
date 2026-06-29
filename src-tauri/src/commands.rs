@@ -930,6 +930,33 @@ pub(crate) fn native_surface_set_theme(
     }
 }
 
+/// Tier 3 native renderer (macOS): report xterm's device cell size so the
+/// surface grid matches the webview's spacing exactly instead of deriving it
+/// from font metrics. A no-op elsewhere.
+#[tauri::command]
+pub(crate) fn native_surface_set_cell_metrics(width: u32, height: u32) {
+    #[cfg(target_os = "macos")]
+    crate::native_surface::set_cell_metrics(width, height);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (width, height);
+    }
+}
+
+/// Tier 3 native renderer (macOS): hide or show the surface so a DOM overlay
+/// (dropdown, menu, modal) that would be occluded by the opaque surface
+/// shows through. xterm renders the same content behind it. A no-op
+/// elsewhere.
+#[tauri::command]
+pub(crate) fn native_surface_set_visible(visible: bool) {
+    #[cfg(target_os = "macos")]
+    crate::native_surface::set_visible(visible);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = visible;
+    }
+}
+
 /// Tier 3 native renderer (macOS): echo locally-sent input into the grid so
 /// the user sees their own commands (xterm gets the same bytes via
 /// onLocalEcho). `text` is the already-styled echo line. A no-op elsewhere.
@@ -1587,9 +1614,22 @@ pub(crate) async fn logs_export(
 }
 
 #[tauri::command]
-pub(crate) async fn scrollback_load(state: State<'_, SharedState>) -> Result<Vec<u8>, String> {
+pub(crate) async fn scrollback_load(
+    state: State<'_, SharedState>,
+    feed_native: bool,
+) -> Result<Vec<u8>, String> {
     let sb = state.scrollback.lock().await;
-    Ok(sb.dump())
+    let bytes = sb.dump();
+    // The native grid is fed only live output, so the persisted scrollback
+    // would be missing there. The live pane asks us to seed it once.
+    #[cfg(target_os = "macos")]
+    if feed_native && !bytes.is_empty() {
+        crate::term_grid::feed_bytes(&bytes);
+        crate::native_surface::request_redraw();
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = feed_native;
+    Ok(bytes)
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

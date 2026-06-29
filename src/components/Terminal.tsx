@@ -478,9 +478,26 @@ export function Terminal({
       }).catch(() => {});
     };
 
+    // Report xterm's exact device cell size so the surface grid matches the
+    // webview's spacing instead of deriving it from font metrics. The cell
+    // size is stable across pane resizes; it changes on font/dpr changes.
+    let lastCellMetrics = '';
+    const reportCellMetrics = () => {
+      if (!nativeSurfaceOn) return;
+      const cell = term.dimensions?.device?.cell;
+      if (!cell?.width || !cell?.height) return;
+      const width = Math.round(cell.width);
+      const height = Math.round(cell.height);
+      const key = `${width},${height}`;
+      if (key === lastCellMetrics) return;
+      lastCellMetrics = key;
+      void invoke('native_surface_set_cell_metrics', { width, height }).catch(() => {});
+    };
+
     const sync = () => {
       if (!sizer || !host) return;
       reportNativeBounds();
+      reportCellMetrics();
       const rect = sizer.getBoundingClientRect();
       const w = Math.floor(rect.width);
       const h = Math.floor(rect.height);
@@ -490,6 +507,8 @@ export function Terminal({
       host.style.width = `${w}px`;
       host.style.height = `${h}px`;
       safeFit();
+      // Fit may have just established or changed the cell dimensions.
+      reportCellMetrics();
     };
 
     // Resizable broadcasts `vosh:resize-progress` { size } from
@@ -595,7 +614,9 @@ export function Terminal({
       }
     };
 
-    loadScrollback()
+    // The live pane seeds the native grid with the persisted scrollback so
+    // it has the same history as xterm; the quiet history pane must not.
+    loadScrollback(!quietRef.current && nativeSurfaceEnabled())
       .then((bytes) => {
         if (bytes.length > 0) {
           term.write(bytes);

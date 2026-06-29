@@ -96,13 +96,39 @@ static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
 static ACTIVE: AtomicBool = AtomicBool::new(false);
 // Coalesces redraw requests so a burst of output schedules one repaint.
 static REDRAW_PENDING: AtomicBool = AtomicBool::new(false);
+// Temporarily hide the opaque surface so a DOM overlay (dropdown, menu,
+// modal) that would otherwise be occluded by it shows through. xterm
+// renders the same content behind the surface, so the swap is seamless.
+static SUPPRESSED: AtomicBool = AtomicBool::new(false);
+
+/// Hide or show the surface for an overlay. Hiding reveals xterm (same
+/// content) so a DOM popover over the terminal is not occluded.
+pub(crate) fn set_visible(visible: bool) {
+    SUPPRESSED.store(!visible, Ordering::Release);
+    let Some(app) = APP.get() else {
+        return;
+    };
+    let _ = app.run_on_main_thread(move || {
+        if let Ok(slot) = surface_slot().lock() {
+            if let Some(handle) = slot.as_ref() {
+                // SAFETY: main thread; the view is live.
+                unsafe {
+                    let _: () = msg_send![handle.view, setHidden: !visible];
+                }
+            }
+        }
+    });
+    if visible {
+        request_redraw();
+    }
+}
 
 /// Request a repaint of the terminal surface. Called from the session loop
-/// after feeding the grid. No-ops until the surface is active; coalesces
-/// bursts; dispatches the actual draw to the main thread (Metal requires
-/// it).
+/// after feeding the grid. No-ops until the surface is active (and not
+/// suppressed); coalesces bursts; dispatches the actual draw to the main
+/// thread (Metal requires it).
 pub(crate) fn request_redraw() {
-    if !ACTIVE.load(Ordering::Acquire) {
+    if !ACTIVE.load(Ordering::Acquire) || SUPPRESSED.load(Ordering::Acquire) {
         return;
     }
     let Some(app) = APP.get() else {
@@ -206,6 +232,32 @@ static SELECTING: AtomicBool = AtomicBool::new(false);
 static DPR: AtomicU32 = AtomicU32::new(0);
 static CELL_W: AtomicU32 = AtomicU32::new(0);
 static CELL_H: AtomicU32 = AtomicU32::new(0);
+// xterm's reported device cell size. When set, the atlas uses it instead of
+// deriving from font metrics, so the surface matches xterm's density exactly
+// (0 = unset, fall back to the font's metrics).
+static XTERM_CELL_W: AtomicU32 = AtomicU32::new(0);
+static XTERM_CELL_H: AtomicU32 = AtomicU32::new(0);
+
+/// xterm's reported device cell size, if the frontend has sent it. The glyph
+/// atlas sizes its cells to this so spacing matches the webview.
+pub(crate) fn reported_cell() -> Option<(u32, u32)> {
+    let w = XTERM_CELL_W.load(Ordering::Acquire);
+    let h = XTERM_CELL_H.load(Ordering::Acquire);
+    if w > 0 && h > 0 {
+        Some((w, h))
+    } else {
+        None
+    }
+}
+
+// The URL under the pointer as (grid_line, start_col, end_col), so the
+// renderer can underline it as a clickable affordance.
+static HOVER_URL: Mutex<Option<(i32, usize, usize)>> = Mutex::new(None);
+
+/// The hovered URL's cell range, for the renderer's hover underline.
+pub(crate) fn hover_url() -> Option<(i32, usize, usize)> {
+    HOVER_URL.lock().ok().and_then(|h| *h)
+}
 
 fn store_f32(slot: &AtomicU32, value: f32) {
     slot.store(value.to_bits(), Ordering::Release);
@@ -220,9 +272,9 @@ fn load_f32(slot: &AtomicU32, default: f32) -> f32 {
     }
 }
 
-/// Map a mouse event to a grid cell `(line, col)`. Uses the scrolled view
-/// (row minus the scroll offset); the live region of an open split reads
-/// as if scrolled, which is acceptable for v1.
+/// Map a mouse event to a grid cell `(line, col)`, mirroring the renderer's
+/// split mapping: the bottom (live) region of an open split reads at offset
+/// 0, the top (history) region at the scroll offset.
 fn point_to_cell(this: *mut AnyObject, event: *mut AnyObject) -> Option<(i32, usize)> {
     if this.is_null() || event.is_null() {
         return None;
@@ -244,8 +296,22 @@ fn point_to_cell(this: *mut AnyObject, event: *mut AnyObject) -> Option<(i32, us
         let phys_y = (bounds.size.height - view_pt.y) * dpr;
         let col = (phys_x / cell_w).floor().max(0.0) as usize;
         let row = (phys_y / cell_h).floor().max(0.0) as i32;
+        let rows = (bounds.size.height * dpr / cell_h).floor() as i32;
         let offset = crate::term_grid::current_display_offset() as i32;
-        Some((row - offset, col))
+        // Match the renderer's split: top region is history at the offset,
+        // bottom region is the live tail at offset 0.
+        let split = offset > 0 && rows >= 6;
+        let top_rows = if split {
+            ((f64::from(rows) * f64::from(split_ratio())) as i32).clamp(1, rows - 1)
+        } else {
+            rows
+        };
+        let line = if split && row >= top_rows {
+            row
+        } else {
+            row - offset
+        };
+        Some((line, col))
     }
 }
 
@@ -317,6 +383,29 @@ pub(crate) fn request_set_font(family: String, font_size: u32) {
         return;
     };
     let font_px = (font_size as f32 * load_f32(&DPR, 2.0)).max(6.0);
+    let _ = app.run_on_main_thread(move || rebuild_font(&family, font_px));
+}
+
+/// Record xterm's device cell size and rebuild the atlas to it, so the
+/// surface matches the webview's spacing exactly. No-op if unchanged.
+#[allow(clippy::cast_precision_loss)]
+pub(crate) fn set_cell_metrics(width: u32, height: u32) {
+    if width == 0 || height == 0 {
+        return;
+    }
+    // Swap both unconditionally; a short-circuiting && would skip the second
+    // store and leave the height unset.
+    let prev_w = XTERM_CELL_W.swap(width, Ordering::AcqRel);
+    let prev_h = XTERM_CELL_H.swap(height, Ordering::AcqRel);
+    if prev_w == width && prev_h == height {
+        return;
+    }
+    tracing::debug!(width, height, "native-surface: xterm reported cell metrics");
+    let Some(app) = APP.get() else {
+        return;
+    };
+    let scale = f64::from(load_f32(&DPR, 2.0));
+    let (family, font_px) = font_atlas_params(scale);
     let _ = app.run_on_main_thread(move || rebuild_font(&family, font_px));
 }
 
@@ -394,7 +483,7 @@ fn open_url(url: &str) {
 extern "C" fn mouse_down(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
     if event_has_command(event) {
         if let Some((line, col)) = point_to_cell(this, event) {
-            if let Some(url) = crate::term_grid::url_at(line, col) {
+            if let Some((url, _, _)) = crate::term_grid::url_at(line, col) {
                 open_url(&url);
                 return;
             }
@@ -442,6 +531,31 @@ extern "C" fn mouse_up(_this: *mut AnyObject, _cmd: Sel, _event: *mut AnyObject)
     if SELECTING.swap(false, Ordering::AcqRel) {
         // Copy the selection to the clipboard on release.
         copy_selection();
+    }
+}
+
+/// Track the URL under the pointer so the renderer can underline it. Only
+/// repaints when the hovered range actually changes.
+extern "C" fn mouse_moved(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
+    let next = point_to_cell(this, event)
+        .and_then(|(line, col)| crate::term_grid::url_at(line, col).map(|(_, s, e)| (line, s, e)));
+    set_hover_url(next);
+}
+
+extern "C" fn mouse_exited(_this: *mut AnyObject, _cmd: Sel, _event: *mut AnyObject) {
+    set_hover_url(None);
+}
+
+fn set_hover_url(next: Option<(i32, usize, usize)>) {
+    let changed = if let Ok(mut h) = HOVER_URL.lock() {
+        let changed = *h != next;
+        *h = next;
+        changed
+    } else {
+        false
+    };
+    if changed {
+        redraw_now();
     }
 }
 
@@ -509,6 +623,14 @@ fn surface_view_class() -> &'static AnyClass {
             builder.add_method(
                 sel!(resetCursorRects),
                 reset_cursor_rects as extern "C" fn(*mut AnyObject, Sel),
+            );
+            builder.add_method(
+                sel!(mouseMoved:),
+                mouse_moved as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(mouseExited:),
+                mouse_exited as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
             );
         }
         let cls: &'static AnyClass = builder.register();
@@ -586,6 +708,22 @@ pub(crate) fn install_probe(window: &tauri::WebviewWindow) -> Result<(), tauri::
             let _: () = msg_send![view, setLayer: metal_layer];
             let _: () = msg_send![view, setWantsLayer: true];
             let _: () = msg_send![content_view, addSubview: view];
+            // Tracking area for URL-hover: MouseMoved | MouseEnteredAndExited
+            // | ActiveInKeyWindow | InVisibleRect. InVisibleRect keeps it
+            // sized to the view automatically, so no manual resize tracking.
+            let opts: usize = 0x02 | 0x01 | 0x20 | 0x200;
+            let area: *mut AnyObject = msg_send![class!(NSTrackingArea), alloc];
+            let zero = CGRect {
+                origin: CGPoint { x: 0.0, y: 0.0 },
+                size: CGSize {
+                    width: 0.0,
+                    height: 0.0,
+                },
+            };
+            let area: *mut AnyObject = msg_send![area, initWithRect: zero, options: opts, owner: view, userInfo: std::ptr::null_mut::<AnyObject>()];
+            if !area.is_null() {
+                let _: () = msg_send![view, addTrackingArea: area];
+            }
             // Start hidden. The surface is opaque and would occlude xterm,
             // so it stays invisible until the frontend opts in (flag) and
             // reports pane bounds, which reveals and positions it.
@@ -649,7 +787,9 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
             size: CGSize { width, height },
         };
         let _: () = msg_send![handle.view, setFrame: frame];
-        let _: () = msg_send![handle.view, setHidden: false];
+        // Respect an active overlay suppression so a resize does not pop the
+        // surface back over an open dropdown.
+        let _: () = msg_send![handle.view, setHidden: SUPPRESSED.load(Ordering::Acquire)];
         let _: () = msg_send![handle.metal_layer, setContentsScale: dpr];
 
         let px_w = (width * dpr).max(1.0) as u32;
@@ -699,7 +839,12 @@ unsafe fn init_gpu(
             .map_err(|e| tracing::warn!(error = %e, "native-surface: request_device failed"))
             .ok()?;
 
-    let config = surface.get_default_config(&adapter, width, height)?;
+    let mut config = surface.get_default_config(&adapter, width, height)?;
+    // Use the non-sRGB view of the format. The cell renderer writes
+    // sRGB-encoded values and relies on hardware alpha blending compositing
+    // in that (gamma) space so glyph antialiasing matches the webview; an
+    // sRGB surface would blend in linear space and make text look heavy.
+    config.format = config.format.remove_srgb_suffix();
     surface.configure(&device, &config);
 
     let cell_renderer =
