@@ -156,6 +156,12 @@ pub(crate) struct UiConfig {
     /// server output reads identically across themes.
     #[serde(default)]
     pub theme_terminal_colors: bool,
+    /// Draw bright (effective ANSI 8-15) text with the heavier bold font on
+    /// the native surface. Off by default so bright reads at the normal weight
+    /// like the webview; explicit bold on non-bright colors stays bold either
+    /// way. Most MUDs encode bright as SGR-1 bold + a base color.
+    #[serde(default)]
+    pub bright_bold: bool,
     /// User-authored themes. Each entry mirrors the `AppTheme`
     /// shape the frontend ships built-in themes as; on app load
     /// these get appended to the built-in list so the user can
@@ -505,6 +511,7 @@ impl Default for UiConfig {
             dock_layout: Vec::new(),
             keep_last_command: false,
             theme_terminal_colors: false,
+            bright_bold: false,
             custom_themes: Vec::new(),
             split_divider_color: None,
             input_echo_color: None,

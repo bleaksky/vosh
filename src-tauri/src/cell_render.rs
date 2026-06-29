@@ -15,7 +15,7 @@
 // Geometry code reads clearest with x/y/w/h destructures.
 #![allow(clippy::many_single_char_names)]
 
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
 
@@ -184,6 +184,46 @@ pub(crate) fn set_palette(ansi: &[(u8, u8, u8)]) {
 
 fn ansi16(idx: usize) -> Rgb {
     unpack_rgb(THEME_ANSI[idx].load(Ordering::Acquire), ANSI_16[idx])
+}
+
+// When set, draw bright (ANSI 8-15) colored text with the bold font weight.
+static BRIGHT_BOLD: AtomicBool = AtomicBool::new(false);
+
+/// Toggle drawing bright-colored text with the bold font, reported by the
+/// frontend from the `bright_bold` setting.
+pub(crate) fn set_bright_bold(on: bool) {
+    BRIGHT_BOLD.store(on, Ordering::Release);
+}
+
+/// True when `fg` is a bright ANSI color (8-15), named or indexed.
+fn is_bright_ansi(fg: Color) -> bool {
+    matches!(
+        fg,
+        Color::Named(
+            NamedColor::BrightBlack
+                | NamedColor::BrightRed
+                | NamedColor::BrightGreen
+                | NamedColor::BrightYellow
+                | NamedColor::BrightBlue
+                | NamedColor::BrightMagenta
+                | NamedColor::BrightCyan
+                | NamedColor::BrightWhite
+        ) | Color::Indexed(8..=15)
+    )
+}
+
+/// True when the cell should use the bold face. A cell whose *effective*
+/// color is a bright ANSI color (8-15, counting bold-promoted base colors the
+/// way MUDs encode bright) is bold only when the bright-bold setting is on.
+/// Genuinely-explicit bold on a non-bright color (e.g. a bold 256-color
+/// prompt token) keeps the bold font regardless.
+fn wants_bold_font(fg: Color, flags: CellFlags) -> bool {
+    let effective = if flags.bold { brighten(fg) } else { fg };
+    if is_bright_ansi(effective) {
+        BRIGHT_BOLD.load(Ordering::Acquire)
+    } else {
+        flags.bold
+    }
 }
 
 // The wgpu surface is sRGB, so the GPU sRGB-encodes whatever the fragment
@@ -1189,14 +1229,10 @@ impl CellRenderer {
                 } else {
                     row as i32 - offset
                 };
-                let (ch, _, _, flags) = grid.cell_at_line(grid_line, col);
-                if ch != ' '
-                    && self
-                        .atlas
-                        .uv_if_cached(ch, flags.bold, flags.italic)
-                        .is_none()
-                {
-                    self.atlas.glyph_uv(ch, flags.bold, flags.italic);
+                let (ch, fg, _, flags) = grid.cell_at_line(grid_line, col);
+                let bold = wants_bold_font(fg, flags);
+                if ch != ' ' && self.atlas.uv_if_cached(ch, bold, flags.italic).is_none() {
+                    self.atlas.glyph_uv(ch, bold, flags.italic);
                     atlas_grew = true;
                 }
             }
@@ -1317,7 +1353,13 @@ impl CellRenderer {
                 if flags.strikeout {
                     strikeouts.push((col, row, fg_rgba));
                 }
-                (ch, fg_rgba, bg_rgba, flags.bold, flags.italic)
+                (
+                    ch,
+                    fg_rgba,
+                    bg_rgba,
+                    wants_bold_font(fg, flags),
+                    flags.italic,
+                )
             },
             |ch, bold, italic| atlas.uv_if_cached(ch, bold, italic).unwrap_or(space_uv),
         );
