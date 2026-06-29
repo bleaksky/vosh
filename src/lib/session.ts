@@ -588,8 +588,8 @@ export async function exportLogSession(sessionId: number, withAnsi: boolean): Pr
   return invoke('logs_export', { sessionId, withAnsi });
 }
 
-export async function loadScrollback(): Promise<Uint8Array> {
-  const bytes = await invoke<number[]>('scrollback_load');
+export async function loadScrollback(feedNative = false): Promise<Uint8Array> {
+  const bytes = await invoke<number[]>('scrollback_load', { feedNative });
   return new Uint8Array(bytes);
 }
 

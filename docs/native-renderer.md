@@ -144,23 +144,23 @@ NSWindow / HWND / GtkWindow
   offset) and a live tail (bottom, offset 0) with a thin divider line. The
   divider is draggable (split stored as a height fraction) with a tracking
   vertical-resize cursor that lines up with the drawn line.
-- **M4 — parity. NEARLY DONE.** Done: cell styles (bold promotes to the
-  bright variant, dim, inverse, underline); theme colors (surface
-  background/foreground/selection plus the ANSI 0-15 palette follow the
-  active theme and the `themeTerminalColors` tint toggle, reported through
-  `native_surface_set_theme`); font live-update (the atlas rebuilds at the
-  configured family + size via `native_surface_set_font`); a dynamic atlas
-  that rasterizes non-ASCII glyphs on demand; find/regex with match
-  highlighting (`native_surface_find`); local echo of sent input with a
-  configurable color (`native_surface_echo` + `input_echo_color`); a
-  scroll-depth indicator drawn on the surface; and Cmd+click to open URLs.
-  The per-line trigger/highlight effects need no work: the trigger engine
-  bakes highlights and gags into the display byte stream that feeds the
-  grid. Remaining: italic (no bundled italic face) and a hover affordance
-  for links. The block cursor is deliberately omitted (the pane is output
-  only; input is a separate row).
+- **M4 — parity. DONE.** Cell styles render at parity: true bold (the
+  bundled Bold face), synthesized italic (per-row slant), underline,
+  strikethrough, dim, inverse, and background color. The glyph atlas holds
+  four faces keyed by (char, bold, italic) in 32x32 slots, rasterized on
+  demand (so non-ASCII glyphs work too). Theme colors (surface bg/fg/
+  selection plus the ANSI 0-15 palette) follow the active theme and the
+  `themeTerminalColors` tint; the font live-updates. Find/regex with match
+  highlighting, local echo of sent input (configurable color), a
+  scroll-depth indicator, Cmd+click to open URLs with a hover underline,
+  drag-select + copy, and the gagged-prompt replacement (with a rich
+  template grammar: colors, 256/RGB/hex, auto-by-percent, styles,
+  backgrounds, time/date) all render on the surface. Per-line trigger
+  highlights and gags need no work: the trigger engine bakes them into the
+  display byte stream that feeds the grid. The block cursor is deliberately
+  omitted (output-only pane).
 - **M6 — cross-platform.** Windows (D3D12) and Linux (Vulkan) surfaces,
-  CI bundles, flip the default.
+  CI bundles, flip the default. The only milestone left.
 
 M1 is the go/no-go gate: if a native surface cannot composite cleanly
 into the Tauri window across the three platforms, the hybrid approach
@@ -168,15 +168,17 @@ is dead and we stay in Tier 1/2. Everything after M1 is "normal" work.
 
 ## Resume here
 
-Branch `native-renderer`. **M1, M2, M3, and M5 are done; M4 (parity) is
-nearly done.** The native wgpu surface renders the full live terminal with
-the configured Vosh font and size, accurate ANSI colors (theme palette +
-tint toggle), cell styles (bold/dim/inverse/underline), non-ASCII glyphs,
-theme-driven surface colors, trigger highlights and gags (free, via the
-byte stream), wheel + keyboard scroll, draggable split-scrollback, a
-scroll-depth indicator, drag-select + copy (mouse and Cmd+C), find/regex
-with match highlighting, local echo of sent input (configurable color), and
-Cmd+click to open URLs. Enable with
+Branch `native-renderer`. **M1, M2, M3, M4, and M5 are done; only M6
+(cross-platform) remains.** The native wgpu surface renders the full live
+terminal at parity with xterm on macOS: the configured Vosh font/size,
+accurate ANSI colors (theme palette + tint toggle), all cell styles (true
+bold, synthesized italic, underline, strikethrough, dim, inverse,
+background color), non-ASCII glyphs, theme-driven surface colors, trigger
+highlights and gags (free, via the byte stream), wheel + keyboard scroll,
+draggable split-scrollback, a scroll-depth indicator, drag-select + copy
+(mouse and Cmd+C), find/regex with match highlighting, local echo of sent
+input, the gagged-prompt replacement with a rich template grammar, and
+Cmd+click URLs with a hover underline. Enable with
 `localStorage.setItem('vosh.nativesurface','1')` + reload; `'0'` falls back
 to xterm.
 
@@ -188,13 +190,15 @@ The frontend reports state to the surface through commands:
 input), `native_surface_find` / `native_surface_find_clear` (search). The
 backend feeds the grid from `session.rs` and redraws via `request_redraw`.
 
-Remaining before native can be the default:
+Remaining before native can be the default everywhere:
 
-- **Italic.** No bundled italic face; bold/dim/inverse/underline render.
-- **Link hover.** Cmd+click opens URLs; no hover underline yet.
-- **Split selection.** Selecting in the live region of an open split maps
-  as if scrolled; accurate in the history region and when not split.
-- **Cross-platform (M6).** Windows (D3D12) and Linux (Vulkan) surfaces.
+- **Cross-platform (M6).** The surface is macOS-only (`native_surface.rs`
+  and `cell_render.rs` are `cfg(target_os = "macos")`). Windows needs a
+  `D3D12` surface on an `HWND` child; Linux a Vulkan surface on a GTK
+  child. wgpu abstracts the renderer, so the work is the per-platform child
+  window/handle plumbing that mirrors the macOS `NSView` + `CAMetalLayer`.
+- **Wide-char columns.** Find/selection column math assumes one cell per
+  char, so double-width (CJK) glyphs can be a column off. Fine for ASCII.
 
 The block cursor is deliberately omitted (output-only pane). The TEMP
 default-on flag in `nativeSurfaceEnabled` (Terminal.tsx) must flip back to

@@ -272,9 +272,10 @@ fn url_regex() -> &'static regex::Regex {
     RE.get_or_init(|| regex::Regex::new(r"https?://[^\s<>()\[\]]+").expect("valid url regex"))
 }
 
-/// The URL spanning the cell at (`grid_line`, `col`), if any. Trailing
-/// sentence punctuation is trimmed. Used by Cmd+click on the surface.
-pub(crate) fn url_at(grid_line: i32, col: usize) -> Option<String> {
+/// The URL spanning the cell at (`grid_line`, `col`) as (url, start column,
+/// end column), if any. Trailing sentence punctuation is trimmed. Used by
+/// Cmd+click and the hover underline on the surface.
+pub(crate) fn url_at(grid_line: i32, col: usize) -> Option<(String, usize, usize)> {
     let slot = grid_slot().lock().ok()?;
     let g = slot.as_ref()?;
     let grid = g.term.grid();
@@ -289,11 +290,12 @@ pub(crate) fn url_at(grid_line: i32, col: usize) -> Option<String> {
         let start_col = text[..m.start()].chars().count();
         let end_col = text[..m.end()].chars().count();
         if col >= start_col && col < end_col {
-            return Some(
-                m.as_str()
-                    .trim_end_matches(['.', ',', ')', ']', '!', '?'])
-                    .to_string(),
-            );
+            let url = m
+                .as_str()
+                .trim_end_matches(['.', ',', ')', ']', '!', '?'])
+                .to_string();
+            let trimmed_end = start_col + url.chars().count();
+            return Some((url, start_col, trimmed_end));
         }
     }
     None

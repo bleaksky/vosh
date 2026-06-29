@@ -326,8 +326,21 @@ fn styled_colors(fg: Color, bg: Color, flags: CellFlags) -> (Rgba, Rgba) {
 // ---------------------------------------------------------------------------
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use fontdue::Font;
+use core_graphics::color_space::CGColorSpace;
+use core_graphics::context::{CGContext, CGTextDrawingMode};
+use core_graphics::font::CGGlyph;
+use core_graphics::geometry::{CGAffineTransform, CGPoint, CGRect, CGSize};
+use core_text::font::CTFont;
+use font_kit::canvas::RasterizationOptions;
+use font_kit::font::Font;
+use font_kit::hinting::HintingOptions;
+use pathfinder_geometry::transform2d::Transform2F;
+
+// Italic slant: shear the top of the glyph rightward. The CoreGraphics text
+// matrix's `c` term is the horizontal shear; positive leans the top right.
+const ITALIC_SKEW: f32 = 0.21;
 
 /// Pixel rect (x, y, w, h) of a fixed-size slot in the atlas grid.
 fn slot_rect(index: u32, cols: u32, cell_w: u32, cell_h: u32) -> (u32, u32, u32, u32) {
@@ -358,12 +371,19 @@ pub(crate) struct GlyphAtlas {
     px: f32,
     cell_w: u32,
     cell_h: u32,
+    // Each slot is wider than the layout cell so a slanted (italic) or
+    // wide glyph can overhang to the right without being clipped; the
+    // glyph quad is drawn at slot width and overhangs the next cell.
+    slot_w: u32,
     ascent: f32,
     cols: u32,
     rows: u32,
     atlas_w: u32,
     atlas_h: u32,
     pixels: Vec<u8>,
+    // A degenerate UV at an always-opaque texel, so background and overlay
+    // quads (which carry no glyph) sample coverage 1.0.
+    solid_uv: ([f32; 2], [f32; 2]),
     // Keyed by (char, bold, italic): four faces (regular, bold, and a
     // synthetic slant of each) share one texture.
     slots: HashMap<(char, bool, bool), u32>,
@@ -377,28 +397,62 @@ impl GlyphAtlas {
     pub(crate) fn new(family_stack: &str, px: f32) -> Option<Self> {
         let font = load_font(family_stack, false)?;
         let bold_font = load_font(family_stack, true).or_else(|| load_font(family_stack, false))?;
-        let line = font.horizontal_line_metrics(px)?;
-        let cell_h = (line.new_line_size.ceil() as u32).max(1);
-        let cell_w = (font.metrics('M', px).advance_width.ceil() as u32).max(1);
+        let metrics = font.metrics();
+        let scale = px / metrics.units_per_em as f32;
+        let ascent = metrics.ascent * scale;
+        // ascent - descent + line_gap is the line height (descent is negative).
+        let cell_h_font =
+            (((metrics.ascent - metrics.descent + metrics.line_gap) * scale).ceil() as u32).max(1);
+        // Monospace: every advance is the same, so 'M' gives the cell width.
+        let advance = match font.glyph_for_char('M').and_then(|g| font.advance(g).ok()) {
+            Some(a) => a.x(),
+            None => metrics.units_per_em as f32 * 0.6,
+        };
+        let cell_w_font = ((advance * scale).round() as u32).max(1);
+        // Prefer xterm's reported device cell so spacing matches the webview
+        // exactly; fall back to the font-derived size before it reports.
+        let (cell_w, cell_h) = crate::native_surface::reported_cell()
+            .map_or((cell_w_font, cell_h_font), |(w, h)| (w.max(1), h.max(1)));
+        // Slots get a full extra cell of width so italic overhang fits.
+        let slot_w = cell_w * 2;
+        tracing::debug!(
+            cell_w,
+            cell_h,
+            cell_w_font,
+            cell_h_font,
+            "native-surface: atlas metrics"
+        );
         // 32x32 = 1024 slots: printable ASCII across four faces (regular,
         // bold, italic, bold-italic) plus box-drawing/accented glyphs a MUD
-        // accumulates, rasterized on demand (see the dynamic-atlas pass).
+        // accumulates, rasterized on demand (see the dynamic-atlas pass). The
+        // last slot is reserved as a solid (opaque) block for bg/overlays.
         let cols = 32;
         let rows = 32;
-        let atlas_w = cols * cell_w;
+        let atlas_w = cols * slot_w;
         let atlas_h = rows * cell_h;
+        let mut pixels = vec![0u8; (atlas_w * atlas_h) as usize];
+        let solid_index = cols * rows - 1;
+        let (qx, qy, qw, qh) = slot_rect(solid_index, cols, slot_w, cell_h);
+        for y in qy..qy + qh {
+            for x in qx..qx + qw {
+                pixels[(y * atlas_w + x) as usize] = 255;
+            }
+        }
+        let solid_uv = rect_to_uv(qx + qw / 2, qy + qh / 2, 0, 0, atlas_w, atlas_h);
         Some(Self {
             font,
             bold_font,
             px,
             cell_w,
             cell_h,
-            ascent: line.ascent,
+            slot_w,
+            ascent,
             cols,
             rows,
             atlas_w,
             atlas_h,
-            pixels: vec![0u8; (atlas_w * atlas_h) as usize],
+            pixels,
+            solid_uv,
             slots: HashMap::new(),
             next: 0,
         })
@@ -409,6 +463,12 @@ impl GlyphAtlas {
     }
     pub(crate) fn cell_h(&self) -> u32 {
         self.cell_h
+    }
+    pub(crate) fn slot_w(&self) -> u32 {
+        self.slot_w
+    }
+    pub(crate) fn solid_uv(&self) -> ([f32; 2], [f32; 2]) {
+        self.solid_uv
     }
     pub(crate) fn atlas_size(&self) -> (u32, u32) {
         (self.atlas_w, self.atlas_h)
@@ -425,13 +485,14 @@ impl GlyphAtlas {
         let index = if let Some(&i) = self.slots.get(&key) {
             i
         } else {
-            let i = self.next.min(self.cols * self.rows - 1);
+            // Cap two below the count: the last slot is the solid block.
+            let i = self.next.min(self.cols * self.rows - 2);
             self.next += 1;
             self.rasterize_into(c, i, bold, italic);
             self.slots.insert(key, i);
             i
         };
-        let (x, y, w, h) = slot_rect(index, self.cols, self.cell_w, self.cell_h);
+        let (x, y, w, h) = slot_rect(index, self.cols, self.slot_w, self.cell_h);
         rect_to_uv(x, y, w, h, self.atlas_w, self.atlas_h)
     }
 
@@ -445,48 +506,139 @@ impl GlyphAtlas {
         italic: bool,
     ) -> Option<([f32; 2], [f32; 2])> {
         self.slots.get(&(c, bold, italic)).map(|&i| {
-            let (x, y, w, h) = slot_rect(i, self.cols, self.cell_w, self.cell_h);
+            let (x, y, w, h) = slot_rect(i, self.cols, self.slot_w, self.cell_h);
             rect_to_uv(x, y, w, h, self.atlas_w, self.atlas_h)
         })
     }
 
-    /// Rasterize `c` (from the bold or regular face) and blit its coverage
-    /// into slot `index` at the baseline. Italic applies a synthetic slant:
-    /// each row shears horizontally, centered on the cell mid-height so the
-    /// overflow clips symmetrically. NOTE: glyph placement needs a visual
-    /// check.
+    /// Rasterize `c` (from the bold or regular face) through CoreGraphics with
+    /// font smoothing off, matching the webview's antialiased glyphs, and blit
+    /// its coverage into slot `index` at the cell baseline. Italic shears the
+    /// glyph so CoreGraphics antialiases the slant.
     fn rasterize_into(&mut self, c: char, index: u32, bold: bool, italic: bool) {
         let face = if bold { &self.bold_font } else { &self.font };
-        let (metrics, bitmap) = face.rasterize(c, self.px);
-        if metrics.width == 0 || metrics.height == 0 {
+        let Some(glyph_id) = face.glyph_for_char(c) else {
+            return;
+        };
+        let skew = if italic { ITALIC_SKEW } else { 0.0 };
+        // font-kit negates the shear into CoreGraphics' c term, so pass -skew
+        // for the bounds to match the c = skew we set when rasterizing.
+        let shear = Transform2F::row_major(1.0, 0.0, -skew, 1.0, 0.0, 0.0);
+        let Ok(bounds) = face.raster_bounds(
+            glyph_id,
+            self.px,
+            shear,
+            HintingOptions::None,
+            RasterizationOptions::GrayscaleAa,
+        ) else {
+            return;
+        };
+        let (bw, bh) = (bounds.width(), bounds.height());
+        if bw <= 0 || bh <= 0 {
             return;
         }
-        let (sx, sy, _, _) = slot_rect(index, self.cols, self.cell_w, self.cell_h);
-        let gx = metrics.xmin.max(0) as u32;
-        let top = (self.ascent - metrics.height as f32 - metrics.ymin as f32).round();
-        let gy = top.max(0.0) as u32;
-        let half = self.cell_h as f32 / 2.0;
-        for row in 0..metrics.height {
-            let shear = if italic {
-                (0.2 * (half - (gy + row as u32) as f32)).round() as i32
-            } else {
-                0
-            };
-            for col in 0..metrics.width {
-                let dst_x = sx as i32 + gx as i32 + col as i32 + shear;
-                let dst_y = sy + gy + row as u32;
+        let h = bh as usize;
+        // Pad the buffer width for the italic slant: raster_bounds can report
+        // the upright width, so without this CoreGraphics clips the overhang
+        // before it ever reaches the atlas.
+        let extra = if italic {
+            (skew.abs() * bh as f32).ceil() as usize + 2
+        } else {
+            0
+        };
+        let w = bw as usize + extra;
+        let coverage = rasterize_glyph_cg(
+            &face.native_font(),
+            glyph_id,
+            self.px,
+            skew,
+            bounds.origin_x(),
+            bounds.origin_y(),
+            w,
+            h,
+        );
+        let (sx, sy, _, _) = slot_rect(index, self.cols, self.slot_w, self.cell_h);
+        // The glyph's pen origin sits at the cell baseline; bounds.origin is
+        // the ink's offset from it (negative y reaches above the baseline).
+        let dst_x0 = sx as i32 + bounds.origin_x();
+        let dst_y0 = sy as i32 + self.ascent.round() as i32 + bounds.origin_y();
+        for row in 0..h {
+            for col in 0..w {
+                let cov = coverage[row * w + col];
+                if cov == 0 {
+                    continue;
+                }
+                let dst_x = dst_x0 + col as i32;
+                let dst_y = dst_y0 + row as i32;
                 if dst_x >= sx as i32
-                    && (dst_x as u32) < sx + self.cell_w
+                    && (dst_x as u32) < sx + self.slot_w
                     && (dst_x as u32) < self.atlas_w
-                    && dst_y < sy + self.cell_h
-                    && dst_y < self.atlas_h
+                    && dst_y >= sy as i32
+                    && (dst_y as u32) < sy + self.cell_h
+                    && (dst_y as u32) < self.atlas_h
                 {
-                    let di = (dst_y * self.atlas_w + dst_x as u32) as usize;
-                    self.pixels[di] = bitmap[row * metrics.width + col];
+                    self.pixels[(dst_y as u32 * self.atlas_w + dst_x as u32) as usize] = cov;
                 }
             }
         }
     }
+}
+
+/// Rasterize one glyph through CoreGraphics with font smoothing disabled, so
+/// the coverage matches the webview's antialiased text rather than the heavier
+/// smoothed look. Returns a `w * h` alpha coverage buffer (0 = no ink, 255 =
+/// full ink). The glyph's bounding box is shifted to the buffer origin; `skew`
+/// is the italic shear and `origin_x/origin_y` come from `raster_bounds`.
+#[allow(clippy::too_many_arguments)]
+fn rasterize_glyph_cg(
+    font: &CTFont,
+    glyph_id: u32,
+    px: f32,
+    skew: f32,
+    origin_x: i32,
+    origin_y: i32,
+    w: usize,
+    h: usize,
+) -> Vec<u8> {
+    let mut pixels = vec![0u8; w * h];
+    let gray = CGColorSpace::create_device_gray();
+    let ctx = CGContext::create_bitmap_context(
+        Some(pixels.as_mut_ptr().cast()),
+        w,
+        h,
+        8,
+        w,
+        &gray,
+        7, // kCGImageAlphaOnly: one byte per pixel = coverage
+    );
+    ctx.set_should_antialias(true);
+    ctx.set_should_smooth_fonts(false);
+    ctx.set_allows_font_smoothing(false);
+    // Clear to alpha 0, draw the glyph at alpha 1: the byte is the coverage.
+    ctx.set_gray_fill_color(0.0, 0.0);
+    ctx.fill_rect(CGRect::new(
+        &CGPoint::new(0.0, 0.0),
+        &CGSize::new(w as f64, h as f64),
+    ));
+    ctx.set_gray_fill_color(1.0, 1.0);
+    // CoreGraphics is bottom-left origin; flip so row 0 is the top.
+    ctx.translate(0.0, h as f64);
+    let cg_font = font.copy_to_CGFont();
+    ctx.set_font(&cg_font);
+    ctx.set_font_size(f64::from(px));
+    ctx.set_text_drawing_mode(CGTextDrawingMode::CGTextFill);
+    // Shift the glyph's bounding box to the buffer origin; c is the shear.
+    let matrix = CGAffineTransform::new(
+        1.0,
+        0.0,
+        f64::from(skew),
+        1.0,
+        f64::from(-origin_x),
+        f64::from(origin_y),
+    );
+    ctx.set_text_matrix(&matrix);
+    ctx.show_glyphs_at_positions(&[glyph_id as CGGlyph], &[CGPoint::new(0.0, 0.0)]);
+    pixels
 }
 
 /// Load the first matchable family from a CSS font-family stack, always
@@ -534,8 +686,7 @@ const JETBRAINS_BOLD: &[u8] =
 fn font_from_handle(handle: &font_kit::handle::Handle) -> Option<Font> {
     let kit_font = handle.load().ok()?;
     tracing::info!(font = %kit_font.full_name(), "native-surface: atlas font (system)");
-    let data = kit_font.copy_font_data()?;
-    Font::from_bytes(&data[..], fontdue::FontSettings::default()).ok()
+    Some(kit_font)
 }
 
 fn load_font(family_stack: &str, bold: bool) -> Option<Font> {
@@ -565,7 +716,7 @@ fn load_font(family_stack: &str, bold: bool) -> Option<Font> {
             } else {
                 BERKELEY_REGULAR
             };
-            if let Ok(font) = Font::from_bytes(bytes, fontdue::FontSettings::default()) {
+            if let Ok(font) = Font::from_bytes(Arc::new(bytes.to_vec()), 0) {
                 tracing::info!(bold, "native-surface: atlas font = bundled BerkeleyMono");
                 return Some(font);
             }
@@ -576,7 +727,7 @@ fn load_font(family_stack: &str, bold: bool) -> Option<Font> {
             } else {
                 JETBRAINS_REGULAR
             };
-            if let Ok(font) = Font::from_bytes(bytes, fontdue::FontSettings::default()) {
+            if let Ok(font) = Font::from_bytes(Arc::new(bytes.to_vec()), 0) {
                 tracing::info!(bold, "native-surface: atlas font = bundled JetBrainsMono");
                 return Some(font);
             }
@@ -600,19 +751,19 @@ fn load_font(family_stack: &str, bold: bool) -> Option<Font> {
 // Per-cell GPU instance data
 // ---------------------------------------------------------------------------
 
-/// One quad instance. `offset` is the top-left in surface pixels and
-/// `size` its width/height, so most instances are cell-sized but the split
-/// divider can be a thin full-width line. The vertex shader builds the
-/// rect and converts to clip space; the fragment shader composites `fg`
-/// over `bg` by the atlas coverage sampled across `uv_min..uv_max`.
-/// `repr(C)` so it maps straight to a wgpu vertex buffer.
+/// One quad instance. `offset` is the top-left in surface pixels and `size`
+/// its width/height. The fragment shader samples the atlas coverage across
+/// `uv_min..uv_max` and emits `color` premultiplied by that coverage, so a
+/// quad pointing at the solid texel is an opaque fill (background, underline,
+/// divider) and one pointing at a glyph slot is the glyph. Glyph quads are
+/// drawn at slot width and may overhang the next cell. `repr(C)` so it maps
+/// straight to a wgpu vertex buffer.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct CellInstance {
     pub offset: [f32; 2],
     pub size: [f32; 2],
-    pub bg: Rgba,
-    pub fg: Rgba,
+    pub color: Rgba,
     pub uv_min: [f32; 2],
     pub uv_max: [f32; 2],
 }
@@ -620,30 +771,48 @@ pub(crate) struct CellInstance {
 /// Build one `CellInstance` per cell, row-major. Pure: the grid is read
 /// through `cell` (returns char, fg, bg) and glyph atlas UVs through `uv`,
 /// so it tests without a live grid or GPU.
+/// Build the per-cell quads, split into two layers: opaque background fills
+/// (one per cell, cell-sized, pointing at the solid texel) and glyph quads
+/// (one per non-blank cell, slot-sized so an italic can overhang). Returned
+/// separately so the caller can draw all backgrounds before any glyph, which
+/// lets a glyph spill over its neighbor's background. Pure: testable without
+/// a grid or GPU.
 fn build_instances(
     cols: usize,
     rows: usize,
     cell_w: f32,
     cell_h: f32,
+    slot_w: f32,
+    solid_uv: ([f32; 2], [f32; 2]),
     mut cell: impl FnMut(usize, usize) -> (char, Rgba, Rgba, bool, bool),
     mut uv: impl FnMut(char, bool, bool) -> ([f32; 2], [f32; 2]),
-) -> Vec<CellInstance> {
-    let mut out = Vec::with_capacity(cols * rows);
+) -> (Vec<CellInstance>, Vec<CellInstance>) {
+    let mut backgrounds = Vec::with_capacity(cols * rows);
+    let mut glyphs = Vec::with_capacity(cols * rows);
     for row in 0..rows {
         for col in 0..cols {
             let (ch, fg, bg, bold, italic) = cell(col, row);
-            let (uv_min, uv_max) = uv(ch, bold, italic);
-            out.push(CellInstance {
-                offset: [col as f32 * cell_w, row as f32 * cell_h],
+            let offset = [col as f32 * cell_w, row as f32 * cell_h];
+            backgrounds.push(CellInstance {
+                offset,
                 size: [cell_w, cell_h],
-                bg,
-                fg,
-                uv_min,
-                uv_max,
+                color: bg,
+                uv_min: solid_uv.0,
+                uv_max: solid_uv.1,
             });
+            if ch != ' ' && ch != '\0' {
+                let (uv_min, uv_max) = uv(ch, bold, italic);
+                glyphs.push(CellInstance {
+                    offset,
+                    size: [slot_w, cell_h],
+                    color: fg,
+                    uv_min,
+                    uv_max,
+                });
+            }
         }
     }
-    out
+    (backgrounds, glyphs)
 }
 
 /// Line-major inclusive containment of a cell in a selection range given as
@@ -677,8 +846,7 @@ struct Uniforms { surface_size: vec2<f32>, cell_size: vec2<f32> };
 struct VsOut {
     @builtin(position) pos: vec4<f32>,
     @location(0) uv: vec2<f32>,
-    @location(1) bg: vec4<f32>,
-    @location(2) fg: vec4<f32>,
+    @location(1) color: vec4<f32>,
 };
 
 @vertex
@@ -686,10 +854,9 @@ fn vs(
     @builtin(vertex_index) vi: u32,
     @location(0) offset: vec2<f32>,
     @location(1) size: vec2<f32>,
-    @location(2) bg: vec4<f32>,
-    @location(3) fg: vec4<f32>,
-    @location(4) uv_min: vec2<f32>,
-    @location(5) uv_max: vec2<f32>,
+    @location(2) color: vec4<f32>,
+    @location(3) uv_min: vec2<f32>,
+    @location(4) uv_max: vec2<f32>,
 ) -> VsOut {
     var corners = array<vec2<f32>, 6>(
         vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
@@ -704,15 +871,26 @@ fn vs(
     var out: VsOut;
     out.pos = vec4<f32>(ndc, 0.0, 1.0);
     out.uv = mix(uv_min, uv_max, corner);
-    out.bg = bg;
-    out.fg = fg;
+    out.color = color;
     return out;
+}
+
+fn lin_to_srgb(c: vec3<f32>) -> vec3<f32> {
+    let lo = c * 12.92;
+    let hi = 1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - 0.055;
+    return select(hi, lo, c <= vec3<f32>(0.0031308));
 }
 
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
-    let cov = textureSample(atlas_tex, atlas_samp, in.uv).r;
-    return vec4<f32>(mix(in.bg.rgb, in.fg.rgb, cov), 1.0);
+    // Coverage from the atlas (1.0 at the solid texel for fills). Emit the
+    // color premultiplied by coverage and sRGB-encoded; the surface is a
+    // non-sRGB format so hardware alpha blending composites in gamma space,
+    // matching how xterm's canvas renderer antialiases. Premultiplied means
+    // a glyph overhanging its cell blends cleanly over the neighbor.
+    let cov = textureSample(atlas_tex, atlas_samp, in.uv).r * in.color.a;
+    let srgb = lin_to_srgb(in.color.rgb);
+    return vec4<f32>(srgb * cov, cov);
 }
 ";
 
@@ -869,28 +1047,22 @@ impl CellRenderer {
                     shader_location: 1,
                     format: wgpu::VertexFormat::Float32x2,
                 },
-                // bg
+                // color
                 wgpu::VertexAttribute {
                     offset: 16,
                     shader_location: 2,
                     format: wgpu::VertexFormat::Float32x4,
                 },
-                // fg
+                // uv_min
                 wgpu::VertexAttribute {
                     offset: 32,
                     shader_location: 3,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                // uv_min
-                wgpu::VertexAttribute {
-                    offset: 48,
-                    shader_location: 4,
                     format: wgpu::VertexFormat::Float32x2,
                 },
                 // uv_max
                 wgpu::VertexAttribute {
-                    offset: 56,
-                    shader_location: 5,
+                    offset: 40,
+                    shader_location: 4,
                     format: wgpu::VertexFormat::Float32x2,
                 },
             ],
@@ -907,7 +1079,24 @@ impl CellRenderer {
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: "fs",
-                targets: &[Some(format.into())],
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    // Premultiplied-alpha over: the shader already multiplies
+                    // color by coverage, so src factor is One.
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
             primitive: wgpu::PrimitiveState::default(),
@@ -1075,13 +1264,29 @@ impl CellRenderer {
             b: 0x22,
         }));
 
+        // URL under the pointer reads as a link: blue and underlined (it
+        // opens on Cmd+click).
+        let hover = crate::native_surface::hover_url();
+        let link_blue = rgb_to_rgba(Rgb {
+            r: 0x58,
+            g: 0xa6,
+            b: 0xff,
+        });
+
+        let solid_uv = atlas.solid_uv();
+        let slot_w = atlas.slot_w() as f32;
         let mut underlines: Vec<(usize, usize, Rgba)> = Vec::new();
         let mut strikeouts: Vec<(usize, usize, Rgba)> = Vec::new();
-        let mut instances = build_instances(
+        // Background fills come back first; glyph quads (slot width) come back
+        // separately so we can draw them on top of every background, letting
+        // an italic overhang its neighbor.
+        let (mut instances, glyphs) = build_instances(
             cols,
             rows,
             cell_w,
             cell_h,
+            slot_w,
+            solid_uv,
             |col, row| {
                 let grid_line = if split && row >= top_rows {
                     row as i32 // live tail (offset 0)
@@ -1089,7 +1294,7 @@ impl CellRenderer {
                     row as i32 - offset // top region / non-split (scrolled)
                 };
                 let (ch, fg, bg, flags) = grid.cell_at_line(grid_line, col);
-                let (fg_rgba, mut bg_rgba) = styled_colors(fg, bg, flags);
+                let (mut fg_rgba, mut bg_rgba) = styled_colors(fg, bg, flags);
                 if cell_in_selection(selection, grid_line, col) {
                     bg_rgba = selection_bg;
                 }
@@ -1101,7 +1306,12 @@ impl CellRenderer {
                         }
                     }
                 }
-                if flags.underline {
+                let hovered =
+                    hover.is_some_and(|(hl, hs, he)| grid_line == hl && col >= hs && col < he);
+                if hovered {
+                    fg_rgba = link_blue;
+                }
+                if flags.underline || hovered {
                     underlines.push((col, row, fg_rgba));
                 }
                 if flags.strikeout {
@@ -1117,10 +1327,9 @@ impl CellRenderer {
             instances.push(CellInstance {
                 offset: [col as f32 * cell_w, (row + 1) as f32 * cell_h - 2.0],
                 size: [cell_w, 1.5],
-                bg: color,
-                fg: color,
-                uv_min: space_uv.0,
-                uv_max: space_uv.1,
+                color,
+                uv_min: solid_uv.0,
+                uv_max: solid_uv.1,
             });
         }
         // Strikethrough quads: a thin line across the cell mid-height.
@@ -1128,12 +1337,13 @@ impl CellRenderer {
             instances.push(CellInstance {
                 offset: [col as f32 * cell_w, row as f32 * cell_h + cell_h * 0.5],
                 size: [cell_w, 1.5],
-                bg: color,
-                fg: color,
-                uv_min: space_uv.0,
-                uv_max: space_uv.1,
+                color,
+                uv_min: solid_uv.0,
+                uv_max: solid_uv.1,
             });
         }
+        // Glyphs on top of the cell backgrounds and underlines.
+        instances.extend(glyphs);
 
         // Thin full-width divider line at the split boundary, overlaying
         // the cells (drawn last). No cell row is consumed.
@@ -1142,10 +1352,9 @@ impl CellRenderer {
             instances.push(CellInstance {
                 offset: [0.0, top_rows as f32 * cell_h - thickness * 0.5],
                 size: [cols as f32 * cell_w, thickness],
-                bg: divider,
-                fg: divider,
-                uv_min: space_uv.0,
-                uv_max: space_uv.1,
+                color: divider,
+                uv_min: solid_uv.0,
+                uv_max: solid_uv.1,
             });
         }
 
@@ -1170,18 +1379,16 @@ impl CellRenderer {
             instances.push(CellInstance {
                 offset: [x0, 0.0],
                 size: [pill_w, cell_h],
-                bg: ind_bg,
-                fg: ind_bg,
-                uv_min: space_uv.0,
-                uv_max: space_uv.1,
+                color: ind_bg,
+                uv_min: solid_uv.0,
+                uv_max: solid_uv.1,
             });
             for (i, ch) in text.chars().enumerate() {
                 let uv = atlas.uv_if_cached(ch, false, false).unwrap_or(space_uv);
                 instances.push(CellInstance {
                     offset: [x0 + (i as f32 + 0.5) * cell_w, 0.0],
-                    size: [cell_w, cell_h],
-                    bg: ind_bg,
-                    fg: ind_fg,
+                    size: [slot_w, cell_h],
+                    color: ind_fg,
                     uv_min: uv.0,
                     uv_max: uv.1,
                 });
@@ -1206,8 +1413,14 @@ impl CellRenderer {
         queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instances));
 
         // Clear to the terminal background so any sliver beyond the grid
-        // matches the cells (linearized like everything else).
-        let clear = color_to_rgba(Color::Named(NamedColor::Background));
+        // matches the cells. The surface is a non-sRGB format and the shader
+        // writes sRGB-encoded values, so the clear is the raw sRGB bg.
+        let bg = theme_bg();
+        let clear = [
+            f32::from(bg.r) / 255.0,
+            f32::from(bg.g) / 255.0,
+            f32::from(bg.b) / 255.0,
+        ];
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("cell-pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1323,11 +1536,14 @@ mod tests {
     fn build_instances_lays_out_row_major_with_colors_and_uv() {
         let white = [1.0, 1.0, 1.0, 1.0];
         let black = [0.0, 0.0, 0.0, 1.0];
-        let instances = build_instances(
+        let solid = ([0.99, 0.99], [0.99, 0.99]);
+        let (backgrounds, glyphs) = build_instances(
             2,
             1,
             10.0,
             20.0,
+            20.0,
+            solid,
             |col, _row| (if col == 0 { 'a' } else { 'b' }, white, black, false, false),
             |ch, _bold, _italic| {
                 if ch == 'a' {
@@ -1337,29 +1553,35 @@ mod tests {
                 }
             },
         );
-        assert_eq!(instances.len(), 2);
+        assert_eq!(backgrounds.len(), 2);
+        assert_eq!(glyphs.len(), 2);
         // Cell (0,0) at origin; cell (1,0) one cell to the right.
-        assert_eq!(instances[0].offset, [0.0, 0.0]);
-        assert_eq!(instances[1].offset, [10.0, 0.0]);
-        // Colors and per-char UVs carry through.
-        assert_eq!(instances[0].fg, white);
-        assert_eq!(instances[0].bg, black);
-        assert_eq!(instances[0].uv_min, [0.0, 0.0]);
-        assert_eq!(instances[1].uv_min, [0.1, 0.0]);
+        assert_eq!(backgrounds[0].offset, [0.0, 0.0]);
+        assert_eq!(backgrounds[1].offset, [10.0, 0.0]);
+        // Background fills carry the bg color and the solid texel UV.
+        assert_eq!(backgrounds[0].color, black);
+        assert_eq!(backgrounds[0].uv_min, solid.0);
+        // Glyph quads carry the fg color, slot width, and per-char UVs.
+        assert_eq!(glyphs[0].color, white);
+        assert_eq!(glyphs[0].size, [20.0, 20.0]);
+        assert_eq!(glyphs[0].uv_min, [0.0, 0.0]);
+        assert_eq!(glyphs[1].uv_min, [0.1, 0.0]);
     }
 
     #[test]
     fn build_instances_second_row_offsets_down() {
         let c = [0.5, 0.5, 0.5, 1.0];
-        let instances = build_instances(
+        let (backgrounds, _glyphs) = build_instances(
             1,
             2,
             8.0,
             16.0,
+            16.0,
+            ([0.99, 0.99], [0.99, 0.99]),
             |_, _| ('x', c, c, false, false),
             |_, _, _| ([0.0, 0.0], [0.0, 0.0]),
         );
-        assert_eq!(instances[0].offset, [0.0, 0.0]);
-        assert_eq!(instances[1].offset, [0.0, 16.0]);
+        assert_eq!(backgrounds[0].offset, [0.0, 0.0]);
+        assert_eq!(backgrounds[1].offset, [0.0, 16.0]);
     }
 }
