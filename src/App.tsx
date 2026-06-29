@@ -28,6 +28,7 @@ import {
   onState,
   presetsInstall,
   presetsRemove,
+  subscribeBrightBoldChanged,
   subscribeCustomThemesChanged,
   subscribeDockLayoutChanged,
   subscribeProfileSwitched,
@@ -126,6 +127,13 @@ function App() {
     termRef.current?.write(text);
     if (nativeSurfaceEnabled()) {
       void invoke('native_surface_echo', { text }).catch(() => {});
+    }
+  };
+  // Report the bright-bold setting to the native surface (xterm has no
+  // equivalent option, so this drives the GPU renderer only).
+  const applyBrightBold = (on: boolean) => {
+    if (nativeSurfaceEnabled()) {
+      void invoke('native_surface_set_bright_bold', { on }).catch(() => {});
     }
   };
   // Direct ref on the terminal-area wrapper so we can attach a
@@ -599,6 +607,7 @@ function App() {
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
         setThemeTerminalColors(cfg.theme_terminal_colors);
+        applyBrightBold(cfg.bright_bold);
         applySplitDividerColor(cfg.split_divider_color);
         setSidePanelsFillHeight(cfg.side_panels_fill_height);
 
@@ -664,6 +673,7 @@ function App() {
           setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
           setFontSize(cfg.font_size || 14);
           setThemeTerminalColors(cfg.theme_terminal_colors);
+          applyBrightBold(cfg.bright_bold);
           applySplitDividerColor(cfg.split_divider_color);
           setSidePanelsFillHeight(cfg.side_panels_fill_height);
           await broadcastUiConfigChanges(cfg);
@@ -702,6 +712,23 @@ function App() {
       const detail = event.payload;
       setFontFamily(detail.family || DEFAULT_FONT_FAMILY);
       setFontSize(detail.size || 14);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Settings save broadcasts the bright-bold toggle. Apply it to the
+    // native surface without a relaunch.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    subscribeBrightBoldChanged((value) => {
+      applyBrightBold(value);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;

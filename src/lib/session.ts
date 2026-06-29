@@ -619,6 +619,7 @@ export interface UiConfig {
   enabled_presets: string[];
   keep_last_command: boolean;
   theme_terminal_colors: boolean;
+  bright_bold: boolean;
   custom_themes: CustomTheme[];
   /** Override color for the split-scrollback divider. Empty/undefined
    *  means use the theme default (--c-border). */
@@ -795,6 +796,7 @@ async function fetchUiConfig(): Promise<UiConfig> {
     enabled_presets: string[];
     keep_last_command?: boolean;
     theme_terminal_colors?: boolean;
+    bright_bold?: boolean;
     custom_themes?: CustomTheme[];
     split_divider_color?: string | null;
     input_echo_color?: string | null;
@@ -818,6 +820,7 @@ async function fetchUiConfig(): Promise<UiConfig> {
     enabled_presets: Array.isArray(cfg.enabled_presets) ? cfg.enabled_presets : [],
     keep_last_command: Boolean(cfg.keep_last_command),
     theme_terminal_colors: Boolean(cfg.theme_terminal_colors),
+    bright_bold: Boolean(cfg.bright_bold),
     custom_themes: Array.isArray(cfg.custom_themes) ? cfg.custom_themes : [],
     split_divider_color:
       typeof cfg.split_divider_color === 'string' && cfg.split_divider_color.length > 0
@@ -991,6 +994,7 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     config.theme_terminal_colors,
     prev?.theme_terminal_colors,
   );
+  await emitChanged('vosh://bright-bold-changed', config.bright_bold, prev?.bright_bold);
   await emitChanged(
     'vosh://split-divider-changed',
     config.split_divider_color,
@@ -1052,6 +1056,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
       enabled_presets: config.enabled_presets,
       keep_last_command: config.keep_last_command,
       theme_terminal_colors: config.theme_terminal_colors,
+      bright_bold: config.bright_bold,
       custom_themes: config.custom_themes,
       split_divider_color: config.split_divider_color,
       input_echo_color: config.input_echo_color,
@@ -1102,6 +1107,14 @@ export async function subscribeSidePanelsFillHeightChanged(
   cb: (value: boolean) => void,
 ): Promise<UnlistenFn> {
   return listen<boolean>('vosh://side-panels-fill-height-changed', (event) => {
+    cb(Boolean(event.payload));
+  });
+}
+
+export async function subscribeBrightBoldChanged(
+  cb: (value: boolean) => void,
+): Promise<UnlistenFn> {
+  return listen<boolean>('vosh://bright-bold-changed', (event) => {
     cb(Boolean(event.payload));
   });
 }

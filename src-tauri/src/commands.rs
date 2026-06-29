@@ -930,6 +930,21 @@ pub(crate) fn native_surface_set_theme(
     }
 }
 
+/// Tier 3 native renderer (macOS): toggle drawing bright (ANSI 8-15) colored
+/// text with the bold font weight. A no-op elsewhere.
+#[tauri::command]
+pub(crate) fn native_surface_set_bright_bold(on: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        crate::cell_render::set_bright_bold(on);
+        crate::native_surface::request_redraw();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = on;
+    }
+}
+
 /// Tier 3 native renderer (macOS): report xterm's device cell size so the
 /// surface grid matches the webview's spacing exactly instead of deriving it
 /// from font metrics. A no-op elsewhere.
@@ -1642,6 +1657,7 @@ pub(crate) struct UiConfigPayload {
     pub enabled_presets: Vec<String>,
     pub keep_last_command: bool,
     pub theme_terminal_colors: bool,
+    pub bright_bold: bool,
     pub custom_themes: Vec<crate::profile_config::CustomTheme>,
     pub split_divider_color: Option<String>,
     pub input_echo_color: Option<String>,
@@ -1669,6 +1685,7 @@ pub(crate) async fn ui_get_config(
         enabled_presets: p.ui.enabled_presets.clone(),
         keep_last_command: p.ui.keep_last_command,
         theme_terminal_colors: p.ui.theme_terminal_colors,
+        bright_bold: p.ui.bright_bold,
         custom_themes: p.ui.custom_themes.clone(),
         split_divider_color: p.ui.split_divider_color.clone(),
         input_echo_color: p.ui.input_echo_color.clone(),
@@ -1702,6 +1719,7 @@ pub(crate) async fn ui_set_config(
         enabled_presets,
         keep_last_command,
         theme_terminal_colors,
+        bright_bold,
         custom_themes,
         split_divider_color,
         input_echo_color,
@@ -1744,6 +1762,7 @@ pub(crate) async fn ui_set_config(
         p.ui.enabled_presets.dedup();
         p.ui.keep_last_command = keep_last_command;
         p.ui.theme_terminal_colors = theme_terminal_colors;
+        p.ui.bright_bold = bright_bold;
         p.ui.custom_themes = custom_themes;
         // Empty strings get normalized to None so the picker can clear
         // back to the theme default by submitting "".

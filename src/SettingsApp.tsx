@@ -420,6 +420,14 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           />
           <span>tint output with theme</span>
         </label>
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={config.bright_bold}
+            onChange={(e) => update({ bright_bold: e.target.checked })}
+          />
+          <span>bright text as bold (native renderer)</span>
+        </label>
         <WebglToggle />
       </Row>
       <Row label="updates">
