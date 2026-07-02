@@ -286,7 +286,14 @@ pub(crate) fn url_at(grid_line: i32, col: usize) -> Option<(String, usize, usize
     let text: String = (0..cols)
         .map(|c| grid[Line(grid_line)][Column(c)].c)
         .collect();
-    for m in url_regex().find_iter(&text) {
+    url_in_line(&text, col)
+}
+
+/// The URL spanning char index `col` in a grid line's text. `text` holds one
+/// char per grid column (wide-char spacer cells read as a space), so char
+/// offsets are grid columns even with double-width glyphs on the line.
+fn url_in_line(text: &str, col: usize) -> Option<(String, usize, usize)> {
+    for m in url_regex().find_iter(text) {
         let start_col = text[..m.start()].chars().count();
         let end_col = text[..m.end()].chars().count();
         if col >= start_col && col < end_col {
@@ -594,6 +601,29 @@ mod tests {
         assert_eq!(m.len(), 2);
         assert_eq!(m[0], (0, 4, 7));
         assert_eq!(m[1], (1, 4, 7));
+    }
+
+    #[test]
+    fn collect_matches_columns_stay_aligned_after_wide_chars() {
+        let mut g = TermGrid::new(80, 24);
+        // 日 and 本 are double-width: the glyph occupies its cell and the
+        // next holds a spacer that reads as a space. Line text collects one
+        // char per column, so char offsets stay 1:1 with grid columns.
+        g.feed("ab\u{65e5}\u{672c} cat".as_bytes());
+        let m = collect_matches(&g, "cat", false, false, false);
+        assert_eq!(m.len(), 1);
+        // Columns: a=0 b=1 日=2 (spacer 3) 本=4 (spacer 5) space=6 c=7.
+        assert_eq!(m[0], (0, 7, 10));
+    }
+
+    #[test]
+    fn url_columns_stay_aligned_after_wide_chars() {
+        // Same one-char-per-column construction url_at feeds url_in_line:
+        // 日=0 spacer=1 本=2 spacer=3, url starts at column 4.
+        let text = "\u{65e5} \u{672c} http://x.dev";
+        let hit = url_in_line(text, 6).expect("url under cursor");
+        assert_eq!(hit, ("http://x.dev".to_string(), 4, 16));
+        assert!(url_in_line(text, 3).is_none());
     }
 
     #[test]

@@ -214,10 +214,14 @@ Remaining before native can be the default everywhere:
   `D3D12` surface on an `HWND` child; Linux a Vulkan surface on a GTK
   child. wgpu abstracts the renderer, so the work is the per-platform child
   window/handle plumbing that mirrors the macOS `NSView` + `CAMetalLayer`.
-- **Wide-char columns.** Find/selection column math assumes one cell per
-  char, so double-width (CJK) glyphs can be a column off. Fine for ASCII.
 
-The block cursor is deliberately omitted (output-only pane). The TEMP
-default-on flag in `nativeSurfaceEnabled` (Terminal.tsx) must flip back to
-opt-in (`=== '1'`) before this branch merges. Check `git log --oneline`
-first.
+Wide-char (CJK) columns are verified correct: line text collects one char
+per grid column (spacer cells read as a space), so find/URL char offsets
+are grid columns; regression tests cover it. The one limitation is search
+input, where adjacent wide chars ("日本") need the interleaved spacer space
+to match. The block cursor is deliberately omitted (output-only pane).
+
+The default is **on**: `nativeSurfaceEnabled` (Terminal.tsx) reads true
+unless `vosh.nativesurface` is `'0'`, gated to macOS until M6 — on
+Windows/Linux the flag reads false so xterm keeps its FitAddon and NAWS
+push.

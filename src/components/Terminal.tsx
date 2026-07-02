@@ -21,13 +21,21 @@ import { WordWrapper } from '../lib/wordWrap';
 import { ingestRecentNames } from '../lib/recentNames';
 import { hexToRgba } from '../lib/mapPalette';
 
-// Tier 3: the native wgpu terminal surface. Default-on while it is the
-// daily driver during development. Before merging to main, flip to
-// `=== '1'` so xterm stays the default and native is opt-in — it is not yet
-// at full parity (find-match highlights, URL link clicks, and the
-// Windows/Linux surfaces are still pending).
+// Tier 3: the native wgpu terminal surface. Default ON where a surface
+// exists — it reached visual parity with xterm (docs/native-renderer.md,
+// M4) and is the intended renderer. Set localStorage vosh.nativesurface to
+// '0' to fall back to xterm. Gated to macOS until M6 lands the
+// Windows/Linux surfaces: on those platforms the frontend must keep
+// xterm's FitAddon and NAWS push active, so the flag reads false there.
 export function nativeSurfaceEnabled(): boolean {
-  return typeof localStorage !== 'undefined' && localStorage.getItem('vosh.nativesurface') !== '0';
+  const isMac =
+    typeof navigator !== 'undefined' &&
+    (navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac OS'));
+  return (
+    isMac &&
+    typeof localStorage !== 'undefined' &&
+    localStorage.getItem('vosh.nativesurface') !== '0'
+  );
 }
 
 // Report the active theme's surface colors and resolved ANSI palette to
