@@ -225,9 +225,11 @@ Remaining before native can be the default everywhere:
 mingw-w64`, then `cargo clippy --target x86_64-pc-windows-gnu` with
   `CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc`), but
   untested on real hardware: z-order over the WebView2 child, DPI, mouse
-  routing, and D3D12 present all need eyes. `nativeSurfaceEnabled`
-  (Terminal.tsx) stays macOS-gated until that pass; flip its platform check
-  to include Windows to test.
+  routing, and D3D12 present all need eyes. The surface defaults OFF on
+  Windows, but a tester on a stock build can force it on with
+  `localStorage.setItem('vosh.nativesurface','1')` + reload (and back off
+  with `'0'`); flip the default in `nativeSurfaceEnabled` (Terminal.tsx)
+  once the pass is clean.
 - **Linux hardware pass.** The Linux surface (`native_surface/linux.rs`)
   is written and compile-checked in a container (`docker run rust:1` with
   the webkit2gtk/gtk3 dev packages, then `cargo clippy -j 2` — the low job
