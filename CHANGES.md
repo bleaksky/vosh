@@ -2,6 +2,11 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.6.1 - 2026-07-02
+
+- You can now try the native GPU renderer on Windows and Linux. Type `#nativesurface on` in the command line and restart Vosh to switch the terminal to the native surface, `#nativesurface off` to force the previous renderer anywhere, and `#nativesurface default` to go back to the platform default. The default is unchanged, native on macOS and the previous renderer elsewhere, because the Windows and Linux surfaces have not had a hardware shakedown yet. If you turn it on and something looks wrong, `#nativesurface off` and a restart puts everything back, and a report of what you saw helps a lot.
+- `#help` and the in-app help list the new command.
+
 ## v0.6.0 - 2026-07-02
 
 - The terminal now draws on a native GPU surface on macOS. Text renders through the system rasterizer at the exact same size and weight as before, but scrolling and heavy combat output are far smoother because server output never crosses into the web layer to reach your screen. This is on by default. If anything looks wrong, set vosh.nativesurface to 0 in DevTools localStorage and reload to fall back to the previous renderer.
