@@ -46,35 +46,54 @@ quick-xml = "0.36"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Used by `enable_macos_spellcheck` in lib.rs to message-send
-# setContinuousSpellCheckingEnabled: into the WKWebView. Gated
-# with respondsToSelector: so a future macOS that drops the
-# setter degrades to a no-op instead of an unrecognized-selector
-# crash.
+# setContinuousSpellCheckingEnabled: into the WKWebView (and by the native
+# surface's NSView glue). Gated with respondsToSelector: so a future macOS
+# that drops the setter degrades to a no-op instead of an
+# unrecognized-selector crash.
 objc2 = "0.5"
-# Tier 3 native terminal renderer (docs/native-renderer.md). wgpu drives
-# a Metal surface on a CAMetalLayer-backed child NSView; pollster blocks
-# on its async init during setup; raw-window-handle bridges the NSView.
+# Glyph rasterization on macOS goes through CoreGraphics directly
+# (core-graphics/core-text) with font smoothing OFF so the strokes match
+# the webview's antialiased text instead of the heavier smoothed look.
+core-graphics = "0.23"
+core-text = "20"
+# alacritty_terminal compiles a unix tty (PTY) module we never use; it
+# pulls rustix-openpty, whose rustix builds without the `std` feature and
+# its fd types then fail to bridge to std's OwnedFd. Force `std` on so
+# Cargo unifies the feature across the graph and the tty module compiles.
+rustix = { version = "0.38", features = ["std"] }
+
+# Tier 3 native terminal renderer (docs/native-renderer.md); the platform
+# list here mirrors the `native_surface` cfg in build.rs. wgpu drives a
+# Metal surface on macOS and a D3D12 surface on Windows; pollster blocks on
+# its async init during setup; raw-window-handle bridges the native view.
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 wgpu = "0.20"
 pollster = "0.3"
 raw-window-handle = "0.6"
 # Terminal grid model (VTE parser + cell grid + scrollback) fed by the
 # post-telnet byte stream; the wgpu renderer draws this grid (M2b/M2c).
 alacritty_terminal = "0.24"
-# Glyph rasterization for the cell renderer's atlas. font-kit selects the
-# font and supplies metrics + glyph bounds; we rasterize each glyph through
-# CoreGraphics directly (core-graphics/core-text) with font smoothing OFF so
-# the strokes match the webview's antialiased text instead of the heavier
-# smoothed look. pathfinder_geometry supplies the transform types.
+# font-kit selects the font and supplies metrics + glyph bounds (and, off
+# macOS, rasterizes through the platform library: DirectWrite/FreeType).
+# pathfinder_geometry supplies its transform types.
 pathfinder_geometry = "0.5"
-core-graphics = "0.23"
-core-text = "20"
 # Cast the per-cell instance + uniform structs to bytes for wgpu buffers.
 bytemuck = { version = "1", features = ["derive"] }
-# alacritty_terminal compiles a unix tty (PTY) module we never use; it
-# pulls rustix-openpty, whose rustix builds without the `std` feature and
-# its fd types then fail to bridge to std's OwnedFd. Force `std` on so
-# Cargo unifies the feature across the graph and the tty module compiles.
-rustix = { version = "0.38", features = ["std"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Win32 plumbing for the native surface's child HWND (window class,
+# WndProc, clipboard, ShellExecute).
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [dev-dependencies]
 tempfile = "3"

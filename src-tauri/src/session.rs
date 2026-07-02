@@ -1451,7 +1451,7 @@ fn emit_output(app: &AppHandle, bytes: Vec<u8>) {
     // for every output path (line pipeline AND the prompt pipeline's gag
     // clearing / replaced text / echoes), then repaint. This is the single
     // choke point so nothing reaches xterm without also reaching the grid.
-    #[cfg(target_os = "macos")]
+    #[cfg(native_surface)]
     {
         crate::term_grid::feed_bytes(&bytes);
         crate::native_surface::request_redraw();

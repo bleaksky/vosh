@@ -167,8 +167,15 @@ NSWindow / HWND / GtkWindow
   the swap is seamless. Per-line trigger highlights and gags need no work:
   the trigger engine bakes them into the display byte stream that feeds the
   grid. The block cursor is deliberately omitted (output-only pane).
-- **M6 — cross-platform.** Windows (D3D12) and Linux (Vulkan) surfaces,
-  CI bundles, flip the default. The only milestone left.
+- **M6 — cross-platform. IN PROGRESS.** The renderer core (grid, cell
+  renderer, surface state, pointer logic) compiles on macOS and Windows,
+  gated by the `native_surface` cfg emitted from build.rs. Platform glue
+  lives in `native_surface/macos.rs` (NSView + CAMetalLayer, verified) and
+  `native_surface/windows.rs` (child HWND + WndProc + D3D12,
+  compile-checked cross-target via the mingw toolchain, awaiting a hardware
+  pass before the frontend enables it). Linux (Vulkan on a GTK child) is
+  not started. Glyph rasterization off macOS goes through font-kit's
+  platform library (DirectWrite/FreeType).
 
 M1 is the go/no-go gate: if a native surface cannot composite cleanly
 into the Tauri window across the three platforms, the hybrid approach
@@ -209,11 +216,18 @@ resize hidden xterm to match.
 
 Remaining before native can be the default everywhere:
 
-- **Cross-platform (M6).** The surface is macOS-only (`native_surface.rs`
-  and `cell_render.rs` are `cfg(target_os = "macos")`). Windows needs a
-  `D3D12` surface on an `HWND` child; Linux a Vulkan surface on a GTK
-  child. wgpu abstracts the renderer, so the work is the per-platform child
-  window/handle plumbing that mirrors the macOS `NSView` + `CAMetalLayer`.
+- **Windows hardware pass.** The Windows surface
+  (`native_surface/windows.rs`) is written and compile-checked (local
+  cross-check: `rustup target add x86_64-pc-windows-gnu`, `brew install
+mingw-w64`, then `cargo clippy --target x86_64-pc-windows-gnu` with
+  `CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc`), but
+  untested on real hardware: z-order over the WebView2 child, DPI, mouse
+  routing, and D3D12 present all need eyes. `nativeSurfaceEnabled`
+  (Terminal.tsx) stays macOS-gated until that pass; flip its platform check
+  to include Windows to test.
+- **Linux (M6).** Vulkan surface on a GTK child window. Not started; the
+  `native_surface` cfg in build.rs excludes Linux so it builds exactly as
+  before.
 
 Wide-char (CJK) columns are verified correct: line text collects one char
 per grid column (spacer cells read as a space), so find/URL char offsets

@@ -14,7 +14,7 @@
 //! Every window touch happens on the main thread (creation inside
 //! `with_webview` / install, updates via `AppHandle::run_on_main_thread`).
 
-#![cfg(target_os = "macos")]
+#![cfg(native_surface)]
 // Platform window plumbing and the wgpu raw-handle surface are unsafe;
 // the workspace forbids unsafe by default.
 #![allow(unsafe_code)]
@@ -28,6 +28,9 @@ use tauri::{Emitter, Manager};
 #[cfg(target_os = "macos")]
 #[path = "macos.rs"]
 mod platform;
+#[cfg(target_os = "windows")]
+#[path = "windows.rs"]
+mod platform;
 
 // Live wgpu objects for the terminal surface.
 struct GpuState {
@@ -40,12 +43,14 @@ struct GpuState {
 }
 
 // The installed surface: the platform's window/view handles plus the GPU
-// state. Platform handles are raw pointers (not Send), but every access is
-// funnelled through the main thread, so the platform marks its type Send.
+// state. Platform handles are raw pointers and the atlas's font-kit face is
+// a platform font object (DirectWrite's is not Send), but every access is
+// funnelled through the main thread, so the assertion is sound.
 struct SurfaceHandle {
     platform: platform::PlatformSurface,
     gpu: GpuState,
 }
+unsafe impl Send for SurfaceHandle {}
 
 static SURFACE: OnceLock<Mutex<Option<SurfaceHandle>>> = OnceLock::new();
 

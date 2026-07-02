@@ -62,7 +62,7 @@ fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(), tauri::E
     })
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(native_surface)]
 mod cell_render;
 mod commands;
 mod connection;
@@ -76,7 +76,7 @@ mod loadout_store;
 mod log_state;
 mod map_state;
 mod migration;
-#[cfg(target_os = "macos")]
+#[cfg(native_surface)]
 mod native_surface;
 mod plugins;
 mod profile;
@@ -84,7 +84,7 @@ mod profile_config;
 mod profile_set;
 mod script_state;
 mod session;
-#[cfg(target_os = "macos")]
+#[cfg(native_surface)]
 mod term_grid;
 mod tick;
 mod tintin_import;
@@ -382,8 +382,11 @@ pub fn run() {
                 for (_, window) in app.webview_windows() {
                     let _ = enable_macos_spellcheck(&window);
                 }
-                // Tier 3 M1 probe: prove a native child view composites
-                // over the webview in the main window. See native_surface.
+            }
+            // Tier 3: install the native terminal surface over the webview
+            // in the main window. See native_surface.
+            #[cfg(native_surface)]
+            {
                 if let Some(main) = app.get_webview_window("main") {
                     let _ = native_surface::install_probe(&main);
                 }

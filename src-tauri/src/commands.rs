@@ -865,13 +865,13 @@ pub(crate) fn native_surface_set_bounds(
     height: f64,
     dpr: f64,
 ) {
-    #[cfg(target_os = "macos")]
+    #[cfg(native_surface)]
     {
         let _ = app.run_on_main_thread(move || {
             crate::native_surface::set_bounds(x, y, width, height, dpr);
         });
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(native_surface))]
     {
         let _ = (&app, x, y, width, height, dpr);
     }
@@ -881,12 +881,12 @@ pub(crate) fn native_surface_set_bounds(
 /// clipboard. Used by the Cmd+C / Ctrl+C path; a no-op elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_copy() {
-    #[cfg(target_os = "macos")]
+    #[cfg(native_surface)]
     crate::native_surface::request_copy();
 }
 
 /// Parse a `#rrggbb` (or `rrggbb`) hex color.
-#[cfg(target_os = "macos")]
+#[cfg(native_surface)]
 fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
     let s = s.trim().trim_start_matches('#');
     if s.len() < 6 {
@@ -909,7 +909,7 @@ pub(crate) fn native_surface_set_theme(
     selection: String,
     ansi: Vec<String>,
 ) {
-    #[cfg(target_os = "macos")]
+    #[cfg(native_surface)]
     {
         if let (Some(bg), Some(fg), Some(sel)) = (
             parse_hex(&background),
@@ -924,7 +924,7 @@ pub(crate) fn native_surface_set_theme(
             crate::native_surface::request_redraw();
         }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(native_surface))]
     {
         let _ = (background, foreground, selection, ansi);
     }
@@ -934,12 +934,12 @@ pub(crate) fn native_surface_set_theme(
 /// text with the bold font weight. A no-op elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_set_bright_bold(on: bool) {
-    #[cfg(target_os = "macos")]
+    #[cfg(native_surface)]
     {
         crate::cell_render::set_bright_bold(on);
         crate::native_surface::request_redraw();
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(native_surface))]
     {
         let _ = on;
     }
@@ -950,9 +950,9 @@ pub(crate) fn native_surface_set_bright_bold(on: bool) {
 /// from font metrics. A no-op elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_set_cell_metrics(width: u32, height: u32) {
-    #[cfg(target_os = "macos")]
+    #[cfg(native_surface)]
     crate::native_surface::set_cell_metrics(width, height);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(native_surface))]
     {
         let _ = (width, height);
     }
@@ -964,9 +964,9 @@ pub(crate) fn native_surface_set_cell_metrics(width: u32, height: u32) {
 /// elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_set_visible(visible: bool) {
-    #[cfg(target_os = "macos")]
+    #[cfg(native_surface)]
     crate::native_surface::set_visible(visible);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(native_surface))]
     {
         let _ = visible;
     }
@@ -977,12 +977,12 @@ pub(crate) fn native_surface_set_visible(visible: bool) {
 /// onLocalEcho). `text` is the already-styled echo line. A no-op elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_echo(text: String) {
-    #[cfg(target_os = "macos")]
+    #[cfg(native_surface)]
     {
         crate::term_grid::feed_bytes(text.as_bytes());
         crate::native_surface::request_redraw();
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(native_surface))]
     {
         let _ = text;
     }
@@ -1000,13 +1000,13 @@ pub(crate) fn native_surface_find(
     whole_word: bool,
     forward: bool,
 ) -> (usize, usize) {
-    #[cfg(target_os = "macos")]
+    #[cfg(native_surface)]
     {
         let result = crate::term_grid::find_run(&query, regex, case_sensitive, whole_word, forward);
         crate::native_surface::request_redraw();
         result
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(native_surface))]
     {
         let _ = (query, regex, case_sensitive, whole_word, forward);
         (0, 0)
@@ -1017,7 +1017,7 @@ pub(crate) fn native_surface_find(
 /// elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_find_clear() {
-    #[cfg(target_os = "macos")]
+    #[cfg(native_surface)]
     {
         crate::term_grid::find_clear();
         crate::native_surface::request_redraw();
@@ -1029,9 +1029,9 @@ pub(crate) fn native_surface_find_clear() {
 /// elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_set_font(family: String, size: u32) {
-    #[cfg(target_os = "macos")]
+    #[cfg(native_surface)]
     crate::native_surface::request_set_font(family, size);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(native_surface))]
     {
         let _ = (family, size);
     }
@@ -1042,7 +1042,7 @@ pub(crate) fn native_surface_set_font(family: String, size: u32) {
 /// elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_scroll(kind: String) {
-    #[cfg(target_os = "macos")]
+    #[cfg(native_surface)]
     {
         match kind.as_str() {
             "pageup" => crate::term_grid::scroll_page(true),
@@ -1052,7 +1052,7 @@ pub(crate) fn native_surface_scroll(kind: String) {
         }
         crate::native_surface::request_redraw();
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(native_surface))]
     {
         let _ = kind;
     }
@@ -1637,12 +1637,12 @@ pub(crate) async fn scrollback_load(
     let bytes = sb.dump();
     // The native grid is fed only live output, so the persisted scrollback
     // would be missing there. The live pane asks us to seed it once.
-    #[cfg(target_os = "macos")]
+    #[cfg(native_surface)]
     if feed_native && !bytes.is_empty() {
         crate::term_grid::feed_bytes(&bytes);
         crate::native_surface::request_redraw();
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(native_surface))]
     let _ = feed_native;
     Ok(bytes)
 }
