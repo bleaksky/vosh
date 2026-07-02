@@ -144,21 +144,29 @@ NSWindow / HWND / GtkWindow
   offset) and a live tail (bottom, offset 0) with a thin divider line. The
   divider is draggable (split stored as a height fraction) with a tracking
   vertical-resize cursor that lines up with the drawn line.
-- **M4 — parity. DONE.** Cell styles render at parity: true bold (the
-  bundled Bold face), synthesized italic (per-row slant), underline,
-  strikethrough, dim, inverse, and background color. The glyph atlas holds
-  four faces keyed by (char, bold, italic) in 32x32 slots, rasterized on
-  demand (so non-ASCII glyphs work too). Theme colors (surface bg/fg/
-  selection plus the ANSI 0-15 palette) follow the active theme and the
-  `themeTerminalColors` tint; the font live-updates. Find/regex with match
-  highlighting, local echo of sent input (configurable color), a
-  scroll-depth indicator, Cmd+click to open URLs with a hover underline,
-  drag-select + copy, and the gagged-prompt replacement (with a rich
-  template grammar: colors, 256/RGB/hex, auto-by-percent, styles,
-  backgrounds, time/date) all render on the surface. Per-line trigger
-  highlights and gags need no work: the trigger engine bakes them into the
-  display byte stream that feeds the grid. The block cursor is deliberately
-  omitted (output-only pane).
+- **M4 — parity. DONE.** Text renders pixel-close to the webview: glyphs
+  rasterize through CoreGraphics with font smoothing off (the browser's
+  antialiased look, not the heavier smoothed one), coverage blends in sRGB
+  gamma space via premultiplied alpha on a non-sRGB surface, and the grid
+  uses xterm's reported device cell so spacing matches exactly. Cell styles
+  render at parity: true bold (the bundled Bold face), synthesized italic
+  (CoreGraphics shear, overhanging its cell like the webview), underline,
+  strikethrough, dim, inverse, and background color. The atlas keys four
+  faces by (char, bold, italic) in double-width slots so slanted glyphs are
+  not clipped; backgrounds and glyphs draw as separate layers. Theme colors
+  follow the active theme and the `themeTerminalColors` tint; the font
+  live-updates; a `bright_bold` setting draws effective-bright (ANSI 8-15,
+  including bold-promoted base colors) text with the bold face. Find/regex
+  with match highlighting, local echo of sent input (configurable color), a
+  scroll-depth indicator, Cmd+click to open URLs with a hover underline
+  (link-blue), drag-select + copy, persisted-scrollback seeding, and the
+  gagged-prompt replacement (with a rich template grammar: colors,
+  256/RGB/hex, auto-by-percent, styles, backgrounds, time/date) all render
+  on the surface. DOM overlays (dropdowns, modals) hide the surface and
+  reveal xterm, which is kept in lockstep with the surface's grid size so
+  the swap is seamless. Per-line trigger highlights and gags need no work:
+  the trigger engine bakes them into the display byte stream that feeds the
+  grid. The block cursor is deliberately omitted (output-only pane).
 - **M6 — cross-platform.** Windows (D3D12) and Linux (Vulkan) surfaces,
   CI bundles, flip the default. The only milestone left.
 
@@ -170,25 +178,34 @@ is dead and we stay in Tier 1/2. Everything after M1 is "normal" work.
 
 Branch `native-renderer`. **M1, M2, M3, M4, and M5 are done; only M6
 (cross-platform) remains.** The native wgpu surface renders the full live
-terminal at parity with xterm on macOS: the configured Vosh font/size,
-accurate ANSI colors (theme palette + tint toggle), all cell styles (true
-bold, synthesized italic, underline, strikethrough, dim, inverse,
-background color), non-ASCII glyphs, theme-driven surface colors, trigger
-highlights and gags (free, via the byte stream), wheel + keyboard scroll,
-draggable split-scrollback, a scroll-depth indicator, drag-select + copy
-(mouse and Cmd+C), find/regex with match highlighting, local echo of sent
-input, the gagged-prompt replacement with a rich template grammar, and
-Cmd+click URLs with a hover underline. Enable with
+terminal at visual parity with xterm on macOS: CoreGraphics-rasterized
+glyphs (smoothing off) at xterm's exact cell metrics, gamma-correct sRGB
+blending, all cell styles (true bold, sheared italic with overhang,
+underline, strikethrough, dim, inverse, background color), the
+`bright_bold` weight toggle, accurate ANSI colors (theme palette + tint
+toggle), non-ASCII glyphs, trigger highlights and gags (free, via the byte
+stream), wheel + keyboard scroll, draggable split-scrollback, a
+scroll-depth indicator, drag-select + copy (mouse and Cmd+C), find/regex
+with match highlighting, local echo of sent input, persisted-scrollback
+seeding, the gagged-prompt replacement with a rich template grammar,
+Cmd+click URLs with a link-blue hover underline, and seamless
+overlay-swap (DOM dropdowns hide the surface; hidden xterm tracks the
+surface's grid size in lockstep). Enable with
 `localStorage.setItem('vosh.nativesurface','1')` + reload; `'0'` falls back
 to xterm.
 
 The frontend reports state to the surface through commands:
-`native_surface_set_bounds` (pane geometry + dpr), `native_surface_scroll`
-(PageUp/PageDown/bottom), `native_surface_copy` (Cmd+C),
-`native_surface_set_theme` (bg/fg/selection + ANSI palette),
-`native_surface_set_font` (family + size), `native_surface_echo` (sent
-input), `native_surface_find` / `native_surface_find_clear` (search). The
-backend feeds the grid from `session.rs` and redraws via `request_redraw`.
+`native_surface_set_bounds` (pane geometry + dpr),
+`native_surface_set_cell_metrics` (xterm's device cell size),
+`native_surface_scroll` (PageUp/PageDown/bottom), `native_surface_copy`
+(Cmd+C), `native_surface_set_theme` (bg/fg/selection + ANSI palette),
+`native_surface_set_font` (family + size), `native_surface_set_bright_bold`
+(weight toggle), `native_surface_set_visible` (overlay suppression),
+`native_surface_echo` (sent input), `native_surface_find` /
+`native_surface_find_clear` (search). The backend feeds the grid from
+`session.rs`, redraws via `request_redraw`, advertises the surface grid
+size as NAWS, and emits `vosh://native-grid-size` so the live pane can
+resize hidden xterm to match.
 
 Remaining before native can be the default everywhere:
 
