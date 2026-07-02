@@ -5168,6 +5168,8 @@ dependencies = [
  "core-graphics 0.23.2",
  "core-text",
  "font-kit",
+ "gdk",
+ "gtk",
  "objc2 0.5.2",
  "pathfinder_geometry",
  "pollster",
@@ -5204,6 +5206,7 @@ dependencies = [
  "webpki-roots 0.26.11",
  "wgpu",
  "windows-sys 0.59.0",
+ "x11-dl",
 ]
 
 [[package]]

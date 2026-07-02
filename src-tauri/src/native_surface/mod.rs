@@ -10,6 +10,8 @@
 //!   drawn by wgpu's Metal backend (`macos.rs`).
 //! - Windows: a child `HWND` over the `WebView2`, drawn by D3D12
 //!   (`windows.rs`).
+//! - Linux: a raw X11 child window over the GTK toplevel, drawn by Vulkan;
+//!   Wayland falls back to xterm (`linux.rs`).
 //!
 //! Every window touch happens on the main thread (creation inside
 //! `with_webview` / install, updates via `AppHandle::run_on_main_thread`).
@@ -18,6 +20,10 @@
 // Platform window plumbing and the wgpu raw-handle surface are unsafe;
 // the workspace forbids unsafe by default.
 #![allow(unsafe_code)]
+// The Linux surface is display-only for now (input propagates through the
+// child X window to the webview), so the shared pointer layer sits unused
+// there. macOS and Windows still enforce dead-code on it.
+#![cfg_attr(target_os = "linux", allow(dead_code))]
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -30,6 +36,9 @@ use tauri::{Emitter, Manager};
 mod platform;
 #[cfg(target_os = "windows")]
 #[path = "windows.rs"]
+mod platform;
+#[cfg(target_os = "linux")]
+#[path = "linux.rs"]
 mod platform;
 
 // Live wgpu objects for the terminal surface.

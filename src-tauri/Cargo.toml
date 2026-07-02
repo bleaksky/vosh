@@ -56,17 +56,12 @@ objc2 = "0.5"
 # the webview's antialiased text instead of the heavier smoothed look.
 core-graphics = "0.23"
 core-text = "20"
-# alacritty_terminal compiles a unix tty (PTY) module we never use; it
-# pulls rustix-openpty, whose rustix builds without the `std` feature and
-# its fd types then fail to bridge to std's OwnedFd. Force `std` on so
-# Cargo unifies the feature across the graph and the tty module compiles.
-rustix = { version = "0.38", features = ["std"] }
-
 # Tier 3 native terminal renderer (docs/native-renderer.md); the platform
 # list here mirrors the `native_surface` cfg in build.rs. wgpu drives a
-# Metal surface on macOS and a D3D12 surface on Windows; pollster blocks on
-# its async init during setup; raw-window-handle bridges the native view.
-[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+# Metal surface on macOS, a D3D12 surface on Windows, and a Vulkan surface
+# on Linux (X11); pollster blocks on its async init during setup;
+# raw-window-handle bridges the native view.
+[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
 wgpu = "0.20"
 pollster = "0.3"
 raw-window-handle = "0.6"
@@ -79,6 +74,23 @@ alacritty_terminal = "0.24"
 pathfinder_geometry = "0.5"
 # Cast the per-cell instance + uniform structs to bytes for wgpu buffers.
 bytemuck = { version = "1", features = ["derive"] }
+
+# alacritty_terminal compiles a unix tty (PTY) module we never use; it
+# pulls rustix-openpty, whose rustix builds without the `std` feature and
+# its fd types then fail to bridge to std's OwnedFd. Force `std` on so
+# Cargo unifies the feature across the graph and the tty module compiles.
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+rustix = { version = "0.38", features = ["std"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# The native surface's child X window rides the GTK toplevel Tauri owns.
+# gtk/gdk (0.18, Tauri 2's GTK3 bindings) reach the toplevel and the
+# clipboard; x11-dl dlopens libX11 for the child window itself, so there
+# is no new link-time dependency and Wayland-only systems still run
+# (install detects the backend and falls back to xterm).
+gtk = "0.18"
+gdk = "0.18"
+x11-dl = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Win32 plumbing for the native surface's child HWND (window class,

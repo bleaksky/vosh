@@ -10,6 +10,10 @@
 //! itself is platform independent and ungates when other platforms land.
 
 #![cfg(native_surface)]
+// The pointer-driven grid helpers (selection, URL lookup, wheel scroll)
+// are only called from the mouse-capable surfaces; the Linux surface is
+// display-only for now, so they sit unused there.
+#![cfg_attr(target_os = "linux", allow(dead_code))]
 
 use std::sync::{Mutex, OnceLock};
 
