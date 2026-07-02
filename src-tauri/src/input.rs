@@ -69,6 +69,7 @@ slash commands:
   #profile load                        replace state with the saved profile
   #profile reset                       wipe aliases, vars, triggers, tick
   #import-tintin <path>                import #alias and #variable from a .tin
+  #nativesurface on|off|default        force the native renderer on or off
   #record <name>                       start recording typed commands into a macro
   #record                              show current recording status
   #record cancel                       discard the in-progress recording
