@@ -2,6 +2,17 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.6.0 - 2026-07-02
+
+- The terminal now draws on a native GPU surface on macOS. Text renders through the system rasterizer at the exact same size and weight as before, but scrolling and heavy combat output are far smoother because server output never crosses into the web layer to reach your screen. This is on by default. If anything looks wrong, set vosh.nativesurface to 0 in DevTools localStorage and reload to fall back to the previous renderer.
+- Everything you rely on carries over to the new surface. Scrollback with the split view and its draggable divider, drag to select with copy on release and Cmd+C, find with regex and match highlighting, theme colors and the tint toggle, your font at its exact size, the echo of sent commands, and your saved scrollback from last session are all there.
+- Links light up. Hover a URL in the terminal and it turns blue and underlines. Cmd+click opens it in your browser.
+- The custom prompt grows a full formatting grammar. Color anything with named colors, 256-palette indexes, RGB triples, or hex codes, and color by a stat percent so your hp number shifts green to yellow to red on its own. Backgrounds take the same color forms. Bold, italic, underline, inverse, and strikethrough styles work inline, and time, date, and percent tokens round it out. The Settings hint lists the syntax.
+- A new terminal setting draws bright colored text with the heavier bold font. Most MUDs mark bright text as bold, so turn this on if you like that weight. Off keeps bright text at the normal weight.
+- Menus and dialogs that open over the terminal now show correctly instead of clipping behind it, and the content underneath no longer shifts while they are open.
+- Selecting text in the live half of an open scrollback split grabs the right characters now.
+- Groundwork for the native renderer on Windows and Linux is in place. Both compile and wait on hardware testing, so those platforms keep the previous renderer for now.
+
 ## v0.5.3 - 2026-06-25
 
 - The split-scrollback history pane shows your scrollback reliably again, the instant you scroll. A rendering race could leave the top pane blank when the split opened, and the earlier attempt to fix it added a visible pause before the content appeared. The pane now reveals and repaints the moment its scrollback loads, so it is never blank and never lags, with GPU rendering on by default.
