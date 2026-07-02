@@ -1563,6 +1563,10 @@ impl CellRenderer {
 }
 
 #[cfg(test)]
+// The tests assert exact float values that are copied verbatim through the
+// instance builder (offsets are products of small integers, colors are
+// passed through untouched), so strict equality is the correct check.
+#[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
 
