@@ -29,7 +29,7 @@ use objc2::{class, msg_send, sel, Encode, Encoding};
 use raw_window_handle::{
     AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 // Self-describing CoreGraphics geometry so frame messages can be
 // message-sent without pulling objc2-foundation.
@@ -181,6 +181,9 @@ fn push_native_size_if_changed(cols: usize, rows: usize) {
     if let Ok(mut ws) = state.window_size.lock() {
         *ws = (cols, rows);
     }
+    // Tell the frontend so it can size hidden xterm to the same grid; when a
+    // DOM overlay reveals xterm it then matches the surface exactly.
+    let _ = app.emit("vosh://native-grid-size", (cols, rows));
     // Bound to a named local (not a temporary) so the guard drops before
     // `state` at end of scope.
     let session_guard = state.session.try_lock();

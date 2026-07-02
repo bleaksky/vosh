@@ -11,6 +11,7 @@ import {
 import { WebglAddon } from '@xterm/addon-webgl';
 
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 import '@xterm/xterm/css/xterm.css';
 import { loadScrollback, onOutput, setWindowSize } from '../lib/session';
@@ -329,6 +330,11 @@ export function Terminal({
     // Escape hatch: set `window.__voshDisableWebGL = true` in the
     // console before reload to force the DOM renderer.
     const safeFit = () => {
+      // When the native surface owns the pane it is the size authority and
+      // resizes xterm via the native-grid-size event. xterm is hidden behind
+      // the opaque surface and mismeasures itself there, so do not let the
+      // FitAddon fight the native grid (it would wrap the MUD too narrow).
+      if (!quietRef.current && nativeSurfaceEnabled()) return;
       try {
         fit.fit();
       } catch {
@@ -537,11 +543,7 @@ export function Terminal({
       lastH = h;
       host.style.width = `${w}px`;
       host.style.height = `${h}px`;
-      try {
-        fit.fit();
-      } catch {
-        // ignore resize before layout settles
-      }
+      safeFit();
       // No explicit refresh or viewport restore. xterm's resize
       // adjusts the buffer dimensions; the WebGL renderer's own
       // debounced redraw paints once after the drag settles, which
@@ -583,6 +585,24 @@ export function Terminal({
     }
 
     let unsubOutput: (() => void) | undefined;
+    // The native surface is the size authority while it owns the pane. It
+    // emits its grid size; size hidden xterm to match so a dropdown swap
+    // reveals identical content. Live pane only.
+    let unsubGridSize: (() => void) | undefined;
+    if (!quietRef.current && nativeSurfaceEnabled()) {
+      void listen<[number, number]>('vosh://native-grid-size', (event) => {
+        const [cols, rows] = event.payload;
+        if (cols > 0 && rows > 0 && (cols !== term.cols || rows !== term.rows)) {
+          try {
+            term.resize(cols, rows);
+          } catch {
+            // resize before the renderer is ready; the next emit retries
+          }
+        }
+      }).then((un) => {
+        unsubGridSize = un;
+      });
+    }
     // Replay persisted scrollback before any live output lands so the
     // user opens the app to the tail of their last session.
     const notifyPosition = () => {
@@ -621,7 +641,16 @@ export function Terminal({
         if (bytes.length > 0) {
           term.write(bytes);
           if (!quietRef.current) {
-            term.write('\r\n\x1b[2m[scrollback restored]\x1b[0m\r\n');
+            // Explicit 256-palette gray, not dim: xterm and the native
+            // renderer dim differently, so dim would show two shades.
+            const banner = '\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n';
+            term.write(banner);
+            // Mirror the banner into the native grid so xterm and the surface
+            // have the same line count; otherwise a dropdown swap to xterm
+            // shifts the content up by these rows.
+            if (nativeSurfaceEnabled()) {
+              void invoke('native_surface_echo', { text: banner }).catch(() => {});
+            }
           }
         }
         // xterm.write batches into an internal queue; flush before
@@ -909,6 +938,7 @@ export function Terminal({
       window.removeEventListener('keydown', onCopyKey, true);
       if (naws_timer) clearTimeout(naws_timer);
       unsubOutput?.();
+      unsubGridSize?.();
       resultsSub.dispose();
       scrollDisposable.dispose();
       searchAddon.dispose();
