@@ -21,20 +21,20 @@ import { WordWrapper } from '../lib/wordWrap';
 import { ingestRecentNames } from '../lib/recentNames';
 import { hexToRgba } from '../lib/mapPalette';
 
-// Tier 3: the native wgpu terminal surface. Default ON where a surface
-// exists — it reached visual parity with xterm (docs/native-renderer.md,
-// M4) and is the intended renderer. Set localStorage vosh.nativesurface to
-// '0' to fall back to xterm. Gated to macOS until M6 lands the
-// Windows/Linux surfaces: on those platforms the frontend must keep
-// xterm's FitAddon and NAWS push active, so the flag reads false there.
+// Tier 3: the native wgpu terminal surface. Default ON on macOS, where it
+// reached visual parity with xterm (docs/native-renderer.md, M4) and had
+// its hardware pass. The Windows and Linux surfaces ship compile-verified
+// but untested, so they default OFF there — setting vosh.nativesurface to
+// '1' explicitly forces the surface on for testing on any platform, and
+// '0' falls back to xterm anywhere.
 export function nativeSurfaceEnabled(): boolean {
-  const isMac =
-    typeof navigator !== 'undefined' &&
-    (navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac OS'));
+  if (typeof localStorage === 'undefined') return false;
+  const flag = localStorage.getItem('vosh.nativesurface');
+  if (flag === '1') return true;
+  if (flag === '0') return false;
   return (
-    isMac &&
-    typeof localStorage !== 'undefined' &&
-    localStorage.getItem('vosh.nativesurface') !== '0'
+    typeof navigator !== 'undefined' &&
+    (navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac OS'))
   );
 }
 
