@@ -517,6 +517,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       '- `#profile load` replaces in-memory state with the saved profile.\n' +
       '- `#profile reset` wipes the profile back to defaults.\n' +
       '- `#import-tintin <path>` imports `#alias` and `#variable` from a TinTin++ `.tin` file.\n' +
+      '- `#nativesurface on | off | default` forces the native GPU renderer on or off, or restores the platform default. Takes effect on restart. `on` is the tester switch for Windows and Linux, where the native renderer ships disabled until it has a hardware pass.\n' +
       '- `#record <name>` starts recording typed commands into a macro alias.\n' +
       '- `#record` (no args) shows recording status.\n' +
       '- `#record cancel` discards the in-progress recording.\n' +

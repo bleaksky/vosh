@@ -494,6 +494,25 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         return [...prev, line];
       });
     }
+    // #nativesurface is handled here, not in the backend, because the
+    // renderer flag lives in localStorage (Terminal.tsx reads it at
+    // startup). `on` forces the native surface on any platform (the
+    // Windows/Linux tester path), `off` forces xterm, `default` restores
+    // the platform default (native on macOS, xterm elsewhere).
+    if (/^#nativesurface\b/i.test(line)) {
+      const arg = (line.split(/\s+/)[1] ?? '').toLowerCase();
+      const notice = (text: string) => onLocalEcho?.(`\x1b[38;5;244m${text}\x1b[0m\r\n`);
+      if (arg === 'on' || arg === 'off') {
+        localStorage.setItem('vosh.nativesurface', arg === 'on' ? '1' : '0');
+        notice(`native renderer forced ${arg}. restart Vosh to apply.`);
+      } else if (arg === 'default') {
+        localStorage.removeItem('vosh.nativesurface');
+        notice('native renderer follows the platform default. restart Vosh to apply.');
+      } else {
+        notice('usage #nativesurface on | off | default (takes effect on restart)');
+      }
+      return;
+    }
     const firstWord = line.split(/\s+/)[0] ?? '';
     const isQuickKey = quickKeysRef.current.some((q) => q.name === firstWord && q.verb.length > 0);
     if (passwordMode) {
