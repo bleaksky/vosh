@@ -6,9 +6,11 @@
 //! triangle. The pipeline reads the grid each frame and draws a
 //! background quad plus a glyph quad per cell.
 //!
-//! macOS only for now (it targets the Metal surface in `native_surface`).
+//! Compiles on every `native_surface` platform. Glyph rasterization is the
+//! one platform-varying piece: CoreGraphics on macOS (smoothing off, to
+//! match the webview), font-kit's DirectWrite/FreeType elsewhere.
 
-#![cfg(target_os = "macos")]
+#![cfg(native_surface)]
 // Pixel-coordinate float math on small integers (atlas dimensions, glyph
 // coords) that are always far inside f32's exact-integer range.
 #![allow(clippy::cast_precision_loss)]
@@ -368,15 +370,24 @@ fn styled_colors(fg: Color, bg: Color, flags: CellFlags) -> (Rgba, Rgba) {
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[cfg(target_os = "macos")]
 use core_graphics::color_space::CGColorSpace;
+#[cfg(target_os = "macos")]
 use core_graphics::context::{CGContext, CGTextDrawingMode};
+#[cfg(target_os = "macos")]
 use core_graphics::font::CGGlyph;
+#[cfg(target_os = "macos")]
 use core_graphics::geometry::{CGAffineTransform, CGPoint, CGRect, CGSize};
+#[cfg(target_os = "macos")]
 use core_text::font::CTFont;
 use font_kit::canvas::RasterizationOptions;
+#[cfg(not(target_os = "macos"))]
+use font_kit::canvas::{Canvas, Format};
 use font_kit::font::Font;
 use font_kit::hinting::HintingOptions;
 use pathfinder_geometry::transform2d::Transform2F;
+#[cfg(not(target_os = "macos"))]
+use pathfinder_geometry::vector::Vector2I;
 
 // Italic slant: shear the top of the glyph rightward. The CoreGraphics text
 // matrix's `c` term is the horizontal shear; positive leans the top right.
@@ -587,8 +598,20 @@ impl GlyphAtlas {
             0
         };
         let w = bw as usize + extra;
+        #[cfg(target_os = "macos")]
         let coverage = rasterize_glyph_cg(
             &face.native_font(),
+            glyph_id,
+            self.px,
+            skew,
+            bounds.origin_x(),
+            bounds.origin_y(),
+            w,
+            h,
+        );
+        #[cfg(not(target_os = "macos"))]
+        let coverage = rasterize_glyph_fk(
+            face,
             glyph_id,
             self.px,
             skew,
@@ -624,11 +647,56 @@ impl GlyphAtlas {
     }
 }
 
+/// Rasterize one glyph through font-kit's platform rasterizer
+/// (`DirectWrite` on Windows, `FreeType` on Linux) into a `w * h` alpha
+/// coverage buffer.
+/// The glyph's bounding box is shifted to the buffer origin; `skew` is the
+/// italic shear and `origin_x/origin_y` come from `raster_bounds`.
+#[cfg(not(target_os = "macos"))]
+#[allow(clippy::too_many_arguments)]
+fn rasterize_glyph_fk(
+    font: &Font,
+    glyph_id: u32,
+    px: f32,
+    skew: f32,
+    origin_x: i32,
+    origin_y: i32,
+    w: usize,
+    h: usize,
+) -> Vec<u8> {
+    let mut canvas = Canvas::new(Vector2I::new(w as i32, h as i32), Format::A8);
+    // Shift the glyph so its bounding box sits at the canvas origin; the
+    // negated shear matches the sign convention used for raster_bounds.
+    let transform =
+        Transform2F::row_major(1.0, 0.0, -skew, 1.0, -origin_x as f32, -origin_y as f32);
+    if font
+        .rasterize_glyph(
+            &mut canvas,
+            glyph_id,
+            px,
+            transform,
+            HintingOptions::None,
+            RasterizationOptions::GrayscaleAa,
+        )
+        .is_err()
+    {
+        return vec![0u8; w * h];
+    }
+    // Repack: the canvas stride can exceed the row width.
+    let mut pixels = vec![0u8; w * h];
+    for row in 0..h {
+        let src = row * canvas.stride;
+        pixels[row * w..(row + 1) * w].copy_from_slice(&canvas.pixels[src..src + w]);
+    }
+    pixels
+}
+
 /// Rasterize one glyph through CoreGraphics with font smoothing disabled, so
 /// the coverage matches the webview's antialiased text rather than the heavier
 /// smoothed look. Returns a `w * h` alpha coverage buffer (0 = no ink, 255 =
 /// full ink). The glyph's bounding box is shifted to the buffer origin; `skew`
 /// is the italic shear and `origin_x/origin_y` come from `raster_bounds`.
+#[cfg(target_os = "macos")]
 #[allow(clippy::too_many_arguments)]
 fn rasterize_glyph_cg(
     font: &CTFont,
@@ -781,7 +849,10 @@ fn load_font(family_stack: &str, bold: bool) -> Option<Font> {
         }
     }
 
+    // Platform monospace fallbacks: Menlo (macOS), Consolas (Windows),
+    // then Courier New (everywhere).
     weighted_face(&source, "Menlo", weight)
+        .or_else(|| weighted_face(&source, "Consolas", weight))
         .or_else(|| weighted_face(&source, "Courier New", weight))
         .as_ref()
         .and_then(font_from_handle)

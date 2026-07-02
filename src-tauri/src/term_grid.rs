@@ -9,7 +9,7 @@
 //! macOS only for now (the renderer that consumes it is). The grid model
 //! itself is platform independent and ungates when other platforms land.
 
-#![cfg(target_os = "macos")]
+#![cfg(native_surface)]
 
 use std::sync::{Mutex, OnceLock};
 

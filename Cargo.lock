@@ -5203,6 +5203,7 @@ dependencies = [
  "vosh-vars",
  "webpki-roots 0.26.11",
  "wgpu",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
