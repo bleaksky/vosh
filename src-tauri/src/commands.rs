@@ -1856,7 +1856,16 @@ pub(crate) async fn presets_install(
     let mut installed = 0usize;
     {
         let mut p = state.profile.lock().await;
-        for t in triggers {
+        for mut t in triggers {
+            // The startup re-install overwrites same-named presets so
+            // pattern/template updates land, but the group is the user's
+            // organization: carry it over so putting a preset into a group
+            // survives relaunch.
+            if t.group.is_none() {
+                if let Some(existing) = p.triggers.get(&t.name) {
+                    t.group.clone_from(&existing.group);
+                }
+            }
             p.triggers.set(t).map_err(|e| e.to_string())?;
             installed += 1;
         }
