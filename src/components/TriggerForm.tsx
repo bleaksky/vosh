@@ -16,6 +16,7 @@ import {
 } from '../lib/session';
 import { colorize, decolorize } from '../lib/colorTokens';
 import { UnsavedDot } from './UnsavedDot';
+import { usePersistedSet } from '../lib/usePersistedSet';
 import { CodeEditor } from './CodeEditor';
 import { useUnsavedWarning } from '../lib/unsaved';
 
@@ -138,7 +139,7 @@ export function TriggerForm({ load, save, onError }: Props) {
   const [baseline, setBaseline] = useState<string>('[]');
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [groupStates, setGroupStates] = useState<GroupState[]>([]);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [collapsed, toggleCollapsed] = usePersistedSet('vosh.triggers.collapsed');
   const dirty = useMemo(() => list !== null && JSON.stringify(list) !== baseline, [list, baseline]);
   useUnsavedWarning(dirty);
 
@@ -167,15 +168,6 @@ export function TriggerForm({ load, save, onError }: Props) {
       unsub?.();
     };
   }, []);
-
-  const toggleCollapsed = (group: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(group)) next.delete(group);
-      else next.add(group);
-      return next;
-    });
-  };
 
   useEffect(() => {
     if (savedAt === null) return;
@@ -230,17 +222,10 @@ export function TriggerForm({ load, save, onError }: Props) {
     setList(next);
   };
 
-  const updateUser = (slot: number, patch: Partial<TriggerRecord>) => {
-    if (!list) return;
-    updateAt(indexInList(list, slot, false), patch);
-  };
-
-  const removeUser = (slot: number) => {
-    if (!list) return;
-    const idx = indexInList(list, slot, false);
-    if (idx < 0) return;
+  const removeAt = (realIdx: number) => {
+    if (!list || realIdx < 0) return;
     const next = list.slice();
-    next.splice(idx, 1);
+    next.splice(realIdx, 1);
     setList(next);
   };
 
@@ -280,15 +265,24 @@ export function TriggerForm({ load, save, onError }: Props) {
 
       <div className="trigger-form-list">
         {(() => {
-          // Bucket user triggers by their group field. Ungrouped (empty
-          // / null) goes into a top "(no group)" section without a
-          // toggle. Named groups follow in alphabetical order, each
-          // with its own enabled checkbox.
-          const buckets = new Map<string, Array<{ slot: number; trigger: TriggerRecord }>>();
-          userTriggers.forEach((t, slot) => {
-            const key = groupKey(t);
+          // Bucket every trigger by its group field, carrying real list
+          // indexes. User triggers and group-assigned presets share the
+          // named sections (preset cards stay read-only apart from the
+          // group field, which is the user's organization); presets
+          // without a group collect in their own collapsible section at
+          // the end. Ungrouped user triggers go in a top "(no group)"
+          // section without a toggle.
+          type Entry = { realIdx: number; trigger: TriggerRecord };
+          const buckets = new Map<string, Entry[]>();
+          const presetBucket: Entry[] = [];
+          (list ?? []).forEach((trigger, realIdx) => {
+            const key = groupKey(trigger);
+            if (trigger.preset && key === '') {
+              presetBucket.push({ realIdx, trigger });
+              return;
+            }
             if (!buckets.has(key)) buckets.set(key, []);
-            buckets.get(key)!.push({ slot, trigger: t });
+            buckets.get(key)!.push({ realIdx, trigger });
           });
           const named = Array.from(buckets.keys())
             .filter((k) => k !== '')
@@ -297,7 +291,25 @@ export function TriggerForm({ load, save, onError }: Props) {
           if (buckets.has('')) renderOrder.push('');
           renderOrder.push(...named);
           const groupEnabledMap = new Map(groupStates.map((g) => [g.name, g.enabled]));
-          return renderOrder.map((group) => {
+          const cardFor = ({ realIdx, trigger }: Entry) => {
+            const readOnly = !!trigger.preset;
+            return (
+              <TriggerCard
+                key={`t-${realIdx}`}
+                trigger={trigger}
+                onChange={(patch) => {
+                  if (readOnly) {
+                    if ('group' in patch) updateAt(realIdx, { group: patch.group });
+                    return;
+                  }
+                  updateAt(realIdx, patch);
+                }}
+                onRemove={() => removeAt(realIdx)}
+                readOnly={readOnly}
+              />
+            );
+          };
+          const sections = renderOrder.map((group) => {
             const entries = buckets.get(group) ?? [];
             const isUngrouped = group === '';
             const groupEnabled = isUngrouped ? true : (groupEnabledMap.get(group) ?? true);
@@ -347,15 +359,7 @@ export function TriggerForm({ load, save, onError }: Props) {
                 </header>
                 {!isCollapsed && (
                   <div className="group-section-body">
-                    {entries.map(({ slot, trigger }) => (
-                      <TriggerCard
-                        key={`u-${slot}`}
-                        trigger={trigger}
-                        onChange={(patch) => updateUser(slot, patch)}
-                        onRemove={() => removeUser(slot)}
-                        readOnly={false}
-                      />
-                    ))}
+                    {entries.map(cardFor)}
                     {entries.length === 0 && (
                       <div className="settings-font-empty">
                         empty group — drag a trigger here or set the group field on a row
@@ -366,23 +370,39 @@ export function TriggerForm({ load, save, onError }: Props) {
               </section>
             );
           });
+          if (presetBucket.length > 0) {
+            const isCollapsed = collapsed.has('__presets__');
+            sections.push(
+              <section key="__presets__" className="group-section">
+                <header className="group-section-head">
+                  <button
+                    type="button"
+                    className="group-section-collapse"
+                    onClick={() => toggleCollapsed('__presets__')}
+                    aria-expanded={!isCollapsed}
+                    title={isCollapsed ? 'expand group' : 'collapse group'}
+                  >
+                    {isCollapsed ? '▸' : '▾'}
+                  </button>
+                  <span className="group-section-name">presets</span>
+                  <span className="group-section-count">
+                    {presetBucket.length} trigger{presetBucket.length === 1 ? '' : 's'}
+                  </span>
+                  <span
+                    className="group-section-count"
+                    title="auto-installed triggers; set the group field on one to file it with your own groups"
+                  >
+                    auto-installed · group field is editable
+                  </span>
+                </header>
+                {!isCollapsed && (
+                  <div className="group-section-body">{presetBucket.map(cardFor)}</div>
+                )}
+              </section>,
+            );
+          }
+          return sections;
         })()}
-        {presetTriggers.length > 0 && (
-          <div className="trigger-form-preset-group">
-            <div className="trigger-form-preset-heading">
-              presets (auto-installed, edit through code)
-            </div>
-            {presetTriggers.map((t, i) => (
-              <TriggerCard
-                key={`p-${i}`}
-                trigger={t}
-                onChange={() => undefined}
-                onRemove={() => undefined}
-                readOnly={true}
-              />
-            ))}
-          </div>
-        )}
       </div>
 
       <div className="settings-actions">
@@ -397,18 +417,6 @@ export function TriggerForm({ load, save, onError }: Props) {
       </div>
     </div>
   );
-}
-
-function indexInList(list: TriggerRecord[], slot: number, preset: boolean): number {
-  let seen = -1;
-  for (let i = 0; i < list.length; i++) {
-    const isPreset = !!list[i].preset;
-    if (isPreset === preset) {
-      seen += 1;
-      if (seen === slot) return i;
-    }
-  }
-  return -1;
 }
 
 interface CardProps {
@@ -517,8 +525,7 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
           type="text"
           placeholder="group"
           value={groupDraft ?? trigger.group ?? ''}
-          disabled={readOnly}
-          title="optional folder; triggers sharing a group can be bulk-disabled"
+          title="optional folder; triggers sharing a group can be bulk-disabled. Editable on presets too: the group is yours even when the trigger is not."
           onChange={(e) => setGroupDraft(e.target.value)}
           onBlur={() => {
             if (groupDraft === null) return;
