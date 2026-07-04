@@ -29,8 +29,9 @@ pub(crate) struct TickConfig {
     /// Text printed to the terminal as the warning. None falls back to
     /// a sensible default when `warn_at_secs` is set.
     pub warn_message: Option<String>,
-    /// Named color for the warning text. Accepts standard ANSI names
-    /// ("red", "bright-red", "yellow", etc.). None defaults to
+    /// Color for the warning text. Accepts standard ANSI names ("red",
+    /// "bright-red", "yellow", etc.), hex ("#rrggbb", "#rgb", with or
+    /// without the #), or a 256-palette index ("196"). None defaults to
     /// bright-red.
     pub warn_color: Option<String>,
 }
@@ -172,29 +173,61 @@ impl TickRuntime {
     }
 }
 
-/// Resolve a named color into the SGR escape that paints it. Unknown
-/// names fall back to bright red so a misconfigured color still draws
-/// attention.
-pub(crate) fn warn_color_escape(name: Option<&str>) -> &'static str {
-    let lowered = name.unwrap_or("").to_ascii_lowercase();
-    match lowered.as_str() {
-        "red" => "\x1b[31m",
-        "green" => "\x1b[32m",
-        "yellow" => "\x1b[33m",
-        "blue" => "\x1b[34m",
-        "magenta" => "\x1b[35m",
-        "cyan" => "\x1b[36m",
-        "white" => "\x1b[37m",
-        "bright-green" | "bgreen" => "\x1b[1;32m",
-        "bright-yellow" | "byellow" => "\x1b[1;33m",
-        "bright-blue" | "bblue" => "\x1b[1;34m",
-        "bright-magenta" | "bmagenta" => "\x1b[1;35m",
-        "bright-cyan" | "bcyan" => "\x1b[1;36m",
-        "bright-white" | "bwhite" => "\x1b[1;37m",
-        // bright-red doubles as the unknown-name fallback so a typo
-        // still draws attention.
-        _ => "\x1b[1;31m",
+/// Resolve a color spec into the SGR escape that paints it: an ANSI name,
+/// hex (`#rrggbb` / `#rgb`, the `#` optional), or a 256-palette index.
+/// Unknown specs fall back to bright red so a misconfigured color still
+/// draws attention.
+pub(crate) fn warn_color_escape(name: Option<&str>) -> String {
+    let lowered = name.unwrap_or("").trim().to_ascii_lowercase();
+    let named = match lowered.as_str() {
+        "red" => Some("\x1b[31m"),
+        "green" => Some("\x1b[32m"),
+        "yellow" => Some("\x1b[33m"),
+        "blue" => Some("\x1b[34m"),
+        "magenta" => Some("\x1b[35m"),
+        "cyan" => Some("\x1b[36m"),
+        "white" => Some("\x1b[37m"),
+        "bright-green" | "bgreen" => Some("\x1b[1;32m"),
+        "bright-yellow" | "byellow" => Some("\x1b[1;33m"),
+        "bright-blue" | "bblue" => Some("\x1b[1;34m"),
+        "bright-magenta" | "bmagenta" => Some("\x1b[1;35m"),
+        "bright-cyan" | "bcyan" => Some("\x1b[1;36m"),
+        "bright-white" | "bwhite" => Some("\x1b[1;37m"),
+        _ => None,
+    };
+    if let Some(sgr) = named {
+        return sgr.to_string();
     }
+    // Bare digits read as a 256-palette index ("196"); a # prefix always
+    // reads as hex, so "#196" is the color #119966 shorthand instead.
+    if !lowered.starts_with('#') {
+        if let Ok(idx) = lowered.parse::<u8>() {
+            return format!("\x1b[38;5;{idx}m");
+        }
+    }
+    // Hex: #rrggbb or #rgb, the # optional.
+    let hex = lowered.strip_prefix('#').unwrap_or(&lowered);
+    if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        let channel = |s: &str| u8::from_str_radix(s, 16).unwrap_or(0);
+        let (r, g, b) = (
+            channel(&hex[0..2]),
+            channel(&hex[2..4]),
+            channel(&hex[4..6]),
+        );
+        return format!("\x1b[38;2;{r};{g};{b}m");
+    }
+    if hex.len() == 3 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        let channel = |s: &str| u8::from_str_radix(s, 16).unwrap_or(0) * 17;
+        let (r, g, b) = (
+            channel(&hex[0..1]),
+            channel(&hex[1..2]),
+            channel(&hex[2..3]),
+        );
+        return format!("\x1b[38;2;{r};{g};{b}m");
+    }
+    // Bright red doubles as the unknown-spec fallback so a typo still
+    // draws attention.
+    "\x1b[1;31m".to_string()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -307,5 +340,21 @@ mod tests {
         assert!(!t.observe_world_hour("9"));
         assert!(t.observe_world_hour("10"));
         assert_eq!(t.last_world_hour.as_deref(), Some("10"));
+    }
+
+    #[test]
+    fn warn_color_accepts_names_hex_and_palette_indexes() {
+        assert_eq!(warn_color_escape(Some("yellow")), "\x1b[33m");
+        assert_eq!(warn_color_escape(Some("#ff8800")), "\x1b[38;2;255;136;0m");
+        assert_eq!(warn_color_escape(Some("FF8800")), "\x1b[38;2;255;136;0m");
+        assert_eq!(warn_color_escape(Some("#f80")), "\x1b[38;2;255;136;0m");
+        assert_eq!(warn_color_escape(Some("196")), "\x1b[38;5;196m");
+    }
+
+    #[test]
+    fn warn_color_falls_back_to_bright_red_on_typos() {
+        assert_eq!(warn_color_escape(Some("chartreuse-ish")), "\x1b[1;31m");
+        assert_eq!(warn_color_escape(Some("#ff88")), "\x1b[1;31m");
+        assert_eq!(warn_color_escape(None), "\x1b[1;31m");
     }
 }

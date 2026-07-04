@@ -1325,7 +1325,8 @@ function TickConfigEditor({ onError }: TickConfigEditorProps) {
             type="text"
             spellCheck={false}
             disabled={!warnOn}
-            placeholder="bright-red"
+            placeholder="bright-red or #rrggbb"
+            title="ANSI name (bright-red), hex (#rrggbb), or 256-palette index (196)"
             value={cfg.warn_color ?? ''}
             onChange={(e) =>
               commit({ warn_color: e.target.value.length > 0 ? e.target.value : null })
