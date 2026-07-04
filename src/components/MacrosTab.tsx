@@ -11,6 +11,7 @@ import {
   type Macro,
 } from '../lib/session';
 import { canonicalKeyFromEvent, labelForKey } from '../lib/macroKeys';
+import { usePersistedSet } from '../lib/usePersistedSet';
 
 interface Props {
   onError: (e: string | null) => void;
@@ -35,7 +36,7 @@ export function MacrosTab({ onError }: Props) {
   const [macros, setMacros] = useState<Macro[]>([]);
   const [loading, setLoading] = useState(true);
   const [groupStates, setGroupStates] = useState<GroupState[]>([]);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [collapsed, toggleCollapsed] = usePersistedSet('vosh.macros.collapsed');
 
   useEffect(() => {
     let cancelled = false;
@@ -104,15 +105,6 @@ export function MacrosTab({ onError }: Props) {
     }
   };
 
-  const toggleCollapsed = (group: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(group)) next.delete(group);
-      else next.add(group);
-      return next;
-    });
-  };
-
   // Bucket by group. Ungrouped first; named groups alphabetically.
   const buckets = new Map<string, Macro[]>();
   for (const m of macros) {
@@ -139,6 +131,16 @@ export function MacrosTab({ onError }: Props) {
         <div className="settings-font-empty">loading...</div>
       ) : (
         <div className="macros-list">
+          {/* The create row is pinned above the groups so a long list of
+              macros never forces a scroll to add a new one. */}
+          <MacroRow
+            key="__new"
+            initialKey=""
+            initialCommand=""
+            initialGroup=""
+            onSave={handleSave}
+            isNew
+          />
           {macros.length === 0 && <div className="settings-font-empty">no macros bound yet</div>}
           {renderOrder.map((group) => {
             const entries = buckets.get(group) ?? [];
@@ -205,14 +207,6 @@ export function MacrosTab({ onError }: Props) {
               </section>
             );
           })}
-          <MacroRow
-            key="__new"
-            initialKey=""
-            initialCommand=""
-            initialGroup=""
-            onSave={handleSave}
-            isNew
-          />
         </div>
       )}
     </div>
