@@ -1,5 +1,5 @@
 import { emit } from '@tauri-apps/api/event';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   BUILTIN_THEMES,
   customToAppTheme,
@@ -197,6 +197,59 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
   );
 }
 
+// Text input for color values that drafts keystrokes locally and only
+// propagates values the browser can render (or empty, which callers map
+// to "use the theme default"). Propagating every keystroke live-applied
+// partial hex like "#010e0" straight into CSS variables, and every
+// surface reading that variable collapsed to transparent while you
+// typed. Leaving the field with an unrenderable value snaps the text
+// back to the last applied color.
+function ColorTextField({
+  className,
+  placeholder,
+  value,
+  allowEmpty,
+  onCommit,
+}: {
+  className: string;
+  placeholder?: string;
+  value: string;
+  allowEmpty: boolean;
+  onCommit: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const focusedRef = useRef(false);
+  useEffect(() => {
+    // Track external changes (the color picker, clear, theme switches)
+    // while the field is not being typed in.
+    if (!focusedRef.current) setDraft(value);
+  }, [value]);
+  return (
+    <input
+      type="text"
+      className={className}
+      spellCheck={false}
+      placeholder={placeholder}
+      value={draft}
+      onFocus={() => {
+        focusedRef.current = true;
+      }}
+      onChange={(e) => {
+        const v = e.target.value;
+        setDraft(v);
+        const renderable = typeof CSS !== 'undefined' && CSS.supports('color', v);
+        if ((v === '' && allowEmpty) || renderable) {
+          onCommit(v);
+        }
+      }}
+      onBlur={() => {
+        focusedRef.current = false;
+        setDraft(value);
+      }}
+    />
+  );
+}
+
 function SplitDividerRow({ config, setConfig, onError }: Props) {
   if (!config) return null;
   const value = config.split_divider_color ?? '';
@@ -218,13 +271,12 @@ function SplitDividerRow({ config, setConfig, onError }: Props) {
           onChange={(e) => update(e.target.value)}
           aria-label="split divider color"
         />
-        <input
-          type="text"
+        <ColorTextField
           className="settings-color-text"
-          spellCheck={false}
           placeholder="theme default (#rrggbb, rgba, named)"
           value={value}
-          onChange={(e) => update(e.target.value || null)}
+          allowEmpty
+          onCommit={(v) => update(v || null)}
         />
         <button
           type="button"
@@ -259,13 +311,12 @@ function InputEchoColorRow({ config, setConfig, onError }: Props) {
           onChange={(e) => update(e.target.value)}
           aria-label="sent command color"
         />
-        <input
-          type="text"
+        <ColorTextField
           className="settings-color-text"
-          spellCheck={false}
           placeholder="theme default (#rrggbb, rgba, named)"
           value={value}
-          onChange={(e) => update(e.target.value || null)}
+          allowEmpty
+          onCommit={(v) => update(v || null)}
         />
         <button
           type="button"
@@ -522,12 +573,11 @@ function ColorSlot({
   return (
     <label className="color-slot" title={slotName}>
       <input type="color" value={hex} onChange={(e) => onChange(e.target.value)} />
-      <input
-        type="text"
+      <ColorTextField
         className="color-slot-text"
-        spellCheck={false}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        allowEmpty={false}
+        onCommit={onChange}
       />
       <span className="color-slot-name">{slotName}</span>
     </label>
