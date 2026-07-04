@@ -2,6 +2,14 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.6.2 - 2026-07-04
+
+- Typing a color in Settings no longer blanks the window mid-keystroke. The theme editor, split divider, and sent command color fields used to apply every character as you typed, so a half-finished hex like #010e0 made surfaces turn transparent. They now apply only complete colors and snap back to the last good value if you leave a typo behind.
+- Macro and trigger groups stay collapsed the way you left them, across tab switches and restarts.
+- The new-macro row now sits at the top of the macros panel, so a long list never makes you scroll to add a binding.
+- Preset triggers collect in their own collapsible section, and you can now file a preset into one of your own groups by typing in its group field. That group finally sticks across restarts too. Setting it used to be silently undone at the next launch.
+- The tick warning color accepts hex like #ff8800, short hex like #f80, and 256-palette numbers like 196, alongside the existing names.
+
 ## v0.6.1 - 2026-07-02
 
 - You can now try the native GPU renderer on Windows and Linux. Type `#nativesurface on` in the command line and restart Vosh to switch the terminal to the native surface, `#nativesurface off` to force the previous renderer anywhere, and `#nativesurface default` to go back to the platform default. The default is unchanged, native on macOS and the previous renderer elsewhere, because the Windows and Linux surfaces have not had a hardware shakedown yet. If you turn it on and something looks wrong, `#nativesurface off` and a restart puts everything back, and a report of what you saw helps a lot.
