@@ -82,6 +82,7 @@ mod plugins;
 mod profile;
 mod profile_config;
 mod profile_set;
+mod prompt_template;
 mod script_state;
 mod session;
 #[cfg(native_surface)]

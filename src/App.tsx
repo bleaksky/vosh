@@ -24,7 +24,6 @@ import {
   getUiConfig,
   setWindowSize,
   listTriggers,
-  onPromptVars,
   onState,
   presetsInstall,
   presetsRemove,
@@ -34,10 +33,8 @@ import {
   subscribeProfileSwitched,
   subscribeSidePanelsFillHeightChanged,
   subscribeSplitDividerChanged,
-  subscribePromptTemplateChanged,
   type StatePayload,
 } from './lib/session';
-import { renderPromptTemplate } from './lib/promptTemplate';
 import { applyAndBroadcastTheme } from './lib/theme';
 import { loadFontStack } from './lib/fontLoader';
 import { defaultEnabledIds, PRESETS, presetTriggers } from './lib/presets';
@@ -771,53 +768,11 @@ function App() {
     };
   }, []);
 
-  // Custom prompt rendering. When the trigger pipeline detects a
-  // prompt (and gags it), the backend emits prompt-vars with the
-  // captured values. If the user enabled the custom prompt
-  // template, we render that template against the vars and write
-  // the result to the live terminal — landing at the cursor
-  // position where the gagged prompt would have appeared. Held in
-  // refs so the long-lived prompt-vars listener picks up live
-  // changes without resubscribing.
-  const promptTemplateEnabledRef = useRef(false);
-  const promptTemplateRef = useRef('');
-  useEffect(() => {
-    let unsubVars: (() => void) | undefined;
-    let unsubChanged: (() => void) | undefined;
-    let cancelled = false;
-    getUiConfig()
-      .then((cfg) => {
-        if (cancelled) return;
-        promptTemplateEnabledRef.current = cfg.prompt_template_enabled;
-        promptTemplateRef.current = cfg.prompt_template;
-      })
-      .catch(() => {
-        // ignore — first-paint defaults are already empty/disabled
-      });
-    onPromptVars((vars) => {
-      if (!promptTemplateEnabledRef.current) return;
-      const template = promptTemplateRef.current;
-      if (template.length === 0) return;
-      const rendered = renderPromptTemplate(template, vars);
-      if (rendered.length === 0) return;
-      writeLive(rendered);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsubVars = fn;
-    });
-    subscribePromptTemplateChanged((value) => {
-      promptTemplateEnabledRef.current = value.enabled;
-      promptTemplateRef.current = value.template;
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unsubChanged = fn;
-    });
-    return () => {
-      cancelled = true;
-      unsubVars?.();
-      unsubChanged?.();
-    };
-  }, []);
+  // The custom prompt renders in the BACKEND (prompt_template.rs) so the
+  // gag-erase and the replacement land in one output batch — rendering it
+  // here off the prompt-vars event put an IPC round trip between the two
+  // and every prompt flashed a blank row. The rendered prompt reaches both
+  // renderers through the normal session output stream.
 
   useEffect(() => {
     // Live-flip the terminal palette mode when the user toggles the
