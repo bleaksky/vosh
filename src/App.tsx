@@ -63,6 +63,10 @@ function applySplitDividerColor(color: string | null): void {
   } else {
     root.style.removeProperty('--c-split-divider');
   }
+  // The native surface draws its own divider; keep it in the same color.
+  if (nativeSurfaceEnabled()) {
+    void invoke('native_surface_set_divider_color', { color }).catch(() => {});
+  }
 }
 
 // One-shot rename migration: when the project was renamed from
@@ -758,6 +762,25 @@ function App() {
     let cancelled = false;
     subscribeSidePanelsFillHeightChanged((value) => {
       setSidePanelsFillHeight(value);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  // Clicks on the native surface are eaten by the opaque view, so the
+  // backend emits an event on mouse-up and the input focuses here —
+  // matching the DOM mouseup handler that covers the rest of the window.
+  useEffect(() => {
+    if (!nativeSurfaceEnabled()) return;
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void listen('vosh://terminal-clicked', () => {
+      inputRef.current?.focus();
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;

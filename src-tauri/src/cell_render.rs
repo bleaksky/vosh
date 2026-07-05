@@ -188,6 +188,53 @@ fn ansi16(idx: usize) -> Rgb {
     unpack_rgb(THEME_ANSI[idx].load(Ordering::Acquire), ANSI_16[idx])
 }
 
+// The split divider color from the settings (0 = unset, theme default).
+static DIVIDER_RGB: AtomicU32 = AtomicU32::new(0);
+
+/// Set (or clear) the split divider color, reported by the frontend from
+/// the `split_divider_color` setting.
+pub(crate) fn set_divider_color(color: Option<(u8, u8, u8)>) {
+    let bits = color.map_or(0, |(r, g, b)| pack_rgb(r, g, b));
+    DIVIDER_RGB.store(bits, Ordering::Release);
+}
+
+fn divider_rgb() -> Rgb {
+    unpack_rgb(
+        DIVIDER_RGB.load(Ordering::Acquire),
+        Rgb {
+            r: 0x3a,
+            g: 0x40,
+            b: 0x4c,
+        },
+    )
+}
+
+/// Parse the divider color setting: `#rgb`, `#rrggbb` (the `#` optional),
+/// or `rgb()`/`rgba()` with integer channels (alpha ignored — the divider
+/// draws opaque). None for anything else, falling back to the default.
+pub(crate) fn parse_css_color(value: &str) -> Option<(u8, u8, u8)> {
+    let v = value.trim().to_ascii_lowercase();
+    let hex = v.strip_prefix('#').unwrap_or(&v);
+    if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        let ch = |s: &str| u8::from_str_radix(s, 16).unwrap_or(0);
+        return Some((ch(&hex[0..2]), ch(&hex[2..4]), ch(&hex[4..6])));
+    }
+    if hex.len() == 3 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        let ch = |s: &str| u8::from_str_radix(s, 16).unwrap_or(0) * 17;
+        return Some((ch(&hex[0..1]), ch(&hex[1..2]), ch(&hex[2..3])));
+    }
+    let inner = v
+        .strip_prefix("rgba(")
+        .or_else(|| v.strip_prefix("rgb("))?
+        .strip_suffix(')')?;
+    let parts: Vec<&str> = inner.split(',').map(str::trim).collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    let ch = |s: &str| s.parse::<u32>().ok().map(|n| n.min(255) as u8);
+    Some((ch(parts[0])?, ch(parts[1])?, ch(parts[2])?))
+}
+
 // When set, draw bright (ANSI 8-15) colored text with the bold font weight.
 static BRIGHT_BOLD: AtomicBool = AtomicBool::new(false);
 
@@ -1381,11 +1428,7 @@ impl CellRenderer {
         // The exact fraction of surface height where the divider is drawn,
         // so the cursor rect and grab band line up with the rendered line.
         let divider_frac = divider_px.map(|px| px / surface_h as f32);
-        let divider = color_to_rgba(Color::Spec(Rgb {
-            r: 0x3a,
-            g: 0x40,
-            b: 0x4c,
-        }));
+        let divider = rgb_to_rgba(divider_rgb());
 
         // Selection highlight: compute the range once, recolor selected
         // cell backgrounds with the theme selection color.
@@ -1570,6 +1613,77 @@ impl CellRenderer {
                 });
             }
         }
+        // Transient "copied N chars" toast in the bottom-right, confirming
+        // a selection copy. Same pill styling as the scroll indicator.
+        if let Some(text) = crate::native_surface::copy_notice() {
+            let n = text.chars().count() as f32;
+            let pill_w = (n + 1.0) * cell_w;
+            let x0 = (surface_w as f32 - pill_w - cell_w).max(0.0);
+            let y0 = (surface_h as f32 - cell_h * 1.5).max(0.0);
+            let toast_fg = rgb_to_rgba(Rgb {
+                r: 0xc0,
+                g: 0xc8,
+                b: 0xd4,
+            });
+            let toast_bg = rgb_to_rgba(Rgb {
+                r: 0x1a,
+                g: 0x20,
+                b: 0x2c,
+            });
+            instances.push(CellInstance {
+                offset: [x0, y0],
+                size: [pill_w, cell_h],
+                color: toast_bg,
+                uv_min: solid_uv.0,
+                uv_max: solid_uv.1,
+            });
+            for (i, ch) in text.chars().enumerate() {
+                let uv = atlas.uv_if_cached(ch, false, false).unwrap_or(space_uv);
+                instances.push(CellInstance {
+                    offset: [x0 + (i as f32 + 0.5) * cell_w, y0],
+                    size: [slot_w, cell_h],
+                    color: toast_fg,
+                    uv_min: uv.0,
+                    uv_max: uv.1,
+                });
+            }
+        }
+
+        // Overlay scrollbar on the right edge while scrolled: a subtle
+        // track and a proportional thumb (the xterm scrollbar sits hidden
+        // behind the opaque surface). Drag mapping lives in native_surface.
+        let scrollback = grid.scrollback_len();
+        if offset > 0 && scrollback > 0 {
+            let total = (scrollback + rows) as f32;
+            let sb_w = (cell_w * 0.45).clamp(4.0, 10.0);
+            let x0 = surface_w as f32 - sb_w;
+            let h = surface_h as f32;
+            let mut track = rgb_to_rgba(divider_rgb());
+            track[3] = 0.3;
+            instances.push(CellInstance {
+                offset: [x0, 0.0],
+                size: [sb_w, h],
+                color: track,
+                uv_min: solid_uv.0,
+                uv_max: solid_uv.1,
+            });
+            let thumb_h = (h * rows as f32 / total).max(24.0);
+            let scroll_top = (scrollback - offset as usize) as f32;
+            let thumb_y = ((h - thumb_h) * scroll_top / scrollback as f32).clamp(0.0, h - thumb_h);
+            let mut thumb = rgb_to_rgba(Rgb {
+                r: 0x8a,
+                g: 0x92,
+                b: 0xa0,
+            });
+            thumb[3] = 0.85;
+            instances.push(CellInstance {
+                offset: [x0, thumb_y],
+                size: [sb_w, thumb_h],
+                color: thumb,
+                uv_min: solid_uv.0,
+                uv_max: solid_uv.1,
+            });
+        }
         let overlay_range = overlay_start..instances.len() as u32;
 
         let uniforms = Uniforms {
@@ -1725,6 +1839,17 @@ mod tests {
         };
         assert!(coverage(&atlas, 0) > 0, "A should have ink");
         assert_eq!(coverage(&atlas, 1), 0, "space should be blank");
+    }
+
+    #[test]
+    fn parse_css_color_accepts_hex_and_rgb_forms() {
+        assert_eq!(parse_css_color("#3a404c"), Some((0x3a, 0x40, 0x4c)));
+        assert_eq!(parse_css_color("3a404c"), Some((0x3a, 0x40, 0x4c)));
+        assert_eq!(parse_css_color("#fff"), Some((255, 255, 255)));
+        assert_eq!(parse_css_color("rgb(1, 2, 3)"), Some((1, 2, 3)));
+        assert_eq!(parse_css_color("rgba(10,20,30,0.5)"), Some((10, 20, 30)));
+        assert_eq!(parse_css_color("bright-red"), None);
+        assert_eq!(parse_css_color(""), None);
     }
 
     #[test]
