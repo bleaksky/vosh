@@ -893,6 +893,7 @@ fn build_instances(
     rows: usize,
     cell_w: f32,
     cell_h: f32,
+    y0: f32,
     slot_w: f32,
     solid_uv: ([f32; 2], [f32; 2]),
     mut cell: impl FnMut(usize, usize) -> (char, Rgba, Rgba, bool, bool),
@@ -903,7 +904,7 @@ fn build_instances(
     for row in 0..rows {
         for col in 0..cols {
             let (ch, fg, bg, bold, italic) = cell(col, row);
-            let offset = [col as f32 * cell_w, row as f32 * cell_h];
+            let offset = [col as f32 * cell_w, y0 + row as f32 * cell_h];
             backgrounds.push(CellInstance {
                 offset,
                 size: [cell_w, cell_h],
@@ -925,6 +926,18 @@ fn build_instances(
     }
     (backgrounds, glyphs)
 }
+
+/// A drawable region of the surface: `vis` rows starting at pixel `y0`,
+/// reading grid line `line0 + row`. The split draws two (history above the
+/// divider, live tail below, each scissored); non-split draws one.
+struct Region {
+    y0: f32,
+    vis: usize,
+    line0: i32,
+}
+
+/// Underline/strike marks: (column, row top in pixels, color).
+type Marks = Vec<(usize, f32, Rgba)>;
 
 /// Line-major inclusive containment of a cell in a selection range given as
 /// start and end line/column.
@@ -1273,38 +1286,71 @@ impl CellRenderer {
         let rows = grid.screen_lines();
         let space_uv = self.space_uv;
 
-        // Split-scrollback: when scrolled up, draw the top region from the
-        // scroll offset (frozen history) and the bottom from the live tail
-        // (offset 0), with a draggable divider at `split_ratio`. Collapses
-        // to full-live at the bottom (offset 0).
+        // Split-scrollback: when scrolled up, draw a frozen-history region on
+        // top and the live tail below, separated by a draggable divider at
+        // `split_ratio`. The divider tracks the pointer per PIXEL (no row
+        // quantization — a row-snapped divider ratchets under the mouse);
+        // each region keeps its rows cell-aligned internally and clips its
+        // edge row mid-cell against the divider with a scissor rect.
         let offset = grid.display_offset() as i32;
         // Find matches (and the active one) drive a highlight pass and
         // suppress the split so the match shows in a single full view.
         let (find_matches, find_active_match) = crate::term_grid::find_snapshot();
         let finding = !find_matches.is_empty();
         let split = offset > 0 && rows >= 6 && !finding;
-        let top_rows = if split {
-            ((rows as f32 * split_ratio) as usize).clamp(1, rows - 1)
+        let divider_px = if split {
+            let raw = split_ratio * surface_h as f32;
+            Some(raw.clamp(cell_h, surface_h as f32 - cell_h).round())
         } else {
-            rows
+            None
+        };
+
+        let regions: Vec<Region> = match divider_px {
+            Some(divider_px) => {
+                // History on top, anchored to the top edge; its last row can
+                // hang past the divider and gets scissored.
+                let top_vis = (divider_px / cell_h).ceil() as usize;
+                // The live rows below keep their absolute top-aligned
+                // positions, IDENTICAL to the non-split view: the divider
+                // only reveals or covers them. Re-anchoring them (to the
+                // divider or the bottom edge) makes the whole live region
+                // jump the moment the split opens. The first live row can
+                // rise above the divider and gets scissored.
+                let row_start = ((divider_px / cell_h).floor() as usize).min(rows - 1);
+                vec![
+                    Region {
+                        y0: 0.0,
+                        vis: top_vis,
+                        line0: -offset,
+                    },
+                    Region {
+                        y0: row_start as f32 * cell_h,
+                        vis: rows - row_start,
+                        line0: row_start as i32,
+                    },
+                ]
+            }
+            None => vec![Region {
+                y0: 0.0,
+                vis: rows,
+                line0: -offset,
+            }],
         };
 
         // Dynamic atlas: rasterize any visible glyph not yet cached, then
         // re-upload the atlas texture if it grew. Steady state (every glyph
         // already cached) costs only the lookups, no upload.
         let mut atlas_grew = false;
-        for row in 0..rows {
-            for col in 0..cols {
-                let grid_line = if split && row >= top_rows {
-                    row as i32
-                } else {
-                    row as i32 - offset
-                };
-                let (ch, fg, _, flags) = grid.cell_at_line(grid_line, col);
-                let bold = wants_bold_font(fg, flags);
-                if ch != ' ' && self.atlas.uv_if_cached(ch, bold, flags.italic).is_none() {
-                    self.atlas.glyph_uv(ch, bold, flags.italic);
-                    atlas_grew = true;
+        for reg in &regions {
+            for row in 0..reg.vis {
+                for col in 0..cols {
+                    let grid_line = reg.line0 + row as i32;
+                    let (ch, fg, _, flags) = grid.cell_at_line(grid_line, col);
+                    let bold = wants_bold_font(fg, flags);
+                    if ch != ' ' && self.atlas.uv_if_cached(ch, bold, flags.italic).is_none() {
+                        self.atlas.glyph_uv(ch, bold, flags.italic);
+                        atlas_grew = true;
+                    }
                 }
             }
         }
@@ -1333,12 +1379,8 @@ impl CellRenderer {
 
         let atlas = &self.atlas;
         // The exact fraction of surface height where the divider is drawn,
-        // so the cursor rect lines up with the rendered line.
-        let divider_frac = if split {
-            Some(top_rows as f32 * cell_h / surface_h as f32)
-        } else {
-            None
-        };
+        // so the cursor rect and grab band line up with the rendered line.
+        let divider_frac = divider_px.map(|px| px / surface_h as f32);
         let divider = color_to_rgba(Color::Spec(Rgb {
             r: 0x3a,
             g: 0x40,
@@ -1382,88 +1424,109 @@ impl CellRenderer {
 
         let solid_uv = atlas.solid_uv();
         let slot_w = atlas.slot_w() as f32;
-        let mut underlines: Vec<(usize, usize, Rgba)> = Vec::new();
-        let mut strikeouts: Vec<(usize, usize, Rgba)> = Vec::new();
-        // Background fills come back first; glyph quads (slot width) come back
-        // separately so we can draw them on top of every background, letting
-        // an italic overhang its neighbor.
-        let (mut instances, glyphs) = build_instances(
-            cols,
-            rows,
-            cell_w,
-            cell_h,
-            slot_w,
-            solid_uv,
-            |col, row| {
-                let grid_line = if split && row >= top_rows {
-                    row as i32 // live tail (offset 0)
-                } else {
-                    row as i32 - offset // top region / non-split (scrolled)
-                };
-                let (ch, fg, bg, flags) = grid.cell_at_line(grid_line, col);
-                let (mut fg_rgba, mut bg_rgba) = styled_colors(fg, bg, flags);
-                if cell_in_selection(selection, grid_line, col) {
-                    bg_rgba = selection_bg;
-                }
-                if let Some(ranges) = find_by_line.get(&grid_line) {
-                    for &(start, end, active) in ranges {
-                        if col >= start && col < end {
-                            bg_rgba = if active { find_active_bg } else { find_bg };
-                            break;
-                        }
+        // Marks carry the absolute pixel y of their row so region offsets
+        // apply exactly once.
+        let mut underlines: Vec<(usize, f32, Rgba)> = Vec::new();
+        let mut strikeouts: Vec<(usize, f32, Rgba)> = Vec::new();
+        // Shared per-cell styling: colors, selection, find highlight, hover,
+        // and the underline/strike marks. Region closures wrap this with
+        // their own line/pixel mapping.
+        let style_cell = |grid_line: i32,
+                          col: usize,
+                          y_top: f32,
+                          underlines: &mut Marks,
+                          strikeouts: &mut Marks| {
+            let (ch, fg, bg, flags) = grid.cell_at_line(grid_line, col);
+            let (mut fg_rgba, mut bg_rgba) = styled_colors(fg, bg, flags);
+            if cell_in_selection(selection, grid_line, col) {
+                bg_rgba = selection_bg;
+            }
+            if let Some(ranges) = find_by_line.get(&grid_line) {
+                for &(start, end, active) in ranges {
+                    if col >= start && col < end {
+                        bg_rgba = if active { find_active_bg } else { find_bg };
+                        break;
                     }
                 }
-                let hovered =
-                    hover.is_some_and(|(hl, hs, he)| grid_line == hl && col >= hs && col < he);
-                if hovered {
-                    fg_rgba = link_blue;
-                }
-                if flags.underline || hovered {
-                    underlines.push((col, row, fg_rgba));
-                }
-                if flags.strikeout {
-                    strikeouts.push((col, row, fg_rgba));
-                }
-                (
-                    ch,
-                    fg_rgba,
-                    bg_rgba,
-                    wants_bold_font(fg, flags),
-                    flags.italic,
-                )
-            },
-            |ch, bold, italic| atlas.uv_if_cached(ch, bold, italic).unwrap_or(space_uv),
-        );
+            }
+            let hovered =
+                hover.is_some_and(|(hl, hs, he)| grid_line == hl && col >= hs && col < he);
+            if hovered {
+                fg_rgba = link_blue;
+            }
+            if flags.underline || hovered {
+                underlines.push((col, y_top, fg_rgba));
+            }
+            if flags.strikeout {
+                strikeouts.push((col, y_top, fg_rgba));
+            }
+            (
+                ch,
+                fg_rgba,
+                bg_rgba,
+                wants_bold_font(fg, flags),
+                flags.italic,
+            )
+        };
 
-        // Underline quads: a thin line at the bottom of each underlined cell.
-        for (col, row, color) in underlines {
-            instances.push(CellInstance {
-                offset: [col as f32 * cell_w, (row + 1) as f32 * cell_h - 2.0],
-                size: [cell_w, 1.5],
-                color,
-                uv_min: solid_uv.0,
-                uv_max: solid_uv.1,
-            });
+        // One instance buffer, one draw range per region (scissored to its
+        // side of the divider) plus an unscissored overlay range. Within a
+        // region: backgrounds, then underline/strike marks, then glyphs so
+        // an italic can overhang its neighbor's background.
+        let mut instances: Vec<CellInstance> = Vec::new();
+        let mut region_ranges: Vec<std::ops::Range<u32>> = Vec::new();
+        for reg in &regions {
+            let start = instances.len() as u32;
+            let (backgrounds, glyphs) = build_instances(
+                cols,
+                reg.vis,
+                cell_w,
+                cell_h,
+                reg.y0,
+                slot_w,
+                solid_uv,
+                |col, row| {
+                    style_cell(
+                        reg.line0 + row as i32,
+                        col,
+                        reg.y0 + row as f32 * cell_h,
+                        &mut underlines,
+                        &mut strikeouts,
+                    )
+                },
+                |ch, bold, italic| atlas.uv_if_cached(ch, bold, italic).unwrap_or(space_uv),
+            );
+            instances.extend(backgrounds);
+            // Underline quads: a thin line at the bottom of each marked cell.
+            for (col, y_top, color) in underlines.drain(..) {
+                instances.push(CellInstance {
+                    offset: [col as f32 * cell_w, y_top + cell_h - 2.0],
+                    size: [cell_w, 1.5],
+                    color,
+                    uv_min: solid_uv.0,
+                    uv_max: solid_uv.1,
+                });
+            }
+            // Strikethrough quads: a thin line across the cell mid-height.
+            for (col, y_top, color) in strikeouts.drain(..) {
+                instances.push(CellInstance {
+                    offset: [col as f32 * cell_w, y_top + cell_h * 0.5],
+                    size: [cell_w, 1.5],
+                    color,
+                    uv_min: solid_uv.0,
+                    uv_max: solid_uv.1,
+                });
+            }
+            instances.extend(glyphs);
+            region_ranges.push(start..instances.len() as u32);
         }
-        // Strikethrough quads: a thin line across the cell mid-height.
-        for (col, row, color) in strikeouts {
-            instances.push(CellInstance {
-                offset: [col as f32 * cell_w, row as f32 * cell_h + cell_h * 0.5],
-                size: [cell_w, 1.5],
-                color,
-                uv_min: solid_uv.0,
-                uv_max: solid_uv.1,
-            });
-        }
-        // Glyphs on top of the cell backgrounds and underlines.
-        instances.extend(glyphs);
-
-        // Thin full-width divider line at the split boundary, overlaying
-        // the cells (drawn last). No cell row is consumed.
-        if split {
+        // Overlays draw unscissored: the divider line at its exact pixel
+        // and the scroll-depth pill.
+        let overlay_start = instances.len() as u32;
+        if let Some(divider_px) = divider_px {
             let thickness = 2.0_f32;
             instances.push(CellInstance {
-                offset: [0.0, top_rows as f32 * cell_h - thickness * 0.5],
+                offset: [0.0, divider_px - thickness * 0.5],
                 size: [cols as f32 * cell_w, thickness],
                 color: divider,
                 uv_min: solid_uv.0,
@@ -1507,6 +1570,7 @@ impl CellRenderer {
                 });
             }
         }
+        let overlay_range = overlay_start..instances.len() as u32;
 
         let uniforms = Uniforms {
             surface_size: [surface_w as f32, surface_h as f32],
@@ -1556,7 +1620,21 @@ impl CellRenderer {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(0, &self.bind_group, &[]);
         rpass.set_vertex_buffer(0, self.instance_buffer.slice(..));
-        rpass.draw(0..6, 0..instances.len() as u32);
+        match divider_px {
+            Some(divider_px) => {
+                // Each region clips its overhanging edge row at the divider.
+                let div = (divider_px as u32).min(surface_h.saturating_sub(1)).max(1);
+                rpass.set_scissor_rect(0, 0, surface_w, div);
+                rpass.draw(0..6, region_ranges[0].clone());
+                rpass.set_scissor_rect(0, div, surface_w, surface_h - div);
+                rpass.draw(0..6, region_ranges[1].clone());
+                rpass.set_scissor_rect(0, 0, surface_w, surface_h);
+                rpass.draw(0..6, overlay_range);
+            }
+            None => {
+                rpass.draw(0..6, region_ranges[0].start..overlay_range.end);
+            }
+        }
         drop(rpass);
         divider_frac
     }
@@ -1659,6 +1737,7 @@ mod tests {
             1,
             10.0,
             20.0,
+            0.0,
             20.0,
             solid,
             |col, _row| (if col == 0 { 'a' } else { 'b' }, white, black, false, false),
@@ -1693,6 +1772,7 @@ mod tests {
             2,
             8.0,
             16.0,
+            0.0,
             16.0,
             ([0.99, 0.99], [0.99, 0.99]),
             |_, _| ('x', c, c, false, false),

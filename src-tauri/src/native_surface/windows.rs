@@ -211,6 +211,7 @@ extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM
             pointer_down(
                 point_to_cell(hwnd, lparam),
                 event_fraction(hwnd, lparam),
+                client_height(hwnd),
                 wparam & MK_CONTROL != 0,
             );
             0

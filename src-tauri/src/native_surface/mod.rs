@@ -264,23 +264,22 @@ fn phys_point_to_cell(phys_x: f64, phys_y: f64, height_px: f64) -> Option<(i32, 
         return None;
     }
     let col = (phys_x / cell_w).floor().max(0.0) as usize;
-    let row = (phys_y / cell_h).floor().max(0.0) as i32;
     let rows = (height_px / cell_h).floor() as i32;
     let offset = crate::term_grid::current_display_offset() as i32;
-    // Match the renderer's split: top region is history at the offset,
-    // bottom region is the live tail at offset 0.
+    // Mirror the renderer's pixel-smooth split: above the drawn divider is
+    // history at the scroll offset; below it are live rows at their
+    // absolute top-aligned positions (identical to the non-split view).
     let split = offset > 0 && rows >= 6;
-    let top_rows = if split {
-        ((f64::from(rows) * f64::from(split_ratio())) as i32).clamp(1, rows - 1)
-    } else {
-        rows
-    };
-    let line = if split && row >= top_rows {
-        row
-    } else {
-        row - offset
-    };
-    Some((line, col))
+    let row = (phys_y / cell_h).floor().max(0.0) as i32;
+    if split {
+        if let Some(frac) = divider_frac() {
+            let divider_px = f64::from(frac) * height_px;
+            if phys_y >= divider_px {
+                return Some((row, col));
+            }
+        }
+    }
+    Some((row - offset, col))
 }
 
 /// Accumulate a wheel delta (positive = reveal older lines) and scroll the
@@ -302,8 +301,9 @@ fn wheel_scroll(delta_y: f64) {
 
 /// Cmd/Ctrl+click on a URL opens it; a press on the divider starts a drag;
 /// anything else starts a selection. Platform mouse-down handlers call this
-/// with the cell under the pointer and the press y as a height fraction.
-fn pointer_down(cell: Option<(i32, usize)>, frac: Option<f64>, open_modifier: bool) {
+/// with the cell under the pointer, the press y as a height fraction, and
+/// the view height in the platform's units.
+fn pointer_down(cell: Option<(i32, usize)>, frac: Option<f64>, height: f64, open_modifier: bool) {
     if open_modifier {
         if let Some((line, col)) = cell {
             if let Some((url, _, _)) = crate::term_grid::url_at(line, col) {
@@ -312,12 +312,14 @@ fn pointer_down(cell: Option<(i32, usize)>, frac: Option<f64>, open_modifier: bo
             }
         }
     }
-    if crate::term_grid::current_display_offset() > 0 {
-        if let Some(frac) = frac {
-            if (frac - f64::from(split_ratio())).abs() < 0.03 {
-                DRAGGING.store(true, Ordering::Release);
-                return;
-            }
+    // Grab the divider where it is DRAWN (divider_frac, row-quantized), not
+    // at the raw ratio: the two can differ by more than a grab band when the
+    // row count is small, which left a resize cursor over a bar that refused
+    // to move. The band is ±8 units, slightly wider than the cursor rect.
+    if let (Some(frac), Some(drawn)) = (frac, divider_frac()) {
+        if height > 0.0 && ((frac - f64::from(drawn)) * height).abs() <= 8.0 {
+            DRAGGING.store(true, Ordering::Release);
+            return;
         }
     }
     crate::term_grid::clear_selection();
