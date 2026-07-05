@@ -91,6 +91,17 @@ impl LineAccumulator {
             self.displayed_len = 0;
         }
 
+        // ROM `\n\r` debris: when the remainder starts a brand-new line
+        // (none of it displayed yet) with the `\r` that belongs to the
+        // previous line's terminator, drop it from the buffer. Left alone
+        // it flows out as a RawDisplay and slams the cursor back to column
+        // zero right after whatever the line pipeline just rendered — the
+        // custom prompt, for one — so the next echo overwrites that row.
+        // A `\r` inside a partial (deliberate overwrite) is untouched.
+        if self.displayed_len == 0 && self.buffer.first() == Some(&b'\r') {
+            self.buffer.remove(0);
+        }
+
         if self.buffer.len() > self.displayed_len {
             let new_to_show = self.buffer[self.displayed_len..].to_vec();
             ops.push(ChunkOp::RawDisplay(new_to_show));
@@ -232,8 +243,10 @@ mod tests {
         // Aabahran / ROM 2.4 terminates lines with `\n\r` rather than
         // standard `\r\n`. Splitting on `\n` leaves a `\r` glued to the
         // start of the next line, which used to break `^`-anchored
-        // trigger patterns. The accumulator now strips a leading `\r`
-        // off each line so triggers see clean text.
+        // trigger patterns. The accumulator strips it from line text AND
+        // from the trailing partial: as a RawDisplay it would slam the
+        // cursor to column zero right after in-batch renders like the
+        // custom prompt, and the next echo would overwrite that row.
         let mut a = LineAccumulator::new();
         let ops = a.feed(b"first\n\rsecond\n\rthird\n\r");
         assert_eq!(
@@ -242,7 +255,6 @@ mod tests {
                 line(b"first", false),
                 line(b"second", false),
                 line(b"third", false),
-                raw(b"\r"),
             ]
         );
     }
@@ -254,6 +266,15 @@ mod tests {
         let mut a = LineAccumulator::new();
         let _ = a.feed(b"first\n");
         let ops = a.feed(b"\rsecond\n\r");
-        assert_eq!(ops, vec![line(b"second", false), raw(b"\r")]);
+        assert_eq!(ops, vec![line(b"second", false)]);
+    }
+
+    #[test]
+    fn deliberate_carriage_return_inside_a_partial_survives() {
+        // Only line-terminator debris is stripped: a server overwriting a
+        // partial line with `\r` mid-stream keeps its carriage return.
+        let mut a = LineAccumulator::new();
+        let ops = a.feed(b"loading 1%\rloading 2%");
+        assert_eq!(ops, vec![raw(b"loading 1%\rloading 2%")]);
     }
 }
