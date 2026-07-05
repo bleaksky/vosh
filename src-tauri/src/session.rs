@@ -714,7 +714,7 @@ async fn handle_event(
                         // `profile.lock().await` it replaces was an
                         // unconditional await every time a line matched
                         // the user's tick reset pattern.
-                        let (result, tick_reset_payload, script_apply) = {
+                        let (result, tick_reset_payload, script_apply, rendered_prompt) = {
                             let lock_t0 = std::time::Instant::now();
                             let mut p = profile.lock().await;
                             perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
@@ -769,7 +769,26 @@ async fn handle_event(
                                 }
                             }
                             let apply = script_state::apply_actions(&mut p, outcome);
-                            (result, tick_payload, apply)
+                            // A gagged line whose script set prompt vars IS
+                            // the prompt: render the custom template while
+                            // the lock is held so the replacement lands in
+                            // the same display batch, exactly where the
+                            // gagged prompt was. (Rendering used to happen
+                            // in the frontend off the prompt-vars event,
+                            // which flashed a blank row on every prompt.)
+                            let rendered_prompt = if result.display.is_none()
+                                && apply.prompt_vars_changed
+                                && p.ui.prompt_template_enabled
+                            {
+                                let rendered = crate::prompt_template::render_prompt_template(
+                                    &p.ui.prompt_template,
+                                    &p.prompt_vars,
+                                );
+                                (!rendered.is_empty()).then_some(rendered)
+                            } else {
+                                None
+                            };
+                            (result, tick_payload, apply, rendered_prompt)
                         };
                         perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
                         // In-place echo replacement. When a trigger gags the
@@ -794,6 +813,16 @@ async fn handle_event(
                             }
                         }
                         append_line_result(&mut display_batch, &result, clear_first);
+                        // The custom prompt renders on the gagged prompt's
+                        // row, in the same batch — no erased-row flash. No
+                        // trailing newline: the cursor sits after the prompt
+                        // like a real MUD prompt (and the typed-command echo
+                        // lands beside it), matching the old frontend render.
+                        // Placed after append_line_result so a clear_first
+                        // wipe cannot erase it.
+                        if let Some(rendered) = &rendered_prompt {
+                            display_batch.extend_from_slice(rendered.as_bytes());
+                        }
                         if !result.routes.is_empty() {
                             perf.routed_emits += result.routes.len() as u64;
                         }
@@ -1290,7 +1319,7 @@ async fn dispatch_prompt_buffer(
     let Some((bytes, already_shown)) = accumulator.flush_partial() else {
         return Ok(());
     };
-    let (result, script_apply) = {
+    let (result, script_apply, rendered_prompt) = {
         let mut p = profile.lock().await;
         let r = vosh_trigger::process_scoped(&p.triggers, &bytes, vosh_trigger::MatchScope::Prompt);
         // Fast path: no prompt-target trigger affected the output.
@@ -1333,36 +1362,64 @@ async fn dispatch_prompt_buffer(
             }
         }
         let apply = script_state::apply_actions(&mut p, outcome);
-        (r, apply)
+        // Render the custom prompt template (if enabled) while the lock is
+        // held, so the gag-erase and the replacement leave in the SAME
+        // output batch below. Rendering used to happen in the frontend off
+        // the prompt-vars event, which put an IPC round trip between the
+        // erase and the redraw: a blank row flashed and content shifted up
+        // for a frame on every prompt.
+        let rendered_prompt = if p.ui.prompt_template_enabled && r.display.is_none() {
+            let rendered = crate::prompt_template::render_prompt_template(
+                &p.ui.prompt_template,
+                &p.prompt_vars,
+            );
+            tracing::debug!(
+                template_len = p.ui.prompt_template.len(),
+                vars = p.prompt_vars.len(),
+                rendered_len = rendered.len(),
+                already_shown,
+                "prompt: template render"
+            );
+            (!rendered.is_empty()).then_some(rendered)
+        } else {
+            None
+        };
+        (r, apply, rendered_prompt)
     };
-    // Repaint the visible partial. If gagged, erase. If replaced,
-    // erase then write the new text. Either way append `\r\n` to
-    // land the cursor on the next row, matching the legacy flush.
-    if already_shown {
-        emit_output(app, b"\x1b[2K\r".to_vec());
-    }
+    // Repaint the visible partial in ONE output batch: erase, then the
+    // replacement. Splitting these across emits (or rendering the prompt in
+    // the frontend, as before) shows the blank erased row for a frame.
     let mut script_apply = script_apply;
+    let mut out = Vec::new();
+    if already_shown {
+        out.extend_from_slice(b"\x1b[2K\r");
+    }
     if let Some(text) = &result.display {
-        // No `\r\n` before the text — we already cleared the line.
-        let mut out = Vec::with_capacity(text.len() + 2);
+        // No `\r\n` before the text — the line was just cleared.
         out.extend_from_slice(text.as_bytes());
         out.extend_from_slice(b"\r\n");
-        emit_output(app, out);
-    } else if !script_apply.echoes.is_empty() {
-        // Gag + echoes: render the echoes where the prompt was,
-        // matching the line-pipeline replacement semantics. Drain
-        // them so `apply_script_result` does not also frame them
-        // with leading + trailing newlines.
-        let mut out = Vec::new();
+    } else {
+        // Gagged. Script echoes render where the prompt was (matching the
+        // line-pipeline replacement semantics; drained so
+        // `apply_script_result` does not also frame them with newlines),
+        // then the custom prompt lands as a partial on the erased row —
+        // the cursor stays after it, like a real MUD prompt.
+        let echoed = !script_apply.echoes.is_empty();
         for line in script_apply.echoes.drain(..) {
             out.extend_from_slice(line.as_bytes());
             out.extend_from_slice(b"\r\n");
         }
+        if let Some(rendered) = &rendered_prompt {
+            out.extend_from_slice(rendered.as_bytes());
+        } else if already_shown && !echoed {
+            // Gag with no replacement at all: just terminate the
+            // (now-blank) line so the next chunk does not paint into the
+            // cleared row.
+            out.extend_from_slice(b"\r\n");
+        }
+    }
+    if !out.is_empty() {
         emit_output(app, out);
-    } else if already_shown {
-        // Gag with no echo replacement: just terminate the (now-blank)
-        // line so the next chunk does not paint into the cleared row.
-        emit_output(app, b"\r\n".to_vec());
     }
     send_trigger_outputs(stream, &result.sends).await?;
     // Always emit prompt-vars after a prompt-scope trigger has

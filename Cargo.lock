@@ -5165,6 +5165,7 @@ version = "0.6.2"
 dependencies = [
  "alacritty_terminal",
  "bytemuck",
+ "chrono",
  "core-graphics 0.23.2",
  "core-text",
  "font-kit",

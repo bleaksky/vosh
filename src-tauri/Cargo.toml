@@ -39,6 +39,9 @@ vosh-map = { path = "../crates/map" }
 vosh-script = { path = "../crates/script" }
 vosh-log = { path = "../crates/log" }
 regex = "1"
+# Local time for the custom prompt's %time / %date tokens (clock only, no
+# default features).
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 toml = "0.8"
 font-kit = "0.14"
 urlencoding = "2"

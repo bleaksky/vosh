@@ -755,6 +755,27 @@ mod tests {
     }
 
     #[test]
+    fn sim_prompt_then_echo_lands_after_prompt() {
+        let mut g = TermGrid::new(80, 24);
+        // Server blank line then the response block (as the line pipeline
+        // emits them), then the gagged prompt replaced by the rendered
+        // template WITHOUT trailing newline.
+        g.feed(b"\r\nPlayers matched: 9\r\n\r\n");
+        g.feed(
+            wrap_stream(
+                "\x1b[3m\x1b[38;5;240m[\x1b[0m329(\x1b[38;5;42m100%\x1b[0m)h\x1b[0m",
+                80,
+            )
+            .as_bytes(),
+        );
+        // Local echo of a typed command, written at the cursor.
+        g.feed(b"\x1b[38;2;200;200;100mwho\x1b[0m\r\n");
+        let row3 = g.row_string(3);
+        eprintln!("row3: {:?}", row3.trim_end());
+        assert!(row3.starts_with("[329(100%)hwho"), "got: {row3:?}");
+    }
+
+    #[test]
     fn wrap_line_breaks_at_the_last_whitespace() {
         assert_eq!(
             wrap_line("the quick brown fox", 10),
