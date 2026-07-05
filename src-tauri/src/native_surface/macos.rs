@@ -178,6 +178,18 @@ fn point_to_cell(this: *mut AnyObject, event: *mut AnyObject) -> Option<(i32, us
     }
 }
 
+/// The view's height in points, for the divider grab band.
+fn view_height(this: *mut AnyObject) -> f64 {
+    if this.is_null() {
+        return 0.0;
+    }
+    // SAFETY: AppKit hands us a live NSView.
+    unsafe {
+        let bounds: CGRect = msg_send![this, bounds];
+        bounds.size.height
+    }
+}
+
 /// The event's y location as a fraction of the view height (0 = top).
 fn event_fraction(this: *mut AnyObject, event: *mut AnyObject) -> Option<f64> {
     if this.is_null() || event.is_null() {
@@ -224,6 +236,7 @@ extern "C" fn mouse_down(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject)
     pointer_down(
         point_to_cell(this, event),
         event_fraction(this, event),
+        view_height(this),
         event_has_command(event),
     );
 }
