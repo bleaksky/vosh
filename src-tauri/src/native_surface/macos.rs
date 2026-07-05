@@ -9,8 +9,8 @@ use std::ptr::NonNull;
 use std::sync::OnceLock;
 
 use super::{
-    divider_frac, load_f32, pointer_down, pointer_dragged, pointer_moved, pointer_up, render,
-    surface_slot, wheel_scroll, SurfaceHandle, DPR, DRAGGING,
+    divider_frac, load_f32, middle_click, pointer_down, pointer_dragged, pointer_moved, pointer_up,
+    render, surface_slot, wheel_scroll, PointerEvent, SurfaceHandle, DPR, DRAGGING,
 };
 use objc2::declare::ClassBuilder;
 use objc2::runtime::{AnyClass, AnyObject, Sel};
@@ -159,8 +159,9 @@ pub(super) fn open_url(url: &str) {
     }
 }
 
-/// Map a mouse event to a grid cell via the shared physical-pixel mapping.
-fn point_to_cell(this: *mut AnyObject, event: *mut AnyObject) -> Option<(i32, usize)> {
+/// Build the shared pointer event (surface-physical pixels, top-left
+/// origin) from an `AppKit` mouse event.
+fn pointer_event(this: *mut AnyObject, event: *mut AnyObject) -> Option<PointerEvent> {
     if this.is_null() || event.is_null() {
         return None;
     }
@@ -171,52 +172,16 @@ fn point_to_cell(this: *mut AnyObject, event: *mut AnyObject) -> Option<(i32, us
         let view_pt: CGPoint =
             msg_send![this, convertPoint: win_pt, fromView: std::ptr::null_mut::<AnyObject>()];
         let bounds: CGRect = msg_send![this, bounds];
-        // NSView is bottom-left; flip to top-down, then scale to pixels.
-        let phys_x = view_pt.x * dpr;
-        let phys_y = (bounds.size.height - view_pt.y) * dpr;
-        super::phys_point_to_cell(phys_x, phys_y, bounds.size.height * dpr)
+        let flags: usize = msg_send![event, modifierFlags];
+        Some(PointerEvent {
+            x: view_pt.x * dpr,
+            // NSView is bottom-left; flip to top-down, then scale to pixels.
+            y: (bounds.size.height - view_pt.y) * dpr,
+            width: bounds.size.width * dpr,
+            height: bounds.size.height * dpr,
+            open_modifier: flags & (1 << 20) != 0, // NSEventModifierFlagCommand
+        })
     }
-}
-
-/// The view's height in points, for the divider grab band.
-fn view_height(this: *mut AnyObject) -> f64 {
-    if this.is_null() {
-        return 0.0;
-    }
-    // SAFETY: AppKit hands us a live NSView.
-    unsafe {
-        let bounds: CGRect = msg_send![this, bounds];
-        bounds.size.height
-    }
-}
-
-/// The event's y location as a fraction of the view height (0 = top).
-fn event_fraction(this: *mut AnyObject, event: *mut AnyObject) -> Option<f64> {
-    if this.is_null() || event.is_null() {
-        return None;
-    }
-    // SAFETY: AppKit hands us a live NSView (`this`) and NSEvent.
-    unsafe {
-        let win_pt: CGPoint = msg_send![event, locationInWindow];
-        let view_pt: CGPoint =
-            msg_send![this, convertPoint: win_pt, fromView: std::ptr::null_mut::<AnyObject>()];
-        let bounds: CGRect = msg_send![this, bounds];
-        if bounds.size.height <= 0.0 {
-            return None;
-        }
-        // NSView uses a bottom-left origin; flip so 0 = top, matching rows.
-        Some(1.0 - view_pt.y / bounds.size.height)
-    }
-}
-
-/// True when the event has the Command modifier held.
-fn event_has_command(event: *mut AnyObject) -> bool {
-    if event.is_null() {
-        return false;
-    }
-    // SAFETY: AppKit hands us a live NSEvent.
-    let flags: usize = unsafe { msg_send![event, modifierFlags] };
-    flags & (1 << 20) != 0 // NSEventModifierFlagCommand
 }
 
 /// Mouse-wheel handler. `AppKit` calls this on the main thread with a live
@@ -230,29 +195,40 @@ extern "C" fn scroll_wheel(_this: *mut AnyObject, _cmd: Sel, event: *mut AnyObje
     wheel_scroll(delta_y);
 }
 
-/// Grab the divider if the press lands on it, otherwise begin a selection.
-/// Cmd+click opens a URL under the pointer.
+/// Grab the scrollbar or divider if the press lands on one, otherwise
+/// begin a selection. Cmd+click opens a URL under the pointer.
 extern "C" fn mouse_down(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
-    pointer_down(
-        point_to_cell(this, event),
-        event_fraction(this, event),
-        view_height(this),
-        event_has_command(event),
-    );
+    if let Some(ev) = pointer_event(this, event) {
+        pointer_down(&ev);
+    }
 }
 
-/// Move the divider, or extend the selection, while dragging.
+/// Move the scrollbar thumb or divider, or extend the selection.
 extern "C" fn mouse_dragged(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
-    pointer_dragged(point_to_cell(this, event), event_fraction(this, event));
+    if let Some(ev) = pointer_event(this, event) {
+        pointer_dragged(&ev);
+    }
 }
 
 extern "C" fn mouse_up(_this: *mut AnyObject, _cmd: Sel, _event: *mut AnyObject) {
     pointer_up();
 }
 
+/// Middle-click (buttonNumber 2) toggles the split-scrollback view.
+extern "C" fn other_mouse_down(_this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
+    if event.is_null() {
+        return;
+    }
+    // SAFETY: AppKit hands us a live NSEvent.
+    let button: isize = unsafe { msg_send![event, buttonNumber] };
+    if button == 2 {
+        middle_click();
+    }
+}
+
 /// Track the URL under the pointer so the renderer can underline it.
 extern "C" fn mouse_moved(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
-    pointer_moved(point_to_cell(this, event));
+    pointer_moved(pointer_event(this, event).as_ref());
 }
 
 extern "C" fn mouse_exited(_this: *mut AnyObject, _cmd: Sel, _event: *mut AnyObject) {
@@ -271,25 +247,35 @@ extern "C" fn reset_cursor_rects(this: *mut AnyObject, _cmd: Sel) {
     unsafe {
         let bounds: CGRect = msg_send![this, bounds];
         let arrow: *mut AnyObject = msg_send![class!(NSCursor), arrowCursor];
-        let _: () = msg_send![this, addCursorRect: bounds, cursor: arrow];
-
-        if let Some(frac) = divider_frac() {
-            let height = bounds.size.height;
-            let band = 12.0;
-            // Divider is `frac` down from the top; NSView is bottom-left.
-            let bottom_y = height * (1.0 - f64::from(frac)) - band / 2.0;
-            let rect = CGRect {
-                origin: CGPoint {
-                    x: 0.0,
-                    y: bottom_y,
-                },
-                size: CGSize {
-                    width: bounds.size.width,
-                    height: band,
-                },
-            };
-            let resize: *mut AnyObject = msg_send![class!(NSCursor), resizeUpDownCursor];
-            let _: () = msg_send![this, addCursorRect: rect, cursor: resize];
+        let Some(frac) = divider_frac() else {
+            // No divider: one arrow rect over the whole surface (so the
+            // webview's text cursor does not bleed through).
+            let _: () = msg_send![this, addCursorRect: bounds, cursor: arrow];
+            return;
+        };
+        // Overlapping cursor rects are undefined behavior in AppKit, so the
+        // surface splits into three DISJOINT rects: arrow below the band,
+        // the vertical-resize band on the divider, arrow above it.
+        // NSView is bottom-left; the divider sits `frac` down from the top.
+        let width = bounds.size.width;
+        let height = bounds.size.height;
+        let band = 12.0_f64;
+        let band_bottom = (height * (1.0 - f64::from(frac)) - band / 2.0).max(0.0);
+        let band_top = (band_bottom + band).min(height);
+        let rect = |y0: f64, y1: f64| CGRect {
+            origin: CGPoint { x: 0.0, y: y0 },
+            size: CGSize {
+                width,
+                height: (y1 - y0).max(0.0),
+            },
+        };
+        if band_bottom > 0.0 {
+            let _: () = msg_send![this, addCursorRect: rect(0.0, band_bottom), cursor: arrow];
+        }
+        let resize: *mut AnyObject = msg_send![class!(NSCursor), resizeUpDownCursor];
+        let _: () = msg_send![this, addCursorRect: rect(band_bottom, band_top), cursor: resize];
+        if band_top < height {
+            let _: () = msg_send![this, addCursorRect: rect(band_top, height), cursor: arrow];
         }
     }
 }
@@ -319,6 +305,10 @@ fn surface_view_class() -> &'static AnyClass {
             builder.add_method(
                 sel!(mouseUp:),
                 mouse_up as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(otherMouseDown:),
+                other_mouse_down as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
             );
             builder.add_method(
                 sel!(resetCursorRects),

@@ -389,6 +389,27 @@ fn wrap_line(line: &str, cols: usize) -> String {
     out
 }
 
+/// Current (display offset, scrollback length) of the shared grid, for the
+/// scrollbar thumb geometry and drag mapping.
+pub(crate) fn scroll_metrics() -> (usize, usize) {
+    grid_slot().lock().map_or((0, 0), |slot| {
+        slot.as_ref()
+            .map_or((0, 0), |g| (g.display_offset(), g.scrollback_len()))
+    })
+}
+
+/// Scroll the shared grid to an absolute display offset (0 = live tail),
+/// clamped to history. Drives the scrollbar thumb drag.
+pub(crate) fn scroll_to_offset(target: usize) {
+    if let Ok(mut slot) = grid_slot().lock() {
+        if let Some(grid) = slot.as_mut() {
+            let target = target.min(grid.scrollback_len()) as i32;
+            let current = grid.display_offset() as i32;
+            grid.scroll(target - current);
+        }
+    }
+}
+
 /// Scroll the shared grid by `delta` lines (positive = up into scrollback).
 pub(crate) fn scroll(delta: i32) {
     if let Ok(mut slot) = grid_slot().lock() {

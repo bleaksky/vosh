@@ -282,6 +282,63 @@ fn phys_point_to_cell(phys_x: f64, phys_y: f64, height_px: f64) -> Option<(i32, 
     Some((row - offset, col))
 }
 
+/// A pointer event in surface-physical pixels, with the surface size and
+/// the platform's open-link modifier (Cmd / Ctrl) state.
+pub(super) struct PointerEvent {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub open_modifier: bool,
+}
+
+// A scrollbar thumb drag in progress.
+static SCROLLBAR_DRAGGING: AtomicBool = AtomicBool::new(false);
+
+/// True when the point falls in the scrollbar hit zone (right edge) while
+/// scrolled. The zone is wider than the drawn bar for forgiving grabs.
+fn in_scrollbar_zone(ev: &PointerEvent) -> bool {
+    let (offset, scrollback) = crate::term_grid::scroll_metrics();
+    if offset == 0 || scrollback == 0 {
+        return false;
+    }
+    let dpr = f64::from(load_f32(&DPR, 2.0));
+    ev.width > 0.0 && ev.x >= ev.width - 12.0 * dpr
+}
+
+/// Map a scrollbar drag y to an absolute display offset: the thumb center
+/// follows the pointer.
+// Scrollback lengths are far inside f64's exact-integer range.
+#[allow(clippy::cast_precision_loss)]
+fn scrollbar_scroll_to(ev: &PointerEvent) {
+    let cell_h = f64::from(load_f32(&CELL_H, 0.0));
+    if cell_h <= 0.0 || ev.height <= 0.0 {
+        return;
+    }
+    let (_, scrollback) = crate::term_grid::scroll_metrics();
+    if scrollback == 0 {
+        return;
+    }
+    let rows = (ev.height / cell_h).floor().max(1.0);
+    let total = scrollback as f64 + rows;
+    let scroll_top = ((ev.y / ev.height) * total - rows / 2.0).clamp(0.0, scrollback as f64);
+    let target = scrollback as f64 - scroll_top;
+    crate::term_grid::scroll_to_offset(target.round().max(0.0) as usize);
+    redraw_now();
+}
+
+/// Middle-click toggles the split: scrolled snaps back to the live tail;
+/// at the tail it pages up into scrollback to open the split.
+fn middle_click() {
+    let (offset, _) = crate::term_grid::scroll_metrics();
+    if offset > 0 {
+        crate::term_grid::scroll_to_bottom();
+    } else {
+        crate::term_grid::scroll_page(true);
+    }
+    redraw_now();
+}
+
 /// Accumulate a wheel delta (positive = reveal older lines) and scroll the
 /// grid by whole lines. Shared by every platform's wheel handler.
 fn wheel_scroll(delta_y: f64) {
@@ -299,12 +356,12 @@ fn wheel_scroll(delta_y: f64) {
     }
 }
 
-/// Cmd/Ctrl+click on a URL opens it; a press on the divider starts a drag;
-/// anything else starts a selection. Platform mouse-down handlers call this
-/// with the cell under the pointer, the press y as a height fraction, and
-/// the view height in the platform's units.
-fn pointer_down(cell: Option<(i32, usize)>, frac: Option<f64>, height: f64, open_modifier: bool) {
-    if open_modifier {
+/// Cmd/Ctrl+click on a URL opens it; a press in the scrollbar zone starts
+/// a thumb drag; a press on the divider starts a divider drag; anything
+/// else starts a selection.
+fn pointer_down(ev: &PointerEvent) {
+    let cell = phys_point_to_cell(ev.x, ev.y, ev.height);
+    if ev.open_modifier {
         if let Some((line, col)) = cell {
             if let Some((url, _, _)) = crate::term_grid::url_at(line, col) {
                 platform::open_url(&url);
@@ -312,12 +369,17 @@ fn pointer_down(cell: Option<(i32, usize)>, frac: Option<f64>, height: f64, open
             }
         }
     }
-    // Grab the divider where it is DRAWN (divider_frac, row-quantized), not
-    // at the raw ratio: the two can differ by more than a grab band when the
-    // row count is small, which left a resize cursor over a bar that refused
-    // to move. The band is ±8 units, slightly wider than the cursor rect.
-    if let (Some(frac), Some(drawn)) = (frac, divider_frac()) {
-        if height > 0.0 && ((frac - f64::from(drawn)) * height).abs() <= 8.0 {
+    if in_scrollbar_zone(ev) {
+        SCROLLBAR_DRAGGING.store(true, Ordering::Release);
+        scrollbar_scroll_to(ev);
+        return;
+    }
+    // Grab the divider where it is DRAWN (divider_frac), not at the raw
+    // ratio. The band is a bit wider than the cursor rect for forgiving
+    // grabs.
+    if let Some(drawn) = divider_frac() {
+        let dpr = f64::from(load_f32(&DPR, 2.0));
+        if ev.height > 0.0 && (ev.y - f64::from(drawn) * ev.height).abs() <= 8.0 * dpr {
             DRAGGING.store(true, Ordering::Release);
             return;
         }
@@ -330,17 +392,23 @@ fn pointer_down(cell: Option<(i32, usize)>, frac: Option<f64>, height: f64, open
     }
 }
 
-/// Move the divider, or extend the selection, while dragging.
-fn pointer_dragged(cell: Option<(i32, usize)>, frac: Option<f64>) {
+/// Move the scrollbar thumb or the divider, or extend the selection,
+/// while dragging.
+fn pointer_dragged(ev: &PointerEvent) {
+    if SCROLLBAR_DRAGGING.load(Ordering::Acquire) {
+        scrollbar_scroll_to(ev);
+        return;
+    }
     if DRAGGING.load(Ordering::Acquire) {
-        if let Some(frac) = frac {
+        if ev.height > 0.0 {
+            let frac = ev.y / ev.height;
             set_split_ratio((frac.clamp(0.15, 0.85)) as f32);
             redraw_now();
         }
         return;
     }
     if SELECTING.load(Ordering::Acquire) {
-        if let Some((line, col)) = cell {
+        if let Some((line, col)) = phys_point_to_cell(ev.x, ev.y, ev.height) {
             crate::term_grid::update_selection(line, col);
             redraw_now();
         }
@@ -348,32 +416,79 @@ fn pointer_dragged(cell: Option<(i32, usize)>, frac: Option<f64>) {
 }
 
 fn pointer_up() {
-    if DRAGGING.swap(false, Ordering::AcqRel) {
+    let was_scrollbar = SCROLLBAR_DRAGGING.swap(false, Ordering::AcqRel);
+    let was_divider = DRAGGING.swap(false, Ordering::AcqRel);
+    if was_divider {
         // Divider drag over; redraw so the cursor rect refreshes.
         redraw_now();
-        return;
     }
-    if SELECTING.swap(false, Ordering::AcqRel) {
+    if !was_scrollbar && !was_divider && SELECTING.swap(false, Ordering::AcqRel) {
         // Copy the selection to the clipboard on release.
         copy_selection();
+    }
+    // Clicking the terminal focuses the command input, like clicking any
+    // other part of the window. The opaque surface eats the DOM mouseup
+    // that used to do this, so the frontend listens for the event instead.
+    if let Some(app) = APP.get() {
+        let _ = app.emit("vosh://terminal-clicked", ());
     }
 }
 
 /// Track the URL under the pointer so the renderer can underline it. Only
 /// repaints when the hovered range actually changes.
-fn pointer_moved(cell: Option<(i32, usize)>) {
-    let next = cell
+fn pointer_moved(ev: Option<&PointerEvent>) {
+    let next = ev
+        .and_then(|e| phys_point_to_cell(e.x, e.y, e.height))
         .and_then(|(line, col)| crate::term_grid::url_at(line, col).map(|(_, s, e)| (line, s, e)));
     set_hover_url(next);
 }
 
-/// Copy the current selection to the clipboard (no-op when empty).
+// The transient "copied N chars" toast: text plus the moment it was set.
+// Cleared by a delayed task; the renderer reads it via `copy_notice`.
+static COPY_NOTICE: Mutex<Option<(String, std::time::Instant)>> = Mutex::new(None);
+static COPY_NOTICE_GEN: AtomicU32 = AtomicU32::new(0);
+const COPY_NOTICE_MS: u64 = 1600;
+
+/// The active copy toast text, if one is showing. Read by the renderer,
+/// which draws it as a pill in the bottom-right of the surface.
+pub(crate) fn copy_notice() -> Option<String> {
+    let guard = COPY_NOTICE.lock().ok()?;
+    let (text, at) = guard.as_ref()?;
+    (at.elapsed().as_millis() < u128::from(COPY_NOTICE_MS)).then(|| text.clone())
+}
+
+/// Copy the current selection to the clipboard (no-op when empty) and show
+/// the "copied N chars" toast for a moment so the copy is visibly
+/// confirmed.
 fn copy_selection() {
-    if let Some(text) = crate::term_grid::selection_text() {
-        if !text.is_empty() {
-            platform::set_clipboard(&text);
-        }
+    let Some(text) = crate::term_grid::selection_text() else {
+        return;
+    };
+    if text.is_empty() {
+        return;
     }
+    platform::set_clipboard(&text);
+    let chars = text.chars().count();
+    let plural = if chars == 1 { "" } else { "s" };
+    if let Ok(mut guard) = COPY_NOTICE.lock() {
+        *guard = Some((
+            format!("copied {chars} char{plural}"),
+            std::time::Instant::now(),
+        ));
+    }
+    let gen = COPY_NOTICE_GEN.fetch_add(1, Ordering::AcqRel) + 1;
+    redraw_now();
+    // Clear the toast after it expires (unless a newer copy replaced it)
+    // and repaint so it actually disappears without waiting for output.
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(COPY_NOTICE_MS)).await;
+        if COPY_NOTICE_GEN.load(Ordering::Acquire) == gen {
+            if let Ok(mut guard) = COPY_NOTICE.lock() {
+                *guard = None;
+            }
+            request_redraw();
+        }
+    });
 }
 
 /// Copy the native selection, dispatched to the main thread. Called by the

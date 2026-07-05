@@ -38,10 +38,11 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 const MK_LBUTTON: usize = 0x0001;
 const MK_CONTROL: usize = 0x0008;
 const WM_MOUSELEAVE: u32 = 0x02A3;
+const WM_MBUTTONDOWN: u32 = 0x0207;
 
 use super::{
-    divider_frac, pointer_down, pointer_dragged, pointer_moved, pointer_up, render, surface_slot,
-    wheel_scroll, SurfaceHandle,
+    divider_frac, middle_click, pointer_down, pointer_dragged, pointer_moved, pointer_up, render,
+    surface_slot, wheel_scroll, PointerEvent, SurfaceHandle,
 };
 
 /// wgpu backend for this platform.
@@ -139,8 +140,18 @@ pub(super) fn open_url(url: &str) {
     }
 }
 
-/// Client-area height in physical pixels.
-fn client_height(hwnd: HWND) -> f64 {
+/// Split an `LPARAM` mouse position into signed client coordinates
+/// (physical pixels on Windows).
+fn mouse_pos(lparam: LPARAM) -> (f64, f64) {
+    let x = (lparam & 0xffff) as u16 as i16;
+    let y = ((lparam >> 16) & 0xffff) as u16 as i16;
+    (f64::from(x), f64::from(y))
+}
+
+/// Build the shared pointer event (client pixels, top-left origin) from a
+/// window-message mouse position.
+fn pointer_event(hwnd: HWND, lparam: LPARAM, open_modifier: bool) -> PointerEvent {
+    let (x, y) = mouse_pos(lparam);
     let mut rect = RECT {
         left: 0,
         top: 0,
@@ -151,31 +162,13 @@ fn client_height(hwnd: HWND) -> f64 {
     unsafe {
         let _ = GetClientRect(hwnd, &mut rect);
     }
-    f64::from(rect.bottom - rect.top)
-}
-
-/// Split an `LPARAM` mouse position into signed client coordinates
-/// (physical pixels on Windows).
-fn mouse_pos(lparam: LPARAM) -> (f64, f64) {
-    let x = (lparam & 0xffff) as u16 as i16;
-    let y = ((lparam >> 16) & 0xffff) as u16 as i16;
-    (f64::from(x), f64::from(y))
-}
-
-/// Map a client-space mouse position to a grid cell via the shared mapping.
-fn point_to_cell(hwnd: HWND, lparam: LPARAM) -> Option<(i32, usize)> {
-    let (x, y) = mouse_pos(lparam);
-    super::phys_point_to_cell(x, y, client_height(hwnd))
-}
-
-/// The position's y as a fraction of the client height (0 = top).
-fn event_fraction(hwnd: HWND, lparam: LPARAM) -> Option<f64> {
-    let (_, y) = mouse_pos(lparam);
-    let height = client_height(hwnd);
-    if height <= 0.0 {
-        return None;
+    PointerEvent {
+        x,
+        y,
+        width: f64::from(rect.right - rect.left),
+        height: f64::from(rect.bottom - rect.top),
+        open_modifier,
     }
-    Some(y / height)
 }
 
 /// Ask for a `WM_MOUSELEAVE` when the pointer exits, so hover clears.
@@ -208,20 +201,21 @@ extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM
             unsafe {
                 SetCapture(hwnd);
             }
-            pointer_down(
-                point_to_cell(hwnd, lparam),
-                event_fraction(hwnd, lparam),
-                client_height(hwnd),
-                wparam & MK_CONTROL != 0,
-            );
+            pointer_down(&pointer_event(hwnd, lparam, wparam & MK_CONTROL != 0));
+            0
+        }
+        WM_MBUTTONDOWN => {
+            // Middle-click toggles the split-scrollback view.
+            middle_click();
             0
         }
         WM_MOUSEMOVE => {
             track_leave(hwnd);
+            let ev = pointer_event(hwnd, lparam, false);
             if wparam & MK_LBUTTON != 0 {
-                pointer_dragged(point_to_cell(hwnd, lparam), event_fraction(hwnd, lparam));
+                pointer_dragged(&ev);
             } else {
-                pointer_moved(point_to_cell(hwnd, lparam));
+                pointer_moved(Some(&ev));
             }
             0
         }

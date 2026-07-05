@@ -930,6 +930,24 @@ pub(crate) fn native_surface_set_theme(
     }
 }
 
+/// Tier 3 native renderer: apply the split divider color setting to the
+/// surface renderer (hex or `rgb()`/`rgba()`; None restores the default).
+#[tauri::command]
+pub(crate) fn native_surface_set_divider_color(color: Option<String>) {
+    #[cfg(native_surface)]
+    {
+        let parsed = color
+            .as_deref()
+            .and_then(crate::cell_render::parse_css_color);
+        crate::cell_render::set_divider_color(parsed);
+        crate::native_surface::request_redraw();
+    }
+    #[cfg(not(native_surface))]
+    {
+        let _ = color;
+    }
+}
+
 /// Tier 3 native renderer (macOS): toggle drawing bright (ANSI 8-15) colored
 /// text with the bold font weight. A no-op elsewhere.
 #[tauri::command]
