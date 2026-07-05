@@ -242,6 +242,153 @@ pub(crate) fn feed_bytes(bytes: &[u8]) {
     grid.feed(bytes);
 }
 
+// UTF-8 tail carried between session chunks so a multi-byte character
+// split across two network reads decodes whole before wrapping.
+static WRAP_PENDING: Mutex<Vec<u8>> = Mutex::new(Vec::new());
+
+/// Feed the live session's display bytes word-wrapped at the grid width.
+/// xterm receives this stream word-wrapped by the frontend `WordWrapper`
+/// (src/lib/wordWrap.ts); without the same treatment the surface hard-wraps
+/// mid-word at the grid edge and the two renderers disagree. This is a
+/// faithful port: complete lines wrap at the last whitespace before the
+/// width, the chunk's partial tail flushes immediately (parity with the
+/// frontend, which flushes per chunk so prompts appear), and ANSI escape
+/// sequences count zero width.
+pub(crate) fn feed_session_bytes(bytes: &[u8]) {
+    let Ok(mut slot) = grid_slot().lock() else {
+        return;
+    };
+    let grid = slot.get_or_insert_with(|| TermGrid::new(80, 24));
+    let cols = grid.columns();
+    let text = {
+        let Ok(mut pending) = WRAP_PENDING.lock() else {
+            return;
+        };
+        pending.extend_from_slice(bytes);
+        match std::str::from_utf8(&pending) {
+            Ok(s) => {
+                let s = s.to_string();
+                pending.clear();
+                s
+            }
+            Err(e) => {
+                let valid = e.valid_up_to();
+                let s = String::from_utf8_lossy(&pending[..valid]).into_owned();
+                // Keep at most one code point of tail; longer garbage is
+                // not a split character, so let it through lossily.
+                if pending.len() - valid <= 3 {
+                    pending.drain(..valid);
+                } else {
+                    pending.clear();
+                }
+                s
+            }
+        }
+    };
+    if !text.is_empty() {
+        grid.feed(wrap_stream(&text, cols).as_bytes());
+    }
+}
+
+/// Word-wrap a chunk of terminal text at `cols`: complete lines (any \r or
+/// \n terminator) wrap in place, and the trailing partial line wraps and
+/// emits immediately.
+fn wrap_stream(text: &str, cols: usize) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut line = String::new();
+    for ch in text.chars() {
+        if ch == '\n' || ch == '\r' {
+            out.push_str(&wrap_line(&line, cols));
+            out.push(ch);
+            line.clear();
+        } else {
+            line.push(ch);
+        }
+    }
+    out.push_str(&wrap_line(&line, cols));
+    out
+}
+
+/// Walk `line` once, tracking the visible column with ANSI escapes at zero
+/// width. When the column exceeds `cols`, insert a CRLF at the last
+/// whitespace so the wrap lands between words; a single token wider than
+/// the width hard-wraps at the boundary so the line still terminates.
+fn wrap_line(line: &str, cols: usize) -> String {
+    enum AnsiState {
+        Normal,
+        Esc,
+        Csi,
+        Osc,
+    }
+    let cols = cols.max(1);
+    let mut out = String::with_capacity(line.len());
+    let mut visible_col = 0usize;
+    // Byte position in `out` of the most recent whitespace on this line;
+    // None when the line (or current wrapped segment) starts with a word.
+    let mut last_ws: Option<(usize, usize)> = None; // (byte pos, visible col)
+    let mut state = AnsiState::Normal;
+
+    for ch in line.chars() {
+        match state {
+            AnsiState::Esc => {
+                out.push(ch);
+                state = match ch {
+                    '[' => AnsiState::Csi,
+                    ']' => AnsiState::Osc,
+                    _ => AnsiState::Normal,
+                };
+                continue;
+            }
+            AnsiState::Csi => {
+                out.push(ch);
+                if ('\u{40}'..='\u{7e}').contains(&ch) {
+                    state = AnsiState::Normal;
+                }
+                continue;
+            }
+            AnsiState::Osc => {
+                out.push(ch);
+                if ch == '\u{07}' || ch == '\u{9c}' {
+                    state = AnsiState::Normal;
+                } else if ch == '\u{1b}' {
+                    state = AnsiState::Esc;
+                }
+                continue;
+            }
+            AnsiState::Normal => {}
+        }
+        if ch == '\u{1b}' {
+            out.push(ch);
+            state = AnsiState::Esc;
+            continue;
+        }
+
+        out.push(ch);
+        visible_col += 1;
+
+        if ch == ' ' || ch == '\t' {
+            last_ws = Some((out.len() - 1, visible_col));
+        }
+
+        if visible_col > cols {
+            if let Some((ws_pos, ws_col)) = last_ws {
+                // Replace the whitespace with CRLF so the wrap lands
+                // between words; everything after it starts the next line.
+                out.replace_range(ws_pos..=ws_pos, "\r\n");
+                visible_col -= ws_col;
+                last_ws = None;
+            } else {
+                // Single token wider than the terminal: hard-wrap at the
+                // boundary, keeping the current char on the new line.
+                let pos = out.len() - ch.len_utf8();
+                out.insert_str(pos, "\r\n");
+                visible_col = 1;
+            }
+        }
+    }
+    out
+}
+
 /// Scroll the shared grid by `delta` lines (positive = up into scrollback).
 pub(crate) fn scroll(delta: i32) {
     if let Ok(mut slot) = grid_slot().lock() {
@@ -605,6 +752,47 @@ mod tests {
         assert_eq!(m.len(), 2);
         assert_eq!(m[0], (0, 4, 7));
         assert_eq!(m[1], (1, 4, 7));
+    }
+
+    #[test]
+    fn wrap_line_breaks_at_the_last_whitespace() {
+        assert_eq!(
+            wrap_line("the quick brown fox", 10),
+            "the quick\r\nbrown fox"
+        );
+    }
+
+    #[test]
+    fn wrap_line_counts_ansi_escapes_as_zero_width() {
+        let line = "\x1b[33mthe quick\x1b[0m brown fox";
+        assert_eq!(wrap_line(line, 10), "\x1b[33mthe quick\x1b[0m\r\nbrown fox");
+    }
+
+    #[test]
+    fn wrap_line_hard_wraps_a_token_wider_than_the_terminal() {
+        assert_eq!(wrap_line("abcdefgh", 5), "abcde\r\nfgh");
+    }
+
+    #[test]
+    fn wrap_stream_wraps_complete_lines_and_the_partial_tail() {
+        // Line-terminated content wraps in place; the unterminated tail
+        // (a prompt) flushes immediately, matching the frontend wrapper.
+        let out = wrap_stream("a long enough line here\r\nprompt> ", 12);
+        assert_eq!(out, "a long\r\nenough line\r\nhere\r\nprompt> ");
+    }
+
+    #[test]
+    fn session_feed_word_wraps_at_the_grid_width() {
+        let Ok(mut slot) = grid_slot().lock() else {
+            panic!("grid lock");
+        };
+        *slot = Some(TermGrid::new(10, 24));
+        drop(slot);
+        feed_session_bytes(b"the quick brown fox\r\n");
+        let slot = grid_slot().lock().unwrap();
+        let g = slot.as_ref().unwrap();
+        assert!(g.row_string(0).starts_with("the quick"));
+        assert!(g.row_string(1).starts_with("brown fox"));
     }
 
     #[test]
