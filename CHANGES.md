@@ -2,6 +2,17 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.6.3 - 2026-07-05
+
+- Long lines wrap between words on the native renderer, matching the previous renderer. They used to break mid-word at the right edge.
+- The split-scrollback divider now glides with your mouse pixel by pixel instead of ratcheting row by row, the content no longer jumps when the split first opens, and the bar is grabbable everywhere it shows the resize cursor. The resize cursor also stays confined to the divider instead of covering the whole terminal.
+- Middle-click toggles the split: click once to open scrollback, click again to snap back to live.
+- A scrollbar returns to the terminal. While you are scrolled, a slim bar on the right edge shows where you are; drag its thumb to scrub or click the track to jump.
+- The split divider color setting works on the native renderer now, applied the moment you change it.
+- Clicking the terminal focuses the command line again, like clicking anywhere else in the window.
+- Selecting text shows a brief "copied N chars" note in the bottom corner, confirming the selection landed on your clipboard.
+- The custom prompt redraws in place with no flicker. It used to flash a blank row and shift content up for a frame on every prompt, and it left a stray blank line above itself. Your typed command now sits beside the prompt on the same row, the way a MUD prompt reads. A stray carriage return in the way some servers end lines could also make typed commands overwrite the prompt; that is fixed at the source.
+
 ## v0.6.2 - 2026-07-04
 
 - Typing a color in Settings no longer blanks the window mid-keystroke. The theme editor, split divider, and sent command color fields used to apply every character as you typed, so a half-finished hex like #010e0 made surfaces turn transparent. They now apply only complete colors and snap back to the last good value if you leave a typo behind.
