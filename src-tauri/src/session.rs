@@ -1453,7 +1453,9 @@ fn emit_output(app: &AppHandle, bytes: Vec<u8>) {
     // choke point so nothing reaches xterm without also reaching the grid.
     #[cfg(native_surface)]
     {
-        crate::term_grid::feed_bytes(&bytes);
+        // Word-wrapped at the grid width, matching the frontend WordWrapper
+        // that xterm receives this same stream through.
+        crate::term_grid::feed_session_bytes(&bytes);
         crate::native_surface::request_redraw();
     }
     if let Err(e) = app.emit("session://output", OutputPayload::from_bytes(&bytes)) {
