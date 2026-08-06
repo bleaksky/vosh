@@ -40,11 +40,30 @@ function notify() {
   for (const l of listeners) l(snapshot);
 }
 
+// Collapse duplicate member rows, keeping the LAST occurrence per name
+// (Group.Info is a snapshot; later rows carry the freshest stats). The
+// Aabahran server appends blinded characters as "someone" without
+// deduping, so after a dirt kick the roster can arrive with dozens of
+// stale duplicates and grow without bound. Collapsing by name keeps the
+// pane sane; genuinely distinct blinded members do fold into one row,
+// which is the lesser evil against unbounded growth. Order of first
+// appearance is preserved.
+function dedupeMembers(info: GroupInfo): GroupInfo {
+  if (!Array.isArray(info.members)) return info;
+  const seen = new Map<string, GroupMember>();
+  for (const m of info.members) {
+    if (!m || typeof m !== 'object') continue;
+    seen.set(m.name ?? '?', m);
+  }
+  if (seen.size === info.members.length) return info;
+  return { ...info, members: [...seen.values()] };
+}
+
 export function startGroupStore(): void {
   if (started) return;
   started = true;
   void onGmcpPackage<unknown>('Group.Info', (data) => {
-    group = data && typeof data === 'object' ? (data as GroupInfo) : {};
+    group = data && typeof data === 'object' ? dedupeMembers(data as GroupInfo) : {};
     notify();
   });
   void onGmcpPackage<unknown>('Char.Worth', (data) => {

@@ -31,7 +31,7 @@ export function GroupPane() {
           <div className="group-list" role="list">
             {group.members!.map((m, i) => (
               <GroupRow
-                key={`${m.name ?? i}`}
+                key={`${m.name ?? '?'}-${i}`}
                 member={m}
                 isLeader={!!m.name && m.name === group.leader}
               />
