@@ -337,6 +337,15 @@ fn middle_click() {
         crate::term_grid::scroll_page(true);
     }
     redraw_now();
+    // A middle-click still pulls key focus off the command input like
+    // any click on the surface, but it arrives as otherMouseDown /
+    // WM_MBUTTONDOWN and never reaches pointer_up, so the refocus
+    // event has to fire here too. Without it, Enter stops resending
+    // the highlighted command and macros go dead after closing the
+    // split.
+    if let Some(app) = APP.get() {
+        let _ = app.emit("vosh://terminal-clicked", ());
+    }
 }
 
 /// Accumulate a wheel delta (positive = reveal older lines) and scroll the
