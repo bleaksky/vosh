@@ -94,20 +94,20 @@ use commands::{
     aliases_export, aliases_groups_list, aliases_import, aliases_set_group_enabled, app_quit,
     app_version, dock_layout_get, dock_layout_set, import_apply, import_detect, loadouts_get_state,
     loadouts_set_active, logs_export, logs_list_sessions, logs_search, macros_delete,
-    macros_groups_list, macros_list, macros_set, macros_set_group_enabled, map_area_snapshot,
-    map_set_avoid, map_set_note, map_walk_to, migration_analyze, migration_apply,
-    native_surface_copy, native_surface_echo, native_surface_find, native_surface_find_clear,
-    native_surface_scroll, native_surface_set_bounds, native_surface_set_bright_bold,
-    native_surface_set_cell_metrics, native_surface_set_divider_color, native_surface_set_font,
-    native_surface_set_theme, native_surface_set_visible, open_settings_window, plugins_list,
-    plugins_reload, plugins_set_enabled, presets_install, presets_remove, profile_create,
-    profile_delete, profile_duplicate, profile_export, profile_get_scope, profile_import,
-    profile_rename, profile_resolve_match, profile_set_metadata, profile_set_scope, profile_switch,
-    profiles_list, scrollback_load, session_connect, session_disconnect, session_send,
-    session_send_input, session_set_window_size, target_get, tick_get_config, tick_set_config,
-    triggers_export, triggers_groups_list, triggers_import, triggers_list,
-    triggers_set_group_enabled, ui_get_config, ui_set_config, updater_check,
-    updater_install_and_relaunch, AppState, SharedState,
+    macros_groups_list, macros_list, macros_set, macros_set_group_enabled, map_set_avoid,
+    map_set_note, map_walk_to, migration_analyze, migration_apply, native_surface_copy,
+    native_surface_echo, native_surface_find, native_surface_find_clear, native_surface_scroll,
+    native_surface_set_bounds, native_surface_set_bright_bold, native_surface_set_cell_metrics,
+    native_surface_set_divider_color, native_surface_set_font, native_surface_set_theme,
+    native_surface_set_visible, open_settings_window, plugins_list, plugins_reload,
+    plugins_set_enabled, presets_install, presets_remove, profile_create, profile_delete,
+    profile_duplicate, profile_export, profile_get_scope, profile_import, profile_rename,
+    profile_resolve_match, profile_set_metadata, profile_set_scope, profile_switch, profiles_list,
+    scrollback_load, session_connect, session_disconnect, session_send, session_send_input,
+    session_set_window_size, target_get, tick_get_config, tick_set_config, triggers_export,
+    triggers_groups_list, triggers_import, triggers_list, triggers_set_group_enabled,
+    ui_get_config, ui_set_config, updater_check, updater_install_and_relaunch, AppState,
+    SharedState,
 };
 use fonts::{fonts_list, handle_font_uri};
 use map_state::MapState;
@@ -266,6 +266,12 @@ pub fn run() {
                                     p.aliases.list().into_iter().cloned().collect();
                                 let per_profile_triggers: Vec<_> = p.triggers.list();
                                 let per_profile_macros = p.macros.clone();
+                                // The per-profile file also restored the
+                                // user's group checkbox state; carry it
+                                // across the catalog rebuild or every
+                                // group comes back enabled.
+                                let alias_disabled = p.aliases.disabled_groups();
+                                let trigger_disabled = p.triggers.disabled_groups();
 
                                 // Catalog first.
                                 let mut aliases = vosh_alias::AliasStore::new();
@@ -276,6 +282,7 @@ pub fn run() {
                                 for a in per_profile_aliases {
                                     aliases.set(a);
                                 }
+                                aliases.set_disabled_groups(alias_disabled);
                                 p.aliases = aliases;
 
                                 let mut triggers = vosh_trigger::TriggerStore::new();
@@ -289,6 +296,7 @@ pub fn run() {
                                         info!(error = %e, "per-profile trigger rejected at startup");
                                     }
                                 }
+                                triggers.set_disabled_groups(trigger_disabled);
                                 p.triggers = triggers;
 
                                 // Macros: catalog defaults, per-profile
@@ -303,7 +311,7 @@ pub fn run() {
                                 }
                                 p.macros = macros;
 
-                                loadout_store::apply_loadout_state(&set, &mut p);
+                                loadout_store::apply_effective_state(&set, &mut p);
                             });
                             let catalog_arc = state.global_catalog.clone();
                             let set_arc = state.loadout_set.clone();
@@ -312,6 +320,8 @@ pub fn run() {
                                 *set_arc.lock().await = Some(set_for_state);
                             });
                             info!("loaded Path B catalog + loadout set");
+                            crate::input::PATH_B_ACTIVE
+                                .store(true, std::sync::atomic::Ordering::Release);
                         }
                         (Err(e), _) | (_, Err(e)) => {
                             error!(error = %e, "Path B files present but failed to load; falling back to per-profile state");
@@ -421,7 +431,6 @@ pub fn run() {
             aliases_import,
             presets_install,
             presets_remove,
-            map_area_snapshot,
             map_walk_to,
             map_set_note,
             map_set_avoid,
@@ -471,8 +480,31 @@ pub fn run() {
             import_detect,
             import_apply,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // Backstop flush: slash-command and Lua edits ride a debounced
+            // persist that may not have fired when the user quits (Cmd+Q,
+            // window close). Write the profile out before the process
+            // ends so nothing authored this session is lost.
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                // Honor a #profile reset/load: the in-memory profile is
+                // deliberately diverged from disk; do not write it back.
+                if commands::AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+                    return;
+                }
+                let state: commands::SharedState =
+                    app_handle.state::<commands::SharedState>().inner().clone();
+                // Bounded: a wedged Lua trigger holding the profile lock
+                // must not turn quit into a hang. The timeout cuts the
+                // lock waits; the file writes themselves are sync and
+                // small.
+                let flush = commands::persist_profile(app_handle, &state);
+                let _ = tauri::async_runtime::block_on(async {
+                    tokio::time::timeout(std::time::Duration::from_secs(3), flush).await
+                });
+            }
+        });
 }
 
 /// One-shot rename migration: when the bundle identifier flipped from

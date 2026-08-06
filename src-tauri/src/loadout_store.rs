@@ -23,13 +23,15 @@
 //!
 //! ## Apply semantics
 //!
-//! Path B inverts the meaning of `disabled_groups`. In legacy mode it
-//! is the set of groups the user explicitly turned off through
-//! Settings checkboxes. In Path B mode it is a computed cache: every
-//! group present in the catalog that is NOT in the union of active
-//! loadouts' `enabled_groups`. Ungrouped items (whose `group` is
-//! `None` or empty) are never disabled because the store already
-//! treats them as always-on.
+//! `disabled_groups` is the user's durable Settings-checkbox state in
+//! BOTH modes. Loadouts only impose group state when at least one
+//! active loadout actually declares `enabled_groups`: then the disabled
+//! set becomes every cataloged group NOT in the union of active
+//! loadouts' `enabled_groups`. When no active loadout declares any
+//! groups, the loadouts have no opinion and the user's checkbox state
+//! is left untouched (and persists via the per-profile snapshot).
+//! Ungrouped items (whose `group` is `None` or empty) are never
+//! disabled because the store already treats them as always-on.
 //!
 //! ## Phase B2 scope
 //!
@@ -124,6 +126,48 @@ pub(crate) fn save_loadout_set(app_data: &Path, set: &LoadoutSet) -> Result<(), 
     Ok(())
 }
 
+/// Apply whatever group state the loadout set actually calls for:
+/// explicit dormancy wins, otherwise the union rules run (including
+/// the no-opinion guard). Every apply point (startup, profile switch,
+/// active-list change) routes through here so the deactivate-all kill
+/// switch cannot be undone by a later rebuild.
+pub(crate) fn apply_effective_state(set: &LoadoutSet, profile: &mut Profile) {
+    if set.dormant {
+        apply_dormant_state(profile);
+    } else {
+        apply_loadout_state(set, profile);
+    }
+}
+
+/// Disable every group in every store: the deactivate-all "keep the
+/// catalog dormant" kill switch. Persisted like any checkbox state, so
+/// dormancy survives restart (and the no-opinion guard in
+/// `apply_loadout_state` will not undo it).
+pub(crate) fn apply_dormant_state(profile: &mut Profile) {
+    let alias_groups: Vec<String> = profile
+        .aliases
+        .groups()
+        .into_iter()
+        .map(|(name, _)| name)
+        .filter(|n| !n.is_empty())
+        .collect();
+    profile.aliases.set_disabled_groups(alias_groups);
+    let trigger_groups: Vec<String> = profile
+        .triggers
+        .groups()
+        .into_iter()
+        .map(|(name, _)| name)
+        .filter(|n| !n.is_empty())
+        .collect();
+    profile.triggers.set_disabled_groups(trigger_groups);
+    profile.disabled_macro_groups = profile
+        .macros
+        .iter()
+        .filter_map(|m| m.group.clone())
+        .filter(|g| !g.is_empty())
+        .collect();
+}
+
 /// Write the per-store `disabled_groups` on a live `Profile` from the
 /// active loadouts' union.
 ///
@@ -137,6 +181,16 @@ pub(crate) fn save_loadout_set(app_data: &Path, set: &LoadoutSet) -> Result<(), 
 /// the per-store bookkeeping the runtime gates on.
 pub(crate) fn apply_loadout_state(set: &LoadoutSet, profile: &mut Profile) {
     let enabled: HashSet<String> = set.effective_enabled_groups().into_iter().collect();
+
+    // No active loadout declares any enabled_groups: the loadouts have no
+    // opinion about groups, so leave the user's Settings checkbox state
+    // alone. The old behavior treated the empty union as "disable every
+    // group", which force-disabled everything at startup for users whose
+    // loadouts do not manage groups at all — and made the Settings group
+    // checkboxes impossible to persist.
+    if enabled.is_empty() {
+        return;
+    }
 
     // Aliases. `AliasStore::groups()` returns (name, enabled), we
     // only need the names to build the universe.
@@ -307,10 +361,13 @@ mod tests {
     }
 
     #[test]
-    fn apply_with_no_active_loadouts_disables_every_group() {
-        // Every group present in any store is disabled when nothing is
-        // active. Ungrouped items are not affected because the stores
-        // treat empty group as always-on.
+    fn apply_with_no_declared_groups_leaves_state_untouched() {
+        // When nothing is active (or no active loadout declares
+        // enabled_groups), the loadouts have no opinion: nothing gets
+        // disabled and the user's checkbox state stands. The old
+        // semantics disabled every group here, which force-disabled
+        // everything at startup for users whose loadouts do not manage
+        // groups.
         let mut profile = profile_with_items(
             vec![alias_with_group("kk", "kick %1", Some("combat"))],
             vec![make_trigger("dot", r"burning", Some("buffs"))],
@@ -324,15 +381,9 @@ mod tests {
         let set = LoadoutSet::default();
         apply_loadout_state(&set, &mut profile);
 
-        assert!(profile
-            .aliases
-            .disabled_groups()
-            .contains(&"combat".to_string()));
-        assert!(profile
-            .triggers
-            .disabled_groups()
-            .contains(&"buffs".to_string()));
-        assert!(profile.disabled_macro_groups.contains("movement"));
+        assert!(profile.aliases.disabled_groups().is_empty());
+        assert!(profile.triggers.disabled_groups().is_empty());
+        assert!(profile.disabled_macro_groups.is_empty());
     }
 
     #[test]
@@ -385,6 +436,7 @@ mod tests {
         let mut crafter = Loadout::empty("crafter");
         crafter.enabled_groups = vec!["crafting".into()];
         let set = LoadoutSet {
+            dormant: false,
             loadouts: vec![warrior, crafter],
             active: vec!["warrior".into(), "crafter".into()],
         };
@@ -395,6 +447,134 @@ mod tests {
         assert!(!disabled.contains(&"combat".to_string()));
         assert!(!disabled.contains(&"crafting".to_string()));
         assert!(disabled.contains(&"social".to_string()));
+    }
+
+    #[test]
+    fn apply_leaves_checkbox_state_alone_when_no_loadout_declares_groups() {
+        // Loadouts with empty enabled_groups have no opinion about
+        // groups: the user's Settings checkbox state must survive both
+        // startup and loadout activation. The old semantics treated the
+        // empty union as "disable every group", which made group
+        // checkboxes impossible to persist for users whose loadouts do
+        // not manage groups.
+        let mut profile = profile_with_items(
+            vec![
+                alias_with_group("kk", "kick %1", Some("combat")),
+                alias_with_group("hh", "heal %1", Some("heals")),
+            ],
+            vec![],
+            vec![],
+        );
+        profile
+            .aliases
+            .set_disabled_groups(vec!["combat".to_string()]);
+        let set = LoadoutSet {
+            dormant: false,
+            loadouts: vec![Loadout::empty("default"), Loadout::empty("Healer")],
+            active: vec!["default".into(), "Healer".into()],
+        };
+        apply_loadout_state(&set, &mut profile);
+        assert_eq!(
+            profile.aliases.disabled_groups(),
+            vec!["combat".to_string()]
+        );
+    }
+
+    #[test]
+    fn apply_still_authoritative_when_a_loadout_declares_groups() {
+        // A loadout that DOES declare enabled_groups keeps the original
+        // semantics: the disabled set becomes the universe minus the
+        // union, overriding checkbox state.
+        let mut profile = profile_with_items(
+            vec![
+                alias_with_group("kk", "kick %1", Some("combat")),
+                alias_with_group("hh", "heal %1", Some("heals")),
+            ],
+            vec![],
+            vec![],
+        );
+        profile
+            .aliases
+            .set_disabled_groups(vec!["heals".to_string()]);
+        let mut warrior = Loadout::empty("warrior");
+        warrior.enabled_groups = vec!["heals".into()];
+        let set = LoadoutSet {
+            dormant: false,
+            loadouts: vec![warrior],
+            active: vec!["warrior".into()],
+        };
+        apply_loadout_state(&set, &mut profile);
+        assert_eq!(
+            profile.aliases.disabled_groups(),
+            vec!["combat".to_string()]
+        );
+    }
+
+    #[test]
+    fn dormant_state_disables_every_group_in_every_store() {
+        // Deactivating the last loadout is an explicit "make the catalog
+        // dormant" request. apply_loadout_state's no-opinion guard would
+        // leave everything running, so loadouts_set_active calls this
+        // instead: disable the full group universe across all three
+        // stores.
+        let mut profile = profile_with_items(
+            vec![
+                alias_with_group("kk", "kick %1", Some("combat")),
+                alias_with_group("ungrouped", "look", None),
+            ],
+            vec![make_trigger("dot", r"burning", Some("buffs"))],
+            vec![Macro {
+                key: "F1".into(),
+                command: "north".into(),
+                group: Some("movement".into()),
+            }],
+        );
+
+        apply_dormant_state(&mut profile);
+
+        assert_eq!(
+            profile.aliases.disabled_groups(),
+            vec!["combat".to_string()]
+        );
+        assert_eq!(
+            profile.triggers.disabled_groups(),
+            vec!["buffs".to_string()]
+        );
+        assert!(profile.disabled_macro_groups.contains("movement"));
+    }
+
+    #[test]
+    fn effective_state_honors_dormant_over_empty_active() {
+        // dormant=true with active=[] must disable everything even
+        // though apply_loadout_state alone treats the empty union as
+        // no-opinion. This is what re-imposes the kill switch at
+        // startup and across profile switches.
+        let mut profile = profile_with_items(
+            vec![alias_with_group("kk", "kick %1", Some("combat"))],
+            vec![],
+            vec![],
+        );
+        let set = LoadoutSet {
+            dormant: true,
+            ..Default::default()
+        };
+        apply_effective_state(&set, &mut profile);
+        assert_eq!(
+            profile.aliases.disabled_groups(),
+            vec!["combat".to_string()]
+        );
+    }
+
+    #[test]
+    fn dormant_flag_round_trips_through_disk() {
+        let dir = tmpdir();
+        let set = LoadoutSet {
+            dormant: true,
+            ..Default::default()
+        };
+        save_loadout_set(&dir, &set).unwrap();
+        assert!(load_loadout_set(&dir).unwrap().dormant);
+        fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
@@ -410,6 +590,7 @@ mod tests {
         let mut warrior = Loadout::empty("warrior");
         warrior.enabled_groups = vec!["combat".into()];
         let set = LoadoutSet {
+            dormant: false,
             loadouts: vec![warrior],
             active: vec!["warrior".into()],
         };

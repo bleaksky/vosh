@@ -6,7 +6,6 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 use tokio::sync::Mutex;
 use tracing::warn;
 use vosh_log::{SearchHit, SearchOptions, SessionRow};
-use vosh_map::Room;
 use vosh_trigger::Trigger;
 
 use crate::input;
@@ -17,6 +16,47 @@ use crate::log_state::{SharedLogStore, SharedScrollback};
 /// listeners in sibling webviews (the main window misses settings-window
 /// updates). Iterating the live window map and emitting to each one
 /// guarantees delivery to both the main and settings webviews.
+/// Debounce generation for `mark_profile_dirty`: each mark bumps it, and
+/// the delayed persist only fires if no newer mark arrived while waiting.
+static PROFILE_DIRTY_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// Set by `#profile reset` / `#profile load`: the in-memory profile is
+/// deliberately diverged from disk, so the passive flushes (debounce,
+/// exit) must not write it. Cleared by the next durable change.
+pub(crate) static AUTO_PERSIST_SUPPRESSED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+/// Set by `migration_apply` once catalog.toml / loadouts.toml are
+/// written: the session is in the post-migration window where the live
+/// Profile is still pre-migration state and must not be persisted.
+/// Deliberately in-process (not a disk sniff): catalog.toml existing
+/// while `state.global_catalog` is None also describes a corrupt
+/// catalog falling back to legacy mode at startup, and that session
+/// must keep persisting normally.
+pub(crate) static MIGRATION_RELAUNCH_PENDING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Record that durable profile state changed (slash commands, Lua
+/// mutations) and persist shortly after the burst settles. Keeps disk
+/// writes off latency-sensitive paths while guaranteeing the change
+/// reaches profile.toml/catalog.toml within a couple of seconds; the
+/// exit hook flushes immediately as a backstop.
+pub(crate) fn mark_profile_dirty(app: &AppHandle) {
+    use std::sync::atomic::Ordering;
+    AUTO_PERSIST_SUPPRESSED.store(false, Ordering::Release);
+    let gen = PROFILE_DIRTY_GEN.fetch_add(1, Ordering::AcqRel) + 1;
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        if PROFILE_DIRTY_GEN.load(Ordering::Acquire) != gen {
+            return; // a newer mark restarted the clock
+        }
+        if AUTO_PERSIST_SUPPRESSED.load(Ordering::Acquire) {
+            return; // a #profile reset/load intervened
+        }
+        let shared: SharedState = app.state::<SharedState>().inner().clone();
+        persist_profile(&app, &shared).await;
+    });
+}
+
 fn broadcast<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: &S) {
     for win in app.webview_windows().values() {
         if let Err(e) = win.emit(event, payload.clone()) {
@@ -109,7 +149,14 @@ pub(crate) type SharedState = Arc<AppState>;
 /// but not surfaced — callers don't want a UI toggle to fail because
 /// the disk is full mid-flight, and the in-memory state is still
 /// correct for the rest of the session.
-async fn persist_profile(app: &AppHandle, state: &SharedState) {
+pub(crate) async fn persist_profile(app: &AppHandle, state: &SharedState) {
+    // Serialize whole-persist runs. The debounced dirty-persist and the
+    // exit-time flush can overlap each other or an inline command
+    // persist; write_with_backup uses a fixed .tmp name per target, so
+    // concurrent runs would break the atomic-write crash guarantee.
+    static PERSIST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _persist_guard = PERSIST_LOCK.lock().await;
+
     // Path B branch. When `state.global_catalog` is `Some`, the user is
     // post-migration: authored items live in catalog.toml and the live
     // Profile is the cache. Write the live aliases / triggers / macros
@@ -118,6 +165,18 @@ async fn persist_profile(app: &AppHandle, state: &SharedState) {
     // and never reopened from a Path B session).
     if state.global_catalog.lock().await.is_some() {
         persist_path_b(app, state).await;
+        return;
+    }
+
+    // Post-migration window: migration_apply has written catalog.toml
+    // but `state.global_catalog` only loads at the next launch. Running
+    // the legacy branch here would resurrect the just-archived
+    // per-profile file from the live pre-migration profile — with
+    // pre-retag group names that would overlay and corrupt the catalog
+    // on relaunch. Persist nothing until the restart completes the
+    // migration.
+    if MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire) {
+        tracing::debug!("persist skipped: post-migration window before relaunch");
         return;
     }
 
@@ -256,9 +315,15 @@ async fn persist_path_b(app: &AppHandle, state: &SharedState) {
         };
         per_profile_snapshot.aliases.clear();
         per_profile_snapshot.triggers.clear();
-        per_profile_snapshot.disabled_alias_groups.clear();
-        per_profile_snapshot.disabled_trigger_groups.clear();
-        per_profile_snapshot.disabled_macro_groups.clear();
+        // The disabled-group lists STAY: they are where the Settings
+        // group checkboxes persist in Path B mode. Clearing them here
+        // (as this used to) meant group toggles could not survive a
+        // restart at all — the catalog has no field for them and the
+        // startup rebuild recomputed them from loadout enabled_groups.
+        // Known limit: when an active loadout DOES declare
+        // enabled_groups, apply_loadout_state stays authoritative and
+        // overwrites these lists on the next loadout change. A separate
+        // durable-checkbox field is the follow-up fix for that cohort.
         strip_global_fields(&mut per_profile_snapshot, &scope);
         if let Err(e) = per_profile_snapshot.save(&p) {
             warn!(
@@ -422,6 +487,32 @@ pub(crate) async fn session_send_input(
         };
         (result, payload, script_apply)
     };
+
+    // Slash commands (#alias, #trigger, #var, #endrec, #import-tintin,
+    // ...) and durable Lua actions mutate the profile but historically
+    // never persisted, so anything authored this way vanished on restart
+    // unless an unrelated persisting command happened to run later.
+    // `#profile reset` and `#profile load` are deliberate exceptions:
+    // reset blanks the LIVE profile only (the help documents `#profile
+    // save` as the explicit write and `load` as the undo), so
+    // auto-persisting it would wipe the on-disk profile — and in Path B
+    // the shared catalog. They also suppress the passive flushes (exit,
+    // debounce) until the next durable change says the in-memory state
+    // is wanted again.
+    // Matched with the parser's own tokenizer so spelling variants
+    // ("#profile  reset", "# profile load") cannot slip past into the
+    // dirty-mark branch and persist the just-blanked profile. Path B
+    // gates the whole save/load/reset trio to echo-only, so suppression
+    // only applies where the commands still act.
+    let path_b_live = crate::input::PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire);
+    let is_reset_or_load = !path_b_live && crate::input::is_profile_reset_or_load(&line);
+    if is_reset_or_load {
+        AUTO_PERSIST_SUPPRESSED.store(true, std::sync::atomic::Ordering::Release);
+    } else if line.trim_start().starts_with('#')
+        || script_apply.as_ref().is_some_and(|a| a.durable_changed)
+    {
+        mark_profile_dirty(&app);
+    }
 
     if let Some(apply) = script_apply {
         // Lua actions append AFTER the alias's template output (which
@@ -809,11 +900,23 @@ pub(crate) async fn triggers_export(state: State<'_, SharedState>) -> Result<Str
 
 #[tauri::command]
 pub(crate) async fn triggers_import(
+    app: AppHandle,
     state: State<'_, SharedState>,
     json: String,
 ) -> Result<usize, String> {
-    let mut p = state.profile.lock().await;
-    p.triggers.import_json(&json).map_err(|e| e.to_string())
+    let count = {
+        let mut p = state.profile.lock().await;
+        p.triggers.import_json(&json).map_err(|e| e.to_string())?
+    };
+    // The editor's save path lands here: persist, or the "saved" state
+    // lives only in memory and vanishes on restart. Broadcast so the
+    // group checkboxes resync (the import may add or drop groups).
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    // Empty string, not unit: the frontend listener types this
+    // payload as string. Empty means "more than one group changed".
+    broadcast(&app, "vosh://trigger-groups-changed", &"");
+    Ok(count)
 }
 
 /// Dump every alias to a pretty JSON array. Mirrors `triggers_export`
@@ -831,17 +934,30 @@ pub(crate) async fn aliases_export(state: State<'_, SharedState>) -> Result<Stri
 /// touching the store.
 #[tauri::command]
 pub(crate) async fn aliases_import(
+    app: AppHandle,
     state: State<'_, SharedState>,
     json: String,
 ) -> Result<usize, String> {
     let parsed: Vec<vosh_alias::Alias> = serde_json::from_str(&json).map_err(|e| e.to_string())?;
     let count = parsed.len();
-    let mut p = state.profile.lock().await;
-    let mut store = vosh_alias::AliasStore::new();
-    for alias in parsed {
-        store.set(alias);
+    {
+        let mut p = state.profile.lock().await;
+        let mut store = vosh_alias::AliasStore::new();
+        for alias in parsed {
+            store.set(alias);
+        }
+        // The disabled-groups set is user state about GROUPS, not items;
+        // replacing the store without carrying it over silently
+        // re-enabled every disabled group on each editor save.
+        store.set_disabled_groups(p.aliases.disabled_groups());
+        p.aliases = store;
     }
-    p.aliases = store;
+    // Same persistence rule as triggers_import: the editor saves here.
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    // Empty string, not unit: the frontend listener types this
+    // payload as string. Empty means "more than one group changed".
+    broadcast(&app, "vosh://alias-groups-changed", &"");
     Ok(count)
 }
 
@@ -1150,12 +1266,18 @@ pub(crate) async fn profile_export(state: State<'_, SharedState>) -> Result<Stri
 
 #[tauri::command]
 pub(crate) async fn profile_import(
+    app: AppHandle,
     state: State<'_, SharedState>,
     toml: String,
 ) -> Result<Vec<String>, String> {
     let snapshot = ProfileConfig::from_toml(&toml).map_err(|e| e.to_string())?;
-    let mut p = state.profile.lock().await;
-    Ok(snapshot.apply_to(&mut p))
+    let applied = {
+        let mut p = state.profile.lock().await;
+        snapshot.apply_to(&mut p)
+    };
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    Ok(applied)
 }
 
 // ============================================================
@@ -1349,10 +1471,17 @@ async fn apply_path_b_overlays(state: &SharedState) {
     };
     let set = state.loadout_set.lock().await.clone();
     let mut p = state.profile.lock().await;
+    // The per-profile file just restored this profile's group checkbox
+    // state into the live stores; carry it across the catalog rebuild
+    // (the rebuilt stores would otherwise start with everything
+    // enabled).
+    let alias_disabled = p.aliases.disabled_groups();
+    let trigger_disabled = p.triggers.disabled_groups();
     let mut aliases = vosh_alias::AliasStore::new();
     for a in &catalog.aliases {
         aliases.set(a.clone());
     }
+    aliases.set_disabled_groups(alias_disabled);
     p.aliases = aliases;
     let mut triggers = vosh_trigger::TriggerStore::new();
     for t in &catalog.triggers {
@@ -1360,10 +1489,11 @@ async fn apply_path_b_overlays(state: &SharedState) {
             warn!(error = %e, "catalog trigger rejected during profile switch");
         }
     }
+    triggers.set_disabled_groups(trigger_disabled);
     p.triggers = triggers;
     p.macros.clone_from(&catalog.macros);
     if let Some(set) = set.as_ref() {
-        crate::loadout_store::apply_loadout_state(set, &mut p);
+        crate::loadout_store::apply_effective_state(set, &mut p);
     }
 }
 
@@ -1373,8 +1503,13 @@ pub(crate) async fn apply_profile_switch(
     name: &str,
 ) -> Result<(), String> {
     // Step 1: snapshot + write the CURRENT active profile so user
-    // changes since the last persist are not lost on switch.
-    persist_profile(app, state).await;
+    // changes since the last persist are not lost on switch. Skipped
+    // after a #profile reset/load: the live profile is deliberately
+    // diverged from disk and a passive switch (the GMCP Char.Status
+    // auto-switch reaches here too) must not write it back.
+    if !AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+        persist_profile(app, state).await;
+    }
 
     // Step 2: flip the active pointer in the index.
     let (new_path, global_path) = {
@@ -1498,39 +1633,6 @@ pub(crate) async fn handle_char_known_for_auto_switch(
         "session://output",
         OutputPayload::from_bytes(line.as_bytes()),
     );
-}
-
-#[derive(serde::Serialize)]
-pub(crate) struct AreaSnapshot {
-    pub current_room_id: Option<i64>,
-    pub area: String,
-    pub rooms: Vec<Room>,
-    pub exits: Vec<vosh_map::Exit>,
-}
-
-#[tauri::command]
-pub(crate) async fn map_area_snapshot(
-    state: State<'_, SharedState>,
-) -> Result<Option<AreaSnapshot>, String> {
-    let guard = state.map.lock().await;
-    let Some(map) = guard.as_ref() else {
-        return Ok(None);
-    };
-    let Some(current_id) = map.current_room_id else {
-        return Ok(None);
-    };
-    let Some(current) = map.store.get_room(current_id).map_err(|e| e.to_string())? else {
-        return Ok(None);
-    };
-    let area = current.area.clone();
-    let rooms = map.store.list_area(&area).map_err(|e| e.to_string())?;
-    let exits = map.store.exits_in_area(&area).map_err(|e| e.to_string())?;
-    Ok(Some(AreaSnapshot {
-        current_room_id: Some(current_id),
-        area,
-        rooms,
-        exits,
-    }))
 }
 
 #[tauri::command]
@@ -2142,6 +2244,7 @@ pub(crate) async fn migration_apply(
     let mut loadout_set = crate::loadout::LoadoutSet {
         loadouts: plan.loadouts,
         active: Vec::new(),
+        dormant: false,
     };
     if let Some(name) = previously_active {
         if loadout_set.loadouts.iter().any(|l| l.name == name) {
@@ -2151,6 +2254,12 @@ pub(crate) async fn migration_apply(
 
     crate::loadout_store::save_global_catalog(&app_data, &catalog).map_err(|e| e.to_string())?;
     crate::loadout_store::save_loadout_set(&app_data, &loadout_set).map_err(|e| e.to_string())?;
+    // Path B is now on disk but the live session still holds the
+    // pre-migration profile. Block every persist until the relaunch
+    // loads the catalog, and flip the input layer into Path B mode so
+    // the legacy #profile trio stops writing files.
+    MIGRATION_RELAUNCH_PENDING.store(true, std::sync::atomic::Ordering::Release);
+    crate::input::PATH_B_ACTIVE.store(true, std::sync::atomic::Ordering::Release);
 
     // Move profiles/<name>.toml into profiles/legacy/. Keep the index
     // file in place — it does not interfere with Path B mode and gives
@@ -2205,6 +2314,8 @@ pub(crate) async fn migration_apply(
 /// new catalog.
 #[tauri::command]
 pub(crate) async fn app_quit(app: AppHandle) -> Result<(), String> {
+    // No explicit persist here: `app.exit` raises `RunEvent::ExitRequested`,
+    // whose handler flushes the profile exactly once (with a timeout).
     app.exit(0);
     Ok(())
 }
@@ -2264,10 +2375,11 @@ pub(crate) async fn loadouts_get_state(
     })
 }
 
-/// Replace the active-loadouts list and recompute every store's
-/// `disabled_groups` from the new union. Persists the loadout set
-/// to disk and emits a state-changed event so other windows (e.g. a
-/// future `TopBar` checklist) see the update.
+/// Replace the active-loadouts list and reapply group state: the
+/// union rule while loadouts are active, full dormancy when the user
+/// deactivates everything. Persists the loadout set to disk and emits
+/// a state-changed event so other windows (e.g. a future `TopBar`
+/// checklist) see the update.
 #[tauri::command]
 pub(crate) async fn loadouts_set_active(
     app: AppHandle,
@@ -2287,13 +2399,25 @@ pub(crate) async fn loadouts_set_active(
             .into_iter()
             .filter(|n| set.loadouts.iter().any(|l| &l.name == n))
             .collect();
+        // Deactivate-all is the documented kill switch ("Activate none
+        // to keep the catalog dormant"). Recorded as an explicit flag:
+        // an empty active list on its own is ambiguous with "loadouts
+        // have no opinion", and the other apply points (startup,
+        // profile switch) must be able to re-impose dormancy.
+        set.dormant = set.active.is_empty();
         let snapshot = set.clone();
         let mut p = state.profile.lock().await;
-        crate::loadout_store::apply_loadout_state(&snapshot, &mut p);
+        crate::loadout_store::apply_effective_state(&snapshot, &mut p);
         if let Err(e) = crate::loadout_store::save_loadout_set(&app_data, &snapshot) {
             warn!(error = %e, "loadouts.toml save failed");
         }
     }
+    // The recomputed (or dormant) disabled lists live in the profile
+    // snapshot on disk; queue a persist so a crash before the exit
+    // flush cannot leave loadouts.toml and per-profile state
+    // disagreeing. Also clears any stale persist suppression — this is
+    // a durable change the user asked for.
+    mark_profile_dirty(&app);
     let _ = app.emit("vosh://loadouts-changed", &());
     Ok(())
 }

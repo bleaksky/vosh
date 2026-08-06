@@ -93,6 +93,28 @@ variable substitution: $name or ${name}, $$ literal $
 trigger captures: $0 full match, $1..$9 positional groups, ${name} named group\
 ";
 
+/// Set at startup (and at migration time) when Path B is live: the
+/// catalog owns authored items and persistence is automatic, so the
+/// legacy #profile save/load/reset trio switches to echo-only.
+pub(crate) static PATH_B_ACTIVE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// True when `line` is `#profile reset` or `#profile load`, tokenized
+/// exactly like the slash dispatcher, so the persist-suppression
+/// decision in `session_send_input` cannot drift from what actually
+/// executes ("#profile  reset" and "# profile load" count too).
+pub(crate) fn is_profile_reset_or_load(line: &str) -> bool {
+    let Some(rest) = line.trim_start().strip_prefix('#') else {
+        return false;
+    };
+    let (cmd, rest) = split_first_word(rest);
+    if cmd != "profile" {
+        return false;
+    }
+    let (sub, _) = split_first_word(rest);
+    matches!(sub, "reset" | "load")
+}
+
 /// Run the input pipeline against the given profile and return what to send
 /// and what to echo locally.
 pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
@@ -1061,6 +1083,21 @@ fn describe_action(action: &TriggerAction) -> String {
 
 fn slash_profile(profile: &mut Profile, args: &str) -> InputResult {
     let (cmd, _rest) = split_first_word(args);
+    // Path B keeps authored items in the catalog and persists them
+    // automatically. The legacy save/load/reset trio would write, load,
+    // or blank the wrong files there, so it bows out with a pointer.
+    if PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire) {
+        return match cmd {
+            "save" => echo_one("loadout mode saves your changes automatically".to_string()),
+            "load" => echo_one("loadout mode loads the catalog at startup".to_string()),
+            "reset" => error_echo(
+                "profile reset does not apply in loadout mode. delete items from settings instead"
+                    .to_string(),
+            ),
+            "" => error_echo("usage #profile save | load | reset".to_string()),
+            other => error_echo(format!("unknown #profile subcommand `{other}`")),
+        };
+    }
     match cmd {
         "save" => match profile_path() {
             Some(path) => {
