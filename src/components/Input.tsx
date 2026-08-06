@@ -223,18 +223,24 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // Color applied to locally-echoed sent input (null = default fg). Same
   // load + subscribe pattern as keepLast.
   const echoColorRef = useRef<string | null>(null);
+  // Echo commands sent by keyboard macros like typed input (default
+  // on). Under lag the echo shows the keybind registered before the
+  // world responds. Same load + subscribe pattern as keepLast.
+  const echoMacrosRef = useRef<boolean>(true);
   useEffect(() => {
     let cancelled = false;
     let unlistenKeep: (() => void) | undefined;
     let unlistenPaste: (() => void) | undefined;
     let unlistenSpell: (() => void) | undefined;
     let unlistenEcho: (() => void) | undefined;
+    let unlistenEchoMacros: (() => void) | undefined;
     getUiConfig()
       .then((cfg) => {
         if (cancelled) return;
         keepLastRef.current = cfg.keep_last_command;
         pasteDelayRef.current = cfg.paste_line_delay_ms;
         echoColorRef.current = cfg.input_echo_color;
+        echoMacrosRef.current = cfg.echo_macros;
         setSpellcheckPrompt(cfg.spellcheck_prompt);
       })
       .catch(() => {});
@@ -266,12 +272,19 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       if (cancelled) fn();
       else unlistenEcho = fn;
     });
+    listen<boolean>('vosh://echo-macros-changed', (event) => {
+      echoMacrosRef.current = Boolean(event.payload);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlistenEchoMacros = fn;
+    });
     return () => {
       cancelled = true;
       unlistenKeep?.();
       unlistenPaste?.();
       unlistenSpell?.();
       unlistenEcho?.();
+      unlistenEchoMacros?.();
     };
   }, []);
 
@@ -620,6 +633,19 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       const command = macroMapRef.current.get(canonical);
       if (command) {
         event.preventDefault();
+        // Echo the macro's command like typed input (same color, same
+        // quick-key skip) so under lag the keybind visibly registered
+        // before the world responds. The checkbox in Settings turns
+        // this off for players whose stacked macros get too noisy.
+        if (echoMacrosRef.current && !passwordMode) {
+          const firstWord = command.split(/\s+/)[0] ?? '';
+          const isQuickKey = quickKeysRef.current.some(
+            (q) => q.name === firstWord && q.verb.length > 0,
+          );
+          if (!isQuickKey) {
+            onLocalEcho?.(`${colorizeEcho(command, echoColorRef.current)}\r\n`);
+          }
+        }
         try {
           await sendInput(command);
         } catch (e) {

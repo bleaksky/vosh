@@ -1781,6 +1781,7 @@ pub(crate) struct UiConfigPayload {
     pub custom_themes: Vec<crate::profile_config::CustomTheme>,
     pub split_divider_color: Option<String>,
     pub input_echo_color: Option<String>,
+    pub echo_macros: bool,
     pub side_panels_fill_height: bool,
     pub paste_line_delay_ms: u32,
     pub spellcheck_prompt: bool,
@@ -1809,6 +1810,7 @@ pub(crate) async fn ui_get_config(
         custom_themes: p.ui.custom_themes.clone(),
         split_divider_color: p.ui.split_divider_color.clone(),
         input_echo_color: p.ui.input_echo_color.clone(),
+        echo_macros: p.ui.echo_macros,
         side_panels_fill_height: p.ui.side_panels_fill_height,
         paste_line_delay_ms: p.ui.paste_line_delay_ms,
         spellcheck_prompt: p.ui.spellcheck_prompt,
@@ -1843,6 +1845,7 @@ pub(crate) async fn ui_set_config(
         custom_themes,
         split_divider_color,
         input_echo_color,
+        echo_macros,
         side_panels_fill_height,
         paste_line_delay_ms,
         spellcheck_prompt,
@@ -1902,6 +1905,7 @@ pub(crate) async fn ui_set_config(
                 Some(trimmed.to_string())
             }
         });
+        p.ui.echo_macros = echo_macros;
         p.ui.side_panels_fill_height = side_panels_fill_height;
         // Clamp to a sane range so a malformed input cannot freeze the
         // paste indicator (0–10s per line is plenty).
