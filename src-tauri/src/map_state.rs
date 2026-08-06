@@ -6,11 +6,9 @@
 
 use std::sync::Arc;
 
-use serde::Serialize;
 use serde_json::Value;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tokio::sync::Mutex;
-use tracing::warn;
 use vosh_gmcp::Message;
 use vosh_map::{direction, MapError, MapStore, Room};
 
@@ -35,20 +33,15 @@ impl MapState {
 /// the `SQLite` store.
 pub(crate) type SharedMap = Arc<Mutex<Option<MapState>>>;
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct MapPayload {
-    pub current_room_id: Option<i64>,
-    pub area: Option<String>,
-}
-
-/// Process a GMCP `Room.Info` message into the map store. Returns the
-/// payload that should be emitted on `session://map`, if any.
+/// Process a GMCP `Room.Info` message into the map store. Pure
+/// `SQLite` bookkeeping — the map pane renders from GMCP `Map.Tiles`
+/// pushes, so nothing is emitted back to the webview from here.
 ///
 /// Aabahran's Room.Info object uses `name`, `area`, `num`, `terrain`, and
 /// `exits` fields; this routine reads what is present and stores defaults
 /// for the rest.
 pub(crate) async fn handle_room_info(
-    app: &AppHandle,
+    _app: &AppHandle,
     map: &SharedMap,
     msg: &Message,
 ) -> Result<(), MapError> {
@@ -120,14 +113,10 @@ pub(crate) async fn handle_room_info(
         state.current_room_id = Some(id);
     }
 
-    let payload = MapPayload {
-        current_room_id: Some(id),
-        area: Some(area),
-    };
+    // No event emit: the map pane renders from server-pushed Map.Tiles
+    // GMCP; the old session://map channel has no frontend listeners.
+    let _ = area;
     drop(guard);
-    if let Err(e) = app.emit("session://map", payload) {
-        warn!(error = %e, "failed to emit map payload");
-    }
     Ok(())
 }
 
