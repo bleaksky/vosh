@@ -486,13 +486,28 @@ pub fn run() {
             // Backstop flush: slash-command and Lua edits ride a debounced
             // persist that may not have fired when the user quits (Cmd+Q,
             // window close). Write the profile out before the process
-            // ends so nothing authored this session is lost.
-            if let tauri::RunEvent::ExitRequested { .. } = event {
+            // ends so nothing authored this session is lost. Matches both
+            // exit events because macOS quit paths that go through
+            // NSApplication terminate can deliver Exit without a
+            // preceding ExitRequested; the once-guard keeps the flush
+            // single when both arrive.
+            let quitting = matches!(
+                event,
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+            );
+            if quitting {
+                static EXIT_FLUSHED: std::sync::atomic::AtomicBool =
+                    std::sync::atomic::AtomicBool::new(false);
+                if EXIT_FLUSHED.swap(true, std::sync::atomic::Ordering::AcqRel) {
+                    return;
+                }
                 // Honor a #profile reset/load: the in-memory profile is
                 // deliberately diverged from disk; do not write it back.
                 if commands::AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+                    info!("exit flush: skipped, persist suppressed by profile reset or load");
                     return;
                 }
+                info!("exit flush: persisting profile");
                 let state: commands::SharedState =
                     app_handle.state::<commands::SharedState>().inner().clone();
                 // Bounded: a wedged Lua trigger holding the profile lock
@@ -500,9 +515,15 @@ pub fn run() {
                 // lock waits; the file writes themselves are sync and
                 // small.
                 let flush = commands::persist_profile(app_handle, &state);
-                let _ = tauri::async_runtime::block_on(async {
+                let outcome = tauri::async_runtime::block_on(async {
                     tokio::time::timeout(std::time::Duration::from_secs(3), flush).await
                 });
+                match outcome {
+                    Ok(()) => info!("exit flush: done"),
+                    Err(_) => {
+                        tracing::warn!("exit flush: timed out after 3s, exiting without it");
+                    }
+                }
             }
         });
 }
