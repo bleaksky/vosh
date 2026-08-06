@@ -963,7 +963,13 @@ async fn handle_gmcp(
             return Ok(());
         }
     };
-    info!(package = %msg.package, data = %msg.data, "gmcp received");
+    // Package name at info; the full payload only at debug. Display-
+    // formatting every radius-7 Map.Tiles grid into a log line sat on
+    // the session hot path per movement. Capture raw payloads with
+    // RUST_LOG=vosh_app_lib=debug when needed (e.g. the Group.Info
+    // duplicate-member server bug).
+    info!(package = %msg.package, "gmcp received");
+    tracing::debug!(package = %msg.package, data = %msg.data, "gmcp payload");
     // Phase 5: same fold as the per-line path. Build the tick-reset
     // payload under the existing lock so a World.Time hour change
     // doesn't force a second `profile.lock().await` after release.
@@ -1043,8 +1049,12 @@ async fn handle_gmcp(
         }
     }
     apply_script_result(app, stream, profile, timers, script_apply).await?;
-    if let Err(e) = map_state::handle_room_info(app, map, &msg).await {
-        warn!(error = %e, "failed to update map from Room.Info");
+    if msg.package == "Room.Info" {
+        // Map-store SQLite writes ride a dedicated single-consumer task
+        // (ordering preserved) instead of running inline on the io loop,
+        // where they sat between a socket read and the next outgoing
+        // command write and contributed to command latency.
+        let _ = map_writer(app, map).send(msg.clone());
     }
     // Phase 4 perf fix: emit on a per-package event channel so each
     // frontend listener subscribes only to the packages it cares
@@ -1063,6 +1073,31 @@ async fn handle_gmcp(
     // we ran. This `emit` count would otherwise duplicate that, so
     // we leave gmcp_packets as the single source.
     Ok(())
+}
+
+/// Lazily-started single-consumer task that applies `Room.Info` map
+/// updates off the session io loop. One consumer preserves room-visit
+/// ordering (spawn-per-message would not).
+static MAP_WRITER: std::sync::OnceLock<tokio::sync::mpsc::UnboundedSender<vosh_gmcp::Message>> =
+    std::sync::OnceLock::new();
+
+fn map_writer(
+    app: &AppHandle,
+    map: &crate::map_state::SharedMap,
+) -> &'static tokio::sync::mpsc::UnboundedSender<vosh_gmcp::Message> {
+    MAP_WRITER.get_or_init(|| {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<vosh_gmcp::Message>();
+        let app = app.clone();
+        let map = map.clone();
+        tauri::async_runtime::spawn(async move {
+            while let Some(msg) = rx.recv().await {
+                if let Err(e) = map_state::handle_room_info(&app, &map, &msg).await {
+                    warn!(error = %e, "failed to update map from Room.Info");
+                }
+            }
+        });
+        tx
+    })
 }
 
 /// Detect a tick fire from a GMCP `World.Time` push. Aabahran (and most ROM
@@ -1156,6 +1191,13 @@ async fn apply_script_result(
     timers: &SharedTimers,
     apply: ApplyResult,
 ) -> std::io::Result<()> {
+    // Durable Lua mutations (mud.alias / set_var / group toggles fired by
+    // triggers or timers) historically never reached disk. Ride the same
+    // debounced persist the slash commands use.
+    if apply.durable_changed {
+        crate::commands::mark_profile_dirty(app);
+    }
+
     if !apply.send_bytes.is_empty() {
         stream.write_all(&apply.send_bytes).await?;
         stream.flush().await?;

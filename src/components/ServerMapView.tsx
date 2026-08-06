@@ -240,7 +240,15 @@ export function ServerMapView() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [tiles, setTiles] = useState<MapTilesPayload | null>(null);
+  // Tiles state carries the payload plus its serialized form. The
+  // cached JSON string lets the Map.Tiles listener drop pushes whose
+  // content matches the current payload without re-stringifying
+  // current state, and gives GlyphsOverlay a cheap content-equality
+  // key for its memo comparison.
+  const [tilesSnap, setTilesSnap] = useState<{ payload: MapTilesPayload; json: string } | null>(
+    null,
+  );
+  const tiles = tilesSnap?.payload ?? null;
   const [style, setStyle] = useState<Style>(loadStyle);
   const [tilesetUrl, setTilesetUrl] = useState<string | null>(loadTileset);
   const [tilesetImage, setTilesetImage] = useState<HTMLImageElement | null>(null);
@@ -322,19 +330,24 @@ export function ServerMapView() {
     let unsubGmcp: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
 
-    // Map.Tiles is the sole tile source; updating `tiles` re-runs the
-    // draw effect. The old `onMap` -> getAreaSnapshot round-trip drove
-    // a second full redraw per move with data nothing rendered, so it
-    // is gone.
+    // Map.Tiles is the sole tile source; updating `tilesSnap` re-runs
+    // the draw effect. The old `onMap` -> getAreaSnapshot round-trip
+    // drove a second full redraw per move with data nothing rendered,
+    // so it is gone. A push whose JSON matches the cached string of
+    // the current payload returns `prev` from the updater, so React
+    // bails out of the re-render entirely — no repaint, no glyph DOM
+    // rebuild for server re-sends with identical content.
     onGmcpPackage<MapTilesPayload>('Map.Tiles', (data) => {
-      setTiles(data ?? ({} as MapTilesPayload));
+      const payload = data ?? ({} as MapTilesPayload);
+      const json = JSON.stringify(payload);
+      setTilesSnap((prev) => (prev && prev.json === json ? prev : { payload, json }));
     }).then((fn) => {
       unsubGmcp = fn;
     });
 
     onState((payload) => {
       if (payload.kind === 'disconnected') {
-        setTiles(null);
+        setTilesSnap(null);
       }
     }).then((fn) => {
       unsubState = fn;
@@ -346,156 +359,187 @@ export function ServerMapView() {
     };
   }, []);
 
-  useEffect(() => {
+  // draw() closes over this render's tiles/style/tileset/zoom. The
+  // effects and persistent observers below call it through drawRef so
+  // callbacks that outlive a render (rAF, timers, ResizeObserver,
+  // window resize) always hit the latest closure, never a stale one.
+  const draw = () => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
+    const dpr = window.devicePixelRatio || 1;
+    const cssWidth = container.clientWidth;
+    const cssHeight = container.clientHeight;
+    // Only resize the backing buffer. CSS keeps the display size
+    // pinned to the container via width:100%/height:100% so the
+    // canvas tracks layout reflows (e.g. the tileset-bar appearing
+    // when style flips) without needing the inline style to be
+    // refreshed in lockstep.
+    const targetW = Math.max(1, cssWidth * dpr);
+    const targetH = Math.max(1, cssHeight * dpr);
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = MAP_COLORS.bg;
+    ctx.fillRect(0, 0, cssWidth, cssHeight);
 
-    const draw = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const cssWidth = container.clientWidth;
-      const cssHeight = container.clientHeight;
-      // Only resize the backing buffer. CSS keeps the display size
-      // pinned to the container via width:100%/height:100% so the
-      // canvas tracks layout reflows (e.g. the tileset-bar appearing
-      // when style flips) without needing the inline style to be
-      // refreshed in lockstep.
-      const targetW = Math.max(1, cssWidth * dpr);
-      const targetH = Math.max(1, cssHeight * dpr);
-      if (canvas.width !== targetW || canvas.height !== targetH) {
-        canvas.width = targetW;
-        canvas.height = targetH;
-      }
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = MAP_COLORS.bg;
-      ctx.fillRect(0, 0, cssWidth, cssHeight);
+    if (!tiles) {
+      ctx.fillStyle = '#6e7681';
+      ctx.font = '12px monospace';
+      ctx.fillText('waiting for Map.Tiles GMCP push', 10, 22);
+      return;
+    }
 
-      if (!tiles) {
-        ctx.fillStyle = '#6e7681';
-        ctx.font = '12px monospace';
-        ctx.fillText('waiting for Map.Tiles GMCP push', 10, 22);
-        return;
-      }
+    const { rows, cols } = gridDims(tiles);
+    if (rows === 0 || cols === 0) {
+      ctx.fillStyle = '#6e7681';
+      ctx.font = '12px monospace';
+      ctx.fillText('Map.Tiles payload has no grid yet', 10, 22);
+      return;
+    }
+    const centerR = Math.floor((rows + 1) / 2);
+    const centerC = Math.floor((cols + 1) / 2);
 
-      const { rows, cols } = gridDims(tiles);
-      if (rows === 0 || cols === 0) {
-        ctx.fillStyle = '#6e7681';
-        ctx.font = '12px monospace';
-        ctx.fillText('Map.Tiles payload has no grid yet', 10, 22);
-        return;
+    // Pick the dominant sector from the visible cells. Drives both the
+    // terrain decorations in the void and the watermark tint.
+    const sectorCounts: Record<string, number> = {};
+    for (const rowKey of Object.keys(tiles.g ?? {})) {
+      const colMap = tiles.g?.[rowKey];
+      if (!colMap) continue;
+      for (const cellKey of Object.keys(colMap)) {
+        const cell = colMap[cellKey];
+        if (!cell || typeof cell === 'string') continue;
+        const code = cell.s ?? '';
+        if (!code) continue;
+        sectorCounts[code] = (sectorCounts[code] ?? 0) + 1;
       }
-      const centerR = Math.floor((rows + 1) / 2);
-      const centerC = Math.floor((cols + 1) / 2);
+    }
+    let dominantCode = '0';
+    let bestCount = 0;
+    for (const [code, count] of Object.entries(sectorCounts)) {
+      if (count > bestCount) {
+        bestCount = count;
+        dominantCode = code;
+      }
+    }
+    const sector = sectorForCode(dominantCode) ?? sectorForCode('0');
+    const halo = sector?.halo ?? '#7fb4ca';
+    let dominantSectorId = 0;
+    for (const [id, theme] of Object.entries(SECTORS)) {
+      if (theme === sector) {
+        dominantSectorId = Number(id);
+        break;
+      }
+    }
 
-      // Pick the dominant sector from the visible cells. Drives both the
-      // terrain decorations in the void and the watermark tint.
-      const sectorCounts: Record<string, number> = {};
-      for (const rowKey of Object.keys(tiles.g ?? {})) {
-        const colMap = tiles.g?.[rowKey];
-        if (!colMap) continue;
-        for (const cellKey of Object.keys(colMap)) {
-          const cell = colMap[cellKey];
-          if (!cell || typeof cell === 'string') continue;
-          const code = cell.s ?? '';
-          if (!code) continue;
-          sectorCounts[code] = (sectorCounts[code] ?? 0) + 1;
-        }
-      }
-      let dominantCode = '0';
-      let bestCount = 0;
-      for (const [code, count] of Object.entries(sectorCounts)) {
-        if (count > bestCount) {
-          bestCount = count;
-          dominantCode = code;
-        }
-      }
-      const sector = sectorForCode(dominantCode) ?? sectorForCode('0');
-      const halo = sector?.halo ?? '#7fb4ca';
-      let dominantSectorId = 0;
-      for (const [id, theme] of Object.entries(SECTORS)) {
-        if (theme === sector) {
-          dominantSectorId = Number(id);
-          break;
-        }
-      }
+    // Terrain decorations in the void around the visible cell cluster.
+    // We don't have the area's true world bbox here; approximate it
+    // from the rendered tile grid.
+    {
+      const anchorPitch = computeAnchor(
+        tiles,
+        rows,
+        cols,
+        centerR,
+        centerC,
+        cssWidth,
+        cssHeight,
+        zoom,
+      );
+      const halfW = (cols / 2) * anchorPitch.pitch;
+      const halfH = (rows / 2) * anchorPitch.pitch;
+      drawTerrainDecorations(
+        ctx,
+        [
+          {
+            cx: anchorPitch.playerX,
+            cy: anchorPitch.playerY,
+            hw: halfW,
+            hh: halfH,
+            sector: dominantSectorId,
+            haloColor: halo,
+          },
+        ],
+        { cssWidth, cssHeight, pitch: anchorPitch.pitch },
+      );
+    }
 
-      // Terrain decorations in the void around the visible cell cluster.
-      // We don't have the area's true world bbox here; approximate it
-      // from the rendered tile grid.
-      {
-        const anchorPitch = computeAnchor(
-          tiles,
-          rows,
-          cols,
-          centerR,
-          centerC,
-          cssWidth,
-          cssHeight,
-          zoom,
-        );
-        const halfW = (cols / 2) * anchorPitch.pitch;
-        const halfH = (rows / 2) * anchorPitch.pitch;
-        drawTerrainDecorations(
-          ctx,
-          [
-            {
-              cx: anchorPitch.playerX,
-              cy: anchorPitch.playerY,
-              hw: halfW,
-              hh: halfH,
-              sector: dominantSectorId,
-              haloColor: halo,
-            },
-          ],
-          { cssWidth, cssHeight, pitch: anchorPitch.pitch },
-        );
-      }
+    const anchor = computeAnchor(tiles, rows, cols, centerR, centerC, cssWidth, cssHeight, zoom);
 
-      const anchor = computeAnchor(tiles, rows, cols, centerR, centerC, cssWidth, cssHeight, zoom);
+    if (style === 'tileset') {
+      drawTileset(
+        ctx,
+        cssWidth,
+        cssHeight,
+        tiles,
+        rows,
+        cols,
+        centerR,
+        centerC,
+        tilesetImage,
+        anchor,
+      );
+    } else if (style === 'squares') {
+      drawSquares(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC, anchor);
+    }
+    // Glyph mode: canvas paints just the background + terrain halo.
+    // The actual character grid is rendered via <GlyphsOverlay /> in
+    // the JSX below so it tiles in real terminal-cell pitch (1ch ×
+    // 1em) using the app font, matching tintin's character-grid map.
+  };
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
 
-      if (style === 'tileset') {
-        drawTileset(
-          ctx,
-          cssWidth,
-          cssHeight,
-          tiles,
-          rows,
-          cols,
-          centerR,
-          centerC,
-          tilesetImage,
-          anchor,
-        );
-      } else if (style === 'squares') {
-        drawSquares(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC, anchor);
-      }
-      // Glyph mode: canvas paints just the background + terrain halo.
-      // The actual character grid is rendered via <GlyphsOverlay /> in
-      // the JSX below so it tiles in real terminal-cell pitch (1ch ×
-      // 1em) using the app font, matching tintin's character-grid map.
-    };
+  // Tiles-driven redraw: exactly one rAF per push. Movement sends one
+  // Map.Tiles per step, and the old combined effect answered each push
+  // with five full-canvas repaints (sync draw, rAF, 80ms, 240ms, plus
+  // the fresh ResizeObserver's initial callback) on the same webview
+  // thread that dispatches keystrokes. React runs the cleanup below
+  // (cancelling any still-pending frame) before re-running the effect,
+  // so back-to-back pushes inside one frame coalesce into one repaint.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => drawRef.current());
+    return () => cancelAnimationFrame(raf);
+  }, [tiles]);
 
-    draw();
-    // Layout for the mode-toggle case (e.g. squares -> tileset adds
-    // the tileset-bar above the canvas-host) can take a frame or two
-    // to settle. Schedule a couple of follow-up draws across short
-    // deadlines so at least one lands on the post-reflow size.
-    const raf = requestAnimationFrame(draw);
-    const t1 = window.setTimeout(draw, 80);
-    const t2 = window.setTimeout(draw, 240);
-    const observer = new ResizeObserver(draw);
-    observer.observe(container);
-    window.addEventListener('resize', draw);
+  // Style/layout-driven redraw keeps the settle sequence. Layout for
+  // the mode-toggle case (e.g. squares -> tileset adds the tileset-bar
+  // above the canvas-host) can take a frame or two to settle. Schedule
+  // a couple of follow-up draws across short deadlines so at least one
+  // lands on the post-reflow size.
+  useEffect(() => {
+    drawRef.current();
+    const raf = requestAnimationFrame(() => drawRef.current());
+    const t1 = window.setTimeout(() => drawRef.current(), 80);
+    const t2 = window.setTimeout(() => drawRef.current(), 240);
     return () => {
       cancelAnimationFrame(raf);
       window.clearTimeout(t1);
       window.clearTimeout(t2);
-      observer.disconnect();
-      window.removeEventListener('resize', draw);
     };
-  }, [tiles, style, tilesetImage, themeVersion, zoom]);
+  }, [style, tilesetImage, themeVersion, zoom]);
+
+  // Persistent size hooks, mounted once. Rebuilding the ResizeObserver
+  // on every tiles push made its initial .observe() callback an extra
+  // repaint per movement; a single long-lived observer (plus the window
+  // resize listener) covers pane and window resizes instead, always
+  // through the latest draw closure via drawRef.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const redraw = () => drawRef.current();
+    const observer = new ResizeObserver(redraw);
+    observer.observe(container);
+    window.addEventListener('resize', redraw);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', redraw);
+    };
+  }, []);
 
   const handleLoadTileset = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -613,7 +657,9 @@ export function ServerMapView() {
       )}
       <div ref={containerRef} className="map-canvas-host">
         <canvas ref={canvasRef} />
-        {style === 'glyphs' && tiles && <GlyphsOverlay payload={tiles} zoom={zoom} />}
+        {style === 'glyphs' && tilesSnap && (
+          <GlyphsOverlay payload={tilesSnap.payload} payloadJson={tilesSnap.json} zoom={zoom} />
+        )}
       </div>
     </div>
   );
@@ -1003,278 +1049,288 @@ const EMPTY_CELL: GlyphCell = {
   floor: 'same',
 };
 
-// Wrapped in React.memo so a Char.Vitals / Room.Info / Room.Chars
-// burst during a movement (which re-renders ServerMapView when its
-// snapshot or themeVersion shifts) does not re-run the 60×60 grid
-// build + ~3500-span DOM diff. Only changes to the tiles payload
-// reference or the zoom value trigger a real rebuild.
-const GlyphsOverlay = memo(function GlyphsOverlay({
-  payload,
-  zoom,
-}: {
-  payload: MapTilesPayload;
-  zoom: number;
-}) {
-  const { rows, cols } = gridDims(payload);
-  if (rows === 0 || cols === 0) {
-    return <div className="map-glyph-empty">no glyph data in payload</div>;
-  }
+// Wrapped in React.memo with a content-based equality. Props compare
+// via the payload's cached JSON string (plus zoom), not the payload
+// object reference, so a fresh-but-identical payload object cannot
+// defeat the memo. A Char.Vitals / Room.Info / Room.Chars burst
+// during a movement (which re-renders ServerMapView when its snapshot
+// or themeVersion shifts) does not re-run the 60×60 grid build +
+// ~3500-span DOM diff. Only real payload content changes or the zoom
+// value trigger a rebuild.
+const GlyphsOverlay = memo(
+  function GlyphsOverlay({
+    payload,
+    zoom,
+  }: {
+    payload: MapTilesPayload;
+    /// Serialized form of `payload`, cached by the parent. The memo
+    /// equality below compares this string instead of the payload
+    /// reference.
+    payloadJson: string;
+    zoom: number;
+  }) {
+    const { rows, cols } = gridDims(payload);
+    if (rows === 0 || cols === 0) {
+      return <div className="map-glyph-empty">no glyph data in payload</div>;
+    }
 
-  // Find the player cell. Aabahran tags it with `h: 1`; falling
-  // back to (radius+1) per the GMCP spec when no cell carries the
-  // flag. Old "midpoint of observed cells" math broke on sparse
-  // grids — the player @ would not paint because the computed center
-  // missed the player's row.
-  //
-  // The h-check is permissive so a JSON quirk (`h: "1"`, `h: true`)
-  // still resolves to the player. Without that, going up into an
-  // indoor area sometimes lost the marker entirely.
-  let centerR = 0;
-  let centerC = 0;
-  if (payload.g) {
-    outer: for (const [rKey, row] of Object.entries(payload.g)) {
-      for (const [cKey, cell] of Object.entries(row)) {
-        if (!cell || typeof cell === 'string') continue;
-        const h = (cell as { h?: unknown }).h;
-        if (h === 1 || h === '1' || h === true) {
-          centerR = Number(rKey);
-          centerC = Number(cKey);
-          break outer;
+    // Find the player cell. Aabahran tags it with `h: 1`; falling
+    // back to (radius+1) per the GMCP spec when no cell carries the
+    // flag. Old "midpoint of observed cells" math broke on sparse
+    // grids — the player @ would not paint because the computed center
+    // missed the player's row.
+    //
+    // The h-check is permissive so a JSON quirk (`h: "1"`, `h: true`)
+    // still resolves to the player. Without that, going up into an
+    // indoor area sometimes lost the marker entirely.
+    let centerR = 0;
+    let centerC = 0;
+    if (payload.g) {
+      outer: for (const [rKey, row] of Object.entries(payload.g)) {
+        for (const [cKey, cell] of Object.entries(row)) {
+          if (!cell || typeof cell === 'string') continue;
+          const h = (cell as { h?: unknown }).h;
+          if (h === 1 || h === '1' || h === true) {
+            centerR = Number(rKey);
+            centerC = Number(cKey);
+            break outer;
+          }
         }
       }
     }
-  }
-  if (centerR === 0 || centerC === 0) {
-    if (typeof payload.r === 'number' && payload.r > 0) {
-      centerR = payload.r + 1;
-      centerC = payload.r + 1;
-    } else {
-      centerR = Math.floor((rows + 1) / 2);
-      centerC = Math.floor((cols + 1) / 2);
-    }
-  }
-
-  const textFallback = parseTextGrid(payload.t);
-  const hasGrid = !!payload.g;
-
-  // Output grid: rooms at even indices, connections at odd indices.
-  const outRows = 2 * rows - 1;
-  const outCols = 2 * cols - 1;
-  const out: GlyphCell[][] = [];
-  for (let r = 0; r < outRows; r++) {
-    out.push(Array.from({ length: outCols }, () => EMPTY_CELL));
-  }
-
-  const placeRoom = (r: number, c: number, gc: GlyphCell) => {
-    const or = 2 * (r - 1);
-    const oc = 2 * (c - 1);
-    if (or < 0 || or >= outRows || oc < 0 || oc >= outCols) return;
-    out[or][oc] = gc;
-  };
-
-  // Pass 1: off-floor rooms. Each entry produces a sector glyph
-  // tagged with its floor kind so the renderer can dim it via CSS.
-  const placeOffEntries = (entries: OffFloorEntry[] | undefined, floor: FloorKind) => {
-    if (!Array.isArray(entries)) return;
-    for (const entry of entries) {
-      const sectorCode = sectorCodeOf(entry.s);
-      if (sectorCode === '') continue;
-      const sector = sectorForCode(sectorCode);
-      const isUnknown = sectorCode !== '0' && sector === SECTORS[0];
-      const cg = connectGlyph(entry.e);
-      const glyph = cg ?? (isUnknown ? UNKNOWN_GLYPH : sector.glyph);
-      placeRoom(entry.y, entry.x, {
-        glyph,
-        color: sector.halo,
-        isPlayer: false,
-        floor,
-      });
-    }
-  };
-  placeOffEntries(payload.a, 'above');
-  placeOffEntries(payload.b, 'below');
-  if (Array.isArray(payload.zr)) {
-    for (const entry of payload.zr) {
-      const z = entry.z ?? 0;
-      const floor: FloorKind = z > 0 ? 'above' : z < 0 ? 'below' : 'far';
-      placeOffEntries([entry], floor);
-    }
-  }
-
-  // Pass 2: same-floor rooms. Overrides off-floor at the same coords.
-  // The player override fires BEFORE the sector check so an indoor
-  // cell that arrives without an `s` field (which happens on the first
-  // tick after walking up/down a Z transition) still gets the marker.
-  for (let r = 1; r <= rows; r++) {
-    for (let c = 1; c <= cols; c++) {
-      if (r === centerR && c === centerC) {
-        placeRoom(r, c, { glyph: '@', color: PLAYER_COLOR, isPlayer: true, floor: 'same' });
-        continue;
-      }
-      const cell = hasGrid ? getCell(payload, r, c) : null;
-      const sectorFromGrid = sectorCodeOf(cell?.s);
-      // g and textFallback are parallel JS arrays. My loop reads
-      // payload.g[String(r)] (array index r) so the text fallback
-      // must read textFallback[r] too — not [r - 1]. The old
-      // off-by-one made every null-cell SE of the player pick up
-      // the player's "@" from text and render it as UNKNOWN_GLYPH.
-      const sectorFromText = textFallback[r]?.[c] ?? '';
-      const sectorCode = sectorFromGrid || sectorFromText;
-      if (!sectorCode || sectorCode === ' ') continue;
-      const dr = r - centerR;
-      const dc = c - centerC;
-      const lvl = dimLevel(dr, dc, cell?.l);
-      const cg = cell ? connectGlyph(cell.e) : null;
-      const sector = sectorForCode(sectorCode);
-      const isUnknown = sectorCode !== '0' && sector === SECTORS[0];
-      const glyph = cg ?? (isUnknown ? UNKNOWN_GLYPH : sector.glyph);
-      placeRoom(r, c, {
-        glyph,
-        color: sectorGlyphColor(sectorCode, lvl),
-        isPlayer: false,
-        floor: 'same',
-      });
-    }
-  }
-
-  // Pass 3: connection chars between adjacent same-floor rooms.
-  // Only same-floor connects to same-floor — connections to off-
-  // floor would require diagonal up/down markers that the
-  // single-cell grid cannot carry. The exit-string check is
-  // bidirectional so a one-way exit does not light up the line
-  // (otherwise the map would imply a connection that does not
-  // travel both ways). Door state (cell.d) picks the connector
-  // color: open → gray, closed → amber, locked → red, hidden →
-  // pink + dashed glyph (see DOOR_COLORS / DOOR_GLYPHS).
-  const OPEN_COLOR = 'var(--c-border-strong, var(--c-border))';
-  const connectorColor = (state: DoorState | null): string =>
-    state && state !== 'open' ? DOOR_COLORS[state] : OPEN_COLOR;
-  for (let r = 1; r <= rows; r++) {
-    for (let c = 1; c <= cols; c++) {
-      const here = hasGrid ? getCell(payload, r, c) : null;
-      if (!here) continue;
-      // east-west connector
-      if (c < cols) {
-        const east = hasGrid ? getCell(payload, r, c + 1) : null;
-        if (east && hasExit(here, 'e') && hasExit(east, 'w')) {
-          const or = 2 * (r - 1);
-          const oc = 2 * (c - 1) + 1;
-          const state = combineDoorStates(doorStateAt(here, 'e'), doorStateAt(east, 'w'));
-          const effective = state ?? 'open';
-          out[or][oc] = {
-            glyph: DOOR_GLYPHS[effective].horizontal,
-            color: connectorColor(state),
-            isPlayer: false,
-            floor: 'same',
-          };
-        }
-      }
-      // north-south connector
-      if (r < rows) {
-        const south = hasGrid ? getCell(payload, r + 1, c) : null;
-        if (south && hasExit(here, 's') && hasExit(south, 'n')) {
-          const or = 2 * (r - 1) + 1;
-          const oc = 2 * (c - 1);
-          const state = combineDoorStates(doorStateAt(here, 's'), doorStateAt(south, 'n'));
-          const effective = state ?? 'open';
-          out[or][oc] = {
-            glyph: DOOR_GLYPHS[effective].vertical,
-            color: connectorColor(state),
-            isPlayer: false,
-            floor: 'same',
-          };
-        }
+    if (centerR === 0 || centerC === 0) {
+      if (typeof payload.r === 'number' && payload.r > 0) {
+        centerR = payload.r + 1;
+        centerC = payload.r + 1;
+      } else {
+        centerR = Math.floor((rows + 1) / 2);
+        centerC = Math.floor((cols + 1) / 2);
       }
     }
-  }
 
-  // Pass 3b: hidden doors. The server omits the direction from
-  // `cell.e` and the hidden room beyond is normally absent from the
-  // grid — `cell.d[dir] === 'hidden'` is the only signal we have.
-  // Iterate all four directions of every cell and place a dashed
-  // connector in the slot pointing toward the secret exit. Only
-  // writes if the slot is still empty so a regular connector from
-  // pass 3 (when both sides happen to be visible AND flagged
-  // hidden) wins.
-  const hiddenDirOffsets: Array<['n' | 's' | 'e' | 'w', number, number, string]> = [
-    ['n', 0, -1, '╎'],
-    ['e', 1, 0, '╌'],
-    ['s', 0, 1, '╎'],
-    ['w', -1, 0, '╌'],
-  ];
-  for (let r = 1; r <= rows; r++) {
-    for (let c = 1; c <= cols; c++) {
-      const here = hasGrid ? getCell(payload, r, c) : null;
-      if (!here) continue;
-      for (const [dir, dx, dy, glyph] of hiddenDirOffsets) {
-        if (doorStateAt(here, dir) !== 'hidden') continue;
-        const or = 2 * (r - 1) + dy;
-        const oc = 2 * (c - 1) + dx;
-        if (or < 0 || or >= outRows || oc < 0 || oc >= outCols) continue;
-        if (out[or][oc] !== EMPTY_CELL) continue;
-        out[or][oc] = {
+    const textFallback = parseTextGrid(payload.t);
+    const hasGrid = !!payload.g;
+
+    // Output grid: rooms at even indices, connections at odd indices.
+    const outRows = 2 * rows - 1;
+    const outCols = 2 * cols - 1;
+    const out: GlyphCell[][] = [];
+    for (let r = 0; r < outRows; r++) {
+      out.push(Array.from({ length: outCols }, () => EMPTY_CELL));
+    }
+
+    const placeRoom = (r: number, c: number, gc: GlyphCell) => {
+      const or = 2 * (r - 1);
+      const oc = 2 * (c - 1);
+      if (or < 0 || or >= outRows || oc < 0 || oc >= outCols) return;
+      out[or][oc] = gc;
+    };
+
+    // Pass 1: off-floor rooms. Each entry produces a sector glyph
+    // tagged with its floor kind so the renderer can dim it via CSS.
+    const placeOffEntries = (entries: OffFloorEntry[] | undefined, floor: FloorKind) => {
+      if (!Array.isArray(entries)) return;
+      for (const entry of entries) {
+        const sectorCode = sectorCodeOf(entry.s);
+        if (sectorCode === '') continue;
+        const sector = sectorForCode(sectorCode);
+        const isUnknown = sectorCode !== '0' && sector === SECTORS[0];
+        const cg = connectGlyph(entry.e);
+        const glyph = cg ?? (isUnknown ? UNKNOWN_GLYPH : sector.glyph);
+        placeRoom(entry.y, entry.x, {
           glyph,
-          color: DOOR_COLORS.hidden,
+          color: sector.halo,
+          isPlayer: false,
+          floor,
+        });
+      }
+    };
+    placeOffEntries(payload.a, 'above');
+    placeOffEntries(payload.b, 'below');
+    if (Array.isArray(payload.zr)) {
+      for (const entry of payload.zr) {
+        const z = entry.z ?? 0;
+        const floor: FloorKind = z > 0 ? 'above' : z < 0 ? 'below' : 'far';
+        placeOffEntries([entry], floor);
+      }
+    }
+
+    // Pass 2: same-floor rooms. Overrides off-floor at the same coords.
+    // The player override fires BEFORE the sector check so an indoor
+    // cell that arrives without an `s` field (which happens on the first
+    // tick after walking up/down a Z transition) still gets the marker.
+    for (let r = 1; r <= rows; r++) {
+      for (let c = 1; c <= cols; c++) {
+        if (r === centerR && c === centerC) {
+          placeRoom(r, c, { glyph: '@', color: PLAYER_COLOR, isPlayer: true, floor: 'same' });
+          continue;
+        }
+        const cell = hasGrid ? getCell(payload, r, c) : null;
+        const sectorFromGrid = sectorCodeOf(cell?.s);
+        // g and textFallback are parallel JS arrays. My loop reads
+        // payload.g[String(r)] (array index r) so the text fallback
+        // must read textFallback[r] too — not [r - 1]. The old
+        // off-by-one made every null-cell SE of the player pick up
+        // the player's "@" from text and render it as UNKNOWN_GLYPH.
+        const sectorFromText = textFallback[r]?.[c] ?? '';
+        const sectorCode = sectorFromGrid || sectorFromText;
+        if (!sectorCode || sectorCode === ' ') continue;
+        const dr = r - centerR;
+        const dc = c - centerC;
+        const lvl = dimLevel(dr, dc, cell?.l);
+        const cg = cell ? connectGlyph(cell.e) : null;
+        const sector = sectorForCode(sectorCode);
+        const isUnknown = sectorCode !== '0' && sector === SECTORS[0];
+        const glyph = cg ?? (isUnknown ? UNKNOWN_GLYPH : sector.glyph);
+        placeRoom(r, c, {
+          glyph,
+          color: sectorGlyphColor(sectorCode, lvl),
           isPlayer: false,
           floor: 'same',
-        };
+        });
       }
     }
-  }
 
-  // Pass 4: unconditional player paint. Belt-and-suspenders for the
-  // pass-2 override — if the player cell is outside the iteration
-  // bounds (sparse grid, weird radius) the marker still lands at the
-  // detected center. Without this, the @ silently disappeared on
-  // some indoor floors.
-  placeRoom(centerR, centerC, {
-    glyph: '@',
-    color: PLAYER_COLOR,
-    isPlayer: true,
-    floor: 'same',
-  });
+    // Pass 3: connection chars between adjacent same-floor rooms.
+    // Only same-floor connects to same-floor — connections to off-
+    // floor would require diagonal up/down markers that the
+    // single-cell grid cannot carry. The exit-string check is
+    // bidirectional so a one-way exit does not light up the line
+    // (otherwise the map would imply a connection that does not
+    // travel both ways). Door state (cell.d) picks the connector
+    // color: open → gray, closed → amber, locked → red, hidden →
+    // pink + dashed glyph (see DOOR_COLORS / DOOR_GLYPHS).
+    const OPEN_COLOR = 'var(--c-border-strong, var(--c-border))';
+    const connectorColor = (state: DoorState | null): string =>
+      state && state !== 'open' ? DOOR_COLORS[state] : OPEN_COLOR;
+    for (let r = 1; r <= rows; r++) {
+      for (let c = 1; c <= cols; c++) {
+        const here = hasGrid ? getCell(payload, r, c) : null;
+        if (!here) continue;
+        // east-west connector
+        if (c < cols) {
+          const east = hasGrid ? getCell(payload, r, c + 1) : null;
+          if (east && hasExit(here, 'e') && hasExit(east, 'w')) {
+            const or = 2 * (r - 1);
+            const oc = 2 * (c - 1) + 1;
+            const state = combineDoorStates(doorStateAt(here, 'e'), doorStateAt(east, 'w'));
+            const effective = state ?? 'open';
+            out[or][oc] = {
+              glyph: DOOR_GLYPHS[effective].horizontal,
+              color: connectorColor(state),
+              isPlayer: false,
+              floor: 'same',
+            };
+          }
+        }
+        // north-south connector
+        if (r < rows) {
+          const south = hasGrid ? getCell(payload, r + 1, c) : null;
+          if (south && hasExit(here, 's') && hasExit(south, 'n')) {
+            const or = 2 * (r - 1) + 1;
+            const oc = 2 * (c - 1);
+            const state = combineDoorStates(doorStateAt(here, 's'), doorStateAt(south, 'n'));
+            const effective = state ?? 'open';
+            out[or][oc] = {
+              glyph: DOOR_GLYPHS[effective].vertical,
+              color: connectorColor(state),
+              isPlayer: false,
+              floor: 'same',
+            };
+          }
+        }
+      }
+    }
 
-  // Font size scales with zoom; base 14 keeps glyph cells legible at
-  // 1.0× and matches the terminal's default size.
-  const fontSize = Math.round(14 * zoom);
+    // Pass 3b: hidden doors. The server omits the direction from
+    // `cell.e` and the hidden room beyond is normally absent from the
+    // grid — `cell.d[dir] === 'hidden'` is the only signal we have.
+    // Iterate all four directions of every cell and place a dashed
+    // connector in the slot pointing toward the secret exit. Only
+    // writes if the slot is still empty so a regular connector from
+    // pass 3 (when both sides happen to be visible AND flagged
+    // hidden) wins.
+    const hiddenDirOffsets: Array<['n' | 's' | 'e' | 'w', number, number, string]> = [
+      ['n', 0, -1, '╎'],
+      ['e', 1, 0, '╌'],
+      ['s', 0, 1, '╎'],
+      ['w', -1, 0, '╌'],
+    ];
+    for (let r = 1; r <= rows; r++) {
+      for (let c = 1; c <= cols; c++) {
+        const here = hasGrid ? getCell(payload, r, c) : null;
+        if (!here) continue;
+        for (const [dir, dx, dy, glyph] of hiddenDirOffsets) {
+          if (doorStateAt(here, dir) !== 'hidden') continue;
+          const or = 2 * (r - 1) + dy;
+          const oc = 2 * (c - 1) + dx;
+          if (or < 0 || or >= outRows || oc < 0 || oc >= outCols) continue;
+          if (out[or][oc] !== EMPTY_CELL) continue;
+          out[or][oc] = {
+            glyph,
+            color: DOOR_COLORS.hidden,
+            isPlayer: false,
+            floor: 'same',
+          };
+        }
+      }
+    }
 
-  // Asymmetric cell sizing crunches the map toward squares-mode
-  // density while keeping connection chars visible. Room cells stay
-  // 1em × 1em so each sector glyph still has a clean box. Bridge
-  // cells (the in-between row/column the doubled grid creates for
-  // ─ │ connectors) shrink to BRIDGE_EM, so room-to-room pitch is
-  // 1 + BRIDGE_EM em instead of 2em. CSS reads this constant via
-  // a --vosh-glyph-bridge custom property so the same value drives
-  // both cell widths and the player-center translate.
-  const BRIDGE_EM = 0.35;
-  const ROOM_EM = 1.0;
-  const stepEm = ROOM_EM + BRIDGE_EM;
-  const playerColOffset = (centerC - 1) * stepEm + ROOM_EM / 2;
-  const playerRowOffset = (centerR - 1) * stepEm + ROOM_EM / 2;
+    // Pass 4: unconditional player paint. Belt-and-suspenders for the
+    // pass-2 override — if the player cell is outside the iteration
+    // bounds (sparse grid, weird radius) the marker still lands at the
+    // detected center. Without this, the @ silently disappeared on
+    // some indoor floors.
+    placeRoom(centerR, centerC, {
+      glyph: '@',
+      color: PLAYER_COLOR,
+      isPlayer: true,
+      floor: 'same',
+    });
 
-  return (
-    <div
-      className="map-glyph-grid"
-      style={{
-        fontSize: `${fontSize}px`,
-        transform: `translate(calc(-1em * ${playerColOffset}), calc(-1em * ${playerRowOffset}))`,
-      }}
-    >
-      {out.map((row, r) => (
-        <div
-          key={r}
-          className={`map-glyph-row ${r % 2 === 0 ? 'map-glyph-row-room' : 'map-glyph-row-bridge'}`}
-        >
-          {row.map((cell, c) => (
-            <span key={c} className={cellClass(cell, r, c)} style={{ color: cell.color }}>
-              {cell.glyph}
-            </span>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-});
+    // Font size scales with zoom; base 14 keeps glyph cells legible at
+    // 1.0× and matches the terminal's default size.
+    const fontSize = Math.round(14 * zoom);
+
+    // Asymmetric cell sizing crunches the map toward squares-mode
+    // density while keeping connection chars visible. Room cells stay
+    // 1em × 1em so each sector glyph still has a clean box. Bridge
+    // cells (the in-between row/column the doubled grid creates for
+    // ─ │ connectors) shrink to BRIDGE_EM, so room-to-room pitch is
+    // 1 + BRIDGE_EM em instead of 2em. CSS reads this constant via
+    // a --vosh-glyph-bridge custom property so the same value drives
+    // both cell widths and the player-center translate.
+    const BRIDGE_EM = 0.35;
+    const ROOM_EM = 1.0;
+    const stepEm = ROOM_EM + BRIDGE_EM;
+    const playerColOffset = (centerC - 1) * stepEm + ROOM_EM / 2;
+    const playerRowOffset = (centerR - 1) * stepEm + ROOM_EM / 2;
+
+    return (
+      <div
+        className="map-glyph-grid"
+        style={{
+          fontSize: `${fontSize}px`,
+          transform: `translate(calc(-1em * ${playerColOffset}), calc(-1em * ${playerRowOffset}))`,
+        }}
+      >
+        {out.map((row, r) => (
+          <div
+            key={r}
+            className={`map-glyph-row ${r % 2 === 0 ? 'map-glyph-row-room' : 'map-glyph-row-bridge'}`}
+          >
+            {row.map((cell, c) => (
+              <span key={c} className={cellClass(cell, r, c)} style={{ color: cell.color }}>
+                {cell.glyph}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  },
+  (prev, next) => prev.payloadJson === next.payloadJson && prev.zoom === next.zoom,
+);
 
 // Cell kind is encoded in its output position:
 //   even row + even col = room (1em × 1em)

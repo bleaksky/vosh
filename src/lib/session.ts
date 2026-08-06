@@ -465,46 +465,6 @@ export async function importProfile(toml: string): Promise<string[]> {
   return invoke('profile_import', { toml });
 }
 
-export interface MapPayload {
-  current_room_id: number | null;
-  area: string | null;
-}
-
-export async function onMap(cb: (payload: MapPayload) => void): Promise<UnlistenFn> {
-  return listen<MapPayload>('session://map', (event) => {
-    cb(event.payload);
-  });
-}
-
-export interface MapRoom {
-  id: number;
-  area: string;
-  name: string;
-  terrain: string;
-  x: number;
-  y: number;
-  z: number;
-  notes: string;
-  avoid: boolean;
-}
-
-export interface MapExit {
-  from_room: number;
-  direction: string;
-  to_room: number;
-}
-
-export interface AreaSnapshot {
-  current_room_id: number | null;
-  area: string;
-  rooms: MapRoom[];
-  exits: MapExit[];
-}
-
-export async function getAreaSnapshot(): Promise<AreaSnapshot | null> {
-  return invoke('map_area_snapshot');
-}
-
 export async function walkToRoom(targetId: number): Promise<void> {
   await invoke('map_walk_to', { targetId });
 }
