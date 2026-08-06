@@ -375,12 +375,20 @@ impl TriggerStore {
     }
 
     /// Replace every trigger from a JSON array. Returns the new count.
+    /// The disabled-groups set carries over: it is user state about
+    /// GROUPS, not item state, and wiping it on import silently
+    /// re-enabled every disabled group each time the Settings editor
+    /// saved (the editor saves through a full import).
     pub fn import_json(&mut self, json: &str) -> Result<usize, TriggerError> {
         let triggers: Vec<Trigger> = serde_json::from_str(json)?;
         let mut next = TriggerStore::new();
         for t in triggers {
             next.set(t)?;
         }
+        // Take only after the fallible build succeeded: an early return on
+        // a bad pattern must leave self (including its disabled set)
+        // untouched.
+        next.disabled_groups = std::mem::take(&mut self.disabled_groups);
         *self = next;
         Ok(self.items.len())
     }

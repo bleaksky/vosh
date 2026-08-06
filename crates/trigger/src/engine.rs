@@ -316,6 +316,44 @@ mod tests {
     }
 
     #[test]
+    fn import_json_preserves_disabled_groups() {
+        // The Settings editor saves through a full import; the
+        // disabled-groups set is user state about GROUPS and must
+        // survive the store replacement, or every save silently
+        // re-enables all disabled groups (and an individually enabled
+        // trigger in a "disabled" group starts firing again).
+        let mut t = highlight("t1", "^ouch", NamedColor::Red);
+        t.group = Some("combat".to_string());
+        let mut s = store(vec![t]);
+        s.set_disabled_groups(vec!["combat".to_string()]);
+        let json = s.export_json().unwrap();
+        s.import_json(&json).unwrap();
+        assert_eq!(s.disabled_groups(), vec!["combat".to_string()]);
+        // And the gate holds: the trigger in the disabled group is
+        // filtered even though its own enabled flag is true.
+        let r = process(&s, b"ouch that hurt");
+        assert!(r.display.is_some());
+        assert_eq!(r.display.as_deref(), Some("ouch that hurt"));
+    }
+
+    #[test]
+    fn import_json_error_path_leaves_store_untouched() {
+        // One invalid pattern among valid triggers must reject the
+        // import wholesale: items AND the disabled-groups set stay
+        // exactly as they were. Pins the take-after-success ordering
+        // in import_json; hoisting the take back above the build loop
+        // would silently empty disabled_groups on this path.
+        let mut t = highlight("t1", "^ouch", NamedColor::Red);
+        t.group = Some("combat".to_string());
+        let mut s = store(vec![t]);
+        s.set_disabled_groups(vec!["combat".to_string()]);
+        let bad_json = s.export_json().unwrap().replace("^ouch", "([");
+        assert!(s.import_json(&bad_json).is_err());
+        assert_eq!(s.len(), 1);
+        assert_eq!(s.disabled_groups(), vec!["combat".to_string()]);
+    }
+
+    #[test]
     fn no_triggers_returns_original() {
         let s = TriggerStore::new();
         let r = process(&s, b"plain text");
