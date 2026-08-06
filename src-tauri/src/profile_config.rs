@@ -180,6 +180,12 @@ pub(crate) struct UiConfig {
     /// `#rrggbb` hex.
     #[serde(default)]
     pub input_echo_color: Option<String>,
+    /// When true (the default), commands sent by keyboard macros echo
+    /// locally like typed commands, so under lag you can tell the
+    /// keybind registered even before the world responds. Turn it off
+    /// when stacked macro sends make the scrollback too noisy.
+    #[serde(default = "default_echo_macros")]
+    pub echo_macros: bool,
     /// When true, the left and right panel zones extend the full
     /// height of the window and the terminal input + status bar live
     /// only under the terminal column. When false (default), input
@@ -452,6 +458,10 @@ fn default_chip_style() -> String {
     "value_only".to_string()
 }
 
+fn default_echo_macros() -> bool {
+    true
+}
+
 fn default_paste_line_delay_ms() -> u32 {
     500
 }
@@ -515,6 +525,7 @@ impl Default for UiConfig {
             custom_themes: Vec::new(),
             split_divider_color: None,
             input_echo_color: None,
+            echo_macros: true,
             side_panels_fill_height: false,
             paste_line_delay_ms: default_paste_line_delay_ms(),
             spellcheck_prompt: false,

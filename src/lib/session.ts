@@ -587,6 +587,10 @@ export interface UiConfig {
   /** Override color for locally-echoed sent input. Empty/undefined
    *  means no recoloring (default terminal foreground). */
   input_echo_color: string | null;
+  /** When true (default), commands sent by keyboard macros echo
+   *  locally like typed commands, so under lag the keybind visibly
+   *  registered before the world responds. */
+  echo_macros: boolean;
   /** When true, left/right panel zones extend the full window height
    *  and the input + status bar live only under the terminal column. */
   side_panels_fill_height: boolean;
@@ -760,6 +764,7 @@ async function fetchUiConfig(): Promise<UiConfig> {
     custom_themes?: CustomTheme[];
     split_divider_color?: string | null;
     input_echo_color?: string | null;
+    echo_macros?: boolean;
     side_panels_fill_height?: boolean;
     paste_line_delay_ms?: number;
     spellcheck_prompt?: boolean;
@@ -790,6 +795,7 @@ async function fetchUiConfig(): Promise<UiConfig> {
       typeof cfg.input_echo_color === 'string' && cfg.input_echo_color.length > 0
         ? cfg.input_echo_color
         : null,
+    echo_macros: cfg.echo_macros !== false,
     side_panels_fill_height: Boolean(cfg.side_panels_fill_height),
     paste_line_delay_ms:
       typeof cfg.paste_line_delay_ms === 'number' && cfg.paste_line_delay_ms >= 0
@@ -965,6 +971,7 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     config.input_echo_color,
     prev?.input_echo_color,
   );
+  await emitChanged('vosh://echo-macros-changed', config.echo_macros, prev?.echo_macros);
   await emitChanged(
     'vosh://side-panels-fill-height-changed',
     config.side_panels_fill_height,
@@ -1020,6 +1027,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
       custom_themes: config.custom_themes,
       split_divider_color: config.split_divider_color,
       input_echo_color: config.input_echo_color,
+      echo_macros: config.echo_macros,
       side_panels_fill_height: config.side_panels_fill_height,
       paste_line_delay_ms: config.paste_line_delay_ms,
       spellcheck_prompt: config.spellcheck_prompt,

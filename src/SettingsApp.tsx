@@ -506,6 +506,14 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
           />
           <span>spell check chat lines</span>
         </label>
+        <label className="settings-checkbox">
+          <input
+            type="checkbox"
+            checked={config.echo_macros}
+            onChange={(e) => update({ echo_macros: e.target.checked })}
+          />
+          <span>echo macro commands</span>
+        </label>
       </Row>
       <Row label="paste pacing">
         <span className="settings-paste-row">
