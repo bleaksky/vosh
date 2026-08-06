@@ -70,10 +70,13 @@ pub(crate) struct Loadout {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_match: Option<AutoMatch>,
     /// Group names whose items become effective when this loadout
-    /// is active. The runtime gates every alias/trigger/macro on
-    /// "is your group in the union of every active loadout's
-    /// `enabled_groups`?" — items in an unselected group pass
-    /// through (alias), don't fire (trigger), or no-op (macro).
+    /// is active. When any active loadout declares groups here, the
+    /// runtime gates every alias/trigger/macro on "is your group in
+    /// the union of every active loadout's `enabled_groups`?" —
+    /// items in an unselected group pass through (alias), don't
+    /// fire (trigger), or no-op (macro). When no active loadout
+    /// declares any groups, the loadout has no opinion and the
+    /// Settings group checkboxes govern instead.
     #[serde(default)]
     pub enabled_groups: Vec<String>,
     /// Per-loadout profile-scoped vars. Stay separated from the
@@ -115,11 +118,19 @@ impl Loadout {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub(crate) struct LoadoutSet {
     /// Loadouts currently considered active. Stack-by-union
-    /// semantics. Empty means no items in the catalog are
-    /// effective right now (a deliberately barren state for
-    /// debugging or "clean slate" sessions).
+    /// semantics. An empty list on its own carries no opinion about
+    /// group state; deliberate deactivate-all dormancy is recorded
+    /// in `dormant`.
     #[serde(default)]
     pub active: Vec<String>,
+    /// True when the user explicitly deactivated every loadout (the
+    /// "keep the catalog dormant" kill switch). A flag of its own
+    /// because an empty `active` list is ambiguous: never-used
+    /// loadout sets also have one, and for those the Settings group
+    /// checkboxes govern. Honored at every apply point so dormancy
+    /// survives restarts and profile switches.
+    #[serde(default)]
+    pub dormant: bool,
     /// Every loadout the user has authored.
     #[serde(default)]
     pub loadouts: Vec<Loadout>,

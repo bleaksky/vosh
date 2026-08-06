@@ -100,6 +100,11 @@ pub(crate) struct ApplyResult {
     /// emits a `session://prompt-vars` snapshot to the frontend
     /// once per apply rather than once per individual set.
     pub prompt_vars_changed: bool,
+    /// True when the apply touched DURABLE profile state (aliases,
+    /// vars, group toggles) that should reach disk. Drives the
+    /// debounced profile persist; ephemeral runtime state (prompt
+    /// vars, timers, echoes) does not set it.
+    pub durable_changed: bool,
     pub new_timers: Vec<PendingTimer>,
     pub cancel_timers: Vec<u32>,
 }
@@ -125,15 +130,25 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
             }
             Action::SetAlias { name, expansion } => {
                 profile.aliases.set(Alias::new(name, expansion));
+                result.durable_changed = true;
             }
             Action::RemoveAlias(name) => {
                 profile.aliases.remove(&name);
+                result.durable_changed = true;
             }
             Action::SetVar { scope, name, value } => {
-                profile.vars.set(scope_to_internal(scope), name, value);
+                let internal = scope_to_internal(scope);
+                // Only profile-scoped vars are persisted; session vars
+                // marking durable would reset the persist debounce on
+                // every combat line for busy Lua triggers.
+                if matches!(internal, Scope::Profile) {
+                    result.durable_changed = true;
+                }
+                profile.vars.set(internal, name, value);
             }
             Action::RemoveVar(name) => {
                 profile.vars.remove(&name);
+                result.durable_changed = true;
             }
             Action::SetPromptVar { name, value } => {
                 profile.prompt_vars.insert(name, value);
@@ -154,6 +169,7 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
             }
             Action::SetGroupEnabled { name, enabled } => {
                 toggle_group(profile, &name, enabled);
+                result.durable_changed = true;
             }
             Action::SetLuaTrigger { .. }
             | Action::RemoveLuaTrigger(_)
