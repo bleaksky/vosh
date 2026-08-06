@@ -2,6 +2,17 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.6.4 - 2026-08-06
+
+- Triggers, aliases, and group toggles now save on their own. Vosh writes your changes to disk a couple of seconds after you make them and again when you quit, so nothing you author disappears at the next launch. This fixes the reports of new triggers and aliases vanishing after a restart.
+- Unticking a group now silences everything inside it, even items whose own box stays ticked. Saving from the editor used to quietly re-enable every group you had turned off.
+- Deactivating all loadouts keeps your catalog dormant like the button promises, and the dormancy now sticks across restarts and profile switches.
+- In loadout mode the #profile save, load, and reset commands now explain that saving is automatic instead of writing files that could bring back items you had deleted.
+- The group pane no longer fills with duplicate "someone" rows when you fight blinded characters. The roster collapses to one row per name, however many copies the server sends.
+- The map no longer slows your commands down. Room bookkeeping moved off the connection path and the map redraws once per movement instead of five times, so you can keep the pane open without the delay players traced to it.
+- Middle-clicking to open or close the scrollback split keeps your command line focused, so Enter still resends the highlighted command and your macro keys keep working.
+- Macro keys now echo their command in the terminal the moment you press them, so under lag you can tell the keybind registered before the world answers. A new "echo macro commands" checkbox in Settings turns this off if stacked macros get too noisy.
+
 ## v0.6.3 - 2026-07-05
 
 - Long lines wrap between words on the native renderer, matching the previous renderer. They used to break mid-word at the right edge.
