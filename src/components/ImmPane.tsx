@@ -73,7 +73,7 @@ function Board({ state }: { state: ImmState }) {
           k="appsOpen"
           count={q.appsOpen}
           label="applications"
-          chip={q.appsUnread > 0 ? `${q.appsUnread} new` : undefined}
+          chip={q.appsUnread > 0 ? `${q.appsUnread} unread` : undefined}
           state={state}
           title="applications in your queue, read and unread"
         />
@@ -92,7 +92,7 @@ function Board({ state }: { state: ImmState }) {
           k="journalsUnread"
           count={q.journalsUnread}
           label="journals"
-          chip={q.journalsUnawarded > 0 ? `${q.journalsUnawarded} rp due` : undefined}
+          chip={q.journalsUnawarded > 0 ? `${q.journalsUnawarded} unawarded` : undefined}
           state={state}
           title="unread journals addressed to you"
         />
@@ -191,8 +191,8 @@ function Slot({
       <span className="imm-slot-label">
         {label}
         {qualifier && <span className="imm-qualifier"> {qualifier}</span>}
+        {chip && <span className="imm-chip-inline"> {chip}</span>}
       </span>
-      {chip && <span className="imm-chip imm-chip-due">{chip}</span>}
     </div>
   );
 }
