@@ -10,12 +10,15 @@ import { onGmcpPackage, onState } from './session';
 // the last snapshot.
 
 export interface ImmQueues {
-  /** Players in the description-approval queue. Global — the same for
-   *  every immortal, and someone is literally waiting on it. */
+  /** Pending description checks. Global — the same for every
+   *  immortal — and includes offline players' unresolved checks.
+   *  One day deadline server-side. */
   dcheck: number;
-  /** Votes awaiting this immortal's ballot. */
+  /** Votes awaiting this immortal's ballot. No deadline. */
   votes: number;
-  /** Total applications addressed to this imm, read and unread. */
+  /** Total real applications addressed to this imm, read and
+   *  unread. Excludes description checks, which are their own
+   *  top-level count. Four day deadline server-side. */
   appsOpen: number;
   /** Unread subset of appsOpen. */
   appsUnread: number;
@@ -35,6 +38,16 @@ export interface ImmQueues {
   ideas: number;
   /** Unread notes. */
   notes: number;
+  /** Per-queue counts past their server-side deadline (applications
+   *  4 days, journals 3 days, dcheck 1 day). Disjoint from nearing;
+   *  the top-level counts are the full totals these tier. */
+  overdueApps: number;
+  overdueJournals: number;
+  overdueDcheck: number;
+  /** Per-queue counts in the final quarter before the deadline. */
+  nearingApps: number;
+  nearingJournals: number;
+  nearingDcheck: number;
 }
 
 export type ImmCounterKey = keyof ImmQueues;
@@ -51,6 +64,12 @@ export interface ImmState {
 
 export const ZERO_QUEUES: ImmQueues = {
   dcheck: 0,
+  overdueApps: 0,
+  overdueJournals: 0,
+  overdueDcheck: 0,
+  nearingApps: 0,
+  nearingJournals: 0,
+  nearingDcheck: 0,
   votes: 0,
   appsOpen: 0,
   appsUnread: 0,
@@ -65,6 +84,12 @@ export const ZERO_QUEUES: ImmQueues = {
 
 const ZERO_STRIKES: Record<ImmCounterKey, number> = {
   dcheck: 0,
+  overdueApps: 0,
+  overdueJournals: 0,
+  overdueDcheck: 0,
+  nearingApps: 0,
+  nearingJournals: 0,
+  nearingDcheck: 0,
   votes: 0,
   appsOpen: 0,
   appsUnread: 0,
@@ -102,6 +127,14 @@ function normalize(data: unknown): ImmQueues {
   const applications = (
     d.applications && typeof d.applications === 'object' ? d.applications : {}
   ) as Record<string, unknown>;
+  const overdue = (d.overdue && typeof d.overdue === 'object' ? d.overdue : {}) as Record<
+    string,
+    unknown
+  >;
+  const nearing = (d.nearing && typeof d.nearing === 'object' ? d.nearing : {}) as Record<
+    string,
+    unknown
+  >;
   return {
     dcheck: asCount(d.dcheck),
     votes: asCount(d.votes),
@@ -114,6 +147,12 @@ function normalize(data: unknown): ImmQueues {
     typos: asCount(d.typos),
     ideas: asCount(d.ideas),
     notes: asCount(d.notes),
+    overdueApps: asCount(overdue.applications),
+    overdueJournals: asCount(overdue.journals),
+    overdueDcheck: asCount(overdue.dcheck),
+    nearingApps: asCount(nearing.applications),
+    nearingJournals: asCount(nearing.journals),
+    nearingDcheck: asCount(nearing.dcheck),
   };
 }
 
