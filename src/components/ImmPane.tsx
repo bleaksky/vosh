@@ -108,7 +108,6 @@ function Board({ state }: { state: ImmState }) {
           k="typos"
           count={q.typos}
           label="typos"
-          qualifier="queue"
           state={state}
           title="typo reports in the queue, read and unread"
         />
@@ -171,7 +170,6 @@ function Slot({
   count,
   label,
   chip,
-  qualifier,
   state,
   title,
 }: {
@@ -179,7 +177,6 @@ function Slot({
   count: number;
   label: string;
   chip?: string | undefined;
-  qualifier?: string | undefined;
   state: ImmState;
   title: string;
 }) {
@@ -190,7 +187,6 @@ function Slot({
       <span className="imm-slot-count">{count}</span>
       <span className="imm-slot-label">
         {label}
-        {qualifier && <span className="imm-qualifier"> {qualifier}</span>}
         {chip && <span className="imm-chip-inline"> {chip}</span>}
       </span>
     </div>

@@ -7498,11 +7498,6 @@ body {
   color: var(--c-text-strong);
 }
 
-.imm-qualifier {
-  color: var(--c-text-faint);
-  font-size: 0.85em;
-}
-
 .imm-chip {
   justify-self: end;
   align-self: center;
