@@ -12,6 +12,8 @@ import { AffectsBar } from './components/AffectsBar';
 import { MapPane } from './components/MapPane';
 import { ChatPane } from './components/ChatPane';
 import { GroupPane } from './components/GroupPane';
+import { ImmPane } from './components/ImmPane';
+import { startImmStore } from './lib/immStore';
 import { RoomStrip } from './components/RoomStrip';
 import { VitalsBar, CombatPane } from './components/VitalsBar';
 import { UpdateNotice } from './components/UpdateNotice';
@@ -573,14 +575,18 @@ function App() {
     };
   }, []);
 
-  // Bootstrap the chat + group buffers at app launch so any
-  // Comm.Channel / routed / Group.Info / Char.Worth pushes that
-  // arrive while the chat-group pane is closed (or has not yet
-  // been opened) still land in the stores and are visible on
-  // first open.
+  // Bootstrap the chat + group + imm buffers at app launch so any
+  // Comm.Channel / routed / Group.Info / Char.Worth / Imm.Queues
+  // pushes that arrive while the panes are closed (or have not yet
+  // been opened) still land in the stores and are visible on first
+  // open. Imm.Queues especially: the server sends the only guaranteed
+  // snapshot at login and has no heartbeat, so a lazily-started store
+  // would drop it and the panel would sit dark until the next queue
+  // change.
   useEffect(() => {
     startChatStore();
     startGroupStore();
+    startImmStore();
   }, []);
 
   useEffect(() => {
@@ -965,6 +971,8 @@ function App() {
         return <MapPane key="map" />;
       case 'group':
         return <GroupPane key="group" />;
+      case 'imm':
+        return <ImmPane key="imm" />;
       case 'vitals': {
         // Combat panel set to `hidden` = inline within the vitals bar
         // (the legacy default). Any other zone routes combat through
