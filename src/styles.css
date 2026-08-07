@@ -7424,6 +7424,10 @@ body {
   color: var(--c-warn);
 }
 
+.imm-total-overdue {
+  color: var(--c-danger);
+}
+
 .imm-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -7498,9 +7502,21 @@ body {
   color: var(--c-text-strong);
 }
 
-.imm-chip {
+.imm-chip-row {
   justify-self: end;
   align-self: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0 7px;
+}
+
+.imm-chip {
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.imm-chip-inline {
   font-size: 0.85em;
   white-space: nowrap;
 }
@@ -7509,15 +7525,20 @@ body {
   color: var(--c-warn);
 }
 
-.imm-chip-inline {
+.imm-chip-nearing {
   color: var(--c-warn);
-  font-size: 0.85em;
-  white-space: nowrap;
 }
 
-/* The lamp. Hollow while clear, filled while lit, one strike flash on
-   mount (which only happens on a genuine increase, plus the power-on
-   lamp test when the first snapshot of the session lands). */
+.imm-chip-overdue {
+  color: var(--c-danger);
+}
+
+/* The lamp. Hollow while clear, filled while lit, one strike flash
+   on mount (a genuine increase, the power-on lamp test when the first
+   snapshot of the session lands, or a pane reopen). Deadline-tracked
+   queues escalate the lit color through the server's tiers: amber
+   when anything nears its deadline, red and breathing when anything
+   is past it. */
 .imm-lamp {
   width: 7px;
   height: 7px;
@@ -7534,13 +7555,13 @@ body {
   animation: imm-strike 0.7s ease-out;
 }
 
-.imm-lamp.is-lit.is-duty {
+.imm-lamp.is-lit.is-nearing {
   border-color: var(--c-warn);
   background: var(--c-warn);
   box-shadow: 0 0 6px color-mix(in srgb, var(--c-warn) 60%, transparent);
 }
 
-.imm-lamp.is-lit.is-danger {
+.imm-lamp.is-lit.is-overdue {
   border-color: var(--c-danger);
   background: var(--c-danger);
   box-shadow: 0 0 7px color-mix(in srgb, var(--c-danger) 65%, transparent);
