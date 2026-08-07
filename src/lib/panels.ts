@@ -38,7 +38,15 @@ export interface PanelPlacement {
   align: Align;
 }
 
-export type PanelId = 'map' | 'group' | 'vitals' | 'roomstrip' | 'chat' | 'affects' | 'combat';
+export type PanelId =
+  | 'map'
+  | 'group'
+  | 'vitals'
+  | 'roomstrip'
+  | 'chat'
+  | 'affects'
+  | 'combat'
+  | 'imm';
 
 export const ALL_PANEL_IDS: PanelId[] = [
   'map',
@@ -48,6 +56,7 @@ export const ALL_PANEL_IDS: PanelId[] = [
   'chat',
   'affects',
   'combat',
+  'imm',
 ];
 
 export interface PanelMeta {
@@ -130,6 +139,16 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     defaultZone: 'bottom',
     homeZone: 'bottom',
     defaultAlign: 'bottom',
+  },
+  imm: {
+    id: 'imm',
+    label: 'imm (staff queues)',
+    description:
+      'Staff duty board fed by the Imm.Queues push. The server lights it for immortals and mortals never receive the feed.',
+    allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
+    defaultZone: 'hidden',
+    homeZone: 'right',
+    defaultAlign: 'top',
   },
   combat: {
     id: 'combat',

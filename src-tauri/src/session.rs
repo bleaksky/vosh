@@ -165,8 +165,17 @@ pub(crate) struct InputModePayload {
 /// Room, and Comm cover the player view; World powers the tick timer reset
 /// (Aabahran ticks fire the moment its `World.Time.hour` field advances);
 /// Map carries the server-rendered tile grid for the map pane's server
-/// mode. More packages land alongside the script engine in Phase 8.
-const REQUESTED_GMCP_PACKAGES: &[&str] = &["Char 1", "Room 1", "Comm 1", "World 1", "Map 1"];
+/// mode; Imm.Queues carries the staff work-queue counters the imm panel
+/// renders (the server only sends it to immortals, so declaring it costs
+/// mortals nothing).
+const REQUESTED_GMCP_PACKAGES: &[&str] = &[
+    "Char 1",
+    "Room 1",
+    "Comm 1",
+    "World 1",
+    "Map 1",
+    "Imm.Queues 1",
+];
 
 /// Bytes flowing to the server. The frontend echoes typed commands into the
 /// terminal pane synchronously, so the `io_loop` only writes to the wire.
