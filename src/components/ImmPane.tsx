@@ -1,71 +1,39 @@
 import { useEffect, useState } from 'react';
 import { getImmState, subscribeImmState, type ImmCounterKey, type ImmState } from '../lib/immStore';
 
-// Staff duty board, driven by the Imm.Queues GMCP snapshot. Reads as
-// an annunciator strip: every queue is a slot with a lamp that sits
-// hollow while the queue is clear and lights when work waits. A
-// counter increase remounts its lamp (keyed on the store's strike
-// generations) so the lamp fires one bright strike, then settles to
-// lit. Decreases stay quiet — clearing your queues dims the board,
-// which is the reward. Any lamp mount replays the strike, so the
-// first snapshot after login flashes every lit lamp at once (the
-// classic power-on lamp test) and reopening the pane repeats it.
+// Staff duty board, driven by the Imm.Queues GMCP snapshot. It is a
+// triage list: only queues that actually have work show up, sorted
+// worst-first, so a quiet board is nearly empty and a glance lands on
+// whatever is on fire. The count carries the urgency color — red when
+// anything in that queue is past its deadline, amber when anything is
+// in the final quarter before it, plain otherwise. A fresh increase
+// flashes the count (the number remounts on a strike-generation bump),
+// so new work announces itself without the board ever shouting.
 //
-// Lamps on the deadline-tracked queues (dcheck, applications,
-// journals) are a three-step traffic signal driven by the server's
-// overdue / nearing tiers: red and breathing when anything is past
-// its deadline, amber when anything sits in the final quarter before
-// it, plain lit when work waits but is on schedule. The server's
-// deliberate count asymmetries surface as small chips instead of
-// being flattened away: applications shows total open with an unread
-// chip, journals carries an unawarded chip, and overdue / nearing
-// counts ride as chips on their queue's row.
-export function ImmPane() {
-  const [state, setState] = useState<ImmState>(() => getImmState());
-  useEffect(() => subscribeImmState(setState), []);
+// The server's count asymmetries ride as small trailing chips instead
+// of being flattened: overdue and nearing tiers, plus applications'
+// unread subset and journals' unawarded parallel count.
 
-  const q = state.queues;
-  // appsUnread is a strict subset of appsOpen. journalsUnawarded
-  // OVERLAPS journalsUnread (a journal can be read but unawarded),
-  // so adding it would double count the overlap; the unawarded chip
-  // carries it instead. Overdue / nearing tier existing totals and
-  // never add to them. That means the header can read "clear" while
-  // an unawarded chip still shows, which is intentional.
-  const total =
-    q.dcheck +
-    q.votes +
-    q.appsOpen +
-    q.journalsUnread +
-    q.penalties +
-    q.bugs +
-    q.typos +
-    q.ideas +
-    q.notes;
-  const anyOverdue = q.overdueApps + q.overdueJournals + q.overdueDcheck > 0;
+// A queue's deadline tier. Worst wins; drives the count color.
+type Tier = 'overdue' | 'nearing' | 'none';
 
-  return (
-    <div className="imm-pane">
-      <div className="chat-pane-header">
-        <span className="chat-pane-title">imm</span>
-        {state.received && (
-          <span
-            className={`chat-pane-count${
-              anyOverdue ? ' imm-total-overdue' : total > 0 ? ' imm-total-hot' : ''
-            }`}
-          >
-            {total > 0 ? total : 'clear'}
-          </span>
-        )}
-      </div>
-      <div className="chat-pane-body imm-body">
-        {state.received ? <Board state={state} /> : <QuietNote />}
-      </div>
-    </div>
-  );
+interface Chip {
+  text: string;
+  kind: 'overdue' | 'nearing' | 'sub';
 }
 
-// Deadline tier for a queue's lamp: worst state wins.
-type Tier = 'overdue' | 'nearing' | 'none';
+interface QueueRow {
+  /** Store key for the count, also the strike-generation lookup. */
+  key: ImmCounterKey;
+  label: string;
+  count: number;
+  tier: Tier;
+  chips: Chip[];
+  /** Second strike key so a new overdue flashes the count even when
+   *  the base count did not move. */
+  overdueKey?: ImmCounterKey;
+  title: string;
+}
 
 function tierOf(overdue: number, nearing: number): Tier {
   if (overdue > 0) return 'overdue';
@@ -73,127 +41,177 @@ function tierOf(overdue: number, nearing: number): Tier {
   return 'none';
 }
 
-// Chips for a deadline-tracked queue, ordered worst first.
-function tierChips(overdue: number, nearing: number): Array<{ text: string; kind: string }> {
-  const chips: Array<{ text: string; kind: string }> = [];
+function deadlineChips(overdue: number, nearing: number): Chip[] {
+  const chips: Chip[] = [];
   if (overdue > 0) chips.push({ text: `${overdue} overdue`, kind: 'overdue' });
   if (nearing > 0) chips.push({ text: `${nearing} nearing`, kind: 'nearing' });
   return chips;
 }
 
-function Board({ state }: { state: ImmState }) {
+// Every queue the board can show, in canonical order (the stable
+// tiebreak when two rows share a tier and count).
+function buildRows(q: ImmState['queues']): QueueRow[] {
+  return [
+    {
+      key: 'dcheck',
+      label: 'dcheck',
+      count: q.dcheck,
+      tier: tierOf(q.overdueDcheck, q.nearingDcheck),
+      chips: deadlineChips(q.overdueDcheck, q.nearingDcheck),
+      overdueKey: 'overdueDcheck',
+      title: 'pending description checks, including offline players. one day deadline',
+    },
+    {
+      key: 'appsOpen',
+      label: 'applications',
+      count: q.appsOpen,
+      tier: tierOf(q.overdueApps, q.nearingApps),
+      chips: [
+        ...deadlineChips(q.overdueApps, q.nearingApps),
+        ...(q.appsUnread > 0 ? [{ text: `${q.appsUnread} unread`, kind: 'sub' as const }] : []),
+      ],
+      overdueKey: 'overdueApps',
+      title: 'applications in your queue, read and unread. four day deadline',
+    },
+    {
+      key: 'journalsUnread',
+      label: 'journals',
+      count: q.journalsUnread,
+      tier: tierOf(q.overdueJournals, q.nearingJournals),
+      chips: [
+        ...deadlineChips(q.overdueJournals, q.nearingJournals),
+        ...(q.journalsUnawarded > 0
+          ? [{ text: `${q.journalsUnawarded} unawarded`, kind: 'sub' as const }]
+          : []),
+      ],
+      overdueKey: 'overdueJournals',
+      title: 'unread journals addressed to you. three day deadline',
+    },
+    {
+      key: 'votes',
+      label: 'votes',
+      count: q.votes,
+      tier: 'none',
+      chips: [],
+      title: 'votes awaiting your ballot',
+    },
+    {
+      key: 'notes',
+      label: 'notes',
+      count: q.notes,
+      tier: 'none',
+      chips: [],
+      title: 'unread notes',
+    },
+    {
+      key: 'bugs',
+      label: 'bugs',
+      count: q.bugs,
+      tier: 'none',
+      chips: [],
+      title: 'unread bug reports',
+    },
+    {
+      key: 'penalties',
+      label: 'penalties',
+      count: q.penalties,
+      tier: 'none',
+      chips: [],
+      title: 'unread penalty notes',
+    },
+    {
+      key: 'ideas',
+      label: 'ideas',
+      count: q.ideas,
+      tier: 'none',
+      chips: [],
+      title: 'unread ideas',
+    },
+    {
+      key: 'typos',
+      label: 'typos',
+      count: q.typos,
+      tier: 'none',
+      chips: [],
+      title: 'typo reports in the queue, read and unread',
+    },
+  ];
+}
+
+const TIER_RANK: Record<Tier, number> = { overdue: 0, nearing: 1, none: 2 };
+
+export function ImmPane() {
+  const [state, setState] = useState<ImmState>(() => getImmState());
+  useEffect(() => subscribeImmState(setState), []);
+
   const q = state.queues;
+  const overdueTotal = q.overdueApps + q.overdueJournals + q.overdueDcheck;
+  const nearingTotal = q.nearingApps + q.nearingJournals + q.nearingDcheck;
+
+  // Only queues that need something, worst-first: overdue tier, then
+  // nearing, then plain pending, and within a tier the bigger backlog
+  // first. A row shows if it has work OR carries deadline pressure —
+  // the second clause keeps an overdue/nearing item visible even if
+  // its base count reads zero (a journal read but not yet awarded past
+  // its deadline), so the header can never say "N overdue" over an
+  // empty board. The canonical order in buildRows is the final
+  // tiebreak (stable sort), so equal rows never jitter.
+  const rows = buildRows(q)
+    .filter((r) => r.count > 0 || r.tier !== 'none')
+    .sort((a, b) => TIER_RANK[a.tier] - TIER_RANK[b.tier] || b.count - a.count);
+
+  let statusText = '';
+  let statusClass = '';
+  if (overdueTotal > 0) {
+    statusText = `${overdueTotal} overdue`;
+    statusClass = ' imm-total-overdue';
+  } else if (nearingTotal > 0) {
+    statusText = `${nearingTotal} nearing`;
+    statusClass = ' imm-total-nearing';
+  } else if (state.received && rows.length === 0) {
+    statusText = 'clear';
+    statusClass = ' imm-total-clear';
+  }
+
   return (
-    <>
-      <div className="imm-duty" role="list">
-        <DutySlot
-          k="dcheck"
-          count={q.dcheck}
-          label="dcheck"
-          tier={tierOf(q.overdueDcheck, q.nearingDcheck)}
-          chips={tierChips(q.overdueDcheck, q.nearingDcheck)}
-          strikeToken={`${state.strikes.dcheck}-${state.strikes.overdueDcheck}`}
-          title="pending description checks, including offline players. one day deadline"
-        />
-        <DutySlot
-          k="appsOpen"
-          count={q.appsOpen}
-          label="applications"
-          tier={tierOf(q.overdueApps, q.nearingApps)}
-          chips={[
-            ...tierChips(q.overdueApps, q.nearingApps),
-            ...(q.appsUnread > 0 ? [{ text: `${q.appsUnread} unread`, kind: 'new' }] : []),
-          ]}
-          strikeToken={`${state.strikes.appsOpen}-${state.strikes.overdueApps}`}
-          title="applications in your queue, read and unread. four day deadline"
-        />
-        <DutySlot
-          k="votes"
-          count={q.votes}
-          label="votes"
-          tier="none"
-          chips={[]}
-          strikeToken={`${state.strikes.votes}`}
-          title="votes awaiting your ballot"
-        />
+    <div className="imm-pane">
+      <div className="chat-pane-header">
+        <span className="chat-pane-title">imm</span>
+        {state.received && statusText && (
+          <span className={`chat-pane-count${statusClass}`}>{statusText}</span>
+        )}
       </div>
-      <div className="imm-grid" role="list">
-        <Slot k="notes" count={q.notes} label="notes" state={state} title="unread notes" />
-        <Slot k="bugs" count={q.bugs} label="bugs" state={state} title="unread bug reports" />
-        <Slot
-          k="journalsUnread"
-          count={q.journalsUnread}
-          label="journals"
-          tier={tierOf(q.overdueJournals, q.nearingJournals)}
-          chips={[
-            ...tierChips(q.overdueJournals, q.nearingJournals),
-            ...(q.journalsUnawarded > 0
-              ? [{ text: `${q.journalsUnawarded} unawarded`, kind: 'new' }]
-              : []),
-          ]}
-          strikeToken={`${state.strikes.journalsUnread}-${state.strikes.overdueJournals}`}
-          state={state}
-          title="unread journals addressed to you. three day deadline"
-        />
-        <Slot k="ideas" count={q.ideas} label="ideas" state={state} title="unread ideas" />
-        <Slot
-          k="penalties"
-          count={q.penalties}
-          label="penalties"
-          state={state}
-          title="unread penalty notes"
-        />
-        <Slot
-          k="typos"
-          count={q.typos}
-          label="typos"
-          state={state}
-          title="typo reports in the queue, read and unread"
-        />
+      <div className="chat-pane-body imm-body">
+        {!state.received ? (
+          <QuietNote />
+        ) : rows.length === 0 ? (
+          <AllClear />
+        ) : (
+          <div className="imm-list" role="list">
+            {rows.map((r) => (
+              <Row key={r.key} row={r} state={state} />
+            ))}
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
 }
 
-function Lamp({ lit, tier, strikeToken }: { lit: boolean; tier: Tier; strikeToken: string }) {
-  const cls = [
-    'imm-lamp',
-    lit ? 'is-lit' : '',
-    lit && tier === 'nearing' ? 'is-nearing' : '',
-    lit && tier === 'overdue' ? 'is-overdue' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-  // Keying on the strike token remounts the lamp when the count (or
-  // its overdue tier) increases, restarting the strike animation.
-  return <span key={strikeToken} className={cls} aria-hidden="true" />;
-}
-
-function DutySlot({
-  k,
-  count,
-  label,
-  tier,
-  chips,
-  strikeToken,
-  title,
-}: {
-  k: ImmCounterKey;
-  count: number;
-  label: string;
-  tier: Tier;
-  chips: Array<{ text: string; kind: string }>;
-  strikeToken: string;
-  title: string;
-}) {
-  const lit = count > 0;
+function Row({ row, state }: { row: QueueRow; state: ImmState }) {
+  const overdueGen = row.overdueKey ? state.strikes[row.overdueKey] : 0;
+  // Remount the count on any increase (base count or a fresh overdue)
+  // so the strike animation replays; a decrease keeps the same token
+  // and stays quiet.
+  const strikeToken = `${state.strikes[row.key]}-${overdueGen}`;
   return (
-    <div className={`imm-duty-slot${lit ? ' is-lit' : ''}`} role="listitem" title={title}>
-      <Lamp lit={lit} tier={tier} strikeToken={`${k}-${strikeToken}`} />
-      <span className="imm-duty-count">{count}</span>
-      <span className="imm-duty-label">{label}</span>
-      <span className="imm-chip-row">
-        {chips.map((c) => (
+    <div className={`imm-row imm-row-${row.tier}`} role="listitem" title={row.title}>
+      <span key={strikeToken} className="imm-row-count">
+        {row.count}
+      </span>
+      <span className="imm-row-label">{row.label}</span>
+      <span className="imm-row-chips">
+        {row.chips.map((c) => (
           <span key={c.kind} className={`imm-chip imm-chip-${c.kind}`}>
             {c.text}
           </span>
@@ -203,43 +221,11 @@ function DutySlot({
   );
 }
 
-function Slot({
-  k,
-  count,
-  label,
-  tier,
-  chips,
-  strikeToken,
-  state,
-  title,
-}: {
-  k: ImmCounterKey;
-  count: number;
-  label: string;
-  tier?: Tier | undefined;
-  chips?: Array<{ text: string; kind: string }> | undefined;
-  strikeToken?: string | undefined;
-  state: ImmState;
-  title: string;
-}) {
-  const lit = count > 0;
+function AllClear() {
   return (
-    <div className={`imm-slot${lit ? ' is-lit' : ''}`} role="listitem" title={title}>
-      <Lamp
-        lit={lit}
-        tier={tier ?? 'none'}
-        strikeToken={`${k}-${strikeToken ?? state.strikes[k]}`}
-      />
-      <span className="imm-slot-count">{count}</span>
-      <span className="imm-slot-label">
-        {label}
-        {(chips ?? []).map((c) => (
-          <span key={c.kind} className={`imm-chip-inline imm-chip-${c.kind}`}>
-            {' '}
-            {c.text}
-          </span>
-        ))}
-      </span>
+    <div className="imm-quiet">
+      <span className="imm-quiet-line">all clear</span>
+      <span className="imm-quiet-sub">no staff queues need you right now</span>
     </div>
   );
 }
