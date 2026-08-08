@@ -132,7 +132,13 @@ pub(super) fn set_clipboard(text: &str) {
         if pasteboard.is_null() {
             return;
         }
-        let _: () = msg_send![pasteboard, clearContents];
+        // clearContents returns NSInteger (the new change count), not
+        // void. Binding it as () makes objc2 encode the call as
+        // returning 'v' while the selector is 'q'; a debug build's
+        // msg_send verification then panics, and because this runs in
+        // the AppKit mouseUp callback the panic cannot unwind and
+        // aborts the whole app. Bind the real return so copy is safe.
+        let _: isize = msg_send![pasteboard, clearContents];
         let ns_text: *mut AnyObject =
             msg_send![class!(NSString), stringWithUTF8String: text_c.as_ptr()];
         let ns_type: *mut AnyObject =
