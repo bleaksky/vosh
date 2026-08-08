@@ -7394,12 +7394,12 @@ body {
 }
 
 /* ---- imm pane: the staff duty board ------------------------------
-   An annunciator strip. Lamps sit hollow while a queue is clear and
-   light when work waits; an increase remounts the lamp (keyed on the
-   store's strike generation) so it fires one bright strike before
-   settling. dcheck breathes while lit because players are literally
-   queued behind it. Zero-count slots drop to faint so a clear board
-   reads dark at a glance. */
+   A triage list. Only queues with work show; they sort worst-first
+   (overdue tier, then nearing, then plain pending, bigger backlog
+   first within a tier), so the eye lands on what is on fire and a
+   quiet board is nearly empty. The count carries the urgency color
+   and flashes once when it climbs (the number remounts on a strike
+   bump); a decrease stays quiet. */
 
 .imm-pane {
   flex: 1 1 auto;
@@ -7420,7 +7420,7 @@ body {
   border-top: none;
 }
 
-.imm-total-hot {
+.imm-total-nearing {
   color: var(--c-warn);
 }
 
@@ -7428,87 +7428,61 @@ body {
   color: var(--c-danger);
 }
 
+.imm-total-clear {
+  color: var(--c-text-faint);
+}
+
 .imm-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 3px 9px 5px;
+  padding: 4px 10px 6px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
 }
 
-.imm-duty {
+.imm-list {
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
 
-.imm-duty-slot {
-  display: grid;
-  grid-template-columns: 9px auto 1fr auto;
+.imm-row {
+  display: flex;
   align-items: baseline;
-  column-gap: 7px;
-  padding: 1px 2px;
-  color: var(--c-text-faint);
+  gap: 9px;
+  padding: 2px 2px;
 }
 
-.imm-duty-slot.is-lit {
-  color: var(--c-text-muted);
-}
-
-.imm-duty-count {
-  font-size: 13px;
-  line-height: 1.2;
+/* Count is the hero: fixed-width and right-aligned so magnitudes line
+   up down the column, colored by the queue's deadline tier. */
+.imm-row-count {
+  flex: 0 0 3.5ch;
+  text-align: right;
   font-variant-numeric: tabular-nums;
-  color: var(--c-text-faint);
-}
-
-.imm-duty-slot.is-lit .imm-duty-count {
   color: var(--c-text-strong);
+  animation: imm-strike 0.7s ease-out;
 }
 
-.imm-duty-label {
+.imm-row-nearing .imm-row-count {
+  color: var(--c-warn);
+}
+
+.imm-row-overdue .imm-row-count {
+  color: var(--c-danger);
+}
+
+.imm-row-label {
+  color: var(--c-text-muted);
   letter-spacing: 0.04em;
 }
 
-.imm-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 10px;
-  border-top: 1px solid var(--c-border-soft);
-  padding-top: 3px;
-}
-
-.imm-slot {
-  display: grid;
-  grid-template-columns: 9px auto 1fr;
-  align-items: baseline;
-  column-gap: 6px;
-  padding: 1px 2px;
-  color: var(--c-text-faint);
-}
-
-.imm-slot.is-lit {
-  color: var(--c-text-muted);
-}
-
-.imm-slot-count {
-  font-variant-numeric: tabular-nums;
-  color: var(--c-text-faint);
-}
-
-.imm-slot.is-lit .imm-slot-count {
-  color: var(--c-text-strong);
-}
-
-.imm-chip-row {
-  justify-self: end;
-  align-self: center;
+.imm-row-chips {
+  margin-left: auto;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 0 7px;
+  gap: 0 8px;
 }
 
 .imm-chip {
@@ -7516,13 +7490,8 @@ body {
   white-space: nowrap;
 }
 
-.imm-chip-inline {
-  font-size: 0.85em;
-  white-space: nowrap;
-}
-
-.imm-chip-new {
-  color: var(--c-warn);
+.imm-chip-sub {
+  color: var(--c-text-faint);
 }
 
 .imm-chip-nearing {
@@ -7533,60 +7502,16 @@ body {
   color: var(--c-danger);
 }
 
-/* The lamp. Hollow while clear, filled while lit, one strike flash
-   on mount (a genuine increase, the power-on lamp test when the first
-   snapshot of the session lands, or a pane reopen). Deadline-tracked
-   queues escalate the lit color through the server's tiers: amber
-   when anything nears its deadline, red and breathing when anything
-   is past it. */
-.imm-lamp {
-  width: 7px;
-  height: 7px;
-  align-self: center;
-  border-radius: 1px;
-  border: 1px solid var(--c-border-strong);
-  background: transparent;
-}
-
-.imm-lamp.is-lit {
-  border-color: var(--c-accent);
-  background: var(--c-accent);
-  box-shadow: 0 0 5px color-mix(in srgb, var(--c-accent) 55%, transparent);
-  animation: imm-strike 0.7s ease-out;
-}
-
-.imm-lamp.is-lit.is-nearing {
-  border-color: var(--c-warn);
-  background: var(--c-warn);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--c-warn) 60%, transparent);
-}
-
-.imm-lamp.is-lit.is-overdue {
-  border-color: var(--c-danger);
-  background: var(--c-danger);
-  box-shadow: 0 0 7px color-mix(in srgb, var(--c-danger) 65%, transparent);
-  animation:
-    imm-strike 0.7s ease-out,
-    imm-breathe 3s ease-in-out 0.7s infinite;
-}
-
+/* The count flashes bright once when it climbs. Keyed remount of the
+   number restarts this; the first snapshot after login flashes the
+   whole board, the classic power-on check. */
 @keyframes imm-strike {
   0% {
-    filter: brightness(2.4);
-    box-shadow: 0 0 14px color-mix(in srgb, currentcolor 80%, transparent);
+    filter: brightness(2.2);
+    text-shadow: 0 0 8px color-mix(in srgb, currentcolor 70%, transparent);
   }
   100% {
     filter: brightness(1);
-  }
-}
-
-@keyframes imm-breathe {
-  0%,
-  100% {
-    filter: brightness(1);
-  }
-  50% {
-    filter: brightness(1.55);
   }
 }
 
