@@ -2,6 +2,10 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.6.5 - 2026-08-10
+
+- A staff panel for immortals. Turn on "imm (staff queues)" in Settings, Panels and it shows the work queues the game sends you: description checks, applications, journals, notes, bugs, votes, and the rest. Only the queues that need something appear, the most urgent sit at the top, and a count turns red when work is past its deadline or amber when it is getting close. Mortals never receive staff data, so the panel stays quiet for them.
+
 ## v0.6.4 - 2026-08-06
 
 - Triggers, aliases, and group toggles now save on their own. Vosh writes your changes to disk a couple of seconds after you make them and again when you quit, so nothing you author disappears at the next launch. This fixes the reports of new triggers and aliases vanishing after a restart.
