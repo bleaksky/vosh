@@ -26,17 +26,26 @@ export interface Worth {
   rps?: number | string;
 }
 
+export interface GroupState {
+  group: GroupInfo;
+  worth: Worth;
+  /** Logged-in character from Char.Status / Char.Name, so the pane
+   *  can pick out the player's own row in the roster. */
+  self?: string | undefined;
+}
+
 // Module-level store for Group.Info + Char.Worth. Mirrors chatStore
 // so the ChatGroupPane can close and reopen without losing the
 // last-pushed roster / worth snapshot. Subscribes to GMCP once on
 // first read and keeps the latest state per package.
 let group: GroupInfo = {};
 let worth: Worth = {};
-let listeners: Array<(state: { group: GroupInfo; worth: Worth }) => void> = [];
+let self: string | undefined;
+let listeners: Array<(state: GroupState) => void> = [];
 let started = false;
 
 function notify() {
-  const snapshot = { group, worth };
+  const snapshot = { group, worth, self };
   for (const l of listeners) l(snapshot);
 }
 
@@ -72,23 +81,30 @@ export function startGroupStore(): void {
       notify();
     }
   });
+  const takeName = (data: { name?: unknown }) => {
+    if (typeof data?.name === 'string' && data.name.trim().length > 0) {
+      self = data.name.trim();
+      notify();
+    }
+  };
+  void onGmcpPackage<{ name?: unknown }>('Char.Status', takeName);
+  void onGmcpPackage<{ name?: unknown }>('Char.Name', takeName);
   void onState((payload) => {
     if (payload.kind === 'disconnected') {
       group = {};
       worth = {};
+      self = undefined;
       notify();
     }
   });
 }
 
-export function getGroupState(): { group: GroupInfo; worth: Worth } {
+export function getGroupState(): GroupState {
   startGroupStore();
-  return { group, worth };
+  return { group, worth, self };
 }
 
-export function subscribeGroupState(
-  cb: (state: { group: GroupInfo; worth: Worth }) => void,
-): () => void {
+export function subscribeGroupState(cb: (state: GroupState) => void): () => void {
   startGroupStore();
   listeners.push(cb);
   return () => {

@@ -2,22 +2,23 @@ import { useEffect, useState } from 'react';
 import {
   getGroupState,
   subscribeGroupState,
-  type GroupInfo,
   type GroupMember,
+  type GroupState,
   type Worth,
 } from '../lib/groupStore';
 
 // Party roster + your-own-worth panel. Subscribes to Group.Info +
 // Char.Worth via the module store (chatStore/groupStore pattern) so
-// state survives close/reopen. Renders one line per member as a
-// 6-column grid (display:contents per row). Placement (which zone
-// it lives in, hidden / visible) is managed by Settings · Panels.
+// state survives close/reopen. Renders one Ember row per member:
+// mono name, 44px hp mini-bar, hp% — health at a glance, colored by
+// tier. Placement (which zone it lives in, hidden / visible) is
+// managed by Settings · Panels.
 export function GroupPane() {
-  const [state, setState] = useState<{ group: GroupInfo; worth: Worth }>(() => getGroupState());
+  const [state, setState] = useState<GroupState>(() => getGroupState());
 
   useEffect(() => subscribeGroupState(setState), []);
 
-  const { group, worth } = state;
+  const { group, worth, self } = state;
   const grouped = !!group.leader && Array.isArray(group.members) && group.members.length > 0;
 
   return (
@@ -28,12 +29,13 @@ export function GroupPane() {
       </div>
       <div className="chat-pane-body">
         {grouped ? (
-          <div className="group-list" role="list">
+          <div className="group-rows" role="list">
             {group.members!.map((m, i) => (
               <GroupRow
                 key={`${m.name ?? '?'}-${i}`}
                 member={m}
                 isLeader={!!m.name && m.name === group.leader}
+                isSelf={!!m.name && !!self && m.name.toLowerCase() === self.toLowerCase()}
               />
             ))}
           </div>
@@ -45,22 +47,33 @@ export function GroupPane() {
   );
 }
 
-function GroupRow({ member, isLeader }: { member: GroupMember; isLeader: boolean }) {
+function GroupRow({
+  member,
+  isLeader,
+  isSelf,
+}: {
+  member: GroupMember;
+  isLeader: boolean;
+  isSelf: boolean;
+}) {
   const hp = asPct(member.hp_pct);
-  const mn = asPct(member.mana_pct);
-  const mv = asPct(member.move_pct);
+  const tone = hp !== null ? hpTone(hp) : 'var(--c-text-dim)';
   return (
-    <div className={`group-row${isLeader ? ' is-leader' : ''}`} role="listitem">
-      <span className="group-name" title={member.name ?? ''}>
+    <div
+      className={`group-row-ember${isLeader ? ' is-leader' : ''}${isSelf ? ' is-self' : ''}`}
+      role="listitem"
+    >
+      <span className="group-row-name" title={member.name ?? ''}>
         {member.name ?? '?'}
       </span>
-      <span className="group-meta">
-        {(member.class ?? '?').toLowerCase()} {asNumberOrDash(member.level)}
+      <span className="group-row-bar">
+        {hp !== null && (
+          <span className="group-row-fill" style={{ width: `${hp}%`, background: tone }} />
+        )}
       </span>
-      <VitalNum pct={hp} />
-      <VitalNum pct={mn} />
-      <VitalNum pct={mv} />
-      <span className="group-tnl">{formatTnl(member.tnl)}</span>
+      <span className="group-row-hp" style={{ color: tone }}>
+        {hp !== null ? `${hp}%` : '-'}
+      </span>
     </div>
   );
 }
@@ -120,22 +133,12 @@ function SoloWorth({ worth }: { worth: Worth }) {
   );
 }
 
-function VitalNum({ pct }: { pct: number | null }) {
-  const color = pct !== null ? colorForPct(pct) : 'var(--c-text-dim)';
-  return (
-    <span className="group-vital" style={{ color }}>
-      {pct !== null ? `${pct}%` : '-'}
-    </span>
-  );
-}
-
-function formatTnl(value: number | string | undefined): string {
-  if (value === undefined || value === '') return '-';
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return '-';
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 10_000) return `${Math.round(n / 1_000)}k`;
-  return String(n);
+/// Three-tier health tone for the roster bar + percent: top third
+/// healthy, middle third warning, bottom third danger.
+function hpTone(p: number): string {
+  if (p >= 67) return 'var(--c-success)';
+  if (p >= 34) return 'var(--c-warn)';
+  return 'var(--c-danger)';
 }
 
 function asPct(value: unknown): number | null {
@@ -143,14 +146,6 @@ function asPct(value: unknown): number | null {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return null;
   return Math.max(0, Math.min(100, Math.round(n)));
-}
-
-function colorForPct(p: number): string {
-  if (p >= 80) return '#87a987';
-  if (p >= 60) return '#e6c384';
-  if (p >= 40) return '#d99a6c';
-  if (p >= 20) return '#e46876';
-  return '#7d1d1d';
 }
 
 function asNumberOrDash(value: number | string | undefined): string {

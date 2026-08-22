@@ -295,7 +295,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       '- The preset chips at the top (`bars`, `compact`, `numeric`, `percent`) flip every column toggle to a sensible combination.\n' +
       '- The toggles below let you turn each column on or off independently.\n' +
       '- The bar glyphs section sets which characters render the filled and empty cells, plus the bar width.\n' +
-      '- The layout dropdown switches between stacked rows (one vital per row) and inline (all three on a single row in TinTin++ nprompt style).\n' +
+      '- The layout chips switch between ember (thin bars in fixed colors under a small pane header, the default), stacked rows (one vital per row), and inline (all three on a single row in TinTin++ nprompt style).\n' +
       '- Percent color either matches the bar (per-vital color) or uses a red-to-green gradient against the percent.\n\n' +
       'If none of that fits, turn on `custom template` and write your own line. The textarea takes tokens like `%hp`, `%pct_mn`, `%bar_mv`, and the help block under it lists every supported token. Tokens can also reach into any field your MUD ships through `Char.Vitals` or `Char.Worth` (for example `%xp`, `%gold`).',
   },

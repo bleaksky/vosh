@@ -284,11 +284,13 @@ pub(crate) struct VitalsConfig {
     /// `bar_layout: "with_history"` in the command handler.
     #[serde(default = "default_bar_layout")]
     pub bar_layout: String,
-    /// Row layout: "stacked" puts each vital on its own row (the
-    /// historical look); "inline" packs all three vitals into a
-    /// single horizontal row like the tintin nprompt
+    /// Row layout: "ember" (the default) draws a sidebar-pane block
+    /// with a caps header plus three thin fixed-color track bars;
+    /// "stacked" puts each vital on its own row (the historical
+    /// look); "inline" packs all three vitals into a single
+    /// horizontal row like the tintin nprompt
     /// `hp 850(85%) mn 230(76%) mv 120(60%)` format. Frontend
-    /// validates the value and falls back to stacked on unknown
+    /// validates the value and falls back to ember on unknown
     /// strings.
     #[serde(default = "default_vitals_layout")]
     pub layout: String,
@@ -414,7 +416,7 @@ fn default_template() -> String {
 }
 
 fn default_vitals_layout() -> String {
-    "stacked".to_string()
+    "ember".to_string()
 }
 
 fn default_percent_color() -> String {

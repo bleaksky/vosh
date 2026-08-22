@@ -215,6 +215,9 @@ export function VitalsConfigSection({
   };
   const track = v.bar_style === 'track';
   const inline = v.layout === 'inline';
+  // Ember draws fixed 4px track bars with per-vital fixed colors, so
+  // the columns / bar style / glyph / width rows all fall away.
+  const ember = v.layout === 'ember';
   const glyphIdx = VITALS_GLYPH_PRESETS.findIndex(
     (p) => p.filled === v.bar_filled && p.empty === v.bar_empty,
   );
@@ -223,44 +226,48 @@ export function VitalsConfigSection({
 
   return (
     <div className="vitals-settings">
-      <div className="settings-row vitals-seg-row">
-        <span className="settings-row-label">columns</span>
-        <span className="settings-row-control">
-          <span className="settings-seg">
-            <SegBtn on={v.show_bar} onClick={() => apply({ show_bar: !v.show_bar })}>
-              bar
-            </SegBtn>
-            <SegBtn on={v.show_percent} onClick={() => apply({ show_percent: !v.show_percent })}>
-              percent
-            </SegBtn>
-            <SegBtn on={v.show_numeric} onClick={() => apply({ show_numeric: !v.show_numeric })}>
-              numeric
-            </SegBtn>
-            <SegBtn on={v.show_delta} onClick={() => apply({ show_delta: !v.show_delta })}>
-              delta
-            </SegBtn>
+      {!ember && (
+        <div className="settings-row vitals-seg-row">
+          <span className="settings-row-label">columns</span>
+          <span className="settings-row-control">
+            <span className="settings-seg">
+              <SegBtn on={v.show_bar} onClick={() => apply({ show_bar: !v.show_bar })}>
+                bar
+              </SegBtn>
+              <SegBtn on={v.show_percent} onClick={() => apply({ show_percent: !v.show_percent })}>
+                percent
+              </SegBtn>
+              <SegBtn on={v.show_numeric} onClick={() => apply({ show_numeric: !v.show_numeric })}>
+                numeric
+              </SegBtn>
+              <SegBtn on={v.show_delta} onClick={() => apply({ show_delta: !v.show_delta })}>
+                delta
+              </SegBtn>
+            </span>
           </span>
-        </span>
-      </div>
+        </div>
+      )}
 
-      <div className="settings-row vitals-seg-row">
-        <span className="settings-row-label">bar style</span>
-        <span className="settings-row-control">
-          <span className="settings-seg">
-            <SegBtn on={v.bar_style === 'solid'} onClick={() => apply({ bar_style: 'solid' })}>
-              solid
-            </SegBtn>
-            <SegBtn on={v.bar_style === 'ramped'} onClick={() => apply({ bar_style: 'ramped' })}>
-              ramped
-            </SegBtn>
-            <SegBtn on={track} onClick={() => apply({ bar_style: 'track' })}>
-              track
-            </SegBtn>
+      {!ember && (
+        <div className="settings-row vitals-seg-row">
+          <span className="settings-row-label">bar style</span>
+          <span className="settings-row-control">
+            <span className="settings-seg">
+              <SegBtn on={v.bar_style === 'solid'} onClick={() => apply({ bar_style: 'solid' })}>
+                solid
+              </SegBtn>
+              <SegBtn on={v.bar_style === 'ramped'} onClick={() => apply({ bar_style: 'ramped' })}>
+                ramped
+              </SegBtn>
+              <SegBtn on={track} onClick={() => apply({ bar_style: 'track' })}>
+                track
+              </SegBtn>
+            </span>
           </span>
-        </span>
-      </div>
+        </div>
+      )}
 
-      {!track && (
+      {!ember && !track && (
         <div className="settings-row vitals-seg-row">
           <span className="settings-row-label">glyphs</span>
           <span className="settings-row-control">
@@ -295,7 +302,7 @@ export function VitalsConfigSection({
           </span>
         </div>
       )}
-      {track && (
+      {!ember && track && (
         <div className="settings-row vitals-seg-row">
           <span className="settings-row-label">width</span>
           <span className="settings-row-control">
@@ -316,7 +323,14 @@ export function VitalsConfigSection({
         <span className="settings-row-control">
           <span className="settings-seg">
             <SegBtn
-              on={!inline}
+              on={ember}
+              disabled={v.template_enabled}
+              onClick={() => apply({ layout: 'ember' })}
+            >
+              ember
+            </SegBtn>
+            <SegBtn
+              on={!inline && !ember}
               disabled={v.template_enabled}
               onClick={() => apply({ layout: 'stacked' })}
             >
@@ -330,7 +344,10 @@ export function VitalsConfigSection({
               inline
             </SegBtn>
           </span>
-          {!track && !inline && (
+          {ember && (
+            <span className="settings-paste-hint">the ember layout draws fixed thin bars</span>
+          )}
+          {!track && !inline && !ember && (
             <>
               <span className="settings-paste-hint">grid</span>
               <span className="settings-seg">
@@ -873,7 +890,7 @@ function previewRampedBar({
 }
 
 interface PreviewSample {
-  label: string;
+  label: PreviewLabel;
   cur: number;
   max: number;
   value: number;
@@ -1118,6 +1135,48 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
         <div className="vitals-bar vitals-bar-template">
           <div className="vitals-row vitals-row-template">
             {previewTemplate(config, sample, track, gradient)}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // Ember preview — mirrors the runtime ember branch in VitalsBar:
+  // pane head over three thin track bars with fixed per-vital fills.
+  // The track itself is the drag hit-target (ember has no cell
+  // width, so the ch-based draggableBar wrapper does not apply).
+  if (config.layout === 'ember') {
+    return (
+      <>
+        <div className="vitals-preview-head">{headerText}</div>
+        <div className="vitals-bar vitals-ember">
+          <div className="vitals-ember-head">
+            <span className="caps">vitals</span>
+            <span className="vitals-ember-tick">tick 12s</span>
+          </div>
+          <div className="vitals-ember-rows">
+            {sample.map((s) => (
+              <div key={s.label} className="vitals-ember-row">
+                <span className="vitals-ember-label">{s.label}</span>
+                <div
+                  className="vitals-ember-track"
+                  onMouseDown={startDrag(s.label)}
+                  role="slider"
+                  aria-label={`${s.label} fill percent`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={s.value}
+                >
+                  <div
+                    className={`vitals-ember-fill vitals-ember-fill-${s.label}`}
+                    style={{ width: `${s.value}%` }}
+                  />
+                </div>
+                <span className="vitals-ember-value">
+                  {s.cur}/{s.max}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </>

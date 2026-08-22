@@ -645,7 +645,11 @@ export interface UiConfig {
 export type MoonsPosition = 'right-edge' | 'before-time' | 'after-time';
 export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
 
-export type VitalsLayout = 'stacked' | 'inline';
+/** `ember` (the default) draws a sidebar-pane block — caps header
+ *  plus three thin fixed-color track bars; `stacked` is the
+ *  historical one-vital-per-row look; `inline` packs all three onto
+ *  a single tintin-nprompt-style row. */
+export type VitalsLayout = 'ember' | 'stacked' | 'inline';
 export type VitalsPercentColor = 'fill' | 'gradient';
 export type VitalsBarStyle = 'solid' | 'track' | 'ramped';
 /** Whether to stack a braille history grid below the bar. Independent
@@ -735,7 +739,7 @@ export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
   bar_width: 20,
   bar_style: 'solid',
   bar_layout: 'plain',
-  layout: 'stacked',
+  layout: 'ember',
   inline_style: 'plain',
   percent_color_mode: 'drain',
   pct_chip_style: 'none',
@@ -867,7 +871,10 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
         : v.bar_layout === 'with_history' || v.bar_layout === 'plain'
           ? v.bar_layout
           : DEFAULT_VITALS_CONFIG.bar_layout,
-    layout: v.layout === 'inline' ? 'inline' : DEFAULT_VITALS_CONFIG.layout,
+    layout:
+      v.layout === 'ember' || v.layout === 'stacked' || v.layout === 'inline'
+        ? v.layout
+        : DEFAULT_VITALS_CONFIG.layout,
     inline_style:
       v.inline_style === 'drain' || v.inline_style === 'badge'
         ? v.inline_style
