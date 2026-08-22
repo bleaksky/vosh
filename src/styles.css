@@ -871,6 +871,10 @@ body {
   width: 100%;
   display: flex;
   flex-direction: row;
+  /* Carved-channel ground. The whole main row paints the terminal
+     well tone; side-zone panes float on it as cards and every seam
+     is the well showing through instead of a drawn line. */
+  background: var(--xterm-bg, var(--c-surface));
   overflow: hidden;
   position: relative;
   z-index: 0;
@@ -955,11 +959,67 @@ body {
   border-bottom: none;
   border-top: 1px solid var(--c-border);
 }
-.panel-zone-left {
-  border-right: 1px solid var(--c-border);
-}
+/* Carved channel: the side zones drop their surface fill and their
+   border seams. The 8px resize handle between terminal and zone is
+   pure exposed ground, and the stack padding keeps an 8px channel
+   on the window-edge side of the cards. The terminal-facing side
+   gets no padding because the handle IS that channel. */
+.panel-zone-left,
 .panel-zone-right {
-  border-left: 1px solid var(--c-border);
+  background: transparent;
+}
+.panel-zone-left .panel-zone-stack {
+  padding: 8px 0 8px 8px;
+  gap: 8px;
+}
+.panel-zone-right .panel-zone-stack {
+  padding: 8px 8px 8px 0;
+  gap: 8px;
+}
+.panel-zone-left .panel-zone-substack,
+.panel-zone-right .panel-zone-substack {
+  gap: 8px;
+}
+/* Every pane in a side zone becomes a card: chrome surface, radius 8,
+   clipped corners, and no border seams of its own — the exposed
+   ground between cards does the separating. The two selectors catch
+   bare panes and panes wrapped in a Resizable. */
+.panel-zone-left .panel-zone-substack > :not(.resizable),
+.panel-zone-right .panel-zone-substack > :not(.resizable),
+.panel-zone-left .panel-zone-substack > .resizable > .resizable-content > :only-child,
+.panel-zone-right .panel-zone-substack > .resizable > .resizable-content > :only-child {
+  /* Cards use the raised pane token, not --c-surface: several themes
+     run their chrome surface at the same tone as the terminal well,
+     and a card that matches the ground it floats on disappears. The
+     pane token is the one every theme already raises (the input row
+     proves it reads). */
+  background: var(--c-surface-pane, var(--c-surface));
+  border-radius: 8px;
+  overflow: hidden;
+  border: none;
+}
+/* Inner vertical handles (chat, roomstrip) sit at the edge of their
+   wrapper, right next to the 8px flex gap — pull them into the gap
+   so the grab zone overlays the channel instead of doubling it. Only
+   when a sibling actually sits on the handle side: pulled past the
+   substack edge the handle lands outside the substack border box and
+   its overflow: hidden clips both the paint and the hit area. An
+   edge-child handle stays inside its wrapper instead, which just
+   deepens that one channel to 16px. */
+.panel-zone-left .panel-zone-substack > * + .resizable > .resizable-handle-top,
+.panel-zone-right .panel-zone-substack > * + .resizable > .resizable-handle-top {
+  margin-top: -8px;
+}
+.panel-zone-left .panel-zone-substack > .resizable:has(+ *) > .resizable-handle-bottom,
+.panel-zone-right .panel-zone-substack > .resizable:has(+ *) > .resizable-handle-bottom {
+  margin-bottom: -8px;
+}
+/* RoomStrip fills its card with an inner element that paints its own
+   surface and bottom hairline — both fight the card recipe, so they
+   go quiet inside the wrap. */
+.room-strip-wrap-column .room-strip {
+  background: transparent;
+  border-bottom: none;
 }
 .panel-zone-stack {
   display: flex;
@@ -1073,10 +1133,10 @@ body {
 }
 
 /* Style the resizable handle so it reads as the split divider. The
-   default --c-border is often invisible against the terminal
-   background; --c-split-divider lets the user override it from
-   Settings. Hover and focus flip to --c-accent via the base
-   .resizable-handle rule. */
+   base carved-channel handle is transparent, which would make the
+   split boundary invisible inside the well; --c-split-divider lets
+   the user pick the line color from Settings. Hover and drag still
+   show the base rule's ember tick. */
 .terminal-pane-history.resizable .resizable-handle {
   background: var(--c-split-divider, var(--c-text-faint));
   flex: 0 0 2px;
@@ -6240,26 +6300,67 @@ body {
   flex-direction: column-reverse;
 }
 
+/* Carved-channel handle. The handle paints nothing at rest — it is
+   an 8px strip of the exposed ground — and a centered ember tick
+   surfaces on hover to name the grab point. Dragging stretches the
+   tick and adds a soft glow. */
 .resizable-handle {
-  background: var(--c-border);
-  transition: background-color 80ms ease-out;
+  background: transparent;
+  position: relative;
+}
+
+.resizable-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  border-radius: 2px;
+  background: var(--c-accent);
+  opacity: 0;
+  transition:
+    opacity 120ms ease-out,
+    width 120ms ease-out,
+    height 120ms ease-out,
+    box-shadow 120ms ease-out;
+  pointer-events: none;
 }
 
 .resizable-handle-horizontal {
-  flex: 0 0 4px;
+  flex: 0 0 8px;
   cursor: col-resize;
+}
+.resizable-handle-horizontal::after {
+  width: 2px;
+  height: 24px;
 }
 
 .resizable-handle-vertical {
-  flex: 0 0 4px;
+  flex: 0 0 8px;
   cursor: row-resize;
   width: 100%;
 }
+.resizable-handle-vertical::after {
+  width: 24px;
+  height: 2px;
+}
 
-.resizable-handle:hover,
+.resizable-handle:hover::after,
+.resizable-handle:focus-visible::after {
+  opacity: 0.8;
+}
 .resizable-handle:focus {
-  background: var(--c-accent);
   outline: none;
+}
+.resizable-handle.is-dragging::after {
+  opacity: 1;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--c-accent) 45%, transparent);
+}
+.resizable-handle-horizontal.is-dragging::after {
+  height: 56px;
+}
+.resizable-handle-vertical.is-dragging::after {
+  width: 56px;
 }
 
 .resizable-content {

@@ -162,12 +162,18 @@ export function Resizable({
   }, [clamped]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    // Primary button only. A right-click capture would race the native
+    // context menu for the pointerup and leave a stuck drag state.
+    if (event.button !== 0) return;
     event.preventDefault();
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
     const start = isVertical ? event.clientY : event.clientX;
     dragStateRef.current = { start, startSize: clamped, lastSnapped: clamped };
     document.body.style.cursor = isVertical ? 'row-resize' : 'col-resize';
+    // Drag visual (the stretched ember tick) is a direct class flip so
+    // it lands in the same frame as the pointer capture, not a render.
+    target.classList.add('is-dragging');
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -232,6 +238,7 @@ export function Resizable({
     }
     dragStateRef.current = null;
     document.body.style.cursor = '';
+    target.classList.remove('is-dragging');
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
