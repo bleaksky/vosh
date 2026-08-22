@@ -530,89 +530,153 @@ body {
   margin-right: 2px;
 }
 
-/* Connect — single command row, terminal-styled */
+/* Session chip — the connect control, living in the top bar. A status
+   dot plus host:port; the host / port / tls form and the action sit in
+   a dropdown that follows the loadouts menu recipe. */
 
-.connect {
+.session-chip-wrap {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 14px;
-  background: var(--c-surface);
-  border-bottom: 1px solid var(--c-border);
+  align-self: center;
+}
+
+.session-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px;
+  background: var(--c-surface-pane);
   color: var(--c-text-muted);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.session-chip:hover {
+  border-color: var(--c-border-hover);
+  color: var(--c-text);
+}
+
+.session-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   flex: 0 0 auto;
 }
 
-.connect-label {
-  color: var(--c-text-faint);
+.session-chip-dot.is-idle {
+  background: var(--c-text-dim);
 }
 
-.connect input[type='text'],
-.connect input[type='number'] {
+.session-chip-dot.is-connecting {
+  background: var(--c-warn);
+}
+
+.session-chip-dot.is-connected {
+  background: var(--c-success);
+}
+
+.session-chip-dot.is-error {
+  background: var(--c-danger);
+}
+
+.session-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 6px;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--c-surface-pane);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 8px;
+  box-shadow:
+    0 18px 44px -14px rgba(0, 0, 0, 0.6),
+    0 6px 18px -10px rgba(0, 0, 0, 0.5);
+  z-index: 60;
+}
+
+.session-menu-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.session-menu-label {
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+  width: 34px;
+  flex: 0 0 auto;
+}
+
+.session-menu input[type='text'],
+.session-menu input[type='number'] {
+  flex: 1 1 auto;
+  min-width: 0;
   background: transparent;
   color: var(--c-text);
   border: none;
-  border-bottom: 1px dashed var(--c-border-strong);
-  padding: 1px 2px;
-  font-family: inherit;
-  font-size: inherit;
+  border-bottom: 1px solid var(--c-border-strong);
+  padding: 2px 1px;
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 
-.connect input[type='text']:focus,
-.connect input[type='number']:focus {
+.session-menu input[type='text']:focus,
+.session-menu input[type='number']:focus {
   outline: none;
   border-bottom-color: var(--c-accent);
 }
 
-.connect input[type='number'] {
-  width: 60px;
+.session-menu input[type='number'] {
   /* Suppress WKWebView native spin-buttons; they render as black
      glyphs on the dark surface and just look like cruft. */
   -moz-appearance: textfield;
   appearance: textfield;
 }
 
-.connect input[type='number']::-webkit-inner-spin-button,
-.connect input[type='number']::-webkit-outer-spin-button {
+.session-menu input[type='number']::-webkit-inner-spin-button,
+.session-menu input[type='number']::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-.connect input[type='text'] {
-  min-width: 220px;
-}
-
-.connect input:disabled {
+.session-menu input:disabled {
   opacity: 0.7;
 }
 
-.connect-tls {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.connect-tls input[type='checkbox'] {
+.session-menu-tls input[type='checkbox'] {
   accent-color: var(--c-accent);
 }
 
-.connect-action {
-  margin-left: auto;
+.session-menu-action {
+  align-self: flex-end;
   background: transparent;
   color: var(--c-accent);
-  border: none;
-  padding: 0;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 3px 12px;
   font-family: inherit;
-  font-size: inherit;
+  font-size: 12px;
   cursor: pointer;
-  letter-spacing: 0.02em;
 }
 
-.connect-action:hover {
+.session-menu-action:hover {
+  border-color: var(--c-border-hover);
   color: var(--c-text-strong);
 }
 
-.connect.is-live .connect-action {
+.session-menu-action.is-live {
   color: var(--c-warn);
 }
 

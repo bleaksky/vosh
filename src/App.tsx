@@ -4,7 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { Terminal, nativeSurfaceEnabled, type TerminalHandle } from './components/Terminal';
 import { Input, type InputHandle } from './components/Input';
-import { Connect, type ConnectionStatus } from './components/Connect';
+import { type ConnectionStatus } from './components/Connect';
 import { TopBar } from './components/TopBar';
 import { StatusBar } from './components/StatusBar';
 import { Resizable } from './components/Resizable';
@@ -1286,8 +1286,9 @@ function App() {
         mapOpen={panelLayout.placements.map.zone !== 'hidden'}
         onToggleMap={() => togglePanelVisibility('map')}
         onOpenHelp={() => setHelpOpen(true)}
+        connectionStatus={status}
+        onConnectionError={handleError}
       />
-      <Connect status={status} onError={handleError} />
       {grouped.top.length > 0 && (
         <div className="panel-zone panel-zone-top">{grouped.top.map(renderPanel)}</div>
       )}
