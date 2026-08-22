@@ -200,6 +200,10 @@ static SELECTING: AtomicBool = AtomicBool::new(false);
 static DPR: AtomicU32 = AtomicU32::new(0);
 static CELL_W: AtomicU32 = AtomicU32::new(0);
 static CELL_H: AtomicU32 = AtomicU32::new(0);
+// The surface's origin in the webview's CSS coordinate space (set with
+// the bounds), so a right-click can be reported at its viewport position.
+static ORIGIN_X: AtomicU32 = AtomicU32::new(0);
+static ORIGIN_Y: AtomicU32 = AtomicU32::new(0);
 // xterm's reported device cell size. When set, the atlas uses it instead of
 // deriving from font metrics, so the surface matches xterm's density exactly
 // (0 = unset, fall back to the font's metrics).
@@ -443,6 +447,22 @@ fn pointer_up() {
     }
 }
 
+/// Right-click. The opaque surface eats the DOM contextmenu event, so the
+/// pointer's position is forwarded in webview CSS coordinates (surface
+/// origin + the event's surface-local point) and the frontend opens its
+/// terminal context menu there.
+fn context_click(ev: &PointerEvent) {
+    let dpr = f64::from(load_f32(&DPR, 2.0));
+    if dpr <= 0.0 {
+        return;
+    }
+    let x = f64::from(load_f32(&ORIGIN_X, 0.0)) + ev.x / dpr;
+    let y = f64::from(load_f32(&ORIGIN_Y, 0.0)) + ev.y / dpr;
+    if let Some(app) = APP.get() {
+        let _ = app.emit("vosh://terminal-context-menu", (x, y));
+    }
+}
+
 /// Track the URL under the pointer so the renderer can underline it. Only
 /// repaints when the hovered range actually changes.
 fn pointer_moved(ev: Option<&PointerEvent>) {
@@ -607,6 +627,8 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
     // trigger repaints.
     ACTIVE.store(true, Ordering::Release);
     store_f32(&DPR, dpr as f32);
+    store_f32(&ORIGIN_X, x as f32);
+    store_f32(&ORIGIN_Y, y as f32);
     platform::set_frame(&handle.platform, x, y, width, height, dpr);
     // Respect an active overlay suppression so a resize does not pop the
     // surface back over an open dropdown.

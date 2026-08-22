@@ -17,6 +17,7 @@ import {
   type ScopeConfig,
 } from '../lib/session';
 import { MigrationWizard } from './MigrationWizard';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface Props {
   onError: (e: string | null) => void;
@@ -38,9 +39,9 @@ export function ProfilesTab({ onError }: Props) {
   // without showing any UI, so the operation silently aborted.
   const [duplicateTarget, setDuplicateTarget] = useState<string | null>(null);
   const [duplicateDraft, setDuplicateDraft] = useState('');
-  // Tauri webviews silently reject window.confirm() too. Replace the
-  // browser confirm with a two-step inline pattern: click [delete],
-  // the row swaps to [confirm] / [cancel], click confirm to commit.
+  // Tauri webviews silently reject window.confirm() too. Delete
+  // routes through the shared ConfirmDialog instead; deleteTarget
+  // holds the profile name awaiting confirmation.
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [showMigrationWizard, setShowMigrationWizard] = useState(false);
 
@@ -96,9 +97,11 @@ export function ProfilesTab({ onError }: Props) {
   };
 
   const handleDelete = async (name: string) => {
+    // Close the dialog either way; a failure surfaces in the tab's
+    // error line rather than behind the scrim.
+    setDeleteTarget(null);
     try {
       await profileDelete(name);
-      setDeleteTarget(null);
       onError(null);
     } catch (e) {
       onError(String(e));
@@ -258,10 +261,7 @@ export function ProfilesTab({ onError }: Props) {
             onCommitDuplicate={() => void commitDuplicate()}
             onCancelDuplicate={cancelDuplicate}
             onSwitch={() => void handleSwitch(p.name)}
-            confirmingDelete={deleteTarget === p.name}
             onBeginDelete={() => setDeleteTarget(p.name)}
-            onConfirmDelete={() => void handleDelete(p.name)}
-            onCancelDelete={() => setDeleteTarget(null)}
             onSaveAutoMatch={async (am, description) => {
               try {
                 await profileSetMetadata(p.name, description, am);
@@ -287,6 +287,15 @@ export function ProfilesTab({ onError }: Props) {
         </button>
       </div>
       {showMigrationWizard && <MigrationWizard onClose={() => setShowMigrationWizard(false)} />}
+      {deleteTarget && (
+        <ConfirmDialog
+          title={`Delete ${deleteTarget}?`}
+          body="This deletes the profile and its aliases, triggers, and vars. It cannot be undone."
+          confirmLabel="delete"
+          onConfirm={() => void handleDelete(deleteTarget)}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -307,10 +316,7 @@ interface RowProps {
   onCommitDuplicate: () => void;
   onCancelDuplicate: () => void;
   onSwitch: () => void;
-  confirmingDelete: boolean;
   onBeginDelete: () => void;
-  onConfirmDelete: () => void;
-  onCancelDelete: () => void;
   onSaveAutoMatch: (
     am: { host: string | null; port: number | null; characters: string[] } | null,
     description: string | null,
@@ -333,10 +339,7 @@ function ProfileRow({
   onCommitDuplicate,
   onCancelDuplicate,
   onSwitch,
-  confirmingDelete,
   onBeginDelete,
-  onConfirmDelete,
-  onCancelDelete,
   onSaveAutoMatch,
 }: RowProps) {
   const [open, setOpen] = useState(false);
@@ -442,33 +445,15 @@ function ProfileRow({
               duplicate
             </button>
           )}
-          {!isActive &&
-            (confirmingDelete ? (
-              <>
-                <button
-                  type="button"
-                  className="settings-btn settings-btn-danger"
-                  onClick={onConfirmDelete}
-                >
-                  confirm delete
-                </button>
-                <button
-                  type="button"
-                  className="settings-btn settings-btn-mute"
-                  onClick={onCancelDelete}
-                >
-                  cancel
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="settings-btn settings-btn-danger"
-                onClick={onBeginDelete}
-              >
-                delete
-              </button>
-            ))}
+          {!isActive && (
+            <button
+              type="button"
+              className="settings-btn settings-btn-danger"
+              onClick={onBeginDelete}
+            >
+              delete
+            </button>
+          )}
         </div>
       </div>
 

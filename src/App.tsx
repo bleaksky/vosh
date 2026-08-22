@@ -17,8 +17,10 @@ import { startImmStore } from './lib/immStore';
 import { RoomStrip } from './components/RoomStrip';
 import { VitalsBar, CombatPane } from './components/VitalsBar';
 import { UpdateNotice } from './components/UpdateNotice';
+import { Toasts } from './components/Toasts';
 import { HelpView } from './components/HelpView';
 import { FindToolbar, type FindToolbarHandle } from './components/FindToolbar';
+import { TerminalMenu } from './components/TerminalMenu';
 import {
   broadcastUiConfigChanges,
   dockLayoutGet,
@@ -43,6 +45,7 @@ import { loadFontStack } from './lib/fontLoader';
 import { defaultEnabledIds, PRESETS, presetTriggers } from './lib/presets';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
 import { startChatStore } from './lib/chatStore';
+import { pushToast } from './lib/toasts';
 import { startGroupStore } from './lib/groupStore';
 import { CommandPalette } from './components/CommandPalette';
 import { ChatWellPane, LogWellPane } from './components/WellPanes';
@@ -173,6 +176,10 @@ function App() {
   const findToolbarRef = useRef<FindToolbarHandle | null>(null);
   // ⌘K command palette.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Right-click context menu over the terminal area. Non-null while
+  // open; the value is the pointer's viewport position (the menu
+  // clamps itself to the window edges).
+  const [terminalMenu, setTerminalMenu] = useState<{ x: number; y: number } | null>(null);
   // Well splits: session / chat / log panes inside the terminal well.
   // Mirrors the module store so the palette and context menu can
   // toggle it from outside React.
@@ -824,6 +831,27 @@ function App() {
     };
   }, []);
 
+  // Right-clicks on the native surface never reach the DOM (the opaque
+  // view eats them like left-clicks), so the backend forwards them with
+  // the pointer's viewport position and the menu opens from the event.
+  // The DOM onContextMenu below covers the xterm renderer.
+  useEffect(() => {
+    if (!nativeSurfaceEnabled()) return;
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void listen<[number, number]>('vosh://terminal-context-menu', (event) => {
+      const [x, y] = event.payload;
+      setTerminalMenu({ x, y });
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
   // The custom prompt renders in the BACKEND (prompt_template.rs) so the
   // gag-erase and the replacement land in one output batch — rendering it
   // here off the prompt-vars event put an IPC round trip between the two
@@ -872,8 +900,13 @@ function App() {
     onState((payload: StatePayload) => {
       if (payload.kind === 'disconnected') {
         setStatus({ kind: 'idle' });
-        if (payload.reason && termRef.current) {
-          writeLive(`\r\n\x1b[31m[${payload.reason}]\x1b[0m\r\n`);
+        // A reason means the link dropped out from under us; a clean
+        // user-initiated disconnect carries none and stays quiet.
+        if (payload.reason) {
+          if (termRef.current) {
+            writeLive(`\r\n\x1b[31m[${payload.reason}]\x1b[0m\r\n`);
+          }
+          pushToast({ kind: 'error', message: 'connection lost', meta: payload.reason });
         }
       } else {
         setStatus(payload);
@@ -882,6 +915,11 @@ function App() {
         // as the server asks. MUDs that honor NAWS wrap at this width
         // server-side, which is the right answer to word wrap.
         if (payload.kind === 'connected') {
+          pushToast({
+            kind: 'success',
+            message: 'connected',
+            meta: `${payload.host}:${payload.port}`,
+          });
           const handle = termRef.current;
           if (handle) {
             const { cols, rows } = handle.getSize();
@@ -1226,6 +1264,11 @@ function App() {
         findOpen && nativeSurfaceEnabled() ? ' terminal-area-find-inset' : ''
       }`}
       onMouseUp={handleTerminalMouseUp}
+      onContextMenu={(event) => {
+        // Replace the webview's default context menu with ours.
+        event.preventDefault();
+        setTerminalMenu({ x: event.clientX, y: event.clientY });
+      }}
     >
       {findOpen && (
         <FindToolbar
@@ -1429,6 +1472,18 @@ function App() {
       {!sidePanelsFillHeight && inputElement}
       {!sidePanelsFillHeight && <StatusBar />}
       <UpdateNotice />
+      <Toasts />
+      {terminalMenu && (
+        <TerminalMenu
+          x={terminalMenu.x}
+          y={terminalMenu.y}
+          connected={connected}
+          termRef={termRef}
+          inputRef={inputRef}
+          onOpenFind={() => setFindOpen(true)}
+          onClose={() => setTerminalMenu(null)}
+        />
+      )}
       {paletteOpen && <CommandPalette deps={paletteDeps()} onClose={() => setPaletteOpen(false)} />}
       {helpOpen && <HelpView onClose={() => setHelpOpen(false)} />}
     </main>
