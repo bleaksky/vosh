@@ -68,7 +68,7 @@ export function UpdateNotice() {
         onClick={() => void handleInstall()}
         disabled={installing}
       >
-        {installing ? '[installing...]' : '[install + restart]'}
+        {installing ? 'installing...' : 'install + restart'}
       </button>
       <button
         type="button"
@@ -76,7 +76,7 @@ export function UpdateNotice() {
         onClick={() => setDismissed(true)}
         disabled={installing}
       >
-        [later]
+        later
       </button>
     </div>
   );

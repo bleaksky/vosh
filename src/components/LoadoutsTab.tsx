@@ -102,7 +102,7 @@ export function LoadoutsTab({ onError }: Props) {
             className="settings-btn loadouts-clear-btn"
             onClick={() => void loadoutsSetActive([]).catch((e) => onError(String(e)))}
           >
-            [deactivate all]
+            deactivate all
           </button>
         )}
       </div>

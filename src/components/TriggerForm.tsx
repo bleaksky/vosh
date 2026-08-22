@@ -407,10 +407,10 @@ export function TriggerForm({ load, save, onError }: Props) {
 
       <div className="settings-actions">
         <button type="button" className="settings-btn" onClick={() => void doSave()}>
-          [save]
+          save
         </button>
         <button type="button" className="settings-btn settings-btn-mute" onClick={addTrigger}>
-          [+ trigger]
+          + trigger
         </button>
         {dirty && <UnsavedDot />}
         {savedAt !== null && <span className="settings-saved">saved.</span>}
@@ -601,7 +601,7 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
               onClick={addPatternRow}
               title="add another pattern (matches if any enabled row matches)"
             >
-              [+ pattern]
+              + pattern
             </button>
           )}
         </div>
@@ -692,21 +692,21 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
                 className="trigger-card-effect-add"
                 onClick={() => addEffect('send')}
               >
-                [+ send]
+                + send
               </button>
               <button
                 type="button"
                 className="trigger-card-effect-add"
                 onClick={() => addEffect('route')}
               >
-                [+ route]
+                + route
               </button>
               <button
                 type="button"
                 className="trigger-card-effect-add"
                 onClick={() => addEffect('script')}
               >
-                [+ script]
+                + script
               </button>
             </div>
           )}

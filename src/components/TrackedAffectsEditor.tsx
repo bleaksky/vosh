@@ -134,7 +134,7 @@ export function TrackedAffectsEditor({ config, update }: Props) {
           disabled={draft.trim().length === 0}
           onClick={() => addAffect(draft)}
         >
-          [add]
+          add
         </button>
       </div>
     </div>

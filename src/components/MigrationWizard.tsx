@@ -103,7 +103,7 @@ export function MigrationWizard({ onClose }: Props) {
         <header className="migration-wizard-header">
           <span className="migration-wizard-title">migrate to global catalog</span>
           <button type="button" className="migration-wizard-close" onClick={onClose}>
-            [close]
+            close
           </button>
         </header>
 
@@ -116,7 +116,7 @@ export function MigrationWizard({ onClose }: Props) {
               <div className="migration-wizard-applied-body">
                 catalog.toml and loadouts.toml are on disk; your per-profile files are preserved
                 under profiles/legacy/ in case you want to roll back. Vosh stays in legacy mode
-                until you quit and relaunch. Click [quit Vosh] below, then reopen Vosh to enter Path
+                until you quit and relaunch. Click quit Vosh below, then reopen Vosh to enter Path
                 B.
               </div>
             </div>
@@ -142,7 +142,7 @@ export function MigrationWizard({ onClose }: Props) {
                 className="settings-btn migration-apply-btn"
                 onClick={() => void handleQuit()}
               >
-                [quit Vosh]
+                quit Vosh
               </button>
             </>
           ) : (
@@ -157,7 +157,7 @@ export function MigrationWizard({ onClose }: Props) {
                 disabled={!plan || applying}
                 onClick={() => void handleApply()}
               >
-                {applying ? '[applying...]' : '[apply migration]'}
+                {applying ? 'applying...' : 'apply migration'}
               </button>
             </>
           )}

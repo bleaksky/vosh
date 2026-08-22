@@ -100,7 +100,7 @@ export function HelpView({ onClose }: Props) {
             onClick={onClose}
             aria-label="close help"
           >
-            [close]
+            close
           </button>
         </header>
 

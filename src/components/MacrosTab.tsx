@@ -308,11 +308,11 @@ function MacroRow({ initialKey, initialCommand, initialGroup, onSave, onDelete, 
           disabled={!canSave}
           onClick={() => void handleSaveClick()}
         >
-          {isNew ? '[add]' : '[save]'}
+          {isNew ? 'add' : 'save'}
         </button>
         {!isNew && onDelete && (
           <button type="button" className="settings-btn settings-btn-danger" onClick={onDelete}>
-            [delete]
+            delete
           </button>
         )}
       </div>
