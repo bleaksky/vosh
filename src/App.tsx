@@ -118,8 +118,26 @@ const DEFAULT_FONT_FAMILY =
 
 function App() {
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'idle' });
-  const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
-  const [fontSize, setFontSize] = useState(14);
+  // Boot with the last-known font instead of the compiled default.
+  // The real value arrives async from the Rust config; booting on the
+  // default and flipping when config lands rescales the whole input
+  // row a beat after every page load, and the next keystroke visibly
+  // shifts the layout as stale heights correct themselves.
+  const [fontFamily, setFontFamily] = useState(() => {
+    try {
+      return localStorage.getItem('vosh.cache.fontFamily') || DEFAULT_FONT_FAMILY;
+    } catch {
+      return DEFAULT_FONT_FAMILY;
+    }
+  });
+  const [fontSize, setFontSize] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem('vosh.cache.fontSize'));
+      return Number.isFinite(n) && n >= 6 && n <= 64 ? n : 14;
+    } catch {
+      return 14;
+    }
+  });
   const [themeTerminalColors, setThemeTerminalColors] = useState(false);
   // Panel layout. Each panel id maps to a placement: zone + (for
   // left/right zones) vertical alignment. Seeded from the backend
@@ -752,6 +770,12 @@ function App() {
     loadFontStack(fontFamily);
     root.style.setProperty('--app-font-family', fontFamily);
     root.style.setProperty('--app-font-size', `${fontSize}px`);
+    try {
+      localStorage.setItem('vosh.cache.fontFamily', fontFamily);
+      localStorage.setItem('vosh.cache.fontSize', String(fontSize));
+    } catch {
+      // cache only; config remains the source of truth
+    }
   }, [fontFamily, fontSize]);
 
   useEffect(() => {
@@ -1201,6 +1225,7 @@ function App() {
     <Input
       ref={inputRef}
       enabled={connected}
+      fontKey={`${fontFamily}|${fontSize}`}
       onError={handleError}
       onLocalEcho={(text) => {
         writeLive(text);
