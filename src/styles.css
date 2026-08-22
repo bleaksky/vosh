@@ -1003,8 +1003,8 @@ body {
      mixed over the chrome tone, so the tint tracks the theme. */
   background: color-mix(
     in srgb,
-    var(--c-surface-pane, var(--c-surface)) 93%,
-    var(--zone-card-tint, var(--c-surface-pane, var(--c-surface))) 7%
+    var(--c-surface-pane, var(--c-surface)) 97%,
+    var(--zone-card-tint, var(--c-surface-pane, var(--c-surface))) 3%
   );
   border-radius: 8px;
   overflow: hidden;
