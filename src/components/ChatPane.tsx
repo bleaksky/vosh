@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { chatChannelColor } from '../lib/chatColors';
 import { getChatLines, subscribeChatLines, type ChatLine } from '../lib/chatStore';
 
 interface Props {
@@ -126,7 +127,7 @@ function ChatColumn({ onClose }: { onClose?: () => void }) {
           </div>
         ) : (
           visible.map((l, i) => (
-            <div key={i} className="chat-pane-line">
+            <div key={i} className="chat-pane-line" style={{ color: chatChannelColor(l.pane) }}>
               <span className="chat-pane-tag">[{l.pane}]</span>
               <span className="chat-pane-text">{l.text}</span>
             </div>
