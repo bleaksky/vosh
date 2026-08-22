@@ -9,6 +9,7 @@ import {
   type AppTheme,
 } from '../lib/themes';
 import { applyTheme } from '../lib/theme';
+import { ANSI_SLOTS, CANONICAL_ANSI_16, setBaseAnsi } from '../lib/baseAnsi';
 import { setUiConfig, type CustomTheme, type UiConfig } from '../lib/session';
 
 interface Props {
@@ -203,8 +204,63 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
         />
       )}
 
+      <BaseAnsiSection config={config} setConfig={setConfig} onError={onError} />
       <SplitDividerRow config={config} setConfig={setConfig} onError={onError} />
       <InputEchoColorRow config={config} setConfig={setConfig} onError={onError} />
+    </div>
+  );
+}
+
+// The base terminal palette: ANSI 0-15 as used while tint-output-with-
+// theme is off. Editing any slot materializes the full 16-entry list
+// from the canonical chart; reset drops back to null (canonical).
+function BaseAnsiSection({ config, setConfig, onError }: Props) {
+  if (!config) return null;
+  const active = config.terminal_base_ansi ?? ANSI_SLOTS.map((s) => CANONICAL_ANSI_16[s]);
+  const isCustom = config.terminal_base_ansi !== null;
+  const persist = (next: string[] | null) => {
+    const updated: UiConfig = { ...config, terminal_base_ansi: next };
+    setConfig(() => updated);
+    setBaseAnsi(next);
+    void setUiConfig(updated).catch((e) => onError(String(e)));
+  };
+  return (
+    <div className="base-ansi">
+      <div className="base-ansi-head">
+        <span className="caps" style={{ color: 'var(--c-text-faint)' }}>
+          terminal base palette
+        </span>
+        <span className="base-ansi-note">
+          the ANSI 0-15 colors while tint output with theme is off
+        </span>
+        {isCustom && (
+          <button
+            type="button"
+            className="settings-btn settings-btn-mute"
+            onClick={() => persist(null)}
+          >
+            reset to canonical
+          </button>
+        )}
+      </div>
+      <div className="color-groups">
+        <div className="color-group">
+          <div className="color-group-grid">
+            {ANSI_SLOTS.map((slot, i) => (
+              <ColorSlot
+                key={slot}
+                slotName={slot}
+                value={active[i]}
+                onChange={(v) => {
+                  const next = [...active];
+                  next[i] = v;
+                  persist(next);
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

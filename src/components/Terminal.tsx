@@ -14,6 +14,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 import '@xterm/xterm/css/xterm.css';
+import { baseAnsiRecord, subscribeBaseAnsi } from '../lib/baseAnsi';
 import { loadScrollback, onOutput, setWindowSize } from '../lib/session';
 import { findTheme, type AppTheme } from '../lib/themes';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
@@ -182,54 +183,15 @@ interface Props {
 // cube (codes 16-231) and 24-step grayscale ramp (232-255) are
 // already theme-independent inside xterm.js; this fixes the 0-15
 // slice that the theme used to tint.
-//
-// Values match the SVG chart at
-// https://upload.wikimedia.org/wikipedia/commons/1/15/Xterm_256color_chart.svg
-const CANONICAL_ANSI_16: Pick<
-  ITheme,
-  | 'black'
-  | 'red'
-  | 'green'
-  | 'yellow'
-  | 'blue'
-  | 'magenta'
-  | 'cyan'
-  | 'white'
-  | 'brightBlack'
-  | 'brightRed'
-  | 'brightGreen'
-  | 'brightYellow'
-  | 'brightBlue'
-  | 'brightMagenta'
-  | 'brightCyan'
-  | 'brightWhite'
-> = {
-  black: '#000000',
-  red: '#800000',
-  green: '#008000',
-  yellow: '#808000',
-  blue: '#000080',
-  magenta: '#800080',
-  cyan: '#008080',
-  white: '#c0c0c0',
-  brightBlack: '#808080',
-  brightRed: '#ff0000',
-  brightGreen: '#00ff00',
-  brightYellow: '#ffff00',
-  brightBlue: '#0000ff',
-  brightMagenta: '#ff00ff',
-  brightCyan: '#00ffff',
-  brightWhite: '#ffffff',
-};
-
 function xtermThemeFor(theme: AppTheme, themeTerminalColors: boolean): ITheme {
-  // Legacy behavior (themeTerminalColors) lets the chrome theme color
-  // server output; the default keeps the canonical xterm-256 ANSI
-  // palette so output reads like a stock xterm. Either way the chrome
-  // theme owns the surfaces (background, foreground, cursor, selection).
+  // Tinted mode lets the chrome theme color server output; otherwise
+  // the BASE palette applies — the canonical xterm-256 chart unless
+  // the user replaced slots in the themes tab (lib/baseAnsi). Either
+  // way the chrome theme owns the surfaces (background, foreground,
+  // cursor, selection).
   const base: ITheme = themeTerminalColors
     ? { ...theme.xterm }
-    : { ...theme.xterm, ...CANONICAL_ANSI_16 };
+    : { ...theme.xterm, ...baseAnsiRecord() };
   // Make the selection translucent. Some themes ship a solid (and light)
   // selectionBackground; the search addon selects every active match, so
   // a washed-out selection means an unreadable search hit. Blending over
@@ -1007,6 +969,17 @@ export function Terminal({
     term.options.theme = xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColors);
     reportNativeTheme(getCurrentThemeId(), themeTerminalColors);
   }, [themeTerminalColors]);
+
+  // Re-apply when the user edits the base ANSI palette (the colors
+  // used while the tint toggle is off).
+  useEffect(() => {
+    return subscribeBaseAnsi(() => {
+      const term = termRef.current;
+      if (!term) return;
+      term.options.theme = xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColorsRef.current);
+      reportNativeTheme(getCurrentThemeId(), themeTerminalColorsRef.current);
+    });
+  }, []);
 
   // Live-refresh the xterm palette when the user switches themes from
   // the settings window. Listens on the cross-window theme event.

@@ -1778,6 +1778,7 @@ pub(crate) struct UiConfigPayload {
     pub keep_last_command: bool,
     pub theme_terminal_colors: Option<bool>,
     pub bright_bold: bool,
+    pub terminal_base_ansi: Option<Vec<String>>,
     pub custom_themes: Vec<crate::profile_config::CustomTheme>,
     pub split_divider_color: Option<String>,
     pub input_echo_color: Option<String>,
@@ -1807,6 +1808,7 @@ pub(crate) async fn ui_get_config(
         keep_last_command: p.ui.keep_last_command,
         theme_terminal_colors: p.ui.theme_terminal_colors,
         bright_bold: p.ui.bright_bold,
+        terminal_base_ansi: p.ui.terminal_base_ansi.clone(),
         custom_themes: p.ui.custom_themes.clone(),
         split_divider_color: p.ui.split_divider_color.clone(),
         input_echo_color: p.ui.input_echo_color.clone(),
@@ -1842,6 +1844,7 @@ pub(crate) async fn ui_set_config(
         keep_last_command,
         theme_terminal_colors,
         bright_bold,
+        terminal_base_ansi,
         custom_themes,
         split_divider_color,
         input_echo_color,
@@ -1886,6 +1889,7 @@ pub(crate) async fn ui_set_config(
         p.ui.keep_last_command = keep_last_command;
         p.ui.theme_terminal_colors = theme_terminal_colors;
         p.ui.bright_bold = bright_bold;
+        p.ui.terminal_base_ansi = terminal_base_ansi;
         p.ui.custom_themes = custom_themes;
         // Empty strings get normalized to None so the picker can clear
         // back to the theme default by submitting "".

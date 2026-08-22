@@ -33,6 +33,7 @@ import {
   presetsInstall,
   presetsRemove,
   subscribeBrightBoldChanged,
+  subscribeBaseAnsiChanged,
   subscribeCustomThemesChanged,
   subscribeDockLayoutChanged,
   subscribeProfileSwitched,
@@ -44,6 +45,7 @@ import { applyAndBroadcastTheme } from './lib/theme';
 import { loadFontStack } from './lib/fontLoader';
 import { defaultEnabledIds, PRESETS, presetTriggers } from './lib/presets';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
+import { setBaseAnsi } from './lib/baseAnsi';
 import { startChatStore } from './lib/chatStore';
 import { pushToast } from './lib/toasts';
 import { startGroupStore } from './lib/groupStore';
@@ -644,6 +646,7 @@ function App() {
         // Register user-authored themes BEFORE the theme apply so
         // the picked theme can actually be a custom entry.
         setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
+        setBaseAnsi(cfg.terminal_base_ansi);
         void applyAndBroadcastTheme(cfg.theme);
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
@@ -710,6 +713,7 @@ function App() {
           const cfg = await getUiConfig();
           if (cancelled) return;
           setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
+          setBaseAnsi(cfg.terminal_base_ansi);
           void applyAndBroadcastTheme(cfg.theme);
           setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
           setFontSize(cfg.font_size || 14);
@@ -884,6 +888,23 @@ function App() {
     let cancelled = false;
     subscribeCustomThemesChanged((list) => {
       setCustomThemes(list.map(customToAppTheme));
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Base ANSI palette edits from the settings window: update the
+    // live override; the Terminal re-derives via its own subscription.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    subscribeBaseAnsiChanged((colors) => {
+      setBaseAnsi(colors);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
