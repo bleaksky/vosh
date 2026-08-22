@@ -61,11 +61,15 @@ export function LoadoutsTab({ onError }: Props) {
   if (!state.path_b_active) {
     return (
       <div className="loadouts-tab">
+        <div className="settings-tab-head">
+          <div className="settings-pane-title">loadouts</div>
+          <span className="settings-tab-head-spacer" />
+        </div>
         <div className="loadouts-empty">
           <div className="loadouts-empty-title">Path B is not active.</div>
           <div className="loadouts-empty-body">
-            run the migration from Settings &middot; Profiles to convert your per-profile files into
-            a shared catalog + loadouts. once Path B is active, loadouts appear here.
+            run the migration preview from Settings &middot; Import to convert your per-profile
+            files into a shared catalog + loadouts. once Path B is active, loadouts appear here.
           </div>
         </div>
       </div>
@@ -86,6 +90,12 @@ export function LoadoutsTab({ onError }: Props) {
 
   return (
     <div className="loadouts-tab">
+      <div className="settings-tab-head">
+        <div className="settings-pane-title">loadouts</div>
+        <span className="settings-tab-head-spacer" />
+        <span className="settings-autosave-hint">changes save automatically</span>
+      </div>
+
       <div className="loadouts-help">
         Loadouts are named presets that toggle groups of aliases, triggers, and macros in your
         global catalog. Activate one or more; the runtime enables the union of their groups.
@@ -139,7 +149,7 @@ function LoadoutRow({ loadout, isActive, onToggle }: RowProps) {
           aria-label={`activate ${loadout.name}`}
         />
         <span className="loadout-row-name">{loadout.name}</span>
-        {isActive && <span className="loadout-row-active-tag">[active]</span>}
+        {isActive && <span className="loadout-row-active-tag">active</span>}
       </label>
       {loadout.description && <div className="loadout-row-description">{loadout.description}</div>}
       <div className="loadout-row-groups">

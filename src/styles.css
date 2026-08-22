@@ -2952,6 +2952,13 @@ body {
   line-height: 1.5;
 }
 
+/* Shared empty-state line for the list editors (triggers, aliases,
+   macros). The font picker keeps its own .settings-font-empty. */
+.settings-empty {
+  color: var(--c-text-faint);
+  padding: 4px 8px;
+}
+
 /* Enum chips. */
 .opt-chip {
   background: transparent;
@@ -3055,6 +3062,19 @@ body {
 .settings-pane {
   display: flex;
   flex-direction: column;
+}
+
+/* Tab header row used by TabHead (and its local copies): slab title,
+   spacer, then the autosave note or a tab-specific right slot, all on
+   one baseline. */
+.settings-tab-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.settings-tab-head-spacer {
+  flex: 1 1 auto;
 }
 
 /* Tab content header: Roboto Slab, per the canvas. */
@@ -3197,12 +3217,10 @@ body {
   margin-top: 8px;
 }
 
-.vitals-advanced-label {
-  font-size: 0.72em;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--c-text-dim);
-  margin: 10px 0 2px;
+/* Sub-headers inside the fold use the one section-header idiom; the
+   scoped margin keeps the old label rhythm. */
+.vitals-advanced-body .settings-section-label {
+  margin: 14px 0 4px;
 }
 
 .vitals-advanced-check {
@@ -3212,6 +3230,14 @@ body {
 .vitals-advanced-hint {
   font-size: 0.82em;
   padding: 4px 0;
+}
+
+/* Reset bars inside the fold sit in normal flow. The sticky
+   treatment belongs to the tab-level action bar only. */
+.vitals-advanced .settings-actions {
+  position: static;
+  background: none;
+  padding: 6px 0 0;
 }
 
 .settings-version {
@@ -3504,21 +3530,67 @@ body {
 .trigger-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  background: var(--c-surface-pane);
+  gap: 12px;
+  padding: 14px 16px;
   border: 1px solid var(--c-border);
-  border-radius: 3px;
+  border-radius: 8px;
 }
 
 .trigger-card.is-readonly {
   opacity: 0.7;
 }
 
+/* Folded card: the head collapses to a single line — enabled box,
+   mono name, dim first pattern (ellipsized), dim effects count,
+   chevron. */
+.trigger-card.is-collapsed {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+}
+
+.trigger-card-collapsed-name {
+  font-family: var(--font-mono);
+  color: var(--c-text);
+}
+
+.trigger-card-collapsed-pattern {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--c-text-dim);
+}
+
+.trigger-card-collapsed-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-text-dim);
+  white-space: nowrap;
+}
+
+.trigger-card-collapse {
+  background: transparent;
+  border: none;
+  color: var(--c-text-faint);
+  padding: 0 2px;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.trigger-card-collapse:hover {
+  color: var(--c-accent);
+}
+
 .trigger-card-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .trigger-card-enabled {
@@ -3532,21 +3604,13 @@ body {
   accent-color: var(--c-accent);
 }
 
+/* Text and number entry inside the card rides the global underline
+   treatment; these rules only own layout. */
 .trigger-card-name {
   flex: 1 1 auto;
   min-width: 0;
-  background: var(--c-surface);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  padding: 3px 6px;
-  font-family: inherit;
-  font-size: inherit;
-  border-radius: 2px;
 }
 
-.trigger-card-name:focus,
-.trigger-card input[type='text']:focus,
-.trigger-card input[type='number']:focus,
 .trigger-card select:focus {
   outline: none;
   border-color: var(--c-accent);
@@ -3554,38 +3618,29 @@ body {
 
 .trigger-card-priority {
   width: 52px;
-  background: var(--c-surface);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  padding: 3px 6px;
-  font-family: inherit;
-  font-size: inherit;
-  border-radius: 2px;
-  -webkit-appearance: none;
-  appearance: none;
 }
 
 .trigger-card-preset {
   color: var(--c-text-faint);
   background: var(--c-surface);
   border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
+  border-radius: 4px;
   padding: 1px 6px;
   letter-spacing: 0.02em;
 }
 
 .trigger-card-remove {
   background: transparent;
-  border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
+  border: none;
   color: var(--c-text-faint);
-  padding: 1px 8px;
-  font: inherit;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
   cursor: pointer;
+  line-height: 1;
 }
 
 .trigger-card-remove:hover {
-  border-color: var(--c-danger);
   color: var(--c-danger);
 }
 
@@ -3599,37 +3654,6 @@ body {
 .trigger-card-label {
   color: var(--c-text-faint);
   padding-top: 4px;
-}
-
-.trigger-card-row input[type='text'] {
-  background: var(--c-surface);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  padding: 3px 6px;
-  font-family: inherit;
-  font-size: inherit;
-  border-radius: 2px;
-}
-
-.trigger-card-action {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.trigger-card-action select {
-  background: var(--c-surface);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  padding: 3px 6px;
-  font-family: inherit;
-  font-size: inherit;
-  border-radius: 2px;
-}
-
-.trigger-card-action input[type='text'] {
-  flex: 1 1 240px;
 }
 
 .trigger-card-template {
@@ -3654,21 +3678,11 @@ body {
   min-width: 0;
 }
 
+/* Visual kind picker: an .opt-chip group, per the mockup. */
 .trigger-card-visual-radios {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 10px;
-}
-
-.trigger-card-radio {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--c-text-muted);
-}
-
-.trigger-card-radio input[type='radio'] {
-  accent-color: var(--c-accent);
+  gap: 6px;
 }
 
 .trigger-card-effect-row {
@@ -3685,31 +3699,20 @@ body {
 
 .trigger-card-effect-row input[type='text'] {
   flex: 1 1 auto;
-  background: var(--c-surface);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  padding: 3px 6px;
-  font-family: inherit;
-  border-radius: 2px;
-}
-
-.trigger-card-effect-row input[type='text']:focus {
-  outline: none;
-  border-color: var(--c-accent);
 }
 
 .trigger-card-effect-remove {
   background: transparent;
-  border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
+  border: none;
   color: var(--c-text-faint);
-  padding: 1px 8px;
-  font: inherit;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
   cursor: pointer;
+  line-height: 1;
 }
 
 .trigger-card-effect-remove:hover {
-  border-color: var(--c-danger);
   color: var(--c-danger);
 }
 
@@ -3793,18 +3796,17 @@ body {
 
 .trigger-card-pattern-remove {
   background: transparent;
-  border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
+  border: none;
   color: var(--c-text-faint);
-  padding: 0 6px;
-  font: inherit;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
   cursor: pointer;
-  line-height: 1.4;
+  line-height: 1;
 }
 
 .trigger-card-pattern-remove:hover {
-  color: var(--c-text-strong);
-  border-color: var(--c-accent);
+  color: var(--c-danger);
 }
 
 .trigger-card-pattern-add {
@@ -3856,7 +3858,7 @@ body {
 .alias-row-mode {
   background: transparent;
   border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
+  border-radius: 4px;
   color: var(--c-text-faint);
   padding: 2px 8px;
   font: inherit;
@@ -3912,22 +3914,24 @@ body {
 
 .alias-row-remove {
   background: transparent;
-  border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
+  border: none;
   color: var(--c-text-faint);
-  padding: 1px 8px;
-  font: inherit;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
   cursor: pointer;
+  line-height: 1;
 }
 
 .alias-row-remove:hover {
-  border-color: var(--c-danger);
   color: var(--c-danger);
 }
 
 .settings-row {
   display: grid;
-  grid-template-columns: 96px 1fr;
+  /* Aligned to the unified form grid: one 140px label column across
+     the whole window (settings-redo rule). */
+  grid-template-columns: 140px 1fr;
   align-items: center;
   gap: 14px;
   padding-bottom: 11px;
@@ -3945,56 +3949,21 @@ body {
   gap: 8px;
 }
 
-.settings-row select,
-.settings-row input[type='number'],
-.settings-row input[type='text'],
-.settings-row input[type='search'] {
-  background: var(--c-surface);
+/* Selects keep a quiet boxed look window-wide; text and number entry
+   is underline-only via the unified form system. */
+.settings-body select {
+  background: var(--c-surface-pane);
   color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  padding: 4px 8px;
-  font-family: inherit;
-  border-radius: 2px;
-  /* Strip default macOS search-input chrome (rounded pill, magnifier,
-     etc.) so search inputs render with the same flat dark surface as
-     every other input on the page. */
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-.settings-row select:focus,
-.settings-row input[type='number']:focus,
-.settings-row input[type='text']:focus,
-.settings-row input[type='search']:focus {
-  outline: none;
-  border-color: var(--c-accent);
-}
-
-/* Settings-body-wide form-control aesthetic. The above .settings-row
-   rules cover the General tab; the Panels tab uses its own row
-   containers (.panels-vitals-glyph-field, .panels-row-control, etc.)
-   so without this every <select> and number <input> there falls back
-   to the browser default white chrome. This single rule pins every
-   form control inside the Settings window to the dark theme. */
-.settings-body select,
-.settings-body input[type='number'],
-.settings-body input[type='text'],
-.settings-body input[type='search'] {
-  background: var(--c-surface-deep);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
+  border: 1px solid var(--c-border);
   padding: 3px 6px;
   font-family: inherit;
   font-size: inherit;
-  border-radius: 2px;
+  border-radius: 6px;
   -webkit-appearance: none;
   appearance: none;
-}
-
-.settings-body select {
   /* Keep room for the native dropdown chevron the appearance:none
-     strip removes from sight. Replaced with a unicode caret painted
-     via the background-image trick below. */
+     strip removes from sight. Replaced with a caret painted via the
+     background-image trick below. */
   padding-right: 22px;
   background-image:
     linear-gradient(45deg, transparent 50%, var(--c-text-faint) 50%),
@@ -4008,10 +3977,7 @@ body {
   background-repeat: no-repeat;
 }
 
-.settings-body select:focus,
-.settings-body input[type='number']:focus,
-.settings-body input[type='text']:focus,
-.settings-body input[type='search']:focus {
+.settings-body select:focus {
   outline: none;
   border-color: var(--c-accent);
 }
@@ -4305,13 +4271,6 @@ body {
   gap: 12px;
 }
 
-.logs-section-label {
-  color: var(--c-text-faint);
-  letter-spacing: 0.04em;
-  text-transform: lowercase;
-  padding-bottom: 4px;
-}
-
 .logs-sessions {
   display: flex;
   flex-direction: column;
@@ -4324,7 +4283,7 @@ body {
   min-height: 0;
   overflow-y: auto;
   border: 1px solid var(--c-border);
-  border-radius: 3px;
+  border-radius: 6px;
   background: var(--c-surface);
   display: flex;
   flex-direction: column;
@@ -4391,19 +4350,6 @@ body {
 
 .logs-search-form input[type='text'] {
   flex: 1 1 auto;
-  background: var(--c-surface);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  padding: 3px 8px;
-  font: inherit;
-  border-radius: 2px;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-.logs-search-form input[type='text']:focus {
-  outline: none;
-  border-color: var(--c-accent);
 }
 
 .logs-case,
@@ -4550,249 +4496,6 @@ body {
   gap: 12px;
 }
 
-/* Sub-toggle at the top of the Panels tab. Three pills:
-   [layout | panes | chips]. Pure visual swap of the rest of the tab. */
-.panels-subtoggle {
-  display: inline-flex;
-  align-self: flex-start;
-  gap: 2px;
-  padding: 2px;
-  background: var(--c-surface-pane, var(--c-surface));
-  border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
-}
-.panels-subtoggle-btn {
-  background: transparent;
-  border: none;
-  color: var(--c-text-faint);
-  font-family: inherit;
-  font-size: 0.92em;
-  padding: 4px 12px;
-  cursor: pointer;
-  border-radius: 2px;
-  letter-spacing: 0.04em;
-}
-.panels-subtoggle-btn:hover {
-  color: var(--c-text);
-}
-.panels-subtoggle-btn.is-on {
-  color: var(--c-accent);
-  background: var(--c-accent-soft, rgba(176, 200, 212, 0.12));
-}
-
-/* Panes accordion: one expandable row per pane that has content config. */
-.panes-accordion {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.panes-accordion-row {
-  background: var(--c-surface-pane, var(--c-surface));
-  border: 1px solid var(--c-border);
-  border-radius: 2px;
-}
-.panes-accordion-row.is-open {
-  border-color: var(--c-border-strong);
-}
-.panes-accordion-head {
-  display: grid;
-  grid-template-columns: 120px 1fr 24px;
-  align-items: center;
-  gap: 14px;
-  padding: 9px 14px;
-  background: transparent;
-  border: none;
-  color: var(--c-text);
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  width: 100%;
-}
-.panes-accordion-head:hover {
-  color: var(--c-text-strong);
-}
-.panes-accordion-name {
-  font-weight: 600;
-}
-.panes-accordion-desc {
-  color: var(--c-text-faint);
-  font-size: 0.88em;
-  line-height: 1.35;
-}
-.panes-accordion-caret {
-  text-align: right;
-  color: var(--c-text-faint);
-}
-.panes-accordion-row.is-open .panes-accordion-caret {
-  color: var(--c-accent);
-}
-.panes-accordion-body {
-  padding: 6px 14px 14px;
-  border-top: 1px dashed var(--c-border);
-}
-
-/* Chips view rows. Same shape as PanelRow but no align column and a
-   shorter dropdown set. */
-.chips-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.chips-row {
-  display: grid;
-  grid-template-columns: 130px 24px auto 1fr;
-  align-items: center;
-  gap: 12px;
-  padding: 7px 12px;
-  background: var(--c-surface-pane, var(--c-surface));
-  border: 1px solid var(--c-border);
-  border-radius: 2px;
-}
-.chips-row-name {
-  color: var(--c-text-strong);
-  letter-spacing: 0.02em;
-}
-.chips-row-arrow {
-  text-align: center;
-  color: var(--c-text-faint);
-}
-.chips-row-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.chips-row-control-label {
-  color: var(--c-text-faint);
-  font-size: 0.85em;
-}
-.chips-row-hint {
-  color: var(--c-text-faint);
-  font-size: 0.88em;
-  line-height: 1.35;
-}
-/* Preset gallery at the top of the Chips sub-view. One-click presets
-   for the most common tick + mud-time placements. The active preset
-   (where both chips' zones match the preset's definition) lights up
-   with the accent border. Each card includes a miniature window
-   preview so the choice reads visually, not just by name. */
-.chip-presets {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 10px;
-}
-.chip-preset {
-  background: var(--c-surface-pane, var(--c-surface));
-  border: 1px solid var(--c-border);
-  border-radius: 2px;
-  padding: 10px 12px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  text-align: left;
-  font-family: inherit;
-  color: var(--c-text);
-}
-.chip-preset:hover {
-  border-color: var(--c-border-strong);
-}
-.chip-preset.is-active {
-  border-color: var(--c-accent);
-  background: var(--c-accent-soft, rgba(176, 200, 212, 0.06));
-}
-.chip-preset-name {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  color: var(--c-text-strong);
-  font-weight: 600;
-  font-size: 0.92em;
-}
-.chip-preset-tag {
-  color: var(--c-accent);
-  font-size: 0.78em;
-  letter-spacing: 0.05em;
-}
-.chip-preset-desc {
-  color: var(--c-text-faint);
-  font-size: 0.82em;
-  line-height: 1.4;
-}
-
-/* Mini-window preview inside a preset card. Stacks four rows:
-   top (roomstrip), center (terminal), bottom (vitals + affects), and
-   the statusbar strip. A small `+ T` chip floats into whichever zone
-   the preset routes tick + time to so the choice is visible at a
-   glance. */
-.chip-preset-mini {
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: 12px 1fr 16px 12px;
-  gap: 2px;
-  height: 80px;
-  background: var(--c-surface-deep, var(--c-surface));
-  border: 1px solid var(--c-border);
-  border-radius: 2px;
-  padding: 2px;
-}
-.chip-preset-mini-row {
-  background: var(--c-surface);
-  border: 1px solid var(--c-border-soft, var(--c-border));
-  border-radius: 1px;
-  padding: 0 4px;
-  font-size: 7.5px;
-  color: var(--c-text-faint);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  letter-spacing: 0.04em;
-}
-.chip-preset-mini-row.center {
-  background: transparent;
-  border: 1px dashed var(--c-border-soft, var(--c-border));
-  color: var(--c-text-dim, var(--c-text-faint));
-  justify-content: center;
-}
-.chip-preset-mini-row.statusbar {
-  background: var(--c-surface-deep, var(--c-surface));
-  border-top: 1px solid var(--c-border-soft, var(--c-border));
-  border-left: none;
-  border-right: none;
-  border-bottom: none;
-  font-size: 7px;
-  color: var(--c-text-faint);
-}
-.chip-preset-mini-row.statusbar.has-chip {
-  color: var(--c-accent);
-  border-top-color: var(--c-accent);
-}
-.chip-preset-mini-pill {
-  background: var(--c-surface-emphasis);
-  border: 1px solid var(--c-border);
-  border-radius: 1px;
-  padding: 0 4px;
-  font-size: 7.5px;
-  color: var(--c-text);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.chip-preset-mini-pill.standalone {
-  margin-left: auto;
-  color: var(--c-accent);
-  border-color: var(--c-accent);
-}
-.chip-preset-mini-pill.has-chip {
-  color: var(--c-text-strong);
-}
-.chip-preset-mini-attach {
-  font-size: 6.5px;
-  color: var(--c-accent);
-  background: var(--c-accent-soft, rgba(176, 200, 212, 0.12));
-  padding: 0 3px;
-  border-radius: 1px;
-}
-
 /* Chip style picker. Three cards showing how the user-selected style
    renders the chip. Same selection shape as the preset gallery so
    the two surfaces read as siblings. */
@@ -4852,76 +4555,6 @@ body {
 .chip-style-sample-value {
   color: var(--c-text-strong);
   font-variant-numeric: tabular-nums;
-}
-
-/* Inline tick-content editor that rides directly under the tick chip
-   row in the Chips sub-view. Indents into the chip row's bracket-name
-   column so it reads as belonging to that row. */
-.chips-tick-config {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 12px 10px 24px;
-  margin: -4px 0 4px 0;
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-top: none;
-  border-radius: 0 0 2px 2px;
-}
-.chips-tick-config-loading {
-  padding: 6px 12px;
-  color: var(--c-text-faint);
-}
-.chips-tick-config-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 18px;
-  align-items: center;
-}
-.chips-tick-config-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.88em;
-  color: var(--c-text);
-}
-.chips-tick-config-field > span:first-child {
-  color: var(--c-text-faint);
-  letter-spacing: 0.02em;
-}
-.chips-tick-config-toggle {
-  cursor: pointer;
-}
-.chips-tick-config-toggle span {
-  color: var(--c-text);
-}
-.chips-tick-config-field-wide {
-  flex: 1 1 280px;
-}
-.chips-tick-config-field-wide input[type='text'] {
-  flex: 1 1 auto;
-  min-width: 200px;
-}
-.chips-tick-config-field input[type='number'] {
-  width: 64px;
-}
-.chips-tick-config-field input[type='text'] {
-  background: var(--c-surface-emphasis);
-  border: 1px solid var(--c-border-strong);
-  color: var(--c-text-strong);
-  font-family: inherit;
-  font-size: 0.95em;
-  padding: 3px 6px;
-  border-radius: 2px;
-}
-.chips-tick-config-field input[type='text']:disabled,
-.chips-tick-config-field input[type='number']:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.chips-tick-config-unit {
-  color: var(--c-text-faint);
-  font-size: 0.85em;
 }
 
 .panels-tab-header {
@@ -5133,21 +4766,6 @@ body {
   color: var(--c-text-faint);
 }
 
-/* Header above the per-panel rows. Mirrors the .panels-vitals-header
-   look so the two sections (panel layout, vitals) read as siblings
-   and the per-panel rows are visibly labeled as a configuration
-   block rather than floating chrome. */
-.panels-section-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  font-weight: 600;
-  color: var(--c-text);
-  margin-top: 12px;
-  padding-top: 6px;
-  border-top: 1px dashed var(--c-border);
-}
-
 /* Per-panel rows --------------------------------------------- */
 .panels-rows {
   display: flex;
@@ -5234,76 +4852,31 @@ body {
    The frame matches the rest of the tab (thin border, faint header)
    but indents inputs so the section reads as a child of the per-panel
    rows above it. */
-.panels-vitals {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--c-border);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
 
-.panels-vitals-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  font-weight: 600;
-  color: var(--c-text);
-}
-
-.panels-vitals-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.panels-vitals-preset-chip {
+.vitals-toggle {
   font-size: 0.85em;
-}
-
-.panels-vitals-toggles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  padding: 6px 4px;
-  border: 1px solid var(--c-border);
-  background: var(--c-surface-deep);
-  border-radius: 2px;
-}
-
-.panels-vitals-toggle {
-  font-size: 0.85em;
-}
-
-.panels-vitals-glyphs,
-.panels-vitals-quickpicks,
-.panels-vitals-layout {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
 }
 
 /* Custom-template editor. Always rendered; the body greys out when
    the toggle above it is off so the user can read the help text and
    default template without enabling it. */
-.panels-vitals-template {
+.vitals-template {
   border-top: 1px dashed var(--c-border);
   padding-top: 8px;
 }
 
-.panels-vitals-template-body {
+.vitals-template-body {
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding-top: 8px;
 }
 
-.panels-vitals-template-body.is-disabled {
+.vitals-template-body.is-disabled {
   opacity: 0.45;
 }
 
-.panels-vitals-template-input {
+.vitals-template-input {
   width: 100%;
   background: var(--c-surface-deep);
   color: var(--c-text);
@@ -5313,23 +4886,23 @@ body {
   resize: vertical;
 }
 
-.panels-vitals-template-input:focus {
+.vitals-template-input:focus {
   outline: none;
   border-color: var(--c-accent);
 }
 
-.panels-vitals-template-help {
+.vitals-template-help {
   color: var(--c-text-faint);
   font-size: 0.85em;
   line-height: 1.5;
 }
 
-.panels-vitals-template-help-title {
+.vitals-template-help-title {
   color: var(--c-text);
   margin-right: 6px;
 }
 
-.panels-vitals-template-help code {
+.vitals-template-help code {
   background: var(--c-surface-deep);
   color: var(--c-accent);
   padding: 0 4px;
@@ -5338,96 +4911,40 @@ body {
   font-size: 0.95em;
 }
 
-.panels-vitals-glyphs.is-disabled,
-.panels-vitals-quickpicks.is-disabled {
-  opacity: 0.4;
-  pointer-events: none;
-}
-
 /* Vitals style row (mockup-style). One unified dropdown carries the
    bar_style + glyph pair, sitting next to the width number. Stacks
    vertically with the bar-font row and the conditional custom-glyph
    row to keep the top of the vitals section uncluttered. */
-.panels-vitals-style {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0 0 6px;
-}
-
-.panels-vitals-style.is-disabled {
-  opacity: 0.4;
-  pointer-events: none;
-}
-
-.panels-vitals-style-field {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.panels-vitals-style-field-grow {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.panels-vitals-style-field-grow select,
-.panels-vitals-style-field-grow input[type='text'] {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.panels-vitals-style-label {
-  color: var(--c-text-faint);
-  font-size: 0.9em;
-  text-transform: lowercase;
-  flex: 0 0 auto;
-}
 
 /* Hint row under the bar-font dropdown. Used by the MonoLisa
    detection status; sits flush under the dropdown without a top
    margin so it reads as belonging to the field above. */
-.panels-vitals-style-hint {
-  margin: -2px 0 8px;
-  font-size: 0.85em;
-  padding-left: 86px;
-}
 
-.panels-vitals-style-hint.is-disabled {
-  opacity: 0.4;
-}
-
-.panels-vitals-style-ok {
+.vitals-style-ok {
   color: var(--c-text-dim);
 }
 
-.panels-vitals-style-warn {
+.vitals-style-warn {
   color: var(--c-warn, var(--c-text-faint));
 }
 
 /* Per-vital color override rows. Sits below the layout / glyph
    knobs in the vitals section. Each row has a label, a native color
-   swatch, the hex text field, and a [clear] button so the user can
+   swatch, the hex text field, and a clear button so the user can
    fall back to the built-in green / blue / orange ramp. */
-.panels-vitals-colors {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 6px 0 4px;
-}
 
-.panels-vitals-color-row {
+.vitals-color-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.panels-vitals-color-label {
+.vitals-color-label {
   flex: 0 0 6em;
   color: var(--c-text);
 }
 
-.panels-vitals-color-row input[type='color'] {
+.vitals-color-row input[type='color'] {
   flex: 0 0 auto;
   width: 28px;
   height: 22px;
@@ -5438,7 +4955,7 @@ body {
   cursor: pointer;
 }
 
-.panels-vitals-color-hex {
+.vitals-color-hex {
   flex: 1 1 auto;
   min-width: 0;
   background: var(--c-surface-deep);
@@ -5451,26 +4968,14 @@ body {
   outline: none;
 }
 
-.panels-vitals-color-hex:focus {
+.vitals-color-hex:focus {
   border-color: var(--c-accent);
-}
-
-.panels-vitals-glyph-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.panels-vitals-glyph-label {
-  color: var(--c-text-faint);
-  letter-spacing: 0.02em;
-  font-size: 0.85em;
 }
 
 /* The glyph inputs are deliberately narrow — the user is expected to
    paste a single Unicode character, not a word. The ch-based width
    keeps them small but accommodates wider glyphs like `██`. */
-.panels-vitals-glyph-input {
+.vitals-glyph-input {
   width: 4ch;
   background: var(--c-surface-deep);
   color: var(--c-text);
@@ -5481,85 +4986,21 @@ body {
   text-align: center;
 }
 
-.panels-vitals-glyph-input:focus {
+.vitals-glyph-input:focus {
   outline: none;
   border-color: var(--c-accent);
 }
 
-/* Disclosure-style "advanced" expander used for the CSS font-family
-   override and for the template editor. Keeps complexity out of the
-   default view but one click away. */
-.vsplit-adv {
-  margin-top: 6px;
-}
-
-.vsplit-adv > summary {
-  cursor: pointer;
-  list-style: none;
-  color: var(--c-text-dim);
-  font-size: 0.7em;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  padding: 4px 0;
-  user-select: none;
-}
-
-.vsplit-adv > summary::before {
-  content: '+ ';
-}
-
-.vsplit-adv[open] > summary::before {
-  content: '− ';
-}
-
-.vsplit-adv > summary:hover {
-  color: var(--c-text);
-}
-
-.vsplit-adv-input {
-  width: 100% !important;
-  text-align: left !important;
-  margin-top: 6px;
-}
-
-.panels-vitals-quickpicks-label {
-  color: var(--c-text-faint);
-  letter-spacing: 0.02em;
-  font-size: 0.85em;
+/* Custom CSS font-family stack entry. Fills its row so long stacks
+   stay readable. */
+.vitals-font-input {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* Glyph quick-pick chip. Each chip renders a 3-up sample of the
    filled+empty pair (e.g. ▰▰▰▱▱▱) so the user can recognize the
    style at a glance. Active chip carries the accent border. */
-.panels-vitals-glyph-chip {
-  font-family: inherit;
-  font-size: 1em;
-  letter-spacing: 0;
-  padding: 2px 6px;
-  background: var(--c-surface-deep);
-  color: var(--c-text);
-  border: 1px solid var(--c-border);
-  cursor: pointer;
-  border-radius: 2px;
-  font-weight: 700;
-}
-
-.panels-vitals-glyph-chip:hover {
-  border-color: var(--c-accent-soft);
-}
-
-.panels-vitals-glyph-chip.is-active {
-  border-color: var(--c-accent);
-  background: color-mix(in oklab, var(--c-accent) 8%, var(--c-surface-deep));
-}
-
-.panels-vitals-preview {
-  margin-top: 4px;
-  border: 1px solid var(--c-border);
-  border-radius: 2px;
-  overflow: hidden;
-  background: var(--c-surface);
-}
 
 /* The preview uses the real .vitals-bar styles so what the user
    sees in Settings matches the runtime. The header reads current
@@ -5742,20 +5183,10 @@ body {
   border-bottom: 1px solid var(--c-border-soft);
 }
 
+/* Macros inputs take the global underline treatment; the leftovers
+   here are layout only. */
 .macros-group {
-  background: var(--c-surface-emphasis);
-  color: var(--c-text-faint);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
-  padding: 4px 8px;
-  font: inherit;
   min-width: 0;
-}
-
-.macros-group:focus {
-  outline: none;
-  border-color: var(--c-accent);
-  color: var(--c-text);
 }
 
 /* Trigger-card group input: same role as the priority input, sits
@@ -5820,33 +5251,33 @@ body {
 }
 
 /* Collapsible group section shared by trigger/alias/macro forms.
-   Header reads as a folder bar — name + count on the left, the
-   per-group enable checkbox on the right. Body holds the actual
-   item rows. A disabled group dims its header + body so the user
-   can see at a glance that nothing inside is currently effective. */
+   Header reads as a folder line — chevron, name, and count on the
+   left over a hairline, the per-group enable checkbox on the right.
+   Body holds the actual item rows. A disabled group dims its header
+   + body so the user can see at a glance that nothing inside is
+   currently effective. */
 .group-section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 10px;
   margin-top: 6px;
 }
 
 .group-section-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  background: var(--c-surface-deep, var(--c-surface));
-  border: 1px solid var(--c-border-soft);
-  border-radius: 3px;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--c-border);
 }
 
 .group-section-collapse {
   background: transparent;
   border: none;
   color: var(--c-text-faint);
-  padding: 0 4px;
-  font: inherit;
+  padding: 0 2px;
+  display: inline-flex;
+  align-items: center;
   cursor: pointer;
   line-height: 1;
 }
@@ -5856,13 +5287,14 @@ body {
 }
 
 .group-section-name {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--c-text);
 }
 
 .group-section-count {
-  color: var(--c-text-faint);
-  font-size: 0.88em;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-text-dim);
 }
 
 .group-section-toggle {
@@ -5883,8 +5315,7 @@ body {
 .group-section-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding-left: 18px;
+  gap: 10px;
 }
 
 .group-section.group-disabled .group-section-head {
@@ -5902,36 +5333,10 @@ body {
   margin-top: 6px;
 }
 
-.macros-key,
-.macros-command {
-  background: var(--c-surface-emphasis);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
-  padding: 4px 8px;
-  font-family: inherit;
-  font-size: inherit;
-}
-
 .macros-key {
   text-align: center;
   font-weight: 700;
-  color: var(--c-accent);
   cursor: pointer;
-  outline: none;
-}
-
-.macros-key:focus {
-  border-color: var(--c-accent);
-  color: var(--c-text-strong);
-}
-
-.macros-command {
-  outline: none;
-}
-
-.macros-command:focus {
-  border-color: var(--c-accent);
 }
 
 .macros-actions {
@@ -6268,77 +5673,8 @@ body {
   line-height: 1.4;
 }
 
-/* Scope toggle section. Lists each UI category with two
-   bracketed pill buttons (global / profile). The active pill
-   takes the accent color so the user reads the current state at
-   a glance; the inactive one stays in muted text. */
-.scope-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  background: var(--c-surface-emphasis);
-  border: 1px solid var(--c-border);
-  border-radius: 3px;
-}
-
-.scope-section-title {
-  color: var(--c-text-faint);
-  text-transform: lowercase;
-  letter-spacing: 0.06em;
-  font-size: 0.85em;
-}
-
-.scope-section-help {
-  color: var(--c-text-dim);
-  font-size: 0.85em;
-  line-height: 1.4;
-}
-
-.scope-grid {
-  display: grid;
-  grid-template-columns: auto auto;
-  column-gap: 18px;
-  row-gap: 4px;
-  align-items: center;
-}
-
-.scope-row {
-  display: contents;
-}
-
-.scope-row-label {
-  color: var(--c-text-muted);
-}
-
-.scope-row-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.scope-pill {
-  background: transparent;
-  color: var(--c-text-dim);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
-  padding: 0 8px;
-  font: inherit;
-  cursor: pointer;
-  text-transform: lowercase;
-  letter-spacing: 0.04em;
-}
-
-.scope-pill:hover {
-  color: var(--c-text-strong);
-  border-color: var(--c-accent);
-}
-
-.scope-pill.is-active {
-  background: var(--c-accent);
-  color: var(--c-surface-deep);
-  border-color: var(--c-accent);
-}
+/* The scope global/profile toggles render as .settings-frow rows
+   with .opt-chip pairs, so they carry no styles of their own. */
 
 .profiles-create-row {
   display: flex;
@@ -6348,18 +5684,6 @@ body {
 
 .profiles-create-row input[type='text'] {
   flex: 1 1 auto;
-  background: var(--c-surface-emphasis);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
-  padding: 4px 8px;
-  font-family: inherit;
-  font-size: inherit;
-  outline: none;
-}
-
-.profiles-create-row input[type='text']:focus {
-  border-color: var(--c-accent);
 }
 
 .profiles-list {
@@ -6371,7 +5695,7 @@ body {
 .profile-row {
   border: 1px solid var(--c-border-soft);
   border-left: 3px solid transparent;
-  border-radius: 3px;
+  border-radius: 6px;
   background: var(--c-surface-lift);
   padding: 6px 10px;
 }
@@ -6394,8 +5718,9 @@ body {
 }
 
 .profile-row-marker {
+  display: inline-flex;
+  align-items: center;
   color: var(--c-text-dim);
-  font-size: 0.9em;
 }
 
 .profile-row.is-active .profile-row-marker {
@@ -6416,15 +5741,9 @@ body {
   font-size: 0.9em;
 }
 
+/* Inline rename / duplicate input. The global underline treatment
+   styles the box; this only keeps the name's weight while editing. */
 .profile-row-rename {
-  background: var(--c-surface-emphasis);
-  color: var(--c-text-strong);
-  border: 1px solid var(--c-accent);
-  border-radius: 2px;
-  padding: 2px 6px;
-  font-family: inherit;
-  font-size: inherit;
-  outline: none;
   font-weight: 700;
 }
 
@@ -6453,21 +5772,6 @@ body {
   font-size: 0.9em;
 }
 
-.profile-row-field input[type='text'] {
-  background: var(--c-surface-emphasis);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
-  padding: 4px 8px;
-  font-family: inherit;
-  font-size: 1em;
-  outline: none;
-}
-
-.profile-row-field input[type='text']:focus {
-  border-color: var(--c-accent);
-}
-
 .profile-row-match-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -6479,44 +5783,10 @@ body {
   gap: 14px;
 }
 
-/* Migration section row at the bottom of the Profiles tab. A small
-   call-to-action that opens the wizard modal. The hint text explains
-   the read-only nature of the current build so the user does not
-   expect a one-click migrate. */
-.migration-section-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 12px;
-  margin-top: 12px;
-  background: var(--c-surface-emphasis);
-  border: 1px solid var(--c-border);
-  border-radius: 3px;
-}
-
-.migration-section-text {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.migration-section-title-inline {
-  color: var(--c-text);
-  font-weight: 600;
-}
-
-.migration-section-hint {
-  color: var(--c-text-faint);
-  font-size: 0.85em;
-  line-height: 1.4;
-}
-
-/* Migration wizard modal. Full-screen backdrop, centered panel, fixed
-   height with scroll. Matches the dialog density used elsewhere in
-   the app (tmux-style chrome, brackets for actions, no rounded chip
-   buttons). */
+/* Migration wizard modal. Opened from the migrate-between-scopes
+   section at the bottom of the Import tab. Full-screen backdrop,
+   centered panel, fixed height with scroll. Matches the dialog
+   density used elsewhere in the app. */
 .migration-wizard-backdrop {
   position: fixed;
   inset: 0;
@@ -6829,25 +6099,6 @@ body {
   line-height: 1.4;
 }
 
-.import-format-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.import-format-opt {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--c-text-muted);
-  cursor: pointer;
-}
-
-.import-format-opt input[type='radio'] {
-  accent-color: var(--c-accent);
-}
-
 .import-source-row {
   display: flex;
   align-items: center;
@@ -6864,7 +6115,7 @@ body {
   background: var(--c-surface-emphasis);
   color: var(--c-text);
   border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
+  border-radius: 6px;
   padding: 8px;
   font-family: inherit;
   font-size: inherit;
@@ -7649,7 +6900,7 @@ body {
   padding: 6px 10px;
   background: var(--c-surface-emphasis);
   border: 1px solid var(--c-border);
-  border-radius: 2px;
+  border-radius: 6px;
 }
 
 .loadouts-active-label {
@@ -7678,7 +6929,7 @@ body {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-left: 2px solid transparent;
-  border-radius: 2px;
+  border-radius: 6px;
 }
 
 .loadout-row-active {
@@ -7702,10 +6953,15 @@ body {
   font-weight: 600;
 }
 
+/* Mini caps tag on the active loadout row. Shares the caps voice of
+   .settings-section-label at a smaller size, no brackets. */
 .loadout-row-active-tag {
+  font-family: var(--font-label);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
   color: var(--c-accent);
-  font-size: 0.78em;
-  letter-spacing: 0.04em;
 }
 
 .loadout-row-description {
@@ -7731,7 +6987,7 @@ body {
   font-size: 0.8em;
   background: var(--c-surface-deep);
   border: 1px solid var(--c-border);
-  border-radius: 2px;
+  border-radius: 4px;
   color: var(--c-text-faint);
 }
 
@@ -8869,4 +8125,11 @@ body {
   flex: 1 1 auto;
   font-size: 11px;
   color: var(--c-text-dim);
+}
+
+/* Moons at the true right edge: extra separation from the clock so
+   the edge placement reads distinct from after-the-clock. */
+.statusbar-moons-edge {
+  display: inline-flex;
+  margin-left: 10px;
 }

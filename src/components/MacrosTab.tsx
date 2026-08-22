@@ -11,6 +11,7 @@ import {
   type Macro,
 } from '../lib/session';
 import { canonicalKeyFromEvent, labelForKey } from '../lib/macroKeys';
+import { Chevron } from './Icons';
 import { usePersistedSet } from '../lib/usePersistedSet';
 
 interface Props {
@@ -122,13 +123,21 @@ export function MacrosTab({ onError }: Props) {
 
   return (
     <div className="macros-tab">
+      {/* Local copy of the SettingsApp TabHead markup (it is not
+          exported). Rows commit through their own add/save buttons,
+          so the right slot says that instead of the autosave note. */}
+      <div className="settings-tab-head">
+        <div className="settings-pane-title">macros</div>
+        <span className="settings-tab-head-spacer" />
+        <span className="settings-autosave-hint">rows apply on add or save</span>
+      </div>
       <div className="macros-help">
         Press a key in the &quot;key&quot; field below to capture it (e.g. F1, Ctrl+N, Numpad7). The
         command fires when that key is pressed while the input bar is focused. Commands may contain
         `;` to chain multiple actions. Set a group to bulk-toggle a folder of bindings.
       </div>
       {loading ? (
-        <div className="settings-font-empty">loading...</div>
+        <div className="settings-empty">loading...</div>
       ) : (
         <div className="macros-list">
           {/* The create row is pinned above the groups so a long list of
@@ -141,7 +150,7 @@ export function MacrosTab({ onError }: Props) {
             onSave={handleSave}
             isNew
           />
-          {macros.length === 0 && <div className="settings-font-empty">no macros bound yet</div>}
+          {macros.length === 0 && <div className="settings-empty">no macros bound yet</div>}
           {renderOrder.map((group) => {
             const entries = buckets.get(group) ?? [];
             const isUngrouped = group === '';
@@ -160,7 +169,7 @@ export function MacrosTab({ onError }: Props) {
                     aria-expanded={!isCollapsed}
                     title={isCollapsed ? 'expand group' : 'collapse group'}
                   >
-                    {isCollapsed ? '▸' : '▾'}
+                    <Chevron open={!isCollapsed} />
                   </button>
                   <span className="group-section-name">
                     {isUngrouped ? UNGROUPED_LABEL : group}

@@ -5,6 +5,7 @@ import {
   type ImportFormat,
   type ImportSummary,
 } from '../lib/session';
+import { MigrationWizard } from './MigrationWizard';
 
 interface Props {
   onError: (e: string | null) => void;
@@ -42,6 +43,10 @@ export function ImportTab({ onError }: Props) {
   const [format, setFormat] = useState<ImportFormat>('');
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
+  // Scope-migration preview modal (moved here from the Profiles tab;
+  // import is the tools tab, and the wizard is an import-shaped
+  // operation even though it reads the profile catalog).
+  const [showMigrationWizard, setShowMigrationWizard] = useState(false);
 
   const handleFile = async (file: File) => {
     setSummary(null);
@@ -77,6 +82,11 @@ export function ImportTab({ onError }: Props) {
 
   return (
     <div className="import-tab">
+      <div className="settings-tab-head">
+        <div className="settings-pane-title">import</div>
+        <span className="settings-tab-head-spacer" />
+      </div>
+
       <div className="import-help">
         Import aliases, triggers, keyboard macros, and variables from another MUD client. Drop a
         file in or paste its contents below, pick a format (or leave on auto-detect), and hit apply.
@@ -84,76 +94,107 @@ export function ImportTab({ onError }: Props) {
         listed in the summary so you can port it by hand.
       </div>
 
-      <div className="import-format-row">
+      <div className="settings-sect settings-sect-first">
         <span className="settings-section-label">format</span>
-        <label className="import-format-opt">
-          <input
-            type="radio"
-            name="import-format"
-            value=""
-            checked={format === ''}
-            onChange={() => setFormat('')}
-          />
-          auto-detect
-        </label>
-        {FORMATS.map((f) => (
-          <label key={f.id} className="import-format-opt" title={f.hint}>
+        <div className="settings-fctrl">
+          <button
+            type="button"
+            className={`opt-chip${format === '' ? ' is-on' : ''}`}
+            aria-pressed={format === ''}
+            onClick={() => setFormat('')}
+          >
+            auto-detect
+          </button>
+          {FORMATS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              className={`opt-chip${format === f.id ? ' is-on' : ''}`}
+              aria-pressed={format === f.id}
+              title={f.hint}
+              onClick={() => setFormat(f.id)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <span className="settings-fhelp" style={{ gridColumn: 'auto' }}>
+          {format === ''
+            ? 'auto-detect reads the pasted contents and picks the format for you'
+            : FORMATS.find((f) => f.id === format)?.hint}
+        </span>
+      </div>
+
+      <div className="settings-sect">
+        <span className="settings-section-label">source</span>
+        <div className="import-source-row">
+          <label className="settings-btn">
+            pick file
             <input
-              type="radio"
-              name="import-format"
-              value={f.id}
-              checked={format === f.id}
-              onChange={() => setFormat(f.id)}
+              type="file"
+              accept=".xml,.mcl,.cfg,.txt,.tin"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleFile(file);
+              }}
             />
-            {f.label}
           </label>
-        ))}
-      </div>
-
-      <div className="import-source-row">
-        <label className="settings-btn">
-          pick file
-          <input
-            type="file"
-            accept=".xml,.mcl,.cfg,.txt,.tin"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void handleFile(file);
+          <button
+            type="button"
+            className="settings-btn"
+            onClick={() => void handleApply()}
+            disabled={busy || !text.trim()}
+          >
+            {busy ? 'applying...' : 'apply'}
+          </button>
+          <button
+            type="button"
+            className="settings-btn settings-btn-mute"
+            onClick={() => {
+              setText('');
+              setFormat('');
+              setSummary(null);
             }}
-          />
-        </label>
-        <button
-          type="button"
-          className="settings-btn"
-          onClick={() => void handleApply()}
-          disabled={busy || !text.trim()}
-        >
-          {busy ? 'applying...' : 'apply'}
-        </button>
-        <button
-          type="button"
-          className="settings-btn settings-btn-mute"
-          onClick={() => {
-            setText('');
-            setFormat('');
-            setSummary(null);
-          }}
-          disabled={busy}
-        >
-          clear
-        </button>
+            disabled={busy}
+          >
+            clear
+          </button>
+        </div>
+
+        <textarea
+          className="import-textarea"
+          spellCheck={false}
+          placeholder="paste config contents here (or use pick file)"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
       </div>
 
-      <textarea
-        className="import-textarea"
-        spellCheck={false}
-        placeholder="paste config contents here (or use pick file)"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
+      {summary && (
+        <div className="settings-sect">
+          <span className="settings-section-label">summary</span>
+          <ImportSummaryView summary={summary} />
+        </div>
+      )}
 
-      {summary && <ImportSummaryView summary={summary} />}
+      <div className="settings-sect">
+        <span className="settings-section-label">migrate between scopes</span>
+        <span className="settings-fhelp" style={{ gridColumn: 'auto' }}>
+          see how your profiles would merge into a single shared catalog with one loadout per
+          profile. read-only, nothing is written.
+        </span>
+        <div className="import-source-row">
+          <button
+            type="button"
+            className="settings-btn"
+            onClick={() => setShowMigrationWizard(true)}
+          >
+            preview migration
+          </button>
+        </div>
+      </div>
+      {showMigrationWizard && <MigrationWizard onClose={() => setShowMigrationWizard(false)} />}
     </div>
   );
 }

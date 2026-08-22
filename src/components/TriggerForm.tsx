@@ -18,6 +18,7 @@ import { colorize, decolorize } from '../lib/colorTokens';
 import { UnsavedDot } from './UnsavedDot';
 import { usePersistedSet } from '../lib/usePersistedSet';
 import { CodeEditor } from './CodeEditor';
+import { Chevron, XIcon } from './Icons';
 import { useUnsavedWarning } from '../lib/unsaved';
 
 const UNGROUPED_LABEL = '(no group)';
@@ -140,6 +141,11 @@ export function TriggerForm({ load, save, onError }: Props) {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [groupStates, setGroupStates] = useState<GroupState[]>([]);
   const [collapsed, toggleCollapsed] = usePersistedSet('vosh.triggers.collapsed');
+  // Per-card fold state, separate from the group folds above. Cards
+  // key by trigger name (falling back to list position for unnamed
+  // rows) so the folded set survives reorders and relaunches; a fresh
+  // blank card keys to a new position and starts expanded.
+  const [cardsCollapsed, toggleCardCollapsed] = usePersistedSet('vosh.triggers.cards.collapsed');
   const dirty = useMemo(() => list !== null && JSON.stringify(list) !== baseline, [list, baseline]);
   useUnsavedWarning(dirty);
 
@@ -293,6 +299,7 @@ export function TriggerForm({ load, save, onError }: Props) {
           const groupEnabledMap = new Map(groupStates.map((g) => [g.name, g.enabled]));
           const cardFor = ({ realIdx, trigger }: Entry) => {
             const readOnly = !!trigger.preset;
+            const cardKey = trigger.name.trim() || `#${realIdx}`;
             return (
               <TriggerCard
                 key={`t-${realIdx}`}
@@ -306,6 +313,8 @@ export function TriggerForm({ load, save, onError }: Props) {
                 }}
                 onRemove={() => removeAt(realIdx)}
                 readOnly={readOnly}
+                collapsed={cardsCollapsed.has(cardKey)}
+                onToggleCollapse={() => toggleCardCollapsed(cardKey)}
               />
             );
           };
@@ -327,7 +336,7 @@ export function TriggerForm({ load, save, onError }: Props) {
                     aria-expanded={!isCollapsed}
                     title={isCollapsed ? 'expand group' : 'collapse group'}
                   >
-                    {isCollapsed ? '▸' : '▾'}
+                    <Chevron open={!isCollapsed} />
                   </button>
                   <span className="group-section-name">
                     {isUngrouped ? UNGROUPED_LABEL : group}
@@ -361,7 +370,7 @@ export function TriggerForm({ load, save, onError }: Props) {
                   <div className="group-section-body">
                     {entries.map(cardFor)}
                     {entries.length === 0 && (
-                      <div className="settings-font-empty">
+                      <div className="settings-empty">
                         empty group — drag a trigger here or set the group field on a row
                       </div>
                     )}
@@ -382,7 +391,7 @@ export function TriggerForm({ load, save, onError }: Props) {
                     aria-expanded={!isCollapsed}
                     title={isCollapsed ? 'expand group' : 'collapse group'}
                   >
-                    {isCollapsed ? '▸' : '▾'}
+                    <Chevron open={!isCollapsed} />
                   </button>
                   <span className="group-section-name">presets</span>
                   <span className="group-section-count">
@@ -424,9 +433,18 @@ interface CardProps {
   onChange: (patch: Partial<TriggerRecord>) => void;
   onRemove: () => void;
   readOnly: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
-function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
+function TriggerCard({
+  trigger,
+  onChange,
+  onRemove,
+  readOnly,
+  collapsed,
+  onToggleCollapse,
+}: CardProps) {
   const { visual, effects } = splitActions(trigger.actions);
   const visualKind: VisualKind = visual?.kind ?? 'none';
   const patterns =
@@ -478,7 +496,36 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
     onChange({ actions: joinActions(visual, nextEffects) });
   };
 
-  const radioGroup = `visual-${trigger.name}-${patterns[0]?.pattern ?? ''}`;
+  // Folded card: one line — enabled box, mono name, dim first pattern,
+  // dim effects count, chevron. Everything else waits behind the toggle.
+  if (collapsed) {
+    return (
+      <div className={`trigger-card is-collapsed${readOnly ? ' is-readonly' : ''}`}>
+        <label className="trigger-card-enabled" title="enabled">
+          <input
+            type="checkbox"
+            checked={trigger.enabled}
+            disabled={readOnly}
+            onChange={(e) => onChange({ enabled: e.target.checked })}
+          />
+        </label>
+        <span className="trigger-card-collapsed-name">{trigger.name || '(unnamed)'}</span>
+        <span className="trigger-card-collapsed-pattern">{patterns[0]?.pattern ?? ''}</span>
+        <span className="trigger-card-collapsed-count">
+          {effects.length} effect{effects.length === 1 ? '' : 's'}
+        </span>
+        <button
+          type="button"
+          className="trigger-card-collapse"
+          onClick={onToggleCollapse}
+          aria-expanded={false}
+          title="expand trigger"
+        >
+          <Chevron open={false} />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className={`trigger-card${readOnly ? ' is-readonly' : ''}`}>
@@ -549,10 +596,24 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
           </span>
         )}
         {!readOnly && (
-          <button type="button" className="trigger-card-remove" onClick={onRemove}>
-            ×
+          <button
+            type="button"
+            className="trigger-card-remove"
+            onClick={onRemove}
+            title="remove trigger"
+          >
+            <XIcon />
           </button>
         )}
+        <button
+          type="button"
+          className="trigger-card-collapse"
+          onClick={onToggleCollapse}
+          aria-expanded={true}
+          title="collapse trigger"
+        >
+          <Chevron open />
+        </button>
       </div>
 
       <div className="trigger-card-row">
@@ -589,7 +650,7 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
                   onClick={() => removePatternAt(i)}
                   title="remove this pattern row"
                 >
-                  ×
+                  <XIcon />
                 </button>
               )}
             </div>
@@ -612,16 +673,21 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
         <div className="trigger-card-visual">
           <div className="trigger-card-visual-radios">
             {(['none', 'highlight', 'replace', 'gag'] as VisualKind[]).map((k) => (
-              <label key={k} className="trigger-card-radio">
-                <input
-                  type="radio"
-                  name={radioGroup}
-                  checked={visualKind === k}
-                  disabled={readOnly}
-                  onChange={() => setVisual(blankVisual(k))}
-                />
+              <button
+                key={k}
+                type="button"
+                className={`opt-chip${visualKind === k ? ' is-on' : ''}`}
+                aria-pressed={visualKind === k}
+                disabled={readOnly}
+                onClick={() => {
+                  // Re-clicking the active chip stays a no-op, matching
+                  // the radios it replaced (a reset would wipe the
+                  // configured style back to the blank default).
+                  if (visualKind !== k) setVisual(blankVisual(k));
+                }}
+              >
                 {k}
-              </label>
+              </button>
             ))}
           </div>
           {visual && (
@@ -679,8 +745,9 @@ function TriggerCard({ trigger, onChange, onRemove, readOnly }: CardProps) {
                   type="button"
                   className="trigger-card-effect-remove"
                   onClick={() => removeEffectAt(i)}
+                  title="remove this effect"
                 >
-                  ×
+                  <XIcon />
                 </button>
               )}
             </div>

@@ -142,111 +142,117 @@ export function LogsTab({ onError }: Props) {
   };
 
   return (
-    <div className="logs-tab">
-      <div className="logs-sessions">
-        <div className="logs-section-label">sessions ({sessions.length})</div>
-        <div className="logs-session-list">
-          <button
-            type="button"
-            className={`logs-session${sessionFilter === null ? ' is-active' : ''}`}
-            onClick={() => setSessionFilter(null)}
-          >
-            <span className="logs-session-host">all sessions</span>
-          </button>
-          {sessions.map((s) => (
+    <>
+      <div className="settings-tab-head">
+        <div className="settings-pane-title">logs</div>
+        <span className="settings-tab-head-spacer" />
+      </div>
+      <div className="logs-tab">
+        <div className="logs-sessions">
+          <div className="settings-section-label">sessions ({sessions.length})</div>
+          <div className="logs-session-list">
             <button
-              key={s.id}
               type="button"
-              className={`logs-session${sessionFilter === s.id ? ' is-active' : ''}`}
-              onClick={() => setSessionFilter(s.id)}
+              className={`logs-session${sessionFilter === null ? ' is-active' : ''}`}
+              onClick={() => setSessionFilter(null)}
             >
-              <span className="logs-session-host">
-                {s.host}:{s.port}
-              </span>
-              <span className="logs-session-meta">
-                {formatTime(s.started_at_ms)} · {s.line_count} lines
-              </span>
-              <span className="logs-session-actions">
-                <span
-                  className="logs-session-export"
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void exportSession(s.id, false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
+              <span className="logs-session-host">all sessions</span>
+            </button>
+            {sessions.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className={`logs-session${sessionFilter === s.id ? ' is-active' : ''}`}
+                onClick={() => setSessionFilter(s.id)}
+              >
+                <span className="logs-session-host">
+                  {s.host}:{s.port}
+                </span>
+                <span className="logs-session-meta">
+                  {formatTime(s.started_at_ms)} · {s.line_count} lines
+                </span>
+                <span className="logs-session-actions">
+                  <span
+                    className="logs-session-export"
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
                       e.stopPropagation();
                       void exportSession(s.id, false);
-                    }
-                  }}
-                  title="copy plain text to clipboard"
-                >
-                  copy
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.stopPropagation();
+                        void exportSession(s.id, false);
+                      }
+                    }}
+                    title="copy plain text to clipboard"
+                  >
+                    copy
+                  </span>
                 </span>
-              </span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="logs-search">
+          <form
+            className="logs-search-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void runSearch();
+            }}
+          >
+            <input
+              type="text"
+              spellCheck={false}
+              placeholder={`search ${sessionFilter === null ? 'all sessions' : 'this session'}`}
+              value={pattern}
+              onChange={(e) => setPattern(e.target.value)}
+            />
+            <label className="logs-case">
+              <input
+                type="checkbox"
+                checked={caseSensitive}
+                onChange={(e) => setCaseSensitive(e.target.checked)}
+              />
+              case
+            </label>
+            <label className="logs-case" title="return every match, not just the most recent 500">
+              <input
+                type="checkbox"
+                checked={showAll}
+                onChange={(e) => setShowAll(e.target.checked)}
+              />
+              show all
+            </label>
+            <button type="submit" className="settings-btn">
+              search
             </button>
-          ))}
+            <span className="logs-status">
+              {searching ? 'searching…' : `${hits.length} hit${hits.length === 1 ? '' : 's'}`}
+            </span>
+          </form>
+          <div className={`logs-results${sessionFilter !== null ? ' logs-results-scoped' : ''}`}>
+            {hits.length === 0 && !searching && (
+              <div className="settings-font-empty">
+                {pattern ? 'no matches' : 'enter a pattern and hit search'}
+              </div>
+            )}
+            {hits.map((h) => (
+              <div key={`${h.session_id}-${h.line_id}`} className="logs-hit">
+                <span className="logs-hit-ts">{formatHit(h.ts_ms)}</span>
+                {sessionFilter === null && (
+                  <span className="logs-hit-session">
+                    {h.host}:{h.port}
+                  </span>
+                )}
+                <span className="logs-hit-text">{renderHitText(h)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-      <div className="logs-search">
-        <form
-          className="logs-search-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void runSearch();
-          }}
-        >
-          <input
-            type="text"
-            spellCheck={false}
-            placeholder={`search ${sessionFilter === null ? 'all sessions' : 'this session'}`}
-            value={pattern}
-            onChange={(e) => setPattern(e.target.value)}
-          />
-          <label className="logs-case">
-            <input
-              type="checkbox"
-              checked={caseSensitive}
-              onChange={(e) => setCaseSensitive(e.target.checked)}
-            />
-            case
-          </label>
-          <label className="logs-case" title="return every match, not just the most recent 500">
-            <input
-              type="checkbox"
-              checked={showAll}
-              onChange={(e) => setShowAll(e.target.checked)}
-            />
-            show all
-          </label>
-          <button type="submit" className="settings-btn">
-            search
-          </button>
-          <span className="logs-status">
-            {searching ? 'searching…' : `${hits.length} hit${hits.length === 1 ? '' : 's'}`}
-          </span>
-        </form>
-        <div className={`logs-results${sessionFilter !== null ? ' logs-results-scoped' : ''}`}>
-          {hits.length === 0 && !searching && (
-            <div className="settings-font-empty">
-              {pattern ? 'no matches' : 'enter a pattern and hit search'}
-            </div>
-          )}
-          {hits.map((h) => (
-            <div key={`${h.session_id}-${h.line_id}`} className="logs-hit">
-              <span className="logs-hit-ts">{formatHit(h.ts_ms)}</span>
-              {sessionFilter === null && (
-                <span className="logs-hit-session">
-                  {h.host}:{h.port}
-                </span>
-              )}
-              <span className="logs-hit-text">{renderHitText(h)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+    </>
   );
 }

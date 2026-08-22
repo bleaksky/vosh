@@ -16,7 +16,6 @@ import {
   type ProfilesList,
   type ScopeConfig,
 } from '../lib/session';
-import { MigrationWizard } from './MigrationWizard';
 import { ConfirmDialog } from './ConfirmDialog';
 
 interface Props {
@@ -43,7 +42,6 @@ export function ProfilesTab({ onError }: Props) {
   // routes through the shared ConfirmDialog instead; deleteTarget
   // holds the profile name awaiting confirmation.
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const [showMigrationWizard, setShowMigrationWizard] = useState(false);
 
   const reload = async () => {
     try {
@@ -178,6 +176,12 @@ export function ProfilesTab({ onError }: Props) {
 
   return (
     <div className="profiles-tab">
+      <div className="settings-tab-head">
+        <div className="settings-pane-title">profiles</div>
+        <span className="settings-tab-head-spacer" />
+        <span className="settings-autosave-hint">changes save automatically</span>
+      </div>
+
       <div className="profiles-help">
         Each profile carries its own aliases, triggers, macros, quick-keys, and variables. Set host
         + port (and optionally character) below and the matching profile auto-loads when you
@@ -185,108 +189,96 @@ export function ProfilesTab({ onError }: Props) {
       </div>
 
       {scope && (
-        <div className="scope-section">
-          <div className="scope-section-title">scope</div>
-          <div className="scope-section-help">
+        <div className="settings-sect settings-sect-first">
+          <span className="settings-section-label">scope</span>
+          <span className="settings-fhelp" style={{ gridColumn: 'auto' }}>
             global = the same value applies across every profile. profile = the value moves with the
             active profile. font covers font-family + font-size as one toggle.
-          </div>
-          <div className="scope-grid">
-            <ScopeRow
-              label="theme"
-              value={scope.theme}
-              onChange={(v) => void handleScopeChange('theme', v)}
-            />
-            <ScopeRow
-              label="font"
-              value={scope.font}
-              onChange={(v) => void handleScopeChange('font', v)}
-            />
-            <ScopeRow
-              label="dock layout"
-              value={scope.dock_layout}
-              onChange={(v) => void handleScopeChange('dock_layout', v)}
-            />
-            <ScopeRow
-              label="keep last command"
-              value={scope.keep_last_command}
-              onChange={(v) => void handleScopeChange('keep_last_command', v)}
-            />
-            <ScopeRow
-              label="auto check updates"
-              value={scope.auto_update}
-              onChange={(v) => void handleScopeChange('auto_update', v)}
-            />
-          </div>
+          </span>
+          <ScopeRow
+            label="theme"
+            value={scope.theme}
+            onChange={(v) => void handleScopeChange('theme', v)}
+          />
+          <ScopeRow
+            label="font"
+            value={scope.font}
+            onChange={(v) => void handleScopeChange('font', v)}
+          />
+          <ScopeRow
+            label="dock layout"
+            value={scope.dock_layout}
+            onChange={(v) => void handleScopeChange('dock_layout', v)}
+          />
+          <ScopeRow
+            label="keep last command"
+            value={scope.keep_last_command}
+            onChange={(v) => void handleScopeChange('keep_last_command', v)}
+          />
+          <ScopeRow
+            label="auto check updates"
+            value={scope.auto_update}
+            onChange={(v) => void handleScopeChange('auto_update', v)}
+          />
         </div>
       )}
 
-      <div className="profiles-create-row">
-        <input
-          type="text"
-          spellCheck={false}
-          value={createDraft}
-          placeholder="new profile name (e.g. aabahran-erelei)"
-          onChange={(e) => setCreateDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void handleCreate();
-          }}
-        />
-        <button
-          type="button"
-          className="settings-btn"
-          onClick={() => void handleCreate()}
-          disabled={!createDraft.trim()}
-        >
-          + new
-        </button>
-      </div>
-
-      <div className="profiles-list">
-        {data.profiles.map((p) => (
-          <ProfileRow
-            key={p.name}
-            entry={p}
-            isActive={p.name === data.active}
-            renaming={renameTarget === p.name}
-            renameDraft={renameDraft}
-            onRenameDraft={setRenameDraft}
-            onBeginRename={() => beginRename(p.name)}
-            onCommitRename={() => void commitRename()}
-            onCancelRename={() => setRenameTarget(null)}
-            duplicating={duplicateTarget === p.name}
-            duplicateDraft={duplicateDraft}
-            onDuplicateDraft={setDuplicateDraft}
-            onBeginDuplicate={() => beginDuplicate(p.name)}
-            onCommitDuplicate={() => void commitDuplicate()}
-            onCancelDuplicate={cancelDuplicate}
-            onSwitch={() => void handleSwitch(p.name)}
-            onBeginDelete={() => setDeleteTarget(p.name)}
-            onSaveAutoMatch={async (am, description) => {
-              try {
-                await profileSetMetadata(p.name, description, am);
-                onError(null);
-              } catch (e) {
-                onError(String(e));
-              }
+      <div className="settings-sect">
+        <span className="settings-section-label">catalog</span>
+        <div className="profiles-create-row">
+          <input
+            type="text"
+            spellCheck={false}
+            value={createDraft}
+            placeholder="new profile name (e.g. aabahran-erelei)"
+            onChange={(e) => setCreateDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void handleCreate();
             }}
           />
-        ))}
+          <button
+            type="button"
+            className="settings-btn"
+            onClick={() => void handleCreate()}
+            disabled={!createDraft.trim()}
+          >
+            + new
+          </button>
+        </div>
+
+        <div className="profiles-list">
+          {data.profiles.map((p) => (
+            <ProfileRow
+              key={p.name}
+              entry={p}
+              isActive={p.name === data.active}
+              renaming={renameTarget === p.name}
+              renameDraft={renameDraft}
+              onRenameDraft={setRenameDraft}
+              onBeginRename={() => beginRename(p.name)}
+              onCommitRename={() => void commitRename()}
+              onCancelRename={() => setRenameTarget(null)}
+              duplicating={duplicateTarget === p.name}
+              duplicateDraft={duplicateDraft}
+              onDuplicateDraft={setDuplicateDraft}
+              onBeginDuplicate={() => beginDuplicate(p.name)}
+              onCommitDuplicate={() => void commitDuplicate()}
+              onCancelDuplicate={cancelDuplicate}
+              onSwitch={() => void handleSwitch(p.name)}
+              onBeginDelete={() => setDeleteTarget(p.name)}
+              onSaveAutoMatch={async (am, description) => {
+                try {
+                  await profileSetMetadata(p.name, description, am);
+                  onError(null);
+                } catch (e) {
+                  onError(String(e));
+                }
+              }}
+            />
+          ))}
+        </div>
       </div>
 
-      <div className="migration-section-row">
-        <div className="migration-section-text">
-          <div className="migration-section-title-inline">global catalog (preview)</div>
-          <div className="migration-section-hint">
-            see how your profiles would merge into a single shared catalog with one loadout per
-            profile. read-only, nothing is written.
-          </div>
-        </div>
-        <button type="button" className="settings-btn" onClick={() => setShowMigrationWizard(true)}>
-          preview migration
-        </button>
-      </div>
-      {showMigrationWizard && <MigrationWizard onClose={() => setShowMigrationWizard(false)} />}
       {deleteTarget && (
         <ConfirmDialog
           title={`Delete ${deleteTarget}?`}
@@ -387,7 +379,16 @@ function ProfileRow({
     <div className={`profile-row${isActive ? ' is-active' : ''}`}>
       <div className="profile-row-head">
         <span className="profile-row-marker" aria-hidden="true">
-          {isActive ? '●' : '○'}
+          <svg width="8" height="8" viewBox="0 0 8 8">
+            <circle
+              cx="4"
+              cy="4"
+              r="3"
+              fill={isActive ? 'currentColor' : 'none'}
+              stroke="currentColor"
+              strokeWidth="1.2"
+            />
+          </svg>
         </span>
         {renaming ? (
           <input
@@ -523,12 +524,12 @@ function ScopeRow({
   onChange: (v: ProfileScope) => void;
 }) {
   return (
-    <div className="scope-row">
-      <span className="scope-row-label">{label}</span>
-      <div className="scope-row-toggle">
+    <div className="settings-frow">
+      <span className="settings-flabel">{label}</span>
+      <span className="settings-fctrl">
         <button
           type="button"
-          className={`scope-pill${value === 'global' ? ' is-active' : ''}`}
+          className={`opt-chip${value === 'global' ? ' is-on' : ''}`}
           aria-pressed={value === 'global'}
           onClick={() => onChange('global')}
         >
@@ -536,13 +537,13 @@ function ScopeRow({
         </button>
         <button
           type="button"
-          className={`scope-pill${value === 'profile' ? ' is-active' : ''}`}
+          className={`opt-chip${value === 'profile' ? ' is-on' : ''}`}
           aria-pressed={value === 'profile'}
           onClick={() => onChange('profile')}
         >
           profile
         </button>
-      </div>
+      </span>
     </div>
   );
 }

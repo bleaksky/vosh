@@ -87,7 +87,7 @@ function BarFontMonoLisaStatus() {
     return () => fonts.removeEventListener('loadingdone', recheck);
   }, []);
   return (
-    <span className={matched ? 'panels-vitals-style-ok' : 'panels-vitals-style-warn'}>
+    <span className={matched ? 'vitals-style-ok' : 'vitals-style-warn'}>
       {matched
         ? `MonoLisa detected as "${matched}" · bars are using it`
         : 'no MonoLisa family found yet · install MonoLisa and reopen Settings, or check the bars visually since some installers use a name not in the probe list'}
@@ -397,7 +397,7 @@ export function VitalsConfigSection({
       <details className="vitals-advanced">
         <summary className="vitals-advanced-summary">advanced</summary>
         <div className="vitals-advanced-body">
-          <div className="vitals-advanced-label">colors</div>
+          <span className="settings-section-label">colors</span>
           <VitalColorRow
             label="hp"
             value={v.hp_color}
@@ -431,7 +431,7 @@ export function VitalsConfigSection({
               <span className="settings-row-control">
                 <input
                   type="text"
-                  className="panels-vitals-glyph-input"
+                  className="vitals-glyph-input"
                   value={v.bar_filled}
                   disabled={!v.show_bar}
                   spellCheck={false}
@@ -442,7 +442,7 @@ export function VitalsConfigSection({
                 />
                 <input
                   type="text"
-                  className="panels-vitals-glyph-input"
+                  className="vitals-glyph-input"
                   value={v.bar_empty}
                   disabled={!v.show_bar}
                   spellCheck={false}
@@ -456,7 +456,7 @@ export function VitalsConfigSection({
             </div>
           )}
 
-          <div className="vitals-advanced-label">bar font</div>
+          <span className="settings-section-label">bar font</span>
           <div className="settings-row vitals-seg-row">
             <span className="settings-row-label">font</span>
             <span className="settings-row-control">
@@ -487,22 +487,25 @@ export function VitalsConfigSection({
               <BarFontMonoLisaStatus />
             </div>
           )}
-          <details className="vsplit-adv">
-            <summary>custom CSS font-family</summary>
-            <input
-              type="text"
-              className="panels-vitals-glyph-input vsplit-adv-input"
-              spellCheck={false}
-              value={v.bar_font}
-              disabled={!v.show_bar}
-              placeholder='blank = app font · or "MonoLisa", "Iosevka", monospace'
-              onChange={(e) => apply({ bar_font: e.target.value })}
-            />
-          </details>
+          <div className="settings-row vitals-seg-row">
+            <span className="settings-row-label">custom stack</span>
+            <span className="settings-row-control">
+              <input
+                type="text"
+                className="vitals-font-input"
+                spellCheck={false}
+                value={v.bar_font}
+                disabled={!v.show_bar}
+                placeholder='blank = app font · or "MonoLisa", "Iosevka", monospace'
+                onChange={(e) => apply({ bar_font: e.target.value })}
+                aria-label="custom CSS font-family stack"
+              />
+            </span>
+          </div>
 
           {inline && (
             <>
-              <div className="vitals-advanced-label">inline</div>
+              <span className="settings-section-label">inline</span>
               <div className="settings-row vitals-seg-row">
                 <span className="settings-row-label">style</span>
                 <span className="settings-row-control">
@@ -610,7 +613,7 @@ export function VitalsConfigSection({
             <span>pulse red vignette under 30% hp</span>
           </label>
 
-          <div className="vitals-advanced-label">template</div>
+          <span className="settings-section-label">template</span>
           <VitalsTemplateEditor config={v} apply={apply} />
 
           <div className="settings-actions">
@@ -619,7 +622,7 @@ export function VitalsConfigSection({
               className="settings-btn settings-btn-mute"
               onClick={() => apply(DEFAULT_VITALS_CONFIG)}
             >
-              [reset vitals]
+              reset vitals
             </button>
           </div>
         </div>
@@ -644,8 +647,8 @@ function VitalColorRow({
       ? value.trim()
       : '#888888';
   return (
-    <label className="panels-vitals-color-row">
-      <span className="panels-vitals-color-label">{label}</span>
+    <label className="vitals-color-row">
+      <span className="vitals-color-label">{label}</span>
       <input
         type="color"
         value={hex}
@@ -654,7 +657,7 @@ function VitalColorRow({
       />
       <input
         type="text"
-        className="panels-vitals-color-hex"
+        className="vitals-color-hex"
         spellCheck={false}
         value={value}
         placeholder={`built-in ${fallback}`}
@@ -666,7 +669,7 @@ function VitalColorRow({
         onClick={() => onChange('')}
         disabled={value.trim().length === 0}
       >
-        [clear]
+        clear
       </button>
     </label>
   );
@@ -687,17 +690,15 @@ function VitalsTemplateEditor({
   // is predictable and the toggle behaves as the single source of
   // truth.
   return (
-    <div className="panels-vitals-template">
+    <div className="vitals-template">
       <Toggle
         label="custom template (overrides layout)"
         checked={config.template_enabled}
         onChange={(c) => apply({ template_enabled: c })}
       />
-      <div
-        className={`panels-vitals-template-body${config.template_enabled ? '' : ' is-disabled'}`}
-      >
+      <div className={`vitals-template-body${config.template_enabled ? '' : ' is-disabled'}`}>
         <textarea
-          className="panels-vitals-template-input"
+          className="vitals-template-input"
           spellCheck={false}
           value={config.template}
           disabled={!config.template_enabled}
@@ -705,19 +706,19 @@ function VitalsTemplateEditor({
           rows={2}
           aria-label="vitals template"
         />
-        <div className="panels-vitals-template-help">
-          <span className="panels-vitals-template-help-title">curated tokens:</span>
+        <div className="vitals-template-help">
+          <span className="vitals-template-help-title">curated tokens:</span>
           <code>%hp</code> <code>%mhp</code> <code>%mn</code> <code>%mmn</code> <code>%mv</code>{' '}
           <code>%mmv</code> <code>%pct_hp</code> <code>%pct_mn</code> <code>%pct_mv</code>{' '}
           <code>%dhp</code> <code>%dmn</code> <code>%dmv</code> <code>%bar_hp</code>{' '}
           <code>%bar_mn</code> <code>%bar_mv</code> <code>%tick</code> <code>%time</code>
           <br />
-          <span className="panels-vitals-template-help-title">pass-through:</span>
+          <span className="vitals-template-help-title">pass-through:</span>
           any field your server actually pushes via <code>Char.Vitals</code> or{' '}
           <code>Char.Worth</code> can be used as <code>%fieldname</code>. Available fields depend on
           the server — try a token; if the field exists, it renders; if not, it shows in red.
           <br />
-          <span className="panels-vitals-template-help-title">explicit braces:</span>
+          <span className="vitals-template-help-title">explicit braces:</span>
           use <code>{'%{name}'}</code> when the token is immediately followed by letters / digits
           that would otherwise be consumed by the greedy match. e.g. <code>{'%{cp}cp'}</code>{' '}
           renders the <code>cp</code> field then literal <code>cp</code>, whereas <code>%cpcp</code>{' '}
@@ -730,7 +731,7 @@ function VitalsTemplateEditor({
             disabled={!config.template_enabled}
             onClick={() => apply({ template: DEFAULT_VITALS_TEMPLATE })}
           >
-            [reset template]
+            reset template
           </button>
         </div>
       </div>
@@ -748,7 +749,7 @@ function Toggle({
   onChange: (next: boolean) => void;
 }) {
   return (
-    <label className="settings-checkbox panels-vitals-toggle">
+    <label className="settings-checkbox vitals-toggle">
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <span>{label}</span>
     </label>
