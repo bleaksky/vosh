@@ -26,6 +26,7 @@ import {
   getUiConfig,
   setWindowSize,
   listTriggers,
+  resolveThemeTerminalColors,
   onState,
   presetsInstall,
   presetsRemove,
@@ -613,7 +614,7 @@ function App() {
         void applyAndBroadcastTheme(cfg.theme);
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
-        setThemeTerminalColors(cfg.theme_terminal_colors);
+        setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
         applySplitDividerColor(cfg.split_divider_color);
         setSidePanelsFillHeight(cfg.side_panels_fill_height);
@@ -679,7 +680,7 @@ function App() {
           void applyAndBroadcastTheme(cfg.theme);
           setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
           setFontSize(cfg.font_size || 14);
-          setThemeTerminalColors(cfg.theme_terminal_colors);
+          setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
           applyBrightBold(cfg.bright_bold);
           applySplitDividerColor(cfg.split_divider_color);
           setSidePanelsFillHeight(cfg.side_panels_fill_height);

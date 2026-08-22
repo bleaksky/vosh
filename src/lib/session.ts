@@ -2,6 +2,13 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { DEFAULT_THEME_ID } from './themes';
 
+/** Resolve the tri-state tint setting: an explicit user choice wins;
+ *  unset follows the active theme — Obsidian Ember ships its pastel
+ *  ANSI on by default, every other theme keeps canonical ANSI. */
+export function resolveThemeTerminalColors(theme: string, stored: boolean | null): boolean {
+  return stored ?? theme === 'obsidian-ember';
+}
+
 /// Cross-window broadcast for tracked-affect changes. The settings
 /// window is a separate Tauri webview, so `window.dispatchEvent`
 /// only reaches its own DOM; the main window's BottomHUD listens
@@ -583,7 +590,10 @@ export interface UiConfig {
   tracked_affects: TrackedAffect[];
   enabled_presets: string[];
   keep_last_command: boolean;
-  theme_terminal_colors: boolean;
+  /** Tri-state: true / false are explicit user choices; null follows
+   *  the active theme (on for obsidian-ember, off otherwise). Resolve
+   *  with resolveThemeTerminalColors before use. */
+  theme_terminal_colors: boolean | null;
   bright_bold: boolean;
   custom_themes: CustomTheme[];
   /** Override color for the split-scrollback divider. Empty/undefined
@@ -789,7 +799,8 @@ async function fetchUiConfig(): Promise<UiConfig> {
       : [],
     enabled_presets: Array.isArray(cfg.enabled_presets) ? cfg.enabled_presets : [],
     keep_last_command: Boolean(cfg.keep_last_command),
-    theme_terminal_colors: Boolean(cfg.theme_terminal_colors),
+    theme_terminal_colors:
+      typeof cfg.theme_terminal_colors === 'boolean' ? cfg.theme_terminal_colors : null,
     bright_bold: Boolean(cfg.bright_bold),
     custom_themes: Array.isArray(cfg.custom_themes) ? cfg.custom_themes : [],
     split_divider_color:
@@ -960,10 +971,14 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     (a, b) => a.family === b.family && a.size === b.size,
   );
   await emitChanged('vosh://keep-last-changed', config.keep_last_command, prev?.keep_last_command);
+  // The event carries the RESOLVED boolean so listeners never see the
+  // tri-state. Resolving both sides of the diff means a theme switch
+  // with the setting on auto also fires this event when the effective
+  // value flips.
   await emitChanged(
     'vosh://theme-terminal-colors-changed',
-    config.theme_terminal_colors,
-    prev?.theme_terminal_colors,
+    resolveThemeTerminalColors(config.theme, config.theme_terminal_colors),
+    prev ? resolveThemeTerminalColors(prev.theme, prev.theme_terminal_colors) : undefined,
   );
   await emitChanged('vosh://bright-bold-changed', config.bright_bold, prev?.bright_bold);
   await emitChanged(
