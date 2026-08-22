@@ -53,12 +53,12 @@
   --c-text-muted: #c0bdbb;
   --c-text-faint: #9b9795;
   --c-text-dim: #726e6b;
-  --c-border-soft: rgba(80, 76, 74, 0.16);
+  --c-border-soft: rgba(80, 76, 74, 0.24);
   --c-border: rgba(80, 76, 74, 0.24);
   --c-border-strong: rgba(80, 76, 74, 0.42);
-  --c-border-hover: rgba(80, 76, 74, 0.6);
-  --c-accent: #ff8c1e;
-  --c-accent-soft: rgba(255, 140, 30, 0.13);
+  --c-border-hover: rgba(80, 76, 74, 0.42);
+  --c-accent: #ef8f2f;
+  --c-accent-soft: rgba(239, 143, 47, 0.13);
   --c-warn: #e5c057;
   --c-danger: #e3645e;
   --c-info: #6ec3eb;
@@ -74,6 +74,13 @@
   --font-display: 'Roboto Slab Variable', 'Roboto Slab', Georgia, serif;
   --font-label: 'Rajdhani', 'Avenir Next Condensed', 'Arial Narrow', sans-serif;
   --font-mono: 'JetBrainsMono Bundled', 'BerkeleyMono Bundled', Menlo, 'SF Mono', monospace;
+
+  /* Floating-layer shadow recipe. Menus, toolbars, tooltips, toasts,
+     and modals all share it so every floating surface reads as one
+     generation of chrome. */
+  --float:
+    0 18px 44px -14px rgba(0, 0, 0, 0.6), 0 6px 18px -10px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 * {
@@ -88,12 +95,75 @@ body,
   height: 100%;
   background: transparent;
   color: var(--c-text);
-  font-family: var(--app-font-family);
-  font-size: var(--app-font-size);
+  /* Ember: chrome is Inter by default; the terminal and game-data
+     surfaces opt back into mono explicitly. Chrome type does NOT
+     scale with the user's terminal font size. */
+  font-family: var(--font-chrome);
+  font-size: 13px;
 }
 
 body {
   overflow: hidden;
+}
+
+/* ── Ember primitives ──────────────────────────────────────────────
+   Shared across every surface so labels, key hints, and floating
+   layers stay one visual language instead of per-component copies. */
+
+/* Section label: Rajdhani caps, wide tracking, dim. */
+.caps {
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+}
+
+/* Keyboard hint chip. */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-text-dim);
+  padding: 1px 5px;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+}
+
+/* Mono opt-ins. With chrome defaulting to Inter, the surfaces that
+   carry terminal text or game data explicitly take a mono face:
+   the input row echoes commands in the user's own terminal font;
+   panes that render MUD-derived names and numbers use the chrome
+   value mono at HUD sizes. */
+.input-row {
+  font-family: var(--app-font-family);
+  font-size: var(--app-font-size);
+}
+
+.room-strip,
+.chat-pane-body,
+.imm-body,
+.group-list,
+.group-worth,
+.combat-pane {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.vitals-bar,
+.vitals-row-template {
+  font-family: var(--font-mono);
+}
+
+.affects-bar {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.find-toolbar input {
+  font-family: var(--font-mono);
 }
 
 /* Global scrollbar theming. WebView2 (Windows) and WebKitGTK (Linux)
@@ -146,14 +216,12 @@ body {
   height: 100vh;
   width: 100vw;
   background: var(--c-surface);
-  /* Hairline window frame. A dimmed blend of the strong border token
-     toward the surface so the frame reads as a defined edge without
-     glaring against the dark window. 3px corners keep it crisp rather
-     than pill-rounded. The shorthand color is the fallback for engines
-     without color-mix. */
+  /* Ember window frame: full-strength hairline, 10px corners, and a
+     one-pixel top sheen so the window edge catches light the way the
+     approved canvas frame does. */
   border: 1px solid var(--c-border-strong);
-  border-color: color-mix(in srgb, var(--c-border-strong) 50%, var(--c-surface));
-  border-radius: 3px;
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   overflow: hidden;
   /* Breathing room above the TopBar so the brand block sits inside
      the window with the rounded corner area visible above, matching
@@ -232,8 +300,13 @@ body {
 
 .topbar-aux {
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 2px;
   margin-right: 6px;
+}
+
+.topbar-aux-btn-pressed {
+  color: var(--c-accent);
 }
 
 .topbar-aux-btn {
@@ -262,20 +335,39 @@ body {
   align-items: stretch;
 }
 
+/* Ember chip: caps "loadout" eyebrow plus the active value in accent,
+   inside a quiet hairline pill that matches the session chip. */
 .topbar-loadouts-btn {
   background: transparent;
-  border: none;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
   color: var(--c-text-muted);
   font-family: inherit;
   line-height: 1;
-  padding: 0 10px;
+  padding: 4px 10px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  letter-spacing: 0.02em;
+  gap: 7px;
+  align-self: center;
 }
 
 .topbar-loadouts-btn:hover {
+  border-color: var(--c-border-hover);
+}
+
+.topbar-loadouts-label {
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+}
+
+.topbar-loadouts-value {
+  font-size: 11px;
+  font-weight: 500;
   color: var(--c-accent);
 }
 
@@ -288,12 +380,12 @@ body {
   top: 100%;
   right: 0;
   min-width: 220px;
-  margin-top: 2px;
-  padding: 4px 0;
-  background: var(--c-surface);
+  margin-top: 6px;
+  padding: 5px;
+  background: var(--c-surface-pane);
   border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  box-shadow: var(--float);
   z-index: 50;
   display: flex;
   flex-direction: column;
@@ -339,23 +431,36 @@ body {
   font-size: 0.82em;
 }
 
+/* Window controls: stroke icons behind a hairline divider, per the
+   Ember canvas. Icons ride currentColor so hover tints the stroke. */
 .topbar-controls {
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 4px;
+  padding-left: 12px;
+  border-left: 1px solid var(--c-border);
+}
+
+.topbar-aux-btn svg,
+.topbar-btn svg {
+  stroke: currentColor;
+  fill: none;
+  display: block;
 }
 
 .topbar-btn {
   background: transparent;
   border: none;
-  color: var(--c-text-faint);
+  border-radius: 5px;
+  color: var(--c-text-dim);
   font-family: inherit;
   line-height: 1;
-  padding: 0 12px;
+  padding: 0 9px;
+  height: 24px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 32px;
 }
 
 .topbar-btn:hover {
@@ -604,9 +709,7 @@ body {
   background: var(--c-surface-pane);
   border: 1px solid var(--c-border-strong);
   border-radius: 8px;
-  box-shadow:
-    0 18px 44px -14px rgba(0, 0, 0, 0.6),
-    0 6px 18px -10px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--float);
   z-index: 60;
 }
 
@@ -736,7 +839,11 @@ body {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  background: var(--c-surface);
+  /* The gutter around xterm paints the SAME dark as the terminal well
+     itself (theme.ts exposes the active xterm background as --xterm-bg)
+     so the well reads as one continuous surface instead of a two-tone
+     ring. Falls back to the chrome surface before the theme applies. */
+  background: var(--xterm-bg, var(--c-surface));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1712,24 +1819,21 @@ body {
    portion of the input-row border it overlaps; the rest of the
    border continues on either side as the line shown in the design
    mockup. */
+/* Ember: the tick + mud-time readout sits quietly at the right edge
+   of the input row — dim mono values with no pill and no border
+   interruption, matching the mockup's right-side hint slot. The warn
+   state carries the only color. */
 .line-chip {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  padding: 1px 10px;
-  background: var(--c-surface-deep);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
-  color: var(--c-text);
-  font-size: 0.92em;
+  flex: 0 0 auto;
+  color: var(--c-text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
+  font-weight: 500;
   display: inline-flex;
   align-items: baseline;
   gap: 8px;
   white-space: nowrap;
-  z-index: 2;
   pointer-events: none;
 }
 
@@ -1752,11 +1856,11 @@ body {
 }
 
 .line-chip-value {
-  color: var(--c-text);
+  color: var(--c-text-faint);
 }
 
 .line-chip-time {
-  color: var(--c-accent);
+  color: var(--c-text-faint);
 }
 
 .line-chip-sep {
@@ -2149,16 +2253,21 @@ body {
 }
 
 .statusbar-moon {
-  font-size: 1.35em;
+  display: inline-flex;
+  align-items: center;
   color: var(--c-text-dim);
   line-height: 1;
   position: relative;
   cursor: default;
 }
 
+.statusbar-moon svg {
+  display: block;
+}
+
 .statusbar-moon.is-active {
   color: var(--c-warn);
-  text-shadow: 0 0 4px rgba(230, 195, 132, 0.45);
+  filter: drop-shadow(0 0 3px rgba(229, 192, 87, 0.5));
 }
 
 /* CSS-driven tooltip — WKWebView's native title tooltip is flaky in
@@ -2171,11 +2280,12 @@ body {
   position: absolute;
   bottom: calc(100% + 6px);
   right: 0;
-  padding: 3px 8px;
+  padding: 5px 10px;
   background: var(--c-surface-emphasis);
   color: var(--c-text);
   border: 1px solid var(--c-border-strong);
-  border-radius: 4px;
+  border-radius: 6px;
+  box-shadow: var(--float);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -4027,7 +4137,7 @@ body {
   color: var(--c-text);
   border: 1px solid var(--c-border);
   padding: 3px 7px;
-  font-family: var(--app-font-family, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 
@@ -4439,7 +4549,7 @@ body {
   border: 1px solid var(--c-border);
   background: var(--c-surface-deep);
   padding: 8px;
-  font-family: var(--app-font-family, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 0.78em;
   line-height: 1.2;
   user-select: none;
@@ -4677,7 +4787,7 @@ body {
 .panels-row-name {
   font-weight: 600;
   color: var(--c-text);
-  font-family: var(--app-font-family, ui-monospace, monospace);
+  font-family: var(--font-mono);
 }
 .panels-row-arrow {
   text-align: center;
@@ -5164,18 +5274,25 @@ body {
   z-index: 10;
 }
 
+/* Ember action chip: quiet bordered pill, replacing the old bracket
+   text-button idiom. Labels lost their literal [brackets] when this
+   landed — the border is the affordance now. */
 .settings-btn {
   background: transparent;
   color: var(--c-accent);
-  border: none;
-  padding: 0;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 2px 10px;
   font-family: inherit;
+  font-size: 12px;
   cursor: pointer;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .settings-btn:hover {
   color: var(--c-text-strong);
+  border-color: var(--c-border-hover);
 }
 
 .settings-btn-mute {
@@ -5184,14 +5301,17 @@ body {
 
 .settings-btn-danger {
   color: var(--c-danger);
+  border-color: color-mix(in srgb, var(--c-danger) 40%, transparent);
 }
 
 .settings-btn-danger:hover {
   color: var(--c-text-strong);
+  border-color: color-mix(in srgb, var(--c-danger) 60%, transparent);
 }
 
 .settings-btn:disabled {
   color: var(--c-text-dim);
+  border-color: var(--c-border-soft);
   cursor: not-allowed;
 }
 
@@ -5440,12 +5560,10 @@ body {
   gap: 10px;
   padding: 8px 14px;
   background: var(--c-surface-pane);
-  border: 1px solid rgba(255, 140, 30, 0.4);
+  border: 1px solid rgba(239, 143, 47, 0.4);
   border-color: color-mix(in srgb, var(--c-accent) 40%, transparent);
   border-radius: 8px;
-  box-shadow:
-    0 18px 44px -14px rgba(0, 0, 0, 0.6),
-    0 6px 18px -10px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--float);
   color: var(--c-text);
   font-family: var(--font-chrome);
   font-size: 12px;
@@ -5973,15 +6091,15 @@ body {
 }
 
 .migration-wizard {
-  background: var(--c-surface);
+  background: var(--c-surface-pane);
   border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
+  border-radius: 10px;
   width: 100%;
   max-width: 880px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--float);
 }
 
 .migration-wizard-header {
@@ -6644,7 +6762,7 @@ body {
   position: absolute;
   left: 50%;
   top: 50%;
-  font-family: var(--app-font-family, 'BerkeleyMono Nerd Font', Menlo, monospace);
+  font-family: var(--font-mono);
   font-weight: 700;
   line-height: 1;
   white-space: pre;
@@ -7185,16 +7303,16 @@ body {
 }
 
 .help-modal {
-  background: var(--c-surface);
+  background: var(--c-surface-pane);
   border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
+  border-radius: 10px;
   width: 100%;
   max-width: 1100px;
   height: 85vh;
   max-height: 900px;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--float);
 }
 
 .help-modal-header {
@@ -7376,7 +7494,7 @@ body {
   border: 1px solid var(--c-border);
   border-radius: 2px;
   padding: 0 4px;
-  font-family: var(--app-font-family);
+  font-family: var(--font-mono);
   font-size: 0.9em;
   color: var(--c-text-strong);
   white-space: nowrap;
@@ -7407,12 +7525,12 @@ body {
   z-index: 50;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 6px;
-  background: var(--c-surface);
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--c-surface-pane);
   border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  border-radius: 8px;
+  box-shadow: var(--float);
 }
 
 .find-toolbar-input {
