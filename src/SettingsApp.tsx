@@ -95,13 +95,13 @@ type TabId =
 // tabs (promoted out of the old Panels sub-toggle); `panels` keeps the
 // placement map and chip routing. `pathBOnly` tabs only appear when
 // Path B mode is active.
-type TabGroup = 'look & layout' | 'content' | 'tools';
+type TabGroup = 'look' | 'content' | 'tools';
 const TABS: { id: TabId; label: string; group: TabGroup; pathBOnly?: boolean }[] = [
-  { id: 'general', label: 'general', group: 'look & layout' },
-  { id: 'themes', label: 'themes', group: 'look & layout' },
-  { id: 'vitals', label: 'vitals', group: 'look & layout' },
-  { id: 'tick', label: 'tick', group: 'look & layout' },
-  { id: 'panels', label: 'panels', group: 'look & layout' },
+  { id: 'general', label: 'general', group: 'look' },
+  { id: 'themes', label: 'themes', group: 'look' },
+  { id: 'vitals', label: 'vitals', group: 'look' },
+  { id: 'tick', label: 'tick', group: 'look' },
+  { id: 'panels', label: 'panels', group: 'look' },
   { id: 'profiles', label: 'profiles', group: 'content' },
   { id: 'loadouts', label: 'loadouts', group: 'content', pathBOnly: true },
   { id: 'triggers', label: 'triggers', group: 'content' },
@@ -110,6 +110,87 @@ const TABS: { id: TabId; label: string; group: TabGroup; pathBOnly?: boolean }[]
   { id: 'import', label: 'import', group: 'tools' },
   { id: 'logs', label: 'logs', group: 'tools' },
 ];
+
+// One 14px stroke icon per rail item, from the Ember icon set. Stroke
+// color rides currentColor so the active accent tint applies for free.
+function TabIcon({ id }: { id: TabId }) {
+  const paths: Record<TabId, JSX.Element> = {
+    general: (
+      <>
+        <path d="M1.5 3.2h3.3M8 3.2h4.5M1.5 7h5.8M10.4 7h2.1M1.5 10.8h1.5M6.1 10.8h6.4" />
+        <circle cx="6.5" cy="3.2" r="1.5" />
+        <circle cx="8.9" cy="7" r="1.5" />
+        <circle cx="4.6" cy="10.8" r="1.5" />
+      </>
+    ),
+    themes: (
+      <>
+        <rect x="2" y="2" width="4.2" height="4.2" rx="0.8" />
+        <rect x="7.8" y="2" width="4.2" height="4.2" rx="0.8" />
+        <rect x="2" y="7.8" width="4.2" height="4.2" rx="0.8" />
+        <rect x="7.8" y="7.8" width="4.2" height="4.2" rx="0.8" />
+      </>
+    ),
+    vitals: <path d="M1 7.2h2.6l1.6-3.8 2.4 7.4 1.6-3.6H13" />,
+    tick: (
+      <>
+        <circle cx="7" cy="7" r="5.3" />
+        <path d="M7 4.2V7l2.1 1.5" />
+      </>
+    ),
+    panels: (
+      <>
+        <rect x="1.5" y="2.5" width="11" height="9" rx="1" />
+        <path d="M6.2 2.5v9M9.6 2.5v9" />
+      </>
+    ),
+    profiles: (
+      <>
+        <circle cx="7" cy="4.6" r="2.4" />
+        <path d="M2.6 12.4c0-2.7 2-4.4 4.4-4.4s4.4 1.7 4.4 4.4" />
+      </>
+    ),
+    loadouts: (
+      <>
+        <rect x="2" y="4" width="10" height="7.5" rx="1" />
+        <path d="M5 4V2.8A0.8 0.8 0 0 1 5.8 2h2.4a0.8 0.8 0 0 1 0.8 0.8V4" />
+      </>
+    ),
+    triggers: <path d="M7.9 1.4 3.6 8h2.9l-1 4.6L9.9 6H7z" />,
+    aliases: <path d="M3.6 3.6 7 7l-3.4 3.4M7.6 3.6 11 7l-3.4 3.4" />,
+    macros: (
+      <>
+        <rect x="1.5" y="3.5" width="11" height="7" rx="1" />
+        <path d="M3.8 5.8h0.02M6.2 5.8h0.02M8.6 5.8h0.02M11 5.8h0.02M4.4 8.4h5.2" />
+      </>
+    ),
+    import: (
+      <path d="M7 1.5v7M4.2 5.7 7 8.5l2.8-2.8M2 10v1.5A1 1 0 0 0 3 12.5h8a1 1 0 0 0 1-1V10" />
+    ),
+    logs: (
+      <>
+        <rect x="2.5" y="1.5" width="9" height="11" rx="1" />
+        <path d="M4.8 4.5h4.4M4.8 7h4.4M4.8 9.5h2.6" />
+      </>
+    ),
+  };
+  return (
+    <svg
+      className="settings-tab-icon"
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths[id]}
+    </svg>
+  );
+}
 
 // Settings window. Frameless Ghostty chrome via the shared TopBar;
 // body splits into named tabs along a thin top strip. T-now ships
@@ -168,7 +249,7 @@ export function SettingsApp() {
 
   return (
     <main className="app settings-app">
-      <TopBar brand="[vosh : settings]" showAuxButtons={false} />
+      <TopBar brand="Settings" showAuxButtons={false} />
       <div className="settings-shell">
         <nav className="settings-tabs settings-tabs-vertical">
           {visibleTabs.map((t, i) => {
@@ -189,6 +270,7 @@ export function SettingsApp() {
                     setTab(t.id);
                   }}
                 >
+                  <TabIcon id={t.id} />
                   {t.label}
                 </button>
               </span>

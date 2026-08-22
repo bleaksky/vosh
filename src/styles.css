@@ -2495,11 +2495,20 @@ body {
    JetBrainsMono Bundled is the same typeface the mockup previewed in,
    and it always loads via the bundled @font-face. */
 .settings-app {
-  font-family:
-    'JetBrainsMono Bundled', 'JetBrainsMono Nerd Font', 'BerkeleyMono Bundled', Menlo, 'SF Mono',
-    monospace;
-  font-size: 13px;
+  font-family: var(--font-chrome);
+  font-size: 12.5px;
   line-height: 1.45;
+}
+
+/* Value-bearing controls inside settings stay mono so hex colors,
+   hosts, patterns, and paths keep their tabular shape under the
+   Inter chrome. */
+.settings-app input[type='text'],
+.settings-app input[type='number'],
+.settings-app textarea,
+.settings-app select,
+.settings-app code {
+  font-family: var(--font-mono);
 }
 
 .settings-shell {
@@ -2713,9 +2722,9 @@ body {
   align-items: stretch;
   height: auto;
   min-height: 0;
-  width: 160px;
-  padding: 12px 0;
-  background: var(--c-surface-deep);
+  width: 176px;
+  padding: 12px 8px;
+  background: var(--c-surface);
   border-right: 1px solid var(--c-border);
   border-bottom: none;
   gap: 2px;
@@ -2745,23 +2754,34 @@ body {
   border-bottom-color: var(--c-accent);
 }
 
-/* In the vertical nav, the active marker moves from a bottom border
-   to a left border so the accent runs alongside the section name
-   instead of underlining it. The button also widens to fill the
-   column and pads vertically. */
+/* In the vertical nav, the active marker is an accent-soft wash on a
+   rounded row (the Ember recipe) instead of an edge border. The
+   button widens to fill the column, carries its icon at a 9px gap,
+   and tints the icon accent when active. */
 .settings-tabs-vertical .settings-tab {
   width: 100%;
-  height: 28px;
-  padding: 0 14px;
+  height: 30px;
+  padding: 0 12px;
+  gap: 9px;
   border-bottom: none;
-  border-left: 2px solid transparent;
+  border-radius: 6px;
   margin-bottom: 0;
+}
+
+.settings-tab-icon {
+  flex: 0 0 auto;
+  opacity: 0.85;
 }
 
 .settings-tabs-vertical .settings-tab-active {
   border-bottom-color: transparent;
-  border-left-color: var(--c-accent);
-  background: var(--c-surface);
+  background: var(--c-accent-soft);
+  color: var(--c-text-strong);
+}
+
+.settings-tabs-vertical .settings-tab-active .settings-tab-icon {
+  color: var(--c-accent);
+  opacity: 1;
 }
 
 /* Inline wrapper so each tab + its optional trailing divider stay
@@ -2802,11 +2822,13 @@ body {
    mockup. Replaces the old bare hairline divider. */
 .settings-tab-group {
   display: block;
-  font-size: 9.5px;
-  letter-spacing: 0.14em;
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--c-text-dim);
-  padding: 6px 16px 3px;
+  padding: 6px 12px 3px;
   user-select: none;
 }
 
