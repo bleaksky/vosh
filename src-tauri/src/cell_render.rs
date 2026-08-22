@@ -1343,6 +1343,12 @@ impl CellRenderer {
         // Find matches (and the active one) drive a highlight pass and
         // suppress the split so the match shows in a single full view.
         let (find_matches, find_active_match) = crate::term_grid::find_snapshot();
+        // Wash accent bars: rows marked by full-line trigger highlights
+        // get a slim bar at the left edge in the trigger's color.
+        let mut marks_by_line: HashMap<i32, Rgba> = HashMap::new();
+        for (line, (r, g, b)) in crate::term_grid::line_marks_snapshot() {
+            marks_by_line.insert(line, color_to_rgba(Color::Spec(Rgb { r, g, b })));
+        }
         let finding = !find_matches.is_empty();
         let split = offset > 0 && rows >= 6 && !finding;
         let divider_px = if split {
@@ -1559,6 +1565,24 @@ impl CellRenderer {
                     uv_min: solid_uv.0,
                     uv_max: solid_uv.1,
                 });
+            }
+            // Wash accent bars: one slim full-height quad at the left
+            // edge of each marked row. Width scales with the cell so it
+            // lands near 2 logical px on hidpi surfaces.
+            if !marks_by_line.is_empty() {
+                let bar_w = (cell_h / 8.0).clamp(2.0, 4.0);
+                for row in 0..reg.vis {
+                    let grid_line = reg.line0 + row as i32;
+                    if let Some(&color) = marks_by_line.get(&grid_line) {
+                        instances.push(CellInstance {
+                            offset: [0.0, reg.y0 + row as f32 * cell_h],
+                            size: [bar_w, cell_h],
+                            color,
+                            uv_min: solid_uv.0,
+                            uv_max: solid_uv.1,
+                        });
+                    }
+                }
             }
             instances.extend(glyphs);
             region_ranges.push(start..instances.len() as u32);

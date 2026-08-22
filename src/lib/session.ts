@@ -200,6 +200,10 @@ export interface HighlightStyle {
   bold?: boolean;
   underline?: boolean;
   inverse?: boolean;
+  /** Full-line wash: the whole line gets a dim background tint derived
+   *  from the highlight color, plus a left-edge accent bar in the
+   *  native renderer. */
+  wash?: boolean;
 }
 
 export async function exportTriggers(): Promise<string> {

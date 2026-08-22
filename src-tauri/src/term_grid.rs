@@ -240,6 +240,90 @@ pub(crate) fn feed_bytes(bytes: &[u8]) {
     };
     let grid = slot.get_or_insert_with(|| TermGrid::new(80, 24));
     grid.feed(bytes);
+    // Keep the absolute row counter in step with every feed path so
+    // wash line marks stay anchored (see the line-marks block below).
+    add_abs_rows(count_newlines(&String::from_utf8_lossy(bytes)));
+}
+
+// ── Line marks: full-line wash accent bars ──────────────────────────
+// Wash-highlighted lines arrive prefixed with a private OSC sequence
+// `ESC ] 7770 ; R ; G ; B BEL` (session.rs append_line_result). The
+// session feed intercepts the marker, records which absolute rows the
+// line occupies, and the renderer converts those rows to grid lines
+// each frame. Absolute rows are simply newlines fed to the grid: the
+// row the cursor is writing right now is always `ABS_ROWS`, so a mark
+// at absolute row A sits `ABS_ROWS - A` lines above the cursor. Marks
+// do not persist across restarts (scrollback stores the line without
+// its marker); the wash background itself rides the ANSI stream and
+// survives everywhere.
+/// One wash mark: the absolute row it lives on plus its accent color.
+type LineMark = (u64, (u8, u8, u8));
+static LINE_MARKS: Mutex<Vec<LineMark>> = Mutex::new(Vec::new());
+static ABS_ROWS: Mutex<u64> = Mutex::new(0);
+const MARK_OSC_PREFIX: &str = "\x1b]7770;";
+const MARK_KEEP_ROWS: u64 = 20_000;
+
+fn add_abs_rows(n: u64) {
+    if let Ok(mut a) = ABS_ROWS.lock() {
+        *a += n;
+    }
+}
+
+fn abs_rows_now() -> u64 {
+    ABS_ROWS.lock().map_or(0, |a| *a)
+}
+
+fn count_newlines(s: &str) -> u64 {
+    s.bytes().filter(|&b| b == b'\n').count() as u64
+}
+
+fn parse_mark_rgb(params: &str) -> Option<(u8, u8, u8)> {
+    let mut it = params.split(';').map(|p| p.trim().parse::<u8>().ok());
+    match (it.next(), it.next(), it.next(), it.next()) {
+        (Some(Some(r)), Some(Some(g)), Some(Some(b)), None) => Some((r, g, b)),
+        _ => None,
+    }
+}
+
+fn push_line_mark(start: u64, rows: u64, rgb: (u8, u8, u8)) {
+    if let Ok(mut m) = LINE_MARKS.lock() {
+        for i in 0..rows {
+            m.push((start + i, rgb));
+        }
+        let floor = abs_rows_now().saturating_sub(MARK_KEEP_ROWS);
+        m.retain(|(abs, _)| *abs >= floor);
+    }
+}
+
+/// Line marks currently addressable in the grid, as (`grid_line`, rgb).
+/// Converts stored absolute rows against the cursor's current row; rows
+/// scrolled off the top of history drop out.
+pub(crate) fn line_marks_snapshot() -> Vec<(i32, (u8, u8, u8))> {
+    let Ok(slot) = grid_slot().lock() else {
+        return Vec::new();
+    };
+    let Some(grid) = slot.as_ref() else {
+        return Vec::new();
+    };
+    let g = grid.term.grid();
+    let cursor_line = i64::from(g.cursor.point.line.0);
+    let top = i64::from(g.topmost_line().0);
+    let abs_now = abs_rows_now();
+    let Ok(marks) = LINE_MARKS.lock() else {
+        return Vec::new();
+    };
+    marks
+        .iter()
+        .filter_map(|&(abs, rgb)| {
+            let delta = abs_now.checked_sub(abs)? as i64;
+            let line = cursor_line - delta;
+            if line >= top {
+                Some((line as i32, rgb))
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 // UTF-8 tail carried between session chunks so a multi-byte character
@@ -285,8 +369,52 @@ pub(crate) fn feed_session_bytes(bytes: &[u8]) {
             }
         }
     };
-    if !text.is_empty() {
-        grid.feed(wrap_stream(&text, cols).as_bytes());
+    if text.is_empty() {
+        return;
+    }
+    // Intercept wash line-mark markers. Each marker precedes exactly one
+    // logical line; the mark covers every row that line wraps into. The
+    // pieces around markers feed separately, which is behavior-identical
+    // because markers only ever sit at line starts (never mid-line).
+    let mut remaining = text.as_str();
+    while let Some(pos) = remaining.find(MARK_OSC_PREFIX) {
+        let before = &remaining[..pos];
+        if !before.is_empty() {
+            let wrapped = wrap_stream(before, cols);
+            grid.feed(wrapped.as_bytes());
+            add_abs_rows(count_newlines(&wrapped));
+        }
+        let after = &remaining[pos + MARK_OSC_PREFIX.len()..];
+        let Some(term_i) = after.find('\u{07}') else {
+            // Marker split across chunks. The VTE parser is stateful, so
+            // feed the tail as-is (the mark is lost, rendering is not).
+            remaining = &remaining[pos..];
+            break;
+        };
+        let rgb = parse_mark_rgb(&after[..term_i]);
+        remaining = &after[term_i + 1..];
+        let (segment, rest) = match remaining.find('\n') {
+            Some(nl) => remaining.split_at(nl + 1),
+            None => (remaining, ""),
+        };
+        let wrapped = wrap_stream(segment, cols);
+        let fed_newlines = count_newlines(&wrapped);
+        let rows = if segment.ends_with('\n') {
+            fed_newlines.max(1)
+        } else {
+            fed_newlines + 1
+        };
+        if let Some(rgb) = rgb {
+            push_line_mark(abs_rows_now(), rows, rgb);
+        }
+        grid.feed(wrapped.as_bytes());
+        add_abs_rows(fed_newlines);
+        remaining = rest;
+    }
+    if !remaining.is_empty() {
+        let wrapped = wrap_stream(remaining, cols);
+        grid.feed(wrapped.as_bytes());
+        add_abs_rows(count_newlines(&wrapped));
     }
 }
 

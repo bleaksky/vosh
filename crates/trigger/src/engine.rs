@@ -43,6 +43,10 @@ pub struct LineResult {
     /// numbered groups). The session loop evaluates these against
     /// its shared `ScriptEngine` after the line is displayed.
     pub scripts: Vec<ScriptInvocation>,
+    /// Accent-bar colors for full-line wash highlights that fired on
+    /// this line. The session loop forwards them to the native
+    /// renderer, which paints a bar at the left edge of the line.
+    pub marks: Vec<(u8, u8, u8)>,
 }
 
 /// One Lua body queued by a trigger's `Script` action, with the
@@ -85,9 +89,7 @@ pub fn process_with_plain(
     if store.is_empty() {
         return LineResult {
             display: Some(bytes_to_string_lossy(original)),
-            sends: Vec::new(),
-            routes: Vec::new(),
-            scripts: Vec::new(),
+            ..Default::default()
         };
     }
 
@@ -194,14 +196,42 @@ pub fn process_with_plain(
             sends,
             routes,
             scripts,
+            marks: Vec::new(),
         };
     }
+
+    // Full-line wash. The first wash-flagged highlight (priority order)
+    // supplies the tint; the whole line gets a dim truecolor background
+    // and the renderer gets an accent-bar mark. Highlighted lines are
+    // rebuilt from plain text, so the only SGR resets that need to
+    // re-assert the wash background are the ones wrap_matches emits.
+    let wash_bg = highlights
+        .iter()
+        .find(|(_, s)| s.wash)
+        .map(|(_, s)| dim_wash_rgb(s.wash_source().rgb()));
+    let mut marks: Vec<(u8, u8, u8)> = Vec::new();
 
     let display = if any_match {
         // Apply highlights last on the (possibly replaced) text so colors
         // wrap whatever the user ends up seeing.
-        for (regex, style) in highlights {
-            text = wrap_matches(&text, &regex, &style);
+        let close = match wash_bg {
+            Some((r, g, b)) => format!("\x1b[0;48;2;{r};{g};{b}m"),
+            None => HighlightStyle::sgr_reset().to_string(),
+        };
+        for (regex, style) in &highlights {
+            text = wrap_matches(&text, regex, style, &close);
+        }
+        if let Some((r, g, b)) = wash_bg {
+            // `ESC [2K` with the background active erases the whole row
+            // to the wash color (BCE), so the tint runs edge to edge in
+            // both renderers; the final reset keeps the following line
+            // clean.
+            text = format!("\x1b[48;2;{r};{g};{b}m\x1b[2K{text}\x1b[0m");
+            for (_, style) in &highlights {
+                if style.wash {
+                    marks.push(style.wash_source().rgb());
+                }
+            }
         }
         Some(text)
     } else {
@@ -213,7 +243,15 @@ pub fn process_with_plain(
         sends,
         routes,
         scripts,
+        marks,
     }
+}
+
+/// Scale a full-strength color down to a dim background tint, roughly a
+/// quarter strength, so washed lines read as a soft band on a dark
+/// terminal rather than a solid block.
+fn dim_wash_rgb((r, g, b): (u8, u8, u8)) -> (u8, u8, u8) {
+    (r / 4, g / 4, b / 4)
 }
 
 /// Split a Send-action template into one command per `;` / `\n`.
@@ -251,9 +289,8 @@ fn split_send_template(input: &str) -> Vec<String> {
     out
 }
 
-fn wrap_matches(text: &str, regex: &Regex, style: &HighlightStyle) -> String {
+fn wrap_matches(text: &str, regex: &Regex, style: &HighlightStyle, close: &str) -> String {
     let open = style.sgr_open();
-    let close = HighlightStyle::sgr_reset();
     let mut out = String::with_capacity(text.len() + open.len() * 2);
     let mut last = 0;
     for mat in regex.find_iter(text) {
@@ -625,6 +662,50 @@ mod tests {
         let count = s2.import_json(&json).unwrap();
         assert_eq!(count, 2);
         assert_eq!(s.list(), s2.list());
+    }
+
+    #[test]
+    fn wash_wraps_whole_line_and_reports_mark() {
+        let mut t = highlight("sancdown", "sanctuary", NamedColor::Yellow);
+        if let TriggerAction::Highlight { style } = &mut t.actions[0] {
+            style.wash = true;
+        }
+        let s = store(vec![t]);
+        let r = process(&s, b"Your sanctuary flickers and fades.");
+        let text = r.display.unwrap();
+        // Quarter-strength canonical yellow (0xcd/4 = 0x33 = 51).
+        assert!(text.starts_with("\x1b[48;2;51;51;0m\x1b[2K"));
+        assert!(text.ends_with("\x1b[0m"));
+        // The matched-text close re-asserts the wash background so the
+        // tint survives past the highlighted word.
+        assert!(text.contains("\x1b[0;48;2;51;51;0m"));
+        assert_eq!(r.marks, vec![(0xcd, 0xcd, 0x00)]);
+    }
+
+    #[test]
+    fn wash_off_keeps_plain_close_and_no_marks() {
+        let s = store(vec![highlight("tells", r"tells you", NamedColor::Cyan)]);
+        let r = process(&s, b"Bob tells you 'hi'");
+        let text = r.display.unwrap();
+        assert!(!text.contains("48;2;"));
+        assert!(text.contains("\x1b[0m"));
+        assert!(r.marks.is_empty());
+    }
+
+    #[test]
+    fn wash_uses_explicit_bg_over_fg() {
+        let mut t = highlight("alert", "DANGER", NamedColor::White);
+        if let TriggerAction::Highlight { style } = &mut t.actions[0] {
+            style.wash = true;
+            style.bg = Some(NamedColor::Red);
+        }
+        let s = store(vec![t]);
+        let r = process(&s, b"DANGER close behind you");
+        let text = r.display.unwrap();
+        // Wash derives from the explicit red bg (0xcd/4 = 51), not the
+        // white fg.
+        assert!(text.starts_with("\x1b[48;2;51;0;0m\x1b[2K"));
+        assert_eq!(r.marks, vec![(0xcd, 0x00, 0x00)]);
     }
 
     #[test]

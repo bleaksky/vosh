@@ -83,7 +83,7 @@ slash commands:
   #qkeys                               list quick-key bindings
   #help                                show this list
 trigger actions:
-  highlight <color> [bold] [underline] [inverse] [bg:<color>]
+  highlight <color> [bold] [underline] [inverse] [wash] [bg:<color>]
   gag
   replace <template>
   send <template>
@@ -1029,6 +1029,7 @@ fn parse_highlight_action(input: &str) -> Result<TriggerAction, String> {
             "bold" => style.bold = true,
             "underline" => style.underline = true,
             "inverse" => style.inverse = true,
+            "wash" => style.wash = true,
             other => {
                 if let Some(name) = other.strip_prefix("bg:") {
                     let color =
@@ -1066,6 +1067,9 @@ fn describe_action(action: &TriggerAction) -> String {
             }
             if style.inverse {
                 parts.push("inverse".to_string());
+            }
+            if style.wash {
+                parts.push("wash".to_string());
             }
             format!("highlight {}", parts.join(" "))
         }

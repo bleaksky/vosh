@@ -71,4 +71,28 @@ impl NamedColor {
     pub fn bg_code(self) -> u32 {
         self.fg_code() + 10
     }
+
+    /// Canonical xterm RGB for the named color. Used to derive the
+    /// truecolor full-line wash and the renderer's accent bar, so the
+    /// wash tint stays stable regardless of the active theme palette.
+    pub fn rgb(self) -> (u8, u8, u8) {
+        match self {
+            Self::Black => (0x00, 0x00, 0x00),
+            Self::Red => (0xcd, 0x00, 0x00),
+            Self::Green => (0x00, 0xcd, 0x00),
+            Self::Yellow => (0xcd, 0xcd, 0x00),
+            Self::Blue => (0x00, 0x00, 0xee),
+            Self::Magenta => (0xcd, 0x00, 0xcd),
+            Self::Cyan => (0x00, 0xcd, 0xcd),
+            Self::White => (0xe5, 0xe5, 0xe5),
+            Self::BrightBlack => (0x7f, 0x7f, 0x7f),
+            Self::BrightRed => (0xff, 0x00, 0x00),
+            Self::BrightGreen => (0x00, 0xff, 0x00),
+            Self::BrightYellow => (0xff, 0xff, 0x00),
+            Self::BrightBlue => (0x5c, 0x5c, 0xff),
+            Self::BrightMagenta => (0xff, 0x00, 0xff),
+            Self::BrightCyan => (0x00, 0xff, 0xff),
+            Self::BrightWhite => (0xff, 0xff, 0xff),
+        }
+    }
 }
