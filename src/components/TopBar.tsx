@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TopBarLoadouts } from './TopBarLoadouts';
+import { Connect, type ConnectionStatus } from './Connect';
 
 // Platform sniff. The square button means "make the window as big as
 // possible." On macOS that idiom maps to native full-screen mode (the
@@ -31,6 +32,10 @@ interface Props {
   onToggleMap?: () => void;
   // Help modal opener. When provided, a `help` button renders.
   onOpenHelp?: () => void;
+  // Session chip. When provided, the connect chip renders next to the
+  // brand block and the old connect row disappears.
+  connectionStatus?: ConnectionStatus;
+  onConnectionError?: (message: string) => void;
 }
 
 // Frameless-window top strip. Drag region across most of its width
@@ -39,10 +44,12 @@ interface Props {
 // traffic lights.
 export function TopBar({
   showAuxButtons = true,
-  brand = '[vosh]',
+  brand = 'Vosh',
   mapOpen,
   onToggleMap,
   onOpenHelp,
+  connectionStatus,
+  onConnectionError,
 }: Props) {
   const win = () => getCurrentWindow();
 
@@ -57,6 +64,9 @@ export function TopBar({
       <span className="brand-block" data-tauri-drag-region title={`Vosh ${__APP_VERSION__}`}>
         {brand}
       </span>
+      {connectionStatus && onConnectionError && (
+        <Connect status={connectionStatus} onError={onConnectionError} />
+      )}
       <span className="topbar-spacer" data-tauri-drag-region />
       {showAuxButtons && (
         <div className="topbar-aux">
