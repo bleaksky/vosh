@@ -144,6 +144,64 @@ const kansoZen: AppTheme = {
   },
 };
 
+// ── Obsidian Ember ──────────────────────────────────────────────────
+// The Ember redesign palette. One warm near-black neutral ramp for
+// every surface, one text ramp on the same hue, a single ember accent,
+// and translucent hairline borders. Values come from the OKLCH ramp
+// (hue 55, chroma 0.004-0.006) converted to sRGB, so the app matches
+// the approved design canvas exactly.
+const obsidianEmber: AppTheme = {
+  id: 'obsidian-ember',
+  label: 'Obsidian Ember',
+  description: 'Near-black warm neutral ramp, single ember accent, pastel ANSI.',
+  xterm: {
+    background: '#050403',
+    foreground: '#c0bdbb',
+    cursor: '#ff8c1e',
+    cursorAccent: '#050403',
+    selectionBackground: '#201d1c',
+    selectionForeground: '#f2efee',
+    black: '#4a4642',
+    red: '#d97a6e',
+    green: '#79c795',
+    yellow: '#d8b56a',
+    blue: '#82a8e0',
+    magenta: '#b48ec9',
+    cyan: '#7ec8d4',
+    white: '#b8b2ac',
+    brightBlack: '#5f5a55',
+    brightRed: '#ea8f80',
+    brightGreen: '#8fdaa8',
+    brightYellow: '#ecc985',
+    brightBlue: '#9bbdf0',
+    brightMagenta: '#cba6dd',
+    brightCyan: '#97dde8',
+    brightWhite: '#ece7e1',
+  },
+  chrome: {
+    surface: '#0a0908',
+    surfaceDeep: '#0e0c0b',
+    surfacePane: '#100f0d',
+    surfaceLift: '#181514',
+    surfaceEmphasis: '#201d1c',
+    textStrong: '#f2efee',
+    text: '#e0dddb',
+    textMuted: '#c0bdbb',
+    textFaint: '#9b9795',
+    textDim: '#726e6b',
+    borderSoft: 'rgba(80, 76, 74, 0.16)',
+    border: 'rgba(80, 76, 74, 0.24)',
+    borderStrong: 'rgba(80, 76, 74, 0.42)',
+    borderHover: 'rgba(80, 76, 74, 0.60)',
+    accent: '#ff8c1e',
+    accentSoft: 'rgba(255, 140, 30, 0.13)',
+    warn: '#e5c057',
+    danger: '#e3645e',
+    info: '#6ec3eb',
+    success: '#76cf8a',
+  },
+};
+
 // ── Tokyo Night Storm ───────────────────────────────────────────────
 // Saturated blues, muted purples, signature deep navy. Accent on the
 // frost blue (`#7aa2f7`).
@@ -768,6 +826,7 @@ const highContrast: AppTheme = {
 };
 
 export const BUILTIN_THEMES: AppTheme[] = [
+  obsidianEmber,
   kansoZen,
   tokyoNight,
   nord,
@@ -838,7 +897,7 @@ export const THEMES: AppTheme[] = new Proxy([] as AppTheme[], {
   },
 });
 
-export const DEFAULT_THEME_ID = 'kanso-zen';
+export const DEFAULT_THEME_ID = 'obsidian-ember';
 
 export function findTheme(id: string | undefined): AppTheme {
   const all = [...BUILTIN_THEMES, ...CUSTOM_THEMES];
