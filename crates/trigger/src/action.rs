@@ -16,6 +16,12 @@ pub struct HighlightStyle {
     pub underline: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub inverse: bool,
+    /// Full-line wash. The whole line gets a dim truecolor background
+    /// derived from the highlight color, and the engine reports a line
+    /// mark so the native renderer can draw an accent bar at the left
+    /// edge. Old profiles deserialize with the flag off.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub wash: bool,
 }
 
 impl HighlightStyle {
@@ -51,7 +57,20 @@ impl HighlightStyle {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.fg.is_none() && self.bg.is_none() && !self.bold && !self.underline && !self.inverse
+        self.fg.is_none()
+            && self.bg.is_none()
+            && !self.bold
+            && !self.underline
+            && !self.inverse
+            && !self.wash
+    }
+
+    /// The color the wash derives from: the explicit background if one
+    /// is set, else the foreground, else yellow.
+    pub fn wash_source(&self) -> crate::color::NamedColor {
+        self.bg
+            .or(self.fg)
+            .unwrap_or(crate::color::NamedColor::Yellow)
     }
 }
 

@@ -835,6 +835,15 @@ function HighlightStyleEditor({ style, onChange, readOnly }: HSProps) {
         />
         inverse
       </label>
+      <label title="tint the whole line with a dim version of the highlight color, with an accent bar at the left edge">
+        <input
+          type="checkbox"
+          checked={!!style.wash}
+          disabled={readOnly}
+          onChange={(e) => setKey('wash', e.target.checked ? true : undefined)}
+        />
+        full-line wash
+      </label>
     </div>
   );
 }
