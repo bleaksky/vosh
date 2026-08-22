@@ -76,18 +76,42 @@ export function TopBar({
               type="button"
               className={`topbar-aux-btn${mapOpen ? ' topbar-aux-btn-pressed' : ''}`}
               aria-pressed={mapOpen}
+              aria-label="toggle map pane"
+              title="map"
               onClick={onToggleMap}
             >
-              map
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" strokeWidth="1.3">
+                <path d="M2 4.5 6 3l4 1.5L14 3v8.5L10 13 6 11.5 2 13z" />
+                <path d="M6 3v8.5M10 4.5V13" />
+              </svg>
             </button>
           )}
           {onOpenHelp && (
-            <button type="button" className="topbar-aux-btn" onClick={onOpenHelp}>
-              help
+            <button
+              type="button"
+              className="topbar-aux-btn"
+              aria-label="open help"
+              title="help"
+              onClick={onOpenHelp}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" strokeWidth="1.3">
+                <circle cx="8" cy="8" r="6.2" />
+                <path d="M6.2 6.2a1.8 1.8 0 1 1 2.6 1.7c-.6.3-.8.7-.8 1.3" />
+                <path d="M8 11.3h.01" />
+              </svg>
             </button>
           )}
-          <button type="button" className="topbar-aux-btn" onClick={openSettings}>
-            settings
+          <button
+            type="button"
+            className="topbar-aux-btn"
+            aria-label="open settings"
+            title="settings"
+            onClick={openSettings}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" strokeWidth="1.3">
+              <circle cx="8" cy="8" r="2.4" />
+              <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4" />
+            </svg>
           </button>
         </div>
       )}
@@ -98,7 +122,9 @@ export function TopBar({
           aria-label="minimize"
           onClick={() => void win().minimize()}
         >
-          –
+          <svg width="10" height="10" viewBox="0 0 10 10" strokeWidth="1.2">
+            <path d="M1 5h8" />
+          </svg>
         </button>
         <button
           type="button"
@@ -106,7 +132,9 @@ export function TopBar({
           aria-label={IS_MAC ? 'enter full screen' : 'maximize'}
           onClick={() => void handleMaximize()}
         >
-          ▢
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" strokeWidth="1.2">
+            <rect x="1.5" y="1.5" width="7" height="7" rx="1" />
+          </svg>
         </button>
         <button
           type="button"
@@ -114,7 +142,9 @@ export function TopBar({
           aria-label="close"
           onClick={() => void win().close()}
         >
-          ✕
+          <svg width="10" height="10" viewBox="0 0 10 10" strokeWidth="1.2">
+            <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" />
+          </svg>
         </button>
       </div>
     </div>

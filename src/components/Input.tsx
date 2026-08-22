@@ -840,7 +840,6 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         lineCount > 1 ? ' input-row-multiline' : ''
       }`}
     >
-      <LineChip />
       <span className="prompt" aria-hidden="true">
         &raquo;
       </span>
@@ -915,6 +914,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           }}
         />
       )}
+      <LineChip />
     </div>
   );
 });

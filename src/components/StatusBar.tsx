@@ -22,15 +22,31 @@ function formatClock(date: Date): string {
 }
 
 // Aabahran's World.Moons GMCP uses 0=full, 4=new, with 1-3 waning
-// and 5-7 waxing. The four geometric circles cover the cardinal
-// phases legibly; intermediate phases collapse to the nearest
-// neighbour (waxing vs waning is preserved).
-function moonGlyphFromIndex(phase: number): string {
+// and 5-7 waxing. Four cardinal phases drawn as crisp 10px stroke
+// circles (the Ember canvas treatment); intermediate phases collapse
+// to the nearest neighbour, waxing vs waning preserved by which half
+// fills. currentColor drives both stroke and fill so the active
+// accent tint applies from CSS.
+function MoonIcon({ phase }: { phase: number }) {
   const n = ((Math.round(phase) % 8) + 8) % 8;
-  if (n === 0) return '○'; // full
-  if (n >= 1 && n <= 3) return '◑'; // waning (right side dark)
-  if (n === 4) return '●'; // new
-  return '◐'; // waxing (left side dark)
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+      {n === 0 && <circle cx="5" cy="5" r="4" fill="currentColor" stroke="none" />}
+      {n >= 1 && n <= 3 && (
+        <>
+          <circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" strokeWidth="1" />
+          <path d="M5 1a4 4 0 0 0 0 8z" fill="currentColor" stroke="none" />
+        </>
+      )}
+      {n === 4 && <circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" strokeWidth="1" />}
+      {n >= 5 && (
+        <>
+          <circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" strokeWidth="1" />
+          <path d="M5 1a4 4 0 0 1 0 8z" fill="currentColor" stroke="none" />
+        </>
+      )}
+    </svg>
+  );
 }
 
 export function StatusBar() {
@@ -159,7 +175,7 @@ function MoonsBlock({ moons }: { moons: MoonsState }) {
             (m.active ? ' (active)' : '')
           }
         >
-          {moonGlyphFromIndex(m.phase ?? -1)}
+          <MoonIcon phase={m.phase ?? -1} />
         </span>
       ))}
       {moons.eclipse && <span className="statusbar-moon-badge is-eclipse">eclipse</span>}

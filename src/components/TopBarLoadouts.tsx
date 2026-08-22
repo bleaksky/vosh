@@ -63,12 +63,8 @@ export function TopBarLoadouts() {
 
   const activeCount = state.active.length;
   const total = state.loadouts.length;
-  const label =
-    activeCount === 0
-      ? '[loadouts: none]'
-      : activeCount === 1
-        ? `[loadouts: ${state.active[0]}]`
-        : `[loadouts: ${activeCount} active]`;
+  const value =
+    activeCount === 0 ? 'none' : activeCount === 1 ? state.active[0] : `${activeCount} active`;
 
   const handleToggle = (name: string) => {
     const next = state.active.includes(name)
@@ -86,7 +82,8 @@ export function TopBarLoadouts() {
         aria-haspopup="menu"
         onClick={() => setOpen((v) => !v)}
       >
-        {label}
+        <span className="topbar-loadouts-label">loadout</span>
+        <span className="topbar-loadouts-value">{value}</span>
       </button>
       {open && (
         <div className="topbar-loadouts-menu" role="menu">
