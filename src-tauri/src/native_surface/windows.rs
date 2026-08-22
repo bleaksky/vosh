@@ -39,10 +39,11 @@ const MK_LBUTTON: usize = 0x0001;
 const MK_CONTROL: usize = 0x0008;
 const WM_MOUSELEAVE: u32 = 0x02A3;
 const WM_MBUTTONDOWN: u32 = 0x0207;
+const WM_RBUTTONDOWN: u32 = 0x0204;
 
 use super::{
-    divider_frac, middle_click, pointer_down, pointer_dragged, pointer_moved, pointer_up, render,
-    surface_slot, wheel_scroll, PointerEvent, SurfaceHandle,
+    context_click, divider_frac, middle_click, pointer_down, pointer_dragged, pointer_moved,
+    pointer_up, render, surface_slot, wheel_scroll, PointerEvent, SurfaceHandle,
 };
 
 /// wgpu backend for this platform.
@@ -207,6 +208,11 @@ extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM
         WM_MBUTTONDOWN => {
             // Middle-click toggles the split-scrollback view.
             middle_click();
+            0
+        }
+        WM_RBUTTONDOWN => {
+            // Right-click opens the frontend's terminal context menu.
+            context_click(&pointer_event(hwnd, lparam, false));
             0
         }
         WM_MOUSEMOVE => {

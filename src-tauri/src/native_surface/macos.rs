@@ -9,8 +9,9 @@ use std::ptr::NonNull;
 use std::sync::OnceLock;
 
 use super::{
-    divider_frac, load_f32, middle_click, pointer_down, pointer_dragged, pointer_moved, pointer_up,
-    render, surface_slot, wheel_scroll, PointerEvent, SurfaceHandle, DPR, DRAGGING,
+    context_click, divider_frac, load_f32, middle_click, pointer_down, pointer_dragged,
+    pointer_moved, pointer_up, render, surface_slot, wheel_scroll, PointerEvent, SurfaceHandle,
+    DPR, DRAGGING,
 };
 use objc2::declare::ClassBuilder;
 use objc2::runtime::{AnyClass, AnyObject, Sel};
@@ -220,6 +221,13 @@ extern "C" fn mouse_up(_this: *mut AnyObject, _cmd: Sel, _event: *mut AnyObject)
     pointer_up();
 }
 
+/// Right-click opens the frontend's terminal context menu at the pointer.
+extern "C" fn right_mouse_down(this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
+    if let Some(ev) = pointer_event(this, event) {
+        context_click(&ev);
+    }
+}
+
 /// Middle-click (buttonNumber 2) toggles the split-scrollback view.
 extern "C" fn other_mouse_down(_this: *mut AnyObject, _cmd: Sel, event: *mut AnyObject) {
     if event.is_null() {
@@ -311,6 +319,10 @@ fn surface_view_class() -> &'static AnyClass {
             builder.add_method(
                 sel!(mouseUp:),
                 mouse_up as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+            builder.add_method(
+                sel!(rightMouseDown:),
+                right_mouse_down as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
             );
             builder.add_method(
                 sel!(otherMouseDown:),
