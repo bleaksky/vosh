@@ -46,6 +46,12 @@ interface Props {
   /** Close the split-scrollback view. Fires on Esc; the host decides
    *  whether anything is currently open. */
   onExitSplit?: () => void;
+  /** Changes whenever the prompt font family or size changes. The
+   *  autosize snap caches a pixel height computed from the current
+   *  metrics, so it must re-run when the metrics move or the row
+   *  holds a stale height until the next keystroke and the whole
+   *  layout shifts when that keystroke lands. */
+  fontKey?: string;
 }
 
 // Regex set for "is this line chat-like?" — when the toggle in
@@ -95,7 +101,7 @@ function colorizeEcho(line: string, color: string | null): string {
 }
 
 export const Input = forwardRef<InputHandle, Props>(function Input(
-  { enabled, onError, onLocalEcho, onScrollTerminal, onExitSplit }: Props,
+  { enabled, onError, onLocalEcho, onScrollTerminal, onExitSplit, fontKey }: Props,
   ref,
 ) {
   const [value, setValue] = useState('');
@@ -216,7 +222,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     } else {
       el.style.height = `${el.scrollHeight}px`;
     }
-  }, [value, passwordMode]);
+  }, [value, passwordMode, fontKey]);
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
