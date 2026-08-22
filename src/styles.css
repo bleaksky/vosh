@@ -2203,7 +2203,15 @@ body {
   outline: none;
   font-family: inherit;
   font-size: inherit;
+  /* Identical vertical metrics to the textarea below. The prompt
+     swaps between the two elements when the server toggles password
+     mode mid-login, and any metric difference shifts the whole row
+     by a pixel on every swap. */
+  line-height: 1.35;
+  height: calc(1.35em + 4px);
   padding: 2px 0;
+  margin: 0;
+  box-sizing: border-box;
 }
 
 .input-row input::placeholder {
