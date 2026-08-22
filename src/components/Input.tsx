@@ -202,7 +202,20 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     const el = inputRef.current;
     if (!(el instanceof HTMLTextAreaElement)) return;
     el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
+    // scrollHeight is an integer rounding of fractional line metrics
+    // (line-height 1.35), so trusting it raw lets the height flip by
+    // one pixel between keystrokes — and the input row, terminal, and
+    // panels all reflow with it. Snap to whole text rows instead so
+    // the height is a pure function of the line count.
+    const cs = getComputedStyle(el);
+    const line = parseFloat(cs.lineHeight);
+    const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    if (Number.isFinite(line) && line > 0) {
+      const rows = Math.max(1, Math.round((el.scrollHeight - pad) / line));
+      el.style.height = `${(rows * line + pad).toFixed(2)}px`;
+    } else {
+      el.style.height = `${el.scrollHeight}px`;
+    }
   }, [value, passwordMode]);
 
   useEffect(() => {
