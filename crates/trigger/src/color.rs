@@ -25,6 +25,27 @@ pub enum NamedColor {
 }
 
 impl NamedColor {
+    /// Every named color, for callers that need the full palette (the
+    /// native renderer derives its wash-detection table from this).
+    pub const ALL: [Self; 16] = [
+        Self::Black,
+        Self::Red,
+        Self::Green,
+        Self::Yellow,
+        Self::Blue,
+        Self::Magenta,
+        Self::Cyan,
+        Self::White,
+        Self::BrightBlack,
+        Self::BrightRed,
+        Self::BrightGreen,
+        Self::BrightYellow,
+        Self::BrightBlue,
+        Self::BrightMagenta,
+        Self::BrightCyan,
+        Self::BrightWhite,
+    ];
+
     pub fn parse(name: &str) -> Option<Self> {
         match name.to_ascii_lowercase().as_str() {
             "black" => Some(Self::Black),
@@ -70,6 +91,16 @@ impl NamedColor {
 
     pub fn bg_code(self) -> u32 {
         self.fg_code() + 10
+    }
+
+    /// The quarter-strength wash tint for this color. The trigger
+    /// engine bakes this exact value into washed lines as a truecolor
+    /// background, and the native renderer recognizes it to place the
+    /// accent bar — both sides MUST derive it from here or detection
+    /// breaks.
+    pub fn wash_tint(self) -> (u8, u8, u8) {
+        let (r, g, b) = self.rgb();
+        (r / 4, g / 4, b / 4)
     }
 
     /// Canonical xterm RGB for the named color. Used to derive the

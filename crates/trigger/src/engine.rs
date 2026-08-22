@@ -43,10 +43,6 @@ pub struct LineResult {
     /// numbered groups). The session loop evaluates these against
     /// its shared `ScriptEngine` after the line is displayed.
     pub scripts: Vec<ScriptInvocation>,
-    /// Accent-bar colors for full-line wash highlights that fired on
-    /// this line. The session loop forwards them to the native
-    /// renderer, which paints a bar at the left edge of the line.
-    pub marks: Vec<(u8, u8, u8)>,
 }
 
 /// One Lua body queued by a trigger's `Script` action, with the
@@ -196,42 +192,31 @@ pub fn process_with_plain(
             sends,
             routes,
             scripts,
-            marks: Vec::new(),
         };
     }
 
     // Full-line wash. The first wash-flagged highlight (priority order)
-    // supplies the tint; the whole line gets a dim truecolor background
-    // and the renderer gets an accent-bar mark. Highlighted lines are
-    // rebuilt from plain text, so the only SGR resets that need to
-    // re-assert the wash background are the ones wrap_matches emits.
+    // supplies the tint: the whole line gets the wash color's quarter-
+    // strength truecolor background. The native renderer recognizes
+    // that exact tint on a row's first cell and draws the left-edge
+    // accent bar from it, so the wash bytes are the entire contract —
+    // no side channel, and the bar survives resize, reflow, and
+    // scrollback reload wherever the bytes do.
     let wash_bg = highlights
         .iter()
         .find(|(_, s)| s.wash)
-        .map(|(_, s)| dim_wash_rgb(s.wash_source().rgb()));
-    let mut marks: Vec<(u8, u8, u8)> = Vec::new();
+        .map(|(_, s)| s.wash_source().wash_tint());
 
     let display = if any_match {
         // Apply highlights last on the (possibly replaced) text so colors
         // wrap whatever the user ends up seeing.
-        let close = match wash_bg {
-            Some((r, g, b)) => format!("\x1b[0;48;2;{r};{g};{b}m"),
-            None => HighlightStyle::sgr_reset().to_string(),
-        };
-        for (regex, style) in &highlights {
-            text = wrap_matches(&text, regex, style, &close);
-        }
+        text = apply_highlights(&text, &highlights, wash_bg);
         if let Some((r, g, b)) = wash_bg {
             // `ESC [2K` with the background active erases the whole row
             // to the wash color (BCE), so the tint runs edge to edge in
             // both renderers; the final reset keeps the following line
             // clean.
             text = format!("\x1b[48;2;{r};{g};{b}m\x1b[2K{text}\x1b[0m");
-            for (_, style) in &highlights {
-                if style.wash {
-                    marks.push(style.wash_source().rgb());
-                }
-            }
         }
         Some(text)
     } else {
@@ -243,15 +228,57 @@ pub fn process_with_plain(
         sends,
         routes,
         scripts,
-        marks,
     }
 }
 
-/// Scale a full-strength color down to a dim background tint, roughly a
-/// quarter strength, so washed lines read as a soft band on a dark
-/// terminal rather than a solid block.
-fn dim_wash_rgb((r, g, b): (u8, u8, u8)) -> (u8, u8, u8) {
-    (r / 4, g / 4, b / 4)
+/// Apply every highlight in a single pass. Match spans are collected
+/// against the text BEFORE any escapes are injected, so a later
+/// pattern can never match inside an earlier highlight's escape
+/// sequence (a digit pattern like `\d+` used to match the digits of an
+/// injected SGR and corrupt the line). Overlapping spans resolve
+/// first-wins in trigger priority order. With a wash active, each
+/// span's closing reset re-asserts the wash background so the tint
+/// holds past the highlighted text.
+fn apply_highlights(
+    text: &str,
+    highlights: &[(Regex, HighlightStyle)],
+    wash_bg: Option<(u8, u8, u8)>,
+) -> String {
+    let close = match wash_bg {
+        Some((r, g, b)) => format!("\x1b[0;48;2;{r};{g};{b}m"),
+        None => HighlightStyle::sgr_reset().to_string(),
+    };
+    let mut spans: Vec<(usize, usize, String)> = Vec::new();
+    for (regex, style) in highlights {
+        let open = style.sgr_open();
+        if open.is_empty() {
+            // A wash-only style colors the line, not a span.
+            continue;
+        }
+        for mat in regex.find_iter(text) {
+            if mat.end() == mat.start() {
+                continue;
+            }
+            let overlaps = spans
+                .iter()
+                .any(|&(s, e, _)| mat.start() < e && s < mat.end());
+            if !overlaps {
+                spans.push((mat.start(), mat.end(), open.clone()));
+            }
+        }
+    }
+    spans.sort_by_key(|&(start, _, _)| start);
+    let mut out = String::with_capacity(text.len() + spans.len() * 24);
+    let mut last = 0;
+    for (start, end, open) in spans {
+        out.push_str(&text[last..start]);
+        out.push_str(&open);
+        out.push_str(&text[start..end]);
+        out.push_str(&close);
+        last = end;
+    }
+    out.push_str(&text[last..]);
+    out
 }
 
 /// Split a Send-action template into one command per `;` / `\n`.
@@ -286,25 +313,6 @@ fn split_send_template(input: &str) -> Vec<String> {
         current.push(ch);
     }
     out.push(current);
-    out
-}
-
-fn wrap_matches(text: &str, regex: &Regex, style: &HighlightStyle, close: &str) -> String {
-    let open = style.sgr_open();
-    let mut out = String::with_capacity(text.len() + open.len() * 2);
-    let mut last = 0;
-    for mat in regex.find_iter(text) {
-        if mat.start() > last {
-            out.push_str(&text[last..mat.start()]);
-        }
-        out.push_str(&open);
-        out.push_str(mat.as_str());
-        out.push_str(close);
-        last = mat.end();
-    }
-    if last < text.len() {
-        out.push_str(&text[last..]);
-    }
     out
 }
 
@@ -665,7 +673,7 @@ mod tests {
     }
 
     #[test]
-    fn wash_wraps_whole_line_and_reports_mark() {
+    fn wash_wraps_whole_line() {
         let mut t = highlight("sancdown", "sanctuary", NamedColor::Yellow);
         if let TriggerAction::Highlight { style } = &mut t.actions[0] {
             style.wash = true;
@@ -673,23 +681,23 @@ mod tests {
         let s = store(vec![t]);
         let r = process(&s, b"Your sanctuary flickers and fades.");
         let text = r.display.unwrap();
-        // Quarter-strength canonical yellow (0xcd/4 = 0x33 = 51).
+        // Quarter-strength canonical yellow (0xcd/4 = 0x33 = 51) —
+        // NamedColor::Yellow.wash_tint(), the exact value the native
+        // renderer detects for the accent bar.
         assert!(text.starts_with("\x1b[48;2;51;51;0m\x1b[2K"));
         assert!(text.ends_with("\x1b[0m"));
         // The matched-text close re-asserts the wash background so the
         // tint survives past the highlighted word.
         assert!(text.contains("\x1b[0;48;2;51;51;0m"));
-        assert_eq!(r.marks, vec![(0xcd, 0xcd, 0x00)]);
     }
 
     #[test]
-    fn wash_off_keeps_plain_close_and_no_marks() {
+    fn wash_off_keeps_plain_close() {
         let s = store(vec![highlight("tells", r"tells you", NamedColor::Cyan)]);
         let r = process(&s, b"Bob tells you 'hi'");
         let text = r.display.unwrap();
         assert!(!text.contains("48;2;"));
         assert!(text.contains("\x1b[0m"));
-        assert!(r.marks.is_empty());
     }
 
     #[test]
@@ -705,7 +713,42 @@ mod tests {
         // Wash derives from the explicit red bg (0xcd/4 = 51), not the
         // white fg.
         assert!(text.starts_with("\x1b[48;2;51;0;0m\x1b[2K"));
-        assert_eq!(r.marks, vec![(0xcd, 0x00, 0x00)]);
+    }
+
+    #[test]
+    fn highlight_never_matches_inside_injected_escapes() {
+        // A wash plus a digit-hungry second highlight on one line. Spans
+        // are collected on the clean text, so the digits inside the
+        // injected wash escapes must never be re-matched and wrapped —
+        // stripping every escape from the output must give back exactly
+        // the original plain text.
+        let mut washy = highlight("sancdown", "sanctuary", NamedColor::Yellow);
+        if let TriggerAction::Highlight { style } = &mut washy.actions[0] {
+            style.wash = true;
+        }
+        let digits = highlight("numbers", r"\d+", NamedColor::Red);
+        let s = store(vec![washy, digits]);
+        let r = process(&s, b"sanctuary fades in 42 seconds");
+        let text = r.display.unwrap();
+        assert_eq!(plain_text(text.as_bytes()), "sanctuary fades in 42 seconds");
+        // And the digit highlight still landed on the real digits.
+        assert!(text.contains("\x1b[31m42"));
+    }
+
+    #[test]
+    fn overlapping_highlights_first_wins() {
+        // Two patterns overlapping on the same text: the higher-priority
+        // trigger keeps its span, the overlapping later span is dropped
+        // rather than nested mid-escape.
+        let mut a = highlight("phrase", "tells you", NamedColor::Cyan);
+        a.priority = 10;
+        let b = highlight("word", "you", NamedColor::Red);
+        let s = store(vec![a, b]);
+        let r = process(&s, b"Bob tells you 'hi'");
+        let text = r.display.unwrap();
+        assert!(text.contains("\x1b[36mtells you\x1b[0m"));
+        assert!(!text.contains("\x1b[31m"));
+        assert_eq!(plain_text(text.as_bytes()), "Bob tells you 'hi'");
     }
 
     #[test]
