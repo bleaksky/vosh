@@ -428,6 +428,12 @@ function App() {
     const PX_PER_LINE = 12;
     let wheelAccum = 0;
     const onWheel = (e: globalThis.WheelEvent) => {
+      // Native surface: wheel over the terminal goes to the native
+      // view, which scrolls the grid itself. The only wheel events
+      // that reach this handler are over the padding gutter around
+      // the surface — opening the (occluded, invisible) DOM split
+      // from those would flip the split layout class for nothing.
+      if (nativeSurfaceEnabled()) return;
       if (e.deltaY === 0) return;
       const scrollingUp = e.deltaY < 0;
       const splitOpen = splitOpenRef.current;
@@ -1031,6 +1037,7 @@ function App() {
     live.scrollToBottom();
     if (!splitOpen) {
       pendingFindRef.current = { query, opts, direction };
+      preSplitLiveRowsRef.current = termRef.current?.getSize().rows ?? 0;
       setSplitOpen(true);
     } else if (historyTermRef.current && historyReady) {
       if (direction === 'next') historyTermRef.current.findNext(query, opts);
@@ -1206,6 +1213,12 @@ function App() {
         historyTermRef.current?.write(text);
       }}
       onScrollTerminal={(pages) => {
+        // Native surface: the grid pages its own display in place
+        // (Input invokes native_surface_scroll alongside this), so
+        // the DOM split must stay closed — it would be invisible
+        // under the opaque surface while still toggling the split
+        // layout class.
+        if (nativeSurfaceEnabled()) return;
         // Split-scrollback gesture. The live pane (termRef) stays
         // anchored to the tail. PageUp opens the split if closed;
         // the history Terminal mounts on that state change and its
@@ -1213,6 +1226,10 @@ function App() {
         // ref here (it is null until the mount completes).
         if (pages < 0) {
           if (!splitOpen) {
+            // Same pre-split row capture as the wheel path: without it
+            // onScrollbackLoaded scrolls back zero rows and the history
+            // pane opens showing a duplicate of the live tail.
+            preSplitLiveRowsRef.current = termRef.current?.getSize().rows ?? 0;
             setSplitOpen(true);
             return;
           }
