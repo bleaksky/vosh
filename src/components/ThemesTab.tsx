@@ -173,7 +173,7 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
       <div className="themes-section-title themes-section-title-row">
         <span>custom</span>
         <button type="button" className="settings-btn" onClick={handleCreate}>
-          [+ new from active]
+          + new from active
         </button>
       </div>
       <div className="themes-list">
@@ -291,7 +291,7 @@ function SplitDividerRow({ config, setConfig, onError }: Props) {
           className="settings-btn settings-btn-mute"
           onClick={() => update(null)}
         >
-          [clear]
+          clear
         </button>
       </span>
     </div>
@@ -331,7 +331,7 @@ function InputEchoColorRow({ config, setConfig, onError }: Props) {
           className="settings-btn settings-btn-mute"
           onClick={() => update(null)}
         >
-          [clear]
+          clear
         </button>
       </span>
     </div>
@@ -400,11 +400,11 @@ function ThemeRow({
         {isCustom && (
           <div className="theme-row-actions">
             <button type="button" className="settings-btn" onClick={onEditToggle}>
-              {isEditing ? '[done]' : '[edit]'}
+              {isEditing ? 'done' : 'edit'}
             </button>
             {!isActive && (
               <button type="button" className="settings-btn settings-btn-danger" onClick={onDelete}>
-                [delete]
+                delete
               </button>
             )}
           </div>

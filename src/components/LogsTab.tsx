@@ -222,7 +222,7 @@ export function LogsTab({ onError }: Props) {
             show all
           </label>
           <button type="submit" className="settings-btn">
-            [search]
+            search
           </button>
           <span className="logs-status">
             {searching ? 'searching…' : `${hits.length} hit${hits.length === 1 ? '' : 's'}`}

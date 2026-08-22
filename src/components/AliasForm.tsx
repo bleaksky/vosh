@@ -344,16 +344,16 @@ export function AliasForm({ load, save, onError }: Props) {
           );
         })}
         {list.length === 0 && (
-          <div className="settings-font-empty">no aliases yet — click [+ alias] to add one</div>
+          <div className="settings-font-empty">no aliases yet — click + alias to add one</div>
         )}
       </div>
 
       <div className="settings-actions">
         <button type="button" className="settings-btn" onClick={() => void doSave()}>
-          [save]
+          save
         </button>
         <button type="button" className="settings-btn settings-btn-mute" onClick={() => add(null)}>
-          [+ alias]
+          + alias
         </button>
         {dirty && <UnsavedDot />}
         {savedAt !== null && <span className="settings-saved">saved.</span>}

@@ -112,7 +112,7 @@ export function ImportTab({ onError }: Props) {
 
       <div className="import-source-row">
         <label className="settings-btn">
-          [pick file]
+          pick file
           <input
             type="file"
             accept=".xml,.mcl,.cfg,.txt,.tin"
@@ -129,7 +129,7 @@ export function ImportTab({ onError }: Props) {
           onClick={() => void handleApply()}
           disabled={busy || !text.trim()}
         >
-          {busy ? '[applying...]' : '[apply]'}
+          {busy ? 'applying...' : 'apply'}
         </button>
         <button
           type="button"
@@ -141,14 +141,14 @@ export function ImportTab({ onError }: Props) {
           }}
           disabled={busy}
         >
-          [clear]
+          clear
         </button>
       </div>
 
       <textarea
         className="import-textarea"
         spellCheck={false}
-        placeholder="paste config contents here (or use [pick file])"
+        placeholder="paste config contents here (or use pick file)"
         value={text}
         onChange={(e) => setText(e.target.value)}
       />

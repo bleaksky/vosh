@@ -33,6 +33,7 @@ import {
   importTriggers,
   installUpdateAndRelaunch,
   listSystemFonts,
+  resolveThemeTerminalColors,
   setUiConfig,
   subscribeDockLayoutChanged,
   type SystemFontEntry,
@@ -497,7 +498,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
         <label className="settings-checkbox">
           <input
             type="checkbox"
-            checked={config.theme_terminal_colors}
+            checked={resolveThemeTerminalColors(config.theme, config.theme_terminal_colors)}
             onChange={(e) => update({ theme_terminal_colors: e.target.checked })}
           />
           <span>tint output with theme</span>
@@ -543,7 +544,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
               }
             }}
           >
-            [check now]
+            check now
           </button>
           {updateStatus.kind === 'available' && (
             <button
@@ -558,7 +559,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
                 }
               }}
             >
-              [install v{updateStatus.version} + restart]
+              install v{updateStatus.version} + restart
             </button>
           )}
           <span className="settings-updates-status">
@@ -743,7 +744,7 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
       </div>
       <div className="settings-actions">
         <button type="button" className="settings-btn settings-btn-mute" onClick={close}>
-          [close]
+          close
         </button>
         {/* This tab auto-saves on every change (250ms debounce); the
             "saved." pill blinks in to confirm. Static hint makes that
@@ -858,14 +859,14 @@ function JsonTab({ kind, singular, plural, load, save, onError }: JsonTabProps) 
       />
       <div className="settings-actions">
         <button type="button" className="settings-btn" onClick={() => void doSave()}>
-          [save]
+          save
         </button>
         <button
           type="button"
           className="settings-btn settings-btn-mute"
           onClick={() => void reload()}
         >
-          [reload]
+          reload
         </button>
         {dirty && <UnsavedDot />}
         {savedAt !== null && <span className="settings-saved">saved.</span>}
@@ -1080,7 +1081,7 @@ function PanelsLayoutSubview({
       </div>
       <div className="settings-actions">
         <button type="button" className="settings-btn settings-btn-mute" onClick={onResetDefaults}>
-          [reset to defaults]
+          reset to defaults
         </button>
       </div>
     </>

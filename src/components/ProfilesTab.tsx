@@ -235,7 +235,7 @@ export function ProfilesTab({ onError }: Props) {
           onClick={() => void handleCreate()}
           disabled={!createDraft.trim()}
         >
-          [+ new]
+          + new
         </button>
       </div>
 
@@ -283,7 +283,7 @@ export function ProfilesTab({ onError }: Props) {
           </div>
         </div>
         <button type="button" className="settings-btn" onClick={() => setShowMigrationWizard(true)}>
-          [preview migration]
+          preview migration
         </button>
       </div>
       {showMigrationWizard && <MigrationWizard onClose={() => setShowMigrationWizard(false)} />}
@@ -409,14 +409,14 @@ function ProfileRow({
         <div className="profile-row-actions">
           {!isActive && (
             <button type="button" className="settings-btn" onClick={onSwitch}>
-              [switch]
+              switch
             </button>
           )}
           <button type="button" className="settings-btn" onClick={() => setOpen((v) => !v)}>
-            {open ? '[hide]' : '[auto-match]'}
+            {open ? 'hide' : 'auto-match'}
           </button>
           <button type="button" className="settings-btn settings-btn-mute" onClick={onBeginRename}>
-            [rename]
+            rename
           </button>
           {duplicating ? (
             <input
@@ -439,7 +439,7 @@ function ProfileRow({
               className="settings-btn settings-btn-mute"
               onClick={onBeginDuplicate}
             >
-              [duplicate]
+              duplicate
             </button>
           )}
           {!isActive &&
@@ -450,14 +450,14 @@ function ProfileRow({
                   className="settings-btn settings-btn-danger"
                   onClick={onConfirmDelete}
                 >
-                  [confirm delete]
+                  confirm delete
                 </button>
                 <button
                   type="button"
                   className="settings-btn settings-btn-mute"
                   onClick={onCancelDelete}
                 >
-                  [cancel]
+                  cancel
                 </button>
               </>
             ) : (
@@ -466,7 +466,7 @@ function ProfileRow({
                 className="settings-btn settings-btn-danger"
                 onClick={onBeginDelete}
               >
-                [delete]
+                delete
               </button>
             ))}
         </div>
@@ -519,7 +519,7 @@ function ProfileRow({
           </div>
           <div className="profile-row-detail-actions">
             <button type="button" className="settings-btn" onClick={handleSaveMatch}>
-              [save]
+              save
             </button>
           </div>
         </div>
