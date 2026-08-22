@@ -1343,12 +1343,21 @@ impl CellRenderer {
         // Find matches (and the active one) drive a highlight pass and
         // suppress the split so the match shows in a single full view.
         let (find_matches, find_active_match) = crate::term_grid::find_snapshot();
-        // Wash accent bars: rows marked by full-line trigger highlights
-        // get a slim bar at the left edge in the trigger's color.
-        let mut marks_by_line: HashMap<i32, Rgba> = HashMap::new();
-        for (line, (r, g, b)) in crate::term_grid::line_marks_snapshot() {
-            marks_by_line.insert(line, color_to_rgba(Color::Spec(Rgb { r, g, b })));
-        }
+        // Wash accent bars. Washed lines carry a distinctive quarter-
+        // strength truecolor background (NamedColor::wash_tint in the
+        // trigger crate), so the bar derives straight from the grid:
+        // any row whose first cell wears a known wash tint gets a
+        // left-edge bar in the full-strength color. No side channel to
+        // drift — bars survive resize, reflow, and scrollback reload
+        // wherever the wash bytes themselves do.
+        let wash_accents: HashMap<[u8; 3], Rgba> = vosh_trigger::NamedColor::ALL
+            .iter()
+            .map(|c| {
+                let (tr, tg, tb) = c.wash_tint();
+                let (r, g, b) = c.rgb();
+                ([tr, tg, tb], color_to_rgba(Color::Spec(Rgb { r, g, b })))
+            })
+            .collect();
         let finding = !find_matches.is_empty();
         let split = offset > 0 && rows >= 6 && !finding;
         let divider_px = if split {
@@ -1567,13 +1576,14 @@ impl CellRenderer {
                 });
             }
             // Wash accent bars: one slim full-height quad at the left
-            // edge of each marked row. Width scales with the cell so it
+            // edge of each washed row. Width scales with the cell so it
             // lands near 2 logical px on hidpi surfaces.
-            if !marks_by_line.is_empty() {
-                let bar_w = (cell_h / 8.0).clamp(2.0, 4.0);
-                for row in 0..reg.vis {
-                    let grid_line = reg.line0 + row as i32;
-                    if let Some(&color) = marks_by_line.get(&grid_line) {
+            let bar_w = (cell_h / 8.0).clamp(2.0, 4.0);
+            for row in 0..reg.vis {
+                let grid_line = reg.line0 + row as i32;
+                let (_, _, bg, _) = grid.cell_at_line(grid_line, 0);
+                if let Color::Spec(rgb) = bg {
+                    if let Some(&color) = wash_accents.get(&[rgb.r, rgb.g, rgb.b]) {
                         instances.push(CellInstance {
                             offset: [0.0, reg.y0 + row as f32 * cell_h],
                             size: [bar_w, cell_h],

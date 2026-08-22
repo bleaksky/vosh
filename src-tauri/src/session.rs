@@ -1165,14 +1165,6 @@ fn append_line_result(batch: &mut Vec<u8>, result: &LineResult, clear_first: boo
         batch.extend_from_slice(b"\x1b[2K\r");
     }
     if let Some(text) = &result.display {
-        // Full-line wash marks ride in front of the line as a private
-        // OSC sequence (7770). The native grid feed intercepts it and
-        // records which rows the line lands on so the renderer can draw
-        // the left-edge accent bar; xterm parses and drops the unknown
-        // OSC, so the fallback renderer is unaffected.
-        for (r, g, b) in &result.marks {
-            batch.extend_from_slice(format!("\x1b]7770;{r};{g};{b}\x07").as_bytes());
-        }
         batch.extend_from_slice(text.as_bytes());
         batch.extend_from_slice(b"\r\n");
     }
