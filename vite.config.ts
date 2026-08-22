@@ -8,7 +8,40 @@ const pkg: { version: string } = JSON.parse(
 );
 
 export default defineConfig(async () => ({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Dev-only diagnostics sink for the WKWebView blank-chrome wedge:
+    // the webview keeps running JS while painting nothing, so the page
+    // POSTs its state here and it lands in the tauri dev log where it
+    // can actually be read.
+    {
+      name: 'vosh-dbg-sink',
+      configureServer(server: {
+        middlewares: {
+          use: (
+            path: string,
+            fn: (
+              req: { on: (ev: string, cb: (c?: unknown) => void) => void },
+              res: { statusCode: number; end: () => void },
+            ) => void,
+          ) => void;
+        };
+      }) {
+        server.middlewares.use('/__vosh-dbg', (req, res) => {
+          let body = '';
+          req.on('data', (c) => {
+            body += String(c);
+          });
+          req.on('end', () => {
+            // eslint-disable-next-line no-console
+            console.log(`[vosh-dbg] ${body.slice(0, 600)}`);
+            res.statusCode = 204;
+            res.end();
+          });
+        });
+      },
+    },
+  ],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
