@@ -165,6 +165,11 @@ pub(crate) struct UiConfig {
     /// way. Most MUDs encode bright as SGR-1 bold + a base color.
     #[serde(default)]
     pub bright_bold: bool,
+    /// Custom base terminal palette: 16 CSS colors (ANSI 0-15 order)
+    /// used whenever tint-output-with-theme resolves off. None means
+    /// the canonical xterm-256 chart. The frontend owns validation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_base_ansi: Option<Vec<String>>,
     /// User-authored themes. Each entry mirrors the `AppTheme`
     /// shape the frontend ships built-in themes as; on app load
     /// these get appended to the built-in list so the user can
@@ -527,6 +532,7 @@ impl Default for UiConfig {
             keep_last_command: false,
             theme_terminal_colors: None,
             bright_bold: false,
+            terminal_base_ansi: None,
             custom_themes: Vec::new(),
             split_divider_color: None,
             input_echo_color: None,

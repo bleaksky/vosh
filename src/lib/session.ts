@@ -595,6 +595,10 @@ export interface UiConfig {
    *  with resolveThemeTerminalColors before use. */
   theme_terminal_colors: boolean | null;
   bright_bold: boolean;
+  /** Custom base terminal palette: 16 CSS colors in ANSI 0-15 order,
+   *  used whenever the tint toggle resolves off. Null = canonical
+   *  xterm chart. */
+  terminal_base_ansi: string[] | null;
   custom_themes: CustomTheme[];
   /** Override color for the split-scrollback divider. Empty/undefined
    *  means use the theme default (--c-border). */
@@ -780,6 +784,7 @@ async function fetchUiConfig(): Promise<UiConfig> {
     keep_last_command?: boolean;
     theme_terminal_colors?: boolean;
     bright_bold?: boolean;
+    terminal_base_ansi?: unknown;
     custom_themes?: CustomTheme[];
     split_divider_color?: string | null;
     input_echo_color?: string | null;
@@ -806,6 +811,12 @@ async function fetchUiConfig(): Promise<UiConfig> {
     theme_terminal_colors:
       typeof cfg.theme_terminal_colors === 'boolean' ? cfg.theme_terminal_colors : null,
     bright_bold: Boolean(cfg.bright_bold),
+    terminal_base_ansi:
+      Array.isArray(cfg.terminal_base_ansi) &&
+      cfg.terminal_base_ansi.length === 16 &&
+      cfg.terminal_base_ansi.every((c) => typeof c === 'string' && c.length > 0)
+        ? (cfg.terminal_base_ansi as string[])
+        : null,
     custom_themes: Array.isArray(cfg.custom_themes) ? cfg.custom_themes : [],
     split_divider_color:
       typeof cfg.split_divider_color === 'string' && cfg.split_divider_color.length > 0
@@ -989,6 +1000,12 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   );
   await emitChanged('vosh://bright-bold-changed', config.bright_bold, prev?.bright_bold);
   await emitChanged(
+    'vosh://base-ansi-changed',
+    config.terminal_base_ansi,
+    prev?.terminal_base_ansi,
+    deepEqual,
+  );
+  await emitChanged(
     'vosh://split-divider-changed',
     config.split_divider_color,
     prev?.split_divider_color,
@@ -1051,6 +1068,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
       keep_last_command: config.keep_last_command,
       theme_terminal_colors: config.theme_terminal_colors,
       bright_bold: config.bright_bold,
+      terminal_base_ansi: config.terminal_base_ansi,
       custom_themes: config.custom_themes,
       split_divider_color: config.split_divider_color,
       input_echo_color: config.input_echo_color,
@@ -1139,6 +1157,19 @@ export async function subscribePromptTemplateChanged(
       });
     },
   );
+}
+
+export async function subscribeBaseAnsiChanged(
+  cb: (colors: string[] | null) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>('vosh://base-ansi-changed', (event) => {
+    const p = event.payload;
+    cb(
+      Array.isArray(p) && p.length === 16 && p.every((c) => typeof c === 'string')
+        ? (p as string[])
+        : null,
+    );
+  });
 }
 
 export async function subscribeCustomThemesChanged(
