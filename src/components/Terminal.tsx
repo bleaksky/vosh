@@ -976,7 +976,10 @@ export function Terminal({
     return subscribeBaseAnsi(() => {
       const term = termRef.current;
       if (!term) return;
-      term.options.theme = xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColorsRef.current);
+      term.options.theme = xtermThemeFor(
+        findTheme(getCurrentThemeId()),
+        themeTerminalColorsRef.current,
+      );
       reportNativeTheme(getCurrentThemeId(), themeTerminalColorsRef.current);
     });
   }, []);
