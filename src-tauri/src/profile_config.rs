@@ -151,11 +151,14 @@ pub(crate) struct UiConfig {
     #[serde(default)]
     pub keep_last_command: bool,
     /// When true, the chrome theme also tints the terminal's 16
-    /// ANSI palette (legacy behavior). When false (the default),
-    /// the terminal uses the canonical xterm-256 ANSI palette so
-    /// server output reads identically across themes.
-    #[serde(default)]
-    pub theme_terminal_colors: bool,
+    /// ANSI palette. When false, the terminal uses the canonical
+    /// xterm-256 ANSI palette so server output reads identically
+    /// across themes. When unset (None), the frontend follows the
+    /// active theme: on for Obsidian Ember (whose pastel ANSI is the
+    /// point of the theme), off for everything else. An explicit
+    /// user choice always wins over the theme default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_terminal_colors: Option<bool>,
     /// Draw bright (effective ANSI 8-15) text with the heavier bold font on
     /// the native surface. Off by default so bright reads at the normal weight
     /// like the webview; explicit bold on non-bright colors stays bold either
@@ -520,7 +523,7 @@ impl Default for UiConfig {
             enabled_presets: Vec::new(),
             dock_layout: Vec::new(),
             keep_last_command: false,
-            theme_terminal_colors: false,
+            theme_terminal_colors: None,
             bright_bold: false,
             custom_themes: Vec::new(),
             split_divider_color: None,

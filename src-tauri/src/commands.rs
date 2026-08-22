@@ -1776,7 +1776,7 @@ pub(crate) struct UiConfigPayload {
     pub tracked_affects: Vec<crate::profile_config::TrackedAffect>,
     pub enabled_presets: Vec<String>,
     pub keep_last_command: bool,
-    pub theme_terminal_colors: bool,
+    pub theme_terminal_colors: Option<bool>,
     pub bright_bold: bool,
     pub custom_themes: Vec<crate::profile_config::CustomTheme>,
     pub split_divider_color: Option<String>,
