@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { type TrackedAffect, type UiConfig } from '../lib/session';
+import { Chevron, XIcon } from './Icons';
 
 interface Props {
   config: UiConfig;
@@ -65,7 +66,7 @@ export function TrackedAffectsEditor({ config, update }: Props) {
                 onClick={() => moveTo(i - 1)}
                 title="move up"
               >
-                ↑
+                <Chevron open={false} up />
               </button>
               <button
                 type="button"
@@ -75,7 +76,7 @@ export function TrackedAffectsEditor({ config, update }: Props) {
                 onClick={() => moveTo(i + 1)}
                 title="move down"
               >
-                ↓
+                <Chevron open />
               </button>
               <input
                 type="text"
@@ -108,7 +109,7 @@ export function TrackedAffectsEditor({ config, update }: Props) {
                 aria-label={`remove ${entry.name}`}
                 onClick={removeEntry}
               >
-                ×
+                <XIcon />
               </button>
             </span>
           );

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { UnsavedDot } from './UnsavedDot';
 import { CodeEditor } from './CodeEditor';
+import { Chevron, XIcon } from './Icons';
+import { usePersistedSet } from '../lib/usePersistedSet';
 import { useUnsavedWarning } from '../lib/unsaved';
 import {
   listAliasGroups,
@@ -52,7 +54,7 @@ export function AliasForm({ load, save, onError }: Props) {
   const [baseline, setBaseline] = useState<string>('[]');
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [groupStates, setGroupStates] = useState<GroupState[]>([]);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [collapsed, toggleCollapsed] = usePersistedSet('vosh.aliases.collapsed');
   // Per-row drafts for the group field so changes do not commit (and
   // re-bucket the row mid-edit) until the user blurs. Without this,
   // typing the first character of a new group name moves the row to a
@@ -146,15 +148,6 @@ export function AliasForm({ load, save, onError }: Props) {
     }
   };
 
-  const toggleCollapsed = (group: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(group)) next.delete(group);
-      else next.add(group);
-      return next;
-    });
-  };
-
   if (!list) return <div className="settings-loading">loading aliases…</div>;
 
   // Build the bucket map: group name -> [index in list, alias]. Empty
@@ -207,7 +200,7 @@ export function AliasForm({ load, save, onError }: Props) {
                   aria-expanded={!isCollapsed}
                   title={isCollapsed ? 'expand group' : 'collapse group'}
                 >
-                  {isCollapsed ? '▸' : '▾'}
+                  <Chevron open={!isCollapsed} />
                 </button>
                 <span className="group-section-name">{isUngrouped ? UNGROUPED_LABEL : group}</span>
                 <span className="group-section-count">
@@ -329,14 +322,15 @@ export function AliasForm({ load, save, onError }: Props) {
                           type="button"
                           className="alias-row-remove"
                           onClick={() => remove(index)}
+                          title="remove alias"
                         >
-                          ×
+                          <XIcon />
                         </button>
                       </div>
                     );
                   })}
                   {entries.length === 0 && (
-                    <div className="settings-font-empty">empty group — delete or add a row</div>
+                    <div className="settings-empty">empty group — delete or add a row</div>
                   )}
                 </div>
               )}
@@ -344,7 +338,7 @@ export function AliasForm({ load, save, onError }: Props) {
           );
         })}
         {list.length === 0 && (
-          <div className="settings-font-empty">no aliases yet — click + alias to add one</div>
+          <div className="settings-empty">no aliases yet — click + alias to add one</div>
         )}
       </div>
 

@@ -5,6 +5,7 @@ import { TopBar } from './components/TopBar';
 import { TriggerForm } from './components/TriggerForm';
 import { AliasForm } from './components/AliasForm';
 import { UnsavedDot } from './components/UnsavedDot';
+import { Chevron } from './components/Icons';
 import { CodeEditor } from './components/CodeEditor';
 import { useUnsavedWarning } from './lib/unsaved';
 import { LogsTab } from './components/LogsTab';
@@ -1270,6 +1271,7 @@ const CHIP_STYLE_OPTIONS: {
 // the config field and cross-window event existed with no UI at all.
 function TickChipsTab({ config, setConfig, onError }: ChipsSubviewProps) {
   const chipStyle = config?.chip_style ?? 'value_only';
+  if (!config) return <div className="settings-loading">loading…</div>;
   const updateConfig = (patch: Partial<UiConfig>) => {
     if (!config) return;
     const next: UiConfig = { ...config, ...patch };
@@ -1357,9 +1359,9 @@ function ChipStyleSample({ preview }: { preview: { caption: boolean; icon: boole
 }
 
 // Tick chip's content config: interval, auto-fire, sound, reset
-// pattern, and the warning timer / message / color. Rides directly
-// under the tick chip's host-routing row so the placement and the
-// content sit together. Backed by tick_get_config / tick_set_config.
+// pattern, and the warning timer / message / color. Renders as
+// .settings-frow rows inside the "tick timer" section TickChipsTab
+// provides. Backed by tick_get_config / tick_set_config.
 // Empty strings round-trip as null on save so the persisted state
 // stays clean (the backend trims them too as a belt-and-braces).
 interface TickConfigEditorProps {
@@ -1389,11 +1391,7 @@ function TickConfigEditor({ onError }: TickConfigEditorProps) {
   }, [onError]);
 
   if (!cfg) {
-    return (
-      <div className="chips-tick-config-loading">
-        <span className="chips-row-control-label">loading tick config…</span>
-      </div>
-    );
+    return <div className="settings-loading">loading tick config…</div>;
   }
 
   const commit = (patch: Partial<TickConfig>) => {
@@ -1404,30 +1402,34 @@ function TickConfigEditor({ onError }: TickConfigEditorProps) {
   const warnOn = cfg.warn_at_secs !== null && cfg.warn_at_secs > 0;
 
   return (
-    <div className="chips-tick-config">
-      <div className="chips-tick-config-row">
-        <label className="chips-tick-config-field chips-tick-config-toggle">
-          <input
-            type="checkbox"
-            checked={cfg.enabled}
-            onChange={(e) => commit({ enabled: e.target.checked })}
-          />
-          <span>tick timer enabled</span>
-        </label>
-        <label className="chips-tick-config-field chips-tick-config-toggle">
-          <input
-            type="checkbox"
-            checked={cfg.sound}
-            onChange={(e) => commit({ sound: e.target.checked })}
-          />
-          <span>sound on fire</span>
-        </label>
+    <>
+      <div className="settings-frow">
+        <span className="settings-flabel">timer</span>
+        <span className="settings-fctrl">
+          <label className="settings-checkbox">
+            <input
+              type="checkbox"
+              checked={cfg.enabled}
+              onChange={(e) => commit({ enabled: e.target.checked })}
+            />
+            <span>enabled</span>
+          </label>
+          <label className="settings-checkbox">
+            <input
+              type="checkbox"
+              checked={cfg.sound}
+              onChange={(e) => commit({ sound: e.target.checked })}
+            />
+            <span>sound on fire</span>
+          </label>
+        </span>
       </div>
-      <div className="chips-tick-config-row">
-        <label className="chips-tick-config-field">
-          <span>interval</span>
+      <div className="settings-frow">
+        <span className="settings-flabel">interval</span>
+        <span className="settings-fctrl">
           <input
             type="number"
+            className="settings-num-input"
             min={1}
             max={3600}
             value={cfg.interval_secs}
@@ -1435,53 +1437,61 @@ function TickConfigEditor({ onError }: TickConfigEditorProps) {
               const v = Number(e.target.value);
               if (Number.isFinite(v) && v > 0) commit({ interval_secs: Math.floor(v) });
             }}
+            aria-label="tick interval in seconds"
           />
-          <span className="chips-tick-config-unit">sec</span>
-        </label>
-        <label className="chips-tick-config-field chips-tick-config-field-wide">
-          <span>auto-fire</span>
+          <span className="settings-unit">sec</span>
+        </span>
+      </div>
+      <div className="settings-frow">
+        <span className="settings-flabel">auto-fire</span>
+        <span className="settings-fctrl">
           <input
             type="text"
+            className="settings-font-input"
             spellCheck={false}
-            placeholder="command to send on every tick (blank = off)"
             value={cfg.auto_fire ?? ''}
             onChange={(e) =>
               commit({ auto_fire: e.target.value.length > 0 ? e.target.value : null })
             }
+            aria-label="auto-fire command"
           />
-        </label>
+        </span>
+        <span className="settings-fhelp">command to send on every tick. blank = off</span>
       </div>
-      <div className="chips-tick-config-row">
-        <label className="chips-tick-config-field chips-tick-config-field-wide">
-          <span>reset on</span>
+      <div className="settings-frow">
+        <span className="settings-flabel">reset on</span>
+        <span className="settings-fctrl">
           <input
             type="text"
+            className="settings-font-input"
             spellCheck={false}
-            placeholder="regex; resets the tick on every match (blank = off)"
             value={cfg.reset_pattern ?? ''}
             onChange={(e) =>
               commit({ reset_pattern: e.target.value.length > 0 ? e.target.value : null })
             }
+            aria-label="tick reset pattern"
           />
-        </label>
+        </span>
+        <span className="settings-fhelp">regex; resets the tick on every match</span>
       </div>
-      <div className="chips-tick-config-row">
-        <label className="chips-tick-config-field chips-tick-config-toggle">
-          <input
-            type="checkbox"
-            checked={warnOn}
-            onChange={(e) =>
-              commit({
-                warn_at_secs: e.target.checked ? (cfg.warn_at_secs ?? 5) : null,
-              })
-            }
-          />
-          <span>warn before fire</span>
-        </label>
-        <label className="chips-tick-config-field">
-          <span>at</span>
+      <div className="settings-frow">
+        <span className="settings-flabel">warn</span>
+        <span className="settings-fctrl">
+          <label className="settings-checkbox">
+            <input
+              type="checkbox"
+              checked={warnOn}
+              onChange={(e) =>
+                commit({
+                  warn_at_secs: e.target.checked ? (cfg.warn_at_secs ?? 5) : null,
+                })
+              }
+              aria-label="warn before fire"
+            />
+          </label>
           <input
             type="number"
+            className="settings-num-input"
             min={1}
             max={300}
             disabled={!warnOn}
@@ -1490,40 +1500,45 @@ function TickConfigEditor({ onError }: TickConfigEditorProps) {
               const v = Number(e.target.value);
               if (Number.isFinite(v) && v > 0) commit({ warn_at_secs: Math.floor(v) });
             }}
+            aria-label="warn seconds before the tick"
           />
-          <span className="chips-tick-config-unit">sec before</span>
-        </label>
+          <span className="settings-unit">sec before</span>
+        </span>
       </div>
-      <div className="chips-tick-config-row">
-        <label className="chips-tick-config-field chips-tick-config-field-wide">
-          <span>warn text</span>
+      <div className="settings-frow">
+        <span className="settings-flabel">warn text</span>
+        <span className="settings-fctrl">
           <input
             type="text"
+            className="settings-font-input"
             spellCheck={false}
             disabled={!warnOn}
-            placeholder="default: tick incoming"
+            placeholder="tick incoming"
             value={cfg.warn_message ?? ''}
             onChange={(e) =>
               commit({ warn_message: e.target.value.length > 0 ? e.target.value : null })
             }
+            aria-label="warn message"
           />
-        </label>
-        <label className="chips-tick-config-field">
-          <span>color</span>
+          <span className="settings-unit">color</span>
           <input
             type="text"
             spellCheck={false}
             disabled={!warnOn}
-            placeholder="bright-red or #rrggbb"
-            title="ANSI name (bright-red), hex (#rrggbb), or 256-palette index (196)"
+            placeholder="bright-red"
             value={cfg.warn_color ?? ''}
             onChange={(e) =>
               commit({ warn_color: e.target.value.length > 0 ? e.target.value : null })
             }
+            aria-label="warn color"
           />
-        </label>
+        </span>
+        <span className="settings-fhelp">
+          blank falls back to the default text. color takes an ANSI name, #rrggbb hex, or a
+          256-palette index
+        </span>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -1543,7 +1558,6 @@ function PanelsPreview({
   const chip = (id: PanelId, hidden = false) => {
     const canUp = !hidden && canMovePanelUp(layout, id);
     const canDown = !hidden && canMovePanelDown(layout, id);
-    const guests: PanelId[] = [];
     return (
       <span
         key={id}
@@ -1556,11 +1570,6 @@ function PanelsPreview({
           .join(' ')}
       >
         {PANELS[id].label}
-        {guests.map((gid) => (
-          <span key={gid} className="panels-preview-chip-embed">
-            + {PANELS[gid].label}
-          </span>
-        ))}
         {!hidden && (canUp || canDown) && (
           <span className="panels-preview-chip-nudge">
             <button
@@ -1571,7 +1580,7 @@ function PanelsPreview({
               aria-label={`move ${PANELS[id].label} up`}
               onClick={() => onMove(id, 'up')}
             >
-              ▲
+              <Chevron open={false} up />
             </button>
             <button
               type="button"
@@ -1581,7 +1590,7 @@ function PanelsPreview({
               aria-label={`move ${PANELS[id].label} down`}
               onClick={() => onMove(id, 'down')}
             >
-              ▼
+              <Chevron open />
             </button>
           </span>
         )}
@@ -1666,7 +1675,7 @@ function PanelRow({
       onMouseEnter={onFocus}
       onMouseLeave={onBlur}
     >
-      <span className="panels-row-name">[{meta.label}]</span>
+      <span className="panels-row-name">{meta.label}</span>
       <span className="panels-row-arrow" aria-hidden>
         →
       </span>
@@ -1718,7 +1727,8 @@ function EditorModeSwitcher({ modeKey, formRender, jsonRender }: SwitcherProps) 
   const storageKey = `vosh.settings.${modeKey}.mode`;
   const [mode, setMode] = useState<'form' | 'json'>(() => {
     try {
-      return (localStorage.getItem(storageKey) as 'form' | 'json') || 'form';
+      const stored = localStorage.getItem(storageKey);
+      return stored === 'json' ? 'json' : 'form';
     } catch {
       return 'form';
     }

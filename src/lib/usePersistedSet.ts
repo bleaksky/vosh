@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react';
 
 // Collapse-state persistence for settings group sections (macros,
-// triggers). The set of collapsed group names survives tab switches and
-// relaunches via localStorage, so a long list stays folded the way you
-// left it instead of re-expanding on every visit.
+// triggers, aliases) and per-card folds. The set of collapsed keys
+// survives tab switches and relaunches via localStorage, so a long
+// list stays folded the way you left it instead of re-expanding on
+// every visit.
 export function usePersistedSet(storageKey: string): [Set<string>, (key: string) => void] {
   const [set, setSet] = useState<Set<string>>(() => {
     try {

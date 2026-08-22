@@ -38,11 +38,12 @@ export interface PaletteDeps {
 }
 
 const SETTINGS_TABS: { id: string; hint: string }[] = [
-  { id: 'general', hint: 'font, terminal, updates, input' },
-  { id: 'themes', hint: 'theme catalog and editor' },
+  { id: 'themes', hint: 'theme catalog, editor, terminal palette' },
+  { id: 'typography', hint: 'terminal face, size, system fonts' },
   { id: 'vitals', hint: 'hp / mn / mv readout' },
-  { id: 'tick', hint: 'tick timer' },
-  { id: 'panels', hint: 'pane placement' },
+  { id: 'tick', hint: 'tick timer, input chip, moons' },
+  { id: 'panels', hint: 'pane placement and tracked affects' },
+  { id: 'general', hint: 'input, prompt, updates' },
   { id: 'profiles', hint: 'characters and hosts' },
   { id: 'triggers', hint: 'patterns and actions' },
   { id: 'aliases', hint: 'command shortcuts' },

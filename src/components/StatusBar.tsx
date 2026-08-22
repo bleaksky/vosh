@@ -200,7 +200,10 @@ export function StatusBar() {
         <span className="statusbar-clock" title="local wall-clock time">
           {formatClock(now)}
         </span>
-        {moonsPosition !== 'before-time' && moonsBlock}
+        {moonsPosition === 'after-time' && moonsBlock}
+        {moonsPosition === 'right-edge' && (
+          <span className="statusbar-moons-edge">{moonsBlock}</span>
+        )}
       </div>
     </div>
   );
