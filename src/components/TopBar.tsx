@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import type { ReactNode } from 'react';
 import { TopBarLoadouts } from './TopBarLoadouts';
 import { Connect, type ConnectionStatus } from './Connect';
 
@@ -36,6 +37,9 @@ interface Props {
   // brand block and the old connect row disappears.
   connectionStatus?: ConnectionStatus;
   onConnectionError?: (message: string) => void;
+  // Extra chrome rendered just before the window controls. The
+  // settings window mounts its search field here.
+  titleExtra?: ReactNode;
 }
 
 // Frameless-window top strip. Drag region across most of its width
@@ -50,6 +54,7 @@ export function TopBar({
   onOpenHelp,
   connectionStatus,
   onConnectionError,
+  titleExtra,
 }: Props) {
   const win = () => getCurrentWindow();
 
@@ -115,6 +120,7 @@ export function TopBar({
           </button>
         </div>
       )}
+      {titleExtra}
       <div className="topbar-controls">
         <button
           type="button"
