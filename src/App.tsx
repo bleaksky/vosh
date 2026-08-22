@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { listen } from '@tauri-apps/api/event';
+import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import { Terminal, nativeSurfaceEnabled, type TerminalHandle } from './components/Terminal';
@@ -44,6 +44,11 @@ import { defaultEnabledIds, PRESETS, presetTriggers } from './lib/presets';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
 import { startChatStore } from './lib/chatStore';
 import { startGroupStore } from './lib/groupStore';
+import { CommandPalette } from './components/CommandPalette';
+import { ChatWellPane, LogWellPane } from './components/WellPanes';
+import { disconnectSession } from './lib/session';
+import { subscribeWellSplits, wellSplitsOpen } from './lib/wellSplits';
+import type { PaletteDeps } from './lib/palette';
 import {
   DEFAULT_PANEL_LAYOUT,
   groupPanels,
@@ -166,6 +171,13 @@ function App() {
   // skips the split entirely.
   const [findOpen, setFindOpen] = useState(false);
   const findToolbarRef = useRef<FindToolbarHandle | null>(null);
+  // ⌘K command palette.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  // Well splits: session / chat / log panes inside the terminal well.
+  // Mirrors the module store so the palette and context menu can
+  // toggle it from outside React.
+  const [wellSplits, setWellSplitsState] = useState(() => wellSplitsOpen());
+  useEffect(() => subscribeWellSplits(setWellSplitsState), []);
   // History pane readiness: flips true once the history Terminal has
   // finished loading scrollback after its mount. We queue any pending
   // mirror search through pendingFindRef until the history is ready,
@@ -524,6 +536,20 @@ function App() {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [findOpen, helpOpen]);
+
+  // ⌘K toggles the command palette from anywhere in the main window.
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'k') return;
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      if (helpOpen) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPaletteOpen((v) => !v);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [helpOpen]);
 
   // Esc closes the find toolbar regardless of which element has
   // focus. The toolbar's own Esc handler is attached to its input,
@@ -1158,6 +1184,41 @@ function App() {
     <div className="panel-zone panel-zone-bottom">{grouped.bottom.map(renderPanel)}</div>
   );
 
+  // Everything the palette can reach, rebuilt fresh at each open so
+  // labels track live state.
+  const paletteDeps = (): PaletteDeps => ({
+    connected,
+    paneVisible: (id) => panelLayout.placements[id].zone !== 'hidden',
+    togglePane: togglePanelVisibility,
+    openHelp: () => setHelpOpen(true),
+    openFind: () => setFindOpen(true),
+    openSettingsTab: (tab) => {
+      // The settings window may not exist yet, so the target tab
+      // travels twice: localStorage for a cold open, the event for a
+      // window that is already up.
+      try {
+        localStorage.setItem('vosh.settings.pendingTab', tab);
+      } catch {
+        // storage unavailable; the event path still covers a warm window
+      }
+      void emit('vosh://settings-goto-tab', tab);
+      invoke('open_settings_window').catch((e) => {
+        console.error('[palette] open_settings_window failed', e);
+      });
+    },
+    connect: () => window.dispatchEvent(new CustomEvent('vosh:connect-request')),
+    disconnect: () => void disconnectSession(),
+    insertInput: (text) => inputRef.current?.insert(text),
+  });
+
+  // The session pane chip labels itself with the host's registrable
+  // name when connected ("theforsakenlands"), else a neutral label.
+  const wellSessionName = (() => {
+    if (status.kind !== 'connected' && status.kind !== 'connecting') return 'session';
+    const parts = status.host.split('.');
+    return parts.length >= 2 ? parts[parts.length - 2] : status.host;
+  })();
+
   const terminalAreaElement = (
     <div
       ref={terminalAreaRef}
@@ -1185,101 +1246,128 @@ function App() {
           }}
         />
       )}
-      {splitOpen && (
-        // History pane is a Resizable so the user can drag the
-        // divider between history and live to set the split ratio.
-        // anchor=top places the panel at the top with the drag
-        // handle on the bottom edge facing the live pane below.
-        // Lazy mount. A hidden Terminal cannot be measured by
-        // FitAddon (its container is display:none, bounding rect
-        // 0x0) so writes wrap at 1-3 columns and the scrollback
-        // arrives mangled. The initial scroll runs in
-        // onScrollbackLoaded — onReady fires before loadScrollback
-        // resolves, and a scrollPages call on an empty terminal
-        // is a no-op that the next write would override anyway.
-        <Resizable
-          storageKey="vosh.layout.splitHistoryHeight"
-          anchor="top"
-          defaultSize={240}
-          minSize={80}
-          maxSize={1200}
-          reservePx={120}
-          className={`terminal-pane terminal-pane-history${historyReady ? '' : ' terminal-pane-history-priming'}`}
-          handleLabel="resize scrollback split"
-          snapPx={() => termRef.current?.cellHeight() ?? 0}
-        >
-          <Terminal
-            fontFamily={fontFamily}
-            fontSize={fontSize}
-            themeTerminalColors={themeTerminalColors}
-            quiet
-            onReady={(handle) => {
-              historyTermRef.current = handle;
-            }}
-            onScrollbackLoaded={() => {
-              // Position the history pane so its bottom row is the
-              // line immediately above the live pane's full row
-              // range. The live pane is `position: absolute` with
-              // both top and bottom pinned (overlay model), so its
-              // xterm renders the full terminal-area row count even
-              // while the history overlay covers part of it. If
-              // history's bottom landed inside live's row range the
-              // same lines would render in both panes — opaque
-              // overlay hides that visually, but the scroll-depth
-              // indicator still makes more sense when the panes
-              // describe disjoint buffer regions. Pre-split live
-              // rows captured in the wheel handler because reading
-              // the live pane's size here is racey.
-              // Fast path: when the load callback fires, position and
-              // reveal immediately. The frame-polled effect above also
-              // positions / reveals / repaints, so this is idempotent and
-              // a no-op when the callback never fires.
-              const scrollBack = preSplitLiveRowsRef.current;
-              if (scrollBack > 0) historyTermRef.current?.scrollLines(-scrollBack);
-              setHistoryReady(true);
-              // Optional split diagnostic, enabled via
-              // localStorage.setItem('vosh.splitdebug', '1'). Snapshots
-              // the history pane internals into the on-screen overlay.
-              if (splitDebugEnabled) {
-                const openN = (splitDebugCountRef.current += 1);
-                const lines: string[] = [`open#${openN} scrollBack=${scrollBack}`];
-                const snap = (tag: string) => {
-                  const d = historyTermRef.current?.debug();
-                  const line = `${tag} ${JSON.stringify(d)}`;
-                  // eslint-disable-next-line no-console
-                  console.log(`[vosh-split-debug] open#${openN} ${line}`);
-                  lines.push(line);
-                  setSplitDebug(lines.join('\n'));
-                };
-                snap('t0');
-                window.setTimeout(() => snap('t250'), 250);
-                window.setTimeout(() => snap('t600'), 600);
-              }
-            }}
-            onScrollPosition={(back, max) => setHistoryScrollPos({ back, max })}
-          />
-          {historyScrollPos && historyScrollPos.max > 0 && (
-            <div className="scrollback-indicator" aria-live="polite">
-              ↑ {historyScrollPos.back} / {historyScrollPos.max}
+      {/* Well wrapper stays mounted whether splits are open or not so
+          toggling never remounts the Terminal (a full xterm + native
+          surface teardown). Closed state just hides the side column. */}
+      <div className={`well-splits${wellSplits ? '' : ' is-closed'}`}>
+        <div className="well-splits-main">
+          {wellSplits && (
+            <div className="well-pane-chip-row">
+              <span className="well-pane-chip is-active">
+                <span className="well-pane-chip-num">1</span>
+                <span className="well-pane-chip-name">{wellSessionName}</span>
+              </span>
             </div>
           )}
-          {splitDebugEnabled && splitDebug && (
-            <pre className="split-debug-overlay">{splitDebug}</pre>
-          )}
-        </Resizable>
-      )}
-      <div className="terminal-pane terminal-pane-live">
-        <Terminal
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          themeTerminalColors={themeTerminalColors}
-          onReady={(handle) => {
-            termRef.current = handle;
-          }}
-          onResultsChanged={(event) =>
-            setFindResults({ index: event.resultIndex, count: event.resultCount })
-          }
-        />
+          <div className="well-splits-term">
+            {splitOpen && (
+              // History pane is a Resizable so the user can drag the
+              // divider between history and live to set the split ratio.
+              // anchor=top places the panel at the top with the drag
+              // handle on the bottom edge facing the live pane below.
+              // Lazy mount. A hidden Terminal cannot be measured by
+              // FitAddon (its container is display:none, bounding rect
+              // 0x0) so writes wrap at 1-3 columns and the scrollback
+              // arrives mangled. The initial scroll runs in
+              // onScrollbackLoaded — onReady fires before loadScrollback
+              // resolves, and a scrollPages call on an empty terminal
+              // is a no-op that the next write would override anyway.
+              <Resizable
+                storageKey="vosh.layout.splitHistoryHeight"
+                anchor="top"
+                defaultSize={240}
+                minSize={80}
+                maxSize={1200}
+                reservePx={120}
+                className={`terminal-pane terminal-pane-history${historyReady ? '' : ' terminal-pane-history-priming'}`}
+                handleLabel="resize scrollback split"
+                snapPx={() => termRef.current?.cellHeight() ?? 0}
+              >
+                <Terminal
+                  fontFamily={fontFamily}
+                  fontSize={fontSize}
+                  themeTerminalColors={themeTerminalColors}
+                  quiet
+                  onReady={(handle) => {
+                    historyTermRef.current = handle;
+                  }}
+                  onScrollbackLoaded={() => {
+                    // Position the history pane so its bottom row is the
+                    // line immediately above the live pane's full row
+                    // range. The live pane is `position: absolute` with
+                    // both top and bottom pinned (overlay model), so its
+                    // xterm renders the full terminal-area row count even
+                    // while the history overlay covers part of it. If
+                    // history's bottom landed inside live's row range the
+                    // same lines would render in both panes — opaque
+                    // overlay hides that visually, but the scroll-depth
+                    // indicator still makes more sense when the panes
+                    // describe disjoint buffer regions. Pre-split live
+                    // rows captured in the wheel handler because reading
+                    // the live pane's size here is racey.
+                    // Fast path: when the load callback fires, position and
+                    // reveal immediately. The frame-polled effect above also
+                    // positions / reveals / repaints, so this is idempotent and
+                    // a no-op when the callback never fires.
+                    const scrollBack = preSplitLiveRowsRef.current;
+                    if (scrollBack > 0) historyTermRef.current?.scrollLines(-scrollBack);
+                    setHistoryReady(true);
+                    // Optional split diagnostic, enabled via
+                    // localStorage.setItem('vosh.splitdebug', '1'). Snapshots
+                    // the history pane internals into the on-screen overlay.
+                    if (splitDebugEnabled) {
+                      const openN = (splitDebugCountRef.current += 1);
+                      const lines: string[] = [`open#${openN} scrollBack=${scrollBack}`];
+                      const snap = (tag: string) => {
+                        const d = historyTermRef.current?.debug();
+                        const line = `${tag} ${JSON.stringify(d)}`;
+                        // eslint-disable-next-line no-console
+                        console.log(`[vosh-split-debug] open#${openN} ${line}`);
+                        lines.push(line);
+                        setSplitDebug(lines.join('\n'));
+                      };
+                      snap('t0');
+                      window.setTimeout(() => snap('t250'), 250);
+                      window.setTimeout(() => snap('t600'), 600);
+                    }
+                  }}
+                  onScrollPosition={(back, max) => setHistoryScrollPos({ back, max })}
+                />
+                {historyScrollPos && historyScrollPos.max > 0 && (
+                  <div className="scrollback-indicator" aria-live="polite">
+                    ↑ {historyScrollPos.back} / {historyScrollPos.max}
+                  </div>
+                )}
+                {splitDebugEnabled && splitDebug && (
+                  <pre className="split-debug-overlay">{splitDebug}</pre>
+                )}
+              </Resizable>
+            )}
+            <div className="terminal-pane terminal-pane-live">
+              <Terminal
+                fontFamily={fontFamily}
+                fontSize={fontSize}
+                themeTerminalColors={themeTerminalColors}
+                onReady={(handle) => {
+                  termRef.current = handle;
+                }}
+                onResultsChanged={(event) =>
+                  setFindResults({ index: event.resultIndex, count: event.resultCount })
+                }
+              />
+            </div>
+          </div>
+        </div>
+        {wellSplits && (
+          <>
+            <div className="well-splits-divider" />
+            <div className="well-splits-side">
+              <ChatWellPane />
+              <div className="well-splits-hdivider" />
+              <LogWellPane />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1341,6 +1429,7 @@ function App() {
       {!sidePanelsFillHeight && inputElement}
       {!sidePanelsFillHeight && <StatusBar />}
       <UpdateNotice />
+      {paletteOpen && <CommandPalette deps={paletteDeps()} onClose={() => setPaletteOpen(false)} />}
       {helpOpen && <HelpView onClose={() => setHelpOpen(false)} />}
     </main>
   );

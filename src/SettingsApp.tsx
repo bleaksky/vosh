@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { TopBar } from './components/TopBar';
 import { TriggerForm } from './components/TriggerForm';
@@ -234,6 +235,35 @@ export function SettingsApp() {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
+  // Palette deep-link: a tab id arrives via localStorage when this
+  // window cold-starts, or via the goto event when it is already up.
+  useEffect(() => {
+    const isTab = (v: string | null): v is TabId => TABS.some((t) => t.id === v);
+    try {
+      const pending = localStorage.getItem('vosh.settings.pendingTab');
+      if (isTab(pending)) setTab(pending);
+      localStorage.removeItem('vosh.settings.pendingTab');
+    } catch {
+      // storage unavailable; event path still works
+    }
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void listen<string>('vosh://settings-goto-tab', (event) => {
+      if (isTab(event.payload)) {
+        setError(null);
+        setTab(event.payload);
+        void getCurrentWindow().setFocus();
+      }
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const refresh = () =>
@@ -296,7 +326,7 @@ export function SettingsApp() {
   return (
     <main className="app settings-app">
       <TopBar
-        brand="Settings"
+        brand="settings"
         showAuxButtons={false}
         titleExtra={
           <div className="settings-search">

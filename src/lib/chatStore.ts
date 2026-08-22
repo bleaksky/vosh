@@ -3,6 +3,9 @@ import { onGmcpPackage, onRouted, onState, type RoutedPayload } from './session'
 export interface ChatLine {
   pane: string;
   text: string;
+  /** Arrival time (ms epoch). The well's chat pane renders it as a
+   *  dim HH:MM column, per the canvas. */
+  ts: number;
 }
 
 const MAX_LINES = 500;
@@ -25,7 +28,7 @@ function commToChatLine(data: unknown): ChatLine | null {
   const raw = String(obj.text ?? obj.msg ?? obj.message ?? '');
   if (!raw) return null;
   const cleaned = stripAnsi(raw);
-  return { pane, text: speaker ? `${speaker}: ${cleaned}` : cleaned };
+  return { pane, text: speaker ? `${speaker}: ${cleaned}` : cleaned, ts: Date.now() };
 }
 
 // Module-level chat buffer. Subscribes to GMCP / routed / state on
@@ -57,7 +60,7 @@ export function startChatStore(): void {
   void onGmcpPackage<unknown>('Comm.Channel', handleComm);
   void onGmcpPackage<unknown>('Comm.Channel.Text', handleComm);
   void onRouted((payload: RoutedPayload) => {
-    append({ pane: payload.pane, text: stripAnsi(payload.text) });
+    append({ pane: payload.pane, text: stripAnsi(payload.text), ts: Date.now() });
   });
   void onState((payload) => {
     if (payload.kind === 'disconnected') {

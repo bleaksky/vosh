@@ -248,24 +248,34 @@ body {
   align-items: center;
   gap: 9px;
   /* Center inside the topbar instead of stretching to its full
-     height — the wordmark reads as a label, not a structural
-     element, so it should sit lighter on the bar. */
+     height — the mark reads as a label, not a structural element,
+     so it should sit lighter on the bar. */
   align-self: center;
-  color: var(--c-text-strong);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 0.01em;
 }
 
-/* The ember tile in front of the wordmark. */
-.brand-block::before {
-  content: '';
-  width: 11px;
-  height: 11px;
-  background: var(--c-accent);
-  border-radius: 2px;
+/* The logotype: Rajdhani caps tracked wide, washed in the icon's own
+   bone tone with a soft vertical sheen so mark and word read as one
+   lockup. The negative margin trims the trailing tracking space. */
+.brand-word {
+  font-family: var(--font-label);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  margin-right: -0.26em;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, #ece7e1 0%, #d9d2c2 55%, #a9a094 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* The moons mark. pointer-events off so the drag region stays the
+   span itself — Tauri only drags when the event target carries the
+   attribute. */
+.brand-block svg {
+  display: block;
   flex: 0 0 auto;
+  pointer-events: none;
 }
 
 /* TopBar — frameless drag region with text-style window controls */
@@ -8106,4 +8116,324 @@ body {
 .imm-quiet-sub {
   color: var(--c-text-faint);
   font-size: 0.9em;
+}
+
+/* ═══ Command palette (⌘K) ══════════════════════════════════════════ */
+
+.palette-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 900;
+}
+
+.palette {
+  position: absolute;
+  left: 50%;
+  top: 130px;
+  transform: translateX(-50%);
+  width: min(600px, calc(100vw - 80px));
+  background: var(--c-surface-pane);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 10px;
+  box-shadow: var(--float);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: min(520px, calc(100vh - 200px));
+}
+
+.palette-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--c-border-soft);
+  color: var(--c-text-dim);
+}
+
+.palette-input-row svg {
+  stroke: currentColor;
+  flex: 0 0 auto;
+}
+
+.palette-input-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--c-text-strong);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  caret-color: var(--c-accent);
+}
+
+.palette-input-row input::placeholder {
+  color: var(--c-text-dim);
+  font-family: var(--font-chrome);
+  font-size: 12px;
+}
+
+.palette-scopes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px 4px;
+}
+
+.palette-scope {
+  background: transparent;
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  color: var(--c-text-dim);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.palette-scope.is-active {
+  background: var(--c-accent-soft);
+  border-color: var(--c-border-strong);
+  color: var(--c-text-muted);
+}
+
+.palette-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.palette-group {
+  padding: 8px 16px 4px;
+}
+
+.palette-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 8px 16px;
+  cursor: pointer;
+  color: var(--c-text-muted);
+  font-family: inherit;
+}
+
+.palette-row svg {
+  stroke: var(--c-text-dim);
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.palette-row.is-selected {
+  background: var(--c-accent-soft);
+}
+
+.palette-row-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--c-text);
+  flex: 0 0 auto;
+}
+
+.palette-row.is-selected .palette-row-title {
+  color: var(--c-text-strong);
+}
+
+.palette-row-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--c-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.palette-row-run {
+  font-size: 10px;
+  color: var(--c-text-dim);
+  flex: 0 0 auto;
+}
+
+.palette-empty {
+  padding: 18px 16px;
+  font-size: 12px;
+  color: var(--c-text-dim);
+}
+
+.palette-footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--c-border-soft);
+  font-size: 10px;
+  color: var(--c-text-dim);
+}
+
+.palette-footer-count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+}
+
+/* ═══ Well splits: session / chat / log inside the terminal well ════ */
+
+.well-splits {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  background: var(--xterm-bg, var(--c-surface));
+}
+
+.well-splits-main {
+  flex: 1 1 55%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.well-splits-divider {
+  flex: 0 0 1px;
+  background: var(--c-border-strong);
+}
+
+.well-splits-side {
+  flex: 1 1 45%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.well-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.well-pane-chat {
+  flex: 1 1 55%;
+}
+
+.well-pane-log {
+  flex: 1 1 45%;
+}
+
+.well-pane-chip-row {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 10px 12px 6px;
+}
+
+.well-pane-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--c-surface-pane);
+  border: 1px solid var(--c-border-strong);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+
+.well-pane-chip-num {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--c-text-dim);
+}
+
+.well-pane-chip.is-active .well-pane-chip-num {
+  color: var(--c-accent);
+}
+
+.well-pane-chip-name {
+  font-family: var(--font-label);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+}
+
+.well-pane-chip.is-active .well-pane-chip-name {
+  color: var(--c-text-muted);
+}
+
+.well-log-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 16px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--c-text-dim);
+}
+
+.well-chat-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 16px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.well-chat-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.well-chat-ts {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--c-text-dim);
+}
+
+.statusbar-panes {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-text-dim);
+}
+
+.statusbar-panes .is-active {
+  color: var(--c-accent);
+}
+
+/* Always-mounted well wrapper. Closed state collapses to a plain
+   column so the terminal keeps its pre-splits geometry exactly. */
+.well-splits.is-closed {
+  display: flex;
+  flex-direction: column;
+}
+
+.well-splits-term {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.well-splits.is-closed .well-splits-main {
+  flex: 1 1 auto;
+}
+
+.well-splits-hdivider {
+  flex: 0 0 1px;
+  background: var(--c-border-strong);
 }

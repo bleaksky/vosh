@@ -85,19 +85,24 @@ export function Connect({ status, onError }: Props) {
     };
   }, [open]);
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
+  // The palette's connect entry lands here so the chip stays the one
+  // owner of host / port / auto-match behavior.
+  useEffect(() => {
+    const onRequest = () => {
+      if (!isLive) void doConnect();
+    };
+    window.addEventListener('vosh:connect-request', onRequest);
+    return () => window.removeEventListener('vosh:connect-request', onRequest);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLive, host, port, tls]);
+
+  const doConnect = async () => {
+    // Pre-login profile auto-match. Resolve by host (plus port if a
+    // profile pins one) and switch ahead of the connection. Profiles
+    // pinned to a specific character soft-skip here because the
+    // character is unknown until the MUD sends Char.Status after
+    // login; the session GMCP handler picks them up and swaps then.
     try {
-      if (isLive) {
-        await disconnectSession();
-        setOpen(false);
-        return;
-      }
-      // Pre-login profile auto-match. Resolve by host (plus port if a
-      // profile pins one) and switch ahead of the connection. Profiles
-      // pinned to a specific character soft-skip here because the
-      // character is unknown until the MUD sends Char.Status after
-      // login; the session GMCP handler picks them up and swaps then.
       try {
         const matchName = await profileResolveMatch(host, port, null);
         if (matchName) {
@@ -116,6 +121,20 @@ export function Connect({ status, onError }: Props) {
     } catch (e) {
       onError(String(e));
     }
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (isLive) {
+      try {
+        await disconnectSession();
+        setOpen(false);
+      } catch (e) {
+        onError(String(e));
+      }
+      return;
+    }
+    await doConnect();
   };
 
   const dotKind =

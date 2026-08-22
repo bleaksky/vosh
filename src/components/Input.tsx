@@ -31,6 +31,9 @@ import { nativeSurfaceEnabled } from './Terminal';
 
 export interface InputHandle {
   focus: () => void;
+  /** Replace the compose value and focus with the caret at the end.
+   *  The palette uses it to hand off parameterized aliases. */
+  insert: (text: string) => void;
 }
 
 interface Props {
@@ -370,6 +373,14 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     ref,
     () => ({
       focus: () => inputRef.current?.focus(),
+      insert: (text: string) => {
+        setValue(text);
+        const el = inputRef.current;
+        el?.focus();
+        window.requestAnimationFrame(() => {
+          el?.setSelectionRange(text.length, text.length);
+        });
+      },
     }),
     [],
   );

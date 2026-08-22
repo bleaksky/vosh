@@ -25,7 +25,9 @@ interface Props {
   // When true, the auxiliary chrome buttons (settings / map) render.
   // Set false on auxiliary windows so they only show window controls.
   showAuxButtons?: boolean;
-  // Label rendered inside the brand block. Defaults to "[vosh]".
+  // Logotype text rendered after the moons mark, in the letterspaced
+  // brand treatment. Defaults to "vosh"; auxiliary windows pass their
+  // own name ("settings"). Empty string shows the mark alone.
   brand?: string;
   // Map pane toggle. When provided, a `map` button renders and reflects
   // pressed state.
@@ -46,9 +48,35 @@ interface Props {
 // with text-style chrome buttons on the right (settings, map, then
 // the window controls). Cross-platform substitute for native
 // traffic lights.
+// The moons mark, from icons/source/vosh-blood.svg minus its tile
+// background — the bar is already the dark ground. Authored colors
+// kept so the blood moon reads.
+function VoshMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 1024 1024" aria-hidden="true">
+      <polygon
+        fill="#d9d2c2"
+        points="396.2,271.8 247.0,358.0 188.0,520.0 247.0,682.0 396.2,768.2 566.0,738.2 676.8,606.2 676.8,433.8 566.0,301.8"
+      />
+      <polygon
+        fill="var(--c-surface, #14151a)"
+        points="776.2,324.2 678.3,222.8 538.2,208.1 421.3,286.9 382.5,422.4 439.8,551.1 566.5,612.9 703.2,578.8 786.0,464.8"
+      />
+      <polygon
+        fill="#d9d2c2"
+        points="870.2,660.0 827.3,616.4 766.0,615.8 722.4,658.7 721.8,720.0 764.7,763.6 826.0,764.2 869.6,721.3"
+      />
+      <polygon
+        fill="#9e3b32"
+        points="853.0,286.0 837.5,248.5 800.0,233.0 762.5,248.5 747.0,286.0 762.5,323.5 800.0,339.0 837.5,323.5"
+      />
+    </svg>
+  );
+}
+
 export function TopBar({
   showAuxButtons = true,
-  brand = 'Vosh',
+  brand = 'vosh',
   mapOpen,
   onToggleMap,
   onOpenHelp,
@@ -67,7 +95,8 @@ export function TopBar({
   return (
     <div className="topbar" data-tauri-drag-region>
       <span className="brand-block" data-tauri-drag-region title={`Vosh ${__APP_VERSION__}`}>
-        {brand}
+        <VoshMark />
+        {brand.length > 0 && <span className="brand-word">{brand}</span>}
       </span>
       {connectionStatus && onConnectionError && (
         <Connect status={connectionStatus} onError={onConnectionError} />

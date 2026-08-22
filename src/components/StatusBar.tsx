@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getTarget, onGmcpPackage, onState, onTarget, type QuickKey } from '../lib/session';
+import { subscribeWellSplits, wellSplitsOpen } from '../lib/wellSplits';
 
 interface MoonInfo {
   name?: string;
@@ -51,6 +52,8 @@ function MoonIcon({ phase }: { phase: number }) {
 
 export function StatusBar() {
   const [now, setNow] = useState(() => new Date());
+  const [splits, setSplits] = useState(() => wellSplitsOpen());
+  useEffect(() => subscribeWellSplits(setSplits), []);
   const [userTarget, setUserTarget] = useState<string | null>(null);
   const [quickKeys, setQuickKeys] = useState<QuickKey[]>([]);
   const [moons, setMoons] = useState<MoonsState>({ moons: [] });
@@ -149,10 +152,17 @@ export function StatusBar() {
           </span>
         )}
       </div>
-      {/* Centered slot is empty now that the tick + MUD time chip rides
-          on the input row's top border. Kept as a layout spacer so the
-          left and right slots stay anchored to their edges. */}
-      <div className="statusbar-center" />
+      {/* Center slot: the pane list while well splits are open, else
+          an empty spacer keeping left and right anchored. */}
+      <div className="statusbar-center">
+        {splits && (
+          <span className="statusbar-panes" aria-label="well panes">
+            <span className="is-active">1 session</span>
+            <span>2 chat</span>
+            <span>3 log</span>
+          </span>
+        )}
+      </div>
       <div className="statusbar-right">
         {moonsBlock}
         <span className="statusbar-clock" title="local wall-clock time">
