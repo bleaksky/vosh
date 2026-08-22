@@ -34,7 +34,6 @@ import {
   importTriggers,
   installUpdateAndRelaunch,
   listSystemFonts,
-  resolveThemeTerminalColors,
   setUiConfig,
   subscribeDockLayoutChanged,
   type SystemFontEntry,
@@ -80,6 +79,7 @@ const PREVIEW_TEXT = 'The quick brown fox 0123456789  |  hp 850/1000  IlOo1';
 type TabId =
   | 'general'
   | 'themes'
+  | 'typography'
   | 'vitals'
   | 'tick'
   | 'panels'
@@ -90,25 +90,24 @@ type TabId =
   | 'macros'
   | 'import'
   | 'logs';
-// Tab list grouped into three labeled buckets. The nav prints the
-// `group` name as an uppercase header above the first tab of each
-// bucket and a hairline between buckets, so look & layout / content /
-// tools read as distinct sections. `vitals` and `tick` are top-level
-// tabs (promoted out of the old Panels sub-toggle); `panels` keeps the
-// placement map and chip routing. `pathBOnly` tabs only appear when
-// Path B mode is active.
-type TabGroup = 'look' | 'content' | 'tools';
+// Tab list grouped into six labeled buckets, per the settings-redo
+// canvas. Existing tab ids stay stable; `typography` is the one new
+// id (font settings moved out of general). `tick` keeps its id but
+// now also hosts the input-row chip style and the moons position.
+// `pathBOnly` tabs only appear when Path B mode is active.
+type TabGroup = 'appearance' | 'hud' | 'automation' | 'characters' | 'session' | 'tools';
 const TABS: { id: TabId; label: string; group: TabGroup; pathBOnly?: boolean }[] = [
-  { id: 'general', label: 'general', group: 'look' },
-  { id: 'themes', label: 'themes', group: 'look' },
-  { id: 'vitals', label: 'vitals', group: 'look' },
-  { id: 'tick', label: 'tick', group: 'look' },
-  { id: 'panels', label: 'panels', group: 'look' },
-  { id: 'profiles', label: 'profiles', group: 'content' },
-  { id: 'loadouts', label: 'loadouts', group: 'content', pathBOnly: true },
-  { id: 'triggers', label: 'triggers', group: 'content' },
-  { id: 'aliases', label: 'aliases', group: 'content' },
-  { id: 'macros', label: 'macros', group: 'content' },
+  { id: 'themes', label: 'themes', group: 'appearance' },
+  { id: 'typography', label: 'typography', group: 'appearance' },
+  { id: 'vitals', label: 'vitals', group: 'hud' },
+  { id: 'tick', label: 'tick & chips', group: 'hud' },
+  { id: 'panels', label: 'panels', group: 'hud' },
+  { id: 'triggers', label: 'triggers', group: 'automation' },
+  { id: 'aliases', label: 'aliases', group: 'automation' },
+  { id: 'macros', label: 'macros', group: 'automation' },
+  { id: 'profiles', label: 'profiles', group: 'characters' },
+  { id: 'loadouts', label: 'loadouts', group: 'characters', pathBOnly: true },
+  { id: 'general', label: 'general', group: 'session' },
   { id: 'import', label: 'import', group: 'tools' },
   { id: 'logs', label: 'logs', group: 'tools' },
 ];
@@ -175,6 +174,7 @@ function TabIcon({ id }: { id: TabId }) {
         <path d="M4.8 4.5h4.4M4.8 7h4.4M4.8 9.5h2.6" />
       </>
     ),
+    typography: <path d="M2 3.5V2h10v1.5M7 2v10M5 12h4" />,
   };
   return (
     <svg
@@ -199,11 +199,12 @@ function TabIcon({ id }: { id: TabId }) {
 // a person actually remembers ("font" lives in general, "color" in
 // themes).
 const TAB_KEYWORDS: Record<TabId, string> = {
-  general: 'font size terminal tint bright bold gpu webgl update input paste prompt spell echo',
-  themes: 'theme color accent ansi palette custom divider sent command dark',
+  general: 'update input paste prompt spell echo history gpu webgl performance',
+  themes: 'theme color accent ansi palette custom divider sent command dark tint',
+  typography: 'font size family mono bold bright preview face system',
   vitals: 'hp mana moves bar percent layout column track gauge',
-  tick: 'tick timer warn sound duration',
-  panels: 'panel layout zone map chat group affects dock chip moons',
+  tick: 'tick timer warn sound duration chip moons position time',
+  panels: 'panel layout zone map chat group affects dock tracked',
   profiles: 'profile character host switch auto match',
   loadouts: 'loadout group set active',
   triggers: 'trigger pattern highlight gag replace route wash script regex',
@@ -386,6 +387,9 @@ export function SettingsApp() {
           {tab === 'general' && (
             <GeneralTab config={config} setConfig={setConfig} onError={setError} />
           )}
+          {tab === 'typography' && (
+            <TypographyTab config={config} setConfig={setConfig} onError={setError} />
+          )}
           {tab === 'triggers' && (
             <EditorModeSwitcher
               modeKey="triggers"
@@ -427,23 +431,14 @@ export function SettingsApp() {
           {tab === 'vitals' &&
             (config ? (
               <div className="settings-pane">
-                <div className="settings-pane-title">vitals</div>
-                <div className="settings-pane-sub">
-                  how the hp / mn / mv readout looks. changes save automatically.
-                </div>
+                <TabHead title="vitals" />
                 <VitalsConfigSection config={config} setConfig={setConfig} onError={setError} />
               </div>
             ) : (
               <div className="settings-loading">loading…</div>
             ))}
           {tab === 'tick' && (
-            <div className="settings-pane">
-              <div className="settings-pane-title">tick timer</div>
-              <div className="settings-pane-sub">
-                the ROM tick countdown. changes save automatically.
-              </div>
-              <TickConfigEditor onError={setError} />
-            </div>
+            <TickChipsTab config={config} setConfig={setConfig} onError={setError} />
           )}
           {tab === 'panels' && (
             <PanelsTab config={config} setConfig={setConfig} onError={setError} />
@@ -500,26 +495,277 @@ function WebglToggle() {
   );
 }
 
-function GeneralTab({ config, setConfig, onError }: GeneralProps) {
+// Debounced auto-save shared by the config-backed tabs. Text inputs
+// can fire many updates in a row while the user types; the debounce
+// coalesces them into one setUiConfig call after typing settles.
+// setUiConfig owns every cross-window emit and dedupes against the
+// previous snapshot, so callers only get the local theme refresh and
+// the saved indicator.
+function useSettingsAutoSave(
+  setConfig: GeneralProps['setConfig'],
+  onError: GeneralProps['onError'],
+) {
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  const scheduleAutoSave = (next: UiConfig) => {
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      void (async () => {
+        try {
+          await setUiConfig(next);
+          applyTheme(next.theme);
+          setSavedAt(Date.now());
+        } catch (e) {
+          onError(String(e));
+        }
+      })();
+    }, 250);
+  };
+  const update = (patch: Partial<UiConfig>) => {
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...patch };
+      scheduleAutoSave(next);
+      return next;
+    });
+  };
+  // Fade the "saved." indicator after 1.5s so it does not linger as
+  // stale chrome long after the user actually saved.
+  useEffect(() => {
+    if (savedAt === null) return;
+    const id = window.setTimeout(() => setSavedAt(null), 1500);
+    return () => window.clearTimeout(id);
+  }, [savedAt]);
+  return { update, savedAt };
+}
+
+// Tab content header: slab title + the one autosave note.
+function TabHead({ title, right }: { title: string; right?: ReactNode }) {
+  return (
+    <div className="settings-tab-head">
+      <div className="settings-pane-title">{title}</div>
+      <span className="settings-tab-head-spacer" />
+      {right ?? <span className="settings-autosave-hint">changes save automatically</span>}
+    </div>
+  );
+}
+
+function GeneralTab({ config, setConfig, onError }: GeneralProps) {
+  const { update, savedAt } = useSettingsAutoSave(setConfig, onError);
   const [updateStatus, setUpdateStatus] = useState<{
     kind: 'idle' | 'checking' | 'available' | 'current' | 'error' | 'installing';
     msg?: string;
     version?: string;
   }>({ kind: 'idle' });
+
+  const close = () => void getCurrentWindow().close();
+
+  if (!config) return <div className="settings-loading">loading…</div>;
+
+  return (
+    <>
+      <TabHead title="general" />
+      <div className="settings-sect settings-sect-first">
+        <span className="settings-section-label">input</span>
+        <div className="settings-frow">
+          <span className="settings-flabel">history</span>
+          <span className="settings-fctrl">
+            <label className="settings-checkbox">
+              <input
+                type="checkbox"
+                checked={config.keep_last_command}
+                onChange={(e) => update({ keep_last_command: e.target.checked })}
+              />
+              <span>keep last command</span>
+            </label>
+          </span>
+          <span className="settings-fhelp">
+            restores and selects the last line so Enter resends it
+          </span>
+        </div>
+        <div className="settings-frow">
+          <span className="settings-flabel">spell check</span>
+          <span className="settings-fctrl">
+            <label className="settings-checkbox">
+              <input
+                type="checkbox"
+                checked={config.spellcheck_prompt}
+                onChange={(e) => update({ spellcheck_prompt: e.target.checked })}
+              />
+              <span>chat lines only</span>
+            </label>
+          </span>
+        </div>
+        <div className="settings-frow">
+          <span className="settings-flabel">macros</span>
+          <span className="settings-fctrl">
+            <label className="settings-checkbox">
+              <input
+                type="checkbox"
+                checked={config.echo_macros}
+                onChange={(e) => update({ echo_macros: e.target.checked })}
+              />
+              <span>echo macro commands</span>
+            </label>
+          </span>
+        </div>
+        <div className="settings-frow">
+          <span className="settings-flabel">paste pacing</span>
+          <span className="settings-fctrl">
+            <input
+              type="number"
+              className="settings-num-input"
+              min={0}
+              max={10000}
+              step={50}
+              value={config.paste_line_delay_ms}
+              onChange={(e) => {
+                const n = Math.max(0, Math.min(10_000, Math.floor(Number(e.target.value) || 0)));
+                update({ paste_line_delay_ms: n });
+              }}
+              aria-label="delay between pasted lines in milliseconds"
+            />
+            <span className="settings-paste-unit">ms between lines</span>
+          </span>
+          <span className="settings-fhelp">
+            0 = no pacing. raise it to dodge server flood filters.
+          </span>
+        </div>
+      </div>
+
+      <div className="settings-sect">
+        <span className="settings-section-label">prompt</span>
+        <div className="settings-frow">
+          <span className="settings-flabel">replace gagged</span>
+          <span className="settings-fctrl">
+            <label className="settings-checkbox">
+              <input
+                type="checkbox"
+                checked={config.prompt_template_enabled}
+                onChange={(e) => update({ prompt_template_enabled: e.target.checked })}
+              />
+              <span>render a template where the server prompt was</span>
+            </label>
+          </span>
+        </div>
+        <div className="settings-frow">
+          <span className="settings-flabel">template</span>
+          <span className="settings-fctrl">
+            <input
+              type="text"
+              className="settings-font-input"
+              spellCheck={false}
+              value={config.prompt_template}
+              placeholder="[%hp_bar:10 %hp/%maxhp hp] > "
+              onChange={(e) => update({ prompt_template: e.target.value })}
+              aria-label="custom prompt template"
+            />
+          </span>
+          <span className="settings-fhelp">
+            {
+              'tokens %hp %pct_hp %hp_bar:W:COLOR %c_hp (auto) %c_red %{c:255,128,0} %{bg:#330033} %s_bold %s_italic %s_underline %c_reset %time %date. needs a prompt-capture trigger that gags and emits vars.'
+            }
+          </span>
+        </div>
+      </div>
+
+      <div className="settings-sect">
+        <span className="settings-section-label">app</span>
+        <div className="settings-frow">
+          <span className="settings-flabel">updates</span>
+          <span className="settings-fctrl settings-updates-row">
+            <label className="settings-checkbox">
+              <input
+                type="checkbox"
+                checked={config.auto_update}
+                onChange={(e) => update({ auto_update: e.target.checked })}
+              />
+              <span>check on launch</span>
+            </label>
+            <button
+              type="button"
+              className="settings-btn settings-btn-mute"
+              disabled={updateStatus.kind === 'checking' || updateStatus.kind === 'installing'}
+              onClick={async () => {
+                setUpdateStatus({ kind: 'checking' });
+                try {
+                  const result = await checkForUpdate();
+                  if (result.available) {
+                    setUpdateStatus({
+                      kind: 'available',
+                      version: result.version ?? 'unknown',
+                    });
+                  } else {
+                    setUpdateStatus({ kind: 'current' });
+                  }
+                } catch (e) {
+                  setUpdateStatus({ kind: 'error', msg: String(e) });
+                }
+              }}
+            >
+              check now
+            </button>
+            {updateStatus.kind === 'available' && (
+              <button
+                type="button"
+                className="settings-btn"
+                onClick={async () => {
+                  setUpdateStatus({ kind: 'installing' });
+                  try {
+                    await installUpdateAndRelaunch();
+                  } catch (e) {
+                    setUpdateStatus({ kind: 'error', msg: String(e) });
+                  }
+                }}
+              >
+                install v{updateStatus.version} + restart
+              </button>
+            )}
+            <span className="settings-updates-status">
+              {updateStatus.kind === 'checking' && 'checking…'}
+              {updateStatus.kind === 'current' && 'up to date'}
+              {updateStatus.kind === 'installing' && 'installing…'}
+              {updateStatus.kind === 'error' && (
+                <span className="settings-updates-error">{updateStatus.msg}</span>
+              )}
+            </span>
+          </span>
+        </div>
+        <div className="settings-frow">
+          <span className="settings-flabel">performance</span>
+          <span className="settings-fctrl">
+            <WebglToggle />
+          </span>
+          <span className="settings-fhelp">this machine only &#183; takes effect after reload</span>
+        </div>
+      </div>
+
+      <div className="settings-actions">
+        <button type="button" className="settings-btn settings-btn-mute" onClick={close}>
+          close
+        </button>
+        {savedAt !== null && <span className="settings-saved">saved.</span>}
+      </div>
+    </>
+  );
+}
+
+// Typography: the terminal face, size, rendering, the system font
+// browser, and the live preview. Moved out of general per the
+// settings-redo canvas so appearance settings live together.
+function TypographyTab({ config, setConfig, onError }: GeneralProps) {
+  const { update, savedAt } = useSettingsAutoSave(setConfig, onError);
   const [systemFonts, setSystemFonts] = useState<SystemFontEntry[]>([]);
   const [fontsState, setFontsState] = useState<'idle' | 'loading' | 'loaded'>('idle');
   const [fontFilter, setFontFilter] = useState('');
   const [showOnlyMono, setShowOnlyMono] = useState(true);
 
   // System font enumeration is lazy. font-kit's first pass costs
-  // 200–500ms because it parses every installed font file to detect
-  // the monospace flag; we used to eat that on Settings open, which
-  // made the General tab feel sluggish. Now we trigger the fetch
-  // only when the user actually engages the font picker (focuses the
-  // filter, toggles monospace-only, etc.). The backend caches the
-  // result in a OnceLock so the second-and-later call within a
-  // session is instant.
+  // 200-500ms because it parses every installed font file to detect
+  // the monospace flag; the fetch fires only when the user actually
+  // engages the picker. The backend caches the result in a OnceLock
+  // so later calls within a session are instant.
   const ensureFontsLoaded = () => {
     if (fontsState !== 'idle') return;
     setFontsState('loading');
@@ -547,314 +793,148 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
     update({ font_family: `"${family}", Menlo, monospace` });
   };
 
-  // Debounced auto-save. Text inputs (font_family, tracked-affect
-  // draft, paste-pacing number) can fire many updates in a row when
-  // the user is typing; the debounce coalesces them into one
-  // setUiConfig call after the typing settles. Toggles/dropdowns
-  // also debounce by the same window, which is imperceptible.
-  const saveTimerRef = useRef<number | null>(null);
-  const scheduleAutoSave = (next: UiConfig) => {
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(() => {
-      saveTimerRef.current = null;
-      void (async () => {
-        try {
-          await setUiConfig(next);
-          // setUiConfig now owns every cross-window emit and dedupes
-          // them against the previous snapshot, so this branch only
-          // needs the local-window theme refresh + the saved
-          // indicator. Saved Phase 7 fans the per-save emit count
-          // from 10-11 down to "only fields that actually moved".
-          applyTheme(next.theme);
-          setSavedAt(Date.now());
-        } catch (e) {
-          onError(String(e));
-        }
-      })();
-    }, 250);
-  };
-
-  const update = (patch: Partial<UiConfig>) => {
-    setConfig((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, ...patch };
-      scheduleAutoSave(next);
-      return next;
-    });
-  };
-
-  // Fade the "saved." indicator after 1.5s so it does not linger as
-  // stale chrome long after the user actually saved.
-  useEffect(() => {
-    if (savedAt === null) return;
-    const id = window.setTimeout(() => setSavedAt(null), 1500);
-    return () => window.clearTimeout(id);
-  }, [savedAt]);
-
-  const close = () => void getCurrentWindow().close();
-
   if (!config) return <div className="settings-loading">loading…</div>;
 
   return (
     <>
-      <Row label="terminal">
-        <label className="settings-checkbox">
-          <input
-            type="checkbox"
-            checked={resolveThemeTerminalColors(config.theme, config.theme_terminal_colors)}
-            onChange={(e) => update({ theme_terminal_colors: e.target.checked })}
-          />
-          <span>tint output with theme</span>
-        </label>
-        <label className="settings-checkbox">
-          <input
-            type="checkbox"
-            checked={config.bright_bold}
-            onChange={(e) => update({ bright_bold: e.target.checked })}
-          />
-          <span>bright text as bold (native renderer)</span>
-        </label>
-        <WebglToggle />
-      </Row>
-      <Row label="updates">
-        <span className="settings-updates-row">
-          <label className="settings-checkbox">
+      <TabHead
+        title="typography"
+        right={
+          <>
+            {savedAt !== null && <span className="settings-saved">saved.</span>}
+            <span className="settings-autosave-hint">changes save automatically</span>
+          </>
+        }
+      />
+      <div className="settings-sect settings-sect-first">
+        <span className="settings-section-label">terminal face</span>
+        <div className="settings-frow">
+          <span className="settings-flabel">family</span>
+          <span className="settings-fctrl">
             <input
-              type="checkbox"
-              checked={config.auto_update}
-              onChange={(e) => update({ auto_update: e.target.checked })}
-            />
-            <span>auto-check on launch</span>
-          </label>
-          <button
-            type="button"
-            className="settings-btn settings-btn-mute"
-            disabled={updateStatus.kind === 'checking' || updateStatus.kind === 'installing'}
-            onClick={async () => {
-              setUpdateStatus({ kind: 'checking' });
-              try {
-                const result = await checkForUpdate();
-                if (result.available) {
-                  setUpdateStatus({
-                    kind: 'available',
-                    version: result.version ?? 'unknown',
-                  });
-                } else {
-                  setUpdateStatus({ kind: 'current' });
-                }
-              } catch (e) {
-                setUpdateStatus({ kind: 'error', msg: String(e) });
-              }
-            }}
-          >
-            check now
-          </button>
-          {updateStatus.kind === 'available' && (
-            <button
-              type="button"
-              className="settings-btn"
-              onClick={async () => {
-                setUpdateStatus({ kind: 'installing' });
-                try {
-                  await installUpdateAndRelaunch();
-                } catch (e) {
-                  setUpdateStatus({ kind: 'error', msg: String(e) });
-                }
-              }}
-            >
-              install v{updateStatus.version} + restart
-            </button>
-          )}
-          <span className="settings-updates-status">
-            {updateStatus.kind === 'checking' && 'checking…'}
-            {updateStatus.kind === 'current' && 'up to date'}
-            {updateStatus.kind === 'installing' && 'installing…'}
-            {updateStatus.kind === 'error' && (
-              <span className="settings-updates-error">{updateStatus.msg}</span>
-            )}
-          </span>
-        </span>
-      </Row>
-      <Row label="input">
-        <label className="settings-checkbox">
-          <input
-            type="checkbox"
-            checked={config.keep_last_command}
-            onChange={(e) => update({ keep_last_command: e.target.checked })}
-          />
-          <span>keep last command</span>
-        </label>
-        <label className="settings-checkbox">
-          <input
-            type="checkbox"
-            checked={config.spellcheck_prompt}
-            onChange={(e) => update({ spellcheck_prompt: e.target.checked })}
-          />
-          <span>spell check chat lines</span>
-        </label>
-        <label className="settings-checkbox">
-          <input
-            type="checkbox"
-            checked={config.echo_macros}
-            onChange={(e) => update({ echo_macros: e.target.checked })}
-          />
-          <span>echo macro commands</span>
-        </label>
-      </Row>
-      <Row label="paste pacing">
-        <span className="settings-paste-row">
-          <input
-            type="number"
-            className="settings-num-input"
-            min={0}
-            max={10000}
-            step={50}
-            value={config.paste_line_delay_ms}
-            onChange={(e) => {
-              const n = Math.max(0, Math.min(10_000, Math.floor(Number(e.target.value) || 0)));
-              update({ paste_line_delay_ms: n });
-            }}
-            aria-label="delay between pasted lines in milliseconds"
-          />
-          <span className="settings-paste-unit">ms between lines</span>
-          <span className="settings-paste-hint">0 = no pacing. raise to dodge flood filters.</span>
-        </span>
-      </Row>
-      <Row label="prompt">
-        <label className="settings-checkbox">
-          <input
-            type="checkbox"
-            checked={config.prompt_template_enabled}
-            onChange={(e) => update({ prompt_template_enabled: e.target.checked })}
-          />
-          <span>replace gagged prompts</span>
-        </label>
-        <input
-          type="text"
-          className="settings-font-input"
-          spellCheck={false}
-          value={config.prompt_template}
-          placeholder="[%hp_bar:10 %hp/%maxhp hp] > "
-          onChange={(e) => update({ prompt_template: e.target.value })}
-          aria-label="custom prompt template"
-        />
-        <span className="settings-paste-hint">
-          {
-            'tokens %hp %pct_hp %hp_bar:W:COLOR %c_hp (auto) %c_red %{c:255,128,0} %{bg:#330033} %s_bold %s_italic %s_underline %c_reset %time %date. needs a prompt-capture trigger that gags and emits vars.'
-          }
-        </span>
-      </Row>
-      <Row label="font">
-        <input
-          type="text"
-          className="settings-font-input"
-          spellCheck={false}
-          value={config.font_family}
-          placeholder='"BerkeleyMono Bundled", Menlo, monospace'
-          onChange={(e) => update({ font_family: e.target.value })}
-        />
-      </Row>
-      <div className="settings-row settings-row-picks">
-        <span className="settings-row-label" />
-        <div className="settings-font-picks">
-          {FONT_PICKS.map((pick) => (
-            <button
-              key={pick.label}
-              type="button"
-              className="settings-font-pick"
-              onClick={() => update({ font_family: pick.value })}
-            >
-              {pick.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="settings-row settings-row-picks">
-        <span className="settings-row-label">system</span>
-        <div className="settings-font-system">
-          <div className="settings-font-system-controls">
-            <input
-              type="search"
+              type="text"
               className="settings-font-input"
               spellCheck={false}
-              placeholder={
-                fontsState === 'loaded'
-                  ? `filter ${systemFonts.length} installed fonts`
-                  : fontsState === 'loading'
-                    ? 'loading installed fonts…'
-                    : 'click to load installed fonts'
-              }
-              value={fontFilter}
-              onChange={(e) => setFontFilter(e.target.value)}
-              onFocus={ensureFontsLoaded}
+              value={config.font_family}
+              placeholder='"BerkeleyMono Bundled", Menlo, monospace'
+              onChange={(e) => update({ font_family: e.target.value })}
             />
-            <label className="settings-font-mono">
+          </span>
+          <span className="settings-fhelp">
+            <span className="settings-font-picks">
+              {FONT_PICKS.map((pick) => (
+                <button
+                  key={pick.label}
+                  type="button"
+                  className="opt-chip"
+                  onClick={() => update({ font_family: pick.value })}
+                >
+                  {pick.label}
+                </button>
+              ))}
+            </span>
+          </span>
+        </div>
+        <div className="settings-frow">
+          <span className="settings-flabel">size</span>
+          <span className="settings-fctrl">
+            <input
+              type="number"
+              min={9}
+              max={32}
+              value={config.font_size}
+              onChange={(e) =>
+                update({ font_size: Math.max(9, Math.min(32, Number(e.target.value) || 14)) })
+              }
+            />
+            <span className="settings-unit">px</span>
+          </span>
+        </div>
+        <div className="settings-frow">
+          <span className="settings-flabel">rendering</span>
+          <span className="settings-fctrl">
+            <label className="settings-checkbox">
               <input
                 type="checkbox"
-                checked={showOnlyMono}
-                onChange={(e) => setShowOnlyMono(e.target.checked)}
+                checked={config.bright_bold}
+                onChange={(e) => update({ bright_bold: e.target.checked })}
+              />
+              <span>bright text as bold</span>
+            </label>
+          </span>
+          <span className="settings-fhelp">
+            native renderer only. SGR bright (8-15) takes the heavier cut.
+          </span>
+        </div>
+      </div>
+
+      <div className="settings-sect">
+        <span className="settings-section-label">system fonts</span>
+        <div className="settings-frow">
+          <span className="settings-flabel">browse</span>
+          <div className="settings-font-system">
+            <div className="settings-font-system-controls">
+              <input
+                type="search"
+                className="settings-font-input"
+                spellCheck={false}
+                placeholder={
+                  fontsState === 'loaded'
+                    ? `filter ${systemFonts.length} installed fonts`
+                    : fontsState === 'loading'
+                      ? 'loading installed fonts…'
+                      : 'click to load installed fonts'
+                }
+                value={fontFilter}
+                onChange={(e) => setFontFilter(e.target.value)}
                 onFocus={ensureFontsLoaded}
               />
-              monospace only
-            </label>
-          </div>
-          <div className="settings-font-list" onMouseEnter={ensureFontsLoaded}>
-            {fontsState === 'idle' ? (
-              <span className="settings-font-empty">
-                hover or click the filter to load the installed font list
-              </span>
-            ) : fontsState === 'loading' || systemFonts.length === 0 ? (
-              <span className="settings-font-empty">loading installed fonts…</span>
-            ) : (
-              filteredFonts.map((f) => (
-                <button
-                  key={f.family}
-                  type="button"
-                  className="settings-font-list-item"
-                  style={{ fontFamily: `"${f.family}", Menlo, monospace` }}
-                  onMouseEnter={() => loadSystemFont(f.family)}
-                  onFocus={() => loadSystemFont(f.family)}
-                  onClick={() => pickSystemFont(f.family)}
-                  title={f.family}
-                >
-                  {f.family}
-                </button>
-              ))
-            )}
+              <label className="settings-font-mono">
+                <input
+                  type="checkbox"
+                  checked={showOnlyMono}
+                  onChange={(e) => setShowOnlyMono(e.target.checked)}
+                  onFocus={ensureFontsLoaded}
+                />
+                monospace only
+              </label>
+            </div>
+            <div className="settings-font-list" onMouseEnter={ensureFontsLoaded}>
+              {fontsState === 'idle' ? (
+                <span className="settings-font-empty">
+                  hover or click the filter to load the installed font list
+                </span>
+              ) : fontsState === 'loading' || systemFonts.length === 0 ? (
+                <span className="settings-font-empty">loading installed fonts…</span>
+              ) : (
+                filteredFonts.map((f) => (
+                  <button
+                    key={f.family}
+                    type="button"
+                    className="settings-font-list-item"
+                    style={{ fontFamily: `"${f.family}", Menlo, monospace` }}
+                    onMouseEnter={() => loadSystemFont(f.family)}
+                    onFocus={() => loadSystemFont(f.family)}
+                    onClick={() => pickSystemFont(f.family)}
+                    title={f.family}
+                  >
+                    {f.family}
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>
-      <Row label="size">
-        <input
-          type="number"
-          min={9}
-          max={32}
-          value={config.font_size}
-          onChange={(e) =>
-            update({ font_size: Math.max(9, Math.min(32, Number(e.target.value) || 14)) })
-          }
-        />
-        <span className="settings-unit">px</span>
-      </Row>
-      <div className="settings-row">
-        <span className="settings-row-label">preview</span>
+
+      <div className="settings-sect">
+        <span className="settings-section-label">preview</span>
         <div
           className="settings-font-preview"
           style={{ fontFamily: config.font_family, fontSize: config.font_size }}
         >
           {PREVIEW_TEXT}
         </div>
-      </div>
-      <div className="settings-actions">
-        <button type="button" className="settings-btn settings-btn-mute" onClick={close}>
-          close
-        </button>
-        {/* This tab auto-saves on every change (250ms debounce); the
-            "saved." pill blinks in to confirm. Static hint makes that
-            explicit so the user is not searching for a [save] button
-            on the affects / panels / fonts rows. */}
-        <span className="settings-autosave-hint">changes save automatically</span>
-        {savedAt !== null && <span className="settings-saved">saved.</span>}
       </div>
     </>
   );
@@ -978,46 +1058,16 @@ function JsonTab({ kind, singular, plural, load, save, onError }: JsonTabProps) 
   );
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="settings-row">
-      <span className="settings-row-label">{label}</span>
-      <span className="settings-row-control">{children}</span>
-    </label>
-  );
-}
-
 interface PanelsTabProps {
   config: UiConfig | null;
   setConfig: (updater: (prev: UiConfig | null) => UiConfig | null) => void;
   onError: (e: string | null) => void;
 }
 
-type PanelsSubView = 'layout' | 'panes' | 'chips';
-
 function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
   const [layout, setLayout] = useState<PanelLayout>(DEFAULT_PANEL_LAYOUT);
   const [highlightId, setHighlightId] = useState<PanelId | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [subView, setSubView] = useState<PanelsSubView>(() => {
-    try {
-      const stored = localStorage.getItem('vosh.settings.panels.subview');
-      if (stored === 'panes' || stored === 'chips') return stored;
-    } catch {
-      // ignore
-    }
-    return 'layout';
-  });
-
-  const pickSubView = (next: PanelsSubView) => {
-    setSubView(next);
-    try {
-      localStorage.setItem('vosh.settings.panels.subview', next);
-    } catch {
-      // ignore
-    }
-  };
-
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
@@ -1074,57 +1124,39 @@ function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
     void setUiConfig(next).catch((e) => onError(String(e)));
   };
 
+  const updateConfig = (patch: Partial<UiConfig>) => {
+    if (!config) return;
+    const next: UiConfig = { ...config, ...patch };
+    setConfig(() => next);
+    void setUiConfig(next).catch((e) => onError(String(e)));
+  };
+
   if (!loaded) return <div className="settings-loading">loading panels…</div>;
 
   return (
     <div className="panels-tab">
-      <div className="panels-subtoggle" role="tablist" aria-label="panels view">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={subView === 'layout'}
-          className={`panels-subtoggle-btn${subView === 'layout' ? ' is-on' : ''}`}
-          onClick={() => pickSubView('layout')}
-        >
-          layout
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={subView === 'panes'}
-          className={`panels-subtoggle-btn${subView === 'panes' ? ' is-on' : ''}`}
-          onClick={() => pickSubView('panes')}
-        >
-          panes
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={subView === 'chips'}
-          className={`panels-subtoggle-btn${subView === 'chips' ? ' is-on' : ''}`}
-          onClick={() => pickSubView('chips')}
-        >
-          chips
-        </button>
-      </div>
-
-      {subView === 'layout' && (
-        <PanelsLayoutSubview
-          layout={layout}
-          highlightId={highlightId}
-          setHighlightId={setHighlightId}
-          onUpdate={update}
-          onMove={move}
-          sideFillOn={sideFillOn}
-          onToggleSideFill={toggleSideFill}
-          onResetDefaults={resetDefaults}
-        />
-      )}
-      {subView === 'panes' && (
-        <PanelsPanesSubview config={config} setConfig={setConfig} onError={onError} />
-      )}
-      {subView === 'chips' && (
-        <PanelsChipsSubview config={config} setConfig={setConfig} onError={onError} />
+      <TabHead title="panels" />
+      <PanelsLayoutSubview
+        layout={layout}
+        highlightId={highlightId}
+        setHighlightId={setHighlightId}
+        onUpdate={update}
+        onMove={move}
+        sideFillOn={sideFillOn}
+        onToggleSideFill={toggleSideFill}
+        onResetDefaults={resetDefaults}
+      />
+      {/* Tracked affects, promoted from three clicks deep (the old
+          panes sub-view accordion) to a first-class section per the
+          settings-redo canvas. */}
+      {config && (
+        <div className="settings-sect">
+          <span className="settings-section-label">tracked affects</span>
+          <span className="settings-fhelp" style={{ gridColumn: 'auto' }}>
+            affects listed here render in the affects pane with remaining duration
+          </span>
+          <TrackedAffectsEditor config={config} update={updateConfig} />
+        </div>
       )}
     </div>
   );
@@ -1199,81 +1231,6 @@ function PanelsLayoutSubview({
 // their content config (interval, format) lands in a follow-up commit.
 // Map / chat / group / roomstrip have no content config yet, so they
 // are not listed at all rather than rendering an empty row.
-interface PanesSubviewProps {
-  config: UiConfig | null;
-  setConfig: (updater: (prev: UiConfig | null) => UiConfig | null) => void;
-  onError: (e: string | null) => void;
-}
-function PanelsPanesSubview({ config, setConfig, onError }: PanesSubviewProps) {
-  const [open, setOpen] = useState<Set<PanelId>>(new Set<PanelId>(['affects']));
-  const toggle = (id: PanelId) => {
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-  if (!config) return <div className="settings-loading">loading panes…</div>;
-  const update = (patch: Partial<UiConfig>) => {
-    const next: UiConfig = { ...config, ...patch };
-    setConfig(() => next);
-    void setUiConfig(next).catch((e) => onError(String(e)));
-  };
-  return (
-    <div className="panes-accordion">
-      <PaneAccordionRow
-        id="affects"
-        label="affects"
-        description="tracked-affect pills with remaining duration"
-        open={open.has('affects')}
-        onToggle={() => toggle('affects')}
-      >
-        <TrackedAffectsEditor config={config} update={update} />
-      </PaneAccordionRow>
-    </div>
-  );
-}
-
-interface AccordionRowProps {
-  id: PanelId;
-  label: string;
-  description: string;
-  open: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}
-function PaneAccordionRow({ label, description, open, onToggle, children }: AccordionRowProps) {
-  return (
-    <div className={`panes-accordion-row${open ? ' is-open' : ''}`}>
-      <button
-        type="button"
-        className="panes-accordion-head"
-        aria-expanded={open}
-        onClick={onToggle}
-      >
-        <span className="panes-accordion-name">{label}</span>
-        <span className="panes-accordion-desc">{description}</span>
-        <span className="panes-accordion-caret" aria-hidden="true">
-          {open ? '▾' : '▸'}
-        </span>
-      </button>
-      {open && <div className="panes-accordion-body">{children}</div>}
-    </div>
-  );
-}
-
-// === Chips sub-view =====================================================
-// Tick, MUD time, and moons-phase host routing. These are the small
-// ride-along elements in Vosh's chrome: they don't take their own
-// panel slot, they hang off a host (vitals, roomstrip, affects, the
-// statusbar). This view lets you pick a host per chip in one place,
-// plus the moons-position knob (which is statusbar chrome only).
-//
-// Per-chip content config (tick interval / auto-fire / sound /
-// warning, mud-time format) is intentionally left out of this commit
-// so the structural change stays focused; it surfaces here in a
-// follow-up.
 interface ChipsSubviewProps {
   config: UiConfig | null;
   setConfig: (updater: (prev: UiConfig | null) => UiConfig | null) => void;
@@ -1306,42 +1263,80 @@ const CHIP_STYLE_OPTIONS: {
   },
 ];
 
-function PanelsChipsSubview({ config, setConfig, onError }: ChipsSubviewProps) {
+// The tick &amp; chips tab: the ROM tick countdown, the input-row chip
+// style, and the status-strip moons position. The three live together
+// because the chip renders the tick and the moons share the strip —
+// per the settings-redo canvas. The moons position control is new;
+// the config field and cross-window event existed with no UI at all.
+function TickChipsTab({ config, setConfig, onError }: ChipsSubviewProps) {
   const chipStyle = config?.chip_style ?? 'value_only';
-  const pickStyle = (id: NonNullable<UiConfig['chip_style']>) => {
+  const updateConfig = (patch: Partial<UiConfig>) => {
     if (!config) return;
-    const next: UiConfig = { ...config, chip_style: id };
+    const next: UiConfig = { ...config, ...patch };
     setConfig(() => next);
     void setUiConfig(next).catch((e) => onError(String(e)));
   };
 
+  const moonsPosition = config?.moons_position ?? 'right-edge';
+  const MOONS_OPTIONS: { id: UiConfig['moons_position']; label: string }[] = [
+    { id: 'right-edge', label: 'right edge' },
+    { id: 'before-time', label: 'before the clock' },
+    { id: 'after-time', label: 'after the clock' },
+  ];
+
   return (
-    <>
-      <div className="panels-tab-header">
-        <span>chip style</span>
-        <span className="panels-tab-header-dim">
-          rendering of the tick + mud time chip on the input row
+    <div className="settings-pane">
+      <TabHead title="tick & chips" />
+      <div className="settings-sect settings-sect-first">
+        <span className="settings-section-label">tick timer</span>
+        <TickConfigEditor onError={onError} />
+      </div>
+
+      <div className="settings-sect">
+        <span className="settings-section-label">input row chip</span>
+        <span className="settings-fhelp" style={{ gridColumn: 'auto' }}>
+          how the tick and mud time readout renders at the right edge of the input row
         </span>
+        <div className="chip-style-picker">
+          {CHIP_STYLE_OPTIONS.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              className={`chip-style-card${chipStyle === opt.id ? ' is-on' : ''}`}
+              onClick={() => updateConfig({ chip_style: opt.id })}
+              aria-pressed={chipStyle === opt.id}
+            >
+              <span className="chip-style-name">{opt.label}</span>
+              <ChipStyleSample preview={opt.preview} />
+              <span className="chip-style-desc">{opt.description}</span>
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="chip-style-picker">
-        {CHIP_STYLE_OPTIONS.map((opt) => (
-          <button
-            key={opt.id}
-            type="button"
-            className={`chip-style-card${chipStyle === opt.id ? ' is-on' : ''}`}
-            onClick={() => pickStyle(opt.id)}
-            aria-pressed={chipStyle === opt.id}
-          >
-            <span className="chip-style-name">
-              {opt.label}
-              {chipStyle === opt.id && <span className="chip-preset-tag">[active]</span>}
-            </span>
-            <ChipStyleSample preview={opt.preview} />
-            <span className="chip-style-desc">{opt.description}</span>
-          </button>
-        ))}
+
+      <div className="settings-sect">
+        <span className="settings-section-label">status strip</span>
+        <div className="settings-frow">
+          <span className="settings-flabel">moons</span>
+          <span className="settings-fctrl">
+            {MOONS_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className={`opt-chip${moonsPosition === opt.id ? ' is-on' : ''}`}
+                aria-pressed={moonsPosition === opt.id}
+                onClick={() => updateConfig({ moons_position: opt.id })}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </span>
+          <span className="settings-fhelp">
+            where the Aabahran moon phases sit in the status strip
+          </span>
+        </div>
       </div>
-    </>
+    </div>
   );
 }
 

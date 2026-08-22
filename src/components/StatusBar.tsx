@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
-import { getTarget, onGmcpPackage, onState, onTarget, type QuickKey } from '../lib/session';
+import {
+  getTarget,
+  getUiConfig,
+  onGmcpPackage,
+  onState,
+  onTarget,
+  subscribeMoonsPositionChanged,
+  type MoonsPosition,
+  type QuickKey,
+} from '../lib/session';
 import { subscribeWellSplits, wellSplitsOpen } from '../lib/wellSplits';
 
 interface MoonInfo {
@@ -54,6 +63,29 @@ export function StatusBar() {
   const [now, setNow] = useState(() => new Date());
   const [splits, setSplits] = useState(() => wellSplitsOpen());
   useEffect(() => subscribeWellSplits(setSplits), []);
+  // Where the moons sit relative to the clock. The setting existed in
+  // config with no consumer until the settings redo; the tick & chips
+  // tab now writes it and this is the read side.
+  const [moonsPosition, setMoonsPosition] = useState<MoonsPosition>('right-edge');
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void getUiConfig()
+      .then((cfg) => {
+        if (!cancelled) setMoonsPosition(cfg.moons_position);
+      })
+      .catch(() => {});
+    void subscribeMoonsPositionChanged((pos) => {
+      if (!cancelled) setMoonsPosition(pos);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
   const [userTarget, setUserTarget] = useState<string | null>(null);
   const [quickKeys, setQuickKeys] = useState<QuickKey[]>([]);
   const [moons, setMoons] = useState<MoonsState>({ moons: [] });
@@ -164,10 +196,11 @@ export function StatusBar() {
         )}
       </div>
       <div className="statusbar-right">
-        {moonsBlock}
+        {moonsPosition === 'before-time' && moonsBlock}
         <span className="statusbar-clock" title="local wall-clock time">
           {formatClock(now)}
         </span>
+        {moonsPosition !== 'before-time' && moonsBlock}
       </div>
     </div>
   );

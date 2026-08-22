@@ -2893,6 +2893,133 @@ body {
   line-height: 1.45;
 }
 
+/* ═══ Unified settings form system (the settings-redo mockup) ═══════
+   ONE grid for every tab: 140px label column, controls left-aligned,
+   help text always UNDER its control in the second column. Sections
+   are hairline-separated with a caps header. Text and number entry is
+   underline-only; enums are chip groups; every checkbox is the custom
+   13px box above. */
+
+.settings-sect {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--c-border);
+}
+
+.settings-sect-first {
+  border-top: none;
+  padding-top: 0;
+}
+
+/* The one section-header idiom. Also finally defines the class
+   ImportTab has referenced since before the redesign. */
+.settings-section-label {
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+}
+
+.settings-frow {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 4px 18px;
+  align-items: baseline;
+}
+
+.settings-flabel {
+  font-size: 12px;
+  color: var(--c-text-faint);
+  padding-top: 1px;
+}
+
+.settings-fctrl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.settings-fhelp {
+  grid-column: 2;
+  font-size: 11px;
+  color: var(--c-text-dim);
+  line-height: 1.5;
+}
+
+/* Enum chips. */
+.opt-chip {
+  background: transparent;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 2px 10px;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--c-text-faint);
+  cursor: pointer;
+}
+
+.opt-chip:hover {
+  border-color: var(--c-border-hover);
+  color: var(--c-text-muted);
+}
+
+.opt-chip.is-on {
+  background: var(--c-accent-soft);
+  border-color: var(--c-border-strong);
+  color: var(--c-text);
+}
+
+.opt-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Underline entry: the single treatment for text and number inputs
+   in the settings window. Selects keep a quiet boxed look (an
+   underline select reads as plain text). */
+.settings-body input[type='text'],
+.settings-body input[type='number'],
+.settings-body input[type='search'] {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--c-border-strong);
+  border-radius: 0;
+  padding: 3px 1px;
+  color: var(--c-text);
+}
+
+.settings-body input[type='text']:focus,
+.settings-body input[type='number']:focus,
+.settings-body input[type='search']:focus {
+  outline: none;
+  border-bottom-color: var(--c-accent);
+}
+
+.settings-body select {
+  background: var(--c-surface-pane);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  color: var(--c-text);
+}
+
+.settings-body input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.settings-body input[type='number']::-webkit-inner-spin-button,
+.settings-body input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 /* Value-bearing controls inside settings stay mono so hex colors,
    hosts, patterns, and paths keep their tabular shape under the
    Inter chrome. */
@@ -4303,17 +4430,12 @@ body {
   cursor: pointer;
 }
 
-/* Custom checkbox, matching the settings-reorg mockup. A 13px square
+/* Custom checkbox, matching the settings-redo mockup. A 13px square
    with the strong border; when checked it fills with the soft accent
-   wash and stamps an accent check glyph. Covers every checkbox in the
-   Settings window (general toggles, the side-fill + vitals toggles
-   that carry .settings-checkbox, the tick toggles, the font filter,
-   and the logs case toggle). The trigger / alias card checkboxes use
-   their own wrappers and are untouched. */
-.logs-case input[type='checkbox'],
-.settings-checkbox input[type='checkbox'],
-.chips-tick-config-toggle input[type='checkbox'],
-.settings-font-mono input[type='checkbox'] {
+   wash and stamps an accent check glyph. Applies to EVERY checkbox in
+   the settings window so the trigger / alias / macro / import /
+   loadout toggles stop falling through to native chrome. */
+.settings-app input[type='checkbox'] {
   -webkit-appearance: none;
   appearance: none;
   flex: 0 0 auto;
@@ -4329,35 +4451,24 @@ body {
   cursor: pointer;
 }
 
-.logs-case input[type='checkbox']:checked,
-.settings-checkbox input[type='checkbox']:checked,
-.chips-tick-config-toggle input[type='checkbox']:checked,
-.settings-font-mono input[type='checkbox']:checked {
+.settings-app input[type='checkbox']:checked {
   background: var(--c-accent-soft, rgba(176, 200, 212, 0.12));
   border-color: var(--c-accent);
 }
 
-.logs-case input[type='checkbox']:checked::after,
-.settings-checkbox input[type='checkbox']:checked::after,
-.chips-tick-config-toggle input[type='checkbox']:checked::after,
-.settings-font-mono input[type='checkbox']:checked::after {
+.settings-app input[type='checkbox']:checked::after {
   content: '✓';
   color: var(--c-accent);
   font-size: 10px;
   line-height: 1;
 }
 
-.logs-case input[type='checkbox']:focus-visible,
-.settings-checkbox input[type='checkbox']:focus-visible,
-.chips-tick-config-toggle input[type='checkbox']:focus-visible,
-.settings-font-mono input[type='checkbox']:focus-visible {
+.settings-app input[type='checkbox']:focus-visible {
   outline: none;
   border-color: var(--c-accent);
 }
 
-.logs-case input[type='checkbox']:disabled,
-.settings-checkbox input[type='checkbox']:disabled,
-.chips-tick-config-toggle input[type='checkbox']:disabled {
+.settings-app input[type='checkbox']:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -5607,7 +5718,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px;
   overflow-y: auto;
 }
 
@@ -6149,7 +6259,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px;
   overflow-y: auto;
 }
 
@@ -6711,7 +6820,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px;
   overflow-y: auto;
 }
 
@@ -7524,7 +7632,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px;
   overflow-y: auto;
 }
 
