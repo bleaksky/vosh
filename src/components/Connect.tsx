@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   connectSession,
   disconnectSession,
+  onGmcpPackage,
+  onState,
   profileResolveMatch,
   profileSwitch,
   profilesList,
@@ -31,8 +33,39 @@ export function Connect({ status, onError }: Props) {
   const [port, setPort] = useState(DEFAULT_PORT);
   const [tls, setTls] = useState(false);
   const [open, setOpen] = useState(false);
+  // Logged-in character, from Char.Status / Char.Name GMCP. Gives the
+  // chip its identity segment; cleared on disconnect.
+  const [charName, setCharName] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const isLive = status.kind === 'connecting' || status.kind === 'connected';
+
+  useEffect(() => {
+    let cancelled = false;
+    const unsubs: (() => void)[] = [];
+    const takeName = (data: { name?: unknown }) => {
+      if (typeof data?.name === 'string' && data.name.trim().length > 0) {
+        setCharName(data.name.trim());
+      }
+    };
+    void onGmcpPackage('Char.Status', takeName).then((fn) => {
+      if (cancelled) fn();
+      else unsubs.push(fn);
+    });
+    void onGmcpPackage('Char.Name', takeName).then((fn) => {
+      if (cancelled) fn();
+      else unsubs.push(fn);
+    });
+    void onState((payload) => {
+      if (payload.kind === 'disconnected') setCharName(null);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsubs.push(fn);
+    });
+    return () => {
+      cancelled = true;
+      for (const fn of unsubs) fn();
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -93,11 +126,10 @@ export function Connect({ status, onError }: Props) {
         : status.kind === 'error'
           ? 'is-error'
           : 'is-idle';
-  const chipLabel = isLive
-    ? `${status.kind === 'connected' || status.kind === 'connecting' ? status.host : host}:${
-        status.kind === 'connected' || status.kind === 'connecting' ? status.port : port
-      }`
-    : 'connect';
+  const liveHostPort =
+    status.kind === 'connected' || status.kind === 'connecting'
+      ? `${status.host}:${status.port}`
+      : `${host}:${port}`;
 
   return (
     <div className="session-chip-wrap" ref={rootRef}>
@@ -110,7 +142,14 @@ export function Connect({ status, onError }: Props) {
         title={status.kind === 'error' ? status.message : undefined}
       >
         <span className={`session-chip-dot ${dotKind}`} aria-hidden="true" />
-        <span className="session-chip-label">{chipLabel}</span>
+        {isLive ? (
+          <>
+            {charName && <span className="session-chip-name">{charName.toLowerCase()}</span>}
+            <span className="session-chip-host">{liveHostPort}</span>
+          </>
+        ) : (
+          <span className="session-chip-label">connect</span>
+        )}
       </button>
       {open && (
         <form className="session-menu" data-occludes-surface="true" onSubmit={handleSubmit}>

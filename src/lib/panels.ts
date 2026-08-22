@@ -109,8 +109,10 @@ export const PANELS: Record<PanelId, PanelMeta> = {
     label: 'vitals (hp bar)',
     description: 'Your hp / mn / mv bars.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
-    defaultZone: 'bottom',
-    homeZone: 'bottom',
+    // Ember rail order: map, vitals, affects, group down the right
+    // side, per the approved canvas.
+    defaultZone: 'right',
+    homeZone: 'right',
     defaultAlign: 'bottom',
   },
   roomstrip: {
@@ -134,10 +136,10 @@ export const PANELS: Record<PanelId, PanelMeta> = {
   affects: {
     id: 'affects',
     label: 'affects',
-    description: 'Tracked-affect pills with remaining duration.',
+    description: 'Tracked affects with remaining duration.',
     allowedZones: ['top', 'bottom', 'left', 'right', 'hidden'],
-    defaultZone: 'bottom',
-    homeZone: 'bottom',
+    defaultZone: 'right',
+    homeZone: 'right',
     defaultAlign: 'bottom',
   },
   imm: {

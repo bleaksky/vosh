@@ -193,15 +193,46 @@ function TabIcon({ id }: { id: TabId }) {
   );
 }
 
+// What each tab answers for when the user types into the settings
+// search. Labels are always searchable; these add the row-level terms
+// a person actually remembers ("font" lives in general, "color" in
+// themes).
+const TAB_KEYWORDS: Record<TabId, string> = {
+  general: 'font size terminal tint bright bold gpu webgl update input paste prompt spell echo',
+  themes: 'theme color accent ansi palette custom divider sent command dark',
+  vitals: 'hp mana moves bar percent layout column track gauge',
+  tick: 'tick timer warn sound duration',
+  panels: 'panel layout zone map chat group affects dock chip moons',
+  profiles: 'profile character host switch auto match',
+  loadouts: 'loadout group set active',
+  triggers: 'trigger pattern highlight gag replace route wash script regex',
+  aliases: 'alias shortcut command expansion',
+  macros: 'macro key f1 binding keyboard',
+  import: 'import tintin mushclient migrate',
+  logs: 'log search history session export',
+};
+
 // Settings window. Frameless Ghostty chrome via the shared TopBar;
-// body splits into named tabs along a thin top strip. T-now ships
-// general (theme + font) and triggers (JSON in / out via the backend
-// export/import commands).
+// body splits into named tabs along a left rail.
 export function SettingsApp() {
   const [tab, setTab] = useState<TabId>('general');
   const [config, setConfig] = useState<UiConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pathBActive, setPathBActive] = useState(false);
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  // Cmd/Ctrl+F focuses the settings search, Escape clears it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -225,7 +256,21 @@ export function SettingsApp() {
     };
   }, []);
 
-  const visibleTabs = TABS.filter((t) => !t.pathBOnly || pathBActive);
+  const trimmedQuery = query.trim().toLowerCase();
+  const matchesQuery = (t: (typeof TABS)[number]) =>
+    trimmedQuery.length === 0 ||
+    t.label.includes(trimmedQuery) ||
+    TAB_KEYWORDS[t.id].includes(trimmedQuery);
+  const visibleTabs = TABS.filter((t) => (!t.pathBOnly || pathBActive) && matchesQuery(t));
+
+  const jumpToFirstMatch = () => {
+    if (visibleTabs.length > 0) {
+      setError(null);
+      setTab(visibleTabs[0].id);
+      setQuery('');
+      searchRef.current?.blur();
+    }
+  };
 
   // Load current config and reveal the window once painted.
   useEffect(() => {
@@ -250,7 +295,35 @@ export function SettingsApp() {
 
   return (
     <main className="app settings-app">
-      <TopBar brand="Settings" showAuxButtons={false} />
+      <TopBar
+        brand="Settings"
+        showAuxButtons={false}
+        titleExtra={
+          <div className="settings-search">
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" strokeWidth="1.4">
+              <circle cx="6" cy="6" r="4.2" />
+              <path d="M9.2 9.2 12.6 12.6" />
+            </svg>
+            <input
+              ref={searchRef}
+              type="text"
+              value={query}
+              placeholder="search settings"
+              spellCheck={false}
+              aria-label="search settings"
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') jumpToFirstMatch();
+                if (e.key === 'Escape') {
+                  setQuery('');
+                  e.currentTarget.blur();
+                }
+              }}
+            />
+            <span className="kbd">&#8984;F</span>
+          </div>
+        }
+      />
       <div className="settings-shell">
         <nav className="settings-tabs settings-tabs-vertical">
           {visibleTabs.map((t, i) => {
