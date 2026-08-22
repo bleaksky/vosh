@@ -992,28 +992,54 @@ body {
      run their chrome surface at the same tone as the terminal well,
      and a card that matches the ground it floats on disappears. The
      pane token is the one every theme already raises (the input row
-     proves it reads). */
-  background: var(--c-surface-pane, var(--c-surface));
+     proves it reads). Each pane kind then tints its card with a
+     whisper of its identity color (the chat-channel pastel family)
+     mixed over the chrome tone, so the tint tracks the theme. */
+  background: color-mix(
+    in srgb,
+    var(--c-surface-pane, var(--c-surface)) 93%,
+    var(--zone-card-tint, var(--c-surface-pane, var(--c-surface))) 7%
+  );
   border-radius: 8px;
   overflow: hidden;
   border: none;
 }
-/* Inner vertical handles (chat, roomstrip) sit at the edge of their
-   wrapper, right next to the 8px flex gap — pull them into the gap
-   so the grab zone overlays the channel instead of doubling it. Only
-   when a sibling actually sits on the handle side: pulled past the
-   substack edge the handle lands outside the substack border box and
-   its overflow: hidden clips both the paint and the hit area. An
-   edge-child handle stays inside its wrapper instead, which just
-   deepens that one channel to 16px. */
-.panel-zone-left .panel-zone-substack > * + .resizable > .resizable-handle-top,
-.panel-zone-right .panel-zone-substack > * + .resizable > .resizable-handle-top {
-  margin-top: -8px;
+/* Card identity tints. Consumed only by the card recipe above, so
+   these are inert everywhere outside a side zone. Hues follow the
+   chat-channel pastels in chatColors.ts. */
+.map-pane {
+  --zone-card-tint: #97dde8;
 }
-.panel-zone-left .panel-zone-substack > .resizable:has(+ *) > .resizable-handle-bottom,
-.panel-zone-right .panel-zone-substack > .resizable:has(+ *) > .resizable-handle-bottom {
-  margin-bottom: -8px;
+.chat-pane {
+  --zone-card-tint: #cba6dd;
 }
+.group-pane,
+.group-pane-pinned {
+  --zone-card-tint: #8fdaa8;
+}
+.room-strip-wrap-column {
+  --zone-card-tint: #9bbdf0;
+}
+.vitals-bar {
+  --zone-card-tint: #ecc985;
+}
+.combat-pane {
+  --zone-card-tint: #ea8f80;
+}
+.imm-pane {
+  --zone-card-tint: var(--c-accent);
+}
+.affects-rows {
+  --zone-card-tint: #b8e0a0;
+}
+/* Inner vertical handles (chat, roomstrip) keep their 8px strip
+   inside the wrapper, so a seam with a drag handle reads one step
+   deeper (gap + handle) than a fixed seam. An earlier pass pulled
+   the handle into the flex gap with negative margins guarded by
+   sibling selectors and :has() — reverted: WebKit's invalidation of
+   those selectors is exactly the kind of machinery under suspicion
+   for the blank-chrome compositing wedge, and the visual win was
+   marginal. */
 /* RoomStrip fills its card with an inner element that paints its own
    surface and bottom hairline — both fight the card recipe, so they
    go quiet inside the wrap. */
@@ -6314,15 +6340,11 @@ body {
   position: absolute;
   left: 50%;
   top: 50%;
-  translate: -50% -50%;
+  transform: translate(-50%, -50%);
   border-radius: 2px;
   background: var(--c-accent);
   opacity: 0;
-  transition:
-    opacity 120ms ease-out,
-    width 120ms ease-out,
-    height 120ms ease-out,
-    box-shadow 120ms ease-out;
+  transition: opacity 120ms ease-out;
   pointer-events: none;
 }
 
