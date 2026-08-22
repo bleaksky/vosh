@@ -1,6 +1,15 @@
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { SettingsApp } from './SettingsApp';
+// Chrome typefaces for the Ember redesign. Bundled through Vite so the
+// app never fetches fonts at runtime. Inter carries chrome body text,
+// Rajdhani the uppercase pane labels, Roboto Slab the wordmark and
+// window titles. Terminal text stays on the bundled mono faces.
+import '@fontsource-variable/inter';
+import '@fontsource/rajdhani/500.css';
+import '@fontsource/rajdhani/600.css';
+import '@fontsource/rajdhani/700.css';
+import '@fontsource-variable/roboto-slab';
 import './styles.css';
 
 // Tag the document with the host OS so CSS can apply per-platform

@@ -37,36 +37,43 @@
   src: url('./assets/fonts/JetBrainsMonoNerdFont-Bold.ttf') format('truetype');
 }
 
-/* T0 baseline. Connect bar across the top, terminal fills the middle,
+/* T0 baseline. Top bar across the top, terminal fills the middle,
    input row at the bottom. Theme palette is supplied at runtime by
    src/lib/theme.ts via `--c-*` CSS custom properties; the defaults
-   below match Kanso Zen so the first paint isn't bare. */
+   below match Obsidian Ember so the first paint isn't bare. */
 
 :root {
-  --c-surface-deep: #06090d;
-  --c-surface: #090e13;
-  --c-surface-pane: #0d0c0c;
-  --c-surface-lift: #14141a;
-  --c-surface-emphasis: #1d1d24;
-  --c-text-strong: #f0f3f1;
-  --c-text: #c5c9c7;
-  --c-text-muted: #a4a7a4;
-  --c-text-faint: #6e7681;
-  --c-text-dim: #4a4e57;
-  --c-border-soft: #161b22;
-  --c-border: #1a1f26;
-  --c-border-strong: #393b44;
-  --c-border-hover: #2a313b;
-  --c-accent: #ff3399;
-  --c-accent-soft: rgba(255, 51, 153, 0.09);
-  --c-warn: #e6c384;
-  --c-danger: #e46876;
-  --c-info: #7fb4ca;
-  --c-success: #87a987;
+  --c-surface-deep: #0e0c0b;
+  --c-surface: #0a0908;
+  --c-surface-pane: #100f0d;
+  --c-surface-lift: #181514;
+  --c-surface-emphasis: #201d1c;
+  --c-text-strong: #f2efee;
+  --c-text: #e0dddb;
+  --c-text-muted: #c0bdbb;
+  --c-text-faint: #9b9795;
+  --c-text-dim: #726e6b;
+  --c-border-soft: rgba(80, 76, 74, 0.16);
+  --c-border: rgba(80, 76, 74, 0.24);
+  --c-border-strong: rgba(80, 76, 74, 0.42);
+  --c-border-hover: rgba(80, 76, 74, 0.6);
+  --c-accent: #ff8c1e;
+  --c-accent-soft: rgba(255, 140, 30, 0.13);
+  --c-warn: #e5c057;
+  --c-danger: #e3645e;
+  --c-info: #6ec3eb;
+  --c-success: #76cf8a;
 
   --app-font-family:
     'BerkeleyMono Bundled', 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace;
   --app-font-size: 14px;
+
+  /* Ember chrome type system. The terminal keeps --app-font-family;
+     everything around it draws from these four stacks. */
+  --font-chrome: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Roboto Slab Variable', 'Roboto Slab', Georgia, serif;
+  --font-label: 'Rajdhani', 'Avenir Next Condensed', 'Arial Narrow', sans-serif;
+  --font-mono: 'JetBrainsMono Bundled', 'BerkeleyMono Bundled', Menlo, 'SF Mono', monospace;
 }
 
 * {
