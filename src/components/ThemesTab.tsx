@@ -59,7 +59,14 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
         if (updated) {
           const merged = customToAppTheme(updated);
           applyTheme(merged.id);
-          void emit('vosh://theme-changed', merged.id);
+          // The main window resolves theme-changed against its own
+          // copy of the custom catalog, so ship the fresh catalog
+          // first and only then nudge the re-apply. Emitting the id
+          // alone made the main window repaint with the colors it
+          // already had, so edits never showed up outside this window.
+          void emit('vosh://custom-themes-changed', next).then(() =>
+            emit('vosh://theme-changed', merged.id),
+          );
         }
       }
       const updatedConfig = { ...prev, custom_themes: next };
