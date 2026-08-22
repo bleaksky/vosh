@@ -1019,26 +1019,23 @@ body {
    janky. */
 .terminal-area-split .terminal-pane-live {
   position: absolute;
-  top: 8px;
-  left: 14px;
-  right: 14px;
-  bottom: 6px;
+  inset: 0;
   flex: none;
   z-index: 1;
 }
 
-/* Insets match .terminal-area's padding (8 14 6 14) so the
-   absolutely-positioned panes sit inside the content area
-   instead of overlapping the padding strip. Absolute children
-   are positioned relative to their containing block's PADDING
-   BOX, so left:0 / right:0 would slap them flush against the
-   padding edge — visibly eating the 14px gutter that the live
-   layout normally leaves around the terminal. */
+/* Both panes anchor to .well-splits-term (position: relative), which
+   already sits inside .terminal-area's padding, so inset 0 lands the
+   overlay exactly on the closed-state live rect. The old 8/14/14/6
+   insets predate the well-splits wrapper — back then the containing
+   block was .terminal-area itself and they replicated its padding;
+   kept, they double-inset and visibly shrink the terminal (and the
+   native surface tracking it) every time the split opens. */
 .terminal-area-split .terminal-pane-history {
   position: absolute;
-  top: 8px;
-  left: 14px;
-  right: 14px;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 2;
   /* Wrapper background stays transparent so any gap beyond the
      inner xterm host (when a drag grows the wrapper past the
@@ -1083,9 +1080,6 @@ body {
 .terminal-pane-history.resizable .resizable-handle {
   background: var(--c-split-divider, var(--c-text-faint));
   flex: 0 0 2px;
-}
-.terminal-area-split .terminal-pane-live {
-  flex: 1 1 0;
 }
 
 /* Scroll-depth indicator in the top-right of the history pane.
