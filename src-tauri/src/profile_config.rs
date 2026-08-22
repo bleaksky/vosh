@@ -539,7 +539,7 @@ impl Default for UiConfig {
 }
 
 fn default_theme() -> String {
-    "kanso-zen".to_string()
+    "obsidian-ember".to_string()
 }
 
 fn default_font_family() -> String {

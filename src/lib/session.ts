@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { DEFAULT_THEME_ID } from './themes';
 
 /// Cross-window broadcast for tracked-affect changes. The settings
 /// window is a separate Tauri webview, so `window.dispatchEvent`
@@ -779,7 +780,7 @@ async function fetchUiConfig(): Promise<UiConfig> {
     chip_style?: string;
   }>('ui_get_config');
   return {
-    theme: typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : 'kanso-zen',
+    theme: typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : DEFAULT_THEME_ID,
     auto_update: cfg.auto_update,
     font_family: cfg.font_family,
     font_size: cfg.font_size,

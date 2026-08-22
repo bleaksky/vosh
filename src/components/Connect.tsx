@@ -36,7 +36,7 @@ export function Connect({ status, onError }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: PointerEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
@@ -44,10 +44,10 @@ export function Connect({ status, onError }: Props) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
-    document.addEventListener('mousedown', onDown);
+    document.addEventListener('pointerdown', onDown);
     document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('pointerdown', onDown);
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
@@ -113,7 +113,7 @@ export function Connect({ status, onError }: Props) {
         <span className="session-chip-label">{chipLabel}</span>
       </button>
       {open && (
-        <form className="session-menu" onSubmit={handleSubmit}>
+        <form className="session-menu" data-occludes-surface="true" onSubmit={handleSubmit}>
           <label className="session-menu-field">
             <span className="session-menu-label">host</span>
             <input

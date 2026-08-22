@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   BUILTIN_THEMES,
   customToAppTheme,
+  DEFAULT_THEME_ID,
   findTheme,
   setCustomThemes,
   type AppTheme,
@@ -123,7 +124,7 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
       if (!prev) return prev;
       const next = prev.custom_themes.filter((t) => t.id !== id);
       setCustomThemes(next.map(customToAppTheme));
-      const nextTheme = prev.theme === id ? 'kanso-zen' : prev.theme;
+      const nextTheme = prev.theme === id ? DEFAULT_THEME_ID : prev.theme;
       if (prev.theme === id) {
         applyTheme(nextTheme);
         void emit('vosh://theme-changed', nextTheme);
