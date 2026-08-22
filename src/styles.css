@@ -984,8 +984,14 @@ body {
    clipped corners, and no border seams of its own — the exposed
    ground between cards does the separating. The two selectors catch
    bare panes and panes wrapped in a Resizable. */
-.panel-zone-left .panel-zone-substack > :not(.resizable),
-.panel-zone-right .panel-zone-substack > :not(.resizable),
+/* The :not(.low-hp-vignette) guard is load-bearing: VitalsBar returns
+   a fragment whose second child is the full-window fixed vignette
+   overlay, so in a side zone that overlay is ALSO a direct substack
+   child. Carding it paints an opaque surface across the entire
+   window above all chrome — the blank-app bug. Any future pane that
+   fragments a fixed overlay next to its root needs the same escape. */
+.panel-zone-left .panel-zone-substack > :not(.resizable):not(.low-hp-vignette),
+.panel-zone-right .panel-zone-substack > :not(.resizable):not(.low-hp-vignette),
 .panel-zone-left .panel-zone-substack > .resizable > .resizable-content > :only-child,
 .panel-zone-right .panel-zone-substack > .resizable > .resizable-content > :only-child {
   /* Cards use the raised pane token, not --c-surface: several themes
