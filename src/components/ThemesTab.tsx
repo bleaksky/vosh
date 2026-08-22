@@ -17,17 +17,18 @@ interface Props {
   onError: (e: string | null) => void;
 }
 
-// Settings tab for the theme catalog + custom theme editor. Lists
-// built-in themes (read-only) and user-authored ones below them.
-// Selecting any row sets the active theme. Custom rows expand to a
-// color-picker grid grouped by role (surfaces / text / borders /
-// accent / semantic / terminal surfaces / ANSI 16).
+// Settings tab for the theme catalog + custom theme editor. One card
+// grid holds every theme — built-ins (read-only), then user-authored
+// ones, then the dashed "+ new from active" card. Clicking a card
+// sets the active theme. Whenever the active theme is a custom one,
+// the editor renders directly below the catalog: a tile grid of
+// color slots grouped by role (surfaces / text / borders / accent /
+// semantic / terminal surfaces / ANSI 16).
 //
 // Edits live-apply to the running window via applyTheme + the
 // theme-changed event so the user sees the result instantly. The
 // debounced save path persists changes through ui_set_config.
 export function ThemesTab({ config, setConfig, onError }: Props) {
-  const [editing, setEditing] = useState<string | null>(null);
   const debounceRef = useRef<number | null>(null);
 
   if (!config) return <div className="settings-loading">loading…</div>;
@@ -108,12 +109,20 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
         xterm: { ...(base.xterm as unknown as Record<string, string>) },
         chrome: { ...(base.chrome as unknown as Record<string, string>) },
       };
-      const updated = { ...prev, custom_themes: [...prev.custom_themes, newTheme] };
-      setCustomThemes(updated.custom_themes.map(customToAppTheme));
+      const next = [...prev.custom_themes, newTheme];
+      setCustomThemes(next.map(customToAppTheme));
+      // The editor keys off the active theme, so activate the fork
+      // right away — it is a byte-for-byte copy of the base, so the
+      // visible colors do not change. Ship the catalog before the
+      // id for the same reason updateCustom does.
+      applyTheme(newId);
+      void emit('vosh://custom-themes-changed', next).then(() =>
+        emit('vosh://theme-changed', newId),
+      );
+      const updated = { ...prev, custom_themes: next, theme: newId };
       persist(updated);
       return updated;
     });
-    setEditing(newId);
   };
 
   const handleDelete = (id: string) => {
@@ -133,7 +142,6 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
       persist(updated);
       return updated;
     });
-    if (editing === id) setEditing(null);
     onError(null);
   };
 
@@ -148,56 +156,52 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
     });
   };
 
+  const activeCustom = config.custom_themes.find((t) => t.id === config.theme) ?? null;
+
   return (
     <div className="themes-tab">
-      <div className="themes-help">
-        Built-in themes ship with the app and are read-only. Custom themes can be created from any
-        starting point, then every chrome and terminal color slot can be tuned to taste. Every
-        change saves automatically.
+      <div className="themes-head">
+        <div className="settings-pane-title">themes</div>
+        <span className="themes-autosave">changes save automatically</span>
       </div>
 
-      <div className="themes-section-title">built-in</div>
-      <div className="themes-list">
+      <div className="theme-cards">
         {BUILTIN_THEMES.map((t) => (
-          <ThemeRow
+          <ThemeCard
             key={t.id}
             theme={t}
             isActive={config.theme === t.id}
             isCustom={false}
-            isEditing={false}
             onSelect={() => handleSelect(t.id)}
           />
         ))}
-      </div>
-
-      <div className="themes-section-title themes-section-title-row">
-        <span>custom</span>
-        <button type="button" className="settings-btn" onClick={handleCreate}>
-          + new from active
-        </button>
-      </div>
-      <div className="themes-list">
-        {config.custom_themes.length === 0 && (
-          <div className="settings-font-empty">no custom themes yet</div>
-        )}
         {config.custom_themes.map((t) => (
-          <ThemeRow
+          <ThemeCard
             key={t.id}
             theme={customToAppTheme(t)}
             isActive={config.theme === t.id}
             isCustom
-            isEditing={editing === t.id}
             onSelect={() => handleSelect(t.id)}
-            onEditToggle={() => setEditing(editing === t.id ? null : t.id)}
             onDelete={() => handleDelete(t.id)}
-            onMetaChange={(label, description) => updateCustom(t.id, { label, description })}
-            onColorChange={(slot, key, value) => {
-              const next = { ...t[slot], [key]: value };
-              updateCustom(t.id, { [slot]: next } as Partial<CustomTheme>);
-            }}
           />
         ))}
+        <button type="button" className="theme-card theme-card-new" onClick={handleCreate}>
+          + new from active
+        </button>
       </div>
+
+      {activeCustom && (
+        <ThemeEditor
+          theme={customToAppTheme(activeCustom)}
+          onMetaChange={(label, description) =>
+            updateCustom(activeCustom.id, { label, description })
+          }
+          onColorChange={(slot, key, value) => {
+            const next = { ...activeCustom[slot], [key]: value };
+            updateCustom(activeCustom.id, { [slot]: next } as Partial<CustomTheme>);
+          }}
+        />
+      )}
 
       <SplitDividerRow config={config} setConfig={setConfig} onError={onError} />
       <InputEchoColorRow config={config} setConfig={setConfig} onError={onError} />
@@ -352,74 +356,61 @@ function normalizeForColorInput(color: string): string {
   return '#888888';
 }
 
-interface RowProps {
+interface CardProps {
   theme: AppTheme;
   isActive: boolean;
   isCustom: boolean;
-  isEditing: boolean;
   onSelect: () => void;
-  onEditToggle?: () => void;
   onDelete?: () => void;
-  onMetaChange?: (label: string, description: string) => void;
-  onColorChange?: (slot: 'xterm' | 'chrome', key: string, value: string) => void;
 }
 
-function ThemeRow({
-  theme,
-  isActive,
-  isCustom,
-  isEditing,
-  onSelect,
-  onEditToggle,
-  onDelete,
-  onMetaChange,
-  onColorChange,
-}: RowProps) {
+// One catalog card: state dot, name, (custom tag), swatch trio, and a
+// delete affordance on inactive custom cards. The whole card is the
+// select target; delete stops propagation so it never also selects.
+function ThemeCard({ theme, isActive, isCustom, onSelect, onDelete }: CardProps) {
   return (
-    <div className={`theme-row${isActive ? ' is-active' : ''}`}>
-      <div className="theme-row-head">
+    <div
+      className={`theme-card${isActive ? ' is-active' : ''}`}
+      role="button"
+      tabIndex={0}
+      title={theme.description}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') onSelect();
+      }}
+    >
+      <span className="theme-card-dot" />
+      <span className="theme-card-name">{theme.label}</span>
+      {isCustom && <span className="caps theme-card-tag">custom</span>}
+      <div className="theme-card-swatches" aria-hidden="true">
+        {SWATCH_KEYS.map((k) => (
+          <span
+            key={k}
+            className="theme-card-swatch"
+            style={{ background: (theme.chrome as unknown as Record<string, string>)[k] }}
+          />
+        ))}
+      </div>
+      {isCustom && !isActive && onDelete && (
         <button
           type="button"
-          className="theme-row-name"
-          onClick={onSelect}
-          title={theme.description}
+          className="theme-card-delete"
+          aria-label={`delete ${theme.label}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
         >
-          <span className="theme-row-marker">{isActive ? '●' : '○'}</span>
-          <span>{theme.label}</span>
-          <span className="theme-row-id">{theme.id}</span>
+          ×
         </button>
-        <div className="theme-row-swatches" aria-hidden="true">
-          {SWATCH_KEYS.map((k) => (
-            <span
-              key={k}
-              className="theme-row-swatch"
-              style={{ background: (theme.chrome as unknown as Record<string, string>)[k] }}
-            />
-          ))}
-        </div>
-        {isCustom && (
-          <div className="theme-row-actions">
-            <button type="button" className="settings-btn" onClick={onEditToggle}>
-              {isEditing ? 'done' : 'edit'}
-            </button>
-            {!isActive && (
-              <button type="button" className="settings-btn settings-btn-danger" onClick={onDelete}>
-                delete
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-      {isEditing && isCustom && onColorChange && onMetaChange && (
-        <ThemeEditor theme={theme} onMetaChange={onMetaChange} onColorChange={onColorChange} />
       )}
     </div>
   );
 }
 
-// Small swatch row in each theme header — picks colors that read
-// well at a glance (surface + accent + text-strong + warn + danger).
-const SWATCH_KEYS = ['surface', 'accent', 'textStrong', 'warn', 'danger'];
+// Swatch trio on each card — surface / accent / warn read as a theme
+// fingerprint at a glance.
+const SWATCH_KEYS = ['surface', 'accent', 'warn'];
 
 // Grouped color slots for the editor grid. Each group renders as a
 // labeled section with the slots inside. Keeping the keys here
@@ -487,9 +478,9 @@ function ThemeEditor({
 }) {
   return (
     <div className="theme-editor">
-      <div className="theme-editor-meta">
-        <label className="theme-editor-field">
-          <span>label</span>
+      <div className="theme-meta">
+        <label className="theme-field theme-field-mono">
+          <span className="caps">label</span>
           <input
             type="text"
             spellCheck={false}
@@ -497,8 +488,8 @@ function ThemeEditor({
             onChange={(e) => onMetaChange(e.target.value, theme.description)}
           />
         </label>
-        <label className="theme-editor-field">
-          <span>description</span>
+        <label className="theme-field">
+          <span className="caps">description</span>
           <input
             type="text"
             spellCheck={false}
@@ -508,29 +499,37 @@ function ThemeEditor({
         </label>
       </div>
 
-      <div className="theme-editor-section-title">chrome</div>
-      {CHROME_GROUPS.map((g) => (
-        <ColorGroup
-          key={g.label}
-          label={g.label}
-          slot="chrome"
-          keys={g.keys}
-          values={theme.chrome as unknown as Record<string, string>}
-          onColorChange={onColorChange}
-        />
-      ))}
+      <div className="theme-editor-section">
+        <div className="caps">chrome</div>
+        <div className="color-groups">
+          {CHROME_GROUPS.map((g) => (
+            <ColorGroup
+              key={g.label}
+              label={g.label}
+              slot="chrome"
+              keys={g.keys}
+              values={theme.chrome as unknown as Record<string, string>}
+              onColorChange={onColorChange}
+            />
+          ))}
+        </div>
+      </div>
 
-      <div className="theme-editor-section-title">terminal</div>
-      {XTERM_GROUPS.map((g) => (
-        <ColorGroup
-          key={g.label}
-          label={g.label}
-          slot="xterm"
-          keys={g.keys}
-          values={theme.xterm as unknown as Record<string, string>}
-          onColorChange={onColorChange}
-        />
-      ))}
+      <div className="theme-editor-section">
+        <div className="caps">terminal</div>
+        <div className="color-groups">
+          {XTERM_GROUPS.map((g) => (
+            <ColorGroup
+              key={g.label}
+              label={g.label}
+              slot="xterm"
+              keys={g.keys}
+              values={theme.xterm as unknown as Record<string, string>}
+              onColorChange={onColorChange}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

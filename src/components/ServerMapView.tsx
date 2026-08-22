@@ -89,6 +89,7 @@ type Style = 'squares' | 'glyphs' | 'tileset';
 const STYLE_KEY = 'vosh.layout.serverMapStyle';
 const TILESET_KEY = 'vosh.layout.serverMapTileset';
 const ZOOM_KEY = 'vosh.layout.serverMapZoom';
+const CONTROLS_KEY = 'vosh.map.controlsOpen';
 
 // Zoom multiplier applied to the base 20-pixel pitch. 1.0 = default
 // (20px cells), 2.0 = 40px, 0.5 = 10px. Stepping at 0.25 increments
@@ -112,6 +113,14 @@ function loadTileset(): string | null {
     return localStorage.getItem(TILESET_KEY);
   } catch {
     return null;
+  }
+}
+
+function loadControlsOpen(): boolean {
+  try {
+    return localStorage.getItem(CONTROLS_KEY) === '1';
+  } catch {
+    return false;
   }
 }
 
@@ -254,6 +263,14 @@ export function ServerMapView() {
   const [tilesetImage, setTilesetImage] = useState<HTMLImageElement | null>(null);
   const [tilesetError, setTilesetError] = useState<string | null>(null);
   const [zoom, setZoom] = useState<number>(loadZoom);
+  // Current area name from Room.Info, lowercased for the caps header
+  // ("map · ashen quarter"). Null until the first push and after
+  // disconnect, when the header falls back to the bare "map" label.
+  const [area, setArea] = useState<string | null>(null);
+  // Whether the mode / zoom / radius controls row is expanded. The
+  // header itself stays quiet; everything operable hides behind the
+  // sliders toggle, and the choice survives relaunch.
+  const [controlsOpen, setControlsOpen] = useState<boolean>(loadControlsOpen);
   // Snapshot of the persistent mapping store. We use it to translate the
   // player-centric Map.Tiles grid into stable world coordinates so cells
   // do not shift on canvas as the player walks.
@@ -293,6 +310,14 @@ export function ServerMapView() {
     }
   }, [zoom]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(CONTROLS_KEY, controlsOpen ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }, [controlsOpen]);
+
   // Ctrl/Cmd + wheel zooms in/out, mirroring the convention used by
   // map apps. Attached non-passively so we can preventDefault and stop
   // the browser from scrolling the surrounding pane in lieu of zooming.
@@ -328,6 +353,7 @@ export function ServerMapView() {
 
   useEffect(() => {
     let unsubGmcp: (() => void) | undefined;
+    let unsubRoom: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
 
     // Map.Tiles is the sole tile source; updating `tilesSnap` re-runs
@@ -345,9 +371,20 @@ export function ServerMapView() {
       unsubGmcp = fn;
     });
 
+    // Room.Info carries the same `area` field RoomStrip renders; the
+    // header only wants the name, lowercased for the caps label.
+    onGmcpPackage<{ area?: string }>('Room.Info', (data) => {
+      const name =
+        data && typeof data === 'object' && typeof data.area === 'string' ? data.area : '';
+      setArea(name ? name.toLowerCase() : null);
+    }).then((fn) => {
+      unsubRoom = fn;
+    });
+
     onState((payload) => {
       if (payload.kind === 'disconnected') {
         setTilesSnap(null);
+        setArea(null);
       }
     }).then((fn) => {
       unsubState = fn;
@@ -355,6 +392,7 @@ export function ServerMapView() {
 
     return () => {
       unsubGmcp?.();
+      unsubRoom?.();
       unsubState?.();
     };
   }, []);
@@ -570,63 +608,91 @@ export function ServerMapView() {
 
   return (
     <div className="server-view">
+      {/* Quiet header per the Ember mockup: caps "map · <area>" and a
+          single 12px sliders affordance. Every operable control lives
+          in the collapsible row below, so the pane reads as a clean
+          canvas until the user asks for chrome. */}
       <div className="map-subhead">
-        <span className="map-subhead-title">map</span>
-        <span className="map-subhead-status">
-          {tiles ? `radius ${tiles.r ?? '?'}` : 'waiting for server map'}
-        </span>
-        <div className="map-mode-toggle">
-          <button
-            type="button"
-            aria-pressed={style === 'squares'}
-            onClick={() => setStyle('squares')}
+        <span className="caps map-subhead-title">{area ? `map · ${area}` : 'map'}</span>
+        <button
+          type="button"
+          className="map-controls-toggle"
+          aria-label="map controls"
+          aria-expanded={controlsOpen}
+          title="map controls"
+          onClick={() => setControlsOpen((v) => !v)}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            aria-hidden="true"
           >
-            squares
-          </button>
-          <button
-            type="button"
-            aria-pressed={style === 'glyphs'}
-            onClick={() => setStyle('glyphs')}
-          >
-            glyphs
-          </button>
-          <button
-            type="button"
-            aria-pressed={style === 'tileset'}
-            onClick={() => setStyle('tileset')}
-          >
-            tileset
-          </button>
-        </div>
-        <div className="map-zoom" title="Ctrl+wheel over the map also zooms">
-          <button
-            type="button"
-            aria-label="zoom out"
-            disabled={zoom <= ZOOM_MIN + 1e-6}
-            onClick={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
-          >
-            −
-          </button>
-          <span className="map-zoom-value">{Math.round(zoom * 100)}%</span>
-          <button
-            type="button"
-            aria-label="zoom in"
-            disabled={zoom >= ZOOM_MAX - 1e-6}
-            onClick={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
-          >
-            +
-          </button>
-          <button
-            type="button"
-            aria-label="reset zoom"
-            disabled={Math.abs(zoom - 1) < 1e-6}
-            onClick={() => setZoom(1)}
-            title="reset to 100%"
-          >
-            ⤺
-          </button>
-        </div>
+            <path d="M1 3.5h10M1 8.5h10M8 1.5v4M4 6.5v4" />
+          </svg>
+        </button>
       </div>
+      {controlsOpen && (
+        <div className="map-controls-row">
+          <div className="map-mode-toggle">
+            <button
+              type="button"
+              aria-pressed={style === 'squares'}
+              onClick={() => setStyle('squares')}
+            >
+              squares
+            </button>
+            <button
+              type="button"
+              aria-pressed={style === 'glyphs'}
+              onClick={() => setStyle('glyphs')}
+            >
+              glyphs
+            </button>
+            <button
+              type="button"
+              aria-pressed={style === 'tileset'}
+              onClick={() => setStyle('tileset')}
+            >
+              tileset
+            </button>
+          </div>
+          <div className="map-zoom" title="Ctrl+wheel over the map also zooms">
+            <button
+              type="button"
+              aria-label="zoom out"
+              disabled={zoom <= ZOOM_MIN + 1e-6}
+              onClick={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
+            >
+              −
+            </button>
+            <span className="map-zoom-value">{Math.round(zoom * 100)}%</span>
+            <button
+              type="button"
+              aria-label="zoom in"
+              disabled={zoom >= ZOOM_MAX - 1e-6}
+              onClick={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
+            >
+              +
+            </button>
+            <button
+              type="button"
+              aria-label="reset zoom"
+              disabled={Math.abs(zoom - 1) < 1e-6}
+              onClick={() => setZoom(1)}
+              title="reset to 100%"
+            >
+              ⤺
+            </button>
+          </div>
+          <span className="map-controls-status">
+            {tiles ? `radius ${tiles.r ?? '?'}` : 'waiting for server map'}
+          </span>
+        </div>
+      )}
       {style === 'tileset' && (
         <div className="tileset-bar">
           <input

@@ -519,6 +519,16 @@ function HistoryWrapper({
   );
 }
 
+// Pane-head tick readout for the ember layout. Its own leaf so the
+// per-second countdown re-renders just this span instead of the
+// whole bar (same split as TickSecondsToken in the template path).
+// Renders nothing while the tick timer is inactive.
+function EmberTick() {
+  const { active, tickSecs } = useTickState();
+  if (!active) return null;
+  return <span className="vitals-ember-tick">tick {tickSecs}s</span>;
+}
+
 // Stacked vitals — one row per hp/mana/move. Tick and mud time render
 // in the LineChip on the input row's top border; this component no
 // longer hosts them. Each row is
@@ -757,6 +767,48 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
           combat={combat}
           promptVars={promptVars}
         />
+        {erelei}
+      </>
+    );
+  }
+
+  // Ember layout — the sidebar-pane block from the Ember redesign:
+  // a pane head (caps "vitals" + live tick countdown while the tick
+  // timer runs) over three thin fixed-height track bars with mono
+  // cur/max values. Fill colors are fixed per vital (hp success /
+  // mn info / mv warn), so the columns, glyph, and width settings
+  // do not apply here. Combat chip rides above the rows, same slot
+  // the inline layout uses.
+  if (config.layout === 'ember') {
+    return (
+      <>
+        <div className="vitals-bar vitals-ember" aria-label="vitals">
+          <div className="vitals-ember-head">
+            <span className="caps">vitals</span>
+            <EmberTick />
+          </div>
+          {combat && (
+            <div className="vitals-row vitals-row-combat-top">
+              <CombatChip combat={combat} config={config} />
+            </div>
+          )}
+          <div className="vitals-ember-rows">
+            {segs.map((s) => (
+              <div key={s.label} className="vitals-ember-row">
+                <span className="vitals-ember-label">{s.label}</span>
+                <div className="vitals-ember-track">
+                  <div
+                    className={`vitals-ember-fill vitals-ember-fill-${s.label}`}
+                    style={{ width: `${pct(s.cur, s.max)}%` }}
+                  />
+                </div>
+                <span className="vitals-ember-value">
+                  {s.cur}/{s.max}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
         {erelei}
       </>
     );

@@ -145,7 +145,6 @@ body {
 .room-strip,
 .chat-pane-body,
 .imm-body,
-.group-list,
 .group-worth,
 .combat-pane {
   font-family: var(--font-mono);
@@ -431,6 +430,39 @@ body {
   font-size: 0.82em;
 }
 
+/* Settings search pill in the title bar: magnifier, borderless inline
+   input, kbd hint. */
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: center;
+  padding: 4px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  color: var(--c-text-dim);
+  margin-right: 10px;
+}
+
+.settings-search svg {
+  stroke: currentColor;
+  flex: 0 0 auto;
+}
+
+.settings-search input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: 11px;
+  width: 130px;
+}
+
+.settings-search input::placeholder {
+  color: var(--c-text-dim);
+}
+
 /* Window controls: stroke icons behind a hairline divider, per the
    Ember canvas. Icons ride currentColor so hover tints the stroke. */
 .topbar-controls {
@@ -657,15 +689,35 @@ body {
 .session-chip {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 3px 10px;
+  gap: 8px;
+  padding: 4px 10px;
   background: var(--c-surface-pane);
   color: var(--c-text-muted);
   border: 1px solid var(--c-border);
   border-radius: 6px;
-  font-family: var(--font-mono);
+  font-family: var(--font-chrome);
   font-size: 11px;
   cursor: pointer;
+  align-self: center;
+}
+
+/* Chip identity: character name in chrome type, host:port in dim
+   mono, per the canvas. */
+.session-chip-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--c-text-muted);
+}
+
+.session-chip-host {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-text-dim);
+}
+
+.session-chip-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
 
 .session-chip:hover {
@@ -1237,6 +1289,88 @@ body {
   opacity: 0.7;
 }
 
+/* Ember layout — the sidebar-pane block from the Ember mockup. A
+   pane head (caps "vitals" + mono tick countdown) over three rows,
+   each `caps label · 4px rounded track · mono cur/max`. Fill colors
+   are fixed per vital; the columns / glyph / width settings do not
+   apply. Overrides the base .vitals-bar padding so the head and
+   rows own their side insets. */
+.vitals-ember {
+  padding: 0 0 12px;
+  row-gap: 0;
+}
+
+.vitals-ember-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px 7px;
+}
+
+.vitals-ember-tick {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-text-dim);
+}
+
+.vitals-ember-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.vitals-ember-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* Row label — the shared .caps look at pane-row scale. */
+.vitals-ember-label {
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+  width: 20px;
+  flex: 0 0 auto;
+}
+
+.vitals-ember-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--c-surface-emphasis);
+  overflow: hidden;
+  flex: 1 1 auto;
+}
+
+.vitals-ember-fill {
+  height: 100%;
+}
+
+.vitals-ember-fill-hp {
+  background: var(--c-success);
+}
+
+.vitals-ember-fill-mn {
+  background: var(--c-info);
+}
+
+.vitals-ember-fill-mv {
+  background: var(--c-warn);
+}
+
+.vitals-ember-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-text-faint);
+  width: 56px;
+  text-align: right;
+  flex: 0 0 auto;
+}
+
 /* Inline (single-row) layout. Packs all vitals onto one row in the
    tintin nprompt shape: `hp 850(85%) mn 230(76%) mv 120(60%)`. Each
    InlineVitalChip is one cluster; the row hosts the InlineTick at
@@ -1784,6 +1918,89 @@ body {
 }
 
 .affect-pill-absent .affect-pill-duration {
+  color: var(--c-text-dim);
+}
+
+/* Rows variant — Ember sidebar pane for side-zone placement. Pane
+   head (caps "affects" + mono active count) over one row per tracked
+   affect: mono name, 30px duration mini-bar, mono countdown. Fill
+   width comes from durationFraction (a full bar = a day or more
+   left); fill and countdown carry the urgency ladder color inline. */
+.affects-rows {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 12px;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+}
+
+/* The imm board draws its own bottom border; drop the pane's top one
+   so they do not double the seam (same fix as .group-pane-pinned). */
+.imm-pane + .affects-rows {
+  border-top: none;
+}
+
+.affects-rows-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px 7px;
+}
+
+.affects-rows-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.affect-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 14px;
+}
+
+.affect-row-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--c-text-muted);
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.affect-row-bar {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--c-surface-emphasis);
+  overflow: hidden;
+}
+
+.affect-row-fill {
+  display: block;
+  height: 100%;
+  /* width + color inline from durationFraction / colorForDuration */
+}
+
+.affect-row-time {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-text-dim);
+  width: 28px;
+  flex: 0 0 auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Absent — tracked but not currently up: dim name, empty bar, and
+   the em-dash countdown keeps the base dim color. */
+.affect-row-absent .affect-row-name {
   color: var(--c-text-dim);
 }
 
@@ -2647,10 +2864,13 @@ body {
   flex-direction: column;
 }
 
+/* Tab content header: Roboto Slab, per the canvas. */
 .settings-pane-title {
   color: var(--c-text-strong);
+  font-family: var(--font-display);
+  font-size: 16px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.01em;
 }
 
 .settings-pane-sub {
@@ -2832,8 +3052,8 @@ body {
   align-items: stretch;
   height: auto;
   min-height: 0;
-  width: 176px;
-  padding: 12px 8px;
+  width: 200px;
+  padding: 14px 10px;
   background: var(--c-surface);
   border-right: 1px solid var(--c-border);
   border-bottom: none;
@@ -5598,218 +5818,261 @@ body {
   flex: 1 1 auto;
 }
 
-/* Themes tab — read-only list of built-ins, mutable list of
-   user-authored ones below. Custom rows expand inline to a color-
-   picker grid grouped by role. Live edits emit the theme-changed
-   event so the running window previews the change immediately. */
+/* Themes tab — one wrapping card grid for the whole catalog
+   (built-ins, then customs, then the dashed "+ new from active"
+   card), with the tile-grid editor below whenever the active theme
+   is a custom one. Live edits emit the theme-changed event so the
+   running window previews the change immediately. */
 .themes-tab {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  overflow-y: auto;
+  gap: 18px;
 }
 
-.themes-help {
-  color: var(--c-text-faint);
-  font-size: 0.9em;
-  line-height: 1.4;
-}
-
-.themes-section-title {
-  color: var(--c-text-faint);
-  text-transform: lowercase;
-  letter-spacing: 0.06em;
-  font-size: 0.85em;
-  margin-top: 4px;
-}
-
-.themes-section-title-row {
+/* Header row: Roboto Slab title left, autosave note right. */
+.themes-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: baseline;
   gap: 12px;
 }
 
-.themes-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.theme-row {
-  border: 1px solid var(--c-border-soft);
-  border-radius: 3px;
-  background: var(--c-surface-lift);
-  padding: 4px 8px;
-}
-
-.theme-row.is-active {
-  border-color: var(--c-accent);
-}
-
-.theme-row-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.theme-row-name {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  background: transparent;
-  border: none;
-  padding: 0;
-  color: var(--c-text);
-  font: inherit;
-  cursor: pointer;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.theme-row-name:hover {
-  color: var(--c-text-strong);
-}
-
-.theme-row.is-active .theme-row-name {
-  color: var(--c-accent);
-}
-
-.theme-row-marker {
+.themes-autosave {
+  margin-left: auto;
+  font-size: 11px;
   color: var(--c-text-dim);
 }
 
-.theme-row.is-active .theme-row-marker {
-  color: var(--c-accent);
+.theme-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.theme-row-id {
-  color: var(--c-text-faint);
-  font-size: 0.85em;
-  letter-spacing: 0.02em;
-}
-
-.theme-row-swatches {
-  display: inline-flex;
+.theme-card {
+  display: flex;
   align-items: center;
-  gap: 3px;
-}
-
-.theme-row-swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 2px;
+  gap: 10px;
+  flex: 1 1 220px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px 12px;
   border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
 }
 
-.theme-row-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  margin-left: auto;
+.theme-card:hover {
+  border-color: var(--c-border-hover);
 }
 
-.theme-editor {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--c-border-strong);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.theme-card.is-active {
+  border-color: color-mix(in srgb, var(--c-accent) 45%, transparent);
+  background: var(--c-accent-soft);
 }
 
-.theme-editor-meta {
-  display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 10px;
+/* State dot: hollow ring normally, filled accent when active. */
+.theme-card-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--c-text-dim);
+  box-sizing: border-box;
+  flex: 0 0 auto;
 }
 
-.theme-editor-field {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  color: var(--c-text-faint);
-  font-size: 0.85em;
-}
-
-.theme-editor-field input[type='text'] {
-  background: var(--c-surface-emphasis);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
-  padding: 3px 6px;
-  font-family: inherit;
-  font-size: 1em;
-  outline: none;
-}
-
-.theme-editor-field input[type='text']:focus {
+.theme-card.is-active .theme-card-dot {
+  background: var(--c-accent);
   border-color: var(--c-accent);
 }
 
-.theme-editor-section-title {
+.theme-card-name {
+  font-size: 12px;
   color: var(--c-text-muted);
-  text-transform: lowercase;
-  letter-spacing: 0.06em;
-  font-size: 0.85em;
-  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.theme-card.is-active .theme-card-name {
+  color: var(--c-text-strong);
+}
+
+.theme-card-tag {
+  font-size: 9px;
+}
+
+/* Trailing trio previewing that theme's surface / accent / warn. */
+.theme-card-swatches {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.theme-card-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid var(--c-border-strong);
+  box-sizing: border-box;
+  flex: 0 0 auto;
+}
+
+.theme-card-delete {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--c-text-dim);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.theme-card-delete:hover {
+  color: var(--c-danger);
+}
+
+.theme-card-new {
+  justify-content: center;
+  border-style: dashed;
+  border-color: var(--c-border-strong);
+  font: inherit;
+  font-size: 11px;
+  color: var(--c-text-dim);
+}
+
+.theme-card-new:hover {
+  color: var(--c-text-muted);
+}
+
+.theme-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Meta fields: .caps label over an underline-only input. */
+.theme-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.theme-field {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Underline-only input. Scoped under .settings-body to outrank the
+   window-wide boxed-input rule (same trick as .settings-stepper). */
+.settings-body .theme-field input[type='text'] {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--c-border-strong);
+  border-radius: 0;
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--c-text-faint);
+}
+
+.settings-body .theme-field input[type='text']:focus {
+  border-bottom-color: var(--c-accent);
+}
+
+/* The label field carries the theme's identity — value mono. */
+.settings-body .theme-field-mono input[type='text'] {
+  font-family: var(--font-mono);
+  color: var(--c-text);
+}
+
+.theme-editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Color groups flow as wrapping rows; each group is a caps name over
+   a row of tile columns. */
+.color-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px 26px;
 }
 
 .color-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .color-group-label {
-  color: var(--c-text-faint);
-  font-size: 0.8em;
-  letter-spacing: 0.04em;
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
 }
 
 .color-group-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Tile column: the 46x30 tile is the native color input itself, then
+   the raw value, then the slot name. */
+.color-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 4px;
 }
 
-.color-slot {
-  display: inline-grid;
-  grid-template-columns: 24px 1fr auto;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 4px;
-  background: var(--c-surface-emphasis);
-  border: 1px solid var(--c-border-soft);
-  border-radius: 2px;
-}
-
 .color-slot input[type='color'] {
-  width: 22px;
-  height: 22px;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 46px;
+  height: 30px;
   padding: 0;
-  border: 1px solid var(--c-border);
-  border-radius: 2px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 5px;
   background: transparent;
   cursor: pointer;
 }
 
-.color-slot-text {
-  background: transparent;
-  color: var(--c-text);
-  border: none;
-  outline: none;
-  font-family: inherit;
-  font-size: 0.85em;
+.color-slot input[type='color']::-webkit-color-swatch-wrapper {
   padding: 0;
-  width: 100%;
+}
+
+.color-slot input[type='color']::-webkit-color-swatch {
+  border: none;
+  border-radius: 4px;
+}
+
+.settings-body .color-slot .color-slot-text {
+  width: 64px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-align: center;
+  color: var(--c-text-dim);
+}
+
+.settings-body .color-slot .color-slot-text:focus {
+  border-bottom-color: var(--c-accent);
+  color: var(--c-text);
 }
 
 .color-slot-name {
-  color: var(--c-text-faint);
-  font-size: 0.8em;
+  font-size: 9px;
+  color: var(--c-text-dim);
 }
 
 /* Profiles tab — named-profile catalog. Active profile marked by a
@@ -6648,41 +6911,22 @@ body {
   flex-direction: column;
 }
 
+/* Quiet pane header, Ember mockup geometry (11px 14px 7px). Just the
+   caps title and the 12px sliders affordance — no border of its own.
+   The hairline lives under the open controls row instead, so the
+   closed state is a bare label floating above the canvas. */
 .map-subhead {
-  padding: 4px 12px;
-  color: var(--c-text-faint);
-  background: var(--c-surface);
-  border-bottom: 1px solid var(--c-border-soft);
+  padding: 11px 14px 7px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  /* When the map pane is narrow, let the mode-toggle wrap to a
-     second line instead of getting clipped off the right edge by
-     the parent's overflow: hidden. The "radius X" label is
-     allowed to truncate first. */
-  flex-wrap: wrap;
-  row-gap: 4px;
 }
 
-/* Map title chip that replaced the standalone map-pane-header bar.
-   Sits flush-left in the subhead so the word "map" labels the row
-   that already carries radius / mode / zoom — one bar instead of
-   two. Slightly emphasized (text color, uppercase) so it reads as
-   a label rather than another status line. */
+/* Layout-only companion to the shared .caps typography on the
+   header title: long area names ellipsize instead of pushing the
+   controls toggle off the pane. */
 .map-subhead-title {
-  flex: 0 0 auto;
-  color: var(--c-text-dim);
-  font-family: var(--font-label);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  /* Tiny separator gap from the status text; the parent's `gap: 8px`
-     already provides horizontal spacing, so no margin needed. */
-}
-
-.map-subhead-status {
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
@@ -6690,16 +6934,62 @@ body {
   white-space: nowrap;
 }
 
-.map-subhead .map-mode-toggle button {
-  padding: 0 6px;
+/* Bare icon button that shows/hides the controls row. No border or
+   fill — the mockup forbids visible control chrome on the pane, so
+   the affordance is only the 12px sliders glyph. */
+.map-controls-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 2px;
+  color: var(--c-text-dim);
+  cursor: pointer;
+}
+
+.map-controls-toggle:hover {
+  color: var(--c-text-strong);
+}
+
+.map-controls-toggle[aria-expanded='true'] {
+  color: var(--c-accent);
+}
+
+/* Tucked-away controls row: mode chips, zoom cluster, radius status.
+   Rendered only while open, so its bottom hairline doubles as the
+   header divider the quiet header gave up. Wraps when the pane is
+   narrow instead of clipping against the parent's overflow: hidden. */
+.map-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 14px 8px;
+  border-bottom: 1px solid var(--c-border-soft);
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+/* Radius / waiting text, right-aligned in the value mono. Truncates
+   first when the row runs out of width — the chips are essential. */
+.map-controls-status {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-text-faint);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tileset-bar {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
-  background: var(--c-surface);
+  padding: 4px 14px 8px;
   border-bottom: 1px solid var(--c-border-soft);
   /* Same wrap treatment so load/clear buttons and the status
      pill never overflow horizontally. Status pill shrinks +
@@ -6715,19 +7005,22 @@ body {
 .tileset-bar button {
   background: transparent;
   color: var(--c-text-muted);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
   padding: 1px 8px;
   font: inherit;
+  font-size: 11px;
   cursor: pointer;
 }
 
 .tileset-bar button:hover {
   color: var(--c-text-strong);
-  border-color: var(--c-accent);
+  border-color: var(--c-border-hover);
 }
 
 .tileset-status {
+  font-family: var(--font-mono);
+  font-size: 10px;
   color: var(--c-text-faint);
   flex: 1;
   overflow: hidden;
@@ -6856,6 +7149,10 @@ body {
   font-size: 0.85em;
 }
 
+/* Mode chips in the controls row. Chip idiom (see .settings-btn):
+   hairline border, radius 6, transparent ground. Sized a step
+   tighter than the settings chips so squares / glyphs / tileset plus
+   the zoom cluster fit a 300px pane on one line. */
 .map-mode-toggle {
   display: inline-flex;
   flex: 0 0 auto;
@@ -6866,17 +7163,26 @@ body {
 .map-mode-toggle button {
   background: transparent;
   color: var(--c-text-muted);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
-  padding: 0 6px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 1px 8px;
   font: inherit;
+  font-size: 11px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
+.map-mode-toggle button:hover {
+  color: var(--c-text-strong);
+  border-color: var(--c-border-hover);
+}
+
+/* Active mode stays a quiet chip — accent ink and a soft accent
+   wash instead of the old filled block. */
 .map-mode-toggle button[aria-pressed='true'] {
-  background: var(--c-accent);
-  color: var(--c-surface-deep);
-  border-color: var(--c-accent);
+  color: var(--c-accent);
+  border-color: color-mix(in srgb, var(--c-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--c-accent) 10%, transparent);
 }
 
 /* Zoom +/-/reset cluster, sits alongside the mode toggle. */
@@ -6891,10 +7197,11 @@ body {
 .map-zoom button {
   background: transparent;
   color: var(--c-text-muted);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
-  padding: 0 6px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  padding: 1px 6px;
   font: inherit;
+  font-size: 11px;
   cursor: pointer;
   min-width: 22px;
   text-align: center;
@@ -6902,7 +7209,7 @@ body {
 
 .map-zoom button:hover:not(:disabled) {
   color: var(--c-text-strong);
-  border-color: var(--c-accent);
+  border-color: var(--c-border-hover);
 }
 
 .map-zoom button:disabled {
@@ -6912,10 +7219,11 @@ body {
 }
 
 .map-zoom-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
   color: var(--c-text-faint);
   min-width: 36px;
   text-align: center;
-  font-size: 0.9em;
 }
 
 /* Chat pane — embedded bottom region for routed channel text. */
@@ -7052,54 +7360,73 @@ body {
   border-left: 1px solid var(--c-border-soft);
 }
 
-/* Group roster — one line per party member. The list is a 6-column
-   grid; each row is `display: contents` so its 6 cells participate
-   directly in the grid for perfect cross-row column alignment.
-   Columns: name (flex+ellipsis) | class+level | hp% | mn% | mv% | tnl. */
-.group-list {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
-  column-gap: 10px;
-  row-gap: 2px;
-  font-variant-numeric: tabular-nums;
+/* Group roster — one Ember row per party member: mono name, 44px hp
+   mini-bar, hp%. Fill width and both colors come inline from the
+   health tier (success / warn / danger by thirds). The negative
+   margin backs the rows out of the body's 12px inset so their own
+   4px 14px padding lines up with the 14px pane-head grid. */
+.group-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -12px;
 }
 
-.group-row {
-  display: contents;
+.group-row-ember {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 14px;
 }
 
-.group-name {
-  color: var(--c-text-strong);
-  font-weight: 700;
+.group-row-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--c-text-muted);
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
 }
 
-.group-row.is-leader .group-name {
+/* Your own row reads a notch brighter; the leader keeps the accent
+   star treatment and wins when they are the same person. */
+.group-row-ember.is-self .group-row-name {
+  color: var(--c-text-strong);
+}
+
+.group-row-ember.is-leader .group-row-name {
   color: var(--c-accent);
 }
 
-.group-row.is-leader .group-name::before {
+.group-row-ember.is-leader .group-row-name::before {
   content: '\2605 ';
   margin-right: 2px;
 }
 
-.group-meta {
-  color: var(--c-text-faint);
-  white-space: nowrap;
+.group-row-bar {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--c-surface-emphasis);
+  overflow: hidden;
 }
 
-.group-vital {
-  font-weight: 700;
-  text-align: right;
-  min-width: 38px;
+.group-row-fill {
+  display: block;
+  height: 100%;
+  /* width + tier color inline */
 }
 
-.group-tnl {
-  color: var(--c-text-faint);
+.group-row-hp {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  width: 28px;
+  flex: 0 0 auto;
   text-align: right;
+  font-variant-numeric: tabular-nums;
+  /* tier color inline */
 }
 
 /* Solo state — your own worth instead of a roster. */

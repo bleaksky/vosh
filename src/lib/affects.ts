@@ -103,6 +103,16 @@ export function colorForDuration(duration: number | undefined): string {
   return '#87a987'; // healthy green
 }
 
+/// Fill fraction for the rows-mode duration mini-bar. A day or more
+/// remaining reads as a full bar; shorter durations (including
+/// fractional hours) scale proportionally. Permanent affects are
+/// always full; unknown durations render empty.
+export function durationFraction(duration: number | undefined): number {
+  if (duration === undefined) return 0;
+  if (duration < 0) return 1;
+  return Math.min(1, Math.max(0, duration / 24));
+}
+
 export function formatDuration(duration: number | undefined): string {
   if (duration === undefined) return '?';
   if (duration < 0) return 'prm';

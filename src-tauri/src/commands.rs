@@ -1927,8 +1927,8 @@ pub(crate) async fn ui_set_config(
             v.bar_empty = "▱".to_string();
         }
         v.bar_width = v.bar_width.clamp(4, 60);
-        if v.layout != "stacked" && v.layout != "inline" {
-            v.layout = "stacked".to_string();
+        if v.layout != "ember" && v.layout != "stacked" && v.layout != "inline" {
+            v.layout = "ember".to_string();
         }
         if v.percent_color != "fill" && v.percent_color != "gradient" {
             v.percent_color = "fill".to_string();

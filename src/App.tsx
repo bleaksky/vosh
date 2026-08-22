@@ -1049,8 +1049,14 @@ function App() {
           </Resizable>
         );
       }
-      case 'affects':
-        return <AffectsBar key="affects" />;
+      case 'affects': {
+        // Side-zone placement gets the Ember pane treatment (pane
+        // head + per-affect duration rows); top/bottom keep the
+        // horizontal pill strip.
+        const zone = panelLayout.placements.affects.zone;
+        const rows = zone === 'left' || zone === 'right';
+        return <AffectsBar key="affects" variant={rows ? 'rows' : 'strip'} />;
+      }
     }
   };
 
