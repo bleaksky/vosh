@@ -10,7 +10,12 @@ import {
 } from '../lib/themes';
 import { applyTheme } from '../lib/theme';
 import { ANSI_SLOTS, CANONICAL_ANSI_16, setBaseAnsi } from '../lib/baseAnsi';
-import { setUiConfig, type CustomTheme, type UiConfig } from '../lib/session';
+import {
+  resolveThemeTerminalColors,
+  setUiConfig,
+  type CustomTheme,
+  type UiConfig,
+} from '../lib/session';
 
 interface Props {
   config: UiConfig | null;
@@ -203,6 +208,30 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
           }}
         />
       )}
+
+      <div className="settings-sect">
+        <span className="settings-section-label">tint</span>
+        <div className="settings-frow">
+          <span className="settings-flabel">terminal tint</span>
+          <span className="settings-fctrl">
+            <label className="settings-checkbox">
+              <input
+                type="checkbox"
+                checked={resolveThemeTerminalColors(config.theme, config.theme_terminal_colors)}
+                onChange={(e) => {
+                  const updated = { ...config, theme_terminal_colors: e.target.checked };
+                  setConfig(() => updated);
+                  persist(updated);
+                }}
+              />
+              <span>tint output with theme</span>
+            </label>
+          </span>
+          <span className="settings-fhelp">
+            follows the theme by default &#183; ember ships its pastel ANSI on
+          </span>
+        </div>
+      </div>
 
       <BaseAnsiSection config={config} setConfig={setConfig} onError={onError} />
       <SplitDividerRow config={config} setConfig={setConfig} onError={onError} />
