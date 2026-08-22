@@ -1600,6 +1600,39 @@ impl CellRenderer {
         // Overlays draw unscissored: the divider line at its exact pixel
         // and the scroll-depth pill.
         let overlay_start = instances.len() as u32;
+        // Sunk-well vignette: stacked translucent black strips fading in
+        // from the top and left edges, approximating the mockup's two
+        // inset shadows (the DOM cannot draw over the opaque surface, so
+        // the renderer carries the cue itself). The pipeline blends
+        // premultiplied alpha and black is zero in every channel, so each
+        // strip just darkens whatever it covers by its alpha. Drawn in
+        // the overlay pass so the split view gets the strips once at the
+        // surface top, not repeated per region; the divider and pills
+        // push after and stay crisp on top. Reach scales with the cell so
+        // it lands near 14 physical px (top) and 10 (left) at the default
+        // hidpi metrics.
+        let top_vignette: [f32; 5] = [0.30, 0.22, 0.15, 0.09, 0.04];
+        let left_vignette: [f32; 5] = [0.20, 0.15, 0.10, 0.06, 0.03];
+        let top_step = (cell_h * 0.42).clamp(8.0, 20.0) / top_vignette.len() as f32;
+        let left_step = (cell_h * 0.30).clamp(6.0, 14.0) / left_vignette.len() as f32;
+        for (i, &alpha) in top_vignette.iter().enumerate() {
+            instances.push(CellInstance {
+                offset: [0.0, i as f32 * top_step],
+                size: [surface_w as f32, top_step],
+                color: [0.0, 0.0, 0.0, alpha],
+                uv_min: solid_uv.0,
+                uv_max: solid_uv.1,
+            });
+        }
+        for (i, &alpha) in left_vignette.iter().enumerate() {
+            instances.push(CellInstance {
+                offset: [i as f32 * left_step, 0.0],
+                size: [left_step, surface_h as f32],
+                color: [0.0, 0.0, 0.0, alpha],
+                uv_min: solid_uv.0,
+                uv_max: solid_uv.1,
+            });
+        }
         if let Some(divider_px) = divider_px {
             let thickness = 2.0_f32;
             instances.push(CellInstance {
