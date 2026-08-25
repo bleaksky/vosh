@@ -945,7 +945,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       }`}
     >
       <span className="prompt" aria-hidden="true">
-        &raquo;
+        &#10095;
       </span>
       {lineCount > 1 && (
         <div className="input-gutter" aria-hidden="true" ref={gutterRef}>
