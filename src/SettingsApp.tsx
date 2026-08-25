@@ -761,6 +761,13 @@ function TypographyTab({ config, setConfig, onError }: GeneralProps) {
   const [fontsState, setFontsState] = useState<'idle' | 'loading' | 'loaded'>('idle');
   const [fontFilter, setFontFilter] = useState('');
   const [showOnlyMono, setShowOnlyMono] = useState(true);
+  // Size field draft. While the input is focused the user owns the
+  // text, including an empty field mid backspace. Valid in range
+  // values apply live as a preview, anything else just sits in the
+  // draft, and blur snaps the field back to the stored value. The
+  // old controlled input re clamped every keystroke, which made
+  // clearing the field to type a new size impossible.
+  const [sizeDraft, setSizeDraft] = useState<string | null>(null);
 
   // System font enumeration is lazy. font-kit's first pass costs
   // 200-500ms because it parses every installed font file to detect
@@ -838,16 +845,41 @@ function TypographyTab({ config, setConfig, onError }: GeneralProps) {
         </div>
         <div className="settings-frow">
           <span className="settings-flabel">size</span>
-          <span className="settings-fctrl">
+          <span className="settings-fctrl settings-size-ctrl">
+            <button
+              type="button"
+              className="opt-chip settings-size-step"
+              aria-label="smaller"
+              onClick={() => update({ font_size: Math.max(9, config.font_size - 1) })}
+            >
+              &#8722;
+            </button>
             <input
               type="number"
               min={9}
               max={32}
-              value={config.font_size}
-              onChange={(e) =>
-                update({ font_size: Math.max(9, Math.min(32, Number(e.target.value) || 14)) })
-              }
+              value={sizeDraft ?? String(config.font_size)}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setSizeDraft(raw);
+                const n = Number(raw);
+                if (raw !== '' && Number.isFinite(n) && n >= 9 && n <= 32) {
+                  update({ font_size: Math.round(n) });
+                }
+              }}
+              onBlur={() => setSizeDraft(null)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur();
+              }}
             />
+            <button
+              type="button"
+              className="opt-chip settings-size-step"
+              aria-label="larger"
+              onClick={() => update({ font_size: Math.min(32, config.font_size + 1) })}
+            >
+              +
+            </button>
             <span className="settings-unit">px</span>
           </span>
         </div>
