@@ -8264,3 +8264,21 @@ body {
   display: inline-flex;
   margin-left: 10px;
 }
+
+/* Font size stepper. Chips flank the number field so the size can be
+   nudged a point at a time without touching the keyboard. The number
+   input stays narrow and centered between them. */
+.settings-size-ctrl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.settings-size-ctrl input[type='number'] {
+  width: 52px;
+  text-align: center;
+}
+.settings-size-step {
+  min-width: 26px;
+  justify-content: center;
+  font-family: var(--font-mono);
+}
