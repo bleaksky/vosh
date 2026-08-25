@@ -1,17 +1,11 @@
 // In-client help content. Source of truth for both the Help view
 // (HelpView.tsx) and the standalone HELP.md document at the repo
-// root. Keep them in sync; the markdown file is meant to mirror this
-// catalog one-to-one. Every body string follows the project writing
-// style. Double-quoted so backticks stay literal for inline code and
-// `${name}` interpolation examples stay literal too.
-//
-// Body conventions (parsed identically by HelpView):
+// root. Keep them in sync; the markdown file mirrors this catalog
+// one-to-one. Every topic is a task walkthrough in the project
+// writing style. Bodies use the lightweight format HelpView parses:
 //   - Paragraphs separated by a blank line (\n\n).
-//   - Lines starting with "- " inside a paragraph block are bullet
-//     items in a list; the list keeps going while consecutive lines
-//     start with "- ".
-//   - Backticks delimit inline code, which renders as a styled span
-//     in the React view and as backticked text in the markdown file.
+//   - Lines starting with "- " render as bullet list items.
+//   - Backticks delimit inline code.
 
 export interface HelpTopic {
   /** Stable id, used as the key in the topic rail. */
@@ -28,550 +22,321 @@ export interface HelpTopic {
 
 /** Section labels in the order they appear in the rail. */
 export const HELP_SECTIONS: string[] = [
-  'Start here',
-  'The command line',
-  'Reading output',
-  'Profiles',
-  'Layout and panels',
-  'The panels themselves',
+  'Get connected',
+  'Play',
+  'Automate',
+  'Shape the window',
   'Tick and target',
-  'Aliases, triggers, variables',
-  'Macros and recording',
-  'Appearance',
-  'Tools',
-  'Updates',
+  'Make it yours',
+  'Characters and data',
+  'Fix it',
   'Reference',
 ];
 
 export const HELP_TOPICS: HelpTopic[] = [
   {
-    id: 'start.what-vosh-is',
+    id: 'get-connected.connect',
     number: '1.1',
-    title: 'What Vosh is',
-    section: 'Start here',
-    body:
-      "Vosh is a desktop MUD client. It connects you to a text-based multiplayer world over the internet, shows that world's output in a terminal pane, and lets you type commands back. It runs on macOS, Windows, and Linux. There is no required account, no cloud sync, no telemetry.\n\n" +
-      'Vosh ships with a connected map, configurable panels for vitals, channel chat, and party roster, a tick timer, an alias and trigger system, and per-profile settings so different characters can carry their own commands. The whole thing is built for power users who want TinTin++-grade tooling inside a modern desktop window.',
+    title: 'Connect to a world',
+    section: 'Get connected',
+    body: 'You finish this walkthrough logged in, with a live session chip in the top bar.\n\n- Click the session chip in the top bar. While idle it reads `connect` beside a status dot.\n- Fill in the host and port. The form defaults to `play.theforsakenlands.com` and `1848`. Tick the `tls` checkbox when your server offers TLS.\n- Click `connect` and watch the dot shift from connecting to connected.\n- Type your character name at the login prompt and press `Enter`.\n- When the server asks for your password, the input row swaps to a masked field with the placeholder `password`. Nothing you type shows on screen, echoes to the terminal, or lands in command history. Press `Enter` to submit. `Shift+Enter` submits here too instead of adding a line.\n\nOnce you are in, the chip shows your character name in lowercase along with the host and port. If a saved profile matches the host and port you dialed, Vosh switches to that profile before connecting. A profile pinned to a character attaches right after login, when the server reports who you are.\n\nTo leave, click the chip and press `disconnect`, or right click the terminal and choose `disconnect`.',
   },
   {
-    id: 'start.what-mud-is',
+    id: 'get-connected.reconnect',
     number: '1.2',
-    title: 'What a MUD is',
-    section: 'Start here',
-    body:
-      'A MUD is a text-based multiplayer game world. People log in, walk between rooms, talk on channels, fight monsters, and build characters together. There are no graphics. Everything happens through text the server sends you, and commands you type back. The acronym stands for Multi-User Dungeon, though most worlds today have moved well beyond dungeons.\n\n' +
-      'A MUD client is the program you use to talk to a MUD server. The server runs the world. The client renders the text and forwards your keystrokes. Without a client you would be staring at a raw telnet stream. With Vosh, the same stream becomes a colored terminal, a live map, and a dashboard of bars and pills that tell you what is happening at a glance.',
+    title: 'Reconnect and recover',
+    section: 'Get connected',
+    body: 'You come back from a dropped connection with your scrollback intact and your next commands already staged.\n\n- Read the session chip first. The status dot turns to its error state when the connection fails and back to idle when the session closes cleanly.\n- Click the chip and press `connect` to dial the same host and port again.\n- Review what happened before the drop. The terminal scrollback survives a disconnect, so scroll up or press `PageUp` and read back through it. Nothing clears it unless you pick `clear buffer` yourself.\n- Stage your recovery while offline. Type the first command, press `Shift+Enter` to stack more lines under it, and leave the block sitting in the compose box. After you reconnect, press `Enter` once and each line submits separately, in order.\n\nTwo things do reset. The chat pane buffer empties the moment the session drops, and session variables set with `#var` clear when the next connection opens, so they never carry into a new session. Aliases, triggers, macros, and profile variables stay loaded because they live in your profile, not in the connection.\n\nWhen you want out on purpose, `disconnect` lives in three places. The session chip form while connected, the terminal right click menu, and the `Cmd+K` palette.',
   },
   {
-    id: 'start.first-connection',
+    id: 'get-connected.profile-save',
     number: '1.3',
-    title: 'Your first connection',
-    section: 'Start here',
-    body:
-      'The connect bar sits across the top of the window. It has three fields. Host is the address Vosh dials. Port is the TCP port the MUD listens on. TLS is a checkbox that asks Vosh to wrap the connection in encryption.\n\n' +
-      'Type the address and port, leave TLS off unless the MUD specifically supports it, and click `[connect]`. The terminal pane echoes a status line as the connection opens. Once you see your login prompt, type your character name and password the same way you would type any other command. Vosh switches the input to password mode the moment the MUD asks for one, so the characters you type stay off screen.\n\n' +
-      'The default values point at Aabahran on `play.theforsakenlands.com` port `1848`. Replace them with whatever world you are connecting to.',
+    title: 'Make Vosh remember you',
+    section: 'Get connected',
+    body: 'You set Vosh up once and every launch after that starts with your aliases, triggers, and settings already in place.\n\n- Shape the client the way you want it. Define aliases, triggers, macros, variables, and tick settings.\n- Type `#profile save`. Vosh writes the snapshot to your active profile TOML under `~/Library/Application Support/com.aabahran.vosh`.\n- Or press `Cmd+K` and run the `#profile save` palette entry. It sends the same command.\n- Restart Vosh. The profile loads on startup with no extra step.\n\nWhat persists. Connection defaults, aliases, profile variables, triggers, tick configuration, macros, ui settings, enabled plugins, and the groups you disabled.\n\nWhat does not. Variables set with `#var` live in session scope. They clear when the next connection opens and never reach the file. A lasting value belongs in the `profile_vars` table of your profile file at `profiles/<name>.toml` in the app data folder. Edit it there while Vosh is closed, or set the value from Lua with `mud.set_profile_var`.\n\n`#profile load` pulls the saved file back into the live session. In loadout mode the profile commands become notices instead, because loadout mode saves your changes automatically.',
   },
   {
-    id: 'start.reading-screen',
-    number: '1.4',
-    title: 'Reading the screen at a glance',
-    section: 'Start here',
-    body:
-      'Vosh has six places where information shows up.\n\n' +
-      '- The terminal pane in the middle is the live MUD output.\n' +
-      '- The room strip above it summarizes the room you are standing in.\n' +
-      '- The vitals row near the bottom shows your hp, mana, and movement.\n' +
-      "- The status bar across the very bottom shows your current target, your quick-keys, the moon phases, and your computer's clock.\n" +
-      '- The map pane on the right (by default) shows the rooms around you.\n' +
-      '- The command line at the bottom is where you type.\n\n' +
-      'Each of these can be hidden, moved to another edge, or restyled. The Settings window has a `panels` tab that controls placement. The map panel can also be toggled from the top bar.',
-  },
-  {
-    id: 'cmd.typing',
+    id: 'play.send-commands',
     number: '2.1',
-    title: 'Typing and sending commands',
-    section: 'The command line',
-    body:
-      'Type at the prompt, then press Enter. Vosh sends your line to the MUD as one command. The same line shows up at the bottom of the terminal pane so you can see what you sent.\n\n' +
-      'Pressing Enter on an empty line sends a blank line, which most MUDs use to advance prompts or step through paginated output.\n\n' +
-      'You can chain several commands by separating them with semicolons. `look;score;who` sends three commands in order.\n\n' +
-      'Press Shift+Enter to add a second line instead of sending. The prompt grows and numbers each line down the left edge, and when you press Enter, Vosh sends every line as its own command. A single line behaves exactly as before.\n\n' +
-      'Anything starting with `#` is a slash command. Slash commands talk to Vosh itself, not the MUD. They are how you create aliases and triggers, configure the tick timer, and save your profile. Type `#help` to see the full list.',
+    title: 'Send commands',
+    section: 'Play',
+    body: 'You move from single commands to chained lines, multi line blocks, and safe bulk pastes.\n\n- Type a command and press `Enter` to send it.\n- Chain commands on one line with `;`. Each piece goes out as its own command. Type `\\;` when you mean a literal semicolon.\n- Press `Shift+Enter` to add a line without sending. The box grows and a line number gutter appears once you have two or more lines. Press `Enter` and every line submits separately, in order, with blank lines dropped.\n- Press `Enter` on an empty box to send a bare line. Many MUD prompts advance on that.\n- Paste multi line text straight into the input. A single line submits immediately. Two or more lines become a paste burst, sent one line every 500 ms by default, with a `paste N/M esc cancels` counter beside the prompt.\n- Press `Esc` during a burst to cancel every line that has not gone out yet. Starting a new paste also cancels the old burst.\n\nTurn on the `keep last command` setting and a sent command stays in the box fully selected. Press `Enter` again to resend it, or just start typing to replace it.\n\nThe burst delay is configurable from 0 to 10000 ms, so pace it to whatever your server tolerates.',
   },
   {
-    id: 'cmd.history',
+    id: 'play.reuse-history',
     number: '2.2',
-    title: 'Command history',
-    section: 'The command line',
-    body:
-      'Vosh remembers every command you send in the current session. Press Up to walk backward through that history. Press Down to walk forward.\n\n' +
-      'If you start typing before pressing Up, Vosh treats what you typed as a prefix and only cycles through history entries that start with the same letters. So typing `cast` then pressing Up walks back through every spell you have cast, skipping unrelated commands.\n\n' +
-      'Editing the line cancels the prefix filter so the next Up press starts a fresh search from whatever you typed last. The `keep last command` toggle in the General tab tells Vosh to leave your sent line in the input box, selected, so a second Enter resends it.',
+    title: 'Reuse what you typed',
+    section: 'Play',
+    body: 'You recall anything you have sent this session without retyping it.\n\n- Press `Up` in an empty input to step back through your sent commands, newest first.\n- Type a few characters before pressing `Up` and recall becomes a prefix search. Type `tell` then `Up` and only lines starting with `tell` cycle past.\n- Press `Down` to step toward newer matches. One step past the newest restores exactly what you had typed before the search began.\n- Edit the recalled line whenever you like. Editing ends the search, and the next `Up` starts a fresh one from whatever is now in the box.\n\nHistory skips consecutive duplicates and never records anything you type in password mode.\n\nTurn on the `keep last command` setting and the line you just sent stays in the box, fully selected. `Enter` resends it and typing anything replaces it, which suits commands you repeat in quick succession.\n\nIn a multi line compose the arrows first do their normal job. `Up` moves the caret up a line unless you are already on the first line, and `Down` moves it down unless you are on the last, so history recall fires only from the edges of the block.',
   },
   {
-    id: 'cmd.tab',
+    id: 'play.tab-complete',
     number: '2.3',
-    title: 'Tab completion',
-    section: 'The command line',
-    body:
-      'Press Tab to complete the word you are typing. Vosh fills in the first match from three sources, in order.\n\n' +
-      '- Words from your typed-command history, most recent first.\n' +
-      '- Names of characters currently in your room (from the Room.Chars GMCP push).\n' +
-      '- Capitalized names Vosh has seen in MUD output over the last thirty minutes (who-lists, channel speakers, considers).\n\n' +
-      'Press Tab again to cycle to the next match. Press Shift+Tab to walk the cycle backward. Typing anything else resets the cycle so the next Tab starts a fresh search.',
+    title: 'Complete names with Tab',
+    section: 'Play',
+    body: 'You finish long names with a keypress instead of spelling them out in the middle of a fight.\n\n- Type the first letters of the name anywhere in your command line.\n- Press `Tab`. Vosh completes the word under the caret with its best match.\n- Press `Tab` again to cycle through the remaining candidates, or `Shift+Tab` to cycle backward. The list wraps around.\n- Keep typing, or press any other key, and the cycle resets with the current completion left in place.\n\nCandidates come from three sources, checked in this order.\n\n- Words from commands you have typed, most recent first.\n- Characters in your room, when the server sends `Room.Chars` over GMCP.\n- Capitalized names Vosh spotted in the output during the last 30 minutes.\n\nMatching is a case insensitive prefix match, duplicates collapse, and Vosh skips a candidate identical to what you already typed. Completion works on the word under the caret, so you can fix the middle of a line without touching the rest.',
   },
   {
-    id: 'cmd.paste',
+    id: 'play.scroll-back',
     number: '2.4',
-    title: 'Pasting many lines',
-    section: 'The command line',
-    body:
-      'Paste a block of text into the command line. Vosh splits it on newlines and sends each non-empty line as its own command. While the burst is in flight, a small `paste N/M esc cancels` indicator sits next to the prompt. Press Esc to drop any unsent lines.\n\n' +
-      'A multi-line paste never clears what you already typed. It sends its lines, and whatever sat in the command line stays put.\n\n' +
-      'The General tab has a paste-pacing field. Set it to the number of milliseconds you want Vosh to wait between lines. Zero means no pacing. A few hundred milliseconds dodges MUD flood filters that drop the connection when too many commands arrive too fast.',
+    title: 'Scroll back through history',
+    section: 'Play',
+    body: 'You read old output in a split pane while live output keeps flowing underneath.\n\n- Scroll the mouse wheel up over the terminal. The first notch opens a scrollback split above the live pane, and further scrolling walks the history line by line.\n- Or press `PageUp` to open the split and page upward, then `PageDown` to page back down. A Mac keyboard produces these with `Fn+Up` and `Fn+Down`.\n- Track your depth with the `↑ N / max` badge at the top right of the history pane.\n- Drag the divider between the panes to resize the split. It snaps to whole terminal rows. The handle also answers the keyboard, arrow keys nudge it 16px and `Shift` with an arrow jumps 64px.\n- Return to live three ways. Scroll or page down until history reaches its bottom and the split closes itself. Press `Esc`. Or middle click the terminal.\n\nThe live pane never scrolls away while the split is open. New output keeps landing at its tail, and the lines you type mirror into the history pane so the story stays continuous.\n\nOn the native macOS renderer there is no split. The surface scrolls its own grid, and `PageUp`, `PageDown`, and `Esc` still page it and snap it back to the bottom.',
   },
   {
-    id: 'cmd.password',
+    id: 'play.find-text',
     number: '2.5',
-    title: 'Password mode and line editing',
-    section: 'The command line',
-    body:
-      'When the MUD asks for a password, Vosh switches the input field to password style and replaces the typed characters with dots. Password lines never enter your command history, and the local echo to the terminal is blank.\n\n' +
-      'Inside the input line, Home jumps to the start, End to the end. On macOS, Cmd+Left and Cmd+Right do the same. Hold Shift on any of these to extend a selection from the current caret. Standard text-editing keys (left, right, backspace, delete) work as you would expect.',
+    title: 'Find text',
+    section: 'Play',
+    body: 'You jump straight to any text in the session, however far back it scrolled.\n\n- Press `Cmd+F` on macOS or `Ctrl+F` elsewhere. The find toolbar drops over the top right of the terminal, and it opens even while you are typing in the command input.\n- Type your query into the `find in scrollback` box.\n- Press `Enter` for the next match and `Shift+Enter` for the previous one. The `↑` and `↓` buttons do the same jobs.\n- Read the badge beside the box. It shows `N / M` while you step through hits and `no match` when the query finds nothing.\n- Sharpen the query with the three toggles. `case` makes it case sensitive, `word` matches whole words only, and `regex` treats the query as a regular expression.\n- Press `Esc` to close the toolbar, clear every highlight, and put focus back on the command input.\n\nA match above the visible screen opens the scrollback split with the hit highlighted near the top of the history pane. A match already on screen closes any open split instead.\n\nThe toolbar also opens from the terminal right click menu item `search scrollback` and from the `Cmd+K` palette.',
   },
   {
-    id: 'term.pane',
+    id: 'play.copy-text',
+    number: '2.6',
+    title: 'Copy text out',
+    section: 'Play',
+    body: "You land terminal text on the clipboard, ready for notes, bug reports, or a friend.\n\n- Drag across the output you want. An active text selection stops the usual click from refocusing the command input, so your selection stays put.\n- Press `Cmd+C` on macOS or `Ctrl+C` elsewhere.\n- Or right click the terminal and choose `copy`. The menu shows the `⌘C` shortcut beside it.\n- Paste wherever you need it.\n\nOne priority rule. When the input box itself holds a selection, `Cmd+C` copies that selection rather than the terminal. Clear the input selection, or use the right click `copy` item, when the terminal text is what you want.\n\nThe trip works in reverse too. The right click menu's `paste` item inserts the clipboard into the input row without sending anything. Edit the line as long as you like, then press `Enter` yourself.\n\nOn the xterm renderer you can also wipe the buffer once you have copied what matters. Right click and choose `clear buffer`.",
+  },
+  {
+    id: 'play.palette',
+    number: '2.7',
+    title: 'Drive everything from the palette',
+    section: 'Play',
+    body: 'You run nearly every Vosh action from one keyboard surface.\n\n- Press `Cmd+K` or `Ctrl+K` to open the palette. The same shortcut closes it again.\n- Type a few letters. Entries whose title starts with your text rank first, then title substrings, then hint and keyword matches.\n- Move the selection with the arrow keys and press `Enter` to run the highlighted entry.\n- Press `Tab` or `Shift+Tab` to cycle the scope filter when you want a single group.\n- Press `Esc` to close without running anything.\n\nFour groups live inside.\n\n- Commands. `connect` or `disconnect` depending on state, `open splits` and `close splits` for the well panes, `search scrollback`, `#profile save`, and `open help`.\n- Panes. A show or hide toggle for each panel (`map`, `group`, `vitals`, `roomstrip`, `chat`, `affects`, `combat`, `imm`).\n- Settings. One entry per Settings tab. Each opens the Settings window already on that tab.\n- Aliases. Every enabled alias. A parameterless alias runs the moment you pick it. An alias that takes arguments inserts its name into the input row instead, so you finish the line and press `Enter`.',
+  },
+  {
+    id: 'play.right-click-menu',
+    number: '2.8',
+    title: 'Use the right click menu',
+    section: 'Play',
+    body: "You reach the terminal's everyday actions from a single menu under your pointer.\n\n- Right click anywhere on the terminal to open it.\n- Choose `copy` to copy the current selection. The menu lists its `⌘C` shortcut.\n- Choose `paste` to insert the clipboard into the input row. Nothing sends until you press `Enter` yourself.\n- Choose `open splits` or `close splits` to toggle the session, chat, and log panes inside the terminal well. These are workspace panes, separate from the scrollback split.\n- Choose `search scrollback` to open the find toolbar.\n- Choose `clear buffer` to wipe the terminal. The item appears only on the xterm renderer. The native macOS grid has no clear command, so the item hides there rather than sit dead.\n- While connected, `disconnect` waits at the bottom in danger styling and closes the session.\n\nThe menu closes on `Esc`, on a click anywhere outside it, or the instant you pick an item. It clamps itself to the window edges, so a right click near a corner never opens it half off screen.",
+  },
+  {
+    id: 'automate.first-alias',
     number: '3.1',
-    title: 'The terminal pane',
-    section: 'Reading output',
-    body:
-      "The terminal pane is where MUD output lives. It renders ANSI color exactly the way a stock xterm would. Long lines wrap at the terminal's column count, which Vosh advertises to the MUD via NAWS (the standard telnet sub-option for window size) on every connect and on every resize. Most modern MUDs honor NAWS and wrap server-side at the advertised width.\n\n" +
-      "The terminal scrolls back automatically. Vosh keeps roughly ten thousand lines in memory plus a persistent copy on disk so the previous session's tail shows up when you launch Vosh again. A dim `[scrollback restored]` line marks where the old session ends and a new one begins.",
+    title: 'Make your first alias',
+    section: 'Automate',
+    body: 'When you finish, typing `kk dragon` will kick and backstab the dragon with one short command.\n\n- Click the gear button in the top bar to open settings, then pick the `aliases` tab.\n- Click `+ alias` to add a blank row.\n- Type `kk` in the name field.\n- Type `kick %1; backstab %1` in the expansion field. `;` splits the expansion into separate commands.\n- Click `save`. The unsaved dot clears and `saved.` appears.\n- Back in the main window, type `kk dragon`. Vosh sends `kick dragon` then `backstab dragon`.\n\nCaptures give aliases their reach. `%1` through `%9` pull the first through ninth word after the alias name. `%0` pulls the whole tail, `%1-` pulls word one through the end with spacing intact, and a missing word expands to nothing. `%%` gives a literal percent and `\\;` keeps a literal semicolon.\n\nYou can also define aliases without opening settings. `#alias gc get all corpse` sets one and echoes `alias gc set`. `#aliases` lists every alias and `#unalias gc` removes one.\n\nGive related aliases a shared group name to toggle them as a folder, either with the group checkbox in the tab or with `#group <name> on|off`. The `tpl` button on each row switches the expansion to a Lua script body when a template stops being enough.',
   },
   {
-    id: 'term.select',
+    id: 'automate.first-trigger',
     number: '3.2',
-    title: 'Selecting and copying text',
-    section: 'Reading output',
-    body:
-      'Click and drag in the terminal pane to select text. Release to lift the selection.\n\n' +
-      'Press Ctrl+C (Cmd+C on macOS) to copy the selected text. The shortcut still works while focus is on the command input, which is the common case. You select with the mouse, then hit the shortcut without clicking back into the terminal. Ctrl+X also copies. Nothing is cut because the terminal is read-only.\n\n' +
-      'Clicking anywhere in the window that is not a button or an active selection re-focuses the command input. So a quick way back to typing after reading is to click anywhere in the terminal area.',
+    title: 'Make your first trigger',
+    section: 'Automate',
+    body: 'When you finish, Vosh will loot every kill the moment the death line lands.\n\n- Open settings, pick the `triggers` tab, and keep the editor pill on `form`.\n- Click `+ trigger` to add a card.\n- Name it `auto-loot`. Leave priority at `5`, the default for a new card, and target on `line`.\n- Type `(\\w+) is DEAD!` in the pattern field. Patterns are regexes, so escape literal punctuation.\n- Click `+ send` and type `get all corpse` in the editor that appears.\n- Click `save`, then go kill something.\n\nA trigger pairs one visual with any number of effects. The visual chips are `none`, `highlight`, `replace`, and `gag`, and the effect buttons are `+ send`, `+ route`, and `+ script`. Send and replace templates reach capture groups with `$1` through `$9` or `${name}`, and `;` splits a send into separate commands. A card holds several patterns through `+ pattern` and fires when any enabled row matches. Higher priority triggers run first.\n\nThe input bar works too. `#trigger auto-loot {(\\w+) is DEAD!} send get all corpse` builds the same trigger with priority 0 on the `line` target. `#triggers` lists everything by priority and `#untrigger auto-loot` removes it. Vosh rejects an invalid regex and names the broken pattern, so nothing half works silently.',
   },
   {
-    id: 'term.split',
+    id: 'automate.highlight-lines',
     number: '3.3',
-    title: 'Split scrollback',
-    section: 'Reading output',
-    body:
-      'Scroll up with the mouse wheel anywhere in the terminal area and a second pane opens above the live one. It shows earlier output. The live pane keeps streaming below so combat does not freeze while you read history. The top-right corner of the upper pane shows `↑ N / max`, where N is how many lines above the live tail you are looking, and max is how many lines of scrollback exist.\n\n' +
-      'Drag the divider between the two panes to set the split ratio. Press PageUp and PageDown to scroll a page at a time. Scroll back to the live tail with the wheel, click the middle mouse button anywhere in the terminal, or press Esc, and the split closes.',
+    title: 'Highlight lines that matter',
+    section: 'Automate',
+    body: 'When you finish, every tell will glow instead of scrolling past unnoticed.\n\n- Type `#trigger tell-glow {tells you} highlight bright_yellow bold`. Every line containing a tell now renders bright yellow and bold.\n- Upgrade it to a wash. Type `#trigger tell-glow {tells you} highlight bright_yellow wash`. Defining a trigger under an existing name replaces it.\n- Type `#triggers` to confirm the pattern and action.\n\nA plain highlight restyles the text. A wash tints the whole line with a dim quarter strength version of the highlight color, fills it edge to edge, and draws an accent bar at the left edge, so important lines read as banners you cannot miss.\n\nColors take the sixteen ANSI names. `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, and `white`, plus a `bright_` variant of each. `purple` maps to magenta and `gray` to `bright_black`. Stack `bold`, `underline`, and `inverse` freely, and add `bg:<color>` for a background.\n\nThe settings `triggers` tab offers the same power with selects. Pick the `highlight` visual chip on a trigger card, choose fg and bg from the color lists, and check `full-line wash`. Wash pairs well with a quiet color, since the tint covers the entire line.',
   },
   {
-    id: 'term.status',
+    id: 'automate.route-chat',
     number: '3.4',
-    title: 'The status bar and clock',
-    section: 'Reading output',
-    body:
-      "The bar across the very bottom of the window carries small status chips. The left side shows your current target (when one is set) and your quick-key bindings. The right side shows the moon-phase glyphs the MUD pushes via GMCP, followed by your computer's local clock.\n\n" +
-      "The chips are read-only. Quick-keys configure under `#qkey <name> <verb>`. The moon glyphs have tooltips that show each moon's name and phase when you hover.",
+    title: 'Route chat into panes',
+    section: 'Automate',
+    body: "When you finish, tells and gossip will collect in the chat pane instead of drowning in combat spam.\n\n- Open settings, pick the `triggers` tab, and click `+ trigger`.\n- Name the card `chat-feed`.\n- Type `tells you '` in the first pattern field.\n- Click `+ pattern` and type `gossips '` in the second row. The trigger fires when any enabled row matches.\n- Click `+ route` and type `chat` in the pane field.\n- Click `save`. Matching lines now land in the chat pane.\n\nRoute is an effect, so it stacks with anything else on the card. Pair it with a `highlight` visual to color the line, or add a `+ send` effect beside it. The pane field takes the pane's name, and `chat` is the placeholder the editor suggests.\n\nPlace the pane where you want it in the `panels` tab. Each panel row has a zone select drawn from the zones that panel supports, and the schematic preview up top moves chips with chevrons so you can order panels within a zone. The `side panels span full height` checkbox decides whether side panes run past the input row.\n\nThe inline form is `#trigger chat-feed {tells you '} route chat`. It creates a single pattern trigger, so build multi pattern feeds in the settings tab.",
   },
   {
-    id: 'prof.what',
+    id: 'automate.variables',
+    number: '3.5',
+    title: 'Set and use variables',
+    section: 'Automate',
+    body: 'When you finish, one variable will feed every command you aim at it.\n\n- Type `#var potion yellow`. Vosh echoes `var potion set`.\n- Type `quaff $potion`. The line expands before it leaves, so the server receives `quaff yellow`.\n- Check a value with `#var potion`, list them all with `#vars`, and remove one with `#unvar potion`.\n\n`$potion` works when the name ends at whitespace or punctuation. Write `${potion}s` when letters follow immediately. `$$` sends a literal dollar sign, and unknown names pass through untouched, so `$100` reaches the server as typed.\n\nInterpolation runs on the line you type, before alias expansion, and Vosh does not interpolate alias output again. Put variables in the line you type, or resolve them in a Lua script body instead.\n\n`#var` writes session scope, which clears when the next connection opens, so a session value never survives into a new session. Profile variables persist across restarts in your profile TOML under `profile_vars`, and a session value shadows a profile value of the same name.\n\nVosh also fills session variables for you. GMCP binds `hp`, `maxhp`, `char_name`, `room_name`, `target_name`, and more, and setting a target with `tar` mirrors it into `$target`, so `cast dispel $target` always aims at your current mark.\n\nOne trap. Trigger send templates use `${name}` for regex capture groups, not this store, and trigger sends skip interpolation entirely.',
+  },
+  {
+    id: 'automate.macros',
+    number: '3.6',
+    title: 'Bind keys to macros',
+    section: 'Automate',
+    body: "When you finish, `F1` will fire a command the instant you press it.\n\n- Open settings and pick the `macros` tab.\n- Click the key field in the top row. It reads `press a key...` while capturing.\n- Press `F1`. The field records the canonical key name.\n- Type the command, for example `stand; flee`. Use `;` to chain actions.\n- Type a group name if you want the binding in a toggleable folder, then click `add`.\n- Focus the input bar in the main window and press `F1`.\n\nRows apply on add or save, so the tab has no separate save step. Existing rows carry their own `save` and `delete` buttons.\n\nCapture accepts function keys, modifier combos like `Ctrl+N`, numpad keys like `Numpad7`, and plain printable keys. A binding fires only while the input bar has focus.\n\nTurn on `echo macro commands` in the `general` tab's `macros` row when you want each press to show what it sent. Group headers carry an `enabled` checkbox, and `#group <name> on|off` flips macro groups from the input bar along with matching alias and trigger groups.\n\n`#record` builds something different. It captures the commands you type and saves them as an alias you invoke by name, not by key. Use the macros tab when you want a key, `#record` when you want a word.",
+  },
+  {
+    id: 'automate.slash-commands',
+    number: '3.7',
+    title: 'Command the client inline',
+    section: 'Automate',
+    body: 'When you finish, you will drive Vosh from the input bar without opening settings. Vosh handles every line that starts with `#` locally, and it never reaches the MUD.\n\n- Type `#help` any time for the full list.\n- Manage aliases with `#alias <name> <expansion>`, `#unalias <name>`, and `#aliases`.\n- Manage variables with `#var <name> [value]`, `#unvar <name>`, and `#vars`.\n- Manage triggers with `#trigger <name> {pattern} <action>`, `#untrigger <name>`, and `#triggers`.\n- Bind prompt stats with `#prompt {regex}` using named groups like `(?<hp>\\d+)`, and clear with `#unprompt`.\n- Flip whole folders with `#group <name> on|off` and inspect them with `#groups`.\n- Tune the tick with `#tick`, `#tick interval <secs>`, `#tick warn at <secs>`, and the rest listed under `#help`.\n- Record a command sequence with `#record <name>`, finish with `#endrec`, abort with `#record cancel`.\n- Configure quick keys with `#qkey <name> <verb>` and list them with `#qkeys`.\n- Drive Lua with `#script load <name>`, `#script reload`, `#scripts`, and `#lua <code>`.\n- Snapshot with `#profile save`, `#profile load`, and `#profile reset`.\n- Import TinTin++ files with `#import-tintin <path>`.\n- Work targets with `#target <args>`, or bare `tar`, `tarn`, `tarp`, and `tarclear` with no `#` at all.\n- Switch renderers with `#nativesurface on|off|default`, applied on restart.\n\nAn unknown command echoes a pointer to `#help`, and errors come back wrapped in square brackets.',
+  },
+  {
+    id: 'automate.lua-scripts',
+    number: '3.8',
+    title: 'Script Vosh with Lua',
+    section: 'Automate',
+    body: 'When you finish, a Lua script will run inside Vosh and a plugin will load itself at every launch.\n\n- Save a script as `combat.lua` in the `scripts` folder under the app data directory, `~/Library/Application Support/com.aabahran.vosh/scripts/` on macOS.\n- Type `#script load combat`. Vosh appends `.lua` to a bare name.\n- Type `#scripts` to see loaded scripts and the triggers they registered.\n- Edit the file, then type `#script reload` to run every loaded script again.\n- Try one liners with `#lua mud.echo("hello")`.\n\nScripts talk to Vosh through the global `mud` table. `mud.send(text)` goes straight to the server and `mud.input(text)` feeds back through the input pipeline. `mud.echo(text)` prints locally. `mud.alias(name, expansion)` and `mud.trigger(name, pattern, callback)` register automation, with `captures[1]` holding the full match and `captures[2]` onward the groups. `mud.on_gmcp(package, callback)` hands you server data as a table, and `mud.timer(secs, callback)` schedules work you can cancel with `mud.cancel_timer`.\n\nLoads from `#script load` last for the session. For autoload, make a plugin. Create `plugins/<slug>/` under the app data directory with a `manifest.toml` naming the plugin and its entry script, `main.lua` by default. Enabled plugin names persist in your profile TOML under `[plugins]`, and every enabled plugin loads at launch. Enabling runs immediately, disabling takes effect next launch.\n\nThe sandbox strips file and process access. `require`, `io`, and `os.execute` are gone.',
+  },
+  {
+    id: 'shape.arrange-panels',
     number: '4.1',
-    title: 'What a profile is',
-    section: 'Profiles',
-    body:
-      'A profile is a saved bundle of everything that is yours, character by character. Aliases, triggers, macros, quick-keys, variables, tick configuration, and (when scoped that way) theme, font, and panel layout. Each profile lives on disk. Switching profiles loads a different bundle into memory.\n\n' +
-      'Out of the box you have one profile called `default`. You can stay on it forever if you only play one character. Most people make a profile per character or per MUD and let auto-match pick the right one when they connect.',
+    title: 'Arrange the panels',
+    section: 'Shape the window',
+    body: "When you finish, every panel sits in the zone you chose at the size you want.\n\n- Click the gear in the top bar, titled `settings`, and open the `panels` tab.\n- Pick a home for each panel with its `zone` select. Zones are `top`, `bottom`, `left`, `right`, and `hidden`. The eight panels are `map`, `group`, `vitals`, `roomstrip`, `chat`, `affects`, `combat`, and `imm`.\n- Set `align` for a left or right panel. `top` panels stack down from the column top and `bottom` panels stack up from the floor. The map hides this select because it always fills the leftover column height.\n- Reorder panels within a zone using the up and down chevrons on the layout map chips.\n- Tick `side panels span full height (input lives under terminal only)` to run the side columns to the window's bottom edge.\n- Back in the main window, drag the 8px channel between the terminal and a column to resize it. A small ember tick fades in on the handle when you hover. Tab to a handle and press an arrow key to nudge 16px, or `Shift` plus an arrow for 64px.\n\nChanges save live. `reset to defaults` restores the stock layout. Panels render as raised cards with 8px of exposed ground at every seam, so moving one never leaves a scar.\n\nPrefer the keyboard for visibility. `⌘K` (`Ctrl+K` off macOS) lists a `show <id> pane` or `hide <id> pane` entry for every panel, and a panel you show again returns to its last visible zone.",
   },
   {
-    id: 'prof.auto',
+    id: 'shape.use-the-map',
     number: '4.2',
-    title: 'Auto-matching a profile',
-    section: 'Profiles',
-    body:
-      'The Profiles tab in Settings has an `[auto-match]` button on each profile. It opens an inline form with three fields.\n\n' +
-      '- Host is the MUD address.\n' +
-      '- Port is the MUD port. Leave blank to match any port.\n' +
-      '- Characters is a comma-separated list of character names. Leave blank to match any character on the host.\n\n' +
-      'When you click `[connect]`, Vosh resolves a profile by host and (if set) port. If that profile pins one or more characters, Vosh does not switch yet. After login, the MUD pushes Char.Status with your character name, and Vosh swaps to the profile that lists that character.\n\n' +
-      'Click `[save]` to commit the match block. Future connects will pick the right profile automatically.',
+    title: 'Use the map',
+    section: 'Shape the window',
+    body: 'When you finish, the server map draws the way you like at the zoom you like.\n\n- The map fills the right column by default. Move it with its `zone` select in the `panels` tab. It accepts `left`, `right`, or `hidden` only, since a horizontal map at full width is unusable.\n- Toggle it from the map button in the top bar. The button flips the map between hidden and its last visible spot.\n- Read the header. It says `map` until the first room push arrives, then `map · <area>` with the area name from `Room.Info`.\n- Click the sliders button labeled `map controls` to open the controls row. Vosh remembers whether you left it open.\n- Switch draw modes with `squares`, `glyphs`, or `tileset`.\n- Zoom with `−` and `+`, or hold `Ctrl` and wheel over the map. The readout shows the percent and `⤺` resets it.\n- Check the status text. `radius N` means live map data. `waiting for server map` means none has arrived yet.\n\nTileset mode adds a bar with `load tileset` and `clear` buttons for your own tile art.',
   },
   {
-    id: 'prof.save',
+    id: 'shape.chat-pane',
     number: '4.3',
-    title: 'Saving and switching profiles',
-    section: 'Profiles',
-    body:
-      'Type `#profile save` to write the current profile to disk. Vosh also saves on its own whenever you change configuration through Settings.\n\n' +
-      'Type `#profile load` to discard in-memory state and reload from disk. Type `#profile reset` to wipe the current profile back to defaults.\n\n' +
-      'Switch between profiles by clicking `[switch]` next to a profile name in the Profiles tab. The whole environment swaps at once. Aliases, triggers, macros, and any per-profile chrome (theme, font, dock layout) load fresh from disk.',
+    title: 'Tame the chat pane',
+    section: 'Shape the window',
+    body: "When you finish, channel talk collects in its own pane where you can filter it by channel.\n\n- Press `⌘K` and run `show chat pane`. Chat ships hidden and its home is the bottom strip.\n- Let lines arrive on their own. `Comm.Channel` GMCP feeds the pane automatically. Each line renders as `[pane] text` in its channel color, with the speaker shown as `Name: `.\n- Click a tab in the header to filter. `all` sits first, then one tab per channel name seen in the buffer. The count beside them reads `visible`, or `visible/total` while filtered.\n- Route trigger output in. In the `triggers` tab, add a `route` effect to a trigger and type a pane name. Those lines land in the chat pane under their own tab.\n- Drag the pane's handle to resize it. Click the `×` labeled `hide chat` to put it away.\n\nThe buffer holds a rolling 500 lines, survives closing and reopening the pane, and clears only on disconnect. The pane sticks to its tail. Scroll up to read back, and it sticks again once you come within 24px of the bottom.",
   },
   {
-    id: 'prof.scope',
+    id: 'shape.read-vitals',
     number: '4.4',
-    title: 'Profile vs global scope',
-    section: 'Profiles',
-    body:
-      'Each profile carries its own aliases and triggers. Some other settings can be shared across every profile or carried per-profile, your choice. The scope row at the top of the Profiles tab has five toggles. Theme. Font (family and size together). Dock layout. Keep-last-command. Auto-check updates.\n\n' +
-      'Set each to `global` if you want every profile to share the same value, or `profile` if you want each profile to remember its own. Flipping a toggle from global to profile copies the current value into every profile so nothing visibly changes the first time you do it.',
+    title: 'Read your vitals',
+    section: 'Shape the window',
+    body: "When you finish, the hp, mana, and moves readout shows exactly what you want to see under pressure.\n\n- Open the `vitals` tab in Settings. Changes save automatically, and you can drag the live preview's bars to scrub the numbers.\n- Pick a layout, `ember`, `stacked`, or `inline`. Ember draws a sidebar pane with a `vitals` head, the tick countdown beside it, and three fixed thin bars with mono current and max numbers.\n- Outside ember, choose columns with the `bar`, `percent`, `numeric`, and `delta` pills, set `bar style` to `solid`, `ramped`, or `track`, and pick bar glyphs and width.\n- Open the `advanced` disclosure to recolor hp, mana, and moves, or turn on `drain through red as bars empty`.\n- Tick `pulse red vignette under 30% hp` for a warning you cannot miss when health drops low.\n- Turn on `custom template (overrides layout)` to write the readout yourself with tokens like `%hp`, `%pct_hp`, `%bar_hp`, `%tick`, and `%time`. Any `Char.Vitals` or `Char.Worth` field resolves as `%fieldname`, and `%%` prints a literal percent.\n\nPlace the bar in any zone from the `panels` tab. It ships in the right column, listed as `vitals (hp bar)`. Tracked affects also live in the `panels` tab, not here. `reset vitals` restores the stock config when an experiment goes wrong.",
   },
   {
-    id: 'panels.overview',
+    id: 'shape.group-affects',
+    number: '4.5',
+    title: 'Watch your group and affects',
+    section: 'Shape the window',
+    body: "When you finish, group health and your spell durations both read at a glance.\n\n- Find the `group` pane at the top of the right column. The header shows `group` plus a member count, or `solo`.\n- Group up. Each member gets a row with a mono name, a 44px hp mini bar, and the percent. The row tone drops through three tiers, healthy at 67% and up, warning down to 34%, danger below.\n- Stay solo and the pane shows your worth instead, tnl, exp, gold, bank, trains, and prac.\n- Configure affects in the `panels` tab under `tracked affects`. Type the server's affect name, add an optional label, and press `add`. Matching is case insensitive, and the affects pane renders nothing until you list at least one name.\n- Put `affects` in a side zone for full rows, each with a mono name, a duration mini bar filled by the fraction of a day remaining, and a countdown. In the top or bottom strip it compresses to pills, and absent tracked affects render dim with `—`.\n\nGroup data arrives from `Group.Info` and worth from `Char.Worth`. Affects come from `Char.Affects`, and duration color shifts with urgency. With no group the pane tells you so and suggests `follow <name>` to start one.",
+  },
+  {
+    id: 'shape.room-strip',
+    number: '4.6',
+    title: 'Read the room strip',
+    section: 'Shape the window',
+    body: 'When you finish, one line tells you where you are, who is here, and what is on the ground.\n\n- Look at the strip along the top of the window. It runs area, room name with vnum, terrain, and the exit list in `N E S W U D` order.\n- Scan the `here` chips. Character chips color NPCs and players differently, stacks collapse to `(N) name`, and your current target carries a `▶` marker.\n- Scan the `items` chips. Each colors by type, so money, weapons, armor, potions, and food read apart at a glance.\n- Move the strip from the `panels` tab, where it lists as `room strip (area info)`. Drop it into a left or right column and it switches to a column variant that wraps onto multiple lines instead of scrolling sideways.\n\nGMCP feeds everything. `Room.Info` names the room, `Map.Tiles` colors the area, `Room.Chars` and `Room.Items` fill the chips, and the target marker follows the backend target. In the top strip, overflowing content fades out at the right edge. An empty slot holds its height so the layout never jumps.',
+  },
+  {
+    id: 'shape.split-the-well',
+    number: '4.7',
+    title: 'Split the well',
+    section: 'Shape the window',
+    body: 'When you finish, the terminal well holds three panes, your session, channel chat, and a raw log tail.\n\n- Press `⌘K` and run `open splits`, or right click the terminal and pick `open splits` from the menu.\n- Read the pane chips. The main terminal takes `1` plus a session name drawn from the host, `theforsakenlands` on the default world, or `session` before you connect.\n- Watch channel talk in the `2 chat` pane, colored per channel with dim `HH:MM` timestamps.\n- Watch raw session output tail through the `3 log · raw` pane below it.\n- Glance at the status bar. While splits are open its center lists `1 session`, `2 chat`, and `3 log`, with the active pane marked.\n- Run `close splits` from the same palette entry or menu item to fold back to a single well.\n\nThe choice persists across launches. Toggling never remounts the terminal, so the session never flickers. Both side panes stick to their bottom edge. Before any traffic the chat pane reads `no channel chat yet` and the log pane reads `quiet — raw session output tails here`.',
+  },
+  {
+    id: 'shape.imm-board',
+    number: '4.8',
+    title: 'Work the imm board',
+    section: 'Shape the window',
+    body: 'When you finish, staff work sorts itself worst first in one panel.\n\n- Show the panel with `⌘K` and `show imm pane`, or place `imm` from the `panels` tab, where it lists as `imm (staff queues)`. Its home is the right column.\n- Log in on an immortal. The server lights the panel at login with an `Imm.Queues` push. On a mortal it reads `no staff feed`.\n- Read top down. Only queues with work appear, overdue sorts above nearing, and bigger counts rise. The queues are `dcheck`, `applications`, `journals`, `votes`, `notes`, `bugs`, `penalties`, `ideas`, and `typos`.\n- Trust the chips. Rows trail `N overdue` and `N nearing`, applications add `N unread`, and journals add `N unawarded`.\n\nThe header sums the board as `N overdue`, `N nearing`, or `clear`. A count flashes when it grows. An empty board after the feed reads `all clear`.',
+  },
+  {
+    id: 'tick.tick-timer',
     number: '5.1',
-    title: 'Panels overview',
-    section: 'Layout and panels',
-    body:
-      'A panel is a piece of UI Vosh can dock at one of four edges of the main window (top, bottom, left, right) or hide entirely. The map, chat, group, vitals, affects, and room strip are all panels.\n\n' +
-      'Each panel can sit in any zone its content can fit. The map only allows left, right, or hidden because a horizontal map at full window width looks like a strip. The other panels accept any edge.\n\n' +
-      'The Settings window has a `panels` tab with three sub-views.\n\n' +
-      '- `layout` shows your placement choices and a visual map of where each panel will land.\n' +
-      '- `panes` dials in content for individual panels (vitals shape, affects to track).\n' +
-      '- `chips` configures the small read-outs that ride along the chrome (tick, mud time, moons).',
+    title: 'Run the tick timer',
+    section: 'Tick and target',
+    body: "When you finish, a countdown chip rides your input row and warns you before every tick.\n\n- Open the `tick & chips` tab in Settings.\n- In the `timer` row, tick `enabled`. Add `sound on fire` if you want to hear it land.\n- Set `interval` in seconds, anywhere from 1 to 3600.\n- Put a command in `auto-fire` to send it on every tick. Leave it blank for none.\n- Give `reset on` a regex. Every line that matches resets the countdown, so the MUD's own tick message keeps the timer honest.\n- Enable `warn` and set how many seconds of lead you want, 5 by default. Fill `warn text` and `color` to restyle the warning. The color takes an ANSI name, `#rrggbb` hex, or a 256 palette index, and blank keeps the defaults.\n- Pick a chip style under `input row chip`. `value only` is just the number, `caption + value` adds labels, and `icon + value` swaps them for compact icons. The chip renders at the right edge of the input row.\n- Place the moons in the `status strip` section. `right edge`, `before the clock`, and `after the clock` position the Aabahran moon phases.\n\nThe ember vitals layout repeats the countdown in its pane head, so a sidebar glance works too. Changes here apply live.",
   },
   {
-    id: 'panels.layout',
+    id: 'tick.track-target',
     number: '5.2',
-    title: 'Choosing where each panel lives',
-    section: 'Layout and panels',
-    body:
-      'Open Settings, click the `panels` tab, and stay on the `layout` sub-view. Each panel has a row with a zone dropdown and an alignment dropdown. Pick a zone. For left and right zones, the alignment dropdown chooses whether the panel hugs the top of the column or the bottom. Top and bottom zones ignore alignment.\n\n' +
-      'Use the up and down arrows on each row to reorder panels within their shared zone.\n\n' +
-      'Click `[reset to defaults]` if you want to start over.',
+    title: 'Track a target with quick keys',
+    section: 'Tick and target',
+    body: 'When you finish, your target reads from three places and your quick keys sit one glance away.\n\n- Watch the status bar once you set a target. The left block shows `tar` plus the target name, then your quick keys as name and verb pairs separated by `·`.\n- Find the target in the room strip. Its character chip carries a `▶` marker, so you can pick it out of a crowd.\n- Give combat its own pane. `combat` ships hidden, which renders it inline inside the vitals bar. Move it to a zone in the `panels` tab and it becomes a standalone pane with the target name over an hp track bar. It collapses when no target exists.\n- Park `combat` and `vitals` together in the bottom zone and combat shrinks to a chip attached to the vitals block.\n- Use a quick key. Type its name as the first word of a command and Vosh suppresses its own echo, because the backend echoes the expansion instead.\n\nQuick keys live in the running session. They reset to the stock `gg`, `xx`, `zz`, and `tt` slots on restart, so set your verbs again with `#qkey` after each launch.',
   },
   {
-    id: 'panels.resize',
-    number: '5.3',
-    title: 'Resizing and side-fill',
-    section: 'Layout and panels',
-    body:
-      "Drag the inside edge of any side panel (the visible dividing line between the panel and the terminal) to resize that zone's width. Each side zone remembers its width on its own.\n\n" +
-      'The Panels tab has a checkbox called `side panels span full height`. When it is off (the default), top and bottom zones stretch all the way across the window and the side panels sit between them, like a plus sign. When it is on, the side panels run the full height of the window, top to bottom, and the input row plus status bar live in a column under the terminal area only. Pick whichever shape fits your screen.',
-  },
-  {
-    id: 'panel.map',
+    id: 'make-it-yours.switch-themes',
     number: '6.1',
-    title: 'The map pane',
-    section: 'The panels themselves',
-    body:
-      'Vosh draws a map of your surroundings from GMCP data the MUD pushes (the Map.Tiles package). The player sits at the center of the canvas. Same-floor rooms render in full color around you. Rooms one or more floors above or below render dimmer in the same positions. Lines connect rooms that share an exit.\n\n' +
-      'The header bar above the canvas has a label, a radius badge, a style toggle, and a zoom control. The style toggle picks between three rendering modes.\n\n' +
-      '- `squares` is the default. Filled sector-colored squares with corridor lines underneath. Vertical exits show as small `▲` and `▼` markers.\n' +
-      '- `glyphs` renders each room as a character glyph in the terminal font, TinTin++ style. The player is an `@`.\n' +
-      '- `tileset` lets you load a horizontal PNG of thirteen tiles in sector order and use those instead of solid squares.\n\n' +
-      'Zoom with the `+` and `-` buttons. The percentage shows in the middle. The `⤺` button resets to 100%. Hold Ctrl or Cmd and roll the mouse wheel over the map to zoom in or out as you would in a map app.\n\n' +
-      'Hide the map with the `[map]` button in the top bar. Click it again to bring the map back to its last zone.',
+    title: 'Switch themes',
+    section: 'Make it yours',
+    body: 'When you finish you will have a new look applied across the whole app, terminal included.\n\n- Click the gear button in the main window top bar to open the settings window.\n- Pick the `themes` tab in the left rail. It sits under the `appearance` group beside `typography`.\n- Read the catalog. Cards for the stock themes come first, then any custom themes tagged `custom`, then the dashed `+ new from active` card.\n- Each card shows a state dot, the theme name, and three swatches for the surface, accent, and warn colors.\n- Click a card. The theme activates on the spot, and the header note reads `changes save automatically`.\n\nA theme changes both layers of the app. The chrome layer covers surfaces, text, borders, the accent pair, and the semantic warn, danger, info, and success colors. The terminal layer covers background, foreground, cursor, selection, and all sixteen ANSI colors. Some themes also turn on terminal tint by default. Ember ships with its pastel ANSI on.\n\nStock themes stay locked. A custom theme shows an `×` on its card while it is inactive, and clicking it deletes the theme immediately with no confirm dialog. If the theme you are using ever disappears, Vosh falls back to the default theme.',
   },
   {
-    id: 'panel.chat',
+    id: 'make-it-yours.build-your-own-theme',
     number: '6.2',
-    title: 'The chat pane',
-    section: 'The panels themselves',
-    body:
-      'The chat pane collects channel chatter so you can read it without watching the live scrollback. Public channels, tells, and any trigger line you route with a `route <pane>` action all land here.\n\n' +
-      "The pane is hidden by default. Move it somewhere visible from Settings panels (set the chat panel's zone to top, bottom, left, or right) or pin it under the terminal and use it as a backlog.\n\n" +
-      'The header has a tab strip showing every pane name Vosh has seen. Click a tab to filter to just that source. Click `all` to see everything.\n\n' +
-      'The pane auto-scrolls to the newest message while you are looking at the bottom. If you scroll up to read back, autoscroll pauses. Scroll back within twenty-four pixels of the bottom and autoscroll resumes.',
+    title: 'Build your own theme',
+    section: 'Make it yours',
+    body: "When you finish you will have your own theme, forked from an existing look and recolored slot by slot.\n\n- Open the settings window and pick the `themes` tab.\n- Activate the theme you want as your starting point.\n- Click the dashed `+ new from active` card at the end of the catalog. Vosh forks the active theme, gives it the base theme's name with `(custom)` appended, and switches to it.\n- The editor appears under the catalog. Set the `label` and `description` fields first.\n- Recolor the `chrome` section. Its groups are surfaces, text, borders, accent, and semantic.\n- Recolor the `terminal` section. Its groups are terminal surfaces, selection, `ANSI 0-7`, and `ANSI 8-15 (bright)`.\n- Adjust any slot with the color picker beside it, or type a value into its text field.\n\nEvery edit applies live in the main window, so keep it visible while you work. Saves happen automatically a beat after each change.\n\nThe text field commits a value only when CSS can render it. You can type an rgba value, and the picker strips it to hex for its own display. The editor only renders while the active theme is one of yours, so switching back to a stock theme hides it until you activate the custom one again.",
   },
   {
-    id: 'panel.group',
+    id: 'make-it-yours.control-terminal-colors',
     number: '6.3',
-    title: 'The group pane',
-    section: 'The panels themselves',
-    body:
-      'The group pane shows your party. While you are grouped, each member appears on a row with their name, class, level, hp percent, mana percent, move percent, and points to next level (TNL). Numbers are colored by how full they are.\n\n' +
-      'While you are solo, the pane swaps to your own Worth read-out. TNL, experience, gold, bank balance, trains, and practices. The data comes from GMCP (Group.Info and Char.Worth), so the pane updates whenever the MUD pushes a new snapshot.',
+    title: 'Control terminal colors',
+    section: 'Make it yours',
+    body: "When you finish you will control the terminal palette itself, plus the two accent colors Vosh draws over it.\n\n- Open the settings window and pick the `themes` tab.\n- Find the `tint` section and its `terminal tint` row.\n- Check `tint output with theme` to recolor server output with the theme's own ANSI set, or uncheck it to show the base palette. Each theme picks its own default. Ember ships its pastel ANSI on.\n- Scroll to the `terminal base palette` section. Its sixteen slots are the ANSI 0 to 15 colors used while `tint output with theme` is off.\n- Edit any slot with its picker or text field. Touching one slot turns all sixteen into a custom list.\n- Click `reset to canonical` to throw the custom list away and return to the canonical chart. The button only shows while your palette is custom.\n- Set `sent command color` to recolor the local echo of every command you send. The row holds a color picker, a text field, and a `clear` button.\n- Set `split scrollback divider` the same way to recolor the line between the history and live panes. Its text field placeholder reads `theme default (#rrggbb, rgba, named)`.\n\nBoth accent rows apply live the moment you commit a value. `clear` returns either one to the theme default.",
   },
   {
-    id: 'panel.vitals',
+    id: 'make-it-yours.pick-your-fonts',
     number: '6.4',
-    title: 'The vitals bar',
-    section: 'The panels themselves',
-    body:
-      'The vitals bar shows your hp (hit points), mn (mana), and mv (movement). Each row carries a color-coded bar, a percent, a current-over-maximum number, and the change since the last tick.\n\n' +
-      'Open Settings, click `panels`, pick the `panes` sub-view, and expand the `vitals` row to configure the bar.\n\n' +
-      '- The preset chips at the top (`bars`, `compact`, `numeric`, `percent`) flip every column toggle to a sensible combination.\n' +
-      '- The toggles below let you turn each column on or off independently.\n' +
-      '- The bar glyphs section sets which characters render the filled and empty cells, plus the bar width.\n' +
-      '- The layout chips switch between ember (thin bars in fixed colors under a small pane header, the default), stacked rows (one vital per row), and inline (all three on a single row in TinTin++ nprompt style).\n' +
-      '- Percent color either matches the bar (per-vital color) or uses a red-to-green gradient against the percent.\n\n' +
-      'If none of that fits, turn on `custom template` and write your own line. The textarea takes tokens like `%hp`, `%pct_mn`, `%bar_mv`, and the help block under it lists every supported token. Tokens can also reach into any field your MUD ships through `Char.Vitals` or `Char.Worth` (for example `%xp`, `%gold`).',
+    title: 'Pick your fonts',
+    section: 'Make it yours',
+    body: 'When you finish the terminal will render in the face and size you chose.\n\n- Open the settings window and pick the `typography` tab.\n- In the `terminal face` section, click one of the quick chips. `BerkeleyMono`, `JetBrainsMono`, `Menlo`, `Monaco`, or `Courier New`. The first two ship inside Vosh, so they work on every machine.\n- Or type a full CSS stack into the family field. Follow the placeholder shape, `"BerkeleyMono Bundled", Menlo, monospace`.\n- Set the size with the number input. It accepts 9 to 32 px and defaults to 14.\n- Check `bright text as bold` to render SGR bright colors 8 to 15 in the heavier cut. This applies on the native renderer only.\n- To use a font installed on your machine, click into the `system fonts` filter field. Vosh loads the installed list on first focus, and the placeholder tells you when it is ready.\n- Keep `monospace only` checked to hide proportional faces. The list shows up to 200 families, each row drawn in its own face.\n- Click a family. Vosh sets your stack to that family with Menlo and monospace as fallbacks.\n- Check the `preview` section. It renders a fixed sample line at your chosen family and size.\n\nChanges save automatically about a quarter second after you stop typing, and a `saved.` note confirms it.',
   },
   {
-    id: 'panel.affects',
-    number: '6.5',
-    title: 'Tracked affects',
-    section: 'The panels themselves',
-    body:
-      'An affect is a temporary status the MUD applies to your character. Sanctuary, haste, poison, bless, anything timed.\n\n' +
-      'The affects bar shows pills for the affects you have asked Vosh to track. Each pill carries the affect name and the remaining duration. The duration color shifts from green (plenty of time) to yellow, orange, and red as it counts down. A permanent affect renders cyan. A tracked affect that is not currently active renders as a dim pill with a `-` instead of a duration, so you can see at a glance which of your buffs are missing.\n\n' +
-      'Pick which affects to track in Settings panels under the `affects` accordion. Add an affect by name (the server-side name from `Char.Affects`). Optionally set a custom label that displays instead of the server name. The tooltip still shows the real name so you cannot lose track of what a chip stands for.',
-  },
-  {
-    id: 'panel.room',
-    number: '6.6',
-    title: 'The room strip',
-    section: 'The panels themselves',
-    body:
-      'The room strip summarizes the room you are standing in on a single horizontal line. It reads `area · room name · #vnum · terrain · [exits] · here <chars> · items <items>` left to right.\n\n' +
-      'The area name is colored by the area, which makes border crossings obvious. The terrain word is colored by its sector type. Exits show as their compass-direction initials (N, E, S, W, U, D) in square brackets. Characters and items group by name so a stack of twenty arrows reads as `(20) arrow` instead of twenty separate entries. Your current target shows up with a `▶` next to its chip in the `here` list.\n\n' +
-      'The strip lives in the top zone by default. When you move it into a side panel, it wraps onto multiple lines and becomes resizable.',
-  },
-  {
-    id: 'tick.timer',
+    id: 'characters-and-data.profiles',
     number: '7.1',
-    title: 'The tick timer',
-    section: 'Tick and target',
-    body:
-      'A tick is a recurring server event most MUDs use to regenerate hp, mana, and movement. Knowing when the next tick lands is the difference between resting and dying.\n\n' +
-      'Vosh has a tick countdown chip that rides on the top border of the input row. It shows `tick 14s` (or similar) and decrements every second. When it reaches zero, an optional sound plays and an optional auto-fire command sends.\n\n' +
-      'Configure the tick in Settings panels, in the `chips` sub-view.\n\n' +
-      '- The interval defaults to a common tick length. Set it to whatever your MUD uses (Aabahran is thirty seconds).\n' +
-      '- The auto-fire field is a command Vosh sends on every tick. Useful for keeping a `consider` or `score` on a clock.\n' +
-      '- The reset-on regex resets the countdown whenever a server line matches it. Useful for MUDs that re-anchor the tick to specific events.\n' +
-      '- The warning section adds an optional pre-fire alert with custom text and color.\n\n' +
-      'Every one of these is also drivable from the command line. `#tick` shows the current state. `#tick interval 30`, `#tick reset`, `#tick on {pattern}`, `#tick off`, `#tick fire score`, `#tick nofire`, `#tick sound on|off`, `#tick disable`, `#tick enable`, and the `#tick warn` family (`#tick warn at 5`, `#tick warn message your tick is up`, `#tick warn color bright-red`, `#tick warn off`) cover the lot.',
+    title: 'Keep characters separate with profiles',
+    section: 'Characters and data',
+    body: "When you finish, each character has its own profile carrying its aliases, triggers, macros, and variables, and the right one loads by itself when you connect.\n\n- Click the gear button in the top bar to open Settings, then pick `profiles` under `characters` in the left rail.\n- Type a name in the create row, `aabahran-erelei` for example, and click `+ new`. Names take letters, digits, `-`, `_`, and spaces.\n- Click `auto-match` on the new row. Enter the `host`, an optional `port`, and `characters` as a list separated by commas, `Erelei, Akletus, Vanek` for example. Any listed name matches. Click `save`.\n- Click `switch` on a row to change the active profile. Everything on this tab saves automatically.\n\nThe `scope` section decides what travels with a profile. Flip the pill from `global` to `profile` on any of `theme`, `font`, `dock layout`, `keep last command`, or `auto check updates`. Global keeps one value across every profile. Profile moves the value with the active profile, and the `font` row covers family and size as one toggle.\n\n`duplicate` copies a profile's whole setup but deliberately leaves the auto match rules behind. You cannot delete the active profile, so switch away first. From the input bar, `#profile save` and `#profile load` write and reload the active profile's file on demand.",
   },
   {
-    id: 'target.quickkeys',
+    id: 'characters-and-data.loadouts',
     number: '7.2',
-    title: 'Targets and quick-keys',
-    section: 'Tick and target',
-    body:
-      'A target in Vosh is whatever character you have most recently picked with the `tar` keyword. The current target shows in the status bar as `tar <name>` and gets a `▶` marker on its chip in the room strip.\n\n' +
-      "Set a target by typing `tar` followed by a number or a partial name. `tar 2` picks the second character in the room. `tar helg` picks the first character whose name contains `helg`. With a substring you type, the target name stays exactly what you typed, so a command like `kill ${target}` sends the short keyword the MUD's own matcher already knows how to resolve. Cycle through everyone in the room with `tarn` (next) and `tarp` (previous). Clear the target with `tarclear`.\n\n" +
-      'A quick-key is a short name (like `gg`) that expands to a verb plus your current target. Four slots come pre-defined. `gg`, `xx`, `zz`, `tt`. All start with empty verbs. Configure a verb with `#qkey gg kick`. Now typing `gg` while you have a target sends `kick <target>`. `#qkey clear gg` removes a binding. `#qkeys` lists every binding.\n\n' +
-      'Quick-keys expand before alias expansion, so a quick-key always wins over an alias with the same name. They will not fire without a target set.',
+    title: 'Group your automation with loadouts',
+    section: 'Characters and data',
+    body: 'When you finish, named loadouts flip whole groups of aliases, triggers, and macros on and off from one shared catalog.\n\n- Open Settings, pick `import` under `tools`, and find the `migrate between scopes` section. Click `preview migration`.\n- Review the plan. The wizard shows how your profiles would merge into a single shared catalog with one generated loadout per source profile. The preview writes nothing.\n- Apply the migration. Vosh writes the catalog and parks your old per profile files in `profiles/legacy/`. Loadout mode waits for the next launch, so click `quit Vosh` in the wizard and reopen the app. The profile you were on becomes the sole active loadout.\n- Reopen Settings. A `loadouts` tab now appears under `characters`. Check the boxes for the loadouts you want live. The runtime enables the union of their groups across every active loadout.\n\nClick `deactivate all` to park the catalog dormant. Dormant disables every grouped alias, trigger, and macro, and it survives restarts and profile switches. Items without a group always stay live.\n\nWhen no active loadout declares any enabled groups, the loadouts have no opinion and your durable checkbox state from the automation tabs stands. Activation is the only edit this tab makes. Author or reshape loadouts by editing `loadouts.toml` in the app data folder, or run the migration wizard again.',
   },
   {
-    id: 'aliases',
+    id: 'characters-and-data.tintin-import',
+    number: '7.3',
+    title: 'Bring your TinTin++ setup over',
+    section: 'Characters and data',
+    body: 'When you finish, your TinTin++ aliases and variables live in Vosh and the report tells you exactly what did not carry over.\n\n- Type `#import-tintin <path>` in the input bar and point it at your `.tin` file. `~` expands, so `#import-tintin ~/aabahran.tin` works.\n- Read the echo. It prints `imported <path>` and a count line like `12 aliases, 4 vars`.\n- Check the `skipped (unsupported)` line. It tallies directives Vosh does not model by name, `event=2 ticker=1` for example, so you can port them by hand.\n- Check the `unparsed` count. It flags alias or variable lines the parser could not read.\n\nThe importer handles `#alias {name} {expansion}` and `#variable {name} {value}`, with `#var` accepted as a short form. Nested braces and escaped braces inside the values parse correctly. The importer silently skips `#nop` lines and comments starting with `;`. Imported aliases overwrite existing aliases with the same name. Variables land at profile scope, so they persist with the profile.\n\nFiles from other clients go through Settings instead. Open the `import` tab, pick or paste a MUSHclient, Mudlet, GMUD, or `CMUD / zMUD` export, leave the format on `auto-detect`, and hit `apply`. The summary lists counts plus anything rejected, unsupported, or unparsed.',
+  },
+  {
+    id: 'characters-and-data.search-logs',
+    number: '7.4',
+    title: 'Search your session logs',
+    section: 'Characters and data',
+    body: 'When you finish, you can pull any line from any past session back out with a regex search.\n\n- Open Settings and pick `logs` under `tools` in the left rail.\n- Pick a scope in the sessions list on the left. `all sessions` searches everything. Clicking one session narrows the search to it, and each row shows the host, port, date, and line count.\n- Type a pattern in the search box and click `search`. Patterns are regular expressions, so `dragon|wyvern` finds both.\n- Tick `case` for case sensitive matching. Tick `show all` to lift the 500 result cap and return every match.\n\nEach hit shows its timestamp, the host and port when you search across sessions, and the line in its original colors when the raw bytes are on record. Changing the session scope or either checkbox reruns the current search on its own. A new pattern needs another click on `search`.\n\nThe `copy` button on a session row copies that whole session to your clipboard as plain text. There is no file download yet. The store is `logs.sqlite` in the app data folder and it fills on every connection, so logging costs you nothing to set up.',
+  },
+  {
+    id: 'characters-and-data.stay-updated',
+    number: '7.5',
+    title: 'Keep Vosh up to date',
+    section: 'Characters and data',
+    body: "When you finish, Vosh checks for new builds on its own and installs them in place.\n\n- Open Settings. The `general` tab opens by default. Scroll to the `app` section and find the `updates` row.\n- Click `check now`. The status reads `checking…`, then `up to date` when nothing is newer.\n- When a build is available, click the `install v<version> + restart` button that appears. The status shows `installing…`, then Vosh relaunches on the new build.\n- Tick `check on launch` to run the check at every start. It is off by default. With it on, a banner appears in the main window when an update is waiting.\n\nUpdates download from the project's GitHub releases, and Vosh checks every build's signature before installing.\n\n`auto check updates` is one of the five scope rows on the `profiles` tab. It defaults to global, so one setting covers every profile. Flip it to profile when one character should check on launch while the others stay quiet.",
+  },
+  {
+    id: 'fix-it.terminal-renderer',
     number: '8.1',
-    title: 'Aliases',
-    section: 'Aliases, triggers, variables',
-    body:
-      'An alias is a short name that expands into a longer command (or several commands) when you type it. If you find yourself typing the same phrase many times, an alias replaces it with one word.\n\n' +
-      'The simplest way to make one is from the command line. `#alias greet wave;bow` defines an alias named `greet` that runs `wave` then `bow`. Now typing `greet` sends both commands. `#unalias greet` removes it. `#aliases` lists every alias.\n\n' +
-      'The Settings window has an `aliases` tab with a form editor. Each alias has a name, an expansion, an optional group (folder), and a toggle that controls whether typing the name expands it or leaves it alone.\n\n' +
-      'Variables interpolate inside the expansion before it sends, so `${target}` and `$hp` work just like in any other typed command. The `%1`, `%2`, ... placeholders take positional arguments from the words you typed after the alias name. `%0` is the entire argument string. `%1-` is `argument 1 onward`.\n\n' +
-      'Aliases can call other aliases. Vosh stops at a recursion limit so an alias that calls itself does not loop forever. The error echoes in brackets when it kicks in.\n\n' +
-      'If you prefer raw JSON, the same tab has a mode toggle. Form mode is what most people want.',
+    title: 'Switch renderers when the terminal looks wrong',
+    section: 'Fix it',
+    body: 'When you finish, the terminal draws with the renderer you chose and the text matches the font you set.\n\nVosh ships two renderers. The native GPU surface is the default on macOS. The xterm renderer is the default on Windows and Linux.\n\n- Type `#nativesurface off` to force the xterm renderer everywhere.\n- Type `#nativesurface on` to force the native surface everywhere.\n- Restart Vosh. The switch applies only on restart, and the echo reminds you with `restart Vosh to apply`.\n- Type `#nativesurface default` to return to the platform default.\n\nThe command runs entirely in the frontend and stores your choice locally under the key `vosh.nativesurface`. A bad argument echoes `usage #nativesurface on | off | default (takes effect on restart)`.\n\nIf the text looks like the wrong typeface, open Settings and pick the `typography` tab. The default family stack starts with `BerkeleyMono Nerd Font` and falls through `JetBrains Mono`, `Fira Code`, `Menlo`, and `Consolas` before generic monospace. Your machine renders the first family in that stack it has installed, so install the font you want or move it to the front. Font size defaults to 14.\n\nFonts also follow profile scope. In Settings under `profiles`, the `font` row covers family and size as one toggle. Set it to `global` for one look everywhere or `profile` to let each profile carry its own.\n\nOn the xterm renderer the right click menu offers `clear buffer`. The native surface hides that item because its grid has no clear command.',
   },
   {
-    id: 'triggers',
+    id: 'fix-it.reconnect',
     number: '8.2',
-    title: 'Triggers',
-    section: 'Aliases, triggers, variables',
-    body:
-      "A trigger watches the server's output for a pattern and runs an action on every match. Triggers are how you color a tell red, hide spam, send a follow-up command when you see a keyword, or push a line into the chat pane.\n\n" +
-      "The pattern is a regular expression. Captures (`(\\w+)`) become `$1`, `$2`, and so on inside the trigger's action. The whole match is `$0`. Named groups like `(?<who>\\w+)` become `${who}`.\n\n" +
-      'A trigger can do any combination of these actions.\n\n' +
-      '- `highlight <color> [bold] [underline] [inverse] [bg:<color>]` colors the matched line.\n' +
-      '- `gag` hides the matched line so it never reaches the terminal.\n' +
-      '- `replace <template>` rewrites the line. The template can interpolate captures and variables.\n' +
-      '- `send <template>` sends a command to the MUD. Same template substitution.\n' +
-      '- `route <pane>` sends a copy of the matched line to a named chat pane.\n\n' +
-      'Define a trigger from the command line with `#trigger <name> {pattern} <action>`. The braces around the pattern matter, so spaces inside the pattern do not split into argument boundaries. Backslash-escape a literal `}` inside the pattern as `\\}`.\n\n' +
-      'The Settings window has a `triggers` tab with the same form editor as aliases. Triggers belong to groups, have a priority that orders matching (lower runs first), and have an enable switch. Vosh ships a set of preset triggers, and the General tab toggles which presets are on.',
+    title: 'Recover a bad connection',
+    section: 'Fix it',
+    body: 'When you finish, the session chip shows a steady connected dot and the world responds again.\n\n- Look at the session chip in the top bar. Its status dot shows idle, connecting, connected, or error, and while live the chip also shows your character name and `host:port`.\n- Click the chip. A dropdown form opens with `host`, `port`, a `tls` checkbox, and a submit button that reads `connect` or `disconnect` depending on state.\n- Press `disconnect`, wait for the dot to go idle, then press `connect`.\n- Confirm the address. The defaults are host `play.theforsakenlands.com` and port `1848` with `tls` off.\n\nTwo other paths reach the same controls. Right click the terminal and pick `disconnect`, the item that appears at the bottom of the menu only while connected. Or press `Cmd+K` on macOS or `Ctrl+K` elsewhere and run the palette entry `connect` or `disconnect`.\n\nThe `tls` checkbox wraps the connection in TLS. Match it to what the server actually offers on that port. The default port `1848` expects it off.\n\nDisconnecting has side effects worth knowing. Session scoped variables clear when the next connection opens, so anything set with `#var` never carries into the new session, while profile variables survive. The chat pane buffer clears at disconnect. When you reconnect, Vosh matches the host and port against your profiles and switches to the best match automatically, and it picks up a character pinned profile after login.',
   },
   {
-    id: 'variables',
+    id: 'fix-it.data-on-disk',
     number: '8.3',
-    title: 'Variables',
-    section: 'Aliases, triggers, variables',
-    body:
-      'A variable is a named value you can interpolate into any typed command, alias expansion, or trigger template. Vosh has two scopes.\n\n' +
-      '- Profile variables live with the profile and survive across launches.\n' +
-      '- Session variables live only as long as the current session and clear on disconnect.\n\n' +
-      'Set one with `#var name value`. Show one with `#var name` (no value). Remove with `#unvar name`. List all with `#vars`.\n\n' +
-      'Interpolate with `$name` or `${name}`. The braces are useful when the name runs into surrounding letters, as in `${name}ish`. A literal `$` escapes as `$$`.\n\n' +
-      'Some variables update on their own. `${target}` always reflects the current target. Triggers and Lua scripts can set variables on a match.',
+    title: 'Find your data on disk',
+    section: 'Fix it',
+    body: 'When you finish, you know which file holds each piece of your Vosh data and how to back it up.\n\nEverything lives in one app data folder named `com.aabahran.vosh`.\n\n- On macOS, open `~/Library/Application Support/com.aabahran.vosh`.\n- On Linux, open `~/.local/share/com.aabahran.vosh`.\n- On Windows, open `%APPDATA%\\com.aabahran.vosh`.\n\nInside that folder.\n\n- `profiles.toml` indexes your profiles and names the active one.\n- `profiles/<name>.toml` holds each profile snapshot with connection defaults, aliases, variables, triggers, tick config, and macros.\n- `global.toml` holds cross profile UI preferences.\n- `catalog.toml` and `loadouts.toml` appear once loadout mode is active.\n- `logs.sqlite` stores session logs, with `-wal` and `-shm` sidecars alongside.\n- `scrollback.txt` persists the last 10,000 terminal lines across restarts.\n- `maps.sqlite` stores map data.\n- `scripts/` holds Lua files for `#script load`.\n- `plugins/` holds plugin folders, each with a `manifest.toml`.\n\nEvery TOML save is safe by design. Vosh renames the old file to `<file>.bak.<timestamp>` with a millisecond timestamp, writes a temp file, swaps it in atomically, and keeps the ten newest backups. To roll back a bad profile edit, copy the backup you want over the live file.\n\nA leftover `profile.toml` at the root is the legacy single profile file. Vosh migrates it to `profiles/default.toml` on the first multi profile launch.',
   },
   {
-    id: 'macros',
+    id: 'reference.slash-commands',
     number: '9.1',
-    title: 'Keyboard macros',
-    section: 'Macros and recording',
-    body:
-      'A keyboard macro is a key on your keyboard that sends a command when you press it (while the command input has focus). Function keys, modifier combinations, and the numpad are all available.\n\n' +
-      'Open Settings, click `macros`. Each row has three fields.\n\n' +
-      '- The key field captures a key when you click it and press something. It accepts F-keys, Numpad keys, and modifier chords like `Ctrl+N` or `Shift+Alt+F3`.\n' +
-      '- The command field is what gets sent on every press. Chain commands with semicolons.\n' +
-      '- The group field is an optional folder so you can bulk-enable or disable related macros.\n\n' +
-      'The bottom row is always empty so you can add a new binding. Fill in a key and a command, then click `[add]`. Delete a row with the red `[delete]` button.\n\n' +
-      'Each named group has a header with a checkbox. Uncheck it to disable every macro in that group at once without losing the bindings. Re-check to bring them back.',
+    title: 'Find the right slash command',
+    section: 'Reference',
+    body: 'This is every slash command Vosh understands today, so you never guess at syntax.\n\n- `#help` prints the command summary.\n- `#alias <name> <expansion>` defines, `#unalias <name>` removes, `#aliases` lists.\n- `#var <name> [value]` sets or shows a session variable, `#unvar <name>` removes it from both scopes, `#vars` lists.\n- `#trigger <name> {pattern} <action> [args]` defines, `#untrigger <name>` removes, `#triggers` lists by priority.\n- `#prompt {regex}` binds named captures to prompt vars, `#unprompt` removes it.\n- `#group <name> on|off` toggles a group, `#group <name>` shows state, `#groups` lists.\n- `#tick`, `#tick interval <secs>`, `#tick reset`, `#tick on {pattern}`, `#tick off`, `#tick fire <command>`, `#tick nofire`, `#tick sound on|off`, `#tick disable`, `#tick enable` drive the tick timer.\n- `#tick warn`, `#tick warn at <secs>`, `#tick warn message <text>`, `#tick warn color <name>`, `#tick warn off` shape the tick warning.\n- `#script load <name>` loads a Lua file, `#script reload` reruns loaded scripts, `#scripts` lists them.\n- `#lua <code>` evaluates Lua inline.\n- `#profile save`, `#profile load`, `#profile reset` manage the profile snapshot. In loadout mode all three become notices.\n- `#import-tintin <path>` imports TinTin++ aliases and variables.\n- `#record <name>` starts recording, `#record` shows status, `#record cancel` discards, `#endrec` saves the recording as an alias.\n- `#qkey <name> <verb>` configures a quick key, `#qkey clear <name>` clears, `#qkeys` lists.\n- `#target <args>` mirrors `tar`, with `#target clear|next|prev`, `#tarn`, `#tarp`, `#tarclear` as slash forms.\n- `#nativesurface on|off|default` forces the renderer, applied on restart.\n\nTargeting also works bare with no `#`. Type `tar` to list, `tar <N>` or `tar <substr>` to pick, `tarn` and `tarp` to cycle, `tarclear` to clear.\n\nAn unknown command points you at `#help`. Errors echo wrapped in square brackets.',
   },
   {
-    id: 'recording',
+    id: 'reference.keyboard-shortcuts',
     number: '9.2',
-    title: 'Recording a multi-step alias',
-    section: 'Macros and recording',
-    body:
-      'Recording is a faster way to build a complex alias. Instead of typing it out in the form editor, you tell Vosh to start recording, run through the sequence you want, then tell it to stop. The recorded commands save as a single alias that fires them in order when you type its name.\n\n' +
-      'Type `#record buff` to start recording with the alias name `buff`. Every command you type from then on is captured. Slash commands are skipped, so `#aliases` or any other `#`-prefixed command will not land in the macro. Type `#endrec` when you are done. Vosh saves an alias called `buff` whose expansion is every recorded command joined with semicolons.\n\n' +
-      'Type `#record` on its own to see the status of an in-progress recording. Type `#record cancel` to throw away the recording without saving.',
-  },
-  {
-    id: 'themes',
-    number: '10.1',
-    title: 'Themes',
-    section: 'Appearance',
-    body:
-      'A theme is a named bundle of colors. Surfaces, text, borders, accent, semantic colors (warn, danger, info, success), and the full ANSI 0 to 15 palette the terminal uses.\n\n' +
-      'The Settings window has a `themes` tab. Built-in themes are listed first and are read-only. Click any row to make that theme active. Vosh applies the new colors immediately.\n\n' +
-      'Click `[+ new from active]` under the custom themes section to fork the current theme. The new theme appears in the list with an `[edit]` button. Click `[edit]` to open the color grid. Each slot has a color picker and a hex or rgba text field. Change either and the running window redraws as you type. Click `[done]` when you are happy. Custom themes can be deleted, but only when they are not active.\n\n' +
-      "The General tab has a checkbox called `tint server output with theme palette`. When it is off, server colors render with the canonical xterm palette regardless of theme. When it is on, the theme's palette tints server output too.",
-  },
-  {
-    id: 'fonts',
-    number: '10.2',
-    title: 'Fonts',
-    section: 'Appearance',
-    body:
-      'The General tab in Settings sets the font Vosh uses for the terminal and the chrome. Type the family name directly into the font field. The five chips below the field are quick picks for fonts known to be present. Two ship bundled with Vosh (BerkeleyMono and JetBrainsMono). Three are system fonts always available on macOS.\n\n' +
-      'The system fonts list lower on the page enumerates every monospace font installed on your computer. It loads lazily when you focus the filter input or hover the list. Filter by name. Click a row to pick. Uncheck `monospace only` to widen the list to every font. Proportional fonts will look strange in the terminal.\n\n' +
-      'Set the font size in the `size` row. Nine to thirty-two pixels. The preview box at the bottom of the section shows the current font at the chosen size.',
-  },
-  {
-    id: 'logs',
-    number: '11.1',
-    title: 'Logs and search',
-    section: 'Tools',
-    body:
-      'Every connection Vosh makes gets logged. Each line, with its timestamp and ANSI colors, persists to a local SQLite database. The Logs tab in Settings is the only reader.\n\n' +
-      'The left column lists sessions, newest first, with the host, port, start time, and line count. Click `all sessions` to search across everything. Click a specific session to scope the search to just that one. The small `copy` button next to each row copies the plain-text transcript of that session to your clipboard.\n\n' +
-      'The right column is search. Type a pattern, choose case-sensitive or not, click `[search]`. Hits appear with their timestamp, the session they came from, and the original ANSI-colored text. The default cap is five hundred matches. Turn on `show all` if you want every match.\n\n' +
-      'Search is plain substring (or case-sensitive substring), not regex. For complex queries, copy a session and search in your editor of choice.',
-  },
-  {
-    id: 'import',
-    number: '11.2',
-    title: 'Importing from another client',
-    section: 'Tools',
-    body:
-      'If you are coming from another MUD client, Vosh can ingest your aliases, triggers, macros, and variables. The Import tab supports MUSHclient (`.mcl` / `.xml`), Mudlet (`.xml`), GMUD (`.cfg`), and CMUD / zMUD (`.xml`). Auto-detect picks the format from the file contents.\n\n' +
-      'Click `[pick file]` and choose your export, or paste the contents into the textarea directly. Click `[apply]`. Vosh parses the file, merges every entry into your current profile, and prints a summary. The summary lists how many of each kind landed, plus any rejected (broken), unsupported (no equivalent in Vosh), or unparsed (we did not understand the line) entries. Open each section to read the details.\n\n' +
-      'Existing aliases and triggers with the same name are overwritten by the import. Save a profile first with `#profile save` if you want a backup before you do this.\n\n' +
-      'For TinTin++, use the command line. `#import-tintin <path>` reads a `.tin` file and pulls in `#alias` and `#variable` directives. Other TinTin directives are counted in the summary so you can port them by hand.',
-  },
-  {
-    id: 'scripting',
-    number: '11.3',
-    title: 'Lua scripting',
-    section: 'Tools',
-    body:
-      'Vosh embeds Lua. Lua scripts can register triggers, react to GMCP, change variables, and send commands. Scripts live in your app data directory under a `scripts/` folder as `.lua` files.\n\n' +
-      'Load a script with `#script load name`. Vosh reads `name.lua` from the scripts directory and runs it. Any triggers the script registers stay registered until the script is reloaded or the profile is reset.\n\n' +
-      'Reload every loaded script with `#script reload`. List loaded scripts and any Lua triggers with `#scripts`.\n\n' +
-      'Run a one-off snippet with `#lua <code>`. The snippet has access to the same Lua bindings the scripts use, so you can test something quickly without writing it to a file.',
-  },
-  {
-    id: 'updates',
-    number: '12.1',
-    title: 'Updates',
-    section: 'Updates',
-    body:
-      'The General tab has an `updates` row. The `auto-check on launch` checkbox controls whether Vosh checks for a new version at startup. When a newer version exists, the row turns into an install button like `[install vX.Y.Z + restart]`. Click it and Vosh downloads the update, applies it, and relaunches.\n\n' +
-      'The `[check now]` button kicks off an out-of-cycle check. The status text to its right shows `checking…`, `up to date`, or an error.\n\n' +
-      'Updates ship as signed releases. Vosh never installs an unsigned binary.',
-  },
-  {
-    id: 'ref.slash',
-    number: '13.1',
-    title: 'Every slash command',
+    title: 'Look up any keyboard shortcut',
     section: 'Reference',
-    body:
-      'Type any of these at the prompt. The text in `< >` is a placeholder you replace. `{pattern}` is a regex inside braces.\n\n' +
-      '- `#help` shows the full slash list inline.\n' +
-      '- `#alias <name> <expansion>` defines an alias.\n' +
-      '- `#unalias <name>` removes an alias.\n' +
-      '- `#aliases` lists every alias.\n' +
-      '- `#var <name> <value>` sets a variable.\n' +
-      '- `#var <name>` shows a variable.\n' +
-      '- `#unvar <name>` removes a variable.\n' +
-      '- `#vars` lists every variable with its scope.\n' +
-      '- `#trigger <name> {pattern} <action>` defines a trigger.\n' +
-      '- `#untrigger <name>` removes a trigger.\n' +
-      '- `#triggers` lists every trigger by priority.\n' +
-      "- `#tick` shows the tick timer's current state.\n" +
-      '- `#tick interval <secs>` sets the tick interval.\n' +
-      '- `#tick reset` resets the timer to a fresh interval.\n' +
-      '- `#tick on {pattern}` adds a regex that resets the tick on every match.\n' +
-      '- `#tick off` clears the regex reset pattern.\n' +
-      '- `#tick fire <command>` runs a command on every tick fire.\n' +
-      '- `#tick nofire` clears the auto-fire command.\n' +
-      '- `#tick sound on|off` toggles the tick beep.\n' +
-      '- `#tick disable` stops the tick timer.\n' +
-      '- `#tick enable` starts the tick timer.\n' +
-      '- `#tick warn` shows the warning settings.\n' +
-      '- `#tick warn at <secs>` echoes a warning that many seconds before the tick fires.\n' +
-      '- `#tick warn message <text>` customizes the warning text.\n' +
-      '- `#tick warn color <name>` colors the warning (red, bright-red, yellow, ...).\n' +
-      '- `#tick warn off` disables the warning.\n' +
-      '- `#script load <name>` loads `name.lua` from the scripts directory.\n' +
-      '- `#script reload` re-runs every loaded script.\n' +
-      '- `#scripts` lists loaded scripts and Lua-registered triggers.\n' +
-      '- `#lua <code>` evaluates a one-shot Lua snippet.\n' +
-      '- `#profile save` saves the active profile to disk.\n' +
-      '- `#profile load` replaces in-memory state with the saved profile.\n' +
-      '- `#profile reset` wipes the profile back to defaults.\n' +
-      '- `#import-tintin <path>` imports `#alias` and `#variable` from a TinTin++ `.tin` file.\n' +
-      '- `#nativesurface on | off | default` forces the native GPU renderer on or off, or restores the platform default. Takes effect on restart. `on` is the tester switch for Windows and Linux, where the native renderer ships disabled until it has a hardware pass.\n' +
-      '- `#record <name>` starts recording typed commands into a macro alias.\n' +
-      '- `#record` (no args) shows recording status.\n' +
-      '- `#record cancel` discards the in-progress recording.\n' +
-      '- `#endrec` stops recording and saves it as the named alias.\n' +
-      '- `#qkey <name> <verb>` configures a quick-key.\n' +
-      '- `#qkey clear <name>` removes a quick-key.\n' +
-      '- `#qkeys` lists every quick-key binding.\n\n' +
-      'The four target keywords are not slash commands. Type them bare.\n\n' +
-      '- `tar` (no args) lists chars in the room.\n' +
-      '- `tar <N>` picks the Nth char.\n' +
-      '- `tar <substr>` picks the first char whose name contains the substring.\n' +
-      '- `tarn` cycles to the next char in the room.\n' +
-      '- `tarp` cycles to the previous char.\n' +
-      '- `tarclear` clears the current target.',
-  },
-  {
-    id: 'ref.keys',
-    number: '13.2',
-    title: 'Keyboard shortcuts',
-    section: 'Reference',
-    body:
-      'Inside the command input.\n\n' +
-      '- `Enter` sends the typed line.\n' +
-      '- `Up` / `Down` walk command history. Type a prefix first to filter.\n' +
-      '- `Tab` / `Shift+Tab` complete the current word (history, room chars, recent names).\n' +
-      '- `Home` / `End` jump to the start or end of the input line. `Cmd+Left` / `Cmd+Right` on macOS.\n' +
-      '- `Shift+Home` / `Shift+End` extend the selection.\n' +
-      '- `Esc` cancels an in-flight paste burst or closes the split scrollback view.\n' +
-      '- `PageUp` / `PageDown` scroll the terminal one page at a time. On macOS this is also `Fn+Up` / `Fn+Down`.\n\n' +
-      'Inside the terminal pane.\n\n' +
-      '- Click and drag selects text.\n' +
-      '- `Ctrl+C` (`Cmd+C` on macOS) copies the selection.\n' +
-      '- Mouse wheel scrolls up to open the split scrollback view.\n' +
-      '- Middle-click anywhere closes the split scrollback and snaps to the live tail.\n' +
-      '- Clicking anywhere that is not a button re-focuses the command input.\n\n' +
-      'Map pane.\n\n' +
-      '- `Ctrl+wheel` (or `Cmd+wheel`) zooms in and out.\n\n' +
-      'Top bar.\n\n' +
-      '- `[help]` opens this help window.\n' +
-      '- `[settings]` opens the Settings window.\n' +
-      '- `[map]` toggles the map pane.',
+    body: 'This is every built in key Vosh binds, grouped by where it works.\n\nIn the command input.\n\n- `Enter` submits. `Shift+Enter` inserts a newline for multi line compose, and in password mode it submits instead.\n- `Tab` and `Shift+Tab` cycle tab completion through your history words, room characters, and recently seen names.\n- `ArrowUp` and `ArrowDown` recall history, filtered by whatever prefix you already typed.\n- `PageUp` and `PageDown` page the scrollback. On macOS press `Fn+Up` and `Fn+Down`.\n- `Escape` cancels an in flight paste burst, closes the scrollback split, and snaps the terminal to its tail.\n- `Home` and `End` jump the caret, also reachable as `Cmd+Left` and `Cmd+Right` or `Fn+Left` and `Fn+Right` on macOS. Add `Shift` to extend the selection.\n- `Cmd+C` or `Ctrl+C` with nothing selected in the input copies the native surface selection.\n\nAnywhere in the window.\n\n- `Cmd+F` or `Ctrl+F` opens the find toolbar.\n- `Cmd+K` or `Ctrl+K` toggles the command palette.\n\nIn the find toolbar. `Enter` finds the next match, `Shift+Enter` the previous, `Escape` closes and clears.\n\nIn the command palette. `ArrowUp` and `ArrowDown` move the selection, `Enter` runs the entry, `Tab` and `Shift+Tab` cycle the scope filter, `Escape` closes.\n\nMouse on the terminal. Wheel up opens the scrollback split on the xterm renderer, the native surface scrolls its own grid. Middle click closes the split and snaps to bottom. Right click opens the terminal menu.\n\nBind your own keys as macros in Settings under `macros`. Canonical names look like `F1`, `Ctrl+N`, `Shift+F5`, and `Ctrl+Alt+Numpad7`.',
   },
 ];
 
-/** Stable accessor so consumers don't depend on array index order. */
-export function getTopic(id: string): HelpTopic | null {
-  return HELP_TOPICS.find((t) => t.id === id) ?? null;
-}
-
-/**
- * Filter topics that match the query case-insensitively. Matches across
- * topic number, title, section, and body. Returns the full list unchanged
- * when the query is empty so the rail keeps its full shape.
- */
 export function searchTopics(query: string, topics: HelpTopic[] = HELP_TOPICS): HelpTopic[] {
   const q = query.trim().toLowerCase();
   if (q.length === 0) return topics;
