@@ -1512,7 +1512,7 @@ function App() {
             {terminalAreaElement}
             {bottomZoneElement}
             {inputElement}
-            <StatusBar />
+            <StatusBar hideCombat={panelLayout.placements.combat.zone !== 'hidden'} />
           </div>
         ) : (
           terminalAreaElement
@@ -1533,7 +1533,9 @@ function App() {
       </div>
       {!sidePanelsFillHeight && bottomZoneElement}
       {!sidePanelsFillHeight && inputElement}
-      {!sidePanelsFillHeight && <StatusBar />}
+      {!sidePanelsFillHeight && (
+        <StatusBar hideCombat={panelLayout.placements.combat.zone !== 'hidden'} />
+      )}
       <UpdateNotice />
       <Toasts />
       {terminalMenu && (

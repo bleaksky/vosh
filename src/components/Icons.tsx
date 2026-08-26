@@ -42,3 +42,22 @@ export function XIcon() {
     </svg>
   );
 }
+
+// Crossed swords for the combat target row in the vitals card.
+export function Swords() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2.5 2.5 11 11M13.5 2.5 5 11M9.5 12.5l3-3M3.5 9.5l3 3M11 11l2.5 2.5M5 11l-2.5 2.5" />
+    </svg>
+  );
+}

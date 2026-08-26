@@ -1385,15 +1385,18 @@ body {
   opacity: 0.7;
 }
 
-/* Ember layout — the sidebar-pane block from the Ember mockup. A
-   pane head (caps "vitals" + mono tick countdown) over three rows,
-   each `caps label · 4px rounded track · mono cur/max`. Fill colors
-   are fixed per vital; the columns / glyph / width settings do not
-   apply. Overrides the base .vitals-bar padding so the head and
-   rows own their side insets. */
+/* Ember layout — the ledger card. A pane head (caps "vitals" + mono
+   tick countdown) over three columns, one per vital: caps label with
+   the per-tick delta at its right, the current value as a 19px mono
+   figure with its max tucked in at 10px, and a 2px filament that
+   carries the percent. The card is a size container so the columns
+   can stack into rows when the rail gets narrow. Overrides the base
+   .vitals-bar padding so the head, columns and combat row own their
+   side insets. */
 .vitals-ember {
-  padding: 0 0 12px;
+  padding: 0;
   row-gap: 0;
+  container-type: inline-size;
 }
 
 .vitals-ember-head {
@@ -1409,62 +1412,540 @@ body {
   color: var(--c-text-dim);
 }
 
-.vitals-ember-rows {
+.vitals-ledger {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0 20px;
+  padding: 2px 14px 12px;
+}
+
+/* Under 300px the columns stack into rows so a five digit figure
+   never overprints its neighbor. Tracks come from the child count
+   in both directions, so a MUD that sends one or two vitals fills
+   the card instead of leaving blank tracks. */
+@container (max-width: 300px) {
+  .vitals-ledger {
+    grid-auto-flow: row;
+    gap: 8px 0;
+  }
+}
+
+/* Each column owns its vital color. The class sets the theme's
+   semantic token per vital, a user override lands on the same
+   property from inline style (VitalsBar.tsx), and the low state
+   wins over both because the inline value is dropped while low. */
+.vitals-ledger-cell {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 0 14px;
+  gap: 5px;
+  min-width: 0;
+}
+.vitals-ledger-cell-hp {
+  --vital-color: var(--c-success);
+}
+.vitals-ledger-cell-mn {
+  --vital-color: var(--c-info);
+}
+.vitals-ledger-cell-mv {
+  --vital-color: var(--c-warn);
+}
+.vitals-ledger-cell.is-low {
+  --vital-color: var(--c-danger);
 }
 
-.vitals-ember-row {
+.vitals-ledger-top {
   display: flex;
-  align-items: center;
-  gap: 9px;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
 }
 
-/* Row label — the shared .caps look at pane-row scale. */
-.vitals-ember-label {
+.vitals-ledger-label {
   font-family: var(--font-label);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  line-height: 12px;
   color: var(--c-text-dim);
-  width: 20px;
-  flex: 0 0 auto;
 }
 
-.vitals-ember-track {
-  height: 4px;
-  border-radius: 2px;
-  background: var(--c-surface-emphasis);
-  overflow: hidden;
-  flex: 1 1 auto;
-}
-
-.vitals-ember-fill {
-  height: 100%;
-}
-
-.vitals-ember-fill-hp {
-  background: var(--c-success);
-}
-
-.vitals-ember-fill-mn {
-  background: var(--c-info);
-}
-
-.vitals-ember-fill-mv {
-  background: var(--c-warn);
-}
-
-.vitals-ember-value {
+.vitals-ledger-delta {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--c-text-faint);
-  width: 56px;
-  text-align: right;
+  line-height: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vital-color);
+}
+.vitals-ledger-delta.is-loss {
+  color: var(--c-danger);
+}
+
+.vitals-ledger-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.vitals-ledger-cur {
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+  color: var(--c-text-strong);
+}
+.vitals-ledger-max {
+  font-size: 10px;
+  line-height: 12px;
+  color: var(--c-text-dim);
+}
+.vitals-ledger-cell.is-low .vitals-ledger-cur {
+  color: var(--c-danger);
+}
+
+.vitals-ledger-track {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--c-surface-emphasis);
+  overflow: hidden;
+}
+.vitals-ledger-fill {
+  height: 100%;
+  background: var(--vital-color);
+}
+
+/* Low state: the figure and the filament breathe together. One
+   keyframe, no extra static red on the card. */
+@keyframes vitals-ledger-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.vitals-ledger-cell.is-low .vitals-ledger-cur,
+.vitals-ledger-cell.is-low .vitals-ledger-fill {
+  animation: vitals-ledger-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vitals-ledger-cell.is-low .vitals-ledger-cur,
+  .vitals-ledger-cell.is-low .vitals-ledger-fill {
+    animation: none;
+  }
+}
+
+/* Combat row under the columns. The name wraps rather than ellipses
+   (the user wants to read the full target). Percent and filament
+   take the drain-red ramp shared with the combat chip, applied
+   inline from VitalsBar.tsx. */
+.vitals-ledger-combat {
+  margin: -2px 14px 0;
+  padding: 9px 0 12px;
+  border-top: 1px solid var(--c-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vitals-ledger-combat-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.vitals-ledger-combat-icon {
+  display: flex;
   flex: 0 0 auto;
+  color: var(--c-danger);
+}
+.vitals-ledger-combat-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+  color: var(--c-text-strong);
+  white-space: normal;
+  word-break: break-word;
+}
+.vitals-ledger-combat-pct {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Gauges layout. The bar is the row: a 22px radius-6 track per vital
+   with the label, delta and value inside. The fill is the vital color
+   at a fifth strength over the track with a one pixel bright right
+   edge; the value sits on a track-colored plate so the edge passes
+   behind it. While low the edge goes away and the fill pulses. The
+   combat target is a fourth gauge in the drain-red ramp. */
+.vitals-gauge-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 14px 12px;
+}
+
+.vitals-gauge {
+  position: relative;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--c-surface-emphasis);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 9px;
+  min-width: 0;
+}
+.vitals-gauge-hp {
+  --vital-color: var(--c-success);
+}
+.vitals-gauge-mn {
+  --vital-color: var(--c-info);
+}
+.vitals-gauge-mv {
+  --vital-color: var(--c-warn);
+}
+.vitals-gauge.is-low {
+  --vital-color: var(--c-danger);
+}
+.vitals-gauge-combat {
+  margin-top: 2px;
+  --vital-color: var(--c-danger);
+}
+
+.vitals-gauge-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--vital-color) 22%, var(--c-surface-emphasis));
+  border-right: 1px solid var(--vital-color);
+}
+.vitals-gauge.is-low .vitals-gauge-fill {
+  background: color-mix(in srgb, var(--vital-color) 34%, var(--c-surface-emphasis));
+  border-right: none;
+  animation: vitals-ledger-pulse 1.4s ease-in-out infinite;
+}
+
+.vitals-gauge-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 12px;
+  color: var(--vital-color);
+}
+.vitals-gauge-delta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--vital-color);
+}
+.vitals-gauge-delta.is-loss {
+  color: var(--c-danger);
+}
+
+.vitals-gauge-value {
+  position: relative;
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-muted);
+  background: var(--c-surface-emphasis);
+  padding: 2px 5px;
+  border-radius: 3px;
+  margin-right: -5px;
+}
+.vitals-gauge-pct {
+  color: var(--vital-color);
+}
+
+.vitals-gauge-name {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.vitals-gauge-name-text {
+  min-width: 0;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+  color: var(--c-text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vitals-gauge.is-low .vitals-gauge-fill {
+    animation: none;
+  }
+}
+
+/* Pips layout. Ten cells per vital, whole tens filled, the remainder
+   as a partial cell, the rest hollow. The combat target gets a name
+   row that wraps over a pip row in the drain-red ramp. */
+.vitals-pip-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 14px 12px;
+}
+
+.vitals-pip-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.vitals-pip-row-hp {
+  --vital-color: var(--c-success);
+}
+.vitals-pip-row-mn {
+  --vital-color: var(--c-info);
+}
+.vitals-pip-row-mv {
+  --vital-color: var(--c-warn);
+}
+.vitals-pip-row.is-low {
+  --vital-color: var(--c-danger);
+}
+.vitals-pip-combat {
+  --vital-color: var(--c-danger);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--c-border);
+}
+
+.vitals-pip-label {
+  width: 20px;
+  flex: 0 0 auto;
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 12px;
+  color: var(--c-text-dim);
+}
+.vitals-pip-row.is-low .vitals-pip-label {
+  color: var(--c-danger);
+}
+
+.vitals-pip-track {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 3px;
+  min-width: 0;
+}
+.vitals-pip {
+  flex: 1 1 0;
+  height: 8px;
+  border-radius: 1.5px;
+}
+.vitals-pip.is-full {
+  background: var(--vital-color);
+}
+.vitals-pip.is-empty {
+  box-shadow: inset 0 0 0 1px var(--c-border-strong);
+}
+.vitals-pip.is-part {
+  box-shadow: inset 0 0 0 1px var(--c-border-strong);
+  background: linear-gradient(
+    90deg,
+    var(--vital-color) var(--pip-part, 0%),
+    transparent var(--pip-part, 0%)
+  );
+}
+.vitals-pip-row.is-low .vitals-pip.is-full,
+.vitals-pip-row.is-low .vitals-pip.is-part {
+  animation: vitals-ledger-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vitals-pip-row.is-low .vitals-pip.is-full,
+  .vitals-pip-row.is-low .vitals-pip.is-part {
+    animation: none;
+  }
+}
+
+.vitals-pip-value {
+  width: 62px;
+  flex: 0 0 auto;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-faint);
+}
+.vitals-pip-row.is-low .vitals-pip-value,
+.vitals-pip-pct {
+  color: var(--vital-color);
+}
+.vitals-pip-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+  color: var(--c-text-strong);
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Strip layout. No card. One segment per vital on the status bar,
+   the two letter label beside the value with a 2px drain line under
+   it, hairlines between segments, then combat and the tick. Mounted
+   from StatusBar.tsx; the panel zone renders nothing meanwhile. The
+   negative margin pulls the first hairline flush with the bar's
+   left inset so the segments read as part of the bar, not a chip. */
+.vitals-strip {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  margin: -2px 0 -2px -14px;
+  min-width: 0;
+}
+
+.vitals-strip-seg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 12px;
+  border-right: 1px solid var(--c-border);
+  min-width: 0;
+}
+.vitals-strip-seg-hp {
+  --vital-color: var(--c-success);
+}
+.vitals-strip-seg-mn {
+  --vital-color: var(--c-info);
+}
+.vitals-strip-seg-mv {
+  --vital-color: var(--c-warn);
+}
+.vitals-strip-seg.is-low {
+  --vital-color: var(--c-danger);
+}
+.vitals-strip-combat {
+  --vital-color: var(--c-danger);
+}
+
+.vitals-strip-label {
+  font-family: var(--font-label);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 12px;
+  color: var(--c-text-dim);
+}
+
+.vitals-strip-val {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.vitals-strip-num {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-text-muted);
+}
+.vitals-strip-seg.is-low .vitals-strip-num {
+  color: var(--c-danger);
+  animation: vitals-ledger-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vitals-strip-seg.is-low .vitals-strip-num {
+    animation: none;
+  }
+}
+.vitals-strip-track {
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--c-surface-emphasis);
+  overflow: hidden;
+}
+.vitals-strip-fill {
+  display: block;
+  height: 100%;
+  background: var(--vital-color);
+}
+
+/* Name line of the combat segment. The name is bounded and ellipses;
+   the percent is a sibling so a long name never swallows it. */
+.vitals-strip-line {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+.vitals-strip-name {
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  line-height: 12px;
+  font-weight: 500;
+  color: var(--c-text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.vitals-strip-pct {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--vital-color);
+}
+.vitals-strip-combat .vitals-ledger-combat-icon,
+.vitals-pip-combat .vitals-ledger-combat-icon {
+  color: var(--vital-color);
+}
+
+/* Settings preview stand-in for the status bar the strip rides. */
+.vitals-preview-statusbar {
+  display: flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 2px 16px;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
 }
 
 /* Inline (single-row) layout. Packs all vitals onto one row in the

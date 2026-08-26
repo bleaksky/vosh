@@ -653,7 +653,7 @@ export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
  *  plus three thin fixed-color track bars; `stacked` is the
  *  historical one-vital-per-row look; `inline` packs all three onto
  *  a single tintin-nprompt-style row. */
-export type VitalsLayout = 'ember' | 'stacked' | 'inline';
+export type VitalsLayout = 'ember' | 'gauges' | 'pips' | 'strip' | 'stacked' | 'inline';
 export type VitalsPercentColor = 'fill' | 'gradient';
 export type VitalsBarStyle = 'solid' | 'track' | 'ramped';
 /** Whether to stack a braille history grid below the bar. Independent
@@ -883,7 +883,12 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
           ? v.bar_layout
           : DEFAULT_VITALS_CONFIG.bar_layout,
     layout:
-      v.layout === 'ember' || v.layout === 'stacked' || v.layout === 'inline'
+      v.layout === 'ember' ||
+      v.layout === 'gauges' ||
+      v.layout === 'pips' ||
+      v.layout === 'strip' ||
+      v.layout === 'stacked' ||
+      v.layout === 'inline'
         ? v.layout
         : DEFAULT_VITALS_CONFIG.layout,
     inline_style:

@@ -1,13 +1,23 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { tokenizeTemplate } from '../lib/vitalsTemplate';
 import { colorForVital, colorForPercent } from '../lib/vitalsColor';
 import { loadFontStack } from '../lib/fontLoader';
+import {
+  LEDGER_LABELS,
+  LEDGER_LOW_ENTER,
+  SHORT_LABELS,
+  formatLedgerDelta,
+  isFixedLayout,
+  ledgerOverride,
+  pipCells,
+} from '../lib/vitalsLayouts';
 import {
   setUiConfig,
   DEFAULT_VITALS_CONFIG,
   DEFAULT_VITALS_TEMPLATE,
   type UiConfig,
   type VitalsConfig,
+  type VitalsLayout,
   type VitalsPctChipStyle,
 } from '../lib/session';
 
@@ -184,6 +194,25 @@ function NumberStepper({
   );
 }
 
+// The layout picker. The id `ember` is the ledger, kept under its
+// original id so saved configs keep working. The four fixed layouts
+// come first, the two legacy ones after.
+const LAYOUT_CHOICES: { id: VitalsLayout; label: string }[] = [
+  { id: 'ember', label: 'ledger' },
+  { id: 'gauges', label: 'gauges' },
+  { id: 'pips', label: 'pips' },
+  { id: 'strip', label: 'strip' },
+  { id: 'stacked', label: 'stacked' },
+  { id: 'inline', label: 'inline' },
+];
+
+const LAYOUT_HINTS: Partial<Record<VitalsLayout, string>> = {
+  ember: 'numbers first, one column per vital, with a filament under each',
+  gauges: 'one filled track per vital with the label and value inside',
+  pips: 'ten cells per vital, filled or hollow',
+  strip: 'no card. vitals ride the status bar and the panel zone stays empty',
+};
+
 // Vitals appearance settings. Clean row + segmented-pill layout: the
 // common controls (columns, bar style, glyphs, layout, percent) sit as
 // rows with a live inline preview below, and the rarely-touched knobs
@@ -215,9 +244,9 @@ export function VitalsConfigSection({
   };
   const track = v.bar_style === 'track';
   const inline = v.layout === 'inline';
-  // Ember draws fixed 4px track bars with per-vital fixed colors, so
-  // the columns / bar style / glyph / width rows all fall away.
-  const ember = v.layout === 'ember';
+  // The four Ember layouts have fixed anatomy, so the columns / bar
+  // style / glyph / width rows all fall away for them.
+  const fixed = isFixedLayout(v.layout);
   const glyphIdx = VITALS_GLYPH_PRESETS.findIndex(
     (p) => p.filled === v.bar_filled && p.empty === v.bar_empty,
   );
@@ -226,7 +255,7 @@ export function VitalsConfigSection({
 
   return (
     <div className="vitals-settings">
-      {!ember && (
+      {!fixed && (
         <div className="settings-row vitals-seg-row">
           <span className="settings-row-label">columns</span>
           <span className="settings-row-control">
@@ -248,7 +277,7 @@ export function VitalsConfigSection({
         </div>
       )}
 
-      {!ember && (
+      {!fixed && (
         <div className="settings-row vitals-seg-row">
           <span className="settings-row-label">bar style</span>
           <span className="settings-row-control">
@@ -267,7 +296,7 @@ export function VitalsConfigSection({
         </div>
       )}
 
-      {!ember && !track && (
+      {!fixed && !track && (
         <div className="settings-row vitals-seg-row">
           <span className="settings-row-label">glyphs</span>
           <span className="settings-row-control">
@@ -302,7 +331,7 @@ export function VitalsConfigSection({
           </span>
         </div>
       )}
-      {!ember && track && (
+      {!fixed && track && (
         <div className="settings-row vitals-seg-row">
           <span className="settings-row-label">width</span>
           <span className="settings-row-control">
@@ -322,32 +351,19 @@ export function VitalsConfigSection({
         <span className="settings-row-label">layout</span>
         <span className="settings-row-control">
           <span className="settings-seg">
-            <SegBtn
-              on={ember}
-              disabled={v.template_enabled}
-              onClick={() => apply({ layout: 'ember' })}
-            >
-              ember
-            </SegBtn>
-            <SegBtn
-              on={!inline && !ember}
-              disabled={v.template_enabled}
-              onClick={() => apply({ layout: 'stacked' })}
-            >
-              stacked
-            </SegBtn>
-            <SegBtn
-              on={inline}
-              disabled={v.template_enabled}
-              onClick={() => apply({ layout: 'inline' })}
-            >
-              inline
-            </SegBtn>
+            {LAYOUT_CHOICES.map((c) => (
+              <SegBtn
+                key={c.id}
+                on={v.layout === c.id}
+                disabled={v.template_enabled}
+                onClick={() => apply({ layout: c.id })}
+              >
+                {c.label}
+              </SegBtn>
+            ))}
           </span>
-          {ember && (
-            <span className="settings-paste-hint">the ember layout draws fixed thin bars</span>
-          )}
-          {!track && !inline && !ember && (
+          {fixed && <span className="settings-paste-hint">{LAYOUT_HINTS[v.layout]}</span>}
+          {!track && !inline && !fixed && (
             <>
               <span className="settings-paste-hint">grid</span>
               <span className="settings-seg">
@@ -416,14 +432,16 @@ export function VitalsConfigSection({
             fallback="orange"
             onChange={(c) => apply({ mv_color: c })}
           />
-          <label className="settings-checkbox vitals-advanced-check">
-            <input
-              type="checkbox"
-              checked={v.use_color_ramp}
-              onChange={(e) => apply({ use_color_ramp: e.target.checked })}
-            />
-            <span>drain through red as bars empty</span>
-          </label>
+          {!fixed && (
+            <label className="settings-checkbox vitals-advanced-check">
+              <input
+                type="checkbox"
+                checked={v.use_color_ramp}
+                onChange={(e) => apply({ use_color_ramp: e.target.checked })}
+              />
+              <span>drain through red as bars empty</span>
+            </label>
+          )}
 
           {!track && glyphValue === '__custom' && (
             <div className="settings-row vitals-seg-row">
@@ -1142,10 +1160,12 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
     );
   }
 
-  // Ember preview — mirrors the runtime ember branch in VitalsBar:
-  // pane head over three thin track bars with fixed per-vital fills.
-  // The track itself is the drag hit-target (ember has no cell
-  // width, so the ch-based draggableBar wrapper does not apply).
+  // Ember preview — mirrors the runtime ledger in VitalsBar: pane
+  // head over three columns of label, figure and filament. The whole
+  // column is the drag hit-target; the filament spans the column, so
+  // dragging at half the column lands at half the filament. Without
+  // tick history the preview has no latch, so low is a plain
+  // threshold here.
   if (config.layout === 'ember') {
     return (
       <>
@@ -1155,12 +1175,19 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
             <span className="caps">vitals</span>
             <span className="vitals-ember-tick">tick 12s</span>
           </div>
-          <div className="vitals-ember-rows">
-            {sample.map((s) => (
-              <div key={s.label} className="vitals-ember-row">
-                <span className="vitals-ember-label">{s.label}</span>
+          <div className="vitals-ledger">
+            {sample.map((s) => {
+              const isLow = s.value < LEDGER_LOW_ENTER;
+              const override = isLow ? '' : ledgerOverride(s.label, config);
+              const style = override
+                ? ({ ['--vital-color' as string]: override } as CSSProperties)
+                : undefined;
+              const delta = formatLedgerDelta(s.delta);
+              return (
                 <div
-                  className="vitals-ember-track"
+                  key={s.label}
+                  className={`vitals-ledger-cell vitals-ledger-cell-${s.label}${isLow ? ' is-low' : ''}`}
+                  style={style}
                   onMouseDown={startDrag(s.label)}
                   role="slider"
                   aria-label={`${s.label} fill percent`}
@@ -1168,16 +1195,180 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
                   aria-valuemax={100}
                   aria-valuenow={s.value}
                 >
-                  <div
-                    className={`vitals-ember-fill vitals-ember-fill-${s.label}`}
-                    style={{ width: `${s.value}%` }}
-                  />
+                  <div className="vitals-ledger-top">
+                    <span className="vitals-ledger-label">{LEDGER_LABELS[s.label] ?? s.label}</span>
+                    {delta && (
+                      <span className={`vitals-ledger-delta${s.delta < 0 ? ' is-loss' : ''}`}>
+                        {delta}
+                      </span>
+                    )}
+                  </div>
+                  <div className="vitals-ledger-figure">
+                    <span className="vitals-ledger-cur">{s.cur}</span>
+                    <span className="vitals-ledger-max">/{s.max}</span>
+                  </div>
+                  <div className="vitals-ledger-track">
+                    <div className="vitals-ledger-fill" style={{ width: `${s.value}%` }} />
+                  </div>
                 </div>
-                <span className="vitals-ember-value">
-                  {s.cur}/{s.max}
-                </span>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // Gauges preview. The track is the drag hit-target.
+  if (config.layout === 'gauges') {
+    return (
+      <>
+        <div className="vitals-preview-head">{headerText}</div>
+        <div className="vitals-bar vitals-ember vitals-gauges">
+          <div className="vitals-ember-head">
+            <span className="caps">vitals</span>
+            <span className="vitals-ember-tick">tick 12s</span>
+          </div>
+          <div className="vitals-gauge-rows">
+            {sample.map((s) => {
+              const isLow = s.value < LEDGER_LOW_ENTER;
+              const override = isLow ? '' : ledgerOverride(s.label, config);
+              const style = override
+                ? ({ ['--vital-color' as string]: override } as CSSProperties)
+                : undefined;
+              const delta = formatLedgerDelta(s.delta);
+              return (
+                <div
+                  key={s.label}
+                  className={`vitals-gauge vitals-gauge-${s.label}${isLow ? ' is-low' : ''}`}
+                  style={style}
+                  onMouseDown={startDrag(s.label)}
+                  role="slider"
+                  aria-label={`${s.label} fill percent`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={s.value}
+                >
+                  <div className="vitals-gauge-fill" style={{ width: `${s.value}%` }} />
+                  <span className="vitals-gauge-label">
+                    {LEDGER_LABELS[s.label] ?? s.label}
+                    {delta && (
+                      <span className={`vitals-gauge-delta${s.delta < 0 ? ' is-loss' : ''}`}>
+                        {delta}
+                      </span>
+                    )}
+                  </span>
+                  <span className="vitals-gauge-value">
+                    {s.cur} / {s.max}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // Pips preview. The pip row is the drag hit-target.
+  if (config.layout === 'pips') {
+    return (
+      <>
+        <div className="vitals-preview-head">{headerText}</div>
+        <div className="vitals-bar vitals-ember vitals-pips">
+          <div className="vitals-ember-head">
+            <span className="caps">vitals</span>
+            <span className="vitals-ember-tick">tick 12s</span>
+          </div>
+          <div className="vitals-pip-rows">
+            {sample.map((s) => {
+              const isLow = s.value < LEDGER_LOW_ENTER;
+              const override = isLow ? '' : ledgerOverride(s.label, config);
+              const style = override
+                ? ({ ['--vital-color' as string]: override } as CSSProperties)
+                : undefined;
+              return (
+                <div
+                  key={s.label}
+                  className={`vitals-pip-row vitals-pip-row-${s.label}${isLow ? ' is-low' : ''}`}
+                  style={style}
+                >
+                  <span className="vitals-pip-label">{SHORT_LABELS[s.label] ?? s.label}</span>
+                  <div
+                    className="vitals-pip-track"
+                    onMouseDown={startDrag(s.label)}
+                    role="slider"
+                    aria-label={`${s.label} fill percent`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={s.value}
+                  >
+                    {pipCells(s.value).map((c, i) => (
+                      <span
+                        key={i}
+                        className={`vitals-pip is-${c.kind}`}
+                        style={
+                          c.kind === 'part'
+                            ? ({ ['--pip-part' as string]: `${c.part}%` } as CSSProperties)
+                            : undefined
+                        }
+                      />
+                    ))}
+                  </div>
+                  <span className="vitals-pip-value">
+                    {s.cur}/{s.max}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // Strip preview. Drawn on a stand-in status bar so it reads the
+  // way it will under the input row. Each segment is the drag
+  // hit-target.
+  if (config.layout === 'strip') {
+    return (
+      <>
+        <div className="vitals-preview-head">{headerText}</div>
+        <div className="vitals-preview-statusbar">
+          <div className="vitals-strip">
+            {sample.map((s) => {
+              const isLow = s.value < LEDGER_LOW_ENTER;
+              const override = isLow ? '' : ledgerOverride(s.label, config);
+              const style = override
+                ? ({ ['--vital-color' as string]: override } as CSSProperties)
+                : undefined;
+              return (
+                <div
+                  key={s.label}
+                  className={`vitals-strip-seg vitals-strip-seg-${s.label}${isLow ? ' is-low' : ''}`}
+                  style={style}
+                  onMouseDown={startDrag(s.label)}
+                  role="slider"
+                  aria-label={`${s.label} fill percent`}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={s.value}
+                >
+                  <span className="vitals-strip-label">{SHORT_LABELS[s.label] ?? s.label}</span>
+                  <span className="vitals-strip-val">
+                    <span className="vitals-strip-num">
+                      {s.cur}/{s.max}
+                    </span>
+                    <span className="vitals-strip-track">
+                      <span className="vitals-strip-fill" style={{ width: `${s.value}%` }} />
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
+            <div className="vitals-strip-seg vitals-strip-tick">
+              <span className="vitals-ember-tick">tick 12s</span>
+            </div>
           </div>
         </div>
       </>
