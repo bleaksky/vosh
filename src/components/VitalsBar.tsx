@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   DEFAULT_VITALS_CONFIG,
   getUiConfig,
@@ -15,6 +15,16 @@ import { useCombat, type CombatState } from '../lib/useCombat';
 import { tokenizeTemplate, type TemplateSegment } from '../lib/vitalsTemplate';
 import { colorForVital, colorForPercent } from '../lib/vitalsColor';
 import { loadFontStack } from '../lib/fontLoader';
+import {
+  LEDGER_LABELS,
+  LEDGER_LOW_ENTER,
+  LEDGER_LOW_EXIT,
+  SHORT_LABELS,
+  formatLedgerDelta,
+  ledgerOverride,
+  pipCells,
+} from '../lib/vitalsLayouts';
+import { Swords } from './Icons';
 
 interface Vitals {
   hp: number;
@@ -529,13 +539,188 @@ function EmberTick() {
   return <span className="vitals-ember-tick">tick {tickSecs}s</span>;
 }
 
+// Combat row under the ledger columns: swords, the target name (wraps
+// rather than ellipses so the whole name reads), hp percent, and a
+// 2px filament. Percent and filament take the drain-red ramp shared
+// with the combat chip so the target reads the same in every layout.
+function LedgerCombat({ combat }: { combat: CombatState }) {
+  const hp = combat.hp;
+  const color = hp !== undefined ? combatDrainRed(hp) : undefined;
+  return (
+    <div className="vitals-ledger-combat" aria-label="combat target">
+      <div className="vitals-ledger-combat-line">
+        <span className="vitals-ledger-combat-icon" aria-hidden="true">
+          <Swords />
+        </span>
+        <span className="vitals-ledger-combat-name">{combat.name}</span>
+        {hp !== undefined ? (
+          <span className="vitals-ledger-combat-pct" style={{ color }}>
+            {hp}%
+          </span>
+        ) : (
+          <span className="vitals-combat-unknown">hp unknown</span>
+        )}
+      </div>
+      {hp !== undefined && (
+        <div className="vitals-ledger-track">
+          <div
+            className="vitals-ledger-fill"
+            style={{ width: `${Math.max(0, Math.min(100, hp))}%`, background: color }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Percent-to-custom-property style for a combat row. Combat has no
+// user override, so the drain-red ramp lands on --vital-color.
+function combatStyle(hp: number | undefined): CSSProperties | undefined {
+  if (hp === undefined) return undefined;
+  return { ['--vital-color' as string]: combatDrainRed(hp) } as CSSProperties;
+}
+
+function clampPct(v: number): number {
+  return Math.max(0, Math.min(100, v));
+}
+
+// Fourth gauge for the combat target. The name ellipses inside the
+// track (the full name rides in the title) because a 22px track has
+// nowhere else to put it.
+function GaugeCombat({ combat }: { combat: CombatState }) {
+  const hp = combat.hp;
+  return (
+    <div
+      className="vitals-gauge vitals-gauge-combat"
+      style={combatStyle(hp)}
+      title={combat.name}
+      aria-label="combat target"
+    >
+      {hp !== undefined && (
+        <div className="vitals-gauge-fill" style={{ width: `${clampPct(hp)}%` }} />
+      )}
+      <span className="vitals-gauge-name">
+        <span className="vitals-ledger-combat-icon" aria-hidden="true">
+          <Swords />
+        </span>
+        <span className="vitals-gauge-name-text">{combat.name}</span>
+      </span>
+      {hp !== undefined ? (
+        <span className="vitals-gauge-value vitals-gauge-pct">{hp}%</span>
+      ) : (
+        <span className="vitals-combat-unknown">hp unknown</span>
+      )}
+    </div>
+  );
+}
+
+// Ten cells, whole tens filled, the remainder as a partial cell, the
+// rest hollow. Shared by the vital rows and the combat row.
+function PipTrack({ percent }: { percent: number }) {
+  return (
+    <div className="vitals-pip-track" aria-hidden="true">
+      {pipCells(percent).map((c, i) => (
+        <span
+          key={i}
+          className={`vitals-pip is-${c.kind}`}
+          style={
+            c.kind === 'part'
+              ? ({ ['--pip-part' as string]: `${c.part}%` } as CSSProperties)
+              : undefined
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+// Combat under the pip rows: a name row that wraps, then a pip row
+// in the drain-red ramp.
+function PipCombat({ combat }: { combat: CombatState }) {
+  const hp = combat.hp;
+  return (
+    <div className="vitals-pip-combat" style={combatStyle(hp)} aria-label="combat target">
+      <div className="vitals-pip-row">
+        <span className="vitals-pip-label vitals-ledger-combat-icon" aria-hidden="true">
+          <Swords />
+        </span>
+        <span className="vitals-pip-name">{combat.name}</span>
+        {hp !== undefined ? (
+          <span className="vitals-pip-value vitals-pip-pct">{hp}%</span>
+        ) : (
+          <span className="vitals-combat-unknown">hp unknown</span>
+        )}
+      </div>
+      {hp !== undefined && (
+        <div className="vitals-pip-row">
+          <span className="vitals-pip-label" />
+          <PipTrack percent={hp} />
+          <span className="vitals-pip-value" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Combat segment on the strip. The name is bounded so a long target
+// cannot starve the rest of the status bar.
+function StripCombat({ combat }: { combat: CombatState }) {
+  const hp = combat.hp;
+  return (
+    <div
+      className="vitals-strip-seg vitals-strip-combat"
+      style={combatStyle(hp)}
+      title={combat.name}
+      aria-label="combat target"
+    >
+      <span className="vitals-ledger-combat-icon" aria-hidden="true">
+        <Swords />
+      </span>
+      <span className="vitals-strip-val">
+        <span className="vitals-strip-line">
+          <span className="vitals-strip-name">{combat.name}</span>
+          {hp !== undefined && <span className="vitals-strip-pct">{hp}%</span>}
+        </span>
+        {hp !== undefined && (
+          <span className="vitals-strip-track">
+            <span className="vitals-strip-fill" style={{ width: `${clampPct(hp)}%` }} />
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+// Tick segment at the end of the strip. Renders nothing while the
+// tick timer is inactive, same as EmberTick.
+function StripTick() {
+  const { active, tickSecs } = useTickState();
+  if (!active) return null;
+  return (
+    <div className="vitals-strip-seg vitals-strip-tick">
+      <span className="vitals-ember-tick">tick {tickSecs}s</span>
+    </div>
+  );
+}
+
 // Stacked vitals — one row per hp/mana/move. Tick and mud time render
 // in the LineChip on the input row's top border; this component no
 // longer hosts them. Each row is
 // `label · bar (20 cells) · % · cur/max · delta`. Subscribes to
 // Char.Vitals + World.Time; World.Time hour-change rebases the
 // per-tick delta snapshot.
-export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {}) {
+export type VitalsHost = 'zone' | 'statusbar';
+
+export function VitalsBar({
+  hideCombat = false,
+  host = 'zone',
+}: {
+  hideCombat?: boolean;
+  /** Where this instance is mounted. The strip layout renders only
+   *  from the status bar's mount, every other layout only from the
+   *  panel zone, so the two mounts never both paint. */
+  host?: VitalsHost;
+} = {}) {
   const [gmcpVitals, setVitals] = useState<Vitals | null>(null);
   const [deltas, setDeltas] = useState<VitalDeltas>(NO_DELTAS);
   const [config, setConfig] = useState<VitalsConfig>(DEFAULT_VITALS_CONFIG);
@@ -555,6 +740,10 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
     mana: [],
     move: [],
   });
+  // Low-state latch per vital for the ledger layout. Enter under
+  // LEDGER_LOW_ENTER, leave at LEDGER_LOW_EXIT, so a vital that regens
+  // across the line does not flip red and back every tick.
+  const ledgerLowRef = useRef<Record<string, boolean>>({});
 
   // Vitals appearance config. Read once on mount then live-updated via
   // vosh://vitals-config-changed so Settings edits land without a
@@ -668,6 +857,7 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
         setDeltas(NO_DELTAS);
         vitalsSnapRef.current = null;
         prevHourRef.current = null;
+        ledgerLowRef.current = {};
         setPromptVars({});
       }
     }).then((fn) => {
@@ -734,6 +924,10 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
     }
     return merged;
   })();
+  // Host gate. Both mounts subscribe to the same data; only the one
+  // that owns the current layout renders.
+  const stripLayout = config.layout === 'strip';
+  if (host === 'statusbar' ? !stripLayout : stripLayout) return null;
   if (!vitals) return null;
 
   const segs: Array<{ label: string; cur: number; max: number; delta: number | null }> = [];
@@ -772,42 +966,186 @@ export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {})
     );
   }
 
-  // Ember layout — the sidebar-pane block from the Ember redesign:
-  // a pane head (caps "vitals" + live tick countdown while the tick
-  // timer runs) over three thin fixed-height track bars with mono
-  // cur/max values. Fill colors are fixed per vital (hp success /
-  // mn info / mv warn), so the columns, glyph, and width settings
-  // do not apply here. Combat chip rides above the rows, same slot
-  // the inline layout uses.
+  // The four Ember layouts share a low-state latch per vital (enter
+  // under LEDGER_LOW_ENTER, leave at LEDGER_LOW_EXIT so regen across
+  // the line does not flicker) and the same color rule: the theme
+  // token per vital, the user's override when set, the danger color
+  // while low. The columns, glyph, and width settings do not apply
+  // to any of them.
+  const lowLatch = (label: string, p: number): boolean => {
+    const low = ledgerLowRef.current;
+    const isLow = low[label] === true ? p < LEDGER_LOW_EXIT : p < LEDGER_LOW_ENTER;
+    low[label] = isLow;
+    return isLow;
+  };
+  const vitalStyle = (label: string, isLow: boolean): CSSProperties | undefined => {
+    const override = isLow ? '' : ledgerOverride(label, config);
+    return override ? ({ ['--vital-color' as string]: override } as CSSProperties) : undefined;
+  };
+  const vitalsHead = (
+    <div className="vitals-ember-head">
+      <span className="caps">vitals</span>
+      <EmberTick />
+    </div>
+  );
+
+  // Ledger (layout id `ember`, the default). A pane head over three
+  // columns, one per vital: a caps label with the per-tick delta at
+  // its right, the current value as the figure with its max tucked
+  // in beside, and a 2px filament that carries the percent. The
+  // columns stack into rows when the card is narrower than 300px
+  // (container query in styles.css). Combat sits under the columns
+  // as a hairline-separated row with its own filament.
   if (config.layout === 'ember') {
     return (
       <>
         <div className="vitals-bar vitals-ember" aria-label="vitals">
-          <div className="vitals-ember-head">
-            <span className="caps">vitals</span>
-            <EmberTick />
-          </div>
-          {combat && (
-            <div className="vitals-row vitals-row-combat-top">
-              <CombatChip combat={combat} config={config} />
-            </div>
-          )}
-          <div className="vitals-ember-rows">
-            {segs.map((s) => (
-              <div key={s.label} className="vitals-ember-row">
-                <span className="vitals-ember-label">{s.label}</span>
-                <div className="vitals-ember-track">
-                  <div
-                    className={`vitals-ember-fill vitals-ember-fill-${s.label}`}
-                    style={{ width: `${pct(s.cur, s.max)}%` }}
-                  />
+          {vitalsHead}
+          <div className="vitals-ledger">
+            {segs.map((s) => {
+              const p = pct(s.cur, s.max);
+              const isLow = lowLatch(s.label, p);
+              const delta = s.delta ?? 0;
+              return (
+                <div
+                  key={s.label}
+                  className={`vitals-ledger-cell vitals-ledger-cell-${s.label}${isLow ? ' is-low' : ''}`}
+                  style={vitalStyle(s.label, isLow)}
+                >
+                  <div className="vitals-ledger-top">
+                    <span className="vitals-ledger-label">{LEDGER_LABELS[s.label] ?? s.label}</span>
+                    {delta !== 0 && (
+                      <span className={`vitals-ledger-delta${delta < 0 ? ' is-loss' : ''}`}>
+                        {formatLedgerDelta(delta)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="vitals-ledger-figure">
+                    <span className="vitals-ledger-cur">{s.cur}</span>
+                    <span className="vitals-ledger-max">/{s.max}</span>
+                  </div>
+                  <div className="vitals-ledger-track">
+                    <div className="vitals-ledger-fill" style={{ width: `${p}%` }} />
+                  </div>
                 </div>
-                <span className="vitals-ember-value">
-                  {s.cur}/{s.max}
+              );
+            })}
+          </div>
+          {combat && <LedgerCombat combat={combat} />}
+        </div>
+        {erelei}
+      </>
+    );
+  }
+
+  // Gauges. The bar is the row: label, delta and value sit inside one
+  // 22px track whose fill is the vital color at a fifth strength with
+  // a one pixel bright edge. The value sits on a track-colored plate
+  // so the edge passes behind it. While low the edge goes away and
+  // the fill itself pulses. Combat is a fourth gauge.
+  if (config.layout === 'gauges') {
+    return (
+      <>
+        <div className="vitals-bar vitals-ember vitals-gauges" aria-label="vitals">
+          {vitalsHead}
+          <div className="vitals-gauge-rows">
+            {segs.map((s) => {
+              const p = pct(s.cur, s.max);
+              const isLow = lowLatch(s.label, p);
+              const delta = s.delta ?? 0;
+              return (
+                <div
+                  key={s.label}
+                  className={`vitals-gauge vitals-gauge-${s.label}${isLow ? ' is-low' : ''}`}
+                  style={vitalStyle(s.label, isLow)}
+                >
+                  <div className="vitals-gauge-fill" style={{ width: `${p}%` }} />
+                  <span className="vitals-gauge-label">
+                    {LEDGER_LABELS[s.label] ?? s.label}
+                    {delta !== 0 && (
+                      <span className={`vitals-gauge-delta${delta < 0 ? ' is-loss' : ''}`}>
+                        {formatLedgerDelta(delta)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="vitals-gauge-value">
+                    {s.cur} / {s.max}
+                  </span>
+                </div>
+              );
+            })}
+            {combat && <GaugeCombat combat={combat} />}
+          </div>
+        </div>
+        {erelei}
+      </>
+    );
+  }
+
+  // Pips. Ten cells per vital, filled or hollow, the partial cell
+  // carrying the remainder. Combat is a name row over a pip row.
+  if (config.layout === 'pips') {
+    return (
+      <>
+        <div className="vitals-bar vitals-ember vitals-pips" aria-label="vitals">
+          {vitalsHead}
+          <div className="vitals-pip-rows">
+            {segs.map((s) => {
+              const p = pct(s.cur, s.max);
+              const isLow = lowLatch(s.label, p);
+              return (
+                <div
+                  key={s.label}
+                  className={`vitals-pip-row vitals-pip-row-${s.label}${isLow ? ' is-low' : ''}`}
+                  style={vitalStyle(s.label, isLow)}
+                >
+                  <span className="vitals-pip-label">{SHORT_LABELS[s.label] ?? s.label}</span>
+                  <PipTrack percent={p} />
+                  <span className="vitals-pip-value">
+                    {s.cur}/{s.max}
+                  </span>
+                </div>
+              );
+            })}
+            {combat && <PipCombat combat={combat} />}
+          </div>
+        </div>
+        {erelei}
+      </>
+    );
+  }
+
+  // Strip. No card. One segment per vital on the status bar (this
+  // instance is the status bar's own mount, see the host gate), the
+  // value over a 2px drain line, then combat and the tick as further
+  // segments.
+  if (config.layout === 'strip') {
+    return (
+      <>
+        <div className="vitals-strip" aria-label="vitals">
+          {segs.map((s) => {
+            const p = pct(s.cur, s.max);
+            const isLow = lowLatch(s.label, p);
+            return (
+              <div
+                key={s.label}
+                className={`vitals-strip-seg vitals-strip-seg-${s.label}${isLow ? ' is-low' : ''}`}
+                style={vitalStyle(s.label, isLow)}
+              >
+                <span className="vitals-strip-label">{SHORT_LABELS[s.label] ?? s.label}</span>
+                <span className="vitals-strip-val">
+                  <span className="vitals-strip-num">
+                    {s.cur}/{s.max}
+                  </span>
+                  <span className="vitals-strip-track">
+                    <span className="vitals-strip-fill" style={{ width: `${p}%` }} />
+                  </span>
                 </span>
               </div>
-            ))}
-          </div>
+            );
+          })}
+          {combat && <StripCombat combat={combat} />}
+          <StripTick />
         </div>
         {erelei}
       </>
