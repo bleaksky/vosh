@@ -27,6 +27,8 @@ import {
   dockLayoutSet,
   getUiConfig,
   setWindowSize,
+  subscribeVitalsConfigChanged,
+  DEFAULT_VITALS_CONFIG,
   listTriggers,
   resolveThemeTerminalColors,
   onState,
@@ -40,6 +42,7 @@ import {
   subscribeSidePanelsFillHeightChanged,
   subscribeSplitDividerChanged,
   type StatePayload,
+  type VitalsConfig,
 } from './lib/session';
 import { applyAndBroadcastTheme } from './lib/theme';
 import { loadFontStack } from './lib/fontLoader';
@@ -148,6 +151,10 @@ function App() {
   // edge of the window and the terminal input + status bar live in
   // a column under the terminal area only. Loaded from UiConfig.
   const [sidePanelsFillHeight, setSidePanelsFillHeight] = useState(false);
+  // Vitals config, held here only for the strip sizing that App
+  // applies when the vitals panel sits in a top or bottom zone.
+  // VitalsBar owns the config for everything it draws itself.
+  const [vitalsCfg, setVitalsCfg] = useState<VitalsConfig>(DEFAULT_VITALS_CONFIG);
   const termRef = useRef<TerminalHandle | null>(null);
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
@@ -846,6 +853,26 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    getUiConfig()
+      .then((cfg) => {
+        if (!cancelled) setVitalsCfg(cfg.vitals);
+      })
+      .catch(() => {});
+    subscribeVitalsConfigChanged((next) => {
+      if (!cancelled) setVitalsCfg(next);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
   // Clicks on the native surface are eaten by the opaque view, so the
   // backend emits an event on mouse-up and the input focuses here —
   // matching the DOM mouseup handler that covers the rest of the window.
@@ -1097,7 +1124,34 @@ function App() {
         // inline chip to avoid double-rendering.
         const combatZone = panelLayout.placements.combat.zone;
         const hideCombat = combatZone !== 'hidden';
-        return <VitalsBar key="vitals" hideCombat={hideCombat} />;
+        const bar = <VitalsBar key="vitals" hideCombat={hideCombat} />;
+        // Strip sizing: only in a top or bottom row, only for the
+        // card and inline layouts (the strip layout draws on the
+        // status bar, not here), and only when the user set a width.
+        // A width of 0 keeps the historical full-row behavior. Wrap
+        // only in the horizontal zones so the side-zone card recipe,
+        // which targets the bar as the substack's direct child, still
+        // matches.
+        const vitalsZone = panelLayout.placements.vitals.zone;
+        const horizontal = vitalsZone === 'top' || vitalsZone === 'bottom';
+        if (horizontal && vitalsCfg.strip_width > 0 && vitalsCfg.layout !== 'strip') {
+          const alignSelf =
+            vitalsCfg.strip_align === 'center'
+              ? 'center'
+              : vitalsCfg.strip_align === 'right'
+                ? 'flex-end'
+                : 'flex-start';
+          return (
+            <div
+              key="vitals"
+              className="vitals-host"
+              style={{ width: vitalsCfg.strip_width, maxWidth: '100%', alignSelf }}
+            >
+              {bar}
+            </div>
+          );
+        }
+        return bar;
       }
       case 'combat': {
         // Chip variant only when combat sits IMMEDIATELY ABOVE vitals

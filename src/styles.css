@@ -1582,6 +1582,17 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Wrapper App puts around the vitals bar when it sits in a top or
+   bottom strip and the user capped its width. A flex column so the
+   bar inside fills the capped width; align-self (set inline) places
+   it across the row. Only used in the horizontal zones, so it never
+   collides with the side-zone card recipe. */
+.vitals-host {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 /* Gauges layout. The bar is the row: a 22px radius-6 track per vital
    with the label, delta and value inside. The fill is the vital color
    at a fifth strength over the track with a one pixel bright right

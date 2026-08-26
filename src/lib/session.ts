@@ -654,6 +654,7 @@ export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
  *  historical one-vital-per-row look; `inline` packs all three onto
  *  a single tintin-nprompt-style row. */
 export type VitalsLayout = 'ember' | 'gauges' | 'pips' | 'strip' | 'stacked' | 'inline';
+export type VitalsStripAlign = 'left' | 'center' | 'right';
 export type VitalsPercentColor = 'fill' | 'gradient';
 export type VitalsBarStyle = 'solid' | 'track' | 'ramped';
 /** Whether to stack a braille history grid below the bar. Independent
@@ -728,6 +729,14 @@ export interface VitalsConfig {
    *  edges when hp drops below 30%. Additive — sits on top of the
    *  regular vitals bar rather than replacing it. */
   low_hp_vignette: boolean;
+  /** Width in pixels of the vitals block when it sits in a top or
+   *  bottom strip. 0 fills the whole row (the historical behavior).
+   *  Any positive value caps the block and `strip_align` places it.
+   *  Ignored in a side zone (the column width sizes it there) and by
+   *  the strip layout (it lives on the status bar). */
+  strip_width: number;
+  /** Where a capped strip block sits across the row. */
+  strip_align: VitalsStripAlign;
 }
 
 export const DEFAULT_VITALS_TEMPLATE =
@@ -756,6 +765,8 @@ export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
   use_color_ramp: true,
   bar_font: '',
   low_hp_vignette: false,
+  strip_width: 0,
+  strip_align: 'left',
 };
 
 // Dedupe the mount-time burst: App, VitalsBar, CombatPane, AffectsBar,
@@ -882,6 +893,14 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
         : v.bar_layout === 'with_history' || v.bar_layout === 'plain'
           ? v.bar_layout
           : DEFAULT_VITALS_CONFIG.bar_layout,
+    strip_width:
+      typeof v.strip_width === 'number' && Number.isFinite(v.strip_width)
+        ? Math.max(0, Math.min(2000, Math.floor(v.strip_width)))
+        : DEFAULT_VITALS_CONFIG.strip_width,
+    strip_align:
+      v.strip_align === 'left' || v.strip_align === 'center' || v.strip_align === 'right'
+        ? v.strip_align
+        : DEFAULT_VITALS_CONFIG.strip_align,
     layout:
       v.layout === 'ember' ||
       v.layout === 'gauges' ||

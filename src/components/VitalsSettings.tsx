@@ -19,6 +19,7 @@ import {
   type VitalsConfig,
   type VitalsLayout,
   type VitalsPctChipStyle,
+  type VitalsStripAlign,
 } from '../lib/session';
 
 /** Quick-pick bar font stacks. Empty string means "inherit the app font"
@@ -151,12 +152,14 @@ function NumberStepper({
   value,
   min,
   max,
+  step = 1,
   onChange,
   ariaLabel,
 }: {
   value: number;
   min: number;
   max: number;
+  step?: number;
   onChange: (n: number) => void;
   ariaLabel?: string;
 }) {
@@ -168,6 +171,7 @@ function NumberStepper({
         className="settings-stepper-input"
         min={min}
         max={max}
+        step={step}
         value={value}
         onChange={(e) => onChange(clamp(Number(e.target.value) || min))}
         aria-label={ariaLabel}
@@ -177,7 +181,7 @@ function NumberStepper({
         className="settings-stepper-btn"
         tabIndex={-1}
         aria-label="decrease"
-        onClick={() => onChange(clamp(value - 1))}
+        onClick={() => onChange(clamp(value - step))}
       >
         −
       </button>
@@ -186,7 +190,7 @@ function NumberStepper({
         className="settings-stepper-btn"
         tabIndex={-1}
         aria-label="increase"
-        onClick={() => onChange(clamp(value + 1))}
+        onClick={() => onChange(clamp(value + step))}
       >
         +
       </button>
@@ -384,6 +388,36 @@ export function VitalsConfigSection({
           )}
         </span>
       </div>
+
+      {v.layout !== 'strip' && (
+        <div className="settings-row vitals-seg-row">
+          <span className="settings-row-label">strip size</span>
+          <span className="settings-row-control">
+            <NumberStepper
+              value={v.strip_width}
+              min={0}
+              max={2000}
+              step={20}
+              onChange={(n) => apply({ strip_width: n })}
+              ariaLabel="strip width in pixels"
+            />
+            <span className="settings-paste-hint">px, 0 fills the row</span>
+            {v.strip_width > 0 && (
+              <span className="settings-seg">
+                {(['left', 'center', 'right'] as VitalsStripAlign[]).map((a) => (
+                  <SegBtn
+                    key={a}
+                    on={v.strip_align === a}
+                    onClick={() => apply({ strip_align: a })}
+                  >
+                    {a}
+                  </SegBtn>
+                ))}
+              </span>
+            )}
+          </span>
+        </div>
+      )}
 
       <div className="settings-row vitals-seg-row">
         <span className="settings-row-label">percent</span>
