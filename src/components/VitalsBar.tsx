@@ -529,16 +529,6 @@ function HistoryWrapper({
   );
 }
 
-// Pane-head tick readout for the ember layout. Its own leaf so the
-// per-second countdown re-renders just this span instead of the
-// whole bar (same split as TickSecondsToken in the template path).
-// Renders nothing while the tick timer is inactive.
-function EmberTick() {
-  const { active, tickSecs } = useTickState();
-  if (!active) return null;
-  return <span className="vitals-ember-tick">tick {tickSecs}s</span>;
-}
-
 // Combat row under the ledger columns: swords, the target name (wraps
 // rather than ellipses so the whole name reads), hp percent, and a
 // 2px filament. Percent and filament take the drain-red ramp shared
@@ -691,36 +681,13 @@ function StripCombat({ combat }: { combat: CombatState }) {
   );
 }
 
-// Tick segment at the end of the strip. Renders nothing while the
-// tick timer is inactive, same as EmberTick.
-function StripTick() {
-  const { active, tickSecs } = useTickState();
-  if (!active) return null;
-  return (
-    <div className="vitals-strip-seg vitals-strip-tick">
-      <span className="vitals-ember-tick">tick {tickSecs}s</span>
-    </div>
-  );
-}
-
 // Stacked vitals — one row per hp/mana/move. Tick and mud time render
 // in the LineChip on the input row's top border; this component no
 // longer hosts them. Each row is
 // `label · bar (20 cells) · % · cur/max · delta`. Subscribes to
 // Char.Vitals + World.Time; World.Time hour-change rebases the
 // per-tick delta snapshot.
-export type VitalsHost = 'zone' | 'statusbar';
-
-export function VitalsBar({
-  hideCombat = false,
-  host = 'zone',
-}: {
-  hideCombat?: boolean;
-  /** Where this instance is mounted. The strip layout renders only
-   *  from the status bar's mount, every other layout only from the
-   *  panel zone, so the two mounts never both paint. */
-  host?: VitalsHost;
-} = {}) {
+export function VitalsBar({ hideCombat = false }: { hideCombat?: boolean } = {}) {
   const [gmcpVitals, setVitals] = useState<Vitals | null>(null);
   const [deltas, setDeltas] = useState<VitalDeltas>(NO_DELTAS);
   const [config, setConfig] = useState<VitalsConfig>(DEFAULT_VITALS_CONFIG);
@@ -924,10 +891,6 @@ export function VitalsBar({
     }
     return merged;
   })();
-  // Host gate. Both mounts subscribe to the same data; only the one
-  // that owns the current layout renders.
-  const stripLayout = config.layout === 'strip';
-  if (host === 'statusbar' ? !stripLayout : stripLayout) return null;
   if (!vitals) return null;
 
   const segs: Array<{ label: string; cur: number; max: number; delta: number | null }> = [];
@@ -985,7 +948,6 @@ export function VitalsBar({
   const vitalsHead = (
     <div className="vitals-ember-head">
       <span className="caps">vitals</span>
-      <EmberTick />
     </div>
   );
 
@@ -1145,7 +1107,6 @@ export function VitalsBar({
             );
           })}
           {combat && <StripCombat combat={combat} />}
-          <StripTick />
         </div>
         {erelei}
       </>

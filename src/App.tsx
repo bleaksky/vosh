@@ -1125,16 +1125,23 @@ function App() {
         const combatZone = panelLayout.placements.combat.zone;
         const hideCombat = combatZone !== 'hidden';
         const bar = <VitalsBar key="vitals" hideCombat={hideCombat} />;
-        // Strip sizing: only in a top or bottom row, only for the
-        // card and inline layouts (the strip layout draws on the
-        // status bar, not here), and only when the user set a width.
-        // A width of 0 keeps the historical full-row behavior. Wrap
-        // only in the horizontal zones so the side-zone card recipe,
-        // which targets the bar as the substack's direct child, still
-        // matches.
+        // In a top or bottom row the bar would otherwise stretch to
+        // the full window width, which flings the card columns apart.
+        // Wrap it so it sits at a natural width and can be placed
+        // left / center / right. The card layouts default to a
+        // rail-width block; the strip and inline layouts shrink to
+        // their content. strip_width, when set, caps it to an exact
+        // width. Side zones size the bar by their column width and
+        // the side-zone card recipe targets the bar as the substack's
+        // direct child, so they are left unwrapped.
         const vitalsZone = panelLayout.placements.vitals.zone;
         const horizontal = vitalsZone === 'top' || vitalsZone === 'bottom';
-        if (horizontal && vitalsCfg.strip_width > 0 && vitalsCfg.layout !== 'strip') {
+        if (horizontal) {
+          const card =
+            vitalsCfg.layout === 'ember' ||
+            vitalsCfg.layout === 'gauges' ||
+            vitalsCfg.layout === 'pips';
+          const width = vitalsCfg.strip_width > 0 ? vitalsCfg.strip_width : card ? 360 : undefined;
           const alignSelf =
             vitalsCfg.strip_align === 'center'
               ? 'center'
@@ -1145,7 +1152,7 @@ function App() {
             <div
               key="vitals"
               className="vitals-host"
-              style={{ width: vitalsCfg.strip_width, maxWidth: '100%', alignSelf }}
+              style={{ width, maxWidth: '100%', alignSelf }}
             >
               {bar}
             </div>
@@ -1566,7 +1573,7 @@ function App() {
             {terminalAreaElement}
             {bottomZoneElement}
             {inputElement}
-            <StatusBar hideCombat={panelLayout.placements.combat.zone !== 'hidden'} />
+            <StatusBar />
           </div>
         ) : (
           terminalAreaElement
@@ -1587,9 +1594,7 @@ function App() {
       </div>
       {!sidePanelsFillHeight && bottomZoneElement}
       {!sidePanelsFillHeight && inputElement}
-      {!sidePanelsFillHeight && (
-        <StatusBar hideCombat={panelLayout.placements.combat.zone !== 'hidden'} />
-      )}
+      {!sidePanelsFillHeight && <StatusBar />}
       <UpdateNotice />
       <Toasts />
       {terminalMenu && (

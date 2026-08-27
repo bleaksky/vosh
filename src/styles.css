@@ -1842,8 +1842,8 @@ body {
 .vitals-strip {
   display: flex;
   align-items: center;
-  height: 26px;
-  margin: -2px 0 -2px -14px;
+  flex-wrap: wrap;
+  padding: 7px 14px 9px;
   min-width: 0;
 }
 
@@ -1947,16 +1947,6 @@ body {
 .vitals-strip-combat .vitals-ledger-combat-icon,
 .vitals-pip-combat .vitals-ledger-combat-icon {
   color: var(--vital-color);
-}
-
-/* Settings preview stand-in for the status bar the strip rides. */
-.vitals-preview-statusbar {
-  display: flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 2px 16px;
-  background: var(--c-surface);
-  border-top: 1px solid var(--c-border);
 }
 
 /* Inline (single-row) layout. Packs all vitals onto one row in the
