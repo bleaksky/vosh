@@ -1151,17 +1151,21 @@ function PanelsTab({ config, setConfig, onError }: PanelsTabProps) {
 
   const sideFillOn = Boolean(config?.side_panels_fill_height);
   const toggleSideFill = () => {
-    if (!config) return;
-    const next: UiConfig = { ...config, side_panels_fill_height: !config.side_panels_fill_height };
-    setConfig(() => next);
-    void setUiConfig(next).catch((e) => onError(String(e)));
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const next: UiConfig = { ...prev, side_panels_fill_height: !prev.side_panels_fill_height };
+      void setUiConfig(next).catch((e) => onError(String(e)));
+      return next;
+    });
   };
 
   const updateConfig = (patch: Partial<UiConfig>) => {
-    if (!config) return;
-    const next: UiConfig = { ...config, ...patch };
-    setConfig(() => next);
-    void setUiConfig(next).catch((e) => onError(String(e)));
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const next: UiConfig = { ...prev, ...patch };
+      void setUiConfig(next).catch((e) => onError(String(e)));
+      return next;
+    });
   };
 
   if (!loaded) return <div className="settings-loading">loading panels…</div>;
@@ -1305,10 +1309,12 @@ function TickChipsTab({ config, setConfig, onError }: ChipsSubviewProps) {
   const chipStyle = config?.chip_style ?? 'value_only';
   if (!config) return <div className="settings-loading">loading…</div>;
   const updateConfig = (patch: Partial<UiConfig>) => {
-    if (!config) return;
-    const next: UiConfig = { ...config, ...patch };
-    setConfig(() => next);
-    void setUiConfig(next).catch((e) => onError(String(e)));
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const next: UiConfig = { ...prev, ...patch };
+      void setUiConfig(next).catch((e) => onError(String(e)));
+      return next;
+    });
   };
 
   const moonsPosition = config?.moons_position ?? 'right-edge';
