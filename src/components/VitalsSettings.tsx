@@ -214,7 +214,7 @@ const LAYOUT_HINTS: Partial<Record<VitalsLayout, string>> = {
   ember: 'numbers first, one column per vital, with a filament under each',
   gauges: 'one filled track per vital with the label and value inside',
   pips: 'ten cells per vital, filled or hollow',
-  strip: 'no card. vitals ride the status bar and the panel zone stays empty',
+  strip: 'no card, one compact row of segments, the smallest layout',
 };
 
 // Vitals appearance settings. Clean row + segmented-pill layout: the
@@ -389,35 +389,27 @@ export function VitalsConfigSection({
         </span>
       </div>
 
-      {v.layout !== 'strip' && (
-        <div className="settings-row vitals-seg-row">
-          <span className="settings-row-label">strip size</span>
-          <span className="settings-row-control">
-            <NumberStepper
-              value={v.strip_width}
-              min={0}
-              max={2000}
-              step={20}
-              onChange={(n) => apply({ strip_width: n })}
-              ariaLabel="strip width in pixels"
-            />
-            <span className="settings-paste-hint">px, 0 fills the row</span>
-            {v.strip_width > 0 && (
-              <span className="settings-seg">
-                {(['left', 'center', 'right'] as VitalsStripAlign[]).map((a) => (
-                  <SegBtn
-                    key={a}
-                    on={v.strip_align === a}
-                    onClick={() => apply({ strip_align: a })}
-                  >
-                    {a}
-                  </SegBtn>
-                ))}
-              </span>
-            )}
+      <div className="settings-row vitals-seg-row">
+        <span className="settings-row-label">strip size</span>
+        <span className="settings-row-control">
+          <NumberStepper
+            value={v.strip_width}
+            min={0}
+            max={2000}
+            step={20}
+            onChange={(n) => apply({ strip_width: n })}
+            ariaLabel="strip width in pixels"
+          />
+          <span className="settings-paste-hint">px in a top or bottom row, 0 auto</span>
+          <span className="settings-seg">
+            {(['left', 'center', 'right'] as VitalsStripAlign[]).map((a) => (
+              <SegBtn key={a} on={v.strip_align === a} onClick={() => apply({ strip_align: a })}>
+                {a}
+              </SegBtn>
+            ))}
           </span>
-        </div>
-      )}
+        </span>
+      </div>
 
       <div className="settings-row vitals-seg-row">
         <span className="settings-row-label">percent</span>
@@ -1361,14 +1353,13 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
     );
   }
 
-  // Strip preview. Drawn on a stand-in status bar so it reads the
-  // way it will under the input row. Each segment is the drag
-  // hit-target.
+  // Strip preview. The strip renders in the panel like the other
+  // layouts, one compact row. Each segment is the drag hit-target.
   if (config.layout === 'strip') {
     return (
       <>
         <div className="vitals-preview-head">{headerText}</div>
-        <div className="vitals-preview-statusbar">
+        <div className="vitals-bar">
           <div className="vitals-strip">
             {sample.map((s) => {
               const isLow = s.value < LEDGER_LOW_ENTER;
@@ -1400,9 +1391,6 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
                 </div>
               );
             })}
-            <div className="vitals-strip-seg vitals-strip-tick">
-              <span className="vitals-ember-tick">tick 12s</span>
-            </div>
           </div>
         </div>
       </>

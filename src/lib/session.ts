@@ -730,10 +730,10 @@ export interface VitalsConfig {
    *  regular vitals bar rather than replacing it. */
   low_hp_vignette: boolean;
   /** Width in pixels of the vitals block when it sits in a top or
-   *  bottom strip. 0 fills the whole row (the historical behavior).
-   *  Any positive value caps the block and `strip_align` places it.
-   *  Ignored in a side zone (the column width sizes it there) and by
-   *  the strip layout (it lives on the status bar). */
+   *  bottom strip. 0 uses a natural width (a rail-width block for the
+   *  card layouts, content width for strip and inline). Any positive
+   *  value caps the block, and `strip_align` places it across the row.
+   *  Ignored in a side zone, where the column width sizes the bar. */
   strip_width: number;
   /** Where a capped strip block sits across the row. */
   strip_align: VitalsStripAlign;

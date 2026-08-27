@@ -10,7 +10,6 @@ import {
   type QuickKey,
 } from '../lib/session';
 import { subscribeWellSplits, wellSplitsOpen } from '../lib/wellSplits';
-import { VitalsBar } from './VitalsBar';
 
 interface MoonInfo {
   name?: string;
@@ -60,7 +59,7 @@ function MoonIcon({ phase }: { phase: number }) {
   );
 }
 
-export function StatusBar({ hideCombat = false }: { hideCombat?: boolean } = {}) {
+export function StatusBar() {
   const [now, setNow] = useState(() => new Date());
   const [splits, setSplits] = useState(() => wellSplitsOpen());
   useEffect(() => subscribeWellSplits(setSplits), []);
@@ -159,9 +158,6 @@ export function StatusBar({ hideCombat = false }: { hideCombat?: boolean } = {})
   return (
     <div className="statusbar">
       <div className="statusbar-left">
-        {/* The strip vitals layout lives here. The mount renders
-            nothing under every other layout. */}
-        <VitalsBar host="statusbar" hideCombat={hideCombat} />
         {(userTarget || configuredKeys.length > 0) && (
           <span className="statusbar-target">
             {userTarget && (
