@@ -242,9 +242,12 @@ export function VitalsConfigSection({
   if (!config) return null;
   const v = config.vitals;
   const apply = (patch: Partial<VitalsConfig>) => {
-    const next: UiConfig = { ...config, vitals: { ...v, ...patch } };
-    setConfig(() => next);
-    void setUiConfig(next).catch((e) => onError(String(e)));
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const next: UiConfig = { ...prev, vitals: { ...prev.vitals, ...patch } };
+      void setUiConfig(next).catch((e) => onError(String(e)));
+      return next;
+    });
   };
   const track = v.bar_style === 'track';
   const inline = v.layout === 'inline';
