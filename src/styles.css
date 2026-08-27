@@ -4714,127 +4714,142 @@ body {
   padding: 4px 8px;
 }
 
-/* Tracked affects: chip list + add input. */
+/* Tracked affects: a list of matcher rows plus an add field. Each row
+   carries reorder handles, the server affect name, an arrow, the
+   optional display label, and a remove control, styled to the settings
+   redo (underline fields, roomy rows) rather than the old cramped
+   bordered pills. */
 
 .settings-tracked {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 12px;
   min-width: 0;
 }
 
 .settings-tracked-chips {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.settings-tracked-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  /* Left padding tightened from 8px to 2px so the up/down move arrows
-     sit flush at the chip's left edge. The name span still picks up
-     visual breathing room from the `gap: 4px` between siblings. */
-  padding: 1px 2px;
-  background: var(--c-surface);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
-  color: var(--c-text);
-}
-
-/* Pair-form chip: server name + optional display label inputs side
-   by side, with up/down move arrows on the left and an × remove on
-   the right. The "→" separator makes it read as "matches <→ shown
-   as>" at a glance. */
-.settings-tracked-chip-pair {
-  /* Pair rows get more horizontal space and don't wrap mid-chip. */
-  flex-wrap: nowrap;
-  white-space: nowrap;
-}
-
-.settings-tracked-name,
-.settings-tracked-label {
-  background: var(--c-surface-deep, var(--c-surface));
-  color: var(--c-text);
-  border: 1px solid var(--c-border);
-  border-radius: 2px;
-  padding: 1px 6px;
-  font: inherit;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
-.settings-tracked-name {
-  width: 14ch;
+.settings-tracked-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--c-text);
+}
+.settings-tracked-chip:hover {
+  background: color-mix(in srgb, var(--c-surface-pane) 90%, var(--c-text) 6%);
 }
 
+.settings-tracked-chip-pair {
+  min-width: 0;
+}
+
+/* Reorder handles: a quiet pair at the row's left edge. */
+.settings-tracked-move {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--c-text-dim);
+  cursor: pointer;
+}
+.settings-tracked-move:hover:not(:disabled) {
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+}
+.settings-tracked-move:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+/* Name and label as underline fields that grow to fill the row, so a
+   long label is no longer clipped to "label (opt". */
+.settings-tracked-name,
 .settings-tracked-label {
-  width: 10ch;
-  color: var(--c-text-faint);
+  flex: 1 1 0;
+  min-width: 0;
+  background: transparent;
+  color: var(--c-text);
+  border: none;
+  border-bottom: 1px solid var(--c-border-strong);
+  border-radius: 0;
+  padding: 3px 2px;
+  font: inherit;
 }
-
+.settings-tracked-name {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+.settings-tracked-label {
+  color: var(--c-text-muted);
+}
+.settings-tracked-name::placeholder,
+.settings-tracked-label::placeholder {
+  color: var(--c-text-dim);
+}
 .settings-tracked-name:focus,
 .settings-tracked-label:focus {
   outline: none;
-  border-color: var(--c-accent);
+  border-bottom-color: var(--c-accent);
   color: var(--c-text);
 }
 
 .settings-tracked-sep {
-  color: var(--c-text-faint);
+  flex: 0 0 auto;
+  color: var(--c-text-dim);
   font-size: 0.85em;
 }
 
-/* Move-up / move-down buttons on each tracked-affect chip. Mirror
-   the panel-placement up/down arrows visually so the affordance
-   reads as the same kind of control. */
-.settings-tracked-move {
-  background: transparent;
-  border: none;
-  color: var(--c-text-faint);
-  padding: 0 4px;
-  font: inherit;
-  cursor: pointer;
-  line-height: 1;
-}
-
-.settings-tracked-move:hover:not(:disabled) {
-  color: var(--c-accent);
-}
-
-.settings-tracked-move:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
 .settings-tracked-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
   background: transparent;
   border: none;
-  color: var(--c-text-faint);
-  padding: 0 6px;
-  font: inherit;
+  border-radius: 4px;
+  color: var(--c-text-dim);
   cursor: pointer;
-  line-height: 1;
 }
-
 .settings-tracked-remove:hover {
   color: var(--c-danger);
+  background: color-mix(in srgb, var(--c-danger) 14%, transparent);
 }
 
+/* Add row: an underline field plus the add button. */
+.settings-tracked-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px 0;
+}
 .settings-tracked-add input[type='text'] {
-  width: 100%;
+  flex: 1 1 auto;
   max-width: 360px;
-  background: var(--c-surface);
+  background: transparent;
   color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  padding: 3px 8px;
+  border: none;
+  border-bottom: 1px solid var(--c-border-strong);
+  border-radius: 0;
+  padding: 4px 2px;
   font: inherit;
-  border-radius: 2px;
 }
-
 .settings-tracked-add input[type='text']:focus {
   outline: none;
-  border-color: var(--c-accent);
+  border-bottom-color: var(--c-accent);
 }
 
 /* Logs tab — sessions panel on the left, search + results on the right. */
@@ -5146,6 +5161,25 @@ body {
   text-transform: none;
   letter-spacing: 0.04em;
   opacity: 0.55;
+}
+
+/* Section header that opens the per-panel placement list. Same label
+   plus dim-descriptor layout as .panels-tab-header, with a top rule
+   and spacing so it reads as a new section under the full-height
+   toggle. Without its own rule the two spans collapsed into one run
+   of text ("panel placementzone and alignment for each panel"). */
+.panels-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.72em;
+  color: var(--c-text-faint);
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--c-border-soft);
 }
 
 /* Preview wireframe ------------------------------------------- */
