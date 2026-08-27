@@ -400,13 +400,15 @@ export function VitalsConfigSection({
             onChange={(n) => apply({ strip_width: n })}
             ariaLabel="strip width in pixels"
           />
-          <span className="settings-paste-hint">px in a top or bottom row, 0 auto</span>
           <span className="settings-seg">
             {(['left', 'center', 'right'] as VitalsStripAlign[]).map((a) => (
               <SegBtn key={a} on={v.strip_align === a} onClick={() => apply({ strip_align: a })}>
                 {a}
               </SegBtn>
             ))}
+          </span>
+          <span className="settings-paste-hint">
+            width in px for a top or bottom row, 0 for auto
           </span>
         </span>
       </div>
