@@ -2,6 +2,21 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.7.0 - 2026-08-28
+
+- Vosh has a whole new look. Obsidian Ember is the new default theme, a near black warm palette with a single ember accent, and it arrives with bundled fonts, a three moons mark, and a top bar that folds the old connect row into a session chip showing your character. The side panels are cards floating on carved channels, and you drag the channel between the terminal and a column to resize it.
+- The vitals readout has four layouts you choose in Settings, vitals. Ledger leads with the numbers in a column per vital, gauges fills one bar per vital, pips draws ten cells each, and strip packs everything into one compact row. When the bar sits in a top or bottom strip you can set its width in pixels and place it on the left, center, or right. A vital under twenty percent turns red and pulses, and it holds that state until it climbs back over twenty five so a regen tick does not make it flicker.
+- Settings is rebuilt. A rail on the left groups every tab under appearance, hud, automation, characters, session, and tools, each with its own icon, and the controls share one clean system of underline fields and boxed selects. Typography and tick and chips are their own tabs now, and a search box at the top jumps straight to any control.
+- A command palette opens on Cmd+K, or Ctrl+K away from macOS. It runs commands, shows or hides any panel, opens a settings tab, or fires an alias, all from the keyboard. You can also split the terminal well into panes for the session, a chat feed, and a log, and the status bar lists what is open.
+- Right click the terminal for a menu of its actions. Steps that used to happen with no feedback now confirm first or drop a small toast in the corner, and deleting a theme asks before it goes.
+- Triggers can wash a whole matched line with a color and mark it with a left accent bar, so an important line reads at a glance instead of one recolored word.
+- The chat pane gives each channel its own pastel color, so tells, gossip, clan, and the rest stay distinct as they scroll.
+- You can edit the terminal base palette, the sixteen ANSI colors Vosh uses when theme tint is off, in Settings, themes, and reset it to the canonical chart whenever you like. Terminal tint now follows each theme by default, and Obsidian Ember ships with its pastel ANSI on.
+- The input row is steady. It no longer shifts by a pixel or flips its font as you type, the password prompt and the command prompt share the same metrics, and the prompt is a single chevron.
+- The command line takes focus back after you copy terminal text or middle click to snap the scrollback to the bottom, so you can keep typing without reaching for the mouse.
+- PageUp and PageDown scroll the scrollback without shrinking the terminal.
+- The in app help is rebuilt as a how to hub. Each topic is a short set of steps for a task, and a reference lists every slash command.
+
 ## v0.6.5 - 2026-08-10
 
 - A staff panel for immortals. Turn on "imm (staff queues)" in Settings, Panels and it shows the work queues the game sends you: description checks, applications, journals, notes, bugs, votes, and the rest. Only the queues that need something appear, the most urgent sit at the top, and a count turns red when work is past its deadline or amber when it is getting close. Mortals never receive staff data, so the panel stays quiet for them.
