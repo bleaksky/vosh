@@ -390,6 +390,35 @@ export async function deleteMacro(key: string): Promise<Macro[]> {
   return invoke('macros_delete', { key });
 }
 
+/** One interval timer: fire `command` every `interval_secs` seconds while
+ *  connected. `id` is a stable backend-assigned handle. */
+export interface Timer {
+  id: number;
+  name: string;
+  interval_secs: number;
+  command: string;
+  enabled: boolean;
+}
+
+export async function timersList(): Promise<Timer[]> {
+  return invoke('timers_list');
+}
+
+/** Create (id null) or update (existing id) a timer. Returns the full list. */
+export async function timersSet(
+  id: number | null,
+  name: string,
+  intervalSecs: number,
+  command: string,
+  enabled: boolean,
+): Promise<Timer[]> {
+  return invoke('timers_set', { id: id ?? null, name, intervalSecs, command, enabled });
+}
+
+export async function timersDelete(id: number): Promise<Timer[]> {
+  return invoke('timers_delete', { id });
+}
+
 // --- Group toggle commands (one set per type) ---
 
 export async function listAliasGroups(): Promise<GroupState[]> {
@@ -442,6 +471,12 @@ export async function subscribeMacroGroupsChanged(
 
 export async function subscribeMacrosChanged(cb: (macros: Macro[]) => void): Promise<UnlistenFn> {
   return listen<Macro[]>('vosh://macros-changed', (event) => {
+    cb(event.payload);
+  });
+}
+
+export async function subscribeTimersChanged(cb: (timers: Timer[]) => void): Promise<UnlistenFn> {
+  return listen<Timer[]>('vosh://timers-changed', (event) => {
     cb(event.payload);
   });
 }

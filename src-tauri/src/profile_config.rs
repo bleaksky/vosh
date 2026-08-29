@@ -15,7 +15,7 @@ use vosh_alias::Alias;
 use vosh_trigger::Trigger;
 use vosh_vars::Scope;
 
-use crate::profile::{Macro, Profile};
+use crate::profile::{Macro, Profile, Timer};
 use crate::profile_set::ScopeConfig;
 use crate::tick::{TickConfig, TickRuntime};
 
@@ -48,6 +48,9 @@ pub(crate) struct ProfileConfig {
     /// Keyboard macro bindings.
     #[serde(default)]
     pub macros: Vec<Macro>,
+    /// Interval timers (Settings timers tab).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timers: Vec<Timer>,
     /// Group folders the user bulk-disabled. One list per type so a
     /// "Combat" alias group is independent of a "Combat" trigger
     /// group — the UX is per-type, matching the existing tab split.
@@ -674,6 +677,7 @@ impl ProfileConfig {
             ui,
             plugins,
             macros: profile.macros.clone(),
+            timers: profile.timers.clone(),
             disabled_alias_groups,
             disabled_trigger_groups,
             disabled_macro_groups,
@@ -757,6 +761,7 @@ impl ProfileConfig {
         // Macros round-trip whole; the disabled-groups set lives
         // directly on Profile because there is no MacroStore wrapper.
         profile.macros.clone_from(&self.macros);
+        profile.timers.clone_from(&self.timers);
         profile.disabled_macro_groups = self
             .disabled_macro_groups
             .iter()

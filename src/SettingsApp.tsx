@@ -11,6 +11,7 @@ import { useUnsavedWarning } from './lib/unsaved';
 import { LogsTab } from './components/LogsTab';
 import { TrackedAffectsEditor } from './components/TrackedAffectsEditor';
 import { MacrosTab } from './components/MacrosTab';
+import { TimersTab } from './components/TimersTab';
 import { ImportTab } from './components/ImportTab';
 import { ProfilesTab } from './components/ProfilesTab';
 import { LoadoutsTab } from './components/LoadoutsTab';
@@ -89,6 +90,7 @@ type TabId =
   | 'triggers'
   | 'aliases'
   | 'macros'
+  | 'timers'
   | 'import'
   | 'logs';
 // Tab list grouped into six labeled buckets, per the settings-redo
@@ -106,6 +108,7 @@ const TABS: { id: TabId; label: string; group: TabGroup; pathBOnly?: boolean }[]
   { id: 'triggers', label: 'triggers', group: 'automation' },
   { id: 'aliases', label: 'aliases', group: 'automation' },
   { id: 'macros', label: 'macros', group: 'automation' },
+  { id: 'timers', label: 'timers', group: 'automation' },
   { id: 'profiles', label: 'profiles', group: 'characters' },
   { id: 'loadouts', label: 'loadouts', group: 'characters', pathBOnly: true },
   { id: 'general', label: 'general', group: 'session' },
@@ -166,6 +169,11 @@ function TabIcon({ id }: { id: TabId }) {
         <path d="M3.8 5.8h0.02M6.2 5.8h0.02M8.6 5.8h0.02M11 5.8h0.02M4.4 8.4h5.2" />
       </>
     ),
+    timers: (
+      <>
+        <path d="M3.5 1.8h7M3.5 12.2h7M4.2 1.8c0 2.9 5.6 2.9 5.6 5.2S4.2 9.3 4.2 12.2M9.8 1.8c0 2.9-5.6 2.9-5.6 5.2" />
+      </>
+    ),
     import: (
       <path d="M7 1.5v7M4.2 5.7 7 8.5l2.8-2.8M2 10v1.5A1 1 0 0 0 3 12.5h8a1 1 0 0 0 1-1V10" />
     ),
@@ -211,6 +219,7 @@ const TAB_KEYWORDS: Record<TabId, string> = {
   triggers: 'trigger pattern highlight gag replace route wash script regex',
   aliases: 'alias shortcut command expansion',
   macros: 'macro key f1 binding keyboard',
+  timers: 'timer interval repeat recurring every seconds fire command schedule',
   import: 'import tintin mushclient migrate',
   logs: 'log search history session export',
 };
@@ -447,6 +456,7 @@ export function SettingsApp() {
           {tab === 'profiles' && <ProfilesTab onError={setError} />}
           {tab === 'loadouts' && <LoadoutsTab onError={setError} />}
           {tab === 'macros' && <MacrosTab onError={setError} />}
+          {tab === 'timers' && <TimersTab onError={setError} />}
           {tab === 'import' && <ImportTab onError={setError} />}
           {tab === 'logs' && <LogsTab onError={setError} />}
         </div>

@@ -5963,6 +5963,85 @@ body {
   gap: 12px;
 }
 
+/* Timers tab — one row per interval timer: enable toggle, optional
+   name, interval seconds, command, remove. Mirrors the macros row
+   grid and the settings underline fields. */
+.timers-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+.timers-help {
+  color: var(--c-text-faint);
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+.timers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.timers-row {
+  display: grid;
+  grid-template-columns: 22px 150px 92px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+/* The pinned add row sits at the top; a dashed rule under it sets it
+   apart from the saved timers below. */
+.timers-row-new {
+  border-bottom: 1px dashed var(--c-border);
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+}
+.timers-enable {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.timers-interval {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+.timers-interval input[type='number'] {
+  width: 4ch;
+  text-align: right;
+}
+.timers-interval-unit {
+  color: var(--c-text-dim);
+  font-size: 0.85em;
+}
+.timers-name,
+.timers-command {
+  min-width: 0;
+}
+.timers-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.timers-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--c-text-dim);
+  cursor: pointer;
+}
+.timers-remove:hover {
+  color: var(--c-danger);
+  background: color-mix(in srgb, var(--c-danger) 14%, transparent);
+}
+
 /* Update notice — single-line strip pinned just above the bottom of
    the .app. Reads as part of the tmux/Ghostty chrome rather than a
    separate floating card: no box-shadow, accent hairline border,

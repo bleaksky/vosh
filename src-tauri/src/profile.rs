@@ -50,6 +50,12 @@ pub(crate) struct Profile {
     /// over GMCP by the vitals template resolver. Session-only;
     /// reset on reconnect like vitals snapshots.
     pub(crate) prompt_vars: BTreeMap<String, String>,
+    /// Interval timers: each fires its command every `interval_secs`
+    /// while connected. Independent of the tick timer (one command on
+    /// the game tick) and of Lua `mud.timer` (script callbacks). The
+    /// per-timer next-fire deadlines live in the session loop, not
+    /// here, so this stays a plain config mirror.
+    pub(crate) timers: Vec<Timer>,
 }
 
 /// One keyboard binding: a canonical key string mapped to a
@@ -67,6 +73,22 @@ pub(crate) struct Macro {
     /// keep loading.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) group: Option<String>,
+}
+
+/// One interval timer: fire `command` every `interval_secs` seconds
+/// while connected. `id` is a stable handle assigned by the backend so
+/// runtime next-fire deadlines survive edits. Authored via the Settings
+/// timers tab.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct Timer {
+    pub(crate) id: u32,
+    /// Optional label shown in the UI. Empty is fine.
+    #[serde(default)]
+    pub(crate) name: String,
+    pub(crate) interval_secs: u32,
+    pub(crate) command: String,
+    #[serde(default)]
+    pub(crate) enabled: bool,
 }
 
 #[derive(Debug, Clone)]
