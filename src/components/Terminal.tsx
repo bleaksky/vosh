@@ -896,6 +896,9 @@ export function Terminal({
       });
       event.preventDefault();
       event.stopPropagation();
+      // Return the caret to the command line so the user keeps typing
+      // instead of leaving focus stranded on the terminal.
+      window.dispatchEvent(new Event('vosh:focus-input'));
     };
     window.addEventListener('keydown', onCopyKey, true);
 

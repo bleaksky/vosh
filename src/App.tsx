@@ -511,6 +511,10 @@ function App() {
       event.preventDefault();
       if (splitOpen) setSplitOpen(false);
       termRef.current?.scrollToBottom();
+      // Snapping the scrollback back to the bottom is a "get me back to
+      // typing" gesture, so return the caret to the command line rather
+      // than leaving focus on the terminal surface.
+      inputRef.current?.focus();
       return;
     }
     focusInputFromClick(event);
@@ -544,6 +548,28 @@ function App() {
     const onFocus = () => inputRef.current?.focus();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
+  // After a copy the caret should land back on the command line. The
+  // terminal copy path dispatches `vosh:focus-input` explicitly; the
+  // DOM `copy` listener is the catch-all for a browser-native copy of
+  // selected terminal text. Both skip when the copy came from a field
+  // (the command input, the find box) so that field keeps its focus,
+  // and the copy listener defers a frame so the clipboard reads the
+  // selection before focus moves off it.
+  useEffect(() => {
+    const focusInput = () => inputRef.current?.focus();
+    const onCopy = () => {
+      if ((document.activeElement as HTMLElement | null)?.closest('.input-row, input, textarea'))
+        return;
+      window.setTimeout(focusInput, 0);
+    };
+    window.addEventListener('vosh:focus-input', focusInput);
+    document.addEventListener('copy', onCopy);
+    return () => {
+      window.removeEventListener('vosh:focus-input', focusInput);
+      document.removeEventListener('copy', onCopy);
+    };
   }, []);
 
   // Cmd+F (macOS) / Ctrl+F (others) opens the scrollback find toolbar.
