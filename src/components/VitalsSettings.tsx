@@ -1204,7 +1204,6 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
         <div className="vitals-bar vitals-ember">
           <div className="vitals-ember-head">
             <span className="caps">vitals</span>
-            <span className="vitals-ember-tick">tick 12s</span>
           </div>
           <div className="vitals-ledger">
             {sample.map((s) => {
@@ -1258,7 +1257,6 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
         <div className="vitals-bar vitals-ember vitals-gauges">
           <div className="vitals-ember-head">
             <span className="caps">vitals</span>
-            <span className="vitals-ember-tick">tick 12s</span>
           </div>
           <div className="vitals-gauge-rows">
             {sample.map((s) => {
@@ -1309,7 +1307,6 @@ function VitalsPreview({ config }: { config: VitalsConfig }) {
         <div className="vitals-bar vitals-ember vitals-pips">
           <div className="vitals-ember-head">
             <span className="caps">vitals</span>
-            <span className="vitals-ember-tick">tick 12s</span>
           </div>
           <div className="vitals-pip-rows">
             {sample.map((s) => {

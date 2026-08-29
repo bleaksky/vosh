@@ -3768,6 +3768,14 @@ body {
   margin-bottom: 10px;
 }
 
+/* Cap the card layouts (ledger / gauges / pips) in the preview to a
+   rail-ish width so the columns group the way the real bar does in a
+   zone, instead of spreading across the whole settings pane. The
+   strip and inline previews are content-width already. */
+.vitals-preview-block .vitals-ember {
+  max-width: 380px;
+}
+
 /* Advanced disclosure folds the rarely-touched vitals knobs (colors,
    bar font, inline sub-styles, percent chip, template). */
 .vitals-advanced {
