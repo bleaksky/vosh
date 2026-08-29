@@ -66,7 +66,7 @@ fn broadcast<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload:
 }
 use crate::map_state::SharedMap;
 use crate::plugins::{PluginRecord, SharedPluginManager};
-use crate::profile::{Macro, Profile};
+use crate::profile::{Macro, Profile, Timer};
 use crate::profile_config::{strip_global_fields, DockEntryPersist, GlobalConfig, ProfileConfig};
 use crate::script_state;
 use crate::script_state::SharedTimers;
@@ -775,6 +775,78 @@ pub(crate) async fn macros_delete(
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
     broadcast(&app, "vosh://macros-changed", &updated);
+    Ok(updated)
+}
+
+/// List every interval timer, in stored order.
+#[tauri::command]
+pub(crate) async fn timers_list(state: State<'_, SharedState>) -> Result<Vec<Timer>, String> {
+    let p = state.profile.lock().await;
+    Ok(p.timers.clone())
+}
+
+/// Create or update an interval timer. A `None` id creates a new timer
+/// (assigned the next free id); an existing id updates in place. The
+/// interval is clamped to at least one second. Returns the full list.
+#[tauri::command]
+pub(crate) async fn timers_set(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    id: Option<u32>,
+    name: String,
+    interval_secs: u32,
+    command: String,
+    enabled: bool,
+) -> Result<Vec<Timer>, String> {
+    let name = name.trim().to_string();
+    let command = command.trim().to_string();
+    if command.is_empty() {
+        return Err("command cannot be empty".into());
+    }
+    let interval_secs = interval_secs.max(1);
+    let updated = {
+        let mut p = state.profile.lock().await;
+        match id.and_then(|wanted| p.timers.iter_mut().find(|t| t.id == wanted)) {
+            Some(existing) => {
+                existing.name = name;
+                existing.interval_secs = interval_secs;
+                existing.command = command;
+                existing.enabled = enabled;
+            }
+            None => {
+                let next_id = p.timers.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+                p.timers.push(Timer {
+                    id: next_id,
+                    name,
+                    interval_secs,
+                    command,
+                    enabled,
+                });
+            }
+        }
+        p.timers.clone()
+    };
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    broadcast(&app, "vosh://timers-changed", &updated);
+    Ok(updated)
+}
+
+/// Remove a timer by id. No-op when the id is not present.
+#[tauri::command]
+pub(crate) async fn timers_delete(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    id: u32,
+) -> Result<Vec<Timer>, String> {
+    let updated = {
+        let mut p = state.profile.lock().await;
+        p.timers.retain(|t| t.id != id);
+        p.timers.clone()
+    };
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    broadcast(&app, "vosh://timers-changed", &updated);
     Ok(updated)
 }
 

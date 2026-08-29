@@ -48,6 +48,7 @@ const SETTINGS_TABS: { id: string; hint: string }[] = [
   { id: 'triggers', hint: 'patterns and actions' },
   { id: 'aliases', hint: 'command shortcuts' },
   { id: 'macros', hint: 'key bindings' },
+  { id: 'timers', hint: 'recurring commands on an interval' },
   { id: 'import', hint: 'bring settings from another client' },
   { id: 'logs', hint: 'session history search' },
 ];

@@ -1,7 +1,7 @@
 //! Per-session task. Wires the connection, the telnet parser, the line
 //! accumulator, and the trigger engine together. Emits Tauri events.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -350,6 +350,10 @@ async fn io_loop(
 
     let mut tick_interval = tokio::time::interval(TICK_EMIT_INTERVAL);
     tick_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // Per-timer next-fire deadlines for the Settings interval timers.
+    // Seeded on first sight in fire_due_profile_timers; cleared here so
+    // each connection starts its timers fresh.
+    let mut timer_next: HashMap<u32, Instant> = HashMap::new();
 
     // Phase 1 audit instrumentation. See `PerfCounters` doc.
     let mut perf = PerfCounters::default();
@@ -528,6 +532,11 @@ async fn io_loop(
                 if let Err(e) = fire_due_script_timers(&app, &mut stream, &profile, &timers).await {
                     error!(error = %e, "script timer firing failed");
                 }
+                if let Err(e) =
+                    fire_due_profile_timers(&app, &mut stream, &profile, &mut timer_next).await
+                {
+                    error!(error = %e, "profile timer firing failed");
+                }
                 perf.tick_emits += 1;
             }
             _ = perf_report_interval.tick() => {
@@ -668,6 +677,75 @@ async fn handle_tick(
         }
     }
 
+    Ok(())
+}
+
+/// Fire the Settings interval timers whose deadline has elapsed.
+/// `timer_next` maps timer id to its next-fire `Instant`; a timer is
+/// seeded on first sight (scheduled one interval out, not fired
+/// immediately) and advanced past any missed slots so a stall never
+/// burst-fires. Disabled or deleted timers drop their deadline. Each
+/// due command runs through the same path as the tick auto-fire:
+/// `input::process`, echo its lines, send its bytes.
+async fn fire_due_profile_timers(
+    app: &AppHandle,
+    stream: &mut Stream,
+    profile: &Arc<Mutex<Profile>>,
+    timer_next: &mut HashMap<u32, Instant>,
+) -> std::io::Result<()> {
+    let now = Instant::now();
+    let due: Vec<String> = {
+        let p = profile.lock().await;
+        let live: HashSet<u32> = p
+            .timers
+            .iter()
+            .filter(|t| t.enabled)
+            .map(|t| t.id)
+            .collect();
+        timer_next.retain(|id, _| live.contains(id));
+        let mut due = Vec::new();
+        for t in p
+            .timers
+            .iter()
+            .filter(|t| t.enabled && !t.command.is_empty())
+        {
+            let interval = Duration::from_secs(u64::from(t.interval_secs.max(1)));
+            match timer_next.get(&t.id).copied() {
+                None => {
+                    timer_next.insert(t.id, now + interval);
+                }
+                Some(next) if now >= next => {
+                    due.push(t.command.clone());
+                    let mut n = next + interval;
+                    while n <= now {
+                        n += interval;
+                    }
+                    timer_next.insert(t.id, n);
+                }
+                Some(_) => {}
+            }
+        }
+        due
+    };
+    for command in due {
+        let result = {
+            let mut p = profile.lock().await;
+            input::process(&mut p, &command)
+        };
+        if !result.echo.is_empty() {
+            let mut buf = Vec::new();
+            for line in &result.echo {
+                buf.extend_from_slice(b"\r\n");
+                buf.extend_from_slice(line.as_bytes());
+            }
+            buf.extend_from_slice(b"\r\n");
+            emit_output(app, buf);
+        }
+        if !result.bytes.is_empty() {
+            stream.write_all(&result.bytes).await?;
+            stream.flush().await?;
+        }
+    }
     Ok(())
 }
 

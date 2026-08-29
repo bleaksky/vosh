@@ -104,10 +104,10 @@ use commands::{
     profile_duplicate, profile_export, profile_get_scope, profile_import, profile_rename,
     profile_resolve_match, profile_set_metadata, profile_set_scope, profile_switch, profiles_list,
     scrollback_load, session_connect, session_disconnect, session_send, session_send_input,
-    session_set_window_size, target_get, tick_get_config, tick_set_config, triggers_export,
-    triggers_groups_list, triggers_import, triggers_list, triggers_set_group_enabled,
-    ui_get_config, ui_set_config, updater_check, updater_install_and_relaunch, AppState,
-    SharedState,
+    session_set_window_size, target_get, tick_get_config, tick_set_config, timers_delete,
+    timers_list, timers_set, triggers_export, triggers_groups_list, triggers_import, triggers_list,
+    triggers_set_group_enabled, ui_get_config, ui_set_config, updater_check,
+    updater_install_and_relaunch, AppState, SharedState,
 };
 use fonts::{fonts_list, handle_font_uri};
 use map_state::MapState;
@@ -477,6 +477,9 @@ pub fn run() {
             triggers_set_group_enabled,
             macros_groups_list,
             macros_set_group_enabled,
+            timers_list,
+            timers_set,
+            timers_delete,
             import_detect,
             import_apply,
         ])
