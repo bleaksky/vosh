@@ -728,23 +728,61 @@ async fn fire_due_profile_timers(
         due
     };
     for command in due {
-        let result = {
-            let mut p = profile.lock().await;
-            input::process(&mut p, &command)
-        };
-        if !result.echo.is_empty() {
-            let mut buf = Vec::new();
-            for line in &result.echo {
-                buf.extend_from_slice(b"\r\n");
-                buf.extend_from_slice(line.as_bytes());
+        run_fired_command(app, stream, profile, &command).await?;
+    }
+    Ok(())
+}
+
+/// Run one command produced by a timer (or any non-typed source) through
+/// the full input pipeline and deliver its results: echo lines to the
+/// terminal, queued alias-script Lua bodies evaluated and their actions
+/// applied, and the combined bytes sent to the server. Mirrors the
+/// typed-input handler so a timer command behaves exactly like the same
+/// line typed at the prompt, including `#lua` and script-bodied aliases.
+async fn run_fired_command(
+    app: &AppHandle,
+    stream: &mut Stream,
+    profile: &Arc<Mutex<Profile>>,
+    command: &str,
+) -> std::io::Result<()> {
+    let (echoes, bytes) = {
+        let mut p = profile.lock().await;
+        let result = input::process(&mut p, command);
+        let mut echoes = result.echo;
+        let mut bytes = result.bytes;
+        // Evaluate any Lua bodies queued by script-bodied aliases and
+        // fold their sends / echoes in, same as the typed-input path.
+        if !result.scripts.is_empty() {
+            let mut outcome = vosh_script::ScriptOutcome::default();
+            for call in &result.scripts {
+                match script_state::eval_with_captures(
+                    &mut p.script,
+                    &call.body,
+                    &call.captures,
+                    "timer-script",
+                ) {
+                    Ok(o) => outcome.actions.extend(o.actions),
+                    Err(err) => warn!(error = %err, "timer script eval failed"),
+                }
             }
+            let apply = script_state::apply_actions(&mut p, outcome);
+            echoes.extend(apply.echoes);
+            bytes.extend(apply.send_bytes);
+        }
+        (echoes, bytes)
+    };
+    if !echoes.is_empty() {
+        let mut buf = Vec::new();
+        for line in &echoes {
             buf.extend_from_slice(b"\r\n");
-            emit_output(app, buf);
+            buf.extend_from_slice(line.as_bytes());
         }
-        if !result.bytes.is_empty() {
-            stream.write_all(&result.bytes).await?;
-            stream.flush().await?;
-        }
+        buf.extend_from_slice(b"\r\n");
+        emit_output(app, buf);
+    }
+    if !bytes.is_empty() {
+        stream.write_all(&bytes).await?;
+        stream.flush().await?;
     }
     Ok(())
 }

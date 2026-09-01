@@ -65,6 +65,7 @@ slash commands:
   #script reload                       re-run all loaded scripts
   #scripts                             list loaded scripts and Lua triggers
   #lua <code>                          evaluate Lua inline
+  #echo <text>                         print text locally (also #showme)
   #profile save                        save the current profile to disk
   #profile load                        replace state with the saved profile
   #profile reset                       wipe aliases, vars, triggers, tick
@@ -226,6 +227,7 @@ fn handle_slash(profile: &mut Profile, rest: &str) -> InputResult {
         "script" => slash_script(profile, args),
         "scripts" => slash_scripts_list(profile),
         "lua" => slash_lua(profile, args),
+        "echo" | "showme" => slash_echo(profile, args),
         "profile" => slash_profile(profile, args),
         "import-tintin" => slash_import_tintin(profile, args),
         "record" => slash_record(profile, args),
@@ -1323,6 +1325,20 @@ fn slash_lua(profile: &mut Profile, args: &str) -> InputResult {
     InputResult {
         bytes: apply.send_bytes,
         echo: apply.echoes,
+        scripts: Vec::new(),
+    }
+}
+
+/// Print text to the local terminal without sending it to the server.
+/// `$vars` interpolate the same way they do in an alias expansion, so a
+/// timer or trigger can echo live state (e.g. `#echo hp is $hp`). Empty
+/// text echoes a blank line. `#showme` is an accepted alias for muscle
+/// memory from `TinTin++` / `Mudlet`.
+fn slash_echo(profile: &mut Profile, args: &str) -> InputResult {
+    let text = profile.vars.interpolate(args);
+    InputResult {
+        bytes: Vec::new(),
+        echo: vec![text],
         scripts: Vec::new(),
     }
 }
