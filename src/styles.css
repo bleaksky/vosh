@@ -5963,9 +5963,10 @@ body {
   gap: 12px;
 }
 
-/* Timers tab — one row per interval timer: enable toggle, optional
-   name, interval seconds, command, remove. Mirrors the macros row
-   grid and the settings underline fields. */
+/* Timers tab — each timer is a small card: enable toggle, name, and
+   interval on the top line, with the command as a full-width Lua editor
+   below so multi-line `#lua` bodies fit. Mirrors the trigger card feel
+   and the settings underline fields. */
 .timers-tab {
   display: flex;
   flex-direction: column;
@@ -5980,33 +5981,49 @@ body {
 .timers-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
-.timers-row {
-  display: grid;
-  grid-template-columns: 22px 150px 92px 1fr auto;
+.timers-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border-soft);
+  border-radius: 8px;
+  background: var(--c-surface-pane);
+}
+/* The pinned add card is set apart with a dashed border and no fill so
+   it reads as the "new" slot above the saved timers. */
+.timers-card-new {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--c-border);
+}
+.timers-card-head {
+  display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--c-border-soft);
-}
-/* The pinned add row sits at the top; a dashed rule under it sets it
-   apart from the saved timers below. */
-.timers-row-new {
-  border-bottom: 1px dashed var(--c-border);
-  padding-bottom: 10px;
-  margin-bottom: 4px;
+  gap: 12px;
+  min-width: 0;
 }
 .timers-enable {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
+}
+.timers-name {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .timers-interval {
   display: inline-flex;
   align-items: baseline;
-  gap: 4px;
-  min-width: 0;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+.timers-interval-label {
+  color: var(--c-text-dim);
+  font-size: 0.85em;
 }
 .timers-interval input[type='number'] {
   width: 4ch;
@@ -6016,14 +6033,11 @@ body {
   color: var(--c-text-dim);
   font-size: 0.85em;
 }
-.timers-name,
-.timers-command {
-  min-width: 0;
-}
-.timers-actions {
+.timers-card-actions {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+  flex: 0 0 auto;
 }
 .timers-remove {
   display: inline-flex;
@@ -6040,6 +6054,12 @@ body {
 .timers-remove:hover {
   color: var(--c-danger);
   background: color-mix(in srgb, var(--c-danger) 14%, transparent);
+}
+/* The command editor spans the card; a hairline sets it off from the
+   controls above without boxing it like a heavy input. */
+.timers-command {
+  border-top: 1px solid var(--c-border-soft);
+  padding-top: 6px;
 }
 
 /* Update notice — single-line strip pinned just above the bottom of
