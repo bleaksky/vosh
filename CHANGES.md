@@ -2,6 +2,12 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.7.1 - 2026-09-11
+
+- Timers repeat a command on an interval while you are connected. Open Settings, timers under automation, and give each one a name, an interval in seconds, and a command, then tick it on or off. Timers save with your profile next to your aliases and triggers. If the client stalls, a timer skips the slots it missed instead of firing them all at once.
+- A timer command can be a multi line Lua script. The command field uses the same highlighted code editor as triggers, and aliases and #lua run from a timer exactly as they do when you type them.
+- #echo prints text to your screen without sending it to the game, and #showme does the same. It fills in your $variables, so a timer or trigger can show you live state.
+
 ## v0.7.0 - 2026-08-28
 
 - Vosh has a whole new look. Obsidian Ember is the new default theme, a near black warm palette with a single ember accent, and it arrives with bundled fonts, a three moons mark, and a top bar that folds the old connect row into a session chip showing your character. The side panels are cards floating on carved channels, and you drag the channel between the terminal and a column to resize it.
