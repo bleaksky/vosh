@@ -1858,6 +1858,7 @@ pub(crate) struct UiConfigPayload {
     pub side_panels_fill_height: bool,
     pub paste_line_delay_ms: u32,
     pub spellcheck_prompt: bool,
+    pub input_cursor_style: String,
     pub prompt_template_enabled: bool,
     pub prompt_template: String,
     pub vitals: crate::profile_config::VitalsConfig,
@@ -1888,6 +1889,7 @@ pub(crate) async fn ui_get_config(
         side_panels_fill_height: p.ui.side_panels_fill_height,
         paste_line_delay_ms: p.ui.paste_line_delay_ms,
         spellcheck_prompt: p.ui.spellcheck_prompt,
+        input_cursor_style: p.ui.input_cursor_style.clone(),
         prompt_template_enabled: p.ui.prompt_template_enabled,
         prompt_template: p.ui.prompt_template.clone(),
         vitals: p.ui.vitals.clone(),
@@ -1924,6 +1926,7 @@ pub(crate) async fn ui_set_config(
         side_panels_fill_height,
         paste_line_delay_ms,
         spellcheck_prompt,
+        input_cursor_style,
         prompt_template_enabled,
         prompt_template,
         vitals,
@@ -1987,6 +1990,14 @@ pub(crate) async fn ui_set_config(
         // paste indicator (0–10s per line is plenty).
         p.ui.paste_line_delay_ms = paste_line_delay_ms.min(10_000);
         p.ui.spellcheck_prompt = spellcheck_prompt;
+        // Coerce an unknown caret shape (hand-edited profile.toml, or a
+        // value from a newer build) back to the default so the input
+        // row always paints something.
+        p.ui.input_cursor_style = match input_cursor_style.as_str() {
+            "block_outline" | "half_block" | "underline" | "underline_thick" | "pipe"
+            | "pipe_thick" => input_cursor_style,
+            _ => "block".to_string(),
+        };
         p.ui.prompt_template_enabled = prompt_template_enabled;
         p.ui.prompt_template = prompt_template;
         // Normalize vitals glyphs + width. Empty glyph strings would

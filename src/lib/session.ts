@@ -617,6 +617,28 @@ export interface CustomTheme {
   chrome: Record<string, string>;
 }
 
+/** Caret shapes the command line can paint. Each one renders inside the
+ *  same anchor box as the default block, so switching shapes never
+ *  reflows the input row. */
+export const INPUT_CURSOR_STYLES = [
+  'block',
+  'block_outline',
+  'half_block',
+  'underline',
+  'underline_thick',
+  'pipe',
+  'pipe_thick',
+] as const;
+
+export type InputCursorStyle = (typeof INPUT_CURSOR_STYLES)[number];
+
+/** Coerce an unknown caret shape back to the default block. */
+export function normalizeInputCursorStyle(value: unknown): InputCursorStyle {
+  return INPUT_CURSOR_STYLES.includes(value as InputCursorStyle)
+    ? (value as InputCursorStyle)
+    : 'block';
+}
+
 export interface UiConfig {
   theme: ThemeChoice;
   auto_update: boolean;
@@ -659,6 +681,8 @@ export interface UiConfig {
    *  `kill` / `oload` / alias names do not light up red. Default
    *  off; opt-in for roleplayers. */
   spellcheck_prompt: boolean;
+  /** Shape of the command-line caret. Defaults to the ember block. */
+  input_cursor_style: InputCursorStyle;
   /** When true, gagged prompts get replaced with a frontend-rendered
    *  string built from `prompt_template`. Off by default. */
   prompt_template_enabled: boolean;
@@ -838,6 +862,7 @@ async function fetchUiConfig(): Promise<UiConfig> {
     side_panels_fill_height?: boolean;
     paste_line_delay_ms?: number;
     spellcheck_prompt?: boolean;
+    input_cursor_style?: string;
     prompt_template_enabled?: boolean;
     prompt_template?: string;
     vitals?: Partial<VitalsConfig>;
@@ -879,6 +904,7 @@ async function fetchUiConfig(): Promise<UiConfig> {
         ? Math.min(10_000, Math.floor(cfg.paste_line_delay_ms))
         : 500,
     spellcheck_prompt: Boolean(cfg.spellcheck_prompt),
+    input_cursor_style: normalizeInputCursorStyle(cfg.input_cursor_style),
     prompt_template_enabled: Boolean(cfg.prompt_template_enabled),
     prompt_template: typeof cfg.prompt_template === 'string' ? cfg.prompt_template : '',
     vitals: normalizeVitalsConfig(cfg.vitals),
@@ -1091,6 +1117,11 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     prev?.spellcheck_prompt,
   );
   await emitChanged(
+    'vosh://input-cursor-style-changed',
+    config.input_cursor_style,
+    prev?.input_cursor_style,
+  );
+  await emitChanged(
     'vosh://prompt-template-changed',
     { enabled: config.prompt_template_enabled, template: config.prompt_template },
     { enabled: prev?.prompt_template_enabled, template: prev?.prompt_template },
@@ -1135,6 +1166,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
       side_panels_fill_height: config.side_panels_fill_height,
       paste_line_delay_ms: config.paste_line_delay_ms,
       spellcheck_prompt: config.spellcheck_prompt,
+      input_cursor_style: config.input_cursor_style,
       prompt_template_enabled: config.prompt_template_enabled,
       prompt_template: config.prompt_template,
       vitals: config.vitals,
