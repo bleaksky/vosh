@@ -2756,6 +2756,7 @@ body {
    solid while the user types. */
 .input-caret {
   position: absolute;
+  box-sizing: border-box;
   width: 7px;
   height: 15px;
   background: var(--c-accent);
@@ -2779,6 +2780,81 @@ body {
   .input-caret {
     animation: none;
   }
+}
+
+/* Caret shapes, chosen in Settings, general. Each modifier only
+   redraws the inside of the 7x15 anchor box the block already
+   occupies, so no shape can shift the caret's measured position or
+   the height of the input row. Shared with the settings picker
+   samples, which is why these carry no .input-caret prefix. */
+.caret-shape--block {
+  width: 7px;
+  height: 15px;
+}
+
+/* Caret picker in Settings, general. Each chip carries a live sample
+   painted by the same shape classes the real caret uses, so the
+   picker cannot drift from what the input row renders. */
+.settings-caret-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The sample sits in a 7x15 box that matches the caret's anchor, and
+   the shape is absolutely placed inside it. That way a shape's own
+   offset moves it within the box exactly as it does inside the input
+   row, instead of pushing the sample out of its chip. */
+.caret-sample-box {
+  position: relative;
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.caret-sample {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  background: var(--c-accent);
+}
+
+.caret-shape--block_outline {
+  width: 7px;
+  height: 15px;
+  background: transparent;
+  border: 1px solid var(--c-accent);
+}
+
+.caret-shape--half_block {
+  width: 7px;
+  height: 7px;
+  transform: translateY(8px);
+}
+
+.caret-shape--underline {
+  width: 7px;
+  height: 2px;
+  transform: translateY(13px);
+}
+
+.caret-shape--underline_thick {
+  width: 7px;
+  height: 4px;
+  transform: translateY(11px);
+}
+
+.caret-shape--pipe {
+  width: 2px;
+  height: 15px;
+}
+
+.caret-shape--pipe_thick {
+  width: 3px;
+  height: 15px;
 }
 
 /* Hidden mirror Input.tsx measures the caret position with: the

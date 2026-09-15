@@ -12,6 +12,7 @@ import {
   getUiConfig,
   listMacros,
   listMacroGroups,
+  normalizeInputCursorStyle,
   onGmcpPackage,
   onInputMode,
   onTarget,
@@ -19,6 +20,7 @@ import {
   subscribeMacroGroupsChanged,
   subscribeMacrosChanged,
   type GroupState,
+  type InputCursorStyle,
   type Macro,
   type QuickKey,
 } from '../lib/session';
@@ -106,6 +108,10 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
 ) {
   const [value, setValue] = useState('');
   const [spellcheckPrompt, setSpellcheckPrompt] = useState(false);
+  // Caret shape from Settings, general. Only the paint changes — every
+  // shape occupies the same anchor box, so the measured position below
+  // stays shape-independent.
+  const [cursorStyle, setCursorStyle] = useState<InputCursorStyle>('block');
   const [history, setHistory] = useState<string[]>([]);
   const [passwordMode, setPasswordMode] = useState(false);
   // When the user starts arrow-key navigation with non-empty input, we
@@ -328,6 +334,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     let unlistenKeep: (() => void) | undefined;
     let unlistenPaste: (() => void) | undefined;
     let unlistenSpell: (() => void) | undefined;
+    let unlistenCursor: (() => void) | undefined;
     let unlistenEcho: (() => void) | undefined;
     let unlistenEchoMacros: (() => void) | undefined;
     getUiConfig()
@@ -338,6 +345,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         echoColorRef.current = cfg.input_echo_color;
         echoMacrosRef.current = cfg.echo_macros;
         setSpellcheckPrompt(cfg.spellcheck_prompt);
+        setCursorStyle(cfg.input_cursor_style);
       })
       .catch(() => {});
     listen<boolean>('vosh://keep-last-changed', (event) => {
@@ -361,6 +369,12 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       if (cancelled) fn();
       else unlistenSpell = fn;
     });
+    listen<string>('vosh://input-cursor-style-changed', (event) => {
+      setCursorStyle(normalizeInputCursorStyle(event.payload));
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlistenCursor = fn;
+    });
     listen<string | null>('vosh://input-echo-color-changed', (event) => {
       const next = event.payload;
       echoColorRef.current = typeof next === 'string' && next.length > 0 ? next : null;
@@ -379,6 +393,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       unlistenKeep?.();
       unlistenPaste?.();
       unlistenSpell?.();
+      unlistenCursor?.();
       unlistenEcho?.();
       unlistenEchoMacros?.();
     };
@@ -1029,7 +1044,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       {!passwordMode && caretPos && (
         <span
           ref={caretRef}
-          className="input-caret"
+          className={`input-caret caret-shape--${cursorStyle}`}
           aria-hidden="true"
           style={{ left: caretPos.left, top: caretPos.top }}
         />

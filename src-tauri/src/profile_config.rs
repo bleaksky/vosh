@@ -216,6 +216,13 @@ pub(crate) struct UiConfig {
     /// for roleplay-heavy users.
     #[serde(default)]
     pub spellcheck_prompt: bool,
+    /// Shape of the command-line caret: `block` (default),
+    /// `block_outline`, `half_block`, `underline`, `underline_thick`,
+    /// `pipe`, or `pipe_thick`. Every shape is painted inside the same
+    /// anchor box, so switching never moves the input row. Unknown
+    /// values coerce back to `block` on save.
+    #[serde(default = "default_input_cursor_style")]
+    pub input_cursor_style: String,
     /// When true, gagged prompts captured via prompt-vars triggers
     /// are replaced with a frontend-rendered string built from
     /// `prompt_template`. The template uses the same `%name` /
@@ -543,6 +550,7 @@ impl Default for UiConfig {
             side_panels_fill_height: false,
             paste_line_delay_ms: default_paste_line_delay_ms(),
             spellcheck_prompt: false,
+            input_cursor_style: default_input_cursor_style(),
             prompt_template_enabled: false,
             prompt_template: String::new(),
             vitals: VitalsConfig::default(),
@@ -563,6 +571,10 @@ fn default_font_family() -> String {
 
 fn default_font_size() -> u32 {
     14
+}
+
+fn default_input_cursor_style() -> String {
+    "block".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

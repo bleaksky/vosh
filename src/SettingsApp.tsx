@@ -32,6 +32,8 @@ import {
   exportAliases,
   exportTriggers,
   getUiConfig,
+  INPUT_CURSOR_STYLES,
+  type InputCursorStyle,
   importAliases,
   importTriggers,
   installUpdateAndRelaunch,
@@ -562,6 +564,18 @@ function TabHead({ title, right }: { title: string; right?: ReactNode }) {
   );
 }
 
+// Caret shapes, in the order they appear in the picker: solid first,
+// then the lighter variants of the same box.
+const CURSOR_LABELS: Record<InputCursorStyle, string> = {
+  block: 'block',
+  block_outline: 'outline',
+  half_block: 'half block',
+  underline: 'underline',
+  underline_thick: 'thick underline',
+  pipe: 'pipe',
+  pipe_thick: 'thick pipe',
+};
+
 function GeneralTab({ config, setConfig, onError }: GeneralProps) {
   const { update, savedAt } = useSettingsAutoSave(setConfig, onError);
   const [updateStatus, setUpdateStatus] = useState<{
@@ -607,6 +621,26 @@ function GeneralTab({ config, setConfig, onError }: GeneralProps) {
               <span>chat lines only</span>
             </label>
           </span>
+        </div>
+        <div className="settings-frow">
+          <span className="settings-flabel">cursor</span>
+          <span className="settings-fctrl settings-caret-picks">
+            {INPUT_CURSOR_STYLES.map((id) => (
+              <button
+                key={id}
+                type="button"
+                className={`opt-chip${config.input_cursor_style === id ? ' is-on' : ''}`}
+                onClick={() => update({ input_cursor_style: id })}
+                aria-pressed={config.input_cursor_style === id}
+              >
+                <span className="caret-sample-box" aria-hidden="true">
+                  <span className={`caret-sample caret-shape--${id}`} />
+                </span>
+                <span>{CURSOR_LABELS[id]}</span>
+              </button>
+            ))}
+          </span>
+          <span className="settings-fhelp">the shape of the caret on the command line</span>
         </div>
         <div className="settings-frow">
           <span className="settings-flabel">macros</span>
