@@ -2,6 +2,12 @@
 
 All notable changes to Vosh. Newest first.
 
+## v0.7.2 - 2026-09-14
+
+- The command line caret comes in seven shapes. Open Settings, general and pick block, outline, half block, underline, thick underline, pipe, or thick pipe. Every shape occupies the same space, so switching never nudges the input row by a pixel.
+- Your vitals layout sticks. Picking gauges, pips, or strip used to snap back to the ledger the next time you opened settings, moved the bar between panels, or restarted. The pick now survives all three. Choose your layout once more after this update, because the old fault had already written the ledger into your profile.
+- A washed trigger line wears your theme. The dim field behind the line and the accent bar at its left edge both take their color from your active palette instead of a fixed chart, and the line text now takes the mark color too. A wash reads as a marked line rather than a slab of color laid over it.
+
 ## v0.7.1 - 2026-09-11
 
 - Timers repeat a command on an interval while you are connected. Open Settings, timers under automation, and give each one a name, an interval in seconds, and a command, then tick it on or off. Timers save with your profile next to your aliases and triggers. If the client stalls, a timer skips the slots it missed instead of firing them all at once.
