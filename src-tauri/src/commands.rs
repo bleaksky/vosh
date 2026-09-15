@@ -2014,9 +2014,13 @@ pub(crate) async fn ui_set_config(
             v.bar_empty = "▱".to_string();
         }
         v.bar_width = v.bar_width.clamp(4, 60);
-        if v.layout != "ember" && v.layout != "stacked" && v.layout != "inline" {
-            v.layout = "ember".to_string();
-        }
+        // Every layout the settings picker offers has to be listed
+        // here. The four Ember layouts (ember/ledger, gauges, pips,
+        // strip) join the legacy stacked / inline pair; anything else
+        // is a hand-edited typo and falls back to the default. This
+        // list went stale once already when gauges / pips / strip
+        // shipped, which silently reset every pick to the ledger.
+        v.layout = crate::profile_config::coerce_vitals_layout(v.layout);
         if v.percent_color != "fill" && v.percent_color != "gradient" {
             v.percent_color = "fill".to_string();
         }
