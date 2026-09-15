@@ -1343,19 +1343,37 @@ impl CellRenderer {
         // Find matches (and the active one) drive a highlight pass and
         // suppress the split so the match shows in a single full view.
         let (find_matches, find_active_match) = crate::term_grid::find_snapshot();
-        // Wash accent bars. Washed lines carry a distinctive quarter-
-        // strength truecolor background (NamedColor::wash_tint in the
-        // trigger crate), so the bar derives straight from the grid:
-        // any row whose first cell wears a known wash tint gets a
-        // left-edge bar in the full-strength color. No side channel to
-        // drift — bars survive resize, reflow, and scrollback reload
-        // wherever the wash bytes themselves do.
-        let wash_accents: HashMap<[u8; 3], Rgba> = vosh_trigger::NamedColor::ALL
+        // Wash paint. Washed lines carry a distinctive quarter-strength
+        // truecolor background (NamedColor::wash_tint in the trigger
+        // crate) on every cell of the row. That value is a SIGNAL, not
+        // the final color: the bytes stay canonical so they survive
+        // resize, reflow, and scrollback reload, and the row is painted
+        // here in the ACTIVE THEME's color instead. Canonical teal on a
+        // warm near-black ground never matched the palette around it.
+        //
+        // Each entry maps the canonical tint to the pair this renderer
+        // draws: the full-strength theme color for the left-edge accent
+        // bar, and the same color mixed down into the terminal ground
+        // for the field behind the text.
+        // How far the field carries toward the mark color. Low enough
+        // that a washed row reads as marked rather than painted.
+        let wash_field_mix = 0.18_f32;
+        let wash_paint: HashMap<[u8; 3], (Rgba, Rgba)> = vosh_trigger::NamedColor::ALL
             .iter()
-            .map(|c| {
+            .enumerate()
+            .map(|(idx, c)| {
                 let (tr, tg, tb) = c.wash_tint();
-                let (r, g, b) = c.rgb();
-                ([tr, tg, tb], color_to_rgba(Color::Spec(Rgb { r, g, b })))
+                let mark = ansi16(idx);
+                let ground = theme_bg();
+                let mix = |m: u8, g: u8| {
+                    (f32::from(g) + (f32::from(m) - f32::from(g)) * wash_field_mix).round() as u8
+                };
+                let field = Rgb {
+                    r: mix(mark.r, ground.r),
+                    g: mix(mark.g, ground.g),
+                    b: mix(mark.b, ground.b),
+                };
+                ([tr, tg, tb], (rgb_to_rgba(mark), rgb_to_rgba(field)))
             })
             .collect();
         let finding = !find_matches.is_empty();
@@ -1496,6 +1514,14 @@ impl CellRenderer {
                           strikeouts: &mut Marks| {
             let (ch, fg, bg, flags) = grid.cell_at_line(grid_line, col);
             let (mut fg_rgba, mut bg_rgba) = styled_colors(fg, bg, flags);
+            // Repaint the canonical wash signal in theme colors. Runs
+            // before selection and find so both still win over a washed
+            // row, the same as any other background.
+            if let Color::Spec(rgb) = bg {
+                if let Some(&(_, field)) = wash_paint.get(&[rgb.r, rgb.g, rgb.b]) {
+                    bg_rgba = field;
+                }
+            }
             if cell_in_selection(selection, grid_line, col) {
                 bg_rgba = selection_bg;
             }
@@ -1583,11 +1609,11 @@ impl CellRenderer {
                 let grid_line = reg.line0 + row as i32;
                 let (_, _, bg, _) = grid.cell_at_line(grid_line, 0);
                 if let Color::Spec(rgb) = bg {
-                    if let Some(&color) = wash_accents.get(&[rgb.r, rgb.g, rgb.b]) {
+                    if let Some(&(bar, _)) = wash_paint.get(&[rgb.r, rgb.g, rgb.b]) {
                         instances.push(CellInstance {
                             offset: [0.0, reg.y0 + row as f32 * cell_h],
                             size: [bar_w, cell_h],
-                            color,
+                            color: bar,
                             uv_min: solid_uv.0,
                             uv_max: solid_uv.1,
                         });

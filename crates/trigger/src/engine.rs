@@ -202,21 +202,32 @@ pub fn process_with_plain(
     // accent bar from it, so the wash bytes are the entire contract —
     // no side channel, and the bar survives resize, reflow, and
     // scrollback reload wherever the bytes do.
-    let wash_bg = highlights
-        .iter()
-        .find(|(_, s)| s.wash)
-        .map(|(_, s)| s.wash_source().wash_tint());
+    let wash_style = highlights.iter().find(|(_, s)| s.wash).map(|(_, s)| s);
+    let wash_bg = wash_style.map(|s| s.wash_source().wash_tint());
+    // A washed line carries the mark color in its text too, not just in
+    // the field behind it. This goes out as a palette SGR code rather
+    // than truecolor, so both renderers resolve it through the active
+    // theme instead of pinning it to the canonical xterm chart.
+    let wash_fg = wash_style
+        .and_then(|s| s.fg)
+        .map(crate::color::NamedColor::fg_code);
+    // The attributes every washed row opens with, and that each
+    // highlight span restores when it closes.
+    let wash_open = wash_bg.map(|(r, g, b)| match wash_fg {
+        Some(fg) => format!("\x1b[{fg};48;2;{r};{g};{b}m"),
+        None => format!("\x1b[48;2;{r};{g};{b}m"),
+    });
 
     let display = if any_match {
         // Apply highlights last on the (possibly replaced) text so colors
         // wrap whatever the user ends up seeing.
-        text = apply_highlights(&text, &highlights, wash_bg);
-        if let Some((r, g, b)) = wash_bg {
+        text = apply_highlights(&text, &highlights, wash_open.as_deref());
+        if let Some(open) = &wash_open {
             // `ESC [2K` with the background active erases the whole row
             // to the wash color (BCE), so the tint runs edge to edge in
             // both renderers; the final reset keeps the following line
             // clean.
-            text = format!("\x1b[48;2;{r};{g};{b}m\x1b[2K{text}\x1b[0m");
+            text = format!("{open}\x1b[2K{text}\x1b[0m");
         }
         Some(text)
     } else {
@@ -237,15 +248,15 @@ pub fn process_with_plain(
 /// sequence (a digit pattern like `\d+` used to match the digits of an
 /// injected SGR and corrupt the line). Overlapping spans resolve
 /// first-wins in trigger priority order. With a wash active, each
-/// span's closing reset re-asserts the wash background so the tint
-/// holds past the highlighted text.
+/// span's closing reset re-opens the wash attributes (field tint plus
+/// the line's mark color) so both hold past the highlighted text.
 fn apply_highlights(
     text: &str,
     highlights: &[(Regex, HighlightStyle)],
-    wash_bg: Option<(u8, u8, u8)>,
+    wash_open: Option<&str>,
 ) -> String {
-    let close = match wash_bg {
-        Some((r, g, b)) => format!("\x1b[0;48;2;{r};{g};{b}m"),
+    let close = match wash_open {
+        Some(open) => format!("{}{open}", HighlightStyle::sgr_reset()),
         None => HighlightStyle::sgr_reset().to_string(),
     };
     let mut spans: Vec<(usize, usize, String)> = Vec::new();
@@ -684,11 +695,12 @@ mod tests {
         // Quarter-strength canonical yellow (0xcd/4 = 0x33 = 51) —
         // NamedColor::Yellow.wash_tint(), the exact value the native
         // renderer detects for the accent bar.
-        assert!(text.starts_with("\x1b[48;2;51;51;0m\x1b[2K"));
+        assert!(text.starts_with("\x1b[33;48;2;51;51;0m\x1b[2K"));
         assert!(text.ends_with("\x1b[0m"));
-        // The matched-text close re-asserts the wash background so the
-        // tint survives past the highlighted word.
-        assert!(text.contains("\x1b[0;48;2;51;51;0m"));
+        // The matched-text close re-opens the wash attributes so both the
+        // field tint and the line's mark color survive past the
+        // highlighted word.
+        assert!(text.contains("\x1b[0m\x1b[33;48;2;51;51;0m"));
     }
 
     #[test]
@@ -712,7 +724,7 @@ mod tests {
         let text = r.display.unwrap();
         // Wash derives from the explicit red bg (0xcd/4 = 51), not the
         // white fg.
-        assert!(text.starts_with("\x1b[48;2;51;0;0m\x1b[2K"));
+        assert!(text.starts_with("\x1b[37;48;2;51;0;0m\x1b[2K"));
     }
 
     #[test]
