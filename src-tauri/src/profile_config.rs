@@ -430,8 +430,28 @@ fn default_template() -> String {
     "%hp(%pct_hp)h %mn(%pct_mn)m %mv(%pct_mv)v - (%tick) - %time".to_string()
 }
 
+/// Every vitals layout the settings picker offers. `ember` is the
+/// ledger, kept under its original id so saved configs keep working.
+/// The save path coerces anything outside this list back to the
+/// default, so a layout added to the picker MUST be added here too —
+/// gauges / pips / strip were once missing, which silently reset
+/// every pick back to the ledger on the next load.
+pub(crate) const VITALS_LAYOUTS: [&str; 6] =
+    ["ember", "gauges", "pips", "strip", "stacked", "inline"];
+
 fn default_vitals_layout() -> String {
     "ember".to_string()
+}
+
+/// Coerce an incoming layout id to a known one. A hand-edited
+/// profile.toml typo falls back to the default rather than leaving the
+/// panel with a layout nothing renders.
+pub(crate) fn coerce_vitals_layout(layout: String) -> String {
+    if VITALS_LAYOUTS.contains(&layout.as_str()) {
+        layout
+    } else {
+        default_vitals_layout()
+    }
 }
 
 fn default_percent_color() -> String {
@@ -1272,5 +1292,16 @@ name = "haste"
         let warnings = config.apply_to(&mut profile);
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("rejected"));
+    }
+
+    #[test]
+    fn every_picker_layout_survives_a_save() {
+        // gauges / pips / strip regressed exactly this way: the save
+        // path did not list them, so it rewrote each pick to the
+        // ledger and the panel reset on the next load.
+        for layout in VITALS_LAYOUTS {
+            assert_eq!(coerce_vitals_layout(layout.to_string()), layout);
+        }
+        assert_eq!(coerce_vitals_layout("nonsense".to_string()), "ember");
     }
 }
