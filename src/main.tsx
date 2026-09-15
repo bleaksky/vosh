@@ -104,12 +104,47 @@ if (import.meta.env.DEV) {
         const el = document.elementFromPoint(x, y);
         return el ? `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 60)}` : 'none';
       };
+      // Vertical band geometry at 1/100 px so a one pixel layout
+      // shift can be pinned to the band that moved.
+      const bandY = (sel: string) => {
+        const el = document.querySelector(sel);
+        if (!el) return 'x';
+        const b = el.getBoundingClientRect();
+        return `${Math.round(b.top * 100) / 100}+${Math.round(b.height * 100) / 100}`;
+      };
+      const bands = {
+        topbar: bandY('.topbar'),
+        term: bandY('.terminal-area'),
+        input: bandY('.input-row'),
+        status: bandY('.statusbar'),
+      };
+      // Which child makes the input row tall, and what the prompt
+      // control's computed metrics actually are.
+      const row = document.querySelector('.input-row');
+      let rowKids = 'x';
+      let ctl = 'x';
+      if (row) {
+        rowKids = Array.from(row.children)
+          .map(
+            (c) =>
+              `${c.tagName.toLowerCase()}:${Math.round(c.getBoundingClientRect().height * 100) / 100}`,
+          )
+          .join(' ');
+        const el = row.querySelector('textarea, input');
+        if (el) {
+          const cs2 = getComputedStyle(el);
+          ctl = `${el.tagName.toLowerCase()} fs=${cs2.fontSize} lh=${cs2.lineHeight} h=${cs2.height}`;
+        }
+      }
       void fetch('/__vosh-dbg', {
         method: 'POST',
         body: JSON.stringify({
           beat,
           kids: rootEl?.childElementCount ?? -1,
           app: r ? `${Math.round(r.width)}x${Math.round(r.height)}` : 'none',
+          bands,
+          rowKids,
+          ctl,
           covers,
           top: probe(640, 18),
           rail: probe((r?.width ?? 1200) - 100, 400),
