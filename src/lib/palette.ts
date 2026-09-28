@@ -56,23 +56,6 @@ const SETTINGS_TABS: { id: string; hint: string }[] = [
 export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
   const entries: PaletteEntry[] = [];
 
-  entries.push(
-    deps.connected
-      ? {
-          id: 'disconnect',
-          group: 'commands',
-          title: 'disconnect',
-          hint: 'close the session',
-          run: deps.disconnect,
-        }
-      : {
-          id: 'connect',
-          group: 'commands',
-          title: 'connect',
-          hint: 'open the session',
-          run: deps.connect,
-        },
-  );
   entries.push({
     id: 'toggle-splits',
     group: 'commands',
@@ -102,6 +85,26 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
     keywords: 'docs manual',
     run: deps.openHelp,
   });
+  // The session entry goes last in its group. The palette opens with the
+  // first row selected, so leading with disconnect meant Cmd+K then Enter
+  // dropped the session.
+  entries.push(
+    deps.connected
+      ? {
+          id: 'disconnect',
+          group: 'commands',
+          title: 'disconnect',
+          hint: 'close the session',
+          run: deps.disconnect,
+        }
+      : {
+          id: 'connect',
+          group: 'commands',
+          title: 'connect',
+          hint: 'open the session',
+          run: deps.connect,
+        },
+  );
 
   for (const meta of Object.values(PANELS)) {
     entries.push({
