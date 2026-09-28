@@ -22,6 +22,10 @@ import { WordWrapper } from '../lib/wordWrap';
 import { ingestRecentNames } from '../lib/recentNames';
 import { hexToRgba } from '../lib/mapPalette';
 
+/** Session flag set when the native surface never came up, so the page
+ *  falls back to xterm instead of leaving a transparent hole. */
+export const NATIVE_FAILED_KEY = 'vosh.nativesurface.failed';
+
 // Tier 3: the native wgpu terminal surface. Default ON on macOS, where it
 // reached visual parity with xterm (docs/native-renderer.md, M4) and had
 // its hardware pass. The Windows and Linux surfaces ship compile-verified
@@ -30,9 +34,29 @@ import { hexToRgba } from '../lib/mapPalette';
 // '0' falls back to xterm anywhere.
 export function nativeSurfaceEnabled(): boolean {
   if (typeof localStorage === 'undefined') return false;
+  // The surface failed to come up earlier in this session. Stay on xterm
+  // until the next launch.
+  try {
+    if (sessionStorage.getItem(NATIVE_FAILED_KEY) === '1') return false;
+  } catch {
+    // storage unavailable; fall through to the flag
+  }
   const flag = localStorage.getItem('vosh.nativesurface');
   if (flag === '1') return true;
   if (flag === '0') return false;
+  return (
+    typeof navigator !== 'undefined' &&
+    (navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac OS'))
+  );
+}
+
+// macOS draws the native surface BELOW the webview (the underlay). The
+// page leaves the terminal pane unpainted so the grid shows through, DOM
+// overlays draw over it with no renderer swap, and pointer input over the
+// pane is forwarded to the surface. Windows and Linux keep the on-top
+// surface when a tester forces it on.
+export function nativeUnderlay(): boolean {
+  if (!nativeSurfaceEnabled()) return false;
   return (
     typeof navigator !== 'undefined' &&
     (navigator.platform.startsWith('Mac') || navigator.userAgent.includes('Mac OS'))
@@ -554,6 +578,127 @@ export function Terminal({
       intervalPoll = setInterval(sync, 250);
     }
 
+    // Underlay input. The webview sits above the surface and receives every
+    // pointer event over the pane, so forward them to the native grid in
+    // pane-local CSS px. Moves coalesce to one IPC per frame and read the
+    // pane rect once per frame. A release flushes the last move first so a
+    // drag ends where the pointer did. preventDefault on press keeps focus
+    // in the command line and stops the page from starting a text
+    // selection. It cannot shield an IME composition, which WebKit hands
+    // every mouse event first. Right click and Control click fall through
+    // to the terminal menu's contextmenu handler.
+    const detachUnderlayInput = (() => {
+      if (quietRef.current || !nativeUnderlay() || !sizer) return undefined;
+      const send = (kind: string, x: number, y: number, open: boolean) => {
+        void invoke('native_surface_pointer', { kind, x, y, open }).catch(() => {});
+      };
+      const toLocal = (clientX: number, clientY: number) => {
+        const r = sizer.getBoundingClientRect();
+        return { x: clientX - r.left, y: clientY - r.top };
+      };
+      let dragging = false;
+      let last = { clientX: 0, clientY: 0 };
+      let pending = false;
+      let raf = 0;
+      const flush = () => {
+        raf = 0;
+        if (!pending) return;
+        pending = false;
+        const p = toLocal(last.clientX, last.clientY);
+        send(dragging ? 'drag' : 'move', p.x, p.y, false);
+      };
+      // End a drag however it ends: a release, a cancel, lost capture, or a
+      // move with the button already up because the release went elsewhere.
+      const release = (pointerId?: number) => {
+        if (!dragging) return;
+        if (raf) cancelAnimationFrame(raf);
+        flush();
+        dragging = false;
+        if (pointerId !== undefined && sizer.hasPointerCapture(pointerId)) {
+          sizer.releasePointerCapture(pointerId);
+        }
+        const p = toLocal(last.clientX, last.clientY);
+        send('up', p.x, p.y, false);
+      };
+      const onDown = (e: PointerEvent) => {
+        last = { clientX: e.clientX, clientY: e.clientY };
+        if (e.button === 1) {
+          e.preventDefault();
+          const p = toLocal(e.clientX, e.clientY);
+          send('middle', p.x, p.y, false);
+          return;
+        }
+        if (e.button === 2) {
+          // Keep the caret in the command line. contextmenu still fires.
+          e.preventDefault();
+          return;
+        }
+        // Control click is the macOS context click. Leave it to the menu.
+        if (e.button !== 0 || e.ctrlKey) return;
+        e.preventDefault();
+        try {
+          sizer.setPointerCapture(e.pointerId);
+        } catch {
+          // No active pointer to capture (a synthetic event). The drag
+          // still works while the pointer stays over the pane.
+        }
+        dragging = true;
+        const p = toLocal(e.clientX, e.clientY);
+        send('down', p.x, p.y, e.metaKey);
+      };
+      const onMove = (e: PointerEvent) => {
+        last = { clientX: e.clientX, clientY: e.clientY };
+        if (dragging && (e.buttons & 1) === 0) {
+          release(e.pointerId);
+          return;
+        }
+        pending = true;
+        if (!raf) raf = requestAnimationFrame(flush);
+      };
+      const onUp = (e: PointerEvent) => {
+        last = { clientX: e.clientX, clientY: e.clientY };
+        if ((e.buttons & 1) === 0) release(e.pointerId);
+      };
+      const onCancel = (e: PointerEvent) => release(e.pointerId);
+      const onLeave = () => {
+        if (dragging) return;
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+        pending = false;
+        send('leave', 0, 0, false);
+      };
+      // WebKit reports wheel deltas with the opposite sign of AppKit's
+      // scrollingDeltaY (positive deltaY scrolls toward newer output), and
+      // the backend accumulator is tuned for AppKit pixels. WebKit on macOS
+      // always sends pixel mode. Line and page modes scale up only in case
+      // another engine sends them.
+      const onWheel = (e: WheelEvent) => {
+        const scale = e.deltaMode === 1 ? 8.5 : e.deltaMode === 2 ? 200 : 1;
+        const delta = -e.deltaY * scale;
+        if (delta === 0) return;
+        void invoke('native_surface_wheel', { deltaY: delta }).catch(() => {});
+      };
+      sizer.addEventListener('pointerdown', onDown);
+      sizer.addEventListener('pointermove', onMove);
+      sizer.addEventListener('pointerup', onUp);
+      sizer.addEventListener('pointercancel', onCancel);
+      sizer.addEventListener('lostpointercapture', onCancel);
+      sizer.addEventListener('pointerleave', onLeave);
+      sizer.addEventListener('wheel', onWheel, { passive: true });
+      return () => {
+        if (raf) cancelAnimationFrame(raf);
+        if (dragging) send('up', 0, 0, false);
+        send('leave', 0, 0, false);
+        sizer.removeEventListener('pointerdown', onDown);
+        sizer.removeEventListener('pointermove', onMove);
+        sizer.removeEventListener('pointerup', onUp);
+        sizer.removeEventListener('pointercancel', onCancel);
+        sizer.removeEventListener('lostpointercapture', onCancel);
+        sizer.removeEventListener('pointerleave', onLeave);
+        sizer.removeEventListener('wheel', onWheel);
+      };
+    })();
+
     let unsubOutput: (() => void) | undefined;
     // The native surface is the size authority while it owns the pane. It
     // emits its grid size; size hidden xterm to match so a dropdown swap
@@ -909,6 +1054,7 @@ export function Terminal({
       window.removeEventListener('resize', handleWindowResize);
       window.removeEventListener('vosh:resize-progress', onResizeProgress);
       window.removeEventListener('keydown', onCopyKey, true);
+      detachUnderlayInput?.();
       if (naws_timer) clearTimeout(naws_timer);
       unsubOutput?.();
       unsubGridSize?.();

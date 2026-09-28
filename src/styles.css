@@ -1241,6 +1241,35 @@ body {
   overflow: hidden;
 }
 
+/* Underlay (macOS). The native surface sits BELOW the webview and paints
+   the terminal background across the whole window, so every ancestor of
+   the terminal pane goes transparent and the grid shows through. The
+   chrome bands (top bar, zones, input row, status bar) paint their own
+   surfaces over it. The xterm copy stays mounted for sizing but is never
+   shown, and the DOM owns the cursor over the pane. */
+html[data-underlay] .app {
+  /* Keep the chrome tone in the breathing band above the top bar. */
+  background: linear-gradient(var(--c-surface), var(--c-surface)) top / 100% 6px no-repeat;
+}
+html[data-underlay] .main-row,
+html[data-underlay] .terminal-column,
+html[data-underlay] .terminal-area,
+html[data-underlay] .well-splits,
+html[data-underlay] .well-splits-main,
+html[data-underlay] .well-splits-term,
+html[data-underlay] .terminal-pane,
+html[data-underlay] .terminal-sizer,
+html[data-underlay] .terminal-host {
+  background: transparent;
+}
+html[data-underlay] .terminal-pane-live .terminal-host {
+  visibility: hidden;
+}
+html[data-underlay] .terminal-pane-live .terminal-sizer {
+  cursor: default;
+  touch-action: none;
+}
+
 /* Affects bar — thin row above the input row that lists every
    active Char.Affects pill. Hides itself entirely when there are no
    active affects so layout does not reserve a slot. */

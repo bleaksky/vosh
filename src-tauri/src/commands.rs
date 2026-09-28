@@ -1065,6 +1065,57 @@ pub(crate) fn native_surface_set_bounds(
     }
 }
 
+/// Tier 3 native renderer, underlay mode (macOS). The webview sits above
+/// the surface and receives every click, so the page forwards pointer
+/// events over the terminal here. `x` and `y` are CSS px from the pane's
+/// top-left corner. `kind` is "down", "drag", "up", "move", "leave", or
+/// "middle". `open` carries the Cmd modifier for opening links. The work
+/// runs on the main thread, which the renderer requires. A no-op elsewhere.
+#[tauri::command]
+pub(crate) fn native_surface_pointer(app: AppHandle, kind: String, x: f64, y: f64, open: bool) {
+    #[cfg(native_surface)]
+    {
+        let _ = app.run_on_main_thread(move || {
+            crate::native_surface::forward_pointer(&kind, x, y, open);
+        });
+    }
+    #[cfg(not(native_surface))]
+    {
+        let _ = (&app, kind, x, y, open);
+    }
+}
+
+/// Tier 3 native renderer: true once the surface installed and its GPU came
+/// up. The page leaves the terminal pane transparent only after this, so a
+/// failed install falls back to xterm. False elsewhere.
+#[tauri::command]
+pub(crate) fn native_surface_ready() -> bool {
+    #[cfg(native_surface)]
+    {
+        crate::native_surface::is_ready()
+    }
+    #[cfg(not(native_surface))]
+    {
+        false
+    }
+}
+
+/// Tier 3 native renderer, underlay mode (macOS): a wheel delta forwarded
+/// from the page. Positive reveals older lines. A no-op elsewhere.
+#[tauri::command]
+pub(crate) fn native_surface_wheel(app: AppHandle, delta_y: f64) {
+    #[cfg(native_surface)]
+    {
+        let _ = app.run_on_main_thread(move || {
+            crate::native_surface::forward_wheel(delta_y);
+        });
+    }
+    #[cfg(not(native_surface))]
+    {
+        let _ = (&app, delta_y);
+    }
+}
+
 /// Tier 3 native renderer (macOS): copy the current selection to the
 /// clipboard. Used by the Cmd+C / Ctrl+C path; a no-op elsewhere.
 #[tauri::command]
