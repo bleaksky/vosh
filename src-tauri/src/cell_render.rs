@@ -156,6 +156,26 @@ fn theme_bg() -> Rgb {
     unpack_rgb(THEME_BG.load(Ordering::Acquire), DEFAULT_BG)
 }
 
+/// The terminal background as sRGB bytes, for surfaces outside the grid
+/// that must match it (the underlay layer backdrop and its first clear).
+pub(crate) fn theme_bg_rgb() -> (u8, u8, u8) {
+    let bg = theme_bg();
+    (bg.r, bg.g, bg.b)
+}
+
+/// Where the pane sits inside the render target, in device pixels. The
+/// macOS underlay surface spans the whole window, so the grid draws at the
+/// pane's offset instead of at the target's origin. The caller keeps the
+/// pane inside the target.
+#[derive(Clone, Copy)]
+pub(crate) struct Placement {
+    pub x: u32,
+    pub y: u32,
+    /// Draw the sunk-well strips. Off under the underlay, where the page
+    /// draws its own vignette over the grid.
+    pub vignette: bool,
+}
+
 fn theme_fg() -> Rgb {
     unpack_rgb(THEME_FG.load(Ordering::Acquire), DEFAULT_FG)
 }
@@ -1326,6 +1346,7 @@ impl CellRenderer {
         surface_w: u32,
         surface_h: u32,
         split_ratio: f32,
+        placement: Placement,
     ) -> Option<f32> {
         let cell_w = self.atlas.cell_w() as f32;
         let cell_h = self.atlas.cell_h() as f32;
@@ -1641,23 +1662,25 @@ impl CellRenderer {
         let left_vignette: [f32; 5] = [0.20, 0.15, 0.10, 0.06, 0.03];
         let top_step = (cell_h * 0.42).clamp(8.0, 20.0) / top_vignette.len() as f32;
         let left_step = (cell_h * 0.30).clamp(6.0, 14.0) / left_vignette.len() as f32;
-        for (i, &alpha) in top_vignette.iter().enumerate() {
-            instances.push(CellInstance {
-                offset: [0.0, i as f32 * top_step],
-                size: [surface_w as f32, top_step],
-                color: [0.0, 0.0, 0.0, alpha],
-                uv_min: solid_uv.0,
-                uv_max: solid_uv.1,
-            });
-        }
-        for (i, &alpha) in left_vignette.iter().enumerate() {
-            instances.push(CellInstance {
-                offset: [i as f32 * left_step, 0.0],
-                size: [left_step, surface_h as f32],
-                color: [0.0, 0.0, 0.0, alpha],
-                uv_min: solid_uv.0,
-                uv_max: solid_uv.1,
-            });
+        if placement.vignette {
+            for (i, &alpha) in top_vignette.iter().enumerate() {
+                instances.push(CellInstance {
+                    offset: [0.0, i as f32 * top_step],
+                    size: [surface_w as f32, top_step],
+                    color: [0.0, 0.0, 0.0, alpha],
+                    uv_min: solid_uv.0,
+                    uv_max: solid_uv.1,
+                });
+            }
+            for (i, &alpha) in left_vignette.iter().enumerate() {
+                instances.push(CellInstance {
+                    offset: [i as f32 * left_step, 0.0],
+                    size: [left_step, surface_h as f32],
+                    color: [0.0, 0.0, 0.0, alpha],
+                    uv_min: solid_uv.0,
+                    uv_max: solid_uv.1,
+                });
+            }
         }
         if let Some(divider_px) = divider_px {
             let thickness = 2.0_f32;
@@ -1827,18 +1850,31 @@ impl CellRenderer {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(0, &self.bind_group, &[]);
         rpass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+        // Map the pane-local instance space onto the pane's rect in the
+        // target. The clear above already painted the whole target, so the
+        // area outside the pane shows the terminal background.
+        let (ox, oy) = (placement.x, placement.y);
+        rpass.set_viewport(
+            ox as f32,
+            oy as f32,
+            surface_w as f32,
+            surface_h as f32,
+            0.0,
+            1.0,
+        );
         match divider_px {
             Some(divider_px) => {
                 // Each region clips its overhanging edge row at the divider.
                 let div = (divider_px as u32).min(surface_h.saturating_sub(1)).max(1);
-                rpass.set_scissor_rect(0, 0, surface_w, div);
+                rpass.set_scissor_rect(ox, oy, surface_w, div);
                 rpass.draw(0..6, region_ranges[0].clone());
-                rpass.set_scissor_rect(0, div, surface_w, surface_h - div);
+                rpass.set_scissor_rect(ox, oy + div, surface_w, surface_h - div);
                 rpass.draw(0..6, region_ranges[1].clone());
-                rpass.set_scissor_rect(0, 0, surface_w, surface_h);
+                rpass.set_scissor_rect(ox, oy, surface_w, surface_h);
                 rpass.draw(0..6, overlay_range);
             }
             None => {
+                rpass.set_scissor_rect(ox, oy, surface_w, surface_h);
                 rpass.draw(0..6, region_ranges[0].start..overlay_range.end);
             }
         }

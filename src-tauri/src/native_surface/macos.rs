@@ -6,12 +6,13 @@
 
 use std::ffi::c_void;
 use std::ptr::NonNull;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::OnceLock;
 
 use super::{
     context_click, divider_frac, load_f32, middle_click, pointer_down, pointer_dragged,
     pointer_moved, pointer_up, render, surface_slot, wheel_scroll, PointerEvent, SurfaceHandle,
-    DPR, DRAGGING,
+    DPR, DRAGGING, UNDERLAY,
 };
 use objc2::declare::ClassBuilder;
 use objc2::runtime::{AnyClass, AnyObject, Sel};
@@ -54,6 +55,35 @@ unsafe impl Encode for CGRect {
     const ENCODING: Encoding = Encoding::Struct("CGRect", &[CGPoint::ENCODING, CGSize::ENCODING]);
 }
 
+// Opaque CoreGraphics object pointers, typed so msg_send's debug encoding
+// check sees the `^{CGColorSpace=}` and `^{CGColor=}` the layer expects.
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+struct CGColorSpaceRef(*mut c_void);
+unsafe impl Encode for CGColorSpaceRef {
+    const ENCODING: Encoding = Encoding::Pointer(&Encoding::Struct("CGColorSpace", &[]));
+}
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+struct CGColorRef(*mut c_void);
+unsafe impl Encode for CGColorRef {
+    const ENCODING: Encoding = Encoding::Pointer(&Encoding::Struct("CGColor", &[]));
+}
+
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+    static kCGColorSpaceSRGB: *const c_void;
+    fn CGColorSpaceCreateWithName(name: *const c_void) -> *mut c_void;
+    fn CGColorSpaceRelease(space: *mut c_void);
+    fn CGColorCreate(space: *mut c_void, components: *const f64) -> *mut c_void;
+    fn CGColorRelease(color: *mut c_void);
+}
+
+/// Corner radius of the frameless window, matching `.app` in styles.css.
+/// The underlay layer spans the window, so it clips to the same curve or
+/// its square corners would paint over the transparent window edge.
+const WINDOW_CORNER_RADIUS: f64 = 10.0;
+
 /// The platform's window handles: the surface `NSView` and the
 /// `CAMetalLayer` it hosts. Raw pointers are not Send, but every access is
 /// funnelled through the main thread, so the marker is sound.
@@ -68,6 +98,73 @@ pub(super) fn set_hidden(platform: &PlatformSurface, hidden: bool) {
     // SAFETY: main thread; the view is live.
     unsafe {
         let _: () = msg_send![platform.view, setHidden: hidden];
+    }
+}
+
+/// The view's size in device pixels at `dpr`. Under the underlay the view
+/// spans the window and `AppKit` resizes it, so the surface reads its size
+/// here instead of from the frontend. Main thread only.
+pub(super) fn view_size_px(platform: &PlatformSurface, dpr: f64) -> (u32, u32) {
+    // SAFETY: main thread; the view is live.
+    let bounds: CGRect = unsafe { msg_send![platform.view, bounds] };
+    (
+        (bounds.size.width * dpr).round().max(1.0) as u32,
+        (bounds.size.height * dpr).round().max(1.0) as u32,
+    )
+}
+
+/// Keep the layer's backing scale in step with the display the window is
+/// on, so text stays crisp after a move between a 2x and a 1x screen.
+/// Main thread only.
+pub(super) fn set_scale(platform: &PlatformSurface, dpr: f64) {
+    // SAFETY: main thread; the layer is live.
+    unsafe {
+        let current: f64 = msg_send![platform.metal_layer, contentsScale];
+        if (current - dpr).abs() > f64::EPSILON {
+            let _: () = msg_send![platform.metal_layer, setContentsScale: dpr];
+        }
+    }
+}
+
+// Last backdrop color set on the layer, packed 0x00RRGGBB, plus one so the
+// initial zero means unset.
+static BACKDROP: AtomicU32 = AtomicU32::new(0);
+
+/// Paint the layer's own background in the terminal color. During a live
+/// resize the drawable lags the view by a frame, and the uncovered strip
+/// shows this color instead of the desktop. Main thread only.
+pub(super) fn set_backdrop(platform: &PlatformSurface, rgb: (u8, u8, u8)) {
+    let packed = (u32::from(rgb.0) << 16 | u32::from(rgb.1) << 8 | u32::from(rgb.2)) + 1;
+    if BACKDROP.swap(packed, Ordering::AcqRel) == packed {
+        return;
+    }
+    // SAFETY: main thread; the layer is live. The CGColor is retained by
+    // the layer and released here after the set.
+    unsafe {
+        // CGColorCreate with an sRGB space, not CGColorCreateSRGB, which
+        // is 10.15+ and would fail to load on the 10.13 Intel floor.
+        let space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+        if space.is_null() {
+            return;
+        }
+        let components = [
+            f64::from(rgb.0) / 255.0,
+            f64::from(rgb.1) / 255.0,
+            f64::from(rgb.2) / 255.0,
+            1.0,
+        ];
+        let color = CGColorCreate(space, components.as_ptr());
+        CGColorSpaceRelease(space);
+        if color.is_null() {
+            return;
+        }
+        // Layer property changes animate by default. Set it without the
+        // implicit fade.
+        let _: () = msg_send![class!(CATransaction), begin];
+        let _: () = msg_send![class!(CATransaction), setDisableActions: true];
+        let _: () = msg_send![platform.metal_layer, setBackgroundColor: CGColorRef(color)];
+        let _: () = msg_send![class!(CATransaction), commit];
+        CGColorRelease(color);
     }
 }
 
@@ -107,7 +204,8 @@ pub(super) fn set_frame(
 /// Post-redraw hook: refresh the divider cursor rect for the current split
 /// state, except mid-drag (`AppKit` holds the cursor through the drag).
 pub(super) fn after_redraw(platform: &PlatformSurface) {
-    if DRAGGING.load(std::sync::atomic::Ordering::Acquire) {
+    // Under the underlay the page owns the cursor.
+    if UNDERLAY || DRAGGING.load(std::sync::atomic::Ordering::Acquire) {
         return;
     }
     // SAFETY: main thread; the view and its window are live.
@@ -254,7 +352,9 @@ extern "C" fn mouse_exited(_this: *mut AnyObject, _cmd: Sel, _event: *mut AnyObj
 /// band while the split is open. `AppKit` holds the rect's cursor through a
 /// drag started inside it, so the divider drag shows the resize cursor.
 extern "C" fn reset_cursor_rects(this: *mut AnyObject, _cmd: Sel) {
-    if this.is_null() {
+    // Under the underlay the view spans the whole window beneath the page.
+    // A cursor rect here would fight WebKit's cursor everywhere.
+    if UNDERLAY || this.is_null() {
         return;
     }
     // SAFETY: AppKit calls this with a live NSView.
@@ -292,6 +392,17 @@ extern "C" fn reset_cursor_rects(this: *mut AnyObject, _cmd: Sel) {
             let _: () = msg_send![this, addCursorRect: rect(band_top, height), cursor: arrow];
         }
     }
+}
+
+/// Under the underlay the view never takes a click. The webview sits above
+/// it and forwards pointer input over IPC, so hit testing skips it even if
+/// something reorders the views.
+extern "C" fn hit_test(this: *mut AnyObject, _cmd: Sel, point: CGPoint) -> *mut AnyObject {
+    if UNDERLAY {
+        return std::ptr::null_mut();
+    }
+    // SAFETY: AppKit calls this with a live NSView; defer to NSView.
+    unsafe { msg_send![super(this, class!(NSView)), hitTest: point] }
 }
 
 /// A minimal `NSView` subclass that forwards mouse-wheel events to the grid.
@@ -340,6 +451,10 @@ fn surface_view_class() -> &'static AnyClass {
                 sel!(mouseExited:),
                 mouse_exited as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
             );
+            builder.add_method(
+                sel!(hitTest:),
+                hit_test as extern "C" fn(*mut AnyObject, Sel, CGPoint) -> *mut AnyObject,
+            );
         }
         let cls: &'static AnyClass = builder.register();
         std::ptr::from_ref(cls) as usize
@@ -370,12 +485,22 @@ pub(super) fn install(window: &tauri::WebviewWindow) -> Result<(), tauri::Error>
                 return;
             }
 
-            let frame = CGRect {
-                origin: CGPoint { x: 0.0, y: 0.0 },
-                size: CGSize {
-                    width: 320.0,
-                    height: 200.0,
-                },
+            // Under the underlay the view spans the webview's parent and sits
+            // below the webview in it. Otherwise it starts at a placeholder
+            // frame that the first set_bounds moves over the pane.
+            let parent: *mut AnyObject = msg_send![wk, superview];
+            let parent = if parent.is_null() { content_view } else { parent };
+            let frame = if UNDERLAY {
+                let bounds: CGRect = msg_send![parent, bounds];
+                bounds
+            } else {
+                CGRect {
+                    origin: CGPoint { x: 0.0, y: 0.0 },
+                    size: CGSize {
+                        width: 320.0,
+                        height: 200.0,
+                    },
+                }
             };
             let scale: f64 = msg_send![ns_window, backingScaleFactor];
 
@@ -391,30 +516,59 @@ pub(super) fn install(window: &tauri::WebviewWindow) -> Result<(), tauri::Error>
                 return;
             }
             let _: () = msg_send![metal_layer, setContentsScale: scale];
+            // Tag the drawable as sRGB so the compositor color-manages the
+            // terminal the same way WebKit manages the chrome around it.
+            // Left unset, the values go to a wide-gamut panel raw.
+            let srgb = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+            if !srgb.is_null() {
+                let _: () = msg_send![metal_layer, setColorspace: CGColorSpaceRef(srgb)];
+                CGColorSpaceRelease(srgb);
+            }
             let _: () = msg_send![view, setLayer: metal_layer];
             let _: () = msg_send![view, setWantsLayer: true];
-            let _: () = msg_send![content_view, addSubview: view];
-            // Tracking area for URL-hover: MouseMoved | MouseEnteredAndExited
-            // | ActiveInKeyWindow | InVisibleRect. InVisibleRect keeps it
-            // sized to the view automatically, so no manual resize tracking.
-            let opts: usize = 0x02 | 0x01 | 0x20 | 0x200;
-            let area: *mut AnyObject = msg_send![class!(NSTrackingArea), alloc];
-            let zero = CGRect {
-                origin: CGPoint { x: 0.0, y: 0.0 },
-                size: CGSize {
-                    width: 0.0,
-                    height: 0.0,
-                },
-            };
-            let area: *mut AnyObject = msg_send![area, initWithRect: zero, options: opts, owner: view, userInfo: std::ptr::null_mut::<AnyObject>()];
-            if !area.is_null() {
-                let _: () = msg_send![view, addTrackingArea: area];
+            if UNDERLAY {
+                // Pin the drawn frame to the top-left so a resize that
+                // outpaces the next render exposes backdrop at the right
+                // and bottom instead of stretching the text. Clip to the
+                // window's curve.
+                let top_left: *mut AnyObject = msg_send![
+                    class!(NSString),
+                    stringWithUTF8String: c"topLeft".as_ptr()
+                ];
+                let _: () = msg_send![metal_layer, setContentsGravity: top_left];
+                let _: () = msg_send![metal_layer, setCornerRadius: WINDOW_CORNER_RADIUS];
+                let _: () = msg_send![metal_layer, setMasksToBounds: true];
+                // NSViewWidthSizable | NSViewHeightSizable: AppKit resizes
+                // the view with the window in the same layout pass.
+                let _: () = msg_send![view, setAutoresizingMask: 18_usize];
+                // NSWindowBelow (-1): under the webview in its parent.
+                let _: () = msg_send![parent, addSubview: view, positioned: -1_isize, relativeTo: wk];
+            } else {
+                let _: () = msg_send![content_view, addSubview: view];
+                // Tracking area for URL-hover: MouseMoved |
+                // MouseEnteredAndExited | ActiveInKeyWindow | InVisibleRect.
+                // InVisibleRect keeps it sized to the view automatically, so
+                // no manual resize tracking.
+                let opts: usize = 0x02 | 0x01 | 0x20 | 0x200;
+                let area: *mut AnyObject = msg_send![class!(NSTrackingArea), alloc];
+                let zero = CGRect {
+                    origin: CGPoint { x: 0.0, y: 0.0 },
+                    size: CGSize {
+                        width: 0.0,
+                        height: 0.0,
+                    },
+                };
+                let area: *mut AnyObject = msg_send![area, initWithRect: zero, options: opts, owner: view, userInfo: std::ptr::null_mut::<AnyObject>()];
+                if !area.is_null() {
+                    let _: () = msg_send![view, addTrackingArea: area];
+                }
             }
             // Start hidden. The surface is opaque and would occlude xterm,
             // so it stays invisible until the frontend opts in (flag) and
             // reports pane bounds, which reveals and positions it.
             let _: () = msg_send![view, setHidden: true];
 
+            // init_gpu clamps these to the device's texture limit.
             let px_w = (frame.size.width * scale).max(1.0) as u32;
             let px_h = (frame.size.height * scale).max(1.0) as u32;
             let (font_stack, font_px) = super::font_atlas_params(scale);

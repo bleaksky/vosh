@@ -79,9 +79,43 @@ static REDRAW_PENDING: AtomicBool = AtomicBool::new(false);
 // renders the same content behind the surface, so the swap is seamless.
 static SUPPRESSED: AtomicBool = AtomicBool::new(false);
 
+/// The surface sits BELOW the webview instead of on top (macOS). It spans
+/// the whole window and never moves; the grid draws at the pane's offset,
+/// the page leaves the pane unpainted so the grid shows through, and DOM
+/// overlays composite over live terminal pixels. Pointer input then
+/// arrives from the page instead of the view.
+pub(crate) const UNDERLAY: bool = cfg!(target_os = "macos");
+
+// The pane rect inside the underlay surface, in device pixels
+// [x, y, width, height]. None until the frontend first reports bounds.
+static VIEWPORT: Mutex<Option<[u32; 4]>> = Mutex::new(None);
+
+/// The pane rect clamped into a `target_w` x `target_h` render target.
+/// Without the underlay (or before the first report) the pane is the
+/// whole target.
+fn pane_rect(target_w: u32, target_h: u32) -> [u32; 4] {
+    let full = [0, 0, target_w.max(1), target_h.max(1)];
+    if !UNDERLAY {
+        return full;
+    }
+    let Some([x, y, w, h]) = VIEWPORT.lock().ok().and_then(|v| *v) else {
+        return full;
+    };
+    let x = x.min(target_w.saturating_sub(1));
+    let y = y.min(target_h.saturating_sub(1));
+    let w = w.min(target_w - x).max(1);
+    let h = h.min(target_h - y).max(1);
+    [x, y, w, h]
+}
+
 /// Hide or show the surface for an overlay. Hiding reveals xterm (same
 /// content) so a DOM popover over the terminal is not occluded.
 pub(crate) fn set_visible(visible: bool) {
+    // Under the underlay the page draws over the grid, so nothing ever
+    // needs to hide it.
+    if UNDERLAY {
+        return;
+    }
     SUPPRESSED.store(!visible, Ordering::Release);
     let Some(app) = APP.get() else {
         return;
@@ -119,6 +153,12 @@ fn redraw_now() {
     REDRAW_PENDING.store(false, Ordering::Release);
     if let Ok(mut slot) = surface_slot().lock() {
         if let Some(handle) = slot.as_mut() {
+            // A theme change repaints through here, so the backdrop that
+            // shows during a resize follows it. Cached, so cheap.
+            #[cfg(target_os = "macos")]
+            if UNDERLAY {
+                platform::set_backdrop(&handle.platform, crate::cell_render::theme_bg_rgb());
+            }
             render(&mut handle.gpu);
             platform::after_redraw(&handle.platform);
         }
@@ -373,6 +413,12 @@ fn wheel_scroll(delta_y: f64) {
 /// a thumb drag; a press on the divider starts a divider drag; anything
 /// else starts a selection.
 fn pointer_down(ev: &PointerEvent) {
+    // A press always starts fresh. Forwarded input cannot promise that
+    // every press got its release, and a stale flag would turn the next
+    // selection into a divider or scrollbar drag.
+    SCROLLBAR_DRAGGING.store(false, Ordering::Release);
+    DRAGGING.store(false, Ordering::Release);
+    SELECTING.store(false, Ordering::Release);
     let cell = phys_point_to_cell(ev.x, ev.y, ev.height);
     if ev.open_modifier {
         if let Some((line, col)) = cell {
@@ -470,6 +516,48 @@ fn pointer_moved(ev: Option<&PointerEvent>) {
         .and_then(|e| phys_point_to_cell(e.x, e.y, e.height))
         .and_then(|(line, col)| crate::term_grid::url_at(line, col).map(|(_, s, e)| (line, s, e)));
     set_hover_url(next);
+}
+
+/// A pointer event forwarded from the page under the underlay, where the
+/// webview sits on top and receives every click. `x` and `y` are CSS px
+/// relative to the pane's top-left corner. `kind` is "down", "drag",
+/// "up", "move", "leave", or "middle". Must run on the main thread.
+pub(crate) fn forward_pointer(kind: &str, x: f64, y: f64, open_modifier: bool) {
+    let dpr = f64::from(load_f32(&DPR, 2.0));
+    let (width, height) = VIEWPORT
+        .lock()
+        .ok()
+        .and_then(|v| *v)
+        .map_or((0.0, 0.0), |[_, _, w, h]| (f64::from(w), f64::from(h)));
+    let ev = PointerEvent {
+        x: x * dpr,
+        y: y * dpr,
+        width,
+        height,
+        open_modifier,
+    };
+    match kind {
+        "down" => pointer_down(&ev),
+        "drag" => pointer_dragged(&ev),
+        "up" => pointer_up(),
+        "move" => pointer_moved(Some(&ev)),
+        "leave" => pointer_moved(None),
+        "middle" => middle_click(),
+        _ => {}
+    }
+}
+
+/// True once the surface installed and its GPU came up. The page checks
+/// this before it leaves the terminal pane transparent, so a failed
+/// install falls back to xterm instead of a see-through hole.
+pub(crate) fn is_ready() -> bool {
+    surface_slot().lock().is_ok_and(|s| s.is_some())
+}
+
+/// A wheel delta forwarded from the page under the underlay. Positive
+/// reveals older lines, matching the platform handlers. Main thread only.
+pub(crate) fn forward_wheel(delta_y: f64) {
+    wheel_scroll(delta_y);
 }
 
 // The transient "copied N chars" toast: text plus the moment it was set.
@@ -629,6 +717,32 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
     store_f32(&DPR, dpr as f32);
     store_f32(&ORIGIN_X, x as f32);
     store_f32(&ORIGIN_Y, y as f32);
+    // The underlay helpers exist only in the macOS glue.
+    #[cfg(target_os = "macos")]
+    if UNDERLAY {
+        // The view already spans the window (AppKit resizes it with the
+        // window), so the report only moves the grid inside it. Snap to
+        // whole device pixels so glyphs land on the pixel grid.
+        let snap = |v: f64| (v * dpr).round().max(0.0) as u32;
+        if let Ok(mut vp) = VIEWPORT.lock() {
+            *vp = Some([snap(x), snap(y), snap(width).max(1), snap(height).max(1)]);
+        }
+        let (px_w, px_h) = platform::view_size_px(&handle.platform, dpr);
+        let (px_w, px_h) = clamp_to_device(&handle.gpu.device, px_w, px_h);
+        platform::set_scale(&handle.platform, dpr);
+        platform::set_hidden(&handle.platform, false);
+        platform::set_backdrop(&handle.platform, crate::cell_render::theme_bg_rgb());
+        if px_w != handle.gpu.config.width || px_h != handle.gpu.config.height {
+            handle.gpu.config.width = px_w;
+            handle.gpu.config.height = px_h;
+            handle
+                .gpu
+                .surface
+                .configure(&handle.gpu.device, &handle.gpu.config);
+        }
+        render(&mut handle.gpu);
+        return;
+    }
     platform::set_frame(&handle.platform, x, y, width, height, dpr);
     // Respect an active overlay suppression so a resize does not pop the
     // surface back over an open dropdown.
@@ -636,6 +750,7 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
 
     let px_w = (width * dpr).max(1.0) as u32;
     let px_h = (height * dpr).max(1.0) as u32;
+    let (px_w, px_h) = clamp_to_device(&handle.gpu.device, px_w, px_h);
     if px_w != handle.gpu.config.width || px_h != handle.gpu.config.height {
         handle.gpu.config.width = px_w;
         handle.gpu.config.height = px_h;
@@ -645,6 +760,14 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
             .configure(&handle.gpu.device, &handle.gpu.config);
     }
     render(&mut handle.gpu);
+}
+
+/// Clamp a drawable size to the device's texture limit. `configure` panics
+/// on anything larger, and that panic would abort the app from inside an
+/// `AppKit` callback.
+fn clamp_to_device(device: &wgpu::Device, width: u32, height: u32) -> (u32, u32) {
+    let max = device.limits().max_texture_dimension_2d.max(1);
+    (width.clamp(1, max), height.clamp(1, max))
 }
 
 /// Build the wgpu surface + device + cell renderer over the platform's raw
@@ -677,11 +800,20 @@ unsafe fn init_gpu(
         force_fallback_adapter: false,
     }))?;
 
-    let (device, queue) =
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
-            .map_err(|e| tracing::warn!(error = %e, "native-surface: request_device failed"))
-            .ok()?;
+    let (device, queue) = pollster::block_on(adapter.request_device(
+        &wgpu::DeviceDescriptor {
+            // The underlay drawable spans the window, which can pass the
+            // default 8192 px cap on a window stretched across displays.
+            // Ask for what the GPU actually supports (16384 on Apple).
+            required_limits: adapter.limits(),
+            ..Default::default()
+        },
+        None,
+    ))
+    .map_err(|e| tracing::warn!(error = %e, "native-surface: request_device failed"))
+    .ok()?;
 
+    let (width, height) = clamp_to_device(&device, width, height);
     let mut config = surface.get_default_config(&adapter, width, height)?;
     // Use the non-sRGB view of the format. The cell renderer writes
     // sRGB-encoded values and relies on hardware alpha blending compositing
@@ -718,11 +850,11 @@ fn render(state: &mut GpuState) {
         .device
         .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-    // Size the grid to the surface so the terminal fills the pane instead
-    // of a fixed 80x24 corner.
-    let (cols, rows) = state
-        .cell_renderer
-        .grid_size_for(state.config.width, state.config.height);
+    // Size the grid to the pane so the terminal fills it instead of a fixed
+    // 80x24 corner. Under the underlay the pane is a rect inside the
+    // window-sized target; otherwise it is the whole target.
+    let [pane_x, pane_y, pane_w, pane_h] = pane_rect(state.config.width, state.config.height);
+    let (cols, rows) = state.cell_renderer.grid_size_for(pane_w, pane_h);
     crate::term_grid::resize_grid(cols, rows);
     push_native_size_if_changed(cols, rows);
     // Publish the cell size so the mouse handler can map points to cells.
@@ -734,8 +866,11 @@ fn render(state: &mut GpuState) {
     // hold the renderer mutably and the device/queue immutably.
     let device = &state.device;
     let queue = &state.queue;
-    let width = state.config.width;
-    let height = state.config.height;
+    let placement = crate::cell_render::Placement {
+        x: pane_x,
+        y: pane_y,
+        vignette: !UNDERLAY,
+    };
     let cell_renderer = &mut state.cell_renderer;
     let drew = crate::term_grid::with_grid(|grid| {
         if let Some(grid) = grid {
@@ -745,9 +880,10 @@ fn render(state: &mut GpuState) {
                 &mut encoder,
                 &view,
                 grid,
-                width,
-                height,
+                pane_w,
+                pane_h,
                 split_ratio(),
+                placement,
             );
             set_divider_frac(frac);
             true
@@ -756,8 +892,10 @@ fn render(state: &mut GpuState) {
         }
     });
     if !drew {
-        // No grid yet: clear to the default background. The pass records
-        // its clear when dropped at the end of this block.
+        // No grid yet: clear to the terminal background, since under the
+        // underlay this fills the whole window behind the page. The pass
+        // records its clear when dropped at the end of this block.
+        let (bg_r, bg_g, bg_b) = crate::cell_render::theme_bg_rgb();
         let _clear_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("term-surface-clear"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -765,9 +903,9 @@ fn render(state: &mut GpuState) {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.04,
-                        g: 0.05,
-                        b: 0.16,
+                        r: f64::from(bg_r) / 255.0,
+                        g: f64::from(bg_g) / 255.0,
+                        b: f64::from(bg_b) / 255.0,
                         a: 1.0,
                     }),
                     store: wgpu::StoreOp::Store,

@@ -2,7 +2,13 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
-import { Terminal, nativeSurfaceEnabled, type TerminalHandle } from './components/Terminal';
+import {
+  NATIVE_FAILED_KEY,
+  Terminal,
+  nativeSurfaceEnabled,
+  nativeUnderlay,
+  type TerminalHandle,
+} from './components/Terminal';
 import { Input, type InputHandle } from './components/Input';
 import { type ConnectionStatus } from './components/Connect';
 import { TopBar } from './components/TopBar';
@@ -649,6 +655,44 @@ function App() {
   // content behind it, so the swap is seamless. Overlays that do not carry a
   // standard role can opt in with data-occludes-surface.
   useEffect(() => {
+    // Under the underlay (macOS) the page draws over the surface, so no
+    // overlay needs to hide it. Mark the root so CSS leaves the terminal
+    // pane unpainted and hides the xterm copy.
+    if (nativeUnderlay()) {
+      // Leave the pane transparent only once the backend confirms the
+      // surface is up. It installs during setup, usually before this runs,
+      // so poll briefly. If it never comes up, reload onto xterm for the
+      // rest of the session instead of showing a see-through hole.
+      let cancelled = false;
+      let tries = 0;
+      const check = () => {
+        void invoke<boolean>('native_surface_ready')
+          .catch(() => false)
+          .then((ready) => {
+            if (cancelled) return;
+            if (ready) {
+              document.documentElement.dataset.underlay = '1';
+              return;
+            }
+            tries += 1;
+            if (tries < 30) {
+              window.setTimeout(check, 100);
+              return;
+            }
+            try {
+              sessionStorage.setItem(NATIVE_FAILED_KEY, '1');
+            } catch {
+              return;
+            }
+            window.location.reload();
+          });
+      };
+      check();
+      return () => {
+        cancelled = true;
+        delete document.documentElement.dataset.underlay;
+      };
+    }
     if (!nativeSurfaceEnabled()) return;
     const selector = '[role="menu"],[role="listbox"],[role="dialog"],[data-occludes-surface]';
     let occluded = false;
@@ -1411,7 +1455,7 @@ function App() {
     <div
       ref={terminalAreaRef}
       className={`terminal-area${splitOpen ? ' terminal-area-split' : ''}${
-        findOpen && nativeSurfaceEnabled() ? ' terminal-area-find-inset' : ''
+        findOpen && nativeSurfaceEnabled() && !nativeUnderlay() ? ' terminal-area-find-inset' : ''
       }`}
       onMouseUp={handleTerminalMouseUp}
       onContextMenu={(event) => {
