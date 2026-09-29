@@ -1,0 +1,5 @@
+/* One Window stylesheets, loaded after the legacy styles.css so the
+   tokens and the new component sheets win ties with it. Add each new
+   sheet under src/styles/ here, after the tokens. */
+
+@import './tokens.css';

@@ -1,0 +1,90 @@
+/* One Window design tokens. src/lib/theme.ts writes the color tokens
+   on :root at runtime from lib/chrome's derivation of the active
+   terminal theme. The values below are Obsidian Ember's, so the first
+   paint matches the default theme. Every new component reads these
+   names and nothing else. */
+
+:root {
+  --bg: #050403;
+  --panel: #0c0a08;
+  --sep: #1d1b19;
+  --divider: #181614;
+  --selrow: #1d1b19;
+  --hover: #171513;
+  --inputband: #0f0e0d;
+  --text: #c0bdbb;
+  --secondary: #918e8c;
+  --tertiary: #62605e;
+  --title: #8f8e8e;
+  --raised: #100f0d;
+  --accent: #ef8f2f;
+  --on-accent: #140b02;
+  --danger: #ea8f80;
+  --warn: #ecc985;
+  --success: #8fdaa8;
+  --selection: rgba(239, 143, 47, 0.22);
+
+  --font-ui:
+    -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI Variable Text', 'Segoe UI', Cantarell,
+    sans-serif;
+  --font-mud: var(--app-font-family);
+
+  --r-float: 16px;
+  --r-card: 12px;
+  --r-row: 8px;
+  --r-key: 4px;
+
+  --row: 22px;
+  --pane-header: 28px;
+  --band: 32px;
+  --input-band: 40px;
+  --status-line: 28px;
+  --panel-w: 300px;
+}
+
+/* Floating recipe (SPEC 3): menus, the palette, popovers, dialogs.
+   --ring-float is the edge alone, --shadow-float the whole recipe. */
+:root,
+:root[data-appearance='dark'] {
+  --ring-float: 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  --shadow-float: var(--ring-float), 0 17.5px 42px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-appearance='light'] {
+  --ring-float: 0 0 0 1px rgba(0, 0, 0, 0.14);
+  --shadow-float: var(--ring-float), 0 17.5px 42px rgba(0, 0, 0, 0.22);
+}
+
+/* Legacy aliases. styles.css and every component built before the One
+   Window shell read the --c-* names, so each maps to its nearest token
+   until those components move to the new names. This block loads after
+   styles.css and replaces its Ember defaults. */
+:root {
+  --c-surface: var(--bg);
+  --c-surface-deep: var(--panel);
+  --c-surface-pane: var(--panel);
+  --c-surface-lift: var(--hover);
+  --c-surface-emphasis: var(--selrow);
+  --c-text-strong: var(--text);
+  --c-text: var(--text);
+  --c-text-muted: var(--secondary);
+  --c-text-faint: var(--tertiary);
+  --c-text-dim: var(--tertiary);
+  --c-border-soft: var(--divider);
+  --c-border: var(--divider);
+  --c-border-strong: var(--sep);
+  --c-border-hover: var(--sep);
+  --c-accent: var(--accent);
+  /* theme.ts also writes this one as rgba, since the map canvas reads
+     it and a canvas fill cannot parse color-mix in every webview. */
+  --c-accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
+  --c-warn: var(--warn);
+  --c-danger: var(--danger);
+  --c-info: var(--accent);
+  --c-success: var(--success);
+  /* Referenced by styles.css and CodeEditor but never defined before. */
+  --c-muted: var(--secondary);
+  --c-muted-red: var(--danger);
+  --c-bg: var(--bg);
+  --xterm-bg: var(--bg);
+}
