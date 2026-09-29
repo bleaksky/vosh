@@ -18,7 +18,9 @@
 //! Unsynced, before any real tick this session or on a game that sends
 //! none, the local timer fires at the interval as it always has. A synced
 //! timer that hears nothing for twice the interval fires locally once and
-//! drops back to unsynced, so it never freezes when GMCP stops.
+//! drops back to unsynced, so it never freezes when GMCP stops. A new
+//! interval starts that wait again, so a shorter one never makes a game
+//! that still ticks look quiet.
 
 use std::time::Duration;
 
@@ -93,6 +95,10 @@ pub(crate) struct TickRuntime {
     /// When the local timer last fired by itself, for
     /// [`SAME_TICK_WINDOW`].
     pub last_local_fire: Option<Instant>,
+    /// When the interval last changed while a synced count ran. The
+    /// fallback waits twice the interval from the later of this and the
+    /// last tick, so a new interval alone never fires it.
+    pub interval_changed_at: Option<Instant>,
     /// Whether the warning echo has already fired for the current cycle.
     /// Resets each time the count restarts: on each tick, on `reset()`,
     /// and on an interval change while unsynced.
@@ -136,7 +142,9 @@ impl TickRuntime {
     /// profile switch, `#profile load`, or `#profile reset` does. The
     /// running count carries across: the last tick, the synced state, the
     /// world hour, and whether this cycle warned. Only the settings
-    /// change, so the expected tick moves with a new interval.
+    /// change, so the expected tick moves with a new interval, and the
+    /// fallback's wait starts again as it does for
+    /// [`set_interval`](Self::set_interval).
     ///
     /// A running tick stays on, whatever the new profile saved. A
     /// connection starts the tick whatever the profile says, and earlier
@@ -154,6 +162,7 @@ impl TickRuntime {
         now: Instant,
     ) {
         let was_on = self.config.enabled;
+        let was_interval = self.config.interval;
         if self.in_session && was_on && self.last_tick.is_some() {
             config.enabled = true;
         }
@@ -164,6 +173,8 @@ impl TickRuntime {
         } else if self.in_session && (!was_on || self.last_tick.is_none()) {
             self.forget_sync();
             self.restart(now);
+        } else {
+            self.note_interval_change(was_interval, now);
         }
     }
 
@@ -192,6 +203,7 @@ impl TickRuntime {
         self.synced = false;
         self.last_signal = None;
         self.last_local_fire = None;
+        self.interval_changed_at = None;
     }
 
     /// Restart the count now, as `#tick reset` asks. A synced timer stays
@@ -206,11 +218,25 @@ impl TickRuntime {
     /// Set the interval. Unsynced it restarts the count and opens a new
     /// warning cycle, as it always has. Synced the interval is only the
     /// expected length, so the count carries on, the expected tick moves,
-    /// and a warning this tick already printed does not print again.
+    /// and a warning this tick already printed does not print again. A
+    /// new interval also starts the fallback's wait again.
     pub(crate) fn set_interval(&mut self, secs: u64, now: Instant) {
+        let was_interval = self.config.interval;
         self.config.interval = Duration::from_secs(secs.max(1));
         if self.config.enabled && !self.synced {
             self.restart(now);
+        } else {
+            self.note_interval_change(was_interval, now);
+        }
+    }
+
+    /// Start the fallback's wait again when the interval moved while a
+    /// synced count runs. The wait is twice the interval, so without
+    /// this a shorter interval could put the game's last tick past it
+    /// and fire the fallback at once while the game still ticks.
+    fn note_interval_change(&mut self, was_interval: Duration, now: Instant) {
+        if self.synced && self.config.interval != was_interval {
+            self.interval_changed_at = Some(now);
         }
     }
 
@@ -282,22 +308,25 @@ impl TickRuntime {
     fn restart(&mut self, now: Instant) {
         self.last_tick = Some(now);
         self.warned_this_cycle = false;
+        self.interval_changed_at = None;
     }
 
     /// Whether the local timer fires by itself now. Unsynced it fires at
     /// the interval. Synced it waits for the game, and fires only when no
-    /// real tick has come for twice the interval, then drops back to
-    /// unsynced. Firing restarts the count.
+    /// real tick has come for twice the interval, counted from the later
+    /// of the last tick and the last change of the interval, then drops
+    /// back to unsynced. Firing restarts the count.
     pub(crate) fn try_consume_fire(&mut self, now: Instant) -> bool {
         let Some(last) = self.last_tick.filter(|_| self.config.enabled) else {
             return false;
         };
-        let wait = if self.synced {
-            self.config.interval * 2
+        let due = if self.synced {
+            let from = self.interval_changed_at.map_or(last, |at| at.max(last));
+            from + self.config.interval * 2
         } else {
-            self.config.interval
+            last + self.config.interval
         };
-        if now < last + wait {
+        if now < due {
             return false;
         }
         if self.synced {
@@ -890,6 +919,120 @@ mod tests {
         t.set_interval(40, tick + secs(10.0));
         assert_eq!(t.last_tick, Some(tick));
         assert_eq!(t.remaining(tick + secs(10.0)), Some(secs(30.0)));
+    }
+
+    // ── A new interval never makes the game look quiet ──────────────
+
+    /// A synced session whose game ticked 5 seconds in, with the time
+    /// of that tick.
+    fn synced_session(t0: Instant) -> (TickRuntime, Instant) {
+        let mut t = session(t0);
+        let tick = t0 + secs(5.0);
+        assert!(t.on_game_tick(tick).is_some());
+        (t, tick)
+    }
+
+    #[test]
+    fn lowering_the_interval_while_synced_does_not_fire_the_fallback() {
+        let t0 = Instant::now();
+        let (mut t, tick) = synced_session(t0);
+        // 25 seconds into the tick you set Every to 10, as #tick
+        // interval and a Settings save do.
+        let change = tick + secs(25.0);
+        t.set_interval(10, change);
+        assert!(poll_span(&mut t, change, tick + secs(30.0)).is_empty());
+        assert!(t.synced);
+        // The game's tick lands on time and fires once.
+        let step = t.on_game_tick(tick + secs(30.0)).expect("the tick lands");
+        assert!(step.payload.fired);
+        assert_eq!(step.command.as_deref(), Some("score"));
+        assert!(t.synced);
+    }
+
+    #[test]
+    fn a_profile_with_a_shorter_interval_does_not_fire_the_fallback() {
+        let t0 = Instant::now();
+        let (mut t, tick) = synced_session(t0);
+        // A switch, #profile load, reset, or an import brings Every 10.
+        let mut config = t.config.clone();
+        config.interval = secs(10.0);
+        let change = tick + secs(25.0);
+        t.adopt(config, None, change);
+        assert!(poll_span(&mut t, change, tick + secs(30.0)).is_empty());
+        assert!(t.synced);
+        let step = t.on_game_tick(tick + secs(30.0)).expect("the tick lands");
+        assert!(step.payload.fired);
+        assert!(t.synced);
+    }
+
+    #[test]
+    fn after_a_shorter_interval_the_fallback_waits_twice_it_from_the_change() {
+        let t0 = Instant::now();
+        let (mut t, tick) = synced_session(t0);
+        let change = tick + secs(25.0);
+        t.set_interval(10, change);
+        // The game goes quiet. Twice the new interval after the change
+        // the timer fires once on its own and drops back to unsynced.
+        assert!(poll_span(&mut t, change, change + secs(20.0)).is_empty());
+        let step = t.poll(change + secs(20.0));
+        assert!(step.payload.fired);
+        assert_eq!(step.command.as_deref(), Some("score"));
+        assert!(!t.synced);
+    }
+
+    #[test]
+    fn raising_the_interval_while_synced_does_not_fire_the_fallback() {
+        let t0 = Instant::now();
+        let (mut t, tick) = synced_session(t0);
+        let change = tick + secs(25.0);
+        t.set_interval(60, change);
+        // The game runs a little late and ticks once.
+        assert!(poll_span(&mut t, change, tick + secs(35.0)).is_empty());
+        let next = tick + secs(35.0);
+        assert!(t.on_game_tick(next).expect("the tick lands").payload.fired);
+        // Then it goes quiet, and the fallback waits twice the new one.
+        assert!(poll_span(&mut t, next, next + secs(120.0)).is_empty());
+        assert!(t.synced);
+        assert!(t.poll(next + secs(120.0)).payload.fired);
+        assert!(!t.synced);
+    }
+
+    #[test]
+    fn a_profile_with_a_longer_interval_does_not_fire_the_fallback() {
+        let t0 = Instant::now();
+        let (mut t, tick) = synced_session(t0);
+        let mut config = t.config.clone();
+        config.interval = secs(60.0);
+        let change = tick + secs(25.0);
+        t.adopt(config, None, change);
+        assert!(poll_span(&mut t, change, tick + secs(35.0)).is_empty());
+        assert!(t.synced);
+        assert!(
+            t.on_game_tick(tick + secs(35.0))
+                .expect("the tick lands")
+                .payload
+                .fired
+        );
+    }
+
+    #[test]
+    fn a_new_interval_unsynced_fires_at_the_new_interval_from_the_change() {
+        for every in [10, 60] {
+            let t0 = Instant::now();
+            let mut t = session(t0);
+            let change = t0 + secs(25.0);
+            t.set_interval(every, change);
+            let due = change + Duration::from_secs(every);
+            assert!(
+                poll_span(&mut t, change, due).is_empty(),
+                "no fire before a new {every} second interval runs out"
+            );
+            assert!(
+                t.poll(due).payload.fired,
+                "fires at the new {every} seconds"
+            );
+            assert!(!t.synced);
+        }
     }
 
     #[test]

@@ -4461,6 +4461,32 @@ mod tests {
     }
 
     #[test]
+    fn a_tick_save_with_a_shorter_interval_does_not_fire_while_the_game_ticks() {
+        let t0 = tokio::time::Instant::now();
+        let at = |s: f64| t0 + std::time::Duration::from_secs_f64(s);
+        let mut tick = crate::tick::TickRuntime::default();
+        tick.start_session(t0);
+        tick.config.auto_fire = Some("score".into());
+        assert!(tick.on_game_tick(at(1.0)).is_some());
+        // 25 seconds into the tick, Settings saves Every 10.
+        let mut shorter = tick_payload("");
+        shorter.enabled = true;
+        shorter.interval_secs = 10;
+        super::apply_tick_config(&mut tick, &shorter, at(26.0)).unwrap();
+        let mut now = 26.0;
+        while now < 31.0 {
+            let step = tick.poll(at(now));
+            assert!(!step.payload.fired, "no fallback at {now}");
+            assert_eq!(step.command, None);
+            now += 0.25;
+        }
+        assert!(tick.synced);
+        let step = tick.on_game_tick(at(31.0)).expect("the tick lands");
+        assert!(step.payload.fired);
+        assert_eq!(step.command.as_deref(), Some("score"));
+    }
+
+    #[test]
     fn settings_window_keeps_a_size_that_fits() {
         assert_eq!(settings_window_fit((880.0, 600.0)), None);
         assert_eq!(settings_window_fit((820.0, 560.0)), None);
