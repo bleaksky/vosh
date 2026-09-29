@@ -169,7 +169,9 @@ pub(crate) struct InputModePayload {
 /// Map carries the server-rendered tile grid for the map pane's server
 /// mode; Imm.Queues carries the staff work-queue counters the imm panel
 /// renders (the server only sends it to immortals, so declaring it costs
-/// mortals nothing).
+/// mortals nothing). Group carries the roster the Group pane shows.
+/// Aabahran sends every package without this list, so it names them
+/// for servers that honor it.
 const REQUESTED_GMCP_PACKAGES: &[&str] = &[
     "Char 1",
     "Room 1",
@@ -177,6 +179,7 @@ const REQUESTED_GMCP_PACKAGES: &[&str] = &[
     "World 1",
     "Map 1",
     "Imm.Queues 1",
+    "Group 1",
 ];
 
 /// Bytes flowing to the server. The frontend echoes typed commands into the
@@ -1733,6 +1736,46 @@ mod tests {
     use super::base64_encode;
     use crate::input::LineEffects;
     use crate::profile::Profile;
+
+    #[test]
+    fn core_supports_set_names_every_package_vosh_reads() {
+        let body = vosh_gmcp::build(
+            "Core.Supports.Set",
+            &super::REQUESTED_GMCP_PACKAGES.to_vec(),
+        )
+        .expect("the list serializes");
+        let msg = vosh_gmcp::parse(&body).expect("the body parses");
+        let modules: Vec<&str> = msg
+            .data
+            .as_array()
+            .expect("a list")
+            .iter()
+            .filter_map(|v| v.as_str()?.split(' ').next())
+            .collect();
+        for read in [
+            "Char.Vitals",
+            "Char.Affects",
+            "Char.Combat",
+            "Char.Prompt",
+            "Char.State",
+            "Char.Worth",
+            "Room.Info",
+            "Room.Weather",
+            "Comm.Channel",
+            "World.Time",
+            "World.Moons",
+            "Map.Tiles",
+            "Imm.Queues",
+            "Group.Info",
+        ] {
+            assert!(
+                modules
+                    .iter()
+                    .any(|m| read == *m || read.starts_with(&format!("{m}."))),
+                "Core.Supports.Set leaves out {read}"
+            );
+        }
+    }
 
     #[test]
     fn a_timer_command_that_edits_the_profile_marks_it_dirty() {
