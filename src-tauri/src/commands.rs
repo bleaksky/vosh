@@ -409,22 +409,13 @@ async fn persist_state_with(
         }
     };
 
-    let (mut per_profile_snapshot, global_snapshot) = {
+    let (per_profile_snapshot, global_snapshot) = {
         let p = state.profile.lock().await;
-        let scope = scope.unwrap_or_default();
         (
-            ProfileConfig::from_profile(&p),
-            GlobalConfig::from_profile(&p, &scope),
+            active_profile_file(&p, scope.as_ref()),
+            GlobalConfig::from_profile(&p, &scope.unwrap_or_default()),
         )
     };
-
-    // Strip the global-scoped fields out of the per-profile snapshot
-    // so they don't get duplicated. Honors the per-category scope
-    // map (categories marked Profile-scoped stay in the per-profile
-    // file).
-    if let Some(scope) = scope.as_ref() {
-        strip_global_fields(&mut per_profile_snapshot, scope);
-    }
 
     if let Some(p) = per_profile_path.as_ref() {
         if let Err(e) = per_profile_snapshot.save(p) {
@@ -436,6 +427,21 @@ async fn persist_state_with(
             warn!(error = %e, path = %g.display(), "auto-save global failed");
         }
     }
+}
+
+/// What a save in per profile mode writes to the file of the active
+/// profile `p`. The fields `scope` keeps global go to global.toml, so
+/// they are left out here and never saved twice. Honors the scope of each
+/// category, and a category kept per profile stays in the file.
+fn active_profile_file(
+    p: &Profile,
+    scope: Option<&crate::profile_set::ScopeConfig>,
+) -> ProfileConfig {
+    let mut snapshot = ProfileConfig::from_profile(p);
+    if let Some(scope) = scope {
+        strip_global_fields(&mut snapshot, scope);
+    }
+    snapshot
 }
 
 /// Path B persistence. Snapshots the live `Profile`'s authored items
@@ -3539,8 +3545,9 @@ pub(crate) async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, S
 }
 
 /// Read-only Path B migration preview. Walks the current profile set,
-/// loads each per-profile [`ProfileConfig`] off disk, and runs the
-/// analyzer in [`crate::migration`]. Returns the full plan: every
+/// loads each per-profile [`ProfileConfig`] off disk, the active one as
+/// the save apply runs first would write it, and runs the analyzer in
+/// [`crate::migration`]. Returns the full plan: every
 /// auto-resolved item, every conflict (one entry per name with two or
 /// more diverging variants), and the per-source-profile loadouts the
 /// migration would generate. Nothing is written to disk; the wizard
@@ -3570,15 +3577,40 @@ async fn analyze_migration(
     app_data: &std::path::Path,
     library: &[&str],
 ) -> Result<crate::migration::MigrationPlan, String> {
+    analyze_migration_with(state, app_data, library, &AUTO_PERSIST_SUPPRESSED).await
+}
+
+/// [`analyze_migration`] with `suppressed` in place of
+/// [`AUTO_PERSIST_SUPPRESSED`], so a test can preview after a `#profile
+/// reset` without touching the flag every other test reads. Apply saves
+/// the live profile before it reads the files, unless `suppressed` holds,
+/// see [`apply_migration_with`]. The preview reads the active profile as
+/// that save would write it, so it shows what apply builds, the presets of
+/// a profile you switched to before anything saved it among them.
+async fn analyze_migration_with(
+    state: &SharedState,
+    app_data: &std::path::Path,
+    library: &[&str],
+    suppressed: &std::sync::atomic::AtomicBool,
+) -> Result<crate::migration::MigrationPlan, String> {
+    // No switch or save lands between the read of the live profile and
+    // the read of the files, as in apply.
+    let _persist_guard = PERSIST_LOCK.lock().await;
     if let Some(reason) = migration_refusal(state, app_data).await {
         return Err(reason.into());
     }
-    let live_presets = state.profile.lock().await.ui.enabled_presets.clone();
+    let scope = state.profile_set.lock().await.as_ref().map(|s| *s.scope());
+    let (live, live_presets) = {
+        let p = state.profile.lock().await;
+        let live = (!suppressed.load(std::sync::atomic::Ordering::Acquire))
+            .then(|| active_profile_file(&p, scope.as_ref()));
+        (live, p.ui.enabled_presets.clone())
+    };
     let guard = state.profile_set.lock().await;
     let Some(set) = guard.as_ref() else {
         return Err(PROFILES_NOT_LOADED.into());
     };
-    let sources = migration_sources(set)?;
+    let sources = migration_sources(set, live.as_ref())?;
     Ok(plan_migration(&sources, &live_presets, library))
 }
 
@@ -3651,8 +3683,12 @@ struct MigrationFile {
 /// A file that does not read stops the wizard, since the catalog would
 /// miss its items. So does a file Vosh could not read at launch, since
 /// the wizard rewrites every profile file and Vosh never saves over one
-/// of those.
-fn migration_sources(set: &crate::profile_set::ProfileSet) -> Result<MigrationSources, String> {
+/// of those. `live`, when given, stands for the file of the active
+/// profile, as the save apply runs first would write it.
+fn migration_sources(
+    set: &crate::profile_set::ProfileSet,
+    live: Option<&ProfileConfig>,
+) -> Result<MigrationSources, String> {
     let mut sources = MigrationSources {
         profiles: Vec::with_capacity(set.list().len()),
         preset_lists: Vec::new(),
@@ -3667,7 +3703,9 @@ fn migration_sources(set: &crate::profile_set::ProfileSet) -> Result<MigrationSo
                 crate::profile_set::display_name(&entry.name)
             ));
         }
-        let text = if path.exists() {
+        let text = if let Some(live) = live.filter(|_| entry.name == set.active_name()) {
+            Some(live.to_toml().map_err(|e| e.to_string())?)
+        } else if path.exists() {
             // The error goes to the log. Its text can hold colons and a
             // path, which a sentence for you leaves out.
             Some(std::fs::read_to_string(&path).map_err(|e| {
@@ -3838,7 +3876,7 @@ async fn apply_migration_with(
         let Some(set) = guard.as_ref() else {
             return Err(PROFILES_NOT_LOADED.into());
         };
-        migration_sources(set)?
+        migration_sources(set, None)?
     };
     let live_presets = state.profile.lock().await.ui.enabled_presets.clone();
 
@@ -6226,6 +6264,77 @@ mod tests {
             super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
+            let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+            assert_eq!(catalog.enabled_presets, Some(plan.shared_presets));
+        }
+
+        #[tokio::test]
+        async fn the_preview_counts_the_live_presets_of_a_profile_that_never_saved() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_presets(&set, DEFAULT_PROFILE_NAME, &["healing_basics"]);
+            write_presets(&set, "Healer", &["healing_basics"]);
+            // You create Test-Prompt, switch to it, and open the wizard
+            // before anything saves it. Its live list is the defaults.
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::switch_profile(&state, Some(dir.path()), "Test-Prompt")
+                .await
+                .unwrap();
+            assert!(!set.profile_path("Test-Prompt").exists());
+
+            // Apply saves the live profile first, so the catalog takes
+            // every preset on. The preview used to leave Test-Prompt out
+            // as a profile without a file and show healing_basics alone.
+            let plan = super::super::analyze_migration(&state, dir.path(), LIBRARY)
+                .await
+                .unwrap();
+            let list = |ids: &[&str]| ids.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+            assert_eq!(plan.shared_presets, Vec::<String>::new());
+            assert_eq!(
+                plan.profile_presets,
+                [
+                    list(&["healing_basics"]),
+                    list(&["healing_basics"]),
+                    Vec::new()
+                ]
+            );
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
+                .await
+                .unwrap();
+            let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+            assert_eq!(catalog.enabled_presets, Some(plan.shared_presets));
+        }
+
+        #[tokio::test]
+        async fn the_preview_reads_the_files_after_a_profile_reset() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            use std::sync::atomic::AtomicBool;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_presets(&set, DEFAULT_PROFILE_NAME, &["healing_basics"]);
+            write_presets(&set, "Healer", &["healing_basics"]);
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            // `#profile reset` blanks the live profile and holds every
+            // save, so apply reads the file as it is, and so does the
+            // preview.
+            state.profile.lock().await.ui.enabled_presets.clear();
+            let suppressed = AtomicBool::new(true);
+            let plan =
+                super::super::analyze_migration_with(&state, dir.path(), LIBRARY, &suppressed)
+                    .await
+                    .unwrap();
+            assert_eq!(plan.shared_presets, ["healing_basics"]);
+            super::super::apply_migration_with(
+                &state,
+                dir.path(),
+                &[],
+                LIBRARY,
+                &suppressed,
+                || {},
+            )
+            .await
+            .unwrap();
             let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
             assert_eq!(catalog.enabled_presets, Some(plan.shared_presets));
         }
