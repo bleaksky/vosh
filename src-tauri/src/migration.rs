@@ -39,6 +39,13 @@
 //! turning on loadout `default` turns on what the default profile had
 //! on, the items it shared included, and nothing it did not have.
 //!
+//! A preset trigger follows the list of presets that are on, which every
+//! profile shares in loadout mode, so it counts as on for every profile,
+//! the ones whose file lacks it included, since a launch installs every
+//! preset that is on. It keeps the group it had, most often none, and
+//! gets a group named for profiles only where a profile had it in a
+//! group it kept off.
+//!
 //! ## Scope
 //!
 //! This module produces the plan only. The `migration_apply` command
@@ -191,7 +198,16 @@ pub(crate) fn analyze_profiles(profiles: &[(String, ProfileConfig)]) -> Migratio
         }
     }
     for (name, variants) in triggers_by_name {
-        if let Some(canonical) = collapse(&variants) {
+        // A launch installs the version of a preset trigger the library
+        // holds, whichever one the catalog keeps, so there is nothing to
+        // ask you.
+        let presets = variants.iter().all(|(_, t)| t.preset.is_some());
+        let canonical = if presets {
+            variants.first().map(|(_, t)| t.clone())
+        } else {
+            collapse(&variants)
+        };
+        if let Some(canonical) = canonical {
             plan.auto_resolved.triggers.push(canonical);
         } else {
             plan.conflicts.push(Conflict {
@@ -273,6 +289,10 @@ trait CatalogItem: Clone + Serialize {
     /// The group checkbox list of this kind in `config`, the groups it
     /// has off.
     fn groups_off(config: &ProfileConfig) -> &[String];
+    /// The preset a preset trigger belongs to.
+    fn preset(&self) -> Option<&str> {
+        None
+    }
 }
 
 impl CatalogItem for Alias {
@@ -309,6 +329,9 @@ impl CatalogItem for Trigger {
     fn groups_off(config: &ProfileConfig) -> &[String] {
         &config.disabled_trigger_groups
     }
+    fn preset(&self) -> Option<&str> {
+        self.preset.as_deref()
+    }
 }
 
 impl CatalogItem for Macro {
@@ -332,8 +355,9 @@ impl CatalogItem for Macro {
 /// Where one name of one kind lands in the catalog, see
 /// [`group_buckets`].
 struct Placement {
-    /// The group it asks for.
-    group: String,
+    /// The group it asks for, None for a preset trigger that stays
+    /// without one.
+    group: Option<String>,
     /// The profiles it is on for.
     on: BTreeSet<String>,
     /// True when some profile had the item turned on. It comes over
@@ -343,29 +367,40 @@ struct Placement {
     enabled: bool,
 }
 
+/// True when `list`, an `enabled_presets` list, has `preset` on. An
+/// empty list means the defaults, and every preset in the library is on
+/// by default, as `presets_on_in_any` in `loadout_store.rs` relies on too.
+fn preset_on(list: &[String], preset: &str) -> bool {
+    list.is_empty() || list.iter().any(|id| id == preset)
+}
+
 /// Where the variants of one name land, from each holder's copy. A store
 /// keeps the last copy of a name, so a later copy in one file wins.
 fn place<T: CatalogItem>(
     profiles: &[(String, ProfileConfig)],
     variants: &[(String, T)],
 ) -> Placement {
+    let presets = variants.iter().all(|(_, item)| item.preset().is_some());
     // The holders in index order, the group each copy sits in, whether
-    // that group is on for its holder, and whether the copy is on.
+    // that group is on for its holder, whether the copy is on, and for a
+    // preset trigger, whether its holder kept it off by its group.
     let mut holders: Vec<&str> = Vec::new();
     let mut group_of: BTreeMap<&str, Option<&str>> = BTreeMap::new();
     let mut group_on: BTreeSet<&str> = BTreeSet::new();
     let mut enabled: BTreeSet<&str> = BTreeSet::new();
+    let mut kept_off: BTreeSet<&str> = BTreeSet::new();
     for (source, item) in variants {
         if !holders.contains(&source.as_str()) {
             holders.push(source);
         }
+        let config = profiles
+            .iter()
+            .find(|(name, _)| name == source)
+            .map(|(_, config)| config);
         let group = item.group().filter(|g| !g.is_empty());
         group_of.insert(source, group);
         let off = group.is_some_and(|g| {
-            profiles
-                .iter()
-                .find(|(name, _)| name == source)
-                .is_some_and(|(_, config)| T::groups_off(config).iter().any(|o| o == g))
+            config.is_some_and(|config| T::groups_off(config).iter().any(|o| o == g))
         });
         if off {
             group_on.remove(source.as_str());
@@ -377,6 +412,46 @@ fn place<T: CatalogItem>(
         } else {
             enabled.remove(source.as_str());
         }
+        // A launch takes out the triggers of a preset that is off, so
+        // only a preset its holder had on can have been off by a group.
+        let preset_was_on = item
+            .preset()
+            .zip(config)
+            .is_some_and(|(preset, config)| preset_on(&config.ui.enabled_presets, preset));
+        if off && preset_was_on {
+            kept_off.insert(source);
+        } else {
+            kept_off.remove(source.as_str());
+        }
+    }
+    let first_group = || {
+        holders
+            .first()
+            .and_then(|h| group_of.get(h).copied())
+            .flatten()
+    };
+    if presets {
+        // A launch installs every preset that is on, whatever the file
+        // held, so a preset trigger is on for every profile but one that
+        // kept it off by its group, and comes over turned on.
+        let on: Vec<&str> = profiles
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .filter(|name| !kept_off.contains(name))
+            .collect();
+        if on.len() == profiles.len() {
+            return Placement {
+                group: first_group().map(str::to_string),
+                on: on.iter().map(|p| (*p).to_string()).collect(),
+                enabled: true,
+            };
+        }
+        let named_for = if on.is_empty() { &holders } else { &on };
+        return Placement {
+            group: Some(group_name(named_for, &group_of)),
+            on: on.iter().map(|p| (*p).to_string()).collect(),
+            enabled: true,
+        };
     }
     let any_enabled = !enabled.is_empty();
     // An item some profile had on is on for each holder whose copy was
@@ -388,19 +463,25 @@ fn place<T: CatalogItem>(
         .filter(|h| group_on.contains(h) && (!any_enabled || enabled.contains(h)))
         .collect();
     let named_for = if on.is_empty() { &holders } else { &on };
-    // The group of the first of them.
-    let group = named_for
+    Placement {
+        group: Some(group_name(named_for, &group_of)),
+        on: on.iter().map(|p| (*p).to_string()).collect(),
+        enabled: any_enabled,
+    }
+}
+
+/// The group named for `profiles`, joined with `+`, then a dot and the
+/// group the first of them that holds the item had it in, when it had
+/// one.
+fn group_name(profiles: &[&str], group_of: &BTreeMap<&str, Option<&str>>) -> String {
+    let prefix = profiles.join("+");
+    let group = profiles
         .iter()
         .find_map(|p| group_of.get(p).copied())
         .flatten();
-    let prefix = named_for.join("+");
-    Placement {
-        group: match group {
-            Some(g) => format!("{prefix}.{g}"),
-            None => prefix,
-        },
-        on: on.iter().map(|p| (*p).to_string()).collect(),
-        enabled: any_enabled,
+    match group {
+        Some(g) => format!("{prefix}.{g}"),
+        None => prefix,
     }
 }
 
@@ -427,16 +508,16 @@ fn group_buckets<T: CatalogItem>(
     let mut names: Vec<Option<String>> = placements
         .iter()
         .map(|p| {
-            p.enabled
-                .then(|| claim_group(&mut groups, p.group.clone(), p.on.clone()))
+            let group = p.group.clone().filter(|_| p.enabled)?;
+            Some(claim_group(&mut groups, group, p.on.clone()))
         })
         .collect();
     for (placement, name) in placements.iter().zip(names.iter_mut()) {
-        if name.is_none() {
+        if let (None, false, Some(group)) = (&name, placement.enabled, &placement.group) {
             groups
-                .entry(placement.group.clone())
+                .entry(group.clone())
                 .or_insert_with(|| placement.on.clone());
-            *name = Some(placement.group.clone());
+            *name = Some(group.clone());
         }
     }
     for ((variants, placement), name) in buckets.values_mut().zip(&placements).zip(names) {
@@ -946,6 +1027,105 @@ mod tests {
                 ["default+warrior"]
             );
         }
+    }
+
+    /// A trigger of the healing basics preset, as a profile file holds it.
+    fn heal_preset(pattern: &str) -> Trigger {
+        Trigger {
+            preset: Some("healing_basics".into()),
+            ..trigger("heal 1", pattern, "HEAL")
+        }
+    }
+
+    #[test]
+    fn a_preset_trigger_stays_on_for_every_profile_that_lacked_it() {
+        // Default has healing basics on and its trigger in its file. The
+        // Healer saved its file before the preset came out, with an older
+        // pattern, and the Bard never saved a file.
+        let default = profile_with(vec![], vec![heal_preset("^You heal")], vec![]);
+        let healer = profile_with(vec![], vec![heal_preset("^You are healed")], vec![]);
+        let plan = analyze_profiles(&[
+            ("default".into(), default),
+            ("Healer".into(), healer),
+            ("Bard".into(), ProfileConfig::default()),
+        ]);
+        // A launch installs the library version either way, so there is
+        // nothing to ask you, and no group of any profile gates it.
+        assert!(plan.conflicts.is_empty());
+        assert_eq!(plan.auto_resolved.triggers[0].group, None);
+        for name in ["default", "Healer", "Bard"] {
+            assert!(file_after(&plan, name).disabled_trigger_groups.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_preset_trigger_a_profile_kept_off_by_its_group_stays_off_for_it() {
+        let mut labelled = heal_preset("^You heal");
+        labelled.group = Some("labels".into());
+        let mut healer = profile_with(vec![], vec![labelled], vec![]);
+        healer.disabled_trigger_groups = vec!["labels".into()];
+        let plan = analyze_profiles(&[
+            (
+                "default".into(),
+                profile_with(vec![], vec![heal_preset("^You heal")], vec![]),
+            ),
+            ("Healer".into(), healer),
+            ("Bard".into(), ProfileConfig::default()),
+        ]);
+        let group = plan.auto_resolved.triggers[0].group.clone();
+        assert_eq!(group.as_deref(), Some("default+Bard"));
+        assert_eq!(
+            file_after(&plan, "Healer").disabled_trigger_groups,
+            ["default+Bard"]
+        );
+        assert!(file_after(&plan, "Bard").disabled_trigger_groups.is_empty());
+    }
+
+    #[test]
+    fn a_preset_trigger_off_in_its_own_list_gates_nothing() {
+        // The Healer turned healing basics off, and its file still holds
+        // the trigger in a group it keeps off. A launch as the Healer
+        // takes the trigger out, so that group never kept it off.
+        let mut labelled = heal_preset("^You heal");
+        labelled.group = Some("labels".into());
+        let mut healer = profile_with(vec![], vec![labelled], vec![]);
+        healer.disabled_trigger_groups = vec!["labels".into()];
+        healer.ui.enabled_presets = vec!["potion_labels".into()];
+        let plan = analyze_profiles(&[
+            (
+                "default".into(),
+                profile_with(vec![], vec![heal_preset("^You heal")], vec![]),
+            ),
+            ("Healer".into(), healer),
+        ]);
+        assert_eq!(plan.auto_resolved.triggers[0].group, None);
+        assert!(file_after(&plan, "Healer")
+            .disabled_trigger_groups
+            .is_empty());
+    }
+
+    #[test]
+    fn a_preset_trigger_in_a_group_every_profile_kept_on_keeps_that_group() {
+        let mut labelled = heal_preset("^You heal");
+        labelled.group = Some("labels".into());
+        let plan = analyze_profiles(&[
+            (
+                "default".into(),
+                profile_with(vec![], vec![labelled], vec![]),
+            ),
+            ("Healer".into(), ProfileConfig::default()),
+        ]);
+        assert_eq!(
+            plan.auto_resolved.triggers[0].group.as_deref(),
+            Some("labels")
+        );
+        // Each loadout turns it on, so an active loadout keeps it on.
+        for loadout in &plan.loadouts {
+            assert_eq!(loadout.enabled_groups, ["labels"]);
+        }
+        assert!(file_after(&plan, "Healer")
+            .disabled_trigger_groups
+            .is_empty());
     }
 
     #[test]
