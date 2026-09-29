@@ -71,6 +71,19 @@ import { useEscape } from './lib/escapeStack';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
+// Hide or show the panel. When focus sat on the title band's toggle or
+// inside the panel, the caret goes back to the command line: a hidden
+// panel is inert and would drop focus to the body, and a toggle button
+// that keeps focus (WebView2 and WebKitGTK focus on click) would take
+// the next Space and toggle again.
+function togglePanelKeepingCaret(focusInput: () => void): void {
+  const active = document.activeElement;
+  const stranded =
+    active instanceof Element && active.closest('.shell-slot-panel, .shell-band') !== null;
+  togglePanelOpen();
+  if (stranded) focusInput();
+}
+
 // CSS variable applied to the split-scrollback divider. Empty value
 // removes the override so the rule falls back to the theme default.
 function applySplitDividerColor(color: string | null): void {
@@ -653,7 +666,7 @@ function App() {
       if (e.shiftKey) {
         if (key === 'l') {
           take();
-          if (!e.repeat) togglePanelOpen();
+          if (!e.repeat) togglePanelKeepingCaret(() => inputRef.current?.focus());
         }
         return;
       }
@@ -1460,8 +1473,8 @@ function App() {
         <TitleBand
           connection={connection}
           panelOpen={panelOpen}
-          onTogglePanel={togglePanelOpen}
-          onOpenPalette={() => setPaletteOpen(true)}
+          onTogglePanel={() => togglePanelKeepingCaret(() => inputRef.current?.focus())}
+          onTogglePalette={() => (paletteOpen ? closePalette() : setPaletteOpen(true))}
           paneTree={panelLayout?.root ?? null}
           onAddPane={addPaneType}
           onMenuClosed={() => inputRef.current?.focus()}

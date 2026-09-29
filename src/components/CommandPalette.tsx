@@ -87,10 +87,14 @@ export function CommandPalette({ deps, onClose }: Props) {
   }, []);
 
   // Close on a press anywhere outside the palette. There is no scrim,
-  // so the terminal and panel stay visible and clickable behind it.
+  // so the terminal and panel stay visible and clickable behind it. The
+  // title band's Search commands button toggles the palette itself, so
+  // a press there is left to its click, which would otherwise reopen
+  // the palette this press just closed.
   useEffect(() => {
     const onPointer = (e: PointerEvent) => {
       if (e.target instanceof Node && rootRef.current?.contains(e.target)) return;
+      if (e.target instanceof Element && e.target.closest('[data-palette-anchor]')) return;
       onClose();
     };
     document.addEventListener('pointerdown', onPointer, true);
