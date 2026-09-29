@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
+import { listen, type EventCallback } from '@tauri-apps/api/event';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -8,8 +10,10 @@ vi.mock('@tauri-apps/api/event', () => ({
 import {
   commitFocusedField,
   createDebouncedWrite,
-  createFlushResponder,
   createPendingWrites,
+  FLUSH_REQUEST_EVENT,
+  listenForQuitFlush,
+  pendingWrites,
   runCloseRequest,
   sendPendingWrites,
   type CloseGuard,
@@ -218,12 +222,22 @@ describe('leaving the focused field', () => {
 });
 
 describe('the quit request', () => {
-  it('answers each round once', () => {
-    const respond = vi.fn(() => Promise.resolve());
-    const answer = createFlushResponder(respond);
-    expect(answer(1)).toBe(true);
-    expect(answer(1)).toBe(false);
-    expect(answer(2)).toBe(true);
-    expect(respond).toHaveBeenCalledTimes(2);
+  it('sends what the window holds and answers every request', async () => {
+    const write = vi.fn();
+    const stop = pendingWrites.register(write);
+    vi.mocked(listen).mockClear();
+    vi.mocked(invoke).mockClear();
+    await listenForQuitFlush();
+    const [event, handler] = vi.mocked(listen).mock.calls[0];
+    expect(event).toBe(FLUSH_REQUEST_EVENT);
+    // The backend asks each window once a round, so a second quit round
+    // gets a second answer.
+    for (const round of [1, 2]) {
+      (handler as EventCallback<unknown>)({ event, id: round, payload: round });
+      await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(round));
+      expect(invoke).toHaveBeenLastCalledWith('pending_writes_flushed');
+      expect(write).toHaveBeenCalledTimes(round);
+    }
+    stop();
   });
 });

@@ -201,29 +201,19 @@ export async function runCloseRequest(steps: {
 export const FLUSH_REQUEST_EVENT = 'vosh://flush-pending-writes';
 const FLUSH_DONE_COMMAND = 'pending_writes_flushed';
 
-/** Answers each quit round once. The backend sends the request to every
- *  window, and a window can hear the same round more than once. */
-export function createFlushResponder(respond: () => Promise<void>): (round: unknown) => boolean {
-  let last: unknown = undefined;
-  return (round) => {
-    if (round === last) return false;
-    last = round;
-    void respond();
-    return true;
-  };
-}
-
 /** Send what this window holds when the backend asks on quit, then tell
  *  the backend, which waits a short time for every window before it
- *  writes the profile and exits. */
+ *  writes the profile and exits. The backend asks each window once a
+ *  round, so every request gets an answer. */
 export function listenForQuitFlush(options: { commitFocus?: boolean } = {}): Promise<UnlistenFn> {
-  const answer = createFlushResponder(async () => {
-    await sendPendingWrites({ commitFocus: options.commitFocus === true });
-    await invoke(FLUSH_DONE_COMMAND).catch((e: unknown) =>
-      console.error('[writes] telling the backend failed', e),
-    );
+  return listen<unknown>(FLUSH_REQUEST_EVENT, () => {
+    void answerQuitFlush(options.commitFocus === true);
   });
-  return listen<unknown>(FLUSH_REQUEST_EVENT, (event) => {
-    answer(event.payload);
-  });
+}
+
+async function answerQuitFlush(commitFocus: boolean): Promise<void> {
+  await sendPendingWrites({ commitFocus });
+  await invoke(FLUSH_DONE_COMMAND).catch((e: unknown) =>
+    console.error('[writes] telling the backend failed', e),
+  );
 }
