@@ -473,6 +473,7 @@ pub fn run() {
             dock_layout_set,
             commands::pane_layout_get,
             commands::pane_layout_set,
+            commands::tracked_affects_set,
             fonts_list,
             macros_list,
             macros_set,
