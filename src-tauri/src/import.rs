@@ -478,6 +478,7 @@ fn commit_mudlet_key(item: MudletItem, report: &mut ImportReport) {
         key: canonical,
         command,
         group: None,
+        enabled: true,
     });
 }
 
@@ -521,6 +522,7 @@ fn parse_gmud(text: &str) -> ImportReport {
                         key: canonical,
                         command: command.clone(),
                         group: None,
+                        enabled: true,
                     });
                 } else {
                     report
@@ -889,6 +891,7 @@ fn commit_cmud_macro(m: CmudMacroInProgress, report: &mut ImportReport) {
             key: canonical,
             command: m.value,
             group: None,
+            enabled: true,
         }),
         None => report
             .unsupported

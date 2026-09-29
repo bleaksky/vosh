@@ -73,6 +73,24 @@ pub(crate) struct Macro {
     /// keep loading.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) group: Option<String>,
+    /// Off keeps the binding but lets the key fall through as if it
+    /// were not bound, the way a disabled group does. Defaults to on,
+    /// and the wire format omits the field while on so older
+    /// profile.toml files and older builds read the same shape.
+    #[serde(
+        default = "default_macro_enabled",
+        skip_serializing_if = "is_macro_enabled"
+    )]
+    pub(crate) enabled: bool,
+}
+
+fn default_macro_enabled() -> bool {
+    true
+}
+
+// serde's skip_serializing_if hands the field by reference.
+fn is_macro_enabled(enabled: &bool) -> bool {
+    *enabled
 }
 
 /// One interval timer: fire `command` every `interval_secs` seconds
@@ -141,5 +159,65 @@ impl TargetState {
                 verb: String::new(),
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Macro;
+
+    #[test]
+    fn macro_without_enabled_reads_as_on() {
+        let m: Macro = serde_json::from_str(r#"{"key":"F1","command":"kick"}"#).unwrap();
+        assert!(m.enabled);
+        assert_eq!(m.group, None);
+    }
+
+    #[test]
+    fn macro_omits_enabled_while_on_and_keeps_it_off() {
+        let on = Macro {
+            key: "F1".into(),
+            command: "kick".into(),
+            group: None,
+            enabled: true,
+        };
+        let json = serde_json::to_string(&on).unwrap();
+        assert!(!json.contains("enabled"), "{json}");
+
+        let off = Macro {
+            enabled: false,
+            ..on
+        };
+        let json = serde_json::to_string(&off).unwrap();
+        assert!(json.contains(r#""enabled":false"#), "{json}");
+        let back: Macro = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, off);
+    }
+
+    #[test]
+    fn macro_enabled_round_trips_through_toml() {
+        #[derive(serde::Serialize, serde::Deserialize)]
+        struct Holder {
+            macros: Vec<Macro>,
+        }
+        let holder = Holder {
+            macros: vec![
+                Macro {
+                    key: "F1".into(),
+                    command: "kick".into(),
+                    group: Some("combat".into()),
+                    enabled: false,
+                },
+                Macro {
+                    key: "F2".into(),
+                    command: "bash".into(),
+                    group: None,
+                    enabled: true,
+                },
+            ],
+        };
+        let text = toml::to_string(&holder).unwrap();
+        let back: Holder = toml::from_str(&text).unwrap();
+        assert_eq!(back.macros, holder.macros);
     }
 }

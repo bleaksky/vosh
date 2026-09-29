@@ -796,7 +796,9 @@ pub(crate) async fn macros_list(state: State<'_, SharedState>) -> Result<Vec<Mac
 
 /// Set or replace a binding by key. Empty `command` is rejected;
 /// callers that want to unbind should use `macros_delete`.
-/// Re-binding an existing key overwrites the prior command.
+/// Re-binding an existing key overwrites the prior command. `enabled`
+/// turns the binding on or off without unbinding it. Absent keeps an
+/// existing binding's state and makes a new binding on.
 #[tauri::command]
 pub(crate) async fn macros_set(
     app: AppHandle,
@@ -804,6 +806,7 @@ pub(crate) async fn macros_set(
     key: String,
     command: String,
     group: Option<String>,
+    enabled: Option<bool>,
 ) -> Result<Vec<Macro>, String> {
     let key = key.trim().to_string();
     let command = command.trim().to_string();
@@ -823,11 +826,15 @@ pub(crate) async fn macros_set(
         if let Some(existing) = p.macros.iter_mut().find(|m| m.key == key) {
             existing.command = command;
             existing.group = group;
+            if let Some(enabled) = enabled {
+                existing.enabled = enabled;
+            }
         } else {
             p.macros.push(Macro {
                 key,
                 command,
                 group,
+                enabled: enabled.unwrap_or(true),
             });
         }
         p.macros.clone()

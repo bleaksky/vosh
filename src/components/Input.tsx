@@ -412,9 +412,9 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
 
   // Keyboard macro bindings — keyed by canonical key string
   // ("F1", "Ctrl+N", "Numpad7"). Seeded from the backend and
-  // refreshed on every macros-changed broadcast. Macros whose
-  // group has been bulk-disabled in the Settings UI are stripped
-  // here so a disabled "Combat" group means pressing F1 does
+  // refreshed on every macros-changed broadcast. Macros turned off
+  // one by one, and macros whose group has been bulk-disabled, are
+  // stripped here so a disabled "Combat" group means pressing F1 does
   // nothing (key bubbles back up as if no macro existed) instead
   // of firing a stale command.
   const macroMapRef = useRef<Map<string, string>>(new Map());
@@ -428,6 +428,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       const m = new Map<string, string>();
       for (const entry of macroListRef.current) {
         if (!entry.key || !entry.command) continue;
+        if (entry.enabled === false) continue;
         if (entry.group && disabledMacroGroupsRef.current.has(entry.group)) continue;
         m.set(entry.key, entry.command);
       }

@@ -370,6 +370,10 @@ export interface Macro {
    *  bulk-disabled via the Settings UI without losing individual
    *  bindings. */
   group?: string | null;
+  /** False keeps the binding but lets the key fall through as if it
+   *  were not bound. The backend omits the field while it is on, so
+   *  absent means on. */
+  enabled?: boolean;
 }
 
 /** One row in any groups-list response: name + current enabled state.
@@ -383,15 +387,19 @@ export async function listMacros(): Promise<Macro[]> {
   return invoke('macros_list');
 }
 
+/** Bind or rebind a key. `enabled` turns the binding on or off. Leave
+ *  it out to keep an existing binding's state, or make a new one on. */
 export async function setMacro(
   key: string,
   command: string,
   group: string | null = null,
+  enabled?: boolean,
 ): Promise<Macro[]> {
   return invoke('macros_set', {
     key,
     command,
     group: group && group.length > 0 ? group : null,
+    enabled: enabled ?? null,
   });
 }
 
