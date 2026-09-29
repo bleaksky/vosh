@@ -558,7 +558,9 @@ Click `deactivate all` to park the catalog dormant. Dormant disables every group
 
 When no active loadout declares any enabled groups, the loadouts impose nothing and your durable checkbox state from the automation tabs stands.
 
-Activation is the only edit the `loadouts` tab makes. Author or reshape loadouts by editing `loadouts.toml` in the app data folder while Vosh is closed. The migration wizard runs once. It will not build a new catalog while `catalog.toml` or `loadouts.toml` sits in the app data folder, while `profiles/legacy/` holds the copies from an earlier run, or while an earlier run waits to finish at the next launch. To build a new catalog, quit Vosh, move `catalog.toml` and `loadouts.toml` out of the app data folder, copy the files in `profiles/legacy/` back over the ones in `profiles/`, since only the copies hold your aliases, triggers, and macros, and move `profiles/legacy/` out too. Then open Vosh again and run the wizard.
+Activation is the only edit the `loadouts` tab makes. Author or reshape loadouts by editing `loadouts.toml` in the app data folder while Vosh is closed. The migration wizard runs once. It will not build a new catalog while `catalog.toml` or `loadouts.toml` sits in the app data folder, while `profiles/legacy/` holds the copies from an earlier run, or while an earlier run waits to finish at the next launch.
+
+After the move, `catalog.toml` holds your aliases, triggers, and macros, with every one you add or change later. Each file in `profiles/legacy/` is a backup of its profile as it was before the move. Copying a backup over its file in `profiles/` brings back that profile as it was then, every setting included, and drops every change you made since, to the profile and to your shared items. To keep your items, leave `catalog.toml` where it is and change them in Automation settings. To build a new catalog from the backups anyway, quit Vosh, move `catalog.toml` and `loadouts.toml` out of the app data folder, copy the files in `profiles/legacy/` back over the ones in `profiles/`, and move `profiles/legacy/` out too. Then open Vosh again and run the wizard.
 
 ### 7.3 Import a TinTin++ file
 
