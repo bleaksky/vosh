@@ -381,3 +381,151 @@
   margin: 6px 12px;
   background: var(--divider);
 }
+
+/* Find bar (Menus board). 40 tall, 8 below the band, its right edge 16
+   in from the panel. Controls are 28 by 24 at radius 8, 8 apart. */
+.ov-find {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 6px;
+  border-radius: var(--r-float);
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+.ov-find-glyph {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  color: var(--tertiary);
+}
+
+.ov-find-input {
+  flex: none;
+  width: 160px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  color: var(--text);
+  caret-color: var(--accent);
+}
+
+.ov-find-input::placeholder {
+  color: var(--tertiary);
+  opacity: 1;
+}
+
+.ov-find-count {
+  flex: none;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+.ov-find-count.is-miss {
+  color: var(--danger);
+}
+
+.ov-find-btn {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-row);
+  outline: none;
+  background: transparent;
+  font-family: var(--font-ui);
+  color: var(--secondary);
+  cursor: default;
+}
+
+.ov-find-btn:hover:not(:disabled) {
+  background: var(--ov-hl);
+}
+
+.ov-find-btn:disabled {
+  color: var(--tertiary);
+}
+
+.ov-find-btn:focus-visible {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.ov-find-rule {
+  display: block;
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: var(--divider);
+}
+
+/* The three match toggles draw their glyphs as text (SPEC 6). On is
+   the selected row fill, ringed on light themes where that fill is
+   white on white. */
+.ov-find-toggle {
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 400;
+  color: var(--tertiary);
+}
+
+.ov-find-toggle.is-case {
+  font-weight: 600;
+}
+
+.ov-find-toggle.is-word span {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.ov-find-toggle.is-regex {
+  font-family: var(--font-mud);
+  font-weight: 700;
+}
+
+.ov-find-toggle.is-on,
+.ov-find-toggle.is-on:hover:not(:disabled) {
+  background: var(--selrow);
+  color: var(--text);
+}
+
+:root[data-appearance='light'] .ov-find-toggle.is-on {
+  box-shadow: inset 0 0 0 1px var(--sep);
+}
+
+/* The Windows and Linux on-top native path insets the terminal while
+   find is open so the bar clears the opaque surface: 8 above the bar,
+   40 of bar, 8 below. */
+.terminal-area-find-inset {
+  padding-top: 56px;
+}

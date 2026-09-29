@@ -5,8 +5,10 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
 import type { FindOptions } from './Terminal';
+import { shortcutLabel } from '../lib/palette';
 
 export interface FindToolbarHandle {
   /** Focus the query input. Called when the toolbar is already open
@@ -28,14 +30,50 @@ interface Props {
   /** Live match counts from the host. `index` is the 0-based active
    *  match position (or -1 when nothing is selected); `count` is the
    *  total number of matches across the scrollback. Displayed as
-   *  "N / M" to the right of the search input. */
+   *  "N of M" to the right of the search input. */
   results?: { index: number; count: number };
 }
 
-// Floating find toolbar that overlays the top-right of the terminal
-// area. Drives xterm's SearchAddon through the Terminal handle so
-// matches cover the full live scrollback, not just the visible
-// viewport. Keyboard contract:
+const ICON = {
+  width: 16,
+  height: 16,
+  viewBox: '0 0 16 16',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.25,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+  'aria-hidden': true,
+} as const;
+
+function Toggle(props: {
+  label: string;
+  on: boolean;
+  onChange: (on: boolean) => void;
+  className: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={`ov-find-btn ov-find-toggle ${props.className}${props.on ? ' is-on' : ''}`}
+      aria-label={props.label}
+      aria-pressed={props.on}
+      title={props.label}
+      onClick={() => props.onChange(!props.on)}
+    >
+      {props.children}
+    </button>
+  );
+}
+
+// Find bar that floats over the top right of the terminal (Menus
+// board): 40 tall on the floating recipe, 8 below the band and 16 in
+// from the panel edge. A search glyph, the query, "5 of 6", previous
+// and next, a hairline, then the match case, whole word and regex
+// toggles, and close. It drives xterm's SearchAddon or the native
+// grid through the host, so matches cover the full scrollback, not
+// just the viewport. Keyboard contract:
 //   - Enter steps to the next match.
 //   - Shift+Enter steps to the previous match.
 //   - Esc closes the toolbar.
@@ -129,11 +167,26 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
     }
   };
 
+  const setOption = (set: (on: boolean) => void) => (on: boolean) => {
+    set(on);
+    resetSearch();
+    inputRef.current?.focus();
+  };
+
+  const statusText =
+    status === 'miss'
+      ? 'No matches'
+      : count > 0
+        ? `${Math.max(0, activeIndex) + 1} of ${count}`
+        : status === 'hit'
+          ? 'Found'
+          : '';
+
   return (
     <div
-      className="find-toolbar"
+      className="ov-find"
       role="search"
-      aria-label="search scrollback"
+      aria-label="Find in scrollback"
       // Stop wheel from leaking into the terminal area so scrolling
       // over the toolbar does not open the split scrollback view.
       onWheel={(e) => e.stopPropagation()}
@@ -141,12 +194,19 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
       // re-focus the command input.
       onMouseUp={(e) => e.stopPropagation()}
     >
+      <span className="ov-find-glyph" aria-hidden="true">
+        <svg {...ICON}>
+          <circle cx="7" cy="7" r="4.5" />
+          <path d="M10.5 10.5l3.5 3.5" />
+        </svg>
+      </span>
       <input
         ref={inputRef}
-        type="search"
-        className="find-toolbar-input"
-        placeholder="find in scrollback"
+        type="text"
+        className="ov-find-input"
+        placeholder="Find in scrollback"
         spellCheck={false}
+        autoComplete="off"
         autoCapitalize="off"
         autoCorrect="off"
         value={query}
@@ -155,87 +215,74 @@ export const FindToolbar = forwardRef<FindToolbarHandle, Props>(function FindToo
           resetSearch();
         }}
         onKeyDown={handleKeyDown}
-        aria-label="search term"
+        aria-label="Find in scrollback"
       />
-      <span className={`find-toolbar-status find-toolbar-status-${status}`} aria-live="polite">
-        {status === 'miss'
-          ? 'no match'
-          : count > 0
-            ? `${Math.max(0, activeIndex) + 1} / ${count}`
-            : status === 'hit'
-              ? 'found'
-              : ''}
+      <span
+        className={`ov-find-count${status === 'miss' ? ' is-miss' : ''}`}
+        aria-live="polite"
+        hidden={statusText.length === 0}
+      >
+        {statusText}
       </span>
       <button
         type="button"
-        className="find-toolbar-btn"
+        className="ov-find-btn"
         onClick={runPrevious}
         disabled={query.length === 0}
-        aria-label="previous match"
-        title="previous (Shift+Enter)"
+        aria-label="Previous match"
+        title={`Previous match (${shortcutLabel('Shift+Enter')})`}
       >
-        ↑
+        <svg {...ICON}>
+          <path d="M4.5 9.75L8 6.25l3.5 3.5" />
+        </svg>
       </button>
       <button
         type="button"
-        className="find-toolbar-btn"
+        className="ov-find-btn"
         onClick={runNext}
         disabled={query.length === 0}
-        aria-label="next match"
-        title="next (Enter)"
+        aria-label="Next match"
+        title={`Next match (${shortcutLabel('Enter')})`}
       >
-        ↓
+        <svg {...ICON}>
+          <path d="M4.5 6.25L8 9.75l3.5-3.5" />
+        </svg>
       </button>
-      <label
-        className={`find-toolbar-toggle${caseSensitive ? ' is-on' : ''}`}
-        title="match case (case sensitive)"
+      <span className="ov-find-rule" aria-hidden="true" />
+      <Toggle
+        label="Match case"
+        className="is-case"
+        on={caseSensitive}
+        onChange={setOption(setCaseSensitive)}
       >
-        <input
-          type="checkbox"
-          checked={caseSensitive}
-          onChange={(e) => {
-            setCaseSensitive(e.target.checked);
-            resetSearch();
-          }}
-        />
-        case
-      </label>
-      <label
-        className={`find-toolbar-toggle${wholeWord ? ' is-on' : ''}`}
-        title="match whole word only"
+        Aa
+      </Toggle>
+      <Toggle
+        label="Whole word"
+        className="is-word"
+        on={wholeWord}
+        onChange={setOption(setWholeWord)}
       >
-        <input
-          type="checkbox"
-          checked={wholeWord}
-          onChange={(e) => {
-            setWholeWord(e.target.checked);
-            resetSearch();
-          }}
-        />
-        word
-      </label>
-      <label
-        className={`find-toolbar-toggle${regex ? ' is-on' : ''}`}
-        title="treat the query as a regular expression"
+        <span>ab</span>
+      </Toggle>
+      <Toggle
+        label="Regular expression"
+        className="is-regex"
+        on={regex}
+        onChange={setOption(setRegex)}
       >
-        <input
-          type="checkbox"
-          checked={regex}
-          onChange={(e) => {
-            setRegex(e.target.checked);
-            resetSearch();
-          }}
-        />
-        regex
-      </label>
+        .*
+      </Toggle>
       <button
         type="button"
-        className="find-toolbar-close"
+        className="ov-find-btn"
         onClick={onClose}
-        aria-label="close find toolbar"
-        title="close (Esc)"
+        aria-label="Close find"
+        title="Close find (Esc)"
       >
-        ×
+        <svg {...ICON}>
+          <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
+        </svg>
       </button>
     </div>
   );
