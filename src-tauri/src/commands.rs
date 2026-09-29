@@ -1189,6 +1189,47 @@ pub(crate) fn native_surface_set_divider_color(color: Option<String>) {
     }
 }
 
+/// Tier 3 native renderer: the chrome colors the page derives with its
+/// theme tokens, as CSS colors (hex, or `rgb()`/`rgba()` with alpha). The
+/// split divider, the selection, every find match, the current match, a
+/// hovered link, and the scrollbar thumb. Each call replaces the whole
+/// set, and a missing or unreadable color falls back to one derived from
+/// the terminal palette. The divider setting still wins over `divider`.
+#[tauri::command]
+pub(crate) fn native_surface_set_tokens(
+    divider: Option<String>,
+    selection: Option<String>,
+    find_match: Option<String>,
+    current_match: Option<String>,
+    link: Option<String>,
+    scrollbar: Option<String>,
+) {
+    #[cfg(native_surface)]
+    {
+        let parse = |v: Option<String>| v.as_deref().and_then(crate::cell_render::parse_css_color);
+        crate::cell_render::set_tokens(crate::cell_render::ChromeTokens {
+            divider: parse(divider),
+            selection: parse(selection),
+            find_match: parse(find_match),
+            current_match: parse(current_match),
+            link: parse(link),
+            scrollbar: parse(scrollbar),
+        });
+        crate::native_surface::request_redraw();
+    }
+    #[cfg(not(native_surface))]
+    {
+        let _ = (
+            divider,
+            selection,
+            find_match,
+            current_match,
+            link,
+            scrollbar,
+        );
+    }
+}
+
 /// Tier 3 native renderer (macOS): toggle drawing bright (ANSI 8-15) colored
 /// text with the bold font weight. A no-op elsewhere.
 #[tauri::command]

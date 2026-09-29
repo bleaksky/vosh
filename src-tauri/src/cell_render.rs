@@ -18,6 +18,7 @@
 #![allow(clippy::many_single_char_names)]
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Mutex;
 
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
 
@@ -180,15 +181,10 @@ fn theme_fg() -> Rgb {
     unpack_rgb(THEME_FG.load(Ordering::Acquire), DEFAULT_FG)
 }
 
-fn theme_selection() -> Rgb {
-    unpack_rgb(
-        THEME_SEL.load(Ordering::Acquire),
-        Rgb {
-            r: 0x2a,
-            g: 0x3b,
-            b: 0x5e,
-        },
-    )
+/// The opaque selection color from `set_theme`, if the page reported one.
+fn theme_selection() -> Option<Rgb> {
+    let bits = THEME_SEL.load(Ordering::Acquire);
+    (bits != 0).then(|| unpack_rgb(bits, DEFAULT_BG))
 }
 
 // The effective ANSI 0-15 palette the frontend last reported. The frontend
@@ -208,51 +204,212 @@ fn ansi16(idx: usize) -> Rgb {
     unpack_rgb(THEME_ANSI[idx].load(Ordering::Acquire), ANSI_16[idx])
 }
 
-// The split divider color from the settings (0 = unset, theme default).
-static DIVIDER_RGB: AtomicU32 = AtomicU32::new(0);
+/// A color with straight alpha: sRGB bytes plus an alpha in 0..1, the way
+/// CSS writes `rgba()`. The chrome tokens arrive in this form, and several
+/// of them are translucent.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Paint {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: f32,
+}
+
+impl Paint {
+    fn opaque(c: Rgb) -> Self {
+        Self::tint(c, 1.0)
+    }
+
+    fn tint(c: Rgb, a: f32) -> Self {
+        Self {
+            r: c.r,
+            g: c.g,
+            b: c.b,
+            a,
+        }
+    }
+}
+
+// The split divider color from the settings (None = unset, theme default).
+static DIVIDER_OVERRIDE: Mutex<Option<Paint>> = Mutex::new(None);
 
 /// Set (or clear) the split divider color, reported by the frontend from
 /// the `split_divider_color` setting.
-pub(crate) fn set_divider_color(color: Option<(u8, u8, u8)>) {
-    let bits = color.map_or(0, |(r, g, b)| pack_rgb(r, g, b));
-    DIVIDER_RGB.store(bits, Ordering::Release);
+pub(crate) fn set_divider_color(color: Option<Paint>) {
+    if let Ok(mut slot) = DIVIDER_OVERRIDE.lock() {
+        *slot = color;
+    }
 }
 
-fn divider_rgb() -> Rgb {
-    unpack_rgb(
-        DIVIDER_RGB.load(Ordering::Acquire),
-        Rgb {
-            r: 0x3a,
-            g: 0x40,
-            b: 0x4c,
-        },
+/// Chrome colors the page derives along with the rest of its theme tokens,
+/// for the parts of the surface the terminal palette does not cover. Each
+/// `None` falls back to a color derived from the terminal palette, so a
+/// light theme never gets dark chips before the page reports.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ChromeTokens {
+    /// The split scrollback divider line.
+    pub divider: Option<Paint>,
+    /// Selected cells, composited over each cell's own background.
+    pub selection: Option<Paint>,
+    /// Every find match, composited like the selection.
+    pub find_match: Option<Paint>,
+    /// The match the find bar is on.
+    pub current_match: Option<Paint>,
+    /// A hovered URL's text and underline.
+    pub link: Option<Paint>,
+    /// The overlay scrollbar thumb. The track is the same color, fainter.
+    pub scrollbar: Option<Paint>,
+}
+
+impl ChromeTokens {
+    pub(crate) const UNSET: Self = Self {
+        divider: None,
+        selection: None,
+        find_match: None,
+        current_match: None,
+        link: None,
+        scrollbar: None,
+    };
+}
+
+static TOKENS: Mutex<ChromeTokens> = Mutex::new(ChromeTokens::UNSET);
+
+/// Replace the chrome tokens, reported by the page on theme change.
+pub(crate) fn set_tokens(tokens: ChromeTokens) {
+    if let Ok(mut slot) = TOKENS.lock() {
+        *slot = tokens;
+    }
+}
+
+fn tokens() -> ChromeTokens {
+    TOKENS.lock().map_or(ChromeTokens::UNSET, |t| *t)
+}
+
+// Fallback strengths for chrome the page has not colored yet. The
+// divider and scrollbar are the foreground at a hairline and a text tier
+// alpha, find matches are ANSI yellow washed into the cell.
+const DIVIDER_FALLBACK_ALPHA: f32 = 0.16;
+const SELECTION_FALLBACK_ALPHA: f32 = 0.25;
+const FIND_MATCH_FALLBACK_ALPHA: f32 = 0.35;
+const CURRENT_MATCH_FALLBACK_ALPHA: f32 = 0.65;
+const SCROLLBAR_FALLBACK_ALPHA: f32 = 0.45;
+// The scrollbar track is the thumb color at this share of its alpha.
+const SCROLLBAR_TRACK_SHARE: f32 = 0.2;
+
+/// The colors one frame draws its chrome with: the page's tokens, the
+/// divider setting over them, and palette fallbacks under them.
+#[derive(Debug, PartialEq)]
+struct ChromePaint {
+    divider: Paint,
+    selection: Paint,
+    find_match: Paint,
+    current_match: Paint,
+    link: Paint,
+    scrollbar: Paint,
+}
+
+fn chrome_paint() -> ChromePaint {
+    let divider_override = DIVIDER_OVERRIDE.lock().ok().and_then(|d| *d);
+    resolve_chrome(
+        tokens(),
+        divider_override,
+        theme_selection(),
+        theme_fg(),
+        ansi16(3),
+        ansi16(12),
     )
 }
 
-/// Parse the divider color setting: `#rgb`, `#rrggbb` (the `#` optional),
-/// or `rgb()`/`rgba()` with integer channels (alpha ignored — the divider
-/// draws opaque). None for anything else, falling back to the default.
-pub(crate) fn parse_css_color(value: &str) -> Option<(u8, u8, u8)> {
+/// Pick each chrome color: the divider setting first (divider only), then
+/// the page's token, then the theme's opaque selection (selection only),
+/// then a fallback from the foreground, ANSI yellow, or ANSI bright blue.
+/// Pure, so the precedence tests without the globals.
+fn resolve_chrome(
+    t: ChromeTokens,
+    divider_override: Option<Paint>,
+    theme_sel: Option<Rgb>,
+    fg: Rgb,
+    yellow: Rgb,
+    bright_blue: Rgb,
+) -> ChromePaint {
+    ChromePaint {
+        divider: divider_override
+            .or(t.divider)
+            .unwrap_or_else(|| Paint::tint(fg, DIVIDER_FALLBACK_ALPHA)),
+        selection: t
+            .selection
+            .or_else(|| theme_sel.map(Paint::opaque))
+            .unwrap_or_else(|| Paint::tint(fg, SELECTION_FALLBACK_ALPHA)),
+        find_match: t
+            .find_match
+            .unwrap_or_else(|| Paint::tint(yellow, FIND_MATCH_FALLBACK_ALPHA)),
+        current_match: t
+            .current_match
+            .unwrap_or_else(|| Paint::tint(yellow, CURRENT_MATCH_FALLBACK_ALPHA)),
+        link: t.link.unwrap_or_else(|| Paint::opaque(bright_blue)),
+        scrollbar: t
+            .scrollbar
+            .unwrap_or_else(|| Paint::tint(fg, SCROLLBAR_FALLBACK_ALPHA)),
+    }
+}
+
+/// Parse a CSS color: `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (the `#`
+/// optional), or `rgb()`/`rgba()` with comma or space separated channels
+/// and an optional alpha as a fraction or a percentage. None for anything
+/// else, so the caller falls back to its default.
+pub(crate) fn parse_css_color(value: &str) -> Option<Paint> {
     let v = value.trim().to_ascii_lowercase();
     let hex = v.strip_prefix('#').unwrap_or(&v);
-    if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
-        let ch = |s: &str| u8::from_str_radix(s, 16).unwrap_or(0);
-        return Some((ch(&hex[0..2]), ch(&hex[2..4]), ch(&hex[4..6])));
-    }
-    if hex.len() == 3 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
-        let ch = |s: &str| u8::from_str_radix(s, 16).unwrap_or(0) * 17;
-        return Some((ch(&hex[0..1]), ch(&hex[1..2]), ch(&hex[2..3])));
+    if matches!(hex.len(), 3 | 4 | 6 | 8) && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        let digit = |i: usize| u8::from_str_radix(&hex[i..=i], 16).unwrap_or(0);
+        let pair = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0);
+        let (r, g, b, a) = if hex.len() <= 4 {
+            let a = if hex.len() == 4 { digit(3) * 17 } else { 255 };
+            (digit(0) * 17, digit(1) * 17, digit(2) * 17, a)
+        } else {
+            let a = if hex.len() == 8 { pair(6) } else { 255 };
+            (pair(0), pair(2), pair(4), a)
+        };
+        return Some(Paint {
+            r,
+            g,
+            b,
+            a: f32::from(a) / 255.0,
+        });
     }
     let inner = v
         .strip_prefix("rgba(")
         .or_else(|| v.strip_prefix("rgb("))?
         .strip_suffix(')')?;
-    let parts: Vec<&str> = inner.split(',').map(str::trim).collect();
-    if parts.len() < 3 {
+    let parts: Vec<&str> = inner
+        .split(|c: char| c == ',' || c == '/' || c.is_whitespace())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if parts.len() != 3 && parts.len() != 4 {
         return None;
     }
-    let ch = |s: &str| s.parse::<u32>().ok().map(|n| n.min(255) as u8);
-    Some((ch(parts[0])?, ch(parts[1])?, ch(parts[2])?))
+    let ch = |s: &str| {
+        s.parse::<f32>()
+            .ok()
+            .filter(|n| n.is_finite())
+            .map(|n| n.round().clamp(0.0, 255.0) as u8)
+    };
+    let a = match parts.get(3) {
+        None => 1.0,
+        Some(s) => match s.strip_suffix('%') {
+            Some(pct) => pct.parse::<f32>().ok()? / 100.0,
+            None => s.parse::<f32>().ok()?,
+        },
+    };
+    if !a.is_finite() {
+        return None;
+    }
+    Some(Paint {
+        r: ch(parts[0])?,
+        g: ch(parts[1])?,
+        b: ch(parts[2])?,
+        a: a.clamp(0.0, 1.0),
+    })
 }
 
 // When set, draw bright (ANSI 8-15) colored text with the bold font weight.
@@ -307,12 +464,47 @@ fn srgb_to_linear(c: f32) -> f32 {
     }
 }
 
+fn linear_to_srgb(c: f32) -> f32 {
+    if c <= 0.003_130_8 {
+        c * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    }
+}
+
 fn rgb_to_rgba(c: Rgb) -> Rgba {
     [
         srgb_to_linear(f32::from(c.r) / 255.0),
         srgb_to_linear(f32::from(c.g) / 255.0),
         srgb_to_linear(f32::from(c.b) / 255.0),
         1.0,
+    ]
+}
+
+/// A paint as a quad color: linear rgb plus its alpha, which the shader
+/// composites over whatever the quad covers.
+fn paint_to_rgba(p: Paint) -> Rgba {
+    let mut c = rgb_to_rgba(Rgb {
+        r: p.r,
+        g: p.g,
+        b: p.b,
+    });
+    c[3] = p.a;
+    c
+}
+
+/// Composite a paint over an opaque cell background in sRGB space, the way
+/// CSS composites `rgba()` and the surface blends. The cell keeps its own
+/// alpha, so the background quad still covers the clear.
+fn blend_over(top: Paint, under: Rgba) -> Rgba {
+    let a = top.a.clamp(0.0, 1.0);
+    let mix =
+        |t: u8, u: f32| srgb_to_linear((f32::from(t) / 255.0) * a + linear_to_srgb(u) * (1.0 - a));
+    [
+        mix(top.r, under[0]),
+        mix(top.g, under[1]),
+        mix(top.b, under[2]),
+        under[3],
     ]
 }
 
@@ -1482,15 +1674,15 @@ impl CellRenderer {
         // The exact fraction of surface height where the divider is drawn,
         // so the cursor rect and grab band line up with the rendered line.
         let divider_frac = divider_px.map(|px| px / surface_h as f32);
-        let divider = rgb_to_rgba(divider_rgb());
+        let chrome = chrome_paint();
+        let divider = paint_to_rgba(chrome.divider);
 
-        // Selection highlight: compute the range once, recolor selected
-        // cell backgrounds with the theme selection color.
+        // Selection highlight: compute the range once, composite the
+        // selection color over each selected cell's own background.
         let selection = grid.selection_bounds();
-        let selection_bg = rgb_to_rgba(theme_selection());
 
-        // Find-match highlight: amber for matches, brighter for the active
-        // one. Keyed by grid line for an O(1) lookup per cell.
+        // Find-match highlight, stronger for the current match. Keyed by
+        // grid line for an O(1) lookup per cell.
         let mut find_by_line: HashMap<i32, Vec<(usize, usize, bool)>> = HashMap::new();
         for &(line, start, end) in &find_matches {
             let active = find_active_match == Some((line, start, end));
@@ -1499,25 +1691,11 @@ impl CellRenderer {
                 .or_default()
                 .push((start, end, active));
         }
-        let find_bg = color_to_rgba(Color::Spec(Rgb {
-            r: 0x55,
-            g: 0x44,
-            b: 0x12,
-        }));
-        let find_active_bg = color_to_rgba(Color::Spec(Rgb {
-            r: 0x99,
-            g: 0x77,
-            b: 0x22,
-        }));
 
-        // URL under the pointer reads as a link: blue and underlined (it
-        // opens on Cmd+click).
+        // URL under the pointer reads as a link: the link color and
+        // underlined (it opens on Cmd+click).
         let hover = crate::native_surface::hover_url();
-        let link_blue = rgb_to_rgba(Rgb {
-            r: 0x58,
-            g: 0xa6,
-            b: 0xff,
-        });
+        let link = paint_to_rgba(chrome.link);
 
         let solid_uv = atlas.solid_uv();
         let slot_w = atlas.slot_w() as f32;
@@ -1544,12 +1722,17 @@ impl CellRenderer {
                 }
             }
             if cell_in_selection(selection, grid_line, col) {
-                bg_rgba = selection_bg;
+                bg_rgba = blend_over(chrome.selection, bg_rgba);
             }
             if let Some(ranges) = find_by_line.get(&grid_line) {
                 for &(start, end, active) in ranges {
                     if col >= start && col < end {
-                        bg_rgba = if active { find_active_bg } else { find_bg };
+                        let paint = if active {
+                            chrome.current_match
+                        } else {
+                            chrome.find_match
+                        };
+                        bg_rgba = blend_over(paint, bg_rgba);
                         break;
                     }
                 }
@@ -1557,7 +1740,7 @@ impl CellRenderer {
             let hovered =
                 hover.is_some_and(|(hl, hs, he)| grid_line == hl && col >= hs && col < he);
             if hovered {
-                fg_rgba = link_blue;
+                fg_rgba = link;
             }
             if flags.underline || hovered {
                 underlines.push((col, y_top, fg_rgba));
@@ -1774,8 +1957,9 @@ impl CellRenderer {
             let sb_w = (cell_w * 0.45).clamp(4.0, 10.0);
             let x0 = surface_w as f32 - sb_w;
             let h = surface_h as f32;
-            let mut track = rgb_to_rgba(divider_rgb());
-            track[3] = 0.3;
+            let thumb = paint_to_rgba(chrome.scrollbar);
+            let mut track = thumb;
+            track[3] *= SCROLLBAR_TRACK_SHARE;
             instances.push(CellInstance {
                 offset: [x0, 0.0],
                 size: [sb_w, h],
@@ -1786,12 +1970,6 @@ impl CellRenderer {
             let thumb_h = (h * rows as f32 / total).max(24.0);
             let scroll_top = (scrollback - offset as usize) as f32;
             let thumb_y = ((h - thumb_h) * scroll_top / scrollback as f32).clamp(0.0, h - thumb_h);
-            let mut thumb = rgb_to_rgba(Rgb {
-                r: 0x8a,
-                g: 0x92,
-                b: 0xa0,
-            });
-            thumb[3] = 0.85;
             instances.push(CellInstance {
                 offset: [x0, thumb_y],
                 size: [sb_w, thumb_h],
@@ -1970,15 +2148,154 @@ mod tests {
         assert_eq!(coverage(&atlas, 1), 0, "space should be blank");
     }
 
+    fn paint(r: u8, g: u8, b: u8, a: f32) -> Paint {
+        Paint { r, g, b, a }
+    }
+
     #[test]
     fn parse_css_color_accepts_hex_and_rgb_forms() {
-        assert_eq!(parse_css_color("#3a404c"), Some((0x3a, 0x40, 0x4c)));
-        assert_eq!(parse_css_color("3a404c"), Some((0x3a, 0x40, 0x4c)));
-        assert_eq!(parse_css_color("#fff"), Some((255, 255, 255)));
-        assert_eq!(parse_css_color("rgb(1, 2, 3)"), Some((1, 2, 3)));
-        assert_eq!(parse_css_color("rgba(10,20,30,0.5)"), Some((10, 20, 30)));
+        assert_eq!(
+            parse_css_color("#3a404c"),
+            Some(paint(0x3a, 0x40, 0x4c, 1.0))
+        );
+        assert_eq!(
+            parse_css_color("3a404c"),
+            Some(paint(0x3a, 0x40, 0x4c, 1.0))
+        );
+        assert_eq!(parse_css_color("#fff"), Some(paint(255, 255, 255, 1.0)));
+        assert_eq!(parse_css_color("rgb(1, 2, 3)"), Some(paint(1, 2, 3, 1.0)));
+        assert_eq!(
+            parse_css_color("rgba(10,20,30,0.5)"),
+            Some(paint(10, 20, 30, 0.5))
+        );
         assert_eq!(parse_css_color("bright-red"), None);
         assert_eq!(parse_css_color(""), None);
+    }
+
+    #[test]
+    fn parse_css_color_reads_alpha_in_every_form() {
+        assert_eq!(
+            parse_css_color("#ffffff80"),
+            Some(paint(255, 255, 255, 128.0 / 255.0))
+        );
+        assert_eq!(
+            parse_css_color("#0008"),
+            Some(paint(0, 0, 0, 136.0 / 255.0))
+        );
+        assert_eq!(
+            parse_css_color("rgba(136, 192, 208, 0.22)"),
+            Some(paint(136, 192, 208, 0.22))
+        );
+        assert_eq!(
+            parse_css_color("rgb(136 192 208 / 22%)"),
+            Some(paint(136, 192, 208, 0.22))
+        );
+        // Alpha clamps into 0..1, and a bad channel or alpha rejects.
+        assert_eq!(parse_css_color("rgba(1,2,3,4)"), Some(paint(1, 2, 3, 1.0)));
+        assert_eq!(parse_css_color("rgba(1,2,3,x)"), None);
+        assert_eq!(parse_css_color("rgb(1,2)"), None);
+        assert_eq!(parse_css_color("rgb(1,2,3,4,5)"), None);
+    }
+
+    #[test]
+    fn blend_over_composites_in_srgb_space() {
+        let black = [0.0, 0.0, 0.0, 1.0];
+        let red = rgb_to_rgba(Rgb { r: 200, g: 0, b: 0 });
+        // Opaque replaces, clear keeps the cell (up to the round trip
+        // through sRGB).
+        assert_eq!(blend_over(paint(200, 0, 0, 1.0), black), red);
+        let kept = blend_over(paint(0, 0, 255, 0.0), red);
+        for (got, want) in kept.iter().zip(red.iter()) {
+            assert!((got - want).abs() < 1e-5);
+        }
+        // Half white over black is sRGB mid gray, as CSS rgba() draws it.
+        let mid = blend_over(paint(255, 255, 255, 0.5), black);
+        assert!((linear_to_srgb(mid[0]) - 0.5).abs() < 1e-4);
+        assert_eq!(mid[3], 1.0);
+    }
+
+    #[test]
+    fn paint_to_rgba_carries_alpha() {
+        let c = paint_to_rgba(paint(255, 0, 0, 0.25));
+        assert_eq!(c, [1.0, 0.0, 0.0, 0.25]);
+    }
+
+    #[test]
+    fn chrome_falls_back_to_the_palette_without_tokens() {
+        let fg = Rgb {
+            r: 0xe5,
+            g: 0xe9,
+            b: 0xf0,
+        };
+        let yellow = Rgb {
+            r: 0xeb,
+            g: 0xcb,
+            b: 0x8b,
+        };
+        let blue = Rgb {
+            r: 0x81,
+            g: 0xa1,
+            b: 0xc1,
+        };
+        let chrome = resolve_chrome(ChromeTokens::UNSET, None, None, fg, yellow, blue);
+        assert_eq!(chrome.divider, Paint::tint(fg, DIVIDER_FALLBACK_ALPHA));
+        assert_eq!(chrome.selection, Paint::tint(fg, SELECTION_FALLBACK_ALPHA));
+        assert_eq!(
+            chrome.find_match,
+            Paint::tint(yellow, FIND_MATCH_FALLBACK_ALPHA)
+        );
+        assert_eq!(
+            chrome.current_match,
+            Paint::tint(yellow, CURRENT_MATCH_FALLBACK_ALPHA)
+        );
+        assert_eq!(chrome.link, Paint::opaque(blue));
+        assert_eq!(chrome.scrollbar, Paint::tint(fg, SCROLLBAR_FALLBACK_ALPHA));
+    }
+
+    #[test]
+    fn chrome_prefers_tokens_and_the_divider_setting() {
+        let grey = Rgb {
+            r: 0x80,
+            g: 0x80,
+            b: 0x80,
+        };
+        let theme_sel = Rgb {
+            r: 0x2a,
+            g: 0x3b,
+            b: 0x5e,
+        };
+        let token = paint(0x88, 0xc0, 0xd0, 0.22);
+        let setting = paint(0xff, 0, 0, 1.0);
+        let tokens = ChromeTokens {
+            divider: Some(token),
+            selection: Some(token),
+            find_match: Some(token),
+            current_match: Some(token),
+            link: Some(token),
+            scrollbar: Some(token),
+        };
+        let chrome = resolve_chrome(tokens, Some(setting), Some(theme_sel), grey, grey, grey);
+        assert_eq!(chrome.divider, setting);
+        assert_eq!(chrome.selection, token);
+        assert_eq!(chrome.find_match, token);
+        assert_eq!(chrome.current_match, token);
+        assert_eq!(chrome.link, token);
+        assert_eq!(chrome.scrollbar, token);
+        // Without the setting the divider takes its token. Without a token
+        // the selection takes the theme's opaque one before the fallback.
+        let chrome = resolve_chrome(
+            ChromeTokens {
+                divider: Some(token),
+                ..ChromeTokens::UNSET
+            },
+            None,
+            Some(theme_sel),
+            grey,
+            grey,
+            grey,
+        );
+        assert_eq!(chrome.divider, token);
+        assert_eq!(chrome.selection, Paint::opaque(theme_sel));
     }
 
     #[test]

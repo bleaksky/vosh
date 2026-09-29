@@ -422,6 +422,7 @@ pub fn run() {
             native_surface_set_cell_metrics,
             native_surface_set_bright_bold,
             native_surface_set_divider_color,
+            commands::native_surface_set_tokens,
             session_connect,
             session_send,
             session_send_input,
