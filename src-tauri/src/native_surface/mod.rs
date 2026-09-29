@@ -215,14 +215,13 @@ fn scroll_report_key(offset: usize, max: usize) -> u64 {
     (clamp(offset) << 32) | max
 }
 
-/// Under the underlay the page draws the scroll depth, so send it the
-/// display offset and the history length as `vosh://native-scroll`
-/// `[offset, max]`. Only fires when `scroll_report_key` changes, so the
-/// live tail reports once as `[0, max]` and then stays quiet.
+/// Send the page the display offset and the history length as
+/// `vosh://native-scroll` `[offset, max]` on every platform. The page
+/// learns from it whether the scrollback split is open, and under the
+/// underlay it also draws the scroll depth, since the surface draws no
+/// pill there. Only fires when `scroll_report_key` changes, so the live
+/// tail reports once as `[0, max]` and then stays quiet.
 fn report_scroll_if_changed() {
-    if !UNDERLAY {
-        return;
-    }
     let (offset, max) = crate::term_grid::scroll_metrics();
     let key = scroll_report_key(offset, max);
     if LAST_SCROLL.swap(key, Ordering::AcqRel) == key {

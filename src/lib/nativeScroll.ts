@@ -2,10 +2,12 @@ import { listen } from '@tauri-apps/api/event';
 
 // Scroll depth of the native terminal grid. The native renderer
 // reports `vosh://native-scroll` as `[offset, max]` whenever the depth
-// changes (on the macOS underlay, where the page draws the readout).
+// changes, on every platform, so the page knows when the grid has split
+// to show scrollback. The macOS underlay also draws the readout from it.
 // The event only fires on a change, so the last value lives at module
 // scope and a remount reads it at once instead of waiting for the next
-// scroll. Off the underlay nothing emits and the offset stays 0.
+// scroll. Without the native surface nothing emits and the offset
+// stays 0.
 
 export interface NativeScrollDepth {
   /** Lines scrolled back from the live tail. 0 at the tail. */
