@@ -12,12 +12,14 @@ import {
   primaryFontFamily,
   removeCustomTheme,
   sizeChoices,
+  stepGalleryTheme,
   THEME_SLOT_GROUPS,
   withBaseColor,
 } from './appearanceSettings';
 import { ANSI_SLOTS, CANONICAL_ANSI_16 } from './baseAnsi';
 import { CHROME_COLOR_KEYS } from './chrome';
 import type { CustomTheme } from './session';
+import { pickTheme, resolveActiveTheme } from './theme';
 import { galleryThemes } from './themeThumb';
 import { BUILTIN_THEMES, customToAppTheme, findTheme } from './themes';
 
@@ -150,6 +152,53 @@ describe('pairChoices', () => {
 
   it('keeps an id it cannot find', () => {
     expect(pairChoices(themes, 'dark', 'gone')[0]).toEqual({ value: 'gone', label: 'gone' });
+  });
+});
+
+describe('stepGalleryTheme', () => {
+  const themes = galleryThemes(BUILTIN_THEMES, []);
+  const last = themes[themes.length - 1].id;
+
+  it('steps through every theme while follow is off', () => {
+    expect(stepGalleryTheme(themes, 'obsidian-ember', 1)).toBe('vellum');
+    expect(stepGalleryTheme(themes, 'vellum', -1)).toBe('obsidian-ember');
+  });
+
+  it('wraps at both ends', () => {
+    expect(stepGalleryTheme(themes, last, 1)).toBe('nord');
+    expect(stepGalleryTheme(themes, 'nord', -1)).toBe(last);
+    expect(stepGalleryTheme(themes, last, 1, 'dark')).toBe('nord');
+  });
+
+  it('passes over the themes of the other appearance while follow is on', () => {
+    expect(stepGalleryTheme(themes, 'obsidian-ember', 1, 'dark')).toBe('gruvbox');
+    expect(stepGalleryTheme(themes, 'gruvbox', -1, 'dark')).toBe('obsidian-ember');
+  });
+
+  it('steps from a theme of the other appearance you clicked', () => {
+    expect(stepGalleryTheme(themes, 'vellum', 1, 'dark')).toBe('gruvbox');
+    expect(stepGalleryTheme(themes, 'vellum', -1, 'dark')).toBe('obsidian-ember');
+  });
+
+  it('stays put when no other theme has that appearance', () => {
+    expect(stepGalleryTheme(themes, 'vellum', 1, 'light')).toBe('vellum');
+  });
+
+  it('shows every step and leaves the light theme alone on a dark system', () => {
+    let ui = {
+      theme: 'nord',
+      follow_system_appearance: true,
+      light_theme: 'vellum',
+      dark_theme: 'nord',
+    };
+    let id = 'nord';
+    for (let i = 0; i < themes.length; i += 1) {
+      id = stepGalleryTheme(themes, id, 1, 'dark');
+      ui = pickTheme(ui, id);
+      // The radio the arrow lands on is the one the gallery checks.
+      expect(resolveActiveTheme(ui, true)).toBe(id);
+    }
+    expect(ui.light_theme).toBe('vellum');
   });
 });
 

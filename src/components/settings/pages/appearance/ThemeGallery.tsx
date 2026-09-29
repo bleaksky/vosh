@@ -1,4 +1,6 @@
-import { useId } from 'react';
+import { useId, useRef, type KeyboardEvent } from 'react';
+import { stepGalleryTheme } from '../../../../lib/appearanceSettings';
+import type { Appearance } from '../../../../lib/chrome';
 import { themeThumb } from '../../../../lib/themeThumb';
 import type { AppTheme } from '../../../../lib/themes';
 
@@ -8,22 +10,56 @@ interface ThemeGalleryProps {
   /** The theme Vosh shows now. Its radio is checked. */
   selected: string;
   onPick: (id: string) => void;
+  /** Set while follow system appearance is on, to the appearance the
+   *  OS asks for. The arrow keys then move only among themes of that
+   *  appearance. */
+  appearance?: Appearance | undefined;
 }
+
+const STEPS: Readonly<Record<string, 1 | -1>> = {
+  ArrowRight: 1,
+  ArrowDown: 1,
+  ArrowLeft: -1,
+  ArrowUp: -1,
+};
 
 /** The Theme gallery from the Appearance board: one radio per theme,
  *  drawn as a 90×59 thumbnail in the theme's own colors with its name
- *  under it. The arrow keys move the pick, as in any radio group. */
-export function ThemeGallery({ themes, selected, onPick }: ThemeGalleryProps) {
+ *  under it. The arrow keys move the pick, as in any radio group, and
+ *  focus goes with it. While follow system appearance is on they skip
+ *  the themes of the other appearance, since a pick of one of those
+ *  fills the other slot and leaves the theme on screen as it is. */
+export function ThemeGallery({ themes, selected, onPick, appearance }: ThemeGalleryProps) {
   const name = useId();
+  const radios = useRef(new Map<string, HTMLInputElement>());
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const step = STEPS[event.key];
+    const target = event.target;
+    if (step === undefined || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (!(target instanceof HTMLInputElement) || target.name !== name) return;
+    // The browser would check the next radio in the group, which may
+    // be a theme of the other appearance. Step here instead.
+    event.preventDefault();
+    const next = stepGalleryTheme(themes, target.value, step, appearance);
+    if (next === target.value) return;
+    onPick(next);
+    radios.current.get(next)?.focus();
+  };
+
   return (
     <fieldset className="st-gallery">
       <legend className="st-visually-hidden">Theme</legend>
-      <div className="st-gallery-grid">
+      <div className="st-gallery-grid" onKeyDown={onKeyDown}>
         {themes.map((theme) => {
           const thumb = themeThumb(theme);
           return (
             <label key={theme.id} className="st-theme">
               <input
+                ref={(el) => {
+                  if (el) radios.current.set(theme.id, el);
+                  else radios.current.delete(theme.id);
+                }}
                 type="radio"
                 className="st-theme-input"
                 name={name}
