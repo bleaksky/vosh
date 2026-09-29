@@ -175,6 +175,9 @@ interface Props {
   onReady?: (handle: TerminalHandle) => void;
   fontFamily: string;
   fontSize: number;
+  /// Row spacing as a multiple of the glyph height (xterm's lineHeight).
+  /// The native grid follows through the cell size this pane reports.
+  lineHeight: number;
   /// When true the chrome theme tints server output too. When false
   /// (the default) server output uses the canonical xterm-256
   /// palette regardless of theme.
@@ -238,6 +241,7 @@ export function Terminal({
   onReady,
   fontFamily,
   fontSize,
+  lineHeight,
   themeTerminalColors,
   quiet = false,
   onScrollbackLoaded,
@@ -256,6 +260,10 @@ export function Terminal({
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const sizingRef = useRef<HTMLDivElement | null>(null);
+  // Sends the current cell size to the native surface. Set by the setup
+  // effect, so a line height change can report without waiting for the
+  // next resize poll.
+  const reportCellMetricsRef = useRef<(() => void) | null>(null);
   // Mirror the flag in a ref so the long-lived effect (which creates
   // the XTerm instance once) doesn't re-create the terminal every
   // time the user toggles the setting.
@@ -283,7 +291,7 @@ export function Terminal({
       cursorInactiveStyle: 'none',
       fontFamily,
       fontSize,
-      lineHeight: 1.2,
+      lineHeight,
       scrollback: 10000,
       allowProposedApi: true,
       convertEol: false,
@@ -482,19 +490,29 @@ export function Terminal({
 
     // Report xterm's exact device cell size so the surface grid matches the
     // webview's spacing instead of deriving it from font metrics. The cell
-    // size is stable across pane resizes; it changes on font/dpr changes.
+    // size is stable across pane resizes; it changes on font, dpr, and line
+    // height changes. The line height is in the cell: xterm multiplies its
+    // glyph box by it and centers the box in the cell, so the box height
+    // rides along and the surface puts its baseline where xterm's is.
     let lastCellMetrics = '';
     const reportCellMetrics = () => {
       if (!nativeSurfaceOn) return;
-      const cell = term.dimensions?.device?.cell;
-      if (!cell?.width || !cell?.height) return;
+      const device = term.dimensions?.device;
+      const cell = device?.cell;
+      if (!device || !cell?.width || !cell?.height) return;
       const width = Math.round(cell.width);
       const height = Math.round(cell.height);
-      const key = `${width},${height}`;
+      const charHeight = Math.round(device.char?.height ?? 0);
+      const key = `${width},${height},${charHeight}`;
       if (key === lastCellMetrics) return;
       lastCellMetrics = key;
-      void invoke('native_surface_set_cell_metrics', { width, height }).catch(() => {});
+      void invoke('native_surface_set_cell_metrics', {
+        width,
+        height,
+        charHeight: charHeight > 0 ? charHeight : null,
+      }).catch(() => {});
     };
+    reportCellMetricsRef.current = reportCellMetrics;
 
     const sync = () => {
       if (!sizer || !host) return;
@@ -1114,6 +1132,25 @@ export function Terminal({
       }).catch(() => {});
     }
   }, [fontFamily, fontSize]);
+
+  // Apply a line height change without rebuilding the terminal. xterm
+  // resizes its cells on the option change. Under the native surface the
+  // new cell goes out at once, the surface rebuilds its atlas to it, and
+  // its grid size event resizes xterm to match. Otherwise fit reflows.
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term || term.options.lineHeight === lineHeight) return;
+    term.options.lineHeight = lineHeight;
+    if (!quietRef.current && nativeSurfaceEnabled()) {
+      reportCellMetricsRef.current?.();
+      return;
+    }
+    try {
+      fitRef.current?.fit();
+    } catch {
+      // ignore resize before layout settles
+    }
+  }, [lineHeight]);
 
   // Re-apply the palette when the canonical-vs-themed toggle flips
   // without needing to recreate the XTerm instance.
