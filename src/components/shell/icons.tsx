@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { TICK_RING_CENTER, TICK_RING_RADIUS, TICK_RING_TRACK_OPACITY, tickArc } from './tickRing';
 
 // The One Window icon set (SPEC 6): 16 unit strokes at 1.25, round caps
 // and joins, drawn in currentColor so each button sets the tone.
@@ -94,12 +95,24 @@ interface SmallIconProps {
 const keepStroke = (size: 12 | 16) =>
   size === 12 ? ({ vectorEffect: 'non-scaling-stroke' } as const) : {};
 
-/** The tick. A stopwatch with its crown, side button, and one hand. */
-export function StopwatchIcon({ size = 12 }: SmallIconProps) {
+interface TickRingIconProps extends SmallIconProps {
+  /** Whole seconds since the last tick. */
+  secs: number;
+  /** The tick interval in seconds, null while unknown. */
+  interval: number | null;
+}
+
+/** The tick. A faint ring, and on top an arc from 12 o clock that runs
+ *  clockwise as the seconds pass and closes when the tick lands. */
+export function TickRingIcon({ secs, interval, size = 12 }: TickRingIconProps) {
+  const arc = tickArc(secs, interval);
+  const c = TICK_RING_CENTER;
+  const r = TICK_RING_RADIUS;
   return (
     <Glyph size={size}>
-      <circle cx="8" cy="9" r="5.25" {...keepStroke(size)} />
-      <path d="M6.25 1.75h3.5M8 1.75v2M8 9V6.25M11.75 5.25L13 4" {...keepStroke(size)} />
+      <circle cx={c} cy={c} r={r} strokeOpacity={TICK_RING_TRACK_OPACITY} {...keepStroke(size)} />
+      {arc.kind === 'whole' && <circle cx={c} cy={c} r={r} {...keepStroke(size)} />}
+      {arc.kind === 'part' && <path d={arc.path} {...keepStroke(size)} />}
     </Glyph>
   );
 }

@@ -142,7 +142,7 @@ function ClockItem({ connected }: { connected: boolean }) {
       style={style}
       tick={
         tick.active && tick.secsSinceTick !== null
-          ? { secs: tick.secsSinceTick, warn: tick.warn }
+          ? { secs: tick.secsSinceTick, warn: tick.warn, interval: tick.intervalSecs }
           : null
       }
       time={text ? { text, tint, daytime: isDaytime(world.time) } : null}

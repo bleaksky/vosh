@@ -16,7 +16,8 @@ import { createStore } from './store';
 // every 250 ms while it runs, as the time left in the interval. This
 // store counts up, the interval minus that time left, the way the old
 // input row chip read, and warns in the last warn_at_secs you set in
-// the tick config.
+// the tick config. It passes the interval on as well, so the ring
+// before the tick in the Icon style fills against it.
 
 /** Warn threshold when the tick config sets none. Matches the five
  *  seconds the old chip used. */
@@ -36,6 +37,10 @@ export interface TickState {
   active: boolean;
   /** Whole seconds since the last tick. null while inactive. */
   secsSinceTick: number | null;
+  /** The interval the count runs against, in seconds, for the tick
+   *  ring. The one you set under Every, as the backend reports it.
+   *  null while inactive. */
+  intervalSecs: number | null;
   /** Warn in the last this many seconds before the tick. */
   warnAt: number;
   /** Active and inside the warn window. */
@@ -46,7 +51,9 @@ export function computeTick(payload: TickPayload | null, config: TickConfig | nu
   const warnAt =
     config?.warn_at_secs && config.warn_at_secs > 0 ? config.warn_at_secs : DEFAULT_TICK_WARN_SECS;
   const active = payload !== null && payload.enabled && config?.enabled !== false;
-  if (!active) return { active: false, secsSinceTick: null, warnAt, warn: false };
+  if (!active) {
+    return { active: false, secsSinceTick: null, intervalSecs: null, warnAt, warn: false };
+  }
   const intervalMs =
     payload.interval_ms > 0
       ? payload.interval_ms
@@ -58,13 +65,14 @@ export function computeTick(payload: TickPayload | null, config: TickConfig | nu
   // The warn window is the time left, so it holds the same last
   // seconds whatever the interval.
   const warn = Math.ceil(remainingMs / 1000) <= warnAt;
-  return { active, secsSinceTick, warnAt, warn };
+  return { active, secsSinceTick, intervalSecs: intervalMs / 1000, warnAt, warn };
 }
 
 function sameTick(a: TickState, b: TickState): boolean {
   return (
     a.active === b.active &&
     a.secsSinceTick === b.secsSinceTick &&
+    a.intervalSecs === b.intervalSecs &&
     a.warnAt === b.warnAt &&
     a.warn === b.warn
   );
