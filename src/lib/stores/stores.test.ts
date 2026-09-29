@@ -64,6 +64,9 @@ async function load() {
     tickCount: await import('./tickCountStore'),
     vitalsOptions: await import('./vitalsOptionsStore'),
     group: await import('../groupStore'),
+    gamePrompt: await import('./gamePromptStore'),
+    charState: await import('./charStateStore'),
+    weather: await import('./weatherStore'),
   };
 }
 
@@ -296,6 +299,40 @@ describe('stores on the event bus', () => {
     packet('char-combat-end.gmcp');
     expect(s.combat.getCombat()).toBeNull();
     expect(seen).toHaveBeenCalledTimes(4);
+  });
+
+  it('keep the prompt settings, your state and the weather until you disconnect', async () => {
+    const s = await load();
+    expect(s.gamePrompt.getGamePrompt()).toBeNull();
+    packet('char-prompt.gmcp');
+    packet('char-state.gmcp');
+    packet('room-weather.gmcp');
+    expect(s.gamePrompt.getGamePrompt()).toEqual({
+      enabled: true,
+      prompt: '%n%P%C<%hhp %mm %vmv> ',
+      fprompt: '',
+    });
+    expect(s.charState.getCharState()).toEqual({ position: 'sitting', language: 'common' });
+    expect(s.weather.getRoomWeather()).toMatchObject({ sky: 'rainy', temp: 60, unit: 'F' });
+
+    // Char.State and Room.Weather ride every prompt, so a repeat keeps
+    // the snapshot.
+    const state = s.charState.getCharState();
+    const weather = s.weather.getRoomWeather();
+    packet('char-state.gmcp');
+    packet('room-weather.gmcp');
+    expect(s.charState.getCharState()).toBe(state);
+    expect(s.weather.getRoomWeather()).toBe(weather);
+
+    packet('char-prompt-off.gmcp');
+    expect(s.gamePrompt.getGamePrompt()?.enabled).toBe(false);
+    packet('room-weather-indoors.gmcp');
+    expect(s.weather.getRoomWeather()?.sky).toBe('indoors');
+
+    disconnect();
+    expect(s.gamePrompt.getGamePrompt()).toBeNull();
+    expect(s.charState.getCharState()).toBeNull();
+    expect(s.weather.getRoomWeather()).toBeNull();
   });
 
   it('seed the tracked list and follow broadcasts and profile switches', async () => {
