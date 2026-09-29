@@ -1,5 +1,5 @@
 import { exportAliases, getUiConfig, sendInput, setUiConfig } from './session';
-import { PANE_TYPES, type PaneType } from './paneLayout';
+import type { PaneType } from './paneLayout';
 import { applyAndBroadcastTheme, getCurrentThemeId } from './theme';
 import { THEMES } from './themes';
 
@@ -182,6 +182,8 @@ export interface PaletteDeps {
    *  shell passes toggleSplit. */
   splitOpen?: boolean;
   toggleSplit?: () => void;
+  /** Pane types that get a Show row, in order. */
+  paneTypes: readonly PaneType[];
   paneVisible: (pane: PaneType) => boolean;
   togglePane: (pane: PaneType) => void;
   openHelp: () => void;
@@ -261,7 +263,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
     childLabel: 'Themes',
     run: () => {},
   });
-  for (const pane of PANE_TYPES) {
+  for (const pane of deps.paneTypes) {
     entries.push({
       id: `pane-${pane}`,
       section: 'view',
