@@ -102,6 +102,27 @@ export function shortcutLabel(spec: string, mac: boolean = isMacPlatform()): str
   return shortcutKeys(spec, mac).join(mac ? '' : '+');
 }
 
+// Physical keys the window shortcuts use, for layouts whose keys type
+// something else.
+const CODE_KEYS: Record<string, string> = {
+  Comma: ',',
+  Slash: '/',
+  Backslash: '\\',
+};
+
+/** The key a window shortcut matches on, lowercased. Latin layouts
+ *  (Dvorak and AZERTY included) match on the character the key types.
+ *  A non-Latin layout (Cyrillic, Greek) types a letter no shortcut
+ *  names, so it falls back to the physical key: Ctrl+R there still
+ *  reads as `r` and never lets WebView2 reload the page. */
+export function shortcutKey(e: { key: string; code: string }): string {
+  const key = e.key.toLowerCase();
+  if (key.length !== 1 || (key >= ' ' && key <= '~')) return key;
+  const letter = /^Key([A-Z])$/.exec(e.code);
+  if (letter) return letter[1].toLowerCase();
+  return CODE_KEYS[e.code] ?? key;
+}
+
 // ── Registry ─────────────────────────────────────────────────────────
 
 /** Home sections, in the order the palette lists them. Session goes

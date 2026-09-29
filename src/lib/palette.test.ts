@@ -3,6 +3,7 @@ import {
   buildPaletteEntries,
   initialSelection,
   paletteSections,
+  shortcutKey,
   shortcutKeys,
   shortcutLabel,
   type PaletteDeps,
@@ -43,6 +44,27 @@ describe('shortcutLabel', () => {
     expect(shortcutLabel('Mod+Shift+L', true)).toBe('⇧⌘L');
     expect(shortcutLabel('Mod+C', false)).toBe('Ctrl+C');
     expect(shortcutLabel('Mod+Shift+L', false)).toBe('Ctrl+Shift+L');
+  });
+});
+
+describe('shortcutKey', () => {
+  it('matches Latin layouts on the character typed', () => {
+    expect(shortcutKey({ key: 'R', code: 'KeyR' })).toBe('r');
+    // Dvorak types k from the physical V key.
+    expect(shortcutKey({ key: 'k', code: 'KeyV' })).toBe('k');
+    expect(shortcutKey({ key: ',', code: 'KeyW' })).toBe(',');
+  });
+
+  it('falls back to the physical key on a non-Latin layout', () => {
+    expect(shortcutKey({ key: 'к', code: 'KeyR' })).toBe('r');
+    expect(shortcutKey({ key: 'Л', code: 'KeyK' })).toBe('k');
+    expect(shortcutKey({ key: 'б', code: 'Comma' })).toBe(',');
+    expect(shortcutKey({ key: '.', code: 'Slash' })).toBe('.');
+    expect(shortcutKey({ key: 'ё', code: 'Backquote' })).toBe('ё');
+  });
+
+  it('leaves named keys alone', () => {
+    expect(shortcutKey({ key: 'Escape', code: 'Escape' })).toBe('escape');
   });
 });
 
