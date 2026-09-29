@@ -451,9 +451,18 @@
   flex-direction: column;
 }
 
+/* A message scrolled partly out of view fades out over the top 8 px
+   instead of butting against the pane header. The log starts 8 px
+   down, so nothing fades while the log sits at its top. The empty
+   state sentence sits higher and keeps its full ink. */
+.pane-chat-scroll:not(.is-empty) {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 8px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 8px);
+}
+
 .pane-chat-log {
   margin: auto 0 0;
-  padding: 0 12px 12px 18px;
+  padding: 8px 12px 12px 18px;
   list-style: none;
 }
 
