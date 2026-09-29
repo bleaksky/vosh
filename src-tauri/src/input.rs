@@ -116,6 +116,55 @@ pub(crate) fn is_profile_reset_or_load(line: &str) -> bool {
     matches!(sub, "reset" | "load")
 }
 
+/// What a run of input lines asks of the saved profile. Every path that
+/// runs a line through [`process`] notes each line here in order: typed
+/// input, a Settings timer command, the tick auto-fire command, and a
+/// Lua `mud.input` line. So `#alias` or `#trigger` from a timer reaches
+/// disk the way the same line typed at the prompt does.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LineEffects {
+    /// A `#profile reset` or `#profile load` replaced the live profile,
+    /// which leaves it diverged from disk on purpose.
+    pub(crate) replaced: bool,
+    /// A durable change came after the last replace, or with none: a
+    /// slash command, or Lua that changed durable state.
+    pub(crate) dirty: bool,
+}
+
+impl LineEffects {
+    /// Note one line that runs through [`process`]. True when that line
+    /// replaces the live profile.
+    pub(crate) fn note_line(&mut self, line: &str) -> bool {
+        self.note_line_with(
+            line,
+            PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire),
+        )
+    }
+
+    /// [`Self::note_line`] with Path B given. Path B turns `#profile
+    /// reset` and `#profile load` into echoes, so there they replace
+    /// nothing and count as any other slash command.
+    pub(crate) fn note_line_with(&mut self, line: &str, path_b_live: bool) -> bool {
+        if !path_b_live && is_profile_reset_or_load(line) {
+            self.replaced = true;
+            self.dirty = false;
+            return true;
+        }
+        if line.trim_start().starts_with('#') {
+            self.dirty = true;
+        }
+        false
+    }
+
+    /// Note Lua that ran for these lines, such as the body of a script
+    /// alias.
+    pub(crate) fn note_script(&mut self, durable_changed: bool) {
+        if durable_changed {
+            self.dirty = true;
+        }
+    }
+}
+
 /// Run the input pipeline against the given profile and return what to send
 /// and what to echo locally.
 pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
@@ -1601,6 +1650,69 @@ fn echo_lines<'a>(lines: impl IntoIterator<Item = &'a str>) -> InputResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn effects_of(lines: &[&str], path_b_live: bool) -> LineEffects {
+        let mut effects = LineEffects::default();
+        for line in lines {
+            effects.note_line_with(line, path_b_live);
+        }
+        effects
+    }
+
+    const DIRTY: LineEffects = LineEffects {
+        replaced: false,
+        dirty: true,
+    };
+
+    #[test]
+    fn slash_commands_mark_the_profile_dirty() {
+        for line in [
+            "#alias greet wave",
+            "#trigger flee {^You flee} send look",
+            "  #var x 1",
+        ] {
+            assert_eq!(effects_of(&[line], false), DIRTY, "{line}");
+        }
+        assert_eq!(
+            effects_of(&["look", "greet"], false),
+            LineEffects::default()
+        );
+    }
+
+    #[test]
+    fn a_reset_or_load_replaces_the_profile_and_saves_nothing() {
+        let replaced = LineEffects {
+            replaced: true,
+            dirty: false,
+        };
+        for line in ["#profile reset", "#profile  load", "# profile reset"] {
+            assert_eq!(effects_of(&[line], false), replaced, "{line}");
+        }
+        // An edit before the reset is gone with it. An edit after it
+        // says the live state is wanted.
+        assert_eq!(
+            effects_of(&["#alias a b", "#profile reset"], false),
+            replaced
+        );
+        assert_eq!(
+            effects_of(&["#profile reset", "#alias a b"], false),
+            LineEffects {
+                replaced: true,
+                dirty: true,
+            }
+        );
+        // Path B turns the pair into echoes.
+        assert_eq!(effects_of(&["#profile reset"], true), DIRTY);
+    }
+
+    #[test]
+    fn durable_lua_marks_the_profile_dirty() {
+        let mut effects = effects_of(&["greet"], false);
+        effects.note_script(false);
+        assert_eq!(effects, LineEffects::default());
+        effects.note_script(true);
+        assert_eq!(effects, DIRTY);
+    }
 
     #[test]
     fn plain_input_appends_crlf() {

@@ -97,6 +97,39 @@ pub(crate) fn schedule_profile_persist(app: &AppHandle) {
     });
 }
 
+/// Act on what a run of input lines asked of the saved profile. Every
+/// path that runs lines through the input pipeline calls this after it
+/// releases the profile lock, so they all save alike.
+///
+/// Slash commands (#alias, #trigger, #var, #endrec, #import-tintin,
+/// ...) and durable Lua actions mutate the profile but historically
+/// never persisted, so anything authored this way vanished on restart
+/// unless an unrelated persisting command happened to run later.
+/// `#profile reset` and `#profile load` are deliberate exceptions:
+/// reset blanks the LIVE profile only (the help documents `#profile
+/// save` as the explicit write and `load` as the undo), so
+/// auto-persisting it would wipe the on-disk profile, and in Path B the
+/// shared catalog. They also suppress the passive flushes (exit,
+/// debounce) until the next durable change says the in-memory state is
+/// wanted again. [`crate::input::LineEffects`] matches them with the
+/// parser's own tokenizer so spelling variants ("#profile  reset",
+/// "# profile load") cannot slip past into the dirty mark and persist
+/// the just-blanked profile.
+pub(crate) async fn settle_line_effects(app: &AppHandle, effects: crate::input::LineEffects) {
+    if effects.replaced {
+        AUTO_PERSIST_SUPPRESSED.store(true, std::sync::atomic::Ordering::Release);
+        // Every window drops its copy of the old panes and tracked
+        // affects, so a later panel edit cannot write them back.
+        let shared: SharedState = app.state::<SharedState>().inner().clone();
+        broadcast_profile_ui(app, &shared).await;
+    }
+    // A durable change after the replace counts as wanting the live
+    // state saved, the way a line typed after `#profile reset` does.
+    if effects.dirty {
+        mark_profile_dirty(app);
+    }
+}
+
 pub(crate) fn broadcast<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: &S) {
     for win in app.webview_windows().values() {
         if let Err(e) = win.emit(event, payload.clone()) {
@@ -532,8 +565,8 @@ pub(crate) async fn session_send_input(
     // `#profile reset` and `#profile load` replace the live profile
     // wholesale, panes and tracked affects included. Path B turns them
     // into echoes, so there they change nothing.
-    let path_b_live = crate::input::PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire);
-    let is_reset_or_load = !path_b_live && crate::input::is_profile_reset_or_load(&line);
+    let mut effects = crate::input::LineEffects::default();
+    let is_reset_or_load = effects.note_line(&line);
     // The profile file they read holds none of the shared settings, so
     // global.toml goes back over the result the way a switch lays it.
     let shared_layer = if is_reset_or_load {
@@ -551,7 +584,7 @@ pub(crate) async fn session_send_input(
             Some(layer) => layer.keep_across(&mut profile, |p| input::process(p, &line)),
             None => input::process(&mut profile, &line),
         };
-        if is_reset_or_load {
+        if effects.replaced {
             bump_panes_generation();
         }
         let after_name = profile.target.name.clone();
@@ -600,33 +633,8 @@ pub(crate) async fn session_send_input(
     // Settings page shows, so tell it.
     broadcast_list_changes(&app, lists);
 
-    // Slash commands (#alias, #trigger, #var, #endrec, #import-tintin,
-    // ...) and durable Lua actions mutate the profile but historically
-    // never persisted, so anything authored this way vanished on restart
-    // unless an unrelated persisting command happened to run later.
-    // `#profile reset` and `#profile load` are deliberate exceptions:
-    // reset blanks the LIVE profile only (the help documents `#profile
-    // save` as the explicit write and `load` as the undo), so
-    // auto-persisting it would wipe the on-disk profile — and in Path B
-    // the shared catalog. They also suppress the passive flushes (exit,
-    // debounce) until the next durable change says the in-memory state
-    // is wanted again.
-    // Matched with the parser's own tokenizer so spelling variants
-    // ("#profile  reset", "# profile load") cannot slip past into the
-    // dirty-mark branch and persist the just-blanked profile. Path B
-    // gates the whole save/load/reset trio to echo-only, so suppression
-    // only applies where the commands still act.
-    if is_reset_or_load {
-        AUTO_PERSIST_SUPPRESSED.store(true, std::sync::atomic::Ordering::Release);
-        // Every window drops its copy of the old panes and tracked
-        // affects, so a later panel edit cannot write them back.
-        let shared: SharedState = state.inner().clone();
-        broadcast_profile_ui(&app, &shared).await;
-    } else if line.trim_start().starts_with('#')
-        || script_apply.as_ref().is_some_and(|a| a.durable_changed)
-    {
-        mark_profile_dirty(&app);
-    }
+    effects.note_script(script_apply.as_ref().is_some_and(|a| a.durable_changed));
+    settle_line_effects(&app, effects).await;
 
     if let Some(apply) = script_apply {
         // Lua actions append AFTER the alias's template output (which
