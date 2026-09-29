@@ -1,0 +1,433 @@
+//! `#logs forget-passwords`. Counts the lines in the session log where you
+//! sent a password, and with `now` blanks them for good. The rule for
+//! which lines lives in `vosh_log` (crates/log/src/forget.rs).
+//!
+//! Nothing here reads, prints, logs, or returns the text of a line. The
+//! store hands back row ids and counts only, and an error names what
+//! failed, never a row.
+
+use std::path::{Path, PathBuf};
+
+use tauri::{AppHandle, Emitter, Manager};
+use tracing::warn;
+use vosh_log::{Forgotten, PasswordLines};
+
+use crate::commands::SharedState;
+use crate::input::LogsCommand;
+use crate::log_state::SharedLogStore;
+use crate::session::OutputPayload;
+
+/// How a run ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Outcome {
+    /// Logging is off, so there is no store to look through.
+    NoLog,
+    /// The pass over the log failed. Nothing changed.
+    ReadFailed,
+    /// The count, for `#logs forget-passwords`.
+    Found(PasswordLines),
+    /// What `#logs forget-passwords now` blanked.
+    Blanked(Forgotten),
+    /// The update failed and rolled back. Nothing changed.
+    BlankFailed,
+}
+
+/// Find the lines, and with `now` blank them.
+///
+/// The pass over the log reads through the search connection, so only a
+/// search waits on it and the session keeps logging. The blanking holds
+/// the writer the way every log write does, so the session's next append
+/// waits for it instead of racing it, and holds the search connection too
+/// so no search keeps an old snapshot open while the write ahead log is
+/// truncated. Both steps tell the runtime they block, so the tasks that
+/// share the thread, the session among them, move elsewhere meanwhile.
+pub(crate) async fn forget(logs: &SharedLogStore, reader: &SharedLogStore, now: bool) -> Outcome {
+    let read = {
+        let guard = reader.lock().await;
+        guard
+            .as_ref()
+            .map(|store| blocking(|| store.find_password_lines()))
+    };
+    let read = match read {
+        Some(read) => read,
+        None => {
+            let guard = logs.lock().await;
+            match guard.as_ref() {
+                Some(store) => blocking(|| store.find_password_lines()),
+                None => return Outcome::NoLog,
+            }
+        }
+    };
+    let found = match read {
+        Ok(found) => found,
+        Err(e) => {
+            warn!(error = %e, "#logs forget-passwords could not read the session log");
+            return Outcome::ReadFailed;
+        }
+    };
+    if !now {
+        return Outcome::Found(found);
+    }
+    let mut writer = logs.lock().await;
+    let _searches_wait = reader.lock().await;
+    let Some(store) = writer.as_mut() else {
+        return Outcome::NoLog;
+    };
+    match blocking(|| store.blank_password_lines(&found)) {
+        Ok(done) => {
+            if !done.wiped {
+                warn!(
+                    lines = done.lines,
+                    "#logs forget-passwords blanked lines but could not rewrite the log file"
+                );
+            }
+            Outcome::Blanked(done)
+        }
+        Err(e) => {
+            warn!(error = %e, "#logs forget-passwords could not blank the session log");
+            Outcome::BlankFailed
+        }
+    }
+}
+
+/// Run `work`, telling a multi thread runtime that it blocks, so a pass
+/// over a large log never stalls the tasks that share its thread.
+fn blocking<T>(work: impl FnOnce() -> T) -> T {
+    match tokio::runtime::Handle::try_current().map(|h| h.runtime_flavor()) {
+        Ok(tokio::runtime::RuntimeFlavor::MultiThread) => tokio::task::block_in_place(work),
+        _ => work(),
+    }
+}
+
+/// `n` with the singular or plural noun.
+fn count(n: usize, one: &str, many: &str) -> String {
+    if n == 1 {
+        format!("1 {one}")
+    } else {
+        format!("{n} {many}")
+    }
+}
+
+/// The lines to echo for `outcome`. `legacy_copy` is the copy of the log
+/// that Vosh left behind when it took its name, when one exists.
+pub(crate) fn messages(outcome: &Outcome, legacy_copy: Option<&Path>) -> Vec<String> {
+    const NONE: &str =
+        "Vosh found no lines where you sent a password. Your log has nothing to blank.";
+    let first = match outcome {
+        Outcome::NoLog => {
+            return vec!["Vosh has no session log open, so there is nothing to blank.".to_string()]
+        }
+        Outcome::ReadFailed => "Vosh could not read your session log. Nothing changed.".to_string(),
+        Outcome::BlankFailed => {
+            "Vosh could not blank the lines in your session log. Nothing changed.".to_string()
+        }
+        Outcome::Found(found) if found.count() == 0 => NONE.to_string(),
+        Outcome::Found(found) => format!(
+            "Vosh found {} where you sent a password, across {}. \
+             Type #logs forget-passwords now to blank {}.",
+            count(found.count(), "line", "lines"),
+            count(found.sessions(), "session", "sessions"),
+            if found.count() == 1 { "it" } else { "them" },
+        ),
+        Outcome::Blanked(done) if done.lines == 0 => NONE.to_string(),
+        Outcome::Blanked(done) if done.wiped => format!(
+            "Vosh blanked {}. Your log keeps the fact that you sent {}, never the text.",
+            count(done.lines, "line", "lines"),
+            if done.lines == 1 { "it" } else { "them" },
+        ),
+        Outcome::Blanked(done) => format!(
+            "Vosh blanked {}, but it could not rewrite the log file to clear \
+             old copies of {} text from the disk.",
+            count(done.lines, "line", "lines"),
+            if done.lines == 1 { "its" } else { "their" },
+        ),
+    };
+    let mut lines = vec![first];
+    if let Some(copy) = legacy_copy {
+        lines.push(format!(
+            "Vosh also left a copy of your log from before it took its name at {}. \
+             This command leaves that copy alone, so delete the file to forget the lines it holds.",
+            copy.display()
+        ));
+    }
+    lines
+}
+
+/// The log the app kept before it was named Vosh, still in the old app
+/// data folder next to `app_data`, when it exists. The rename copied it
+/// and never removed it.
+pub(crate) fn legacy_log_copy(app_data: &Path) -> Option<PathBuf> {
+    crate::mudclient_dir_for(app_data)
+        .map(|dir| crate::log_state::log_db_path(&dir))
+        .filter(|path| path.is_file())
+}
+
+/// The echo for a `#logs` line that is not a known command.
+pub(crate) const USAGE: &str = "[usage #logs forget-passwords [now]]";
+
+/// Run `command` off the input path and echo what it found or did.
+pub(crate) fn start(app: &AppHandle, command: LogsCommand) {
+    let now = match command {
+        LogsCommand::Usage => {
+            echo(app, &[USAGE.to_string()]);
+            return;
+        }
+        LogsCommand::Preview => false,
+        LogsCommand::Forget => true,
+    };
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state: SharedState = app.state::<SharedState>().inner().clone();
+        let outcome = forget(&state.logs, &state.log_reader, now).await;
+        let legacy = app
+            .path()
+            .app_data_dir()
+            .ok()
+            .and_then(|dir| legacy_log_copy(&dir));
+        echo(&app, &messages(&outcome, legacy.as_deref()));
+    });
+}
+
+/// Print `lines` in the terminal pane the way other slash commands do.
+fn echo(app: &AppHandle, lines: &[String]) {
+    let mut buf = Vec::new();
+    for line in lines {
+        buf.extend_from_slice(line.as_bytes());
+        buf.extend_from_slice(b"\r\n");
+    }
+    let _ = app.emit("session://output", OutputPayload::from_bytes(&buf));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    use vosh_log::LogStore;
+
+    #[test]
+    fn a_blanked_line_reads_like_a_line_the_session_never_saved() {
+        // The session logs a line sent while the server hides your input
+        // as this row, and the command blanks an old one to the same.
+        assert_eq!(vosh_log::HIDDEN_SENT_TEXT, crate::hidden_input::HIDDEN_ROW);
+    }
+
+    #[test]
+    fn the_preview_says_how_many_and_how_to_blank_them() {
+        let found = PasswordLines {
+            lines: vec![(3, 1), (9, 1), (40, 2), (41, 2), (77, 5)],
+        };
+        assert_eq!(
+            messages(&Outcome::Found(found), None),
+            vec![
+                "Vosh found 5 lines where you sent a password, across 3 sessions. \
+                 Type #logs forget-passwords now to blank them."
+                    .to_string()
+            ]
+        );
+        let one = PasswordLines {
+            lines: vec![(3, 1)],
+        };
+        assert_eq!(
+            messages(&Outcome::Found(one), None),
+            vec![
+                "Vosh found 1 line where you sent a password, across 1 session. \
+                 Type #logs forget-passwords now to blank it."
+                    .to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn the_real_run_says_what_it_blanked() {
+        let done = Forgotten {
+            lines: 12,
+            sessions: 9,
+            wiped: true,
+        };
+        assert_eq!(
+            messages(&Outcome::Blanked(done), None),
+            vec![
+                "Vosh blanked 12 lines. Your log keeps the fact that you sent them, never the text."
+                    .to_string()
+            ]
+        );
+        let one = Forgotten {
+            lines: 1,
+            sessions: 1,
+            wiped: true,
+        };
+        assert_eq!(
+            messages(&Outcome::Blanked(one), None),
+            vec![
+                "Vosh blanked 1 line. Your log keeps the fact that you sent it, never the text."
+                    .to_string()
+            ]
+        );
+        let unwiped = Forgotten {
+            lines: 2,
+            sessions: 1,
+            wiped: false,
+        };
+        assert_eq!(
+            messages(&Outcome::Blanked(unwiped), None),
+            vec![
+                "Vosh blanked 2 lines, but it could not rewrite the log file to clear \
+                 old copies of their text from the disk."
+                    .to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn nothing_to_blank_says_so() {
+        let none = "Vosh found no lines where you sent a password. Your log has nothing to blank.";
+        assert_eq!(
+            messages(&Outcome::Found(PasswordLines::default()), None),
+            vec![none.to_string()]
+        );
+        assert_eq!(
+            messages(&Outcome::Blanked(Forgotten::default()), None),
+            vec![none.to_string()]
+        );
+    }
+
+    #[test]
+    fn failures_say_nothing_changed() {
+        assert_eq!(
+            messages(&Outcome::NoLog, None),
+            vec!["Vosh has no session log open, so there is nothing to blank.".to_string()]
+        );
+        assert_eq!(
+            messages(&Outcome::ReadFailed, None),
+            vec!["Vosh could not read your session log. Nothing changed.".to_string()]
+        );
+        assert_eq!(
+            messages(&Outcome::BlankFailed, None),
+            vec![
+                "Vosh could not blank the lines in your session log. Nothing changed.".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn an_old_copy_of_the_log_is_named() {
+        let copy = Path::new("/data/com.aabahran.mudclient/logs.sqlite");
+        let found = PasswordLines {
+            lines: vec![(3, 1)],
+        };
+        let lines = messages(&Outcome::Found(found), Some(copy));
+        assert_eq!(lines.len(), 2);
+        assert_eq!(
+            lines[1],
+            "Vosh also left a copy of your log from before it took its name at \
+             /data/com.aabahran.mudclient/logs.sqlite. This command leaves that copy alone, \
+             so delete the file to forget the lines it holds."
+        );
+        let lines = messages(&Outcome::Blanked(Forgotten::default()), Some(copy));
+        assert_eq!(lines.len(), 2);
+        // No log at all, no copy to mention either.
+        assert_eq!(messages(&Outcome::NoLog, Some(copy)).len(), 1);
+    }
+
+    #[test]
+    fn the_old_copy_is_found_next_to_the_app_data_folder() {
+        let root = tempfile::tempdir().unwrap();
+        let app_data = root.path().join("com.aabahran.vosh");
+        std::fs::create_dir_all(&app_data).unwrap();
+        assert_eq!(legacy_log_copy(&app_data), None);
+        let old = root.path().join("com.aabahran.mudclient");
+        std::fs::create_dir_all(&old).unwrap();
+        assert_eq!(legacy_log_copy(&app_data), None);
+        std::fs::write(old.join("logs.sqlite"), b"").unwrap();
+        assert_eq!(legacy_log_copy(&app_data), Some(old.join("logs.sqlite")));
+    }
+
+    /// A log with one session that holds two made up passwords: a line
+    /// after a logged prompt and a password command.
+    fn shared_log(dir: &Path) -> (SharedLogStore, SharedLogStore, i64) {
+        let path = dir.join("logs.sqlite");
+        let mut writer = LogStore::open(&path).unwrap();
+        let sid = writer
+            .start_session("play.theforsakenlands.com", 1848, 0)
+            .unwrap();
+        writer.append_raw(sid, 1, b"Password: ").unwrap();
+        writer.append(sid, 2, "> Hb3flintOtter", None).unwrap();
+        writer.append_raw(sid, 3, b"Welcome.").unwrap();
+        writer.append(sid, 4, "> look", None).unwrap();
+        writer
+            .append(sid, 5, "> password Hb3flintOtter Rt8emberFinch", None)
+            .unwrap();
+        let reader = LogStore::open(&path).unwrap();
+        (
+            Arc::new(Mutex::new(Some(writer))),
+            Arc::new(Mutex::new(Some(reader))),
+            sid,
+        )
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_preview_then_a_real_run_then_the_session_keeps_logging() {
+        let dir = tempfile::tempdir().unwrap();
+        let (logs, reader, sid) = shared_log(dir.path());
+
+        let Outcome::Found(found) = forget(&logs, &reader, false).await else {
+            panic!("the preview did not count");
+        };
+        assert_eq!((found.count(), found.sessions()), (2, 1));
+
+        let Outcome::Blanked(done) = forget(&logs, &reader, true).await else {
+            panic!("the real run did not blank");
+        };
+        assert_eq!((done.lines, done.sessions, done.wiped), (2, 1, true));
+
+        // The session loop appends through the same shared store.
+        {
+            let mut guard = logs.lock().await;
+            let store = guard.as_mut().unwrap();
+            store.append(sid, 6, "> north", None).unwrap();
+            store
+                .append_batch(&[vosh_log::LogEntry {
+                    session_id: sid,
+                    ts_ms: 7,
+                    text: "A dusty road.".into(),
+                    raw: Some(b"A dusty road.".to_vec()),
+                }])
+                .unwrap();
+        }
+        let guard = reader.lock().await;
+        let store = guard.as_ref().unwrap();
+        let hits = store
+            .search(
+                "^> north$|^A dusty road\\.$",
+                &vosh_log::SearchOptions::default(),
+            )
+            .unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(store.get_session(sid).unwrap().unwrap().line_count, 7);
+        drop(guard);
+
+        let Outcome::Blanked(again) = forget(&logs, &reader, true).await else {
+            panic!("the second run did not report");
+        };
+        assert_eq!(again.lines, 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn no_store_is_no_log() {
+        let none: SharedLogStore = Arc::new(Mutex::new(None));
+        assert_eq!(forget(&none, &none, false).await, Outcome::NoLog);
+        assert_eq!(forget(&none, &none, true).await, Outcome::NoLog);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_writer_alone_serves_when_the_reader_did_not_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let (logs, _reader, _) = shared_log(dir.path());
+        let none: SharedLogStore = Arc::new(Mutex::new(None));
+        let Outcome::Found(found) = forget(&logs, &none, false).await else {
+            panic!("the preview did not count");
+        };
+        assert_eq!(found.count(), 2);
+    }
+}

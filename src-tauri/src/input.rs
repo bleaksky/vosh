@@ -70,6 +70,8 @@ slash commands:
   #profile load                        replace state with the saved profile
   #profile reset                       wipe aliases, vars, triggers, tick
   #import-tintin <path>                import #alias and #variable from a .tin
+  #logs forget-passwords               count the lines where you sent a password
+  #logs forget-passwords now           blank those lines in the session log
   #nativesurface on|off|default        force the native renderer on or off
   #record <name>                       start recording typed commands into a macro
   #record                              show current recording status
@@ -114,6 +116,34 @@ pub(crate) fn is_profile_reset_or_load(line: &str) -> bool {
     }
     let (sub, _) = split_first_word(rest);
     matches!(sub, "reset" | "load")
+}
+
+/// What a `#logs` line asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LogsCommand {
+    /// `#logs forget-passwords` counts the lines that hold a password.
+    Preview,
+    /// `#logs forget-passwords now` blanks them.
+    Forget,
+    /// Anything else after `#logs`.
+    Usage,
+}
+
+/// The `#logs` command `line` asks for, or None when it is no `#logs`
+/// line. Typed input runs it before the pipeline, since it works on the
+/// log store rather than the profile.
+pub(crate) fn logs_command(line: &str) -> Option<LogsCommand> {
+    let rest = line.trim_start().strip_prefix('#')?;
+    let (cmd, rest) = split_first_word(rest);
+    if cmd != "logs" {
+        return None;
+    }
+    let mut words = rest.split_whitespace();
+    Some(match (words.next(), words.next(), words.next()) {
+        (Some("forget-passwords"), None, None) => LogsCommand::Preview,
+        (Some("forget-passwords"), Some("now"), None) => LogsCommand::Forget,
+        _ => LogsCommand::Usage,
+    })
 }
 
 /// True when `line` may replace the live profile: a `#profile reset` or
@@ -333,6 +363,9 @@ fn handle_slash(profile: &mut Profile, rest: &str, replaced: &mut bool) -> Input
         "echo" | "showme" => slash_echo(profile, args),
         "profile" => slash_profile(profile, args, replaced),
         "import-tintin" => slash_import_tintin(profile, args),
+        // Typed input runs #logs before the pipeline (see `logs_command`),
+        // so only a timer, the tick command, or Lua gets here.
+        "logs" => error_echo("type #logs at the input bar".to_string()),
         "record" => slash_record(profile, args),
         "endrec" => slash_endrec(profile),
         "target" => slash_target(profile, args),
@@ -2293,5 +2326,64 @@ mod tests {
         let (pattern, rest) = parse_braced_pattern(r"{a\}b} send hi").unwrap();
         assert_eq!(pattern, "a}b");
         assert_eq!(rest, "send hi");
+    }
+
+    #[test]
+    fn logs_forget_passwords_reads_like_the_slash_dispatcher() {
+        for line in [
+            "#logs forget-passwords",
+            "  #logs   forget-passwords  ",
+            "# logs forget-passwords",
+        ] {
+            assert_eq!(logs_command(line), Some(LogsCommand::Preview), "{line:?}");
+        }
+        for line in [
+            "#logs forget-passwords now",
+            "#logs  forget-passwords   now ",
+        ] {
+            assert_eq!(logs_command(line), Some(LogsCommand::Forget), "{line:?}");
+        }
+        for line in [
+            "#logs",
+            "#logs forget",
+            "#logs forget-passwords later",
+            "#logs forget-passwords now please",
+            "#logs Forget-Passwords",
+        ] {
+            assert_eq!(logs_command(line), Some(LogsCommand::Usage), "{line:?}");
+        }
+        for line in [
+            "#log forget-passwords",
+            "logs forget-passwords",
+            "#logsforget-passwords",
+            "say #logs forget-passwords",
+        ] {
+            assert_eq!(logs_command(line), None, "{line:?}");
+        }
+    }
+
+    #[test]
+    fn help_lists_logs_forget_passwords() {
+        let lines: Vec<&str> = HELP_TEXT.lines().collect();
+        assert!(lines
+            .iter()
+            .any(|l| l.trim_start().starts_with("#logs forget-passwords ")
+                && l.contains("count the lines where you sent a password")));
+        assert!(lines.iter().any(
+            |l| l.trim_start().starts_with("#logs forget-passwords now ")
+                && l.contains("blank those lines in the session log")
+        ));
+    }
+
+    #[test]
+    fn logs_from_a_timer_or_script_says_where_it_runs() {
+        // Typed input runs #logs before the pipeline. Only a timer, the
+        // tick command, or Lua reaches it here, and those never blank a log.
+        let mut p = Profile::default();
+        for line in ["#logs forget-passwords now", "#logs"] {
+            let r = process(&mut p, line);
+            assert!(r.bytes.is_empty());
+            assert_eq!(r.echo, vec!["[type #logs at the input bar]".to_string()]);
+        }
     }
 }

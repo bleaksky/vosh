@@ -71,6 +71,7 @@ mod commands;
 mod connection;
 mod exit_flush;
 mod fonts;
+mod forget_passwords;
 mod gmcp_bind;
 mod hidden_input;
 mod import;
