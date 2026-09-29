@@ -75,7 +75,7 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 
 `Segmented` is the segmented control.
 
-- `options` is a list of `{ value, label, disabled? }`.
+- `options` is a list of `{ value, label, disabled?, name? }`. Give `name` when the label is a picture, like the Input caret shapes. It becomes the segment's accessible name and its tooltip.
 - `value` is the pressed value, or null for none.
 - `onChange(value)` runs on press.
 - `label` names the group when it does not sit in a `Row`, like the Automation `Kind`.

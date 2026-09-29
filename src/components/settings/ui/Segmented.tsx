@@ -6,6 +6,9 @@ export interface SegmentedOption<T extends string> {
   value: T;
   label: ReactNode;
   disabled?: boolean;
+  /** The segment's name when its label is a picture, like the Input
+   *  caret shapes. It is also the tooltip. */
+  name?: string;
 }
 
 export interface SegmentedProps<T extends string> {
@@ -47,6 +50,8 @@ export function Segmented<T extends string>({
           type="button"
           className="st-seg-item"
           aria-pressed={option.value === value}
+          aria-label={option.name}
+          title={option.name}
           disabled={option.disabled}
           onClick={() => onChange(option.value)}
         >
