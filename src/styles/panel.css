@@ -130,6 +130,307 @@
   outline-offset: 1px;
 }
 
+/* ── Dense rows ──────────────────────────────────────────────────── */
+
+.pane-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pane-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: var(--row);
+  padding: 0 12px 0 18px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.pane-row-marked {
+  padding-left: 34px;
+}
+
+.pane-row-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.pane-row-note {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--tertiary);
+}
+
+.pane-row-value {
+  flex: none;
+  margin-left: 8px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--secondary);
+}
+
+.pane-marker {
+  position: absolute;
+  left: 18px;
+  top: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--tertiary);
+}
+
+/* A sub label inside a pane, after a divider inset 18 on both sides. */
+.pane-divider {
+  height: 1px;
+  margin: 4px 18px 0;
+  background: var(--divider);
+}
+
+.pane-sublabel {
+  margin: 0;
+  padding: 10px 18px 4px;
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 600;
+  color: var(--tertiary);
+}
+
+/* A plain sentence where a pane has nothing to show yet. */
+.pane-empty {
+  margin: 0;
+  min-height: var(--row);
+  padding: 3px 12px 3px 18px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+}
+
+.panel-empty {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+/* ── Affects ─────────────────────────────────────────────────────── */
+
+.pane-affect-missing .pane-marker {
+  border: 1.25px solid var(--danger);
+  background: transparent;
+}
+
+.pane-affect-missing .pane-row-name,
+.pane-affect-missing .pane-row-value,
+.pane-affect-harmful .pane-row-value {
+  color: var(--danger);
+}
+
+.pane-affect-expiring .pane-marker {
+  background: var(--warn);
+}
+
+.pane-affect-expiring .pane-row-value {
+  color: var(--warn);
+}
+
+.pane-affect-present .pane-marker {
+  background: var(--success);
+}
+
+.pane-affect-harmful .pane-marker {
+  background: var(--danger);
+}
+
+.pane-affect-untracked .pane-row-name {
+  color: var(--secondary);
+}
+
+.pane-affect-untracked .pane-row-value {
+  color: var(--tertiary);
+}
+
+/* ── Map ─────────────────────────────────────────────────────────── */
+
+.pane-map {
+  padding-bottom: 8px;
+}
+
+/* The drawing: inset 8, radius 8, no fill or border of its own. It
+   takes the height the rows leave and keeps at least 96 px. */
+.pane-map-box {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-height: 96px;
+  margin: 0 8px;
+  border-radius: var(--r-row);
+  overflow: hidden;
+}
+
+.pane-map-box .server-view {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pane-map-empty {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 3px 4px 3px 10px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+  pointer-events: none;
+}
+
+/* A short pane gives up the people rows first, down to the room row. */
+.pane-map-rows {
+  flex: 0 1 auto;
+  min-height: var(--row);
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.pane-map-exits,
+.pane-map-count {
+  font-weight: 400;
+  color: var(--tertiary);
+}
+
+.pane-map-person .pane-row-name {
+  color: var(--secondary);
+}
+
+/* ── Group ───────────────────────────────────────────────────────── */
+
+.pane-member-lead {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--tertiary);
+}
+
+.pane-member-meter {
+  flex: none;
+  width: 48px;
+  height: 3px;
+  margin-left: 8px;
+  border-radius: 1.5px;
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.pane-member-fill {
+  display: block;
+  height: 3px;
+  border-radius: 1.5px;
+  background: var(--secondary);
+}
+
+.pane-member-pct {
+  flex: none;
+  width: 36px;
+  margin-left: 8px;
+  text-align: right;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--secondary);
+}
+
+.pane-member-warn .pane-member-fill {
+  background: var(--warn);
+}
+
+.pane-member-warn .pane-member-pct {
+  color: var(--warn);
+}
+
+.pane-member-danger .pane-member-fill {
+  background: var(--danger);
+}
+
+.pane-member-danger .pane-member-pct {
+  color: var(--danger);
+}
+
+/* ── Chat ────────────────────────────────────────────────────────── */
+
+/* Bottom anchored: the log's top margin soaks up the free space until
+   the messages overflow, then the pane scrolls. */
+.pane-chat-scroll {
+  display: flex;
+  flex-direction: column;
+}
+
+.pane-chat-log {
+  margin: auto 0 0;
+  padding: 0 12px 12px 18px;
+  list-style: none;
+}
+
+.pane-chat-msg {
+  margin: 0;
+  padding: 0;
+}
+
+.pane-chat-msg + .pane-chat-msg {
+  margin-top: 6px;
+}
+
+.pane-chat-when {
+  height: 15px;
+  font-size: 11px;
+  line-height: 15px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--tertiary);
+}
+
+.pane-chat-channel {
+  margin-left: 6px;
+}
+
+.pane-chat-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text);
+  overflow-wrap: break-word;
+}
+
+.pane-chat-speaker {
+  font-weight: 600;
+}
+
+/* ── Staff queues ────────────────────────────────────────────────── */
+
+.pane-imm-overdue .pane-marker {
+  background: var(--danger);
+}
+
+.pane-imm-overdue .pane-row-value,
+.pane-imm-overdue .pane-row-note {
+  color: var(--danger);
+}
+
+.pane-imm-nearing .pane-marker {
+  background: var(--warn);
+}
+
+.pane-imm-nearing .pane-row-value,
+.pane-imm-nearing .pane-row-note {
+  color: var(--warn);
+}
+
 /* ── Pane menus (SPEC 7 menu recipe) ─────────────────────────────── */
 
 .pane-menu {

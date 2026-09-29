@@ -1,0 +1,96 @@
+import { useSyncExternalStore } from 'react';
+import {
+  getGroupState,
+  memberKey,
+  subscribeGroupState,
+  type GroupMember,
+  type GroupState,
+} from '../../lib/groupStore';
+import { PaneHeader, PaneMeta } from './PaneHeader';
+
+// Your group at a glance (SPEC 9). One dense row per member: the name,
+// a `lead` tag on the leader, a 48 by 3 health meter, and the percent.
+// The meter and percent stay quiet until a member drops into the
+// middle third (warn) or the bottom third (danger).
+
+// groupStore builds a fresh snapshot object on every read, so keep
+// the last one while its parts are unchanged. useSyncExternalStore
+// needs a stable value between pushes.
+let snapshot: GroupState | null = null;
+
+function subscribe(cb: () => void): () => void {
+  return subscribeGroupState(() => cb());
+}
+
+function getSnapshot(): GroupState {
+  const fresh = getGroupState();
+  if (
+    !snapshot ||
+    snapshot.group !== fresh.group ||
+    snapshot.worth !== fresh.worth ||
+    snapshot.self !== fresh.self
+  ) {
+    snapshot = fresh;
+  }
+  return snapshot;
+}
+
+export function GroupPane() {
+  const { group } = useSyncExternalStore(subscribe, getSnapshot);
+  const members = group.leader && Array.isArray(group.members) ? group.members : [];
+
+  return (
+    <>
+      <PaneHeader
+        meta={members.length > 0 ? <PaneMeta tone="quiet">{members.length}</PaneMeta> : null}
+      />
+      <div className="pane-body">
+        {members.length === 0 ? (
+          <p className="pane-empty">Group appears when you join a group.</p>
+        ) : (
+          <ul className="pane-rows">
+            {members.map((m) => (
+              <MemberRow
+                key={memberKey(m)}
+                member={m}
+                leader={!!m.name && m.name === group.leader}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
+  );
+}
+
+function MemberRow({ member, leader }: { member: GroupMember; leader: boolean }) {
+  const hp = asPct(member.hp_pct);
+  const tone = hp === null ? '' : hpTone(hp);
+  return (
+    <li className={`pane-row pane-member${tone ? ` pane-member-${tone}` : ''}`}>
+      <span className="pane-row-name">
+        {member.name ?? 'Someone'}
+        {leader && <span className="pane-member-lead">lead</span>}
+      </span>
+      <span className="pane-member-meter" aria-hidden="true">
+        {hp !== null && <span className="pane-member-fill" style={{ width: `${hp}%` }} />}
+      </span>
+      <span className="pane-member-pct">{hp === null ? '' : `${hp}%`}</span>
+    </li>
+  );
+}
+
+/** Thirds, like the old roster: the top third stays quiet, the middle
+ *  third warns, the bottom third is danger. */
+function hpTone(pct: number): '' | 'warn' | 'danger' {
+  if (pct >= 67) return '';
+  if (pct >= 34) return 'warn';
+  return 'danger';
+}
+
+function asPct(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
