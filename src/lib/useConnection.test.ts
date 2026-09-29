@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { parseTarget, worldName } from './useConnection';
+import { KNOWN_WORLDS, parseTarget, worldName } from './useConnection';
+
+describe('KNOWN_WORLDS', () => {
+  it('knows where to connect to The Forsaken Lands', () => {
+    expect(KNOWN_WORLDS).toContainEqual({
+      domain: 'theforsakenlands.com',
+      name: 'The Forsaken Lands',
+      host: 'play.theforsakenlands.com',
+      port: 1848,
+    });
+  });
+
+  it('names every known world by its own host', () => {
+    for (const world of KNOWN_WORLDS) expect(worldName(world.host)).toBe(world.name);
+  });
+});
 
 describe('worldName', () => {
   it('names a known world by its host or any subdomain', () => {
