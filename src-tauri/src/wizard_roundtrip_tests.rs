@@ -1,18 +1,20 @@
 //! A generated round trip of the shared catalog wizard. A seeded
 //! generator builds hundreds of profile sets, each with two to four
 //! profiles that hold aliases, triggers, and macros in groups, items
-//! several profiles share alike or in conflict, triggers in orders and at
-//! priorities of each profile's own, groups off for one kind and on for
-//! another under one name, presets on and off, preset triggers a file
-//! lacks, a profile that never saved a file, and settings that are not
-//! automation. For each set it launches as every character in per
-//! profile mode to see what each has on, and what each has on after each
-//! of a run of `#group` commands. It runs the wizard, then launches as
-//! every character in loadout mode, runs the same `#group` commands,
-//! switches between the characters with saves in between, and launches as
-//! each again. Every time, each character must have on exactly the
-//! aliases, triggers, and macros it had on before, with the same content,
-//! its triggers in the same order, and every other setting as it was.
+//! several profiles share alike or in conflict, a second copy of a name
+//! further on in a file, triggers in orders and at priorities of each
+//! profile's own, groups off for one kind and on for another under one
+//! name, presets on and off, preset triggers a file lacks, a profile that
+//! never saved a file, and settings that are not automation. For each set
+//! it launches as every character in per profile mode to see what each
+//! has on, and what each has on after each of a run of `#group` commands.
+//! It runs the wizard, then launches as every character in loadout mode,
+//! runs the same `#group` commands, switches between the characters with
+//! saves in between, and launches as each again and switches to each,
+//! running the `#group` commands once more. Every time, each character
+//! must have on exactly the aliases, triggers, and macros it had on
+//! before, with the same content, its triggers in the same order, and
+//! every other setting as it was.
 //!
 //! The presets that are on are shared in loadout mode, so where the
 //! characters had different preset lists, each character is compared to
@@ -411,6 +413,21 @@ fn generate(seed: u64) -> Set {
                 target: TriggerTarget::Line,
             });
         }
+        // Now and then a file holds a second copy of a name further on,
+        // which is the one its store keeps, in its own place.
+        for _ in 0..2 {
+            if !config.triggers.is_empty() && rng.chance(10) {
+                let mut again = rng.pick(&config.triggers);
+                again.patterns[0].pattern.push_str(" again");
+                again.enabled = rng.chance(85);
+                config.triggers.push(again);
+            }
+        }
+        if !config.aliases.is_empty() && rng.chance(10) {
+            let mut again = rng.pick(&config.aliases);
+            again.expansion.push_str(" again");
+            config.aliases.push(again);
+        }
         for key in MACROS {
             if !rng.chance(55) {
                 continue;
@@ -784,16 +801,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         }
         check(&state, name, "at the first launch", &before[n], &want[n]).await?;
         // `#group` with a folder name turns on and off what it did.
-        let toggled = run_group_steps(&state, &steps).await;
-        for (step, rows) in toggled.iter().enumerate() {
-            let (folder, on) = steps[step];
-            diff(
-                name,
-                &format!("after #group {folder} {}", if on { "on" } else { "off" }),
-                rows,
-                &want_toggled[n][step],
-            )?;
-        }
+        check_group_steps(&state, name, &steps, &want_toggled[n]).await?;
     }
 
     // Switch between the characters with saves in between.
@@ -819,10 +827,38 @@ async fn round_trip(seed: u64) -> Result<(), String> {
     save(&state, dir).await;
     drop(state);
 
-    // And once more from a fresh launch as each.
+    // And once more from a fresh launch as each, and after a switch to
+    // each, where `#group` follows the folder map the saves kept.
     for (n, name) in names.iter().enumerate() {
         let state = launch_as(dir, name).await;
         check(&state, name, "at the last launch", &before[n], &want[n]).await?;
+        check_group_steps(&state, name, &steps, &want_toggled[n]).await?;
+        let state = launch_as(dir, &names[(n + 1) % names.len()]).await;
+        super::switch_profile(&state, Some(dir), name)
+            .await
+            .map_err(|e| format!("switch: {e}"))?;
+        check_group_steps(&state, name, &steps, &want_toggled[n]).await?;
+    }
+    Ok(())
+}
+
+/// Run `steps` as `name`, and check what is on after each against
+/// `want`.
+async fn check_group_steps(
+    state: &SharedState,
+    name: &str,
+    steps: &[(&str, bool)],
+    want: &[Vec<String>],
+) -> Result<(), String> {
+    let toggled = run_group_steps(state, steps).await;
+    for (step, rows) in toggled.iter().enumerate() {
+        let (folder, on) = steps[step];
+        diff(
+            name,
+            &format!("after #group {folder} {}", if on { "on" } else { "off" }),
+            rows,
+            &want[step],
+        )?;
     }
     Ok(())
 }
