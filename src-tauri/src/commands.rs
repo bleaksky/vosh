@@ -153,6 +153,10 @@ pub(crate) struct AppState {
     /// duplicate resolver calls when the MUD re-sends Char.Status on
     /// every vitals update.
     pub(crate) current_character: std::sync::Mutex<Option<String>>,
+    /// The last Char.Affects list of this connection, for a window that
+    /// opens between ticks. Cleared on connect and when the session
+    /// ends.
+    pub(crate) last_affects: crate::affects_snapshot::AffectsSnapshot,
     /// Path B authoring catalog. `Some` when the app started up with
     /// `catalog.toml` present (Path B mode); `None` in legacy per-
     /// profile mode. Mutated alongside the live `Profile` so on-disk
@@ -183,6 +187,7 @@ impl Default for AppState {
             window_size: std::sync::Mutex::new((80, 24)),
             current_connection: std::sync::Mutex::new(None),
             current_character: std::sync::Mutex::new(None),
+            last_affects: crate::affects_snapshot::AffectsSnapshot::default(),
             global_catalog: Arc::new(Mutex::new(None)),
             loadout_set: Arc::new(Mutex::new(None)),
         }
@@ -424,6 +429,9 @@ pub(crate) async fn session_connect(
     if let Ok(mut g) = state.current_character.lock() {
         *g = None;
     }
+    // The old session cleared the list as it ended. A new connection
+    // starts with none until the MUD sends its own.
+    state.last_affects.clear();
 
     let scrollback_path = tauri::Manager::path(&app)
         .app_data_dir()

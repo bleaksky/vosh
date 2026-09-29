@@ -600,6 +600,11 @@ async fn io_loop(
         );
     }
     let _ = stream.shutdown().await;
+    // The affects list goes stale with the session, as the frontend
+    // store drops its copy on the disconnected state below.
+    app.state::<crate::commands::SharedState>()
+        .last_affects
+        .clear();
     // Reset password mode on disconnect so the next session starts with
     // a normal-text input even if the server bailed mid-password-prompt.
     emit_input_mode(&app, false);
@@ -1190,6 +1195,10 @@ async fn handle_gmcp(
     // separator (`Char.Vitals` → `Char-Vitals`). The frontend's
     // `onGmcpPackage` helper does the same replacement when
     // computing its listen target.
+    // Keep the last affects list for a window that opens between ticks.
+    app.state::<crate::commands::SharedState>()
+        .last_affects
+        .observe(&msg.package, &msg.data);
     let event_name = format!("session://gmcp/{}", msg.package.replace('.', "-"));
     if let Err(e) = app.emit(&event_name, &msg.data) {
         warn!(error = %e, package = %msg.package, "failed to emit GMCP event");

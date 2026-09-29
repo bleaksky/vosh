@@ -113,6 +113,52 @@ describe('stores on the event bus', () => {
     expect(s.world.getWorld()).toEqual({ time: null, moons: null });
   });
 
+  it('show the last affects list at once in a window that opens between ticks', async () => {
+    commands.set('affects_snapshot_get', {
+      affects: [{ kind: 'spell', name: 'sanctuary', duration: 12 }],
+    });
+    const s = await load();
+    expect(s.affects.getAffects()?.map((a) => a.name)).toEqual(['sanctuary']);
+    gmcp('Char.Affects', { affects: [{ name: 'haste', duration: 3 }] });
+    expect(s.affects.getAffects()?.map((a) => a.name)).toEqual(['haste']);
+  });
+
+  it('keep a list or a disconnect that lands before the snapshot answers', async () => {
+    const late = () => {
+      let answer: (value: unknown) => void = () => undefined;
+      commands.set(
+        'affects_snapshot_get',
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+      return (value: unknown) => answer(value);
+    };
+    const snapshot = { affects: [{ name: 'sanctuary', duration: 12 }] };
+
+    let answer = late();
+    let s = await load();
+    gmcp('Char.Affects', { affects: [{ name: 'haste', duration: 3 }] });
+    answer(snapshot);
+    await settle();
+    expect(s.affects.getAffects()?.map((a) => a.name)).toEqual(['haste']);
+
+    vi.resetModules();
+    handlers.clear();
+    answer = late();
+    s = await load();
+    disconnect();
+    answer(snapshot);
+    await settle();
+    expect(s.affects.getAffects()).toBeNull();
+  });
+
+  it('start empty when no connection has sent a list', async () => {
+    commands.set('affects_snapshot_get', null);
+    const s = await load();
+    expect(s.affects.getAffects()).toBeNull();
+  });
+
   it('notify subscribers once per change and not for repeats', async () => {
     const s = await load();
     const seen = vi.fn();
