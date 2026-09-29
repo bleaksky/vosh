@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { aabahranPacket } from '../../test/aabahranGmcp';
 import {
+  holdPromptVitals,
   mergeVitals,
   nextLow,
   nextVitals,
   parseVitals,
   parseVitalsPacket,
+  releasePromptVitals,
+  withoutHeld,
   type VitalValues,
 } from './vitalsStore';
 
@@ -70,6 +73,43 @@ describe('mergeVitals', () => {
       move: 0,
       maxmove: 0,
     });
+  });
+});
+
+describe('held prompt vars', () => {
+  const lament = { hp: '0', maxhp: '0', mana: '0', maxmana: '0', move: '0', maxmove: '0' };
+
+  it('hold the six vitals the prompt gives and nothing else', () => {
+    expect(holdPromptVitals({ ...lament, target: 'guard' })).toEqual(lament);
+    expect(holdPromptVitals({ hp: '0', move: '0' })).toEqual({ hp: '0', move: '0' });
+    expect(holdPromptVitals({})).toEqual({});
+  });
+
+  it('let go of each var the prompt sets to a new value', () => {
+    const held = holdPromptVitals(lament);
+    expect(releasePromptVitals(held, { ...lament })).toBe(held);
+    expect(releasePromptVitals(held, { ...lament, hp: '850' })).toEqual({
+      maxhp: '0',
+      mana: '0',
+      maxmana: '0',
+      move: '0',
+      maxmove: '0',
+    });
+    // A var the prompt no longer sets is let go too.
+    expect(releasePromptVitals({ hp: '0' }, {})).toEqual({});
+  });
+
+  it('leave the held vars out of the merge', () => {
+    const vars = { ...lament, hp: '850', target: 'guard' };
+    expect(withoutHeld(vars, {})).toBe(vars);
+    expect(withoutHeld(vars, { maxhp: '0', mana: '0' })).toEqual({
+      hp: '850',
+      maxmana: '0',
+      move: '0',
+      maxmove: '0',
+      target: 'guard',
+    });
+    expect(mergeVitals(full, withoutHeld(lament, holdPromptVitals(lament)))).toEqual(full);
   });
 });
 
