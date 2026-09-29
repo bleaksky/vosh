@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { VITALS_LINE_LABEL_MIN_WIDTH, vitalsLineFit, type VitalsLineItem } from './vitalsLine';
+import { vitalsLineFit, type VitalsLineItem } from './vitalsLine';
 
 // Widths SF 12 draws, measured in the page: the labels at 400, the
 // values at 500 with tabular digits.
@@ -19,11 +19,30 @@ const NEWER: VitalsLineItem[] = [
   { label: labels.Moves, value: 43 },
 ];
 
+// Erelei at full under Values Current (1020, 800, 930) and Percent
+// (100% three times).
+const CURRENT: VitalsLineItem[] = [
+  { label: labels.Health, value: 29 },
+  { label: labels.Mana, value: 22 },
+  { label: labels.Moves, value: 22 },
+];
+const PERCENT: VitalsLineItem[] = [
+  { label: labels.Health, value: 32 },
+  { label: labels.Mana, value: 32 },
+  { label: labels.Moves, value: 32 },
+];
+
 describe('vitalsLineFit', () => {
-  it('shows the labels from 360 pt when they fit', () => {
-    expect(VITALS_LINE_LABEL_MIN_WIDTH).toBe(360);
-    expect(vitalsLineFit(360, NEWER)).toBe('labels');
-    expect(vitalsLineFit(359, NEWER)).toBe('values');
+  it('shows the labels whenever they fit beside the values', () => {
+    // 30 of padding, two 16 gaps, three labels 6 before their values.
+    expect(vitalsLineFit(314, NEWER)).toBe('labels');
+    expect(vitalsLineFit(313, NEWER)).toBe('values');
+  });
+
+  it('keeps the labels at 300 pt for Current and Percent', () => {
+    expect(vitalsLineFit(300, CURRENT)).toBe('labels');
+    expect(vitalsLineFit(300, PERCENT)).toBe('labels');
+    expect(vitalsLineFit(300, ERELEI)).toBe('values');
   });
 
   it('drops the labels until they fit beside longer values', () => {
