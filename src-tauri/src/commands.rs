@@ -1338,8 +1338,10 @@ pub(crate) fn native_surface_set_font(family: String, size: u32) {
 }
 
 /// Tier 3 native renderer (macOS): keyboard scroll. `kind` is "pageup",
-/// "pagedown", or "bottom". Scrolls the grid and repaints; a no-op
-/// elsewhere.
+/// "pagedown", "bottom", or "toggle". Toggle opens or closes the split
+/// the way a middle click does: scrolled back it snaps to the live
+/// tail, at the tail it pages up into scrollback. Scrolls the grid and
+/// repaints; a no-op elsewhere.
 #[tauri::command]
 pub(crate) fn native_surface_scroll(kind: String) {
     #[cfg(native_surface)]
@@ -1348,6 +1350,14 @@ pub(crate) fn native_surface_scroll(kind: String) {
             "pageup" => crate::term_grid::scroll_page(true),
             "pagedown" => crate::term_grid::scroll_page(false),
             "bottom" => crate::term_grid::scroll_to_bottom(),
+            "toggle" => {
+                let (offset, _) = crate::term_grid::scroll_metrics();
+                if offset > 0 {
+                    crate::term_grid::scroll_to_bottom();
+                } else {
+                    crate::term_grid::scroll_page(true);
+                }
+            }
             _ => {}
         }
         crate::native_surface::request_redraw();
