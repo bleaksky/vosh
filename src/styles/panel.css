@@ -461,10 +461,13 @@
   }
 }
 
-/* The rows give way only once the drawing is at its floor. MapPane then
-   drops people rows whole, from the bottom, and the room row stays. */
+/* The band holds as many rows as MapPane sets in --band-rows, filled or
+   not, so the drawing above it keeps one height while you walk. It
+   gives way only once the drawing is at its floor, and MapPane then
+   sets fewer rows. The room row stays. */
 .pane-map-rows {
   flex: 0 1 auto;
+  height: calc(var(--row) * var(--band-rows, 1));
   min-height: var(--row);
   margin-top: 4px;
   overflow: hidden;
@@ -478,6 +481,10 @@
 
 .pane-map-person .pane-row-name {
   color: var(--secondary);
+}
+
+.pane-map-more .pane-row-name {
+  color: var(--tertiary);
 }
 
 /* ── Group ───────────────────────────────────────────────────────── */
