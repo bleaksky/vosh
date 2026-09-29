@@ -12,7 +12,8 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 vi.mock('./toasts', () => ({ pushToast: fakes.pushToast }));
 
-const { launchNoticeLine, showLaunchNotices } = await import('./launchNotices');
+const { launchNoticeLine, MIGRATION_APPLIED_NOTICE, showLaunchNotices, showMigrationApplied } =
+  await import('./launchNotices');
 
 const HEALER =
   'Vosh could not read the Healer profile file, so it will not save over it. Fix the file or switch to another profile.';
@@ -45,5 +46,29 @@ describe('launch notices', () => {
     await showLaunchNotices(write);
     expect(write).not.toHaveBeenCalled();
     expect(fakes.pushToast).not.toHaveBeenCalled();
+  });
+});
+
+describe('the notice after the move to loadouts', () => {
+  beforeEach(() => {
+    fakes.pushToast.mockReset();
+  });
+
+  it('says Vosh saves nothing you change before you quit', () => {
+    expect(MIGRATION_APPLIED_NOTICE).toBe(
+      'The move to loadouts is done. Vosh does not save the changes you make before you quit, so quit Vosh and open it again now.',
+    );
+    expect(MIGRATION_APPLIED_NOTICE).not.toMatch(/[:;‒-―]/);
+  });
+
+  it('shows it in the terminal and in a toast that stays until you close it', () => {
+    const written: string[] = [];
+    showMigrationApplied((text) => written.push(text));
+    expect(written).toEqual([launchNoticeLine(MIGRATION_APPLIED_NOTICE)]);
+    expect(fakes.pushToast).toHaveBeenCalledWith({
+      kind: 'info',
+      message: MIGRATION_APPLIED_NOTICE,
+      sticky: true,
+    });
   });
 });

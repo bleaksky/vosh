@@ -118,17 +118,7 @@ export function MigrationWizard({ onClose }: Props) {
         <div className="migration-wizard-body">
           {pending && <div className="migration-wizard-status">analyzing profiles...</div>}
           {error && <div className="migration-wizard-error">[error] {error}</div>}
-          {applied && (
-            <div className="migration-wizard-status migration-wizard-applied">
-              <div className="migration-wizard-applied-title">migration complete.</div>
-              <div className="migration-wizard-applied-body">
-                Vosh saved the shared catalog and a loadout for each profile. Every character now
-                shares one list of presets that are on. Each profile kept its other settings, and a
-                full copy of each old profile file waits in profiles/legacy. Quit Vosh below, then
-                open it again to use the catalog.
-              </div>
-            </div>
-          )}
+          {applied && <AppliedNotice />}
           {!applied && plan && (
             <PlanView
               plan={plan}
@@ -171,6 +161,22 @@ export function MigrationWizard({ onClose }: Props) {
             </>
           )}
         </footer>
+      </div>
+    </div>
+  );
+}
+
+/** What the wizard says once it wrote its files. Nothing the session
+ *  changes saves until Vosh opens again, and the main window says so too. */
+export function AppliedNotice() {
+  return (
+    <div className="migration-wizard-status migration-wizard-applied">
+      <div className="migration-wizard-applied-title">migration complete.</div>
+      <div className="migration-wizard-applied-body">
+        Vosh saved the shared catalog and a loadout for each profile. Every character now shares one
+        list of presets that are on. Each profile kept its other settings, and a full copy of each
+        old profile file waits in profiles/legacy. Vosh does not save the changes you make before
+        you quit, so quit Vosh below and open it again to use the catalog.
       </div>
     </div>
   );

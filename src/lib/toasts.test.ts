@@ -1,0 +1,27 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { dismissToast, getToasts, pushToast } from './toasts';
+
+describe('toasts', () => {
+  const setTimeout = vi.fn(() => 1);
+  beforeEach(() => {
+    setTimeout.mockClear();
+    vi.stubGlobal('window', { setTimeout, clearTimeout: vi.fn() });
+  });
+  afterEach(() => {
+    for (const toast of getToasts()) dismissToast(toast.id);
+    vi.unstubAllGlobals();
+  });
+
+  it('dismisses a toast on a timer', () => {
+    pushToast({ kind: 'info', message: 'Saved' });
+    expect(setTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a sticky toast up until you close it', () => {
+    const id = pushToast({ kind: 'info', message: 'Quit Vosh now', sticky: true });
+    expect(setTimeout).not.toHaveBeenCalled();
+    expect(getToasts().map((t) => t.id)).toEqual([id]);
+    dismissToast(id);
+    expect(getToasts()).toEqual([]);
+  });
+});

@@ -8,6 +8,7 @@ import {
   isOwnThemeEcho,
   migrationAnalyze,
   migrationApply,
+  subscribeMigrationApplied,
   normalizeChipStyle,
   normalizeTerminalLineHeight,
   normalizeTickCount,
@@ -622,5 +623,15 @@ describe('the shared catalog wizard calls', () => {
       resolutions: [],
       library: ['healing_basics'],
     });
+  });
+
+  it('hear when the move to loadouts is done', async () => {
+    const heard = vi.fn();
+    vi.mocked(listen).mockClear();
+    await subscribeMigrationApplied(heard);
+    const [event, handler] = vi.mocked(listen).mock.calls[0];
+    expect(event).toBe('vosh://migration-applied');
+    (handler as EventCallback<unknown>)({ event, id: 1, payload: null });
+    expect(heard).toHaveBeenCalledTimes(1);
   });
 });

@@ -14,6 +14,8 @@ export interface ToastInput {
   meta?: string;
   /** Auto-dismiss delay override. Defaults below apply otherwise. */
   timeoutMs?: number;
+  /** Stays up until you click it, for a notice that holds until you act. */
+  sticky?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -22,8 +24,9 @@ const ERROR_TIMEOUT_MS = 8000;
 // Module-level toast queue, same shape as chatStore: producers call
 // pushToast from anywhere (session state handlers, command results),
 // the Toasts component subscribes and renders whatever is queued.
-// Every toast self-dismisses on a store-owned timer — errors linger
-// longer — and dismissToast is always available for a manual close.
+// Every toast but a sticky one self-dismisses on a store-owned timer —
+// errors linger longer — and dismissToast is always available for a
+// manual close.
 let toasts: Toast[] = [];
 let listeners: Array<(toasts: Toast[]) => void> = [];
 let nextId = 1;
@@ -39,11 +42,14 @@ export function pushToast(input: ToastInput): number {
   const toast: Toast = { id, kind: input.kind, message: input.message };
   if (input.meta !== undefined) toast.meta = input.meta;
   toasts = [...toasts, toast];
-  const delay = input.timeoutMs ?? (input.kind === 'error' ? ERROR_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
-  timers.set(
-    id,
-    window.setTimeout(() => dismissToast(id), delay),
-  );
+  if (!input.sticky) {
+    const delay =
+      input.timeoutMs ?? (input.kind === 'error' ? ERROR_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
+    timers.set(
+      id,
+      window.setTimeout(() => dismissToast(id), delay),
+    );
+  }
   notify();
   return id;
 }
