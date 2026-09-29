@@ -1,6 +1,10 @@
 import { onGmcpPackage, onState } from './session';
 
 export interface GroupMember {
+  /** Stable per character identity. Aabahran sends it because the name
+   *  is masked (blind, doppelganger, shapeshifted) and two members can
+   *  share one. Servers that omit it fall back to the name. */
+  id?: number | string;
   name?: string;
   level?: number | string;
   class?: string;
@@ -49,20 +53,29 @@ function notify() {
   for (const l of listeners) l(snapshot);
 }
 
-// Collapse duplicate member rows, keeping the LAST occurrence per name
-// (Group.Info is a snapshot; later rows carry the freshest stats). The
-// Aabahran server appends blinded characters as "someone" without
-// deduping, so after a dirt kick the roster can arrive with dozens of
-// stale duplicates and grow without bound. Collapsing by name keeps the
-// pane sane; genuinely distinct blinded members do fold into one row,
-// which is the lesser evil against unbounded growth. Order of first
-// appearance is preserved.
-function dedupeMembers(info: GroupInfo): GroupInfo {
+/** Dedupe key for a member. The server `id` when present, else the
+ *  name, so servers without ids keep the old behavior. */
+export function memberKey(m: GroupMember): string {
+  if ((typeof m.id === 'number' && Number.isFinite(m.id)) || (typeof m.id === 'string' && m.id)) {
+    return `id:${m.id}`;
+  }
+  return `name:${m.name ?? '?'}`;
+}
+
+// Collapse duplicate member rows, keeping the LAST occurrence per key
+// (Group.Info is a snapshot; later rows carry the freshest stats). Older
+// Aabahran builds appended blinded characters as "someone" without
+// deduping, so after a dirt kick the roster could arrive with dozens of
+// stale duplicates and grow without bound. The server now sends a
+// stable `id` per member, so distinct masked members that share a name
+// stay apart while a repeated member still folds into one row. Order of
+// first appearance is preserved.
+export function dedupeMembers(info: GroupInfo): GroupInfo {
   if (!Array.isArray(info.members)) return info;
   const seen = new Map<string, GroupMember>();
   for (const m of info.members) {
     if (!m || typeof m !== 'object') continue;
-    seen.set(m.name ?? '?', m);
+    seen.set(memberKey(m), m);
   }
   if (seen.size === info.members.length) return info;
   return { ...info, members: [...seen.values()] };
