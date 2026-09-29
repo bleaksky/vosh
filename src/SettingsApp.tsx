@@ -13,6 +13,7 @@ import {
   type UiConfig,
 } from './lib/session';
 import { applyThemePrefs, subscribeThemeChanges, subscribeThemePrefs } from './lib/theme';
+import { showAfterThemePaint } from './lib/reveal';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
 import { loadFontStack } from './lib/fontLoader';
 import { isMacPlatform } from './lib/palette';
@@ -183,7 +184,9 @@ export function SettingsApp() {
     };
   }, []);
 
-  // Load current config and reveal the window once painted.
+  // Load current config and reveal the window once a frame with the
+  // theme has gone out. The startup paint usually has it on screen
+  // already.
   useEffect(() => {
     let revealed = false;
     const reveal = () => {
@@ -202,7 +205,7 @@ export function SettingsApp() {
         applyThemePrefs(cfg);
       })
       .catch((e) => setError(String(e)))
-      .finally(reveal);
+      .finally(() => showAfterThemePaint(reveal));
     return () => window.clearTimeout(fallback);
   }, []);
 
