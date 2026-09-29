@@ -81,6 +81,15 @@ const LIBRARY: [(&str, &[&str]); 3] = [
     ("herb_labels", &["preset herb 1", "preset herb 2"]),
 ];
 
+/// A preset an older build had, which [`LIBRARY`] no longer holds. A
+/// launch installs it for no one, and takes out every copy it finds.
+const DROPPED_PRESET: &str = "old_labels";
+
+/// The id of every preset in [`LIBRARY`], as the wizard takes them.
+fn library_ids() -> Vec<&'static str> {
+    LIBRARY.iter().map(|(id, _)| *id).collect()
+}
+
 /// A preset trigger as the library holds it, or as an older build left
 /// it in a profile file.
 fn preset_trigger(preset: &str, name: &str, older: bool) -> Trigger {
@@ -477,6 +486,15 @@ fn generate(seed: u64) -> Set {
                 config.triggers.push(t);
             }
         }
+        // Now and then an older build left the trigger of a preset the
+        // library no longer has.
+        if rng.chance(20) {
+            let mut t = preset_trigger(DROPPED_PRESET, "preset old 1", false);
+            if rng.chance(30) {
+                t.group = some_group(&mut rng);
+            }
+            config.triggers.push(t);
+        }
         config.ui.enabled_presets = list;
         // Settings that are not automation.
         config.connection.host = format!("host{}.example", rng.below(1000));
@@ -734,7 +752,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
 
     // Pick a version of each item in conflict.
     let mut rng = Rng(seed ^ 0xa5a5_a5a5);
-    let plan = super::analyze_migration(&wizard, dir)
+    let plan = super::analyze_migration(&wizard, dir, &library_ids())
         .await
         .map_err(|e| format!("analyze: {e}"))?;
     // Now and then leave a conflict to the version the wizard picks.
@@ -809,7 +827,7 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         .map(|b| b.toggled.iter().map(|rows| kept(rows)).collect())
         .collect();
 
-    super::apply_migration(&wizard, dir, &resolutions, || {})
+    super::apply_migration(&wizard, dir, &resolutions, &library_ids(), || {})
         .await
         .map_err(|e| format!("apply: {e}"))?;
     drop(wizard);
@@ -840,6 +858,43 @@ async fn round_trip(seed: u64) -> Result<(), String> {
                 }
             }
             None => {}
+        }
+    }
+
+    // The catalog turns the trigger of a preset the library no longer has
+    // on for no character whose file lacked it. A launch takes it out, so
+    // the checks below never see it.
+    let (catalog, _) = crate::loadout_store::load_path_b_at_launch(dir)
+        .map_err(|e| format!("the catalog does not read: {e:?}"))?;
+    let dropped: Vec<&Trigger> = catalog
+        .triggers
+        .iter()
+        .filter(|t| t.preset.as_deref() == Some(DROPPED_PRESET))
+        .collect();
+    for (n, name) in names.iter().enumerate() {
+        let had = files_before[n].as_deref().is_some_and(|text| {
+            ProfileConfig::from_toml(text)
+                .unwrap()
+                .triggers
+                .iter()
+                .any(|t| t.preset.as_deref() == Some(DROPPED_PRESET))
+        });
+        let path = profiles.profile_path(name);
+        let file = if path.exists() {
+            ProfileConfig::load(&path).map_err(|e| e.to_string())?
+        } else {
+            ProfileConfig::default()
+        };
+        let on = dropped.iter().any(|t| {
+            t.enabled
+                && t.group.as_deref().map_or(true, |g| {
+                    g.is_empty() || !file.disabled_trigger_groups.iter().any(|o| o == g)
+                })
+        });
+        if on && !had {
+            return Err(format!(
+                "{name}: the catalog turns on {DROPPED_PRESET}, which its file never had"
+            ));
         }
     }
 

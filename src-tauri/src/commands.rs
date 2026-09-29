@@ -3555,16 +3555,20 @@ pub(crate) async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, S
 pub(crate) async fn migration_analyze(
     app: AppHandle,
     state: State<'_, SharedState>,
+    library: Vec<String>,
 ) -> Result<crate::migration::MigrationPlan, String> {
     let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    analyze_migration(&state, &app_data).await
+    let library: Vec<&str> = library.iter().map(String::as_str).collect();
+    analyze_migration(&state, &app_data, &library).await
 }
 
 /// [`migration_analyze`] over the app data folder `app_data`, so a test
-/// can run it over a folder of its own.
+/// can run it over a folder of its own. `library` holds the id of every
+/// preset in the library the frontend installs from.
 async fn analyze_migration(
     state: &SharedState,
     app_data: &std::path::Path,
+    library: &[&str],
 ) -> Result<crate::migration::MigrationPlan, String> {
     if let Some(reason) = migration_refusal(state, app_data).await {
         return Err(reason.into());
@@ -3574,7 +3578,10 @@ async fn analyze_migration(
         return Err(PROFILES_NOT_LOADED.into());
     };
     let sources = migration_sources(set)?;
-    Ok(crate::migration::analyze_profiles(&sources.profiles))
+    Ok(crate::migration::analyze_profiles(
+        &sources.profiles,
+        library,
+    ))
 }
 
 /// Why the shared catalog wizard may not run, or None when it may. Past
@@ -3705,9 +3712,11 @@ pub(crate) async fn migration_apply(
     app: AppHandle,
     state: State<'_, SharedState>,
     resolutions: Vec<ConflictResolution>,
+    library: Vec<String>,
 ) -> Result<(), String> {
     let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    apply_migration(&state, &app_data, &resolutions, || {
+    let library: Vec<&str> = library.iter().map(String::as_str).collect();
+    apply_migration(&state, &app_data, &resolutions, &library, || {
         // Path B is now on disk but the live session still holds the
         // pre-migration profile. Block every persist until the relaunch
         // loads the catalog, and flip the input layer into Path B mode
@@ -3732,7 +3741,8 @@ pub(crate) async fn migration_apply(
 }
 
 /// [`migration_apply`] over the app data folder `app_data`, so a test
-/// can run it over a folder of its own. `written` runs once catalog.toml,
+/// can run it over a folder of its own. `library` holds the id of every
+/// preset in the library the frontend installs from. `written` runs once catalog.toml,
 /// loadouts.toml, and every profile file are on disk. A write that fails
 /// puts back every file the run changed and skips `written`, unless a
 /// file stays changed. The journal then stays for the next launch to
@@ -3741,12 +3751,14 @@ async fn apply_migration(
     state: &SharedState,
     app_data: &std::path::Path,
     resolutions: &[ConflictResolution],
+    library: &[&str],
     written: impl FnOnce(),
 ) -> Result<(), String> {
     apply_migration_with(
         state,
         app_data,
         resolutions,
+        library,
         &AUTO_PERSIST_SUPPRESSED,
         written,
     )
@@ -3760,6 +3772,7 @@ async fn apply_migration_with(
     state: &SharedState,
     app_data: &std::path::Path,
     resolutions: &[ConflictResolution],
+    library: &[&str],
     suppressed: &std::sync::atomic::AtomicBool,
     written: impl FnOnce(),
 ) -> Result<(), String> {
@@ -3793,7 +3806,7 @@ async fn apply_migration_with(
     };
     let live_presets = state.profile.lock().await.ui.enabled_presets.clone();
 
-    let plan = crate::migration::analyze_profiles(&sources.profiles);
+    let plan = crate::migration::analyze_profiles(&sources.profiles, library);
     let mut catalog = plan.auto_resolved.clone();
     // The catalog owns which presets are on. It takes the list here, by
     // the rule launch uses, so the first launch in loadout mode keeps on
@@ -5536,6 +5549,29 @@ mod tests {
         use crate::profile_config::ProfileConfig;
         use crate::profile_set::ProfileSet;
 
+        /// Every preset in the library src/lib/presets.ts holds.
+        const LIBRARY: &[&str] = &[
+            "healing_basics",
+            "defensive_combat",
+            "disarm_buff_fade",
+            "terror_events",
+            "combat_outgoing",
+            "combat_incoming",
+            "loot_progression",
+            "potion_labels",
+            "herb_labels",
+        ];
+
+        #[test]
+        fn the_library_here_is_the_one_presets_ts_holds() {
+            let library = include_str!("../../src/lib/presets.ts");
+            for id in LIBRARY {
+                assert!(library.contains(&format!("id: '{id}',")), "{id}");
+            }
+            // Each preset opens with its id, four spaces in.
+            assert_eq!(library.matches("\n    id: '").count(), LIBRARY.len());
+        }
+
         const HELD: &str = "Vosh could not read your shared catalog at launch, so it will not \
                             build a new one over it. Fix catalog.toml or loadouts.toml and \
                             restart Vosh.";
@@ -5573,10 +5609,10 @@ mod tests {
         }
 
         async fn refused(state: &super::super::SharedState, dir: &std::path::Path) -> String {
-            let analyze = super::super::analyze_migration(state, dir)
+            let analyze = super::super::analyze_migration(state, dir, LIBRARY)
                 .await
                 .unwrap_err();
-            let apply = super::super::apply_migration(state, dir, &[], || {})
+            let apply = super::super::apply_migration(state, dir, &[], LIBRARY, || {})
                 .await
                 .unwrap_err();
             assert_eq!(analyze, apply);
@@ -5722,7 +5758,7 @@ mod tests {
             let set = james_like_set(dir.path());
             write_alias(&set, "Healer", "hh");
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
@@ -5774,12 +5810,12 @@ mod tests {
             write_alias(&set, "Healer", "hh");
             let state = launch_state(dir.path()).await;
 
-            let plan = super::super::analyze_migration(&state, dir.path())
+            let plan = super::super::analyze_migration(&state, dir.path(), LIBRARY)
                 .await
                 .unwrap();
             assert_eq!(plan.auto_resolved.aliases.len(), 1);
             let mut written = false;
-            super::super::apply_migration(&state, dir.path(), &[], || written = true)
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || written = true)
                 .await
                 .unwrap();
             assert!(written);
@@ -5825,14 +5861,14 @@ mod tests {
             config.aliases.push(vosh_alias::Alias::new("kk", "kick 1."));
             config.save(&set.profile_path("Healer")).unwrap();
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            let plan = super::super::analyze_migration(&state, dir.path())
+            let plan = super::super::analyze_migration(&state, dir.path(), LIBRARY)
                 .await
                 .unwrap();
             assert_eq!(plan.conflicts[0].default_source, "Healer");
 
             // You apply without a pick, and the Healer keeps the kk it
             // used. It used to get the version Default had off.
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
             let state = relaunch_as(dir.path(), "Healer").await;
@@ -5850,7 +5886,7 @@ mod tests {
             let set = james_like_set(dir.path());
             write_alias(&set, "Healer", "hh");
             let state = launch_state(dir.path()).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
             let legacy = crate::loadout_store::legacy_dir(dir.path()).join("Healer.toml");
@@ -5892,7 +5928,7 @@ mod tests {
             let set = james_like_set(dir.path());
             write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
             // In loadout mode you add an alias and set a variable, which
@@ -5945,7 +5981,7 @@ mod tests {
                 ));
             }
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
 
@@ -5979,7 +6015,7 @@ mod tests {
             std::fs::rename(&legacy, aside.path().join("legacy")).unwrap();
 
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
             for (n, name) in names.iter().enumerate() {
@@ -6032,7 +6068,7 @@ mod tests {
             );
             write_presets(&set, "Healer", &["healing_basics", "herb_labels"]);
             let state = launch_state(dir.path()).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
 
@@ -6264,7 +6300,7 @@ mod tests {
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
             persist(&state, dir.path()).await;
             originals[0] = read(&set.profile_path(DEFAULT_PROFILE_NAME));
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
 
@@ -6403,7 +6439,7 @@ mod tests {
             }
 
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
             let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
@@ -6462,7 +6498,7 @@ mod tests {
             assert!(before[3].is_empty());
 
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
             let (_, loadouts) = load_path_b_at_launch(dir.path()).unwrap();
@@ -6523,7 +6559,7 @@ mod tests {
             config.triggers.push(in_combat("bash"));
             config.save(&set.profile_path("Healer")).unwrap();
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
 
@@ -6579,11 +6615,11 @@ mod tests {
                 .unwrap();
             }
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            let plan = super::super::analyze_migration(&state, dir.path())
+            let plan = super::super::analyze_migration(&state, dir.path(), LIBRARY)
                 .await
                 .unwrap();
             assert!(plan.conflicts.is_empty());
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
 
@@ -6632,7 +6668,7 @@ mod tests {
             };
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
             assert_eq!(fired(&state).await, ["stand", "bash"]);
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
 
@@ -6689,7 +6725,7 @@ mod tests {
             assert_eq!(before, ["alias loot"]);
 
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
 
@@ -6728,7 +6764,7 @@ mod tests {
             assert!(before[1].is_empty());
 
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
 
@@ -6802,7 +6838,7 @@ mod tests {
             }
 
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
 
@@ -6835,7 +6871,7 @@ mod tests {
             }
 
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
 
@@ -6879,7 +6915,7 @@ mod tests {
                 p.aliases.set(vosh_alias::Alias::new("zz", "sleep"));
             }
 
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
 
@@ -6905,9 +6941,16 @@ mod tests {
             ProfileConfig::default().apply_to(&mut *state.profile.lock().await);
             let suppressed = std::sync::atomic::AtomicBool::new(true);
 
-            super::super::apply_migration_with(&state, dir.path(), &[], &suppressed, || {})
-                .await
-                .unwrap();
+            super::super::apply_migration_with(
+                &state,
+                dir.path(),
+                &[],
+                LIBRARY,
+                &suppressed,
+                || {},
+            )
+            .await
+            .unwrap();
 
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
             let p = state.profile.lock().await;
@@ -6927,7 +6970,7 @@ mod tests {
             write_alias(&set, "Healer", "hh");
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
             let pending = AtomicBool::new(false);
-            super::super::apply_migration(&state, dir.path(), &[], || {
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {
                 pending.store(true, Ordering::Release);
             })
             .await
@@ -7023,7 +7066,7 @@ mod tests {
             write_alias(&set, "Healer", "hh");
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
             let pending = AtomicBool::new(false);
-            super::super::apply_migration(&state, dir.path(), &[], || {
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {
                 pending.store(true, Ordering::Release);
             })
             .await
@@ -7081,12 +7124,15 @@ mod tests {
                 // A crash or a force quit stops the run where it stands.
                 let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
                 super::super::WIZARD_WRITES_BEFORE_A_CRASH.set(Some(stop));
-                let run = tokio::spawn({
-                    let state = state.clone();
-                    let dir = dir.path().to_path_buf();
-                    async move { super::super::apply_migration(&state, &dir, &[], || {}).await }
-                })
-                .await;
+                let run =
+                    tokio::spawn({
+                        let state = state.clone();
+                        let dir = dir.path().to_path_buf();
+                        async move {
+                            super::super::apply_migration(&state, &dir, &[], LIBRARY, || {}).await
+                        }
+                    })
+                    .await;
                 super::super::WIZARD_WRITES_BEFORE_A_CRASH.set(None);
                 assert!(run.is_err(), "stop {stop}");
                 let journal = crate::loadout_store::journal_path(dir.path());
@@ -7148,7 +7194,7 @@ mod tests {
             let run = tokio::spawn({
                 let state = state.clone();
                 let dir = dir.path().to_path_buf();
-                async move { super::super::apply_migration(&state, &dir, &[], || {}).await }
+                async move { super::super::apply_migration(&state, &dir, &[], LIBRARY, || {}).await }
             })
             .await;
             super::super::WIZARD_WRITES_BEFORE_A_CRASH.set(None);
@@ -7231,7 +7277,7 @@ mod tests {
             let run = tokio::spawn({
                 let state = state.clone();
                 let dir = dir.path().to_path_buf();
-                async move { super::super::apply_migration(&state, &dir, &[], || {}).await }
+                async move { super::super::apply_migration(&state, &dir, &[], LIBRARY, || {}).await }
             })
             .await;
             super::super::WIZARD_WRITES_BEFORE_A_CRASH.set(None);
@@ -7273,7 +7319,7 @@ mod tests {
             write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
             write_alias(&set, "Healer", "hl");
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
 
@@ -7332,9 +7378,10 @@ mod tests {
             let blocked = set.profile_path("Bard").with_extension("toml.tmp");
             std::fs::create_dir(&blocked).unwrap();
             let mut written = false;
-            let err = super::super::apply_migration(&state, dir.path(), &[], || written = true)
-                .await
-                .unwrap_err();
+            let err =
+                super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || written = true)
+                    .await
+                    .unwrap_err();
             // The raw error text of the failed write, with its colons, no
             // longer shows.
             assert_eq!(
@@ -7369,7 +7416,7 @@ mod tests {
 
             // Once the file saves again, the wizard runs.
             std::fs::remove_dir(&blocked).unwrap();
-            super::super::apply_migration(&state, dir.path(), &[], || written = true)
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || written = true)
                 .await
                 .unwrap();
             assert!(written);
@@ -7396,7 +7443,7 @@ mod tests {
             // A file sits where the legacy folder goes, so no copy lands.
             let legacy = legacy_dir(dir.path());
             std::fs::write(&legacy, "").unwrap();
-            let err = super::super::apply_migration(&state, dir.path(), &[], || {})
+            let err = super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap_err();
             assert!(err.starts_with("Vosh could not copy "), "{err}");
@@ -7412,7 +7459,7 @@ mod tests {
             // The journal does not save.
             let blocked = journal_path(dir.path()).with_extension("toml.tmp");
             std::fs::create_dir(&blocked).unwrap();
-            let err = super::super::apply_migration(&state, dir.path(), &[], || {})
+            let err = super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap_err();
             assert_eq!(
@@ -7427,7 +7474,7 @@ mod tests {
             // Both changed nothing, so the wizard runs once you fix it.
             assert!(!catalog_path(dir.path()).exists());
             assert_eq!(read(&set.profile_path("Healer")), healer);
-            super::super::apply_migration(&state, dir.path(), &[], || {})
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
                 .await
                 .unwrap();
         }
@@ -7472,7 +7519,7 @@ mod tests {
                 before.push(items_on(&*state.profile.lock().await));
             }
             let state = relaunch_as(dir, DEFAULT_PROFILE_NAME).await;
-            super::super::apply_migration(&state, dir, &[], || {})
+            super::super::apply_migration(&state, dir, &[], LIBRARY, || {})
                 .await
                 .unwrap();
             (relaunch_as(dir, DEFAULT_PROFILE_NAME).await, before)

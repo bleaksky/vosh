@@ -7,6 +7,10 @@ import {
   type MigrationItemKind,
   type MigrationPlan,
 } from '../lib/session';
+import { PRESETS } from '../lib/presets';
+
+/** The id of every preset in the library this build installs from. */
+const LIBRARY = PRESETS.map((p) => p.id);
 
 interface Props {
   onClose: () => void;
@@ -38,7 +42,7 @@ export function MigrationWizard({ onClose }: Props) {
     let cancelled = false;
     void (async () => {
       try {
-        const p = await migrationAnalyze();
+        const p = await migrationAnalyze(LIBRARY);
         if (!cancelled) {
           setPlan(p);
           setPending(false);
@@ -76,7 +80,7 @@ export function MigrationWizard({ onClose }: Props) {
     setApplying(true);
     setError(null);
     try {
-      await migrationApply(resolutions);
+      await migrationApply(resolutions, LIBRARY);
       setApplied(true);
       setApplying(false);
     } catch (e) {

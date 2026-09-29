@@ -54,7 +54,8 @@
 //! profile shares in loadout mode, so it is on for every profile, the
 //! ones whose file lacks it included, since a launch installs every
 //! preset that is on. It stays in a folder only for a profile that had
-//! it there.
+//! it there. A preset the library no longer has installs for no one, so
+//! its trigger stays off for a profile whose file lacks it.
 //!
 //! ## Scope
 //!
@@ -171,7 +172,12 @@ pub(crate) struct FileGroups {
 /// `profiles` is an ordered list so determinism is preserved: group
 /// names list profiles in this order, and when every variant agrees,
 /// the copy of the FIRST profile in it becomes the catalog entry.
-pub(crate) fn analyze_profiles(profiles: &[(String, ProfileConfig)]) -> MigrationPlan {
+/// `library` holds the id of every preset in the library this build
+/// installs from, see src/lib/presets.ts.
+pub(crate) fn analyze_profiles(
+    profiles: &[(String, ProfileConfig)],
+    library: &[&str],
+) -> MigrationPlan {
     let mut plan = MigrationPlan {
         source_profiles: profiles.iter().map(|(name, _)| name.clone()).collect(),
         ..MigrationPlan::default()
@@ -179,7 +185,7 @@ pub(crate) fn analyze_profiles(profiles: &[(String, ProfileConfig)]) -> Migratio
     let reserved = every_folder(profiles);
 
     let aliases = keyed_entries(profiles, |c| &c.aliases);
-    let triggers = trigger_entries(profiles);
+    let triggers = trigger_entries(profiles, library);
     let macros = keyed_entries(profiles, |c| &c.macros);
     let alias_plan = plan_kind(profiles, &aliases, &reserved);
     let trigger_plan = plan_kind(profiles, &triggers, &reserved);
@@ -374,6 +380,9 @@ struct Entry<T> {
     copies: Vec<(usize, T)>,
     /// A preset trigger, which the shared preset list turns on.
     preset: bool,
+    /// A preset trigger whose preset the library still has, so a launch
+    /// installs it for every profile, the ones whose file lacks it too.
+    in_library: bool,
 }
 
 /// What one profile has of an item.
@@ -415,6 +424,7 @@ fn keyed_entries<T: CatalogItem>(
                 .or_insert_with(|| Entry {
                     copies: Vec::new(),
                     preset: false,
+                    in_library: false,
                 })
                 .copies
                 .push((n, item.clone()));
@@ -426,7 +436,8 @@ fn keyed_entries<T: CatalogItem>(
 /// The triggers in `configs`, in the order the catalog keeps them. A
 /// name whose every copy is a preset trigger is one preset entry, since
 /// a launch installs the library version whichever copy the catalog
-/// keeps, and puts it last among the triggers of its priority. The
+/// keeps, and puts it last among the triggers of its priority. `library`
+/// names the presets the library still has. The
 /// others come in an order that keeps the order each profile's store
 /// runs them in, see [`merge_run`], since every trigger that matches a
 /// line fires in that order.
@@ -439,13 +450,17 @@ fn keyed_entries<T: CatalogItem>(
 /// take. The first entry of a name keeps it, and each other one adds the
 /// profiles that have it, such as `greet (Healer)`, with a number when
 /// that name is taken too.
-fn trigger_entries(profiles: &[(String, ProfileConfig)]) -> Vec<Entry<Trigger>> {
+fn trigger_entries(profiles: &[(String, ProfileConfig)], library: &[&str]) -> Vec<Entry<Trigger>> {
     let mut presets: Vec<Entry<Trigger>> = keyed_entries(profiles, |c| &c.triggers)
         .into_iter()
         .filter(|e| e.copies.iter().all(|(_, t)| t.preset.is_some()))
         .collect();
     for entry in &mut presets {
         entry.preset = true;
+        entry.in_library = entry
+            .copies
+            .iter()
+            .any(|(_, t)| t.preset().is_some_and(|id| library.contains(&id)));
     }
     let preset_names: BTreeSet<&str> = presets.iter().map(|e| e.copies[0].1.key()).collect();
     let mut order: Vec<(usize, Entry<Trigger>)> = Vec::new();
@@ -557,6 +572,7 @@ fn merge_run(
                 Entry {
                     copies: vec![(holder, run[i].clone())],
                     preset: false,
+                    in_library: false,
                 },
             ));
             *created += 1;
@@ -601,7 +617,9 @@ fn roles<T: CatalogItem>(profiles: &[(String, ProfileConfig)], entry: &Entry<T>)
                 // A launch installs every preset that is on, whatever the
                 // file held, and turns its triggers on. A launch also takes
                 // out the triggers of a preset that is off, so only a
-                // preset its holder had on can sit in its folder.
+                // preset its holder had on can sit in its folder. A preset
+                // the library no longer has installs for no one, so it
+                // stays off for a profile whose file lacks it.
                 let config = &profiles[n].1;
                 return match copy {
                     Some(item)
@@ -611,6 +629,7 @@ fn roles<T: CatalogItem>(profiles: &[(String, ProfileConfig)], entry: &Entry<T>)
                     {
                         folder_of(item).map_or(Role::On, Role::Folder)
                     }
+                    None if !entry.in_library => Role::Off,
                     _ => Role::On,
                 };
             }
@@ -925,10 +944,17 @@ mod tests {
         found.unwrap().group.clone()
     }
 
+    /// The preset library these tests install from.
+    const LIBRARY: &[&str] = &["healing_basics", "potion_labels", "herb_labels"];
+
+    fn analyze(profiles: &[(String, ProfileConfig)]) -> MigrationPlan {
+        analyze_profiles(profiles, LIBRARY)
+    }
+
     #[test]
     fn unique_items_pass_through_as_auto_resolved() {
         let kk = Alias::new("kk", "kick %1");
-        let plan = analyze_profiles(&[(
+        let plan = analyze(&[(
             "default".into(),
             profile_with(vec![kk.clone()], vec![], vec![]),
         )]);
@@ -941,7 +967,7 @@ mod tests {
     #[test]
     fn identical_aliases_across_profiles_auto_resolve() {
         let kk = Alias::new("kk", "kick %1");
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(vec![kk.clone()], vec![], vec![]),
@@ -962,7 +988,7 @@ mod tests {
 
     #[test]
     fn every_variant_of_a_conflict_lands_in_the_group_of_all_its_holders() {
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(vec![Alias::new("kk", "kick %1")], vec![], vec![]),
@@ -996,7 +1022,7 @@ mod tests {
     fn diverging_aliases_surface_as_conflict() {
         let kk_a = Alias::new("kk", "kick %1");
         let kk_b = Alias::new("kk", "kick 1.");
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(vec![kk_a.clone()], vec![], vec![]),
@@ -1028,7 +1054,7 @@ mod tests {
         let plain = Alias::new("bash", "bash %1");
         let mut scripted = plain.clone();
         scripted.script = Some("mud.send('bash ' .. args[2])".into());
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             ("default".into(), profile_with(vec![plain], vec![], vec![])),
             (
                 "warrior".into(),
@@ -1067,7 +1093,7 @@ mod tests {
             group: None,
             enabled,
         };
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(
@@ -1119,7 +1145,7 @@ mod tests {
 
     #[test]
     fn a_conflict_with_two_versions_on_or_none_defaults_to_the_first_profile() {
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(vec![Alias::new("kk", "kick %1")], vec![], vec![]),
@@ -1179,7 +1205,7 @@ mod tests {
             ],
         );
         cfg.disabled_macro_groups = vec!["loot".into()];
-        let plan = analyze_profiles(&[("Healer".into(), cfg)]);
+        let plan = analyze(&[("Healer".into(), cfg)]);
         let command = |key: &str| {
             let found = plan.auto_resolved.macros.iter().find(|m| m.key == key);
             let found = found.unwrap_or_else(|| panic!("no macro {key}"));
@@ -1199,7 +1225,7 @@ mod tests {
 
     #[test]
     fn divergent_triggers_keep_each_version() {
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(vec![], vec![trigger("greet", "^hi$", "HELLO")], vec![]),
@@ -1232,7 +1258,7 @@ mod tests {
         let hello = trigger("greet", "^hi$", "HELLO");
         let mut in_folder = hello.clone();
         in_folder.group = Some("social".into());
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             ("default".into(), profile_with(vec![], vec![hello], vec![])),
             (
                 "Healer".into(),
@@ -1305,7 +1331,7 @@ mod tests {
     fn triggers_keep_the_order_the_file_had() {
         // Both match the same line at the same priority, and the file
         // stands up before it bashes.
-        let plan = analyze_profiles(&[(
+        let plan = analyze(&[(
             "default".into(),
             profile_with(
                 vec![],
@@ -1331,7 +1357,7 @@ mod tests {
         let stand = trigger("stand", "^You are knocked down", "stand");
         let bash = trigger("bash", "^You are knocked down", "bash");
         let flee = trigger("flee", "^You are knocked down", "flee");
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(vec![], vec![stand.clone(), bash.clone()], vec![]),
@@ -1359,7 +1385,7 @@ mod tests {
         let t = trigger("greet", "^hi$", "HELLO");
         let mut in_folder = t.clone();
         in_folder.group = Some("social".into());
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(vec![], vec![t.clone()], vec![]),
@@ -1375,7 +1401,7 @@ mod tests {
 
     #[test]
     fn loadouts_carry_enabled_groups_per_source() {
-        let plan = analyze_profiles(&[(
+        let plan = analyze(&[(
             "default".into(),
             profile_with(
                 vec![
@@ -1408,7 +1434,7 @@ mod tests {
             vec![],
         );
         cfg.disabled_alias_groups = vec!["combat".into(), "buffs".into()];
-        let plan = analyze_profiles(&[("default".into(), cfg)]);
+        let plan = analyze(&[("default".into(), cfg)]);
         // Buffs was off in the only list that has it. The combat triggers
         // were on, so combat stays in for them.
         assert_eq!(plan.loadouts[0].enabled_groups, ["combat"]);
@@ -1419,7 +1445,7 @@ mod tests {
 
     #[test]
     fn a_profile_file_turns_off_every_catalog_group_its_loadout_leaves_off() {
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(
@@ -1456,7 +1482,7 @@ mod tests {
             vec![],
         );
         cfg.disabled_trigger_groups = vec!["loot".into()];
-        let plan = analyze_profiles(&[("Healer".into(), cfg)]);
+        let plan = analyze(&[("Healer".into(), cfg)]);
 
         let file = file_after(&plan, "Healer");
         // The trigger group stays off. It used to come on with the alias
@@ -1475,7 +1501,7 @@ mod tests {
         let default = profile_with(vec![], vec![loot.clone(), flee.clone()], vec![]);
         let mut healer = profile_with(vec![], vec![loot, flee], vec![]);
         healer.disabled_trigger_groups = vec!["loot".into()];
-        let plan = analyze_profiles(&[("default".into(), default), ("Healer".into(), healer)]);
+        let plan = analyze(&[("default".into(), default), ("Healer".into(), healer)]);
 
         assert!(plan.conflicts.is_empty());
         let group = |name: &str| {
@@ -1510,7 +1536,7 @@ mod tests {
             enabled: false,
             ..f1.clone()
         };
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(vec![Alias::new("kk", "kick %1")], vec![], vec![f1]),
@@ -1541,7 +1567,7 @@ mod tests {
             vec![],
         );
         cfg.disabled_alias_groups = vec!["combat".into()];
-        let plan = analyze_profiles(&[("Healer".into(), cfg)]);
+        let plan = analyze(&[("Healer".into(), cfg)]);
         let alias = |name: &str| {
             let found = plan.auto_resolved.aliases.iter().find(|a| a.name == name);
             found.unwrap().clone()
@@ -1563,7 +1589,7 @@ mod tests {
     fn an_item_you_turned_off_stays_in_the_group_you_kept_on() {
         let mut dirt = grouped("dirt", "dirt %1", "combat");
         dirt.enabled = false;
-        let plan = analyze_profiles(&[(
+        let plan = analyze(&[(
             "Healer".into(),
             profile_with(
                 vec![grouped("bash", "bash %1", "combat"), dirt],
@@ -1584,7 +1610,7 @@ mod tests {
     fn a_folder_two_characters_filled_differently_keeps_its_name_for_both() {
         // Both have flee in combat, and only the default profile has bash
         // there too.
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(
@@ -1628,7 +1654,7 @@ mod tests {
         // Each alias sits in the default combat folder. The warrior has
         // dig in combat too, kk without a folder, and xx in its loot
         // folder. kk and xx both land in a group named for both profiles.
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(
@@ -1681,7 +1707,7 @@ mod tests {
     fn a_group_named_for_profiles_never_takes_a_folder_name() {
         // The Healer keeps its own aliases in a folder named (default),
         // and kk, on for the default profile alone, would take that name.
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(vec![Alias::new("kk", "kick %1")], vec![], vec![]),
@@ -1714,7 +1740,7 @@ mod tests {
         // pattern, and the Bard never saved a file.
         let default = profile_with(vec![], vec![heal_preset("^You heal")], vec![]);
         let healer = profile_with(vec![], vec![heal_preset("^You are healed")], vec![]);
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             ("default".into(), default),
             ("Healer".into(), healer),
             ("Bard".into(), ProfileConfig::default()),
@@ -1729,12 +1755,46 @@ mod tests {
     }
 
     #[test]
+    fn a_preset_the_library_no_longer_has_stays_off_for_profiles_that_lack_it() {
+        // An older build left the Healer the trigger of a preset this
+        // build's library no longer has, so no launch installs it for a
+        // profile whose file lacks it.
+        let old = Trigger {
+            preset: Some("old_labels".into()),
+            ..trigger("old 1", "^old$", "OLD")
+        };
+        let plan = analyze(&[
+            ("default".into(), ProfileConfig::default()),
+            (
+                "Healer".into(),
+                profile_with(vec![], vec![old, heal_preset("^You heal")], vec![]),
+            ),
+            ("Bard".into(), ProfileConfig::default()),
+        ]);
+        assert!(plan.conflicts.is_empty());
+        // It used to sit in no group, on for every character.
+        assert_eq!(
+            trigger_named(&plan, "old 1").group.as_deref(),
+            Some("(Healer)")
+        );
+        for name in ["default", "Bard"] {
+            let off = file_after(&plan, name).disabled_trigger_groups;
+            assert_eq!(off, ["(Healer)"], "{name}");
+        }
+        assert!(file_after(&plan, "Healer")
+            .disabled_trigger_groups
+            .is_empty());
+        // A preset the library has still comes on for every profile.
+        assert_eq!(trigger_named(&plan, "heal 1").group, None);
+    }
+
+    #[test]
     fn a_preset_trigger_a_profile_kept_off_by_its_group_stays_off_for_it() {
         let mut labelled = heal_preset("^You heal");
         labelled.group = Some("labels".into());
         let mut healer = profile_with(vec![], vec![labelled], vec![]);
         healer.disabled_trigger_groups = vec!["labels".into()];
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(vec![], vec![heal_preset("^You heal")], vec![]),
@@ -1768,7 +1828,7 @@ mod tests {
         let mut healer = profile_with(vec![], vec![labelled], vec![]);
         healer.disabled_trigger_groups = vec!["labels".into()];
         healer.ui.enabled_presets = vec!["potion_labels".into()];
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(vec![], vec![heal_preset("^You heal")], vec![]),
@@ -1785,7 +1845,7 @@ mod tests {
     fn a_preset_trigger_in_a_group_every_profile_kept_on_keeps_that_group() {
         let mut labelled = heal_preset("^You heal");
         labelled.group = Some("labels".into());
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             (
                 "default".into(),
                 profile_with(vec![], vec![labelled], vec![]),
@@ -1812,7 +1872,7 @@ mod tests {
         cfg.connection.port = 4000;
         cfg.tick.interval_secs = 45;
         cfg.profile_vars.insert("target".into(), "orc".into());
-        let plan = analyze_profiles(&[("default".into(), cfg)]);
+        let plan = analyze(&[("default".into(), cfg)]);
         let loadout = &plan.loadouts[0];
         let empty = Loadout::empty("default");
         assert_eq!(loadout.connection.host, empty.connection.host);
@@ -1823,7 +1883,7 @@ mod tests {
 
     #[test]
     fn source_profiles_listed_in_iteration_order() {
-        let plan = analyze_profiles(&[
+        let plan = analyze(&[
             ("default".into(), profile_with(vec![], vec![], vec![])),
             ("aabahran".into(), profile_with(vec![], vec![], vec![])),
             ("warrior".into(), profile_with(vec![], vec![], vec![])),
