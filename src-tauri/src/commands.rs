@@ -556,6 +556,25 @@ async fn read_shared_layer(state: &SharedState) -> Option<SharedLayer> {
     Some(SharedLayer::read(&set.global_path(), *set.scope()))
 }
 
+/// [`read_shared_layer`] for a path other than typed input, when one of
+/// `lines` is a `#profile reset` or `#profile load` that acts. A timer,
+/// the tick auto-fire command, and `mud.input` then keep the shared
+/// settings across it the way typed input does. Call before taking the
+/// profile lock.
+pub(crate) async fn shared_layer_for_lines<'a>(
+    app: &AppHandle,
+    lines: impl IntoIterator<Item = &'a str>,
+) -> Option<SharedLayer> {
+    let replaces = lines
+        .into_iter()
+        .any(|line| crate::input::LineEffects::default().note_line(line));
+    if !replaces {
+        return None;
+    }
+    let state: SharedState = app.state::<SharedState>().inner().clone();
+    read_shared_layer(&state).await
+}
+
 #[tauri::command]
 pub(crate) async fn session_send_input(
     app: AppHandle,
