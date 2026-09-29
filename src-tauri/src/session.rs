@@ -748,26 +748,26 @@ async fn fire_due_profile_timers(
 
 /// Run `line` through the input pipeline for a path other than typed
 /// input, and note what it asks of the saved profile the way the typed
-/// path does. Call with the profile lock held. A `#profile reset` or
-/// `#profile load` swaps the live panes, so the pane generation moves in
-/// the same step. The profile file it reads holds none of the shared
-/// settings, so `shared` goes back over the result as it does for typed
-/// input.
+/// path does. Call with the profile lock held. A `#profile reset`, or a
+/// `#profile load` that reads its file, swaps the live panes, so the
+/// pane generation moves in the same step. The profile file it reads
+/// holds none of the shared settings, so `shared` goes back over the
+/// result as it does for typed input.
 fn process_fired_line(
     p: &mut Profile,
     line: &str,
     effects: &mut input::LineEffects,
     shared: Option<&SharedLayer>,
 ) -> input::InputResult {
-    if !effects.note_line(line) {
-        return input::process(p, line);
-    }
-    let result = match shared {
-        Some(layer) => layer.keep_across(p, |p| input::process(p, line)),
-        None => input::process(p, line),
+    let ran = match shared.filter(|_| input::may_replace_profile(line)) {
+        Some(layer) => layer.keep_across(p, |p| input::run_line(p, line)),
+        None => input::run_line(p, line),
     };
-    crate::commands::bump_panes_generation();
-    result
+    effects.note(line, ran.replaced);
+    if ran.replaced {
+        crate::commands::bump_panes_generation();
+    }
+    ran.result
 }
 
 /// What one timer command produced under the profile lock.

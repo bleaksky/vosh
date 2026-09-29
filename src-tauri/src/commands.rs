@@ -111,10 +111,11 @@ pub(crate) fn schedule_profile_persist(app: &AppHandle) {
 /// auto-persisting it would wipe the on-disk profile, and in Path B the
 /// shared catalog. They also suppress the passive flushes (exit,
 /// debounce) until the next durable change says the in-memory state is
-/// wanted again. [`crate::input::LineEffects`] matches them with the
-/// parser's own tokenizer so spelling variants ("#profile  reset",
-/// "# profile load") cannot slip past into the dirty mark and persist
-/// the just-blanked profile.
+/// wanted again. The pipeline itself says when one replaced the profile
+/// (see [`crate::input::run_line`]), so a `#profile load` whose file does
+/// not read suppresses nothing, and spelling variants ("#profile  reset",
+/// "# profile load") cannot slip past into the dirty mark and persist the
+/// just-blanked profile.
 pub(crate) async fn settle_line_effects(app: &AppHandle, effects: crate::input::LineEffects) {
     if effects.replaced {
         AUTO_PERSIST_SUPPRESSED.store(true, std::sync::atomic::Ordering::Release);
@@ -618,9 +619,7 @@ pub(crate) async fn shared_layer_for_lines<'a>(
     app: &AppHandle,
     lines: impl IntoIterator<Item = &'a str>,
 ) -> Option<SharedLayer> {
-    let replaces = lines
-        .into_iter()
-        .any(|line| crate::input::LineEffects::default().note_line(line));
+    let replaces = lines.into_iter().any(crate::input::may_replace_profile);
     if !replaces {
         return None;
     }
@@ -638,10 +637,9 @@ pub(crate) async fn session_send_input(
     // wholesale, panes and tracked affects included. Path B turns them
     // into echoes, so there they change nothing.
     let mut effects = crate::input::LineEffects::default();
-    let is_reset_or_load = effects.note_line(&line);
     // The profile file they read holds none of the shared settings, so
     // global.toml goes back over the result the way a switch lays it.
-    let shared_layer = if is_reset_or_load {
+    let shared_layer = if crate::input::may_replace_profile(&line) {
         read_shared_layer(state.inner()).await
     } else {
         None
@@ -652,13 +650,17 @@ pub(crate) async fn session_send_input(
         let before_name = profile.target.name.clone();
         let before_idx = profile.target.room_idx;
         let before_keys = profile.target.quick_keys.clone();
-        let result = match &shared_layer {
-            Some(layer) => layer.keep_across(&mut profile, |p| input::process(p, &line)),
-            None => input::process(&mut profile, &line),
+        let ran = match &shared_layer {
+            Some(layer) => layer.keep_across(&mut profile, |p| input::run_line(p, &line)),
+            None => input::run_line(&mut profile, &line),
         };
-        if effects.replaced {
+        // Only a reset, or a load that read its file, replaced the
+        // profile. A load that failed leaves it for the saves to write.
+        effects.note(&line, ran.replaced);
+        if ran.replaced {
             bump_panes_generation();
         }
+        let result = ran.result;
         let after_name = profile.target.name.clone();
         let after_idx = profile.target.room_idx;
         let after_keys = profile.target.quick_keys.clone();

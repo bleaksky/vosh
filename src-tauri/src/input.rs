@@ -116,8 +116,33 @@ pub(crate) fn is_profile_reset_or_load(line: &str) -> bool {
     matches!(sub, "reset" | "load")
 }
 
+/// True when `line` may replace the live profile: a `#profile reset` or
+/// `#profile load` outside loadout mode, which turns the pair into
+/// echoes. A caller reads global.toml before such a line runs, to lay the
+/// shared settings back over the result. Whether it did replace the
+/// profile comes back from [`run_line`].
+pub(crate) fn may_replace_profile(line: &str) -> bool {
+    !PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire) && is_profile_reset_or_load(line)
+}
+
+/// One line run through the input pipeline.
+pub(crate) struct Ran {
+    pub(crate) result: InputResult,
+    /// A `#profile reset`, or a `#profile load` that read its file,
+    /// replaced the live profile.
+    pub(crate) replaced: bool,
+}
+
+/// Run `line` through the input pipeline: what to send, what to echo,
+/// and whether it replaced the live profile, for [`LineEffects::note`].
+pub(crate) fn run_line(profile: &mut Profile, line: &str) -> Ran {
+    let mut replaced = false;
+    let result = process_line(profile, line, &mut replaced);
+    Ran { result, replaced }
+}
+
 /// What a run of input lines asks of the saved profile. Every path that
-/// runs a line through [`process`] notes each line here in order: typed
+/// runs a line through [`run_line`] notes each line here in order: typed
 /// input, a Settings timer command, the tick auto-fire command, and a
 /// Lua `mud.input` line. So `#alias` or `#trigger` from a timer reaches
 /// disk the way the same line typed at the prompt does.
@@ -132,28 +157,26 @@ pub(crate) struct LineEffects {
 }
 
 impl LineEffects {
-    /// Note one line that runs through [`process`]. True when that line
-    /// replaces the live profile.
-    pub(crate) fn note_line(&mut self, line: &str) -> bool {
-        self.note_line_with(
-            line,
-            PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire),
-        )
-    }
-
-    /// [`Self::note_line`] with Path B given. Path B turns `#profile
-    /// reset` and `#profile load` into echoes, so there they replace
-    /// nothing and count as any other slash command.
-    pub(crate) fn note_line_with(&mut self, line: &str, path_b_live: bool) -> bool {
-        if !path_b_live && is_profile_reset_or_load(line) {
+    /// Note one line that ran through [`run_line`], with whether it
+    /// replaced the live profile. The line alone cannot say: a `#profile
+    /// load` whose file does not read leaves the profile as it was, and
+    /// the pending save and the exit flush must still write it.
+    pub(crate) fn note(&mut self, line: &str, replaced: bool) {
+        if replaced {
             self.replaced = true;
             self.dirty = false;
-            return true;
+            return;
+        }
+        // A `#profile load` that did not read its file changed nothing,
+        // and loadout mode turns the pair into echoes, so neither counts
+        // as a change to save. Saving after a failed load would write a
+        // profile an earlier `#profile reset` blanked.
+        if is_profile_reset_or_load(line) {
+            return;
         }
         if line.trim_start().starts_with('#') {
             self.dirty = true;
         }
-        false
     }
 
     /// Note Lua that ran for these lines, such as the body of a script
@@ -166,13 +189,21 @@ impl LineEffects {
 }
 
 /// Run the input pipeline against the given profile and return what to send
-/// and what to echo locally.
+/// and what to echo locally. The app runs every line through [`run_line`],
+/// which also says whether the line replaced the profile.
+#[cfg(test)]
 pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
+    run_line(profile, line).result
+}
+
+/// The body of [`run_line`]. Sets `replaced` when a `#profile reset` or a
+/// `#profile load` that read its file replaced the live profile.
+fn process_line(profile: &mut Profile, line: &str, replaced: &mut bool) -> InputResult {
     let trimmed = line.trim_start();
 
     // Slash commands target the local profile.
     if let Some(rest) = trimmed.strip_prefix('#') {
-        return handle_slash(profile, rest);
+        return handle_slash(profile, rest, replaced);
     }
 
     // A bare Enter sends a blank line to the server. MUDs use this to
@@ -219,7 +250,7 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
             return error_echo("no target — set one with `tar <name|index>` first".to_string());
         }
         let expansion = format!("{} {}", qk.verb, target);
-        let mut inner = process(profile, &expansion);
+        let mut inner = process_line(profile, &expansion, replaced);
         // Echo the resolved line like any other typed command. The
         // frontend suppresses its own echo for quick-keys, so this is
         // the only echo that lands.
@@ -256,7 +287,7 @@ pub(crate) fn process(profile: &mut Profile, line: &str) -> InputResult {
     }
 }
 
-fn handle_slash(profile: &mut Profile, rest: &str) -> InputResult {
+fn handle_slash(profile: &mut Profile, rest: &str, replaced: &mut bool) -> InputResult {
     let (cmd, args) = split_first_word(rest);
     match cmd {
         "alias" => slash_alias(profile, args),
@@ -277,7 +308,7 @@ fn handle_slash(profile: &mut Profile, rest: &str) -> InputResult {
         "scripts" => slash_scripts_list(profile),
         "lua" => slash_lua(profile, args),
         "echo" | "showme" => slash_echo(profile, args),
-        "profile" => slash_profile(profile, args),
+        "profile" => slash_profile(profile, args, replaced),
         "import-tintin" => slash_import_tintin(profile, args),
         "record" => slash_record(profile, args),
         "endrec" => slash_endrec(profile),
@@ -1136,7 +1167,7 @@ fn describe_action(action: &TriggerAction) -> String {
     }
 }
 
-fn slash_profile(profile: &mut Profile, args: &str) -> InputResult {
+fn slash_profile(profile: &mut Profile, args: &str, replaced: &mut bool) -> InputResult {
     let (cmd, _rest) = split_first_word(args);
     // Path B keeps authored items in the catalog and persists them
     // automatically. The legacy save/load/reset trio would write, load,
@@ -1178,33 +1209,45 @@ fn slash_profile(profile: &mut Profile, args: &str) -> InputResult {
             None => error_echo("could not resolve profile path".to_string()),
         },
         "load" => match profile_path() {
-            Some(path) => match ProfileConfig::load(&path) {
-                Ok(snapshot) => {
-                    // The file reads now and the live profile holds what it
-                    // says, so the saves may write it again.
-                    crate::profile_config::release_unread(&path);
-                    let warnings = snapshot.apply_to(profile);
-                    let mut lines = vec![format!("profile loaded from {}", path.display())];
-                    for w in warnings {
-                        lines.push(format!("  {w}"));
-                    }
-                    InputResult {
-                        bytes: Vec::new(),
-                        echo: lines,
-                        scripts: Vec::new(),
-                    }
-                }
-                Err(e) => error_echo(format!("load failed: {e}")),
-            },
+            Some(path) => load_profile_file(profile, &path, replaced),
             None => error_echo("could not resolve profile path".to_string()),
         },
         "reset" => {
             let blank = ProfileConfig::default();
             let _ = blank.apply_to(profile);
+            *replaced = true;
             echo_one("profile reset to defaults".to_string())
         }
         "" => error_echo("usage #profile save | load | reset".to_string()),
         other => error_echo(format!("unknown #profile subcommand `{other}`")),
+    }
+}
+
+/// `#profile load` from `path`. Replaces the live profile, and sets
+/// `replaced`, only when the file reads. A file that does not read leaves
+/// the live profile as it was.
+fn load_profile_file(
+    profile: &mut Profile,
+    path: &std::path::Path,
+    replaced: &mut bool,
+) -> InputResult {
+    let snapshot = match ProfileConfig::load(path) {
+        Ok(snapshot) => snapshot,
+        Err(e) => return error_echo(format!("load failed: {e}")),
+    };
+    // The file reads now and the live profile holds what it says, so the
+    // saves may write it again.
+    crate::profile_config::release_unread(path);
+    let warnings = snapshot.apply_to(profile);
+    *replaced = true;
+    let mut lines = vec![format!("profile loaded from {}", path.display())];
+    for w in warnings {
+        lines.push(format!("  {w}"));
+    }
+    InputResult {
+        bytes: Vec::new(),
+        echo: lines,
+        scripts: Vec::new(),
     }
 }
 
@@ -1661,10 +1704,14 @@ fn echo_lines<'a>(lines: impl IntoIterator<Item = &'a str>) -> InputResult {
 mod tests {
     use super::*;
 
-    fn effects_of(lines: &[&str], path_b_live: bool) -> LineEffects {
+    /// Run `lines` through the pipeline the way the typed path does and
+    /// note each one.
+    fn effects_of(lines: &[&str]) -> LineEffects {
+        let mut p = Profile::default();
         let mut effects = LineEffects::default();
         for line in lines {
-            effects.note_line_with(line, path_b_live);
+            let ran = run_line(&mut p, line);
+            effects.note(line, ran.replaced);
         }
         effects
     }
@@ -1674,6 +1721,11 @@ mod tests {
         dirty: true,
     };
 
+    const REPLACED: LineEffects = LineEffects {
+        replaced: true,
+        dirty: false,
+    };
+
     #[test]
     fn slash_commands_mark_the_profile_dirty() {
         for line in [
@@ -1681,43 +1733,72 @@ mod tests {
             "#trigger flee {^You flee} send look",
             "  #var x 1",
         ] {
-            assert_eq!(effects_of(&[line], false), DIRTY, "{line}");
+            assert_eq!(effects_of(&[line]), DIRTY, "{line}");
         }
-        assert_eq!(
-            effects_of(&["look", "greet"], false),
-            LineEffects::default()
-        );
+        assert_eq!(effects_of(&["look", "greet"]), LineEffects::default());
     }
 
     #[test]
-    fn a_reset_or_load_replaces_the_profile_and_saves_nothing() {
-        let replaced = LineEffects {
-            replaced: true,
-            dirty: false,
-        };
-        for line in ["#profile reset", "#profile  load", "# profile reset"] {
-            assert_eq!(effects_of(&[line], false), replaced, "{line}");
+    fn a_reset_replaces_the_profile_and_saves_nothing() {
+        for line in ["#profile reset", "#profile  reset", "# profile reset"] {
+            assert_eq!(effects_of(&[line]), REPLACED, "{line}");
         }
         // An edit before the reset is gone with it. An edit after it
         // says the live state is wanted.
+        assert_eq!(effects_of(&["#alias a b", "#profile reset"]), REPLACED);
         assert_eq!(
-            effects_of(&["#alias a b", "#profile reset"], false),
-            replaced
-        );
-        assert_eq!(
-            effects_of(&["#profile reset", "#alias a b"], false),
+            effects_of(&["#profile reset", "#alias a b"]),
             LineEffects {
                 replaced: true,
                 dirty: true,
             }
         );
-        // Path B turns the pair into echoes.
-        assert_eq!(effects_of(&["#profile reset"], true), DIRTY);
+    }
+
+    #[test]
+    fn a_load_replaces_the_profile_only_when_its_file_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Healer.toml");
+        std::fs::write(&path, "tracked = = [\n").unwrap();
+        let mut p = Profile::default();
+        let _ = process(&mut p, "#alias greet wave");
+
+        let mut replaced = false;
+        let r = load_profile_file(&mut p, &path, &mut replaced);
+        assert!(!replaced);
+        assert!(r.echo[0].contains("load failed"), "{:?}", r.echo);
+        assert!(p.aliases.get("greet").is_some());
+        // So the alias still saves, and a reset before it stays unsaved.
+        let mut effects = LineEffects::default();
+        effects.note("#alias greet wave", false);
+        effects.note("#profile load", replaced);
+        assert_eq!(effects, DIRTY);
+        let mut effects = REPLACED;
+        effects.note("#profile load", replaced);
+        assert_eq!(effects, REPLACED);
+
+        ProfileConfig::default().save(&path).unwrap();
+        let _ = load_profile_file(&mut p, &path, &mut replaced);
+        assert!(replaced);
+        assert!(p.aliases.get("greet").is_none());
+        let mut effects = DIRTY;
+        effects.note("#profile load", replaced);
+        assert_eq!(effects, REPLACED);
+    }
+
+    #[test]
+    fn a_reset_or_load_that_echoes_saves_nothing() {
+        // Loadout mode turns the pair into echoes, and an echo is no
+        // change to save.
+        let mut effects = LineEffects::default();
+        effects.note("#profile reset", false);
+        effects.note("#profile load", false);
+        assert_eq!(effects, LineEffects::default());
     }
 
     #[test]
     fn durable_lua_marks_the_profile_dirty() {
-        let mut effects = effects_of(&["greet"], false);
+        let mut effects = effects_of(&["greet"]);
         effects.note_script(false);
         assert_eq!(effects, LineEffects::default());
         effects.note_script(true);
