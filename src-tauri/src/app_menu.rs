@@ -456,6 +456,8 @@ mod mac {
                     }
                 } else if is_front(app, "main") {
                     emit_main(app, id);
+                } else {
+                    system_close();
                 }
             }
             Route::Copy => {
@@ -635,19 +637,31 @@ mod mac {
 
     /// Copy the way the system Copy row would: send `copy:` down the
     /// responder chain of the key window. Main thread only.
-    #[allow(unsafe_code)]
     pub(super) fn system_copy() {
+        send_action(objc2::sel!(copy:));
+    }
+
+    /// Close a window Vosh does not own, like the About panel, the way
+    /// the system Close row would. Main thread only.
+    fn system_close() {
+        send_action(objc2::sel!(performClose:));
+    }
+
+    /// Send `action` to the first responder of the key window, as a
+    /// menu row with no target does.
+    #[allow(unsafe_code)]
+    fn send_action(action: objc2::runtime::Sel) {
         use objc2::runtime::{AnyObject, Bool};
-        use objc2::{class, msg_send, sel};
+        use objc2::{class, msg_send};
         // SAFETY: NSApplication's shared instance and a nil target send
-        // the standard action, on the main thread, as the menu would.
+        // a standard action, on the main thread, as the menu would.
         unsafe {
             let nsapp: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
             if nsapp.is_null() {
                 return;
             }
             let nil: *mut AnyObject = std::ptr::null_mut();
-            let _: Bool = msg_send![nsapp, sendAction: sel!(copy:), to: nil, from: nil];
+            let _: Bool = msg_send![nsapp, sendAction: action, to: nil, from: nil];
         }
     }
 }
