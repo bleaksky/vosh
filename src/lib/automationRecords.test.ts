@@ -9,6 +9,8 @@ import {
 import {
   activeLoadouts,
   aliasesForSave,
+  loadAliases,
+  saveAliasDraft,
   automationSaveError,
   blankTimer,
   enabledPresetIds,
@@ -60,6 +62,33 @@ describe('aliases', () => {
     expect(
       validateAliases([normalizeAlias({ name: 'kk' }), normalizeAlias({ name: 'kk' })]),
     ).toContain('Two aliases');
+  });
+});
+
+describe('saving aliases', () => {
+  it('keeps an alias #alias added after the page loaded', async () => {
+    let json = JSON.stringify([
+      { name: 'k', expansion: 'kick' },
+      { name: 'b', expansion: 'bash' },
+    ]);
+    const api = {
+      exportAliases: () => Promise.resolve(json),
+      importAliases: (next: string) => {
+        json = next;
+        return Promise.resolve(0);
+      },
+    };
+    let draft = createDraft(await loadAliases(api));
+    // #alias in the main window, after the page loaded.
+    json = JSON.stringify([...(JSON.parse(json) as unknown[]), { name: 'r', expansion: 'rescue' }]);
+    draft = updateDraftItem(draft, draft.items[0].uid, (a) => ({ ...a, expansion: 'kick %1' }));
+    await saveAliasDraft(draft, api);
+    const saved = JSON.parse(json) as { name: string; expansion: string }[];
+    expect(saved.map((a) => [a.name, a.expansion])).toEqual([
+      ['k', 'kick %1'],
+      ['b', 'bash'],
+      ['r', 'rescue'],
+    ]);
   });
 });
 

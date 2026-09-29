@@ -5,8 +5,11 @@
 // lists. An edit changes the action it names in place and leaves the
 // rest of the list, and its order, as it was.
 
+import { saveDraftOnto, type Draft } from './automationDraft';
 import { colorize, decolorize } from './colorTokens';
 import {
+  exportTriggers,
+  importTriggers,
   normalizeActions,
   normalizePatterns,
   type HighlightStyle,
@@ -317,4 +320,55 @@ export function validateTriggers(list: readonly TriggerRecord[]): string | null 
     }
   }
   return null;
+}
+
+/** A trigger's identity. The store keys triggers by name. */
+export const triggerKey = (trigger: TriggerRecord): string => trigger.name;
+
+/** The two calls the trigger store takes a whole list through. */
+export interface TriggerStoreApi {
+  exportTriggers: () => Promise<string>;
+  importTriggers: (json: string) => Promise<unknown>;
+}
+
+const TRIGGER_STORE: TriggerStoreApi = { exportTriggers, importTriggers };
+
+/** Every trigger the store holds, for display. A reply that does not
+ *  read shows as no triggers. */
+export async function loadTriggers(api: TriggerStoreApi = TRIGGER_STORE): Promise<TriggerRecord[]> {
+  return parseTriggerList(await api.exportTriggers()) ?? [];
+}
+
+function parseTriggerList(text: string): TriggerRecord[] | null {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed.map(normalizeTrigger) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Save the Triggers draft. The store takes a whole list, so Save reads
+ *  it again first and writes it back with only the draft's additions,
+ *  changes, and removals applied. A trigger #trigger or a script added
+ *  after the page loaded survives. When the store's list does not read,
+ *  Save writes nothing, since writing would drop what it could not read. */
+export async function saveTriggerDraft(
+  draft: Draft<TriggerRecord>,
+  api: TriggerStoreApi = TRIGGER_STORE,
+): Promise<void> {
+  await saveDraftOnto(
+    draft,
+    {
+      read: async () => {
+        const list = parseTriggerList(await api.exportTriggers());
+        if (!list) throw new Error('Vosh could not read your saved triggers, so it saved nothing.');
+        return list;
+      },
+      write: async (values) => {
+        await api.importTriggers(JSON.stringify(values.map(triggerForSave), null, 2));
+      },
+    },
+    triggerKey,
+  );
 }

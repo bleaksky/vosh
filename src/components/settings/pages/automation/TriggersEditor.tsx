@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { draftValues } from '../../../../lib/automationDraft';
 import { groupKeyOf, searchText } from '../../../../lib/automationList';
 import { jsonListText, parseJsonList } from '../../../../lib/automationRecords';
 import {
@@ -8,11 +7,13 @@ import {
   extraEffects,
   HIGHLIGHT_COLORS,
   highlightOf,
+  loadTriggers,
   mainPattern,
   normalizeTrigger,
   replaceTemplateOf,
+  saveTriggerDraft,
   TRIGGER_STYLE_OPTIONS,
-  triggerForSave,
+  triggerKey,
   triggerStyle,
   validateTriggers,
   withEffect,
@@ -26,8 +27,6 @@ import {
   type TriggerStyle,
 } from '../../../../lib/automationTriggers';
 import {
-  exportTriggers,
-  importTriggers,
   subscribeTriggerGroupsChanged,
   type HighlightStyle,
   type NamedColor,
@@ -62,10 +61,8 @@ const TRIGGERS_SPEC: KindSpec<TriggerRecord> = {
   canDelete: (t) => !t.preset,
   emptyDetail: 'Choose a trigger to edit it.',
   emptyList: 'You have no triggers yet.',
-  load: async () => parseJsonList(await exportTriggers(), normalizeTrigger) ?? [],
-  save: async (draft) => {
-    await importTriggers(JSON.stringify(draftValues(draft).map(triggerForSave), null, 2));
-  },
+  load: () => loadTriggers(),
+  save: (draft) => saveTriggerDraft(draft),
   validate: validateTriggers,
   entry: (t) => ({
     name: t.name,
@@ -79,7 +76,7 @@ const TRIGGERS_SPEC: KindSpec<TriggerRecord> = {
       effectOf(t.actions, 'send'),
     ),
   }),
-  keyOf: (t) => t.name,
+  keyOf: triggerKey,
   blank: blankTrigger,
   json: {
     toText: jsonListText,
