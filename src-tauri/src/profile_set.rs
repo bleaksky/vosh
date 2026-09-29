@@ -80,6 +80,33 @@ pub(crate) struct AutoMatch {
     /// load and promoted to a one-element list.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub characters: Vec<String>,
+    /// The login toggle. Off keeps the world and the character names
+    /// but stops `resolve_match` from picking this profile, so turning
+    /// the toggle off never leaves a host-only entry that would become
+    /// the whole world's fallback. On by default and left out of the
+    /// file while on, so older files load unchanged.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub enabled: bool,
+}
+
+impl Default for AutoMatch {
+    fn default() -> Self {
+        Self {
+            host: None,
+            port: None,
+            characters: Vec::new(),
+            enabled: true,
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde passes a reference
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 /// Custom deserializer that accepts both the legacy shape
@@ -102,6 +129,8 @@ impl<'de> Deserialize<'de> for AutoMatch {
             character: Option<String>,
             #[serde(default)]
             characters: Vec<String>,
+            #[serde(default = "default_true")]
+            enabled: bool,
         }
         let raw = Raw::deserialize(deserializer)?;
         let mut characters = raw.characters;
@@ -115,6 +144,7 @@ impl<'de> Deserialize<'de> for AutoMatch {
             host: raw.host,
             port: raw.port,
             characters,
+            enabled: raw.enabled,
         })
     }
 }
@@ -305,7 +335,8 @@ impl ProfileSet {
     ///   - character match: +2
     ///
     /// So a profile pinned to (host, port, character) beats one pinned
-    /// to (host, port) which beats one pinned to (host) alone.
+    /// to (host, port) which beats one pinned to (host) alone. An entry
+    /// whose login toggle is off never matches.
     pub(crate) fn resolve_match(
         &self,
         host: &str,
@@ -319,6 +350,9 @@ impl ProfileSet {
             let Some(am) = &entry.auto_match else {
                 continue;
             };
+            if !am.enabled {
+                continue;
+            }
             let Some(am_host) = &am.host else { continue };
             if am_host.trim().to_ascii_lowercase() != host_l {
                 continue;
@@ -614,12 +648,59 @@ characters = ["Erelei", "Vanek"]
             host: Some("h".into()),
             port: Some(1848),
             characters: vec!["A".into(), "B".into()],
+            enabled: true,
         };
         let text = toml::to_string_pretty(&am).unwrap();
         let parsed: AutoMatch = toml::from_str(&text).unwrap();
         assert_eq!(parsed.host, am.host);
         assert_eq!(parsed.port, am.port);
         assert_eq!(parsed.characters, am.characters);
+    }
+
+    #[test]
+    fn auto_match_login_toggle_defaults_on_and_stays_out_of_the_file_while_on() {
+        let am: AutoMatch = toml::from_str("host = \"h\"\ncharacters = [\"Erelei\"]\n").unwrap();
+        assert!(am.enabled, "files written before the toggle load as on");
+        let text = toml::to_string_pretty(&am).unwrap();
+        assert!(!text.contains("enabled"), "{text}");
+
+        let off = AutoMatch {
+            enabled: false,
+            ..am
+        };
+        let text = toml::to_string_pretty(&off).unwrap();
+        assert!(text.contains("enabled = false"), "{text}");
+        let parsed: AutoMatch = toml::from_str(&text).unwrap();
+        assert!(!parsed.enabled);
+        assert_eq!(parsed.characters, vec!["Erelei"]);
+        assert_eq!(parsed.host.as_deref(), Some("h"));
+    }
+
+    #[test]
+    fn resolve_match_skips_an_entry_whose_login_toggle_is_off() {
+        let set = set_with_profiles(vec![
+            (
+                DEFAULT_PROFILE_NAME,
+                AutoMatch {
+                    host: Some("h".into()),
+                    port: Some(1848),
+                    characters: vec!["Erelei".into()],
+                    enabled: false,
+                },
+            ),
+            (
+                "fallback",
+                AutoMatch {
+                    host: Some("h".into()),
+                    port: None,
+                    characters: vec![],
+                    enabled: false,
+                },
+            ),
+        ]);
+        assert_eq!(set.resolve_match("h", 1848, Some("Erelei")), None);
+        // A host-only entry that is off is no fallback at connect.
+        assert_eq!(set.resolve_match("h", 1848, None), None);
     }
 
     #[test]
@@ -684,6 +765,7 @@ characters = ["Erelei", "Vanek"]
                 host: Some("h".into()),
                 port: None,
                 characters: vec![],
+                enabled: true,
             },
         )]);
         assert_eq!(
@@ -700,6 +782,7 @@ characters = ["Erelei", "Vanek"]
                 host: Some("PLAY.example.com".into()),
                 port: None,
                 characters: vec![],
+                enabled: true,
             },
         )]);
         assert!(set.resolve_match("play.EXAMPLE.com", 0, None).is_some());
@@ -717,6 +800,7 @@ characters = ["Erelei", "Vanek"]
                 host: Some("h".into()),
                 port: None,
                 characters: vec!["Erelei".into()],
+                enabled: true,
             },
         )]);
         assert_eq!(set.resolve_match("h", 0, None), None);
@@ -738,6 +822,7 @@ characters = ["Erelei", "Vanek"]
                     host: Some("h".into()),
                     port: None,
                     characters: vec![],
+                    enabled: true,
                 },
             ),
             (
@@ -746,6 +831,7 @@ characters = ["Erelei", "Vanek"]
                     host: Some("h".into()),
                     port: None,
                     characters: vec!["Erelei".into()],
+                    enabled: true,
                 },
             ),
         ]);
@@ -768,6 +854,7 @@ characters = ["Erelei", "Vanek"]
                 host: Some("h".into()),
                 port: None,
                 characters: vec!["A".into(), "B".into(), "C".into()],
+                enabled: true,
             },
         )]);
         assert!(set.resolve_match("h", 0, Some("a")).is_some());
@@ -783,6 +870,7 @@ characters = ["Erelei", "Vanek"]
                 host: Some("h".into()),
                 port: Some(1848),
                 characters: vec![],
+                enabled: true,
             },
         )]);
         assert!(set.resolve_match("h", 1848, None).is_some());
