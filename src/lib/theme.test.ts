@@ -474,4 +474,76 @@ describe('the paint cache', () => {
     paint = await cached();
     expect(paint?.follow === false && paint.manual.vars['--xterm-bg']).toBe('#302010');
   });
+
+  // A custom theme's Background field takes any color CSS can draw, not
+  // just hex. The backend still has to hear the appearance, or the next
+  // Settings window opens on the old one, and the ground whenever it is
+  // a solid color.
+  type Pixel = [number, number, number, number];
+  // A stand in for a 2D canvas. It reads the colors in `known` and
+  // ignores anything else, as a canvas ignores a color it cannot read.
+  const canvasReading = (known: Record<string, Pixel>) => {
+    const colors: Record<string, Pixel> = { 'rgba(0, 0, 0, 0)': [0, 0, 0, 0], ...known };
+    const root = (document as unknown as { documentElement: unknown }).documentElement;
+    vi.stubGlobal('document', {
+      documentElement: root,
+      createElement: () => {
+        let fill: Pixel = [0, 0, 0, 255];
+        let pixel: Pixel = [0, 0, 0, 0];
+        return {
+          width: 300,
+          height: 150,
+          getContext: () => ({
+            set fillStyle(css: string) {
+              if (colors[css]) fill = colors[css];
+            },
+            fillRect: () => {
+              pixel = fill;
+            },
+            getImageData: () => ({ data: Uint8ClampedArray.from(pixel) }),
+          }),
+        };
+      },
+    });
+  };
+
+  const groundedOn = (bg: string) => ({
+    id: 'grounded',
+    label: 'Grounded',
+    description: '',
+    xterm: { background: '#101010', foreground: '#dddddd' },
+    chrome: { bg },
+  });
+
+  const reportFor = async (bg: string) => {
+    const theme = await import('./theme');
+    const { customToAppTheme, setCustomThemes } = await import('./themes');
+    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    setCustomThemes([customToAppTheme(groundedOn(bg))]);
+    invoke.mockClear();
+    theme.applyThemePrefs(prefs({ theme: 'grounded' }));
+    return backdrops();
+  };
+
+  it('reports a solid ground written in any CSS color', async () => {
+    canvasReading({ 'rgb(16, 16, 16)': [16, 16, 16, 255], black: [0, 0, 0, 255] });
+    expect(await reportFor('rgb(16, 16, 16)')).toEqual([
+      { background: '#101010', appearance: 'dark' },
+    ]);
+    vi.resetModules();
+    expect(await reportFor('black')).toEqual([{ background: '#000000', appearance: 'dark' }]);
+  });
+
+  it('reports the appearance without a ground it cannot use', async () => {
+    // Translucent: the window color under it would not match the page.
+    canvasReading({ '#10101080': [16, 16, 16, 128] });
+    expect(await reportFor('#10101080')).toEqual([{ background: null, appearance: 'dark' }]);
+    // A color the canvas cannot read.
+    vi.resetModules();
+    expect(await reportFor('var(--nowhere)')).toEqual([{ background: null, appearance: 'dark' }]);
+  });
+
+  it('reports the appearance where no canvas can read the ground', async () => {
+    expect(await reportFor('rgb(16, 16, 16)')).toEqual([{ background: null, appearance: 'dark' }]);
+  });
 });
