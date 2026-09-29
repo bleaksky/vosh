@@ -14,7 +14,7 @@ describe('resolveSettingsTarget', () => {
       ['general', { group: 'general' }],
       ['themes', { group: 'appearance', section: 'theme' }],
       ['typography', { group: 'appearance', section: 'text' }],
-      ['vitals', { group: 'layout' }],
+      ['vitals', { group: 'layout', section: 'vitals' }],
       ['tick', { group: 'automation', section: 'timers', anchor: 'tick' }],
       ['panels', { group: 'characters', anchor: 'layout' }],
       ['profiles', { group: 'characters' }],
