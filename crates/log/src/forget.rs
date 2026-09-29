@@ -55,6 +55,15 @@
 //! differ` lines ask the same prompt again. `Passwords don't match.` goes
 //! back to the new password and its confirmation. Each try is blanked.
 //!
+//! The pieces of a split line reach the game one per pulse, and it
+//! answers each on its own. A piece that finds no password due still
+//! answers the prompt the game asks once it turns down the piece before,
+//! so the replay counts those pieces and plays them again from there. The
+//! login sends no GA, so a prompt the game prints between two pieces
+//! stays a partial line until the next output ends it. It lands in the
+//! log as a row of its own, which keeps the wait, or joined to the front
+//! of the next line, which the replay reads without it.
+//!
 //! The pick of an immortal is the one prompt that looks like nothing at
 //! all, and a character left link dead in the game reconnects from the
 //! pick just as quietly. So the line after a pick is blanked only once the
@@ -186,33 +195,50 @@ pub struct Forgotten {
     pub wiped: bool,
 }
 
+/// Every password prompt in the game's source, the account login in
+/// tables.c and the older nanny login in comm.c.
+const PASSWORD_PROMPT: &str = r"(?:
+        (?:imm-)?password\??
+      | (?:please\s+)?retype\s+password
+      | (?:new|current|character|immortal|set\s+immortal
+          |confirm|confirm\s+new|confirm\s+immortal)\s+password
+      | enter\s+password\s+for\s+\S+
+      | please\s+enter\s+your\s+imm\s+password
+      | please\s+choose\s+a\s+password\s+for\s+\S+
+      | please\s+enter\s+the\s+old\s+password\s+in\s+order\s+to\s+use\s+the\s+name\s+\S+
+    )\s*[>:]";
+
+/// [`PASSWORD_PROMPT`] at the start of a line, followed by `end`.
+fn prompt_pattern(end: &str) -> Regex {
+    RegexBuilder::new(&format!("^{PASSWORD_PROMPT}{end}"))
+        .case_insensitive(true)
+        .ignore_whitespace(true)
+        .build()
+        .expect("the password prompt pattern compiles")
+}
+
 /// True when `line`, one line of game output, is a prompt that asks for
-/// a password. It covers every password prompt in the game's source, the
-/// account login in tables.c and the older nanny login in comm.c, and
+/// a password. It covers every password prompt in the game's source, and
 /// only a whole line shaped like one, so a channel line that mentions a
 /// password never matches.
 pub fn is_password_prompt(line: &str) -> bool {
-    static PROMPT: OnceLock<Regex> = OnceLock::new();
-    PROMPT
-        .get_or_init(|| {
-            RegexBuilder::new(
-                r"^(?:
-                    (?:imm-)?password\??
-                  | (?:please\s+)?retype\s+password
-                  | (?:new|current|character|immortal|set\s+immortal
-                      |confirm|confirm\s+new|confirm\s+immortal)\s+password
-                  | enter\s+password\s+for\s+\S+
-                  | please\s+enter\s+your\s+imm\s+password
-                  | please\s+choose\s+a\s+password\s+for\s+\S+
-                  | please\s+enter\s+the\s+old\s+password\s+in\s+order\s+to\s+use\s+the\s+name\s+\S+
-                )\s*[>:]$",
-            )
-            .case_insensitive(true)
-            .ignore_whitespace(true)
-            .build()
-            .expect("the password prompt pattern compiles")
-        })
+    static WHOLE: OnceLock<Regex> = OnceLock::new();
+    WHOLE
+        .get_or_init(|| prompt_pattern("$"))
         .is_match(line.trim())
+}
+
+/// `line` without a password prompt at its front. The login sends no GA,
+/// so a prompt the game prints between two pieces of a split line stays
+/// a partial line until the next output ends it, and it lands in the log
+/// as a row of its own or joined to the front of the next line.
+fn after_password_prompt(line: &str) -> &str {
+    static LEADING: OnceLock<Regex> = OnceLock::new();
+    let trimmed = line.trim_start();
+    match LEADING.get_or_init(|| prompt_pattern("")).find(trimmed) {
+        Some(prompt) => trimmed[prompt.end()..].trim_start(),
+        None => line,
+    }
 }
 
 /// True when `word`, as typed, is a form of `name` the game accepts, at
@@ -321,6 +347,18 @@ fn passwords(left: u8) -> Wait {
     }
 }
 
+/// The last password prompt your lines answered, which the game's reply
+/// can take back by asking again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Answered {
+    /// The wait that line answered.
+    wait: Wait,
+    /// Pieces that went out in the same write after it and found no
+    /// password due. The game reads each piece as its own answer, so when
+    /// it asks again, these answer the prompts it asks from there.
+    ahead: u8,
+}
+
 /// A line sent right after a pick, blanked once the game shows it was
 /// the answer to `Imm-Password?> `.
 #[derive(Debug, Clone)]
@@ -341,9 +379,8 @@ struct Replay {
     wait: Wait,
     /// The nearest earlier row reads as a password prompt.
     after_prompt: bool,
-    /// The wait your last line answered, when it answered a password
-    /// prompt. The game's reply can ask for the same password again.
-    answered: Option<Wait>,
+    /// The password prompt your last lines answered, when they did.
+    answered: Option<Answered>,
     candidate: Option<Candidate>,
     /// The time of the write your last line went out in, when that line
     /// was blanked and no game output came since.
@@ -370,10 +407,49 @@ impl Replay {
         self.candidate = None;
     }
 
+    /// Take one line as the answer to a password prompt, when one is due.
+    /// True when it was.
+    fn answer_password(&mut self) -> bool {
+        let Wait::Password { left, then, .. } = self.wait else {
+            return false;
+        };
+        self.answered = Some(Answered {
+            wait: self.wait,
+            ahead: 0,
+        });
+        self.wait = if left > 1 {
+            Wait::Password {
+                left: left - 1,
+                then,
+                refused: Refused::Nothing,
+            }
+        } else {
+            then.wait()
+        };
+        true
+    }
+
+    /// The game turned an answer down and waits at `wait` again. The
+    /// pieces sent ahead of its reply answer the prompts from there.
+    fn ask_again(&mut self, wait: Wait, ahead: u8) {
+        self.wait = wait;
+        self.answered = None;
+        for _ in 0..ahead {
+            if !self.answer_password() {
+                if let Some(answered) = self.answered.as_mut() {
+                    answered.ahead = answered.ahead.saturating_add(1);
+                }
+            }
+        }
+    }
+
     /// One row of game output. Returns the candidate lines it confirms.
     fn output(&mut self, text: &str) -> Vec<i64> {
-        let line = text.trim_end();
-        self.after_prompt = is_password_prompt(line);
+        let row = text.trim_end();
+        self.after_prompt = is_password_prompt(row);
+        // A prompt row asks for what the replay already waits for, and a
+        // prompt joined to the next line leaves that line as the reply.
+        let line = after_password_prompt(row);
         self.blank_write = None;
         if let Some(candidate) = self.candidate.as_mut() {
             candidate.open = false;
@@ -386,7 +462,7 @@ impl Replay {
             self.enter(Wait::AccountMenu);
             return Vec::new();
         }
-        // The line break in front of a prompt.
+        // The line break in front of a prompt, or the prompt itself.
         if line.trim_start().is_empty() {
             return Vec::new();
         }
@@ -414,8 +490,8 @@ impl Replay {
             // The same prompt again. Answers sent ahead of the game's
             // reply each earn one of these lines, so with no answer left
             // to take back, one more password is due.
-            self.wait = match (self.answered.take(), self.wait) {
-                (Some(answered), _) => answered,
+            match (self.answered.take(), self.wait) {
+                (Some(answered), _) => self.ask_again(answered.wait, answered.ahead),
                 (
                     None,
                     Wait::Password {
@@ -423,16 +499,18 @@ impl Replay {
                         then,
                         refused,
                     },
-                ) => Wait::Password {
-                    left: left.saturating_add(1),
-                    then,
-                    refused,
-                },
-                (None, other) => other,
-            };
+                ) => {
+                    self.wait = Wait::Password {
+                        left: left.saturating_add(1),
+                        then,
+                        refused,
+                    };
+                }
+                (None, _) => {}
+            }
             return confirmed;
         }
-        if self.answered.take().is_some() {
+        if let Some(answered) = self.answered.take() {
             let again = if MISMATCH.contains(&line) || line == SET_IMM {
                 Some(passwords(2))
             } else if line == VERIFY_IMM {
@@ -441,7 +519,7 @@ impl Replay {
                 None
             };
             if let Some(wait) = again {
-                self.wait = wait;
+                self.ask_again(wait, answered.ahead);
                 return confirmed;
             }
         }
@@ -477,23 +555,21 @@ impl Replay {
         // A line after a pick that the game never showed to be the
         // immortal password was an ordinary command.
         self.candidate = None;
-        self.answered = None;
 
-        let mut blank = after_prompt || same_write || carries_password(answer);
+        if self.answer_password() {
+            self.blank_write = Some(ts_ms);
+            return (!hidden).then_some(id);
+        }
+        let blank = after_prompt || same_write || carries_password(answer);
+        // A piece of the last answer's write answers whatever the game
+        // asks once it turns that answer down.
+        match self.answered.as_mut() {
+            Some(answered) if same_write => answered.ahead = answered.ahead.saturating_add(1),
+            _ => self.answered = None,
+        }
         self.wait = match self.wait {
-            Wait::Password { left, then, .. } => {
-                blank = true;
-                self.answered = Some(self.wait);
-                if left > 1 {
-                    Wait::Password {
-                        left: left - 1,
-                        then,
-                        refused: Refused::Nothing,
-                    }
-                } else {
-                    then.wait()
-                }
-            }
+            // Taken above.
+            Wait::Password { .. } => self.wait,
             Wait::MaybeImmPassword => {
                 if !hidden {
                     self.candidate = Some(Candidate {
@@ -1539,6 +1615,117 @@ mod tests {
                 Out("Password must be at least five characters."),
                 Out(""),
                 Out("Password must be at least five characters."),
+                Out(""),
+                Sent(SECRET_NEW),
+                Out(""),
+                Sent(SECRET_NEW),
+            ],
+            &account_menu(),
+            &[Sent("1"), Out("Welcome."), Out(MOTD), Sent("look")],
+        ]);
+        let expected: Vec<usize> = (2..=5).map(|n| sent_at(&rows, n)).collect();
+        assert_eq!(blanked(&rows), expected);
+    }
+
+    // The game reads one piece of a split line each pulse. The login sends
+    // no GA, so a prompt it prints between two pieces stays a partial
+    // line until the next pulse's output ends it. It then lands in the
+    // log as a row of its own, or joined to the front of the next line.
+
+    #[test]
+    fn a_split_password_refused_at_the_confirmation_keeps_every_later_try_blanked() {
+        let rows = session(&[
+            &greeting(),
+            &[
+                Sent("c"),
+                Out(""),
+                Sent("tester"),
+                Out(""),
+                // `ab` is too short, and `cdefgh` becomes the new password.
+                Sent("ab"),
+                Also("cdefgh"),
+                Out("Password must be at least five characters."),
+                Out(""),
+                Out("New password> "),
+                // `ab` fails the confirmation, and `cdefgh` becomes the
+                // new password again.
+                Sent("ab"),
+                Also("cdefgh"),
+                Out("Passwords don't match."),
+                Out(""),
+                Out("New password> "),
+                // A confirmation that fails, then the password you keep,
+                // twice.
+                Sent("Fn7emberKite"),
+                Out("Passwords don't match."),
+                Out(""),
+                Sent("Fn7emberKite"),
+                Out(""),
+                Sent("Fn7emberKite"),
+            ],
+            &account_menu(),
+            &[Sent("1"), Out("Welcome."), Out(MOTD), Sent("look")],
+        ]);
+        let expected: Vec<usize> = (2..=8).map(|n| sent_at(&rows, n)).collect();
+        assert_eq!(blanked(&rows), expected);
+    }
+
+    #[test]
+    fn a_split_password_refused_in_a_password_change_keeps_every_later_try_blanked() {
+        let rows = session(&[
+            &greeting(),
+            &login(SECRET_ACCOUNT),
+            &account_menu(),
+            &[
+                Sent("p"),
+                Out(""),
+                Sent(SECRET_OLD),
+                Out(""),
+                Sent("ab"),
+                Also("cdefgh"),
+                Out("Password must be at least five characters."),
+                Out(""),
+                Out("New password> "),
+                Sent("ab"),
+                Also("cdefgh"),
+                Out("Passwords don't match."),
+                Out(""),
+                Out("New password> "),
+                Sent("Fn7emberKite"),
+                Out("Passwords don't match."),
+                Out(""),
+                Sent("Fn7emberKite"),
+                Out(""),
+                Sent("Fn7emberKite"),
+                Out(""),
+                Out("Account password changed successfully."),
+            ],
+            &account_menu(),
+            &[Sent("1"), Out("Welcome."), Out(MOTD), Sent("look")],
+        ]);
+        let expected: Vec<usize> = [2, 4, 5, 6, 7, 8, 9, 10, 11]
+            .iter()
+            .map(|&n| sent_at(&rows, n))
+            .collect();
+        assert_eq!(blanked(&rows), expected);
+    }
+
+    #[test]
+    fn a_prompt_joined_to_the_next_line_still_reads_as_the_reply() {
+        // Both pieces are too short. The prompt after the first one joins
+        // the reply to the second.
+        let rows = session(&[
+            &greeting(),
+            &[
+                Sent("c"),
+                Out(""),
+                Sent("tester"),
+                Out(""),
+                Sent("ab"),
+                Also("cd"),
+                Out("Password must be at least five characters."),
+                Out(""),
+                Out("New password> Password must be at least five characters."),
                 Out(""),
                 Sent(SECRET_NEW),
                 Out(""),
