@@ -13,6 +13,7 @@ import {
   nextDraftUid,
   removeDraftItem,
   replaceDraftValues,
+  saveListThenPinned,
   storeChangeAction,
   updateDraftItem,
   type Draft,
@@ -366,9 +367,11 @@ export function DraftEditor<T>({
     setBusy(true);
     savingRef.current = true;
     try {
-      if (isDraftDirty(d)) await spec.save(d);
-      if (pinned?.dirty) await pinned.save();
-      await load(selectedKey());
+      await saveListThenPinned({
+        list: isDraftDirty(d) ? () => spec.save(d) : null,
+        pinned: pinned?.dirty ? () => pinned.save() : null,
+        reload: () => load(selectedKey()),
+      });
       setJustSaved(true);
     } catch (e) {
       onError(automationSaveError(e));

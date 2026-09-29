@@ -3,8 +3,10 @@ import {
   addDraftItem,
   createDraft,
   removeDraftItem,
+  saveListThenPinned,
   updateDraftItem,
   isDraftDirty,
+  type Draft,
 } from './automationDraft';
 import {
   activeLoadouts,
@@ -32,6 +34,7 @@ import {
   validateAliases,
   validateMacros,
   validateTimers,
+  type TimerRecord,
 } from './automationRecords';
 import { defaultEnabledIds, PRESETS } from './presets';
 
@@ -164,6 +167,40 @@ describe('timers', () => {
       [1, 'drink'],
       [null, 'look'],
     ]);
+  });
+
+  it('creates a new timer once when the tick fails after it', async () => {
+    // timers_set and timers_list over one list.
+    const store: TimerRecord[] = timers.map((t) => ({ ...t }));
+    const write = async (d: Draft<TimerRecord>) => {
+      const plan = timerSavePlan(d);
+      for (const t of plan.set) {
+        if (t.id === null) store.push({ ...t, id: Math.max(...store.map((s) => s.id ?? 0)) + 1 });
+        else
+          store.splice(
+            store.findIndex((s) => s.id === t.id),
+            1,
+            { ...t },
+          );
+      }
+    };
+    let draft = addDraftItem(createDraft(store.map((t) => ({ ...t }))), {
+      ...blankTimer(),
+      command: 'look',
+    });
+    const save = () =>
+      saveListThenPinned({
+        list: isDraftDirty(draft) ? () => write(draft) : null,
+        // An invalid Reset on pattern.
+        pinned: () => Promise.reject(new Error('invalid reset pattern')),
+        reload: async () => {
+          draft = createDraft(store.map((t) => ({ ...t })));
+        },
+      });
+    await expect(save()).rejects.toThrow('invalid reset pattern');
+    await expect(save()).rejects.toThrow('invalid reset pattern');
+    expect(store.filter((t) => t.command === 'look')).toHaveLength(1);
+    expect(isDraftDirty(draft)).toBe(false);
   });
 
   it('shows intervals in the largest whole unit', () => {
