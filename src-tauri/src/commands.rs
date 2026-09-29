@@ -3305,10 +3305,10 @@ pub(crate) struct ConflictResolution {
 /// `profiles/legacy/`, writes `catalog.toml` + `loadouts.toml`, takes the
 /// aliases, triggers, and macros out of each profile file, which keeps
 /// every other setting, and asks for a relaunch so the startup hook
-/// picks up Path B mode. The previously-active profile name (from the
-/// index) becomes the sole initial active loadout so the user's first
-/// post-restart session keeps the same authoring set live. A write that
-/// fails puts back every file the run changed, so you stay in per
+/// picks up Path B mode. No loadout is on at first, so the group
+/// checkboxes in each profile file decide what is on for that profile,
+/// at launch and at every switch, the way each profile had it. A write
+/// that fails puts back every file the run changed, so you stay in per
 /// profile mode and can run it again. Refused while a profile file did
 /// not read at launch, or while catalog.toml or loadouts.toml is on
 /// disk, see [`crate::loadout_store::migration_refusal`].
@@ -3365,12 +3365,12 @@ async fn apply_migration(
     // same set the user just previewed, but a few seconds may have
     // passed and we want the fresh snapshot rather than caching across
     // commands.
-    let (previously_active, sources) = {
+    let sources = {
         let guard = state.profile_set.lock().await;
         let Some(set) = guard.as_ref() else {
             return Err(PROFILES_NOT_LOADED.into());
         };
-        (set.active_name().to_string(), migration_sources(set)?)
+        migration_sources(set)?
     };
     let live_presets = state.profile.lock().await.ui.enabled_presets.clone();
 
@@ -3408,18 +3408,16 @@ async fn apply_migration(
         }
     }
 
-    let mut loadout_set = crate::loadout::LoadoutSet {
+    // Every loadout starts off. An active loadout imposes its groups on
+    // every profile, at launch and at every switch, so the loadout of the
+    // profile you use now would turn off the items of every other
+    // character you switch to. With none on, the loadouts have no opinion
+    // and the group checkboxes each profile file keeps below decide.
+    let loadout_set = crate::loadout::LoadoutSet {
         loadouts: plan.loadouts,
         active: Vec::new(),
         dormant: false,
     };
-    if loadout_set
-        .loadouts
-        .iter()
-        .any(|l| l.name == previously_active)
-    {
-        loadout_set.active.push(previously_active);
-    }
 
     // Each profile file stays where it is and keeps every setting of its
     // profile, its timers, variables, tick, panels, theme, and vitals
@@ -5218,7 +5216,8 @@ mod tests {
                 .unwrap();
 
             let (catalog, loadouts) = load_path_b_at_launch(dir.path()).unwrap();
-            assert_eq!(loadouts.active, [DEFAULT_PROFILE_NAME]);
+            assert!(loadouts.active.is_empty());
+            assert!(!loadouts.dormant);
             // Every item sits in the catalog once.
             let mut in_catalog: Vec<String> = catalog
                 .aliases
@@ -5269,11 +5268,8 @@ mod tests {
                 assert!(backups >= 1, "{name}");
             }
 
-            // Quit, then open Vosh as each character with its own loadout.
+            // Quit, then open Vosh as each character.
             for (n, name) in names.iter().enumerate() {
-                let mut loadouts = crate::loadout_store::load_loadout_set(dir.path()).unwrap();
-                loadouts.active = vec![(*name).to_string()];
-                save_loadout_set(dir.path(), &loadouts).unwrap();
                 let state = relaunch_as(dir.path(), name).await;
                 assert!(state.global_catalog.lock().await.is_some(), "{name}");
                 {
@@ -5596,6 +5592,45 @@ mod tests {
                 rows
             );
             assert_eq!(live_rows(&state).await, rows);
+        }
+
+        #[tokio::test]
+        async fn each_character_keeps_its_own_items_across_switches_after_the_wizard() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let (state, before) = converted_three(dir.path()).await;
+            assert_eq!(items_on(&*state.profile.lock().await), before[0]);
+
+            // Caelaor logs in, and Vosh switches to Healer.
+            super::super::switch_profile(&state, Some(dir.path()), "Healer")
+                .await
+                .unwrap();
+            assert_eq!(items_on(&*state.profile.lock().await), before[1]);
+            persist(&state, dir.path()).await;
+
+            // The next launch opens as Healer.
+            let state = relaunch_as(dir.path(), "Healer").await;
+            assert_eq!(items_on(&*state.profile.lock().await), before[1]);
+
+            // Back to Default, then on to Test-Prompt.
+            super::super::switch_profile(&state, Some(dir.path()), DEFAULT_PROFILE_NAME)
+                .await
+                .unwrap();
+            assert_eq!(items_on(&*state.profile.lock().await), before[0]);
+            super::super::switch_profile(&state, Some(dir.path()), "Test-Prompt")
+                .await
+                .unwrap();
+            assert_eq!(items_on(&*state.profile.lock().await), before[2]);
+            persist(&state, dir.path()).await;
+
+            // Every save along the way kept each character as it was.
+            for (n, name) in [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"]
+                .iter()
+                .enumerate()
+            {
+                let state = relaunch_as(dir.path(), name).await;
+                assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+            }
         }
     }
 }

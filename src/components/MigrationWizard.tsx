@@ -284,8 +284,8 @@ function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
           </ul>
         )}
         <div className="migration-hint">
-          Each loadout turns on the groups its profile had on. The profile you use now becomes the
-          only active loadout, so your next session starts the same.
+          Each loadout turns on the groups its profile had on. Every loadout starts off, so each
+          profile keeps on the items it has on now, at launch and when you switch.
         </div>
       </Section>
     </>
