@@ -1652,7 +1652,7 @@ pub(crate) async fn profile_create(
         };
         set.create(&name).map_err(|e| e.to_string())?;
     }
-    let _ = app.emit("vosh://profiles-changed", &name);
+    broadcast(&app, "vosh://profiles-changed", &name);
     Ok(())
 }
 
@@ -1670,7 +1670,7 @@ pub(crate) async fn profile_delete(
         };
         set.delete(&name).map_err(|e| e.to_string())?;
     }
-    let _ = app.emit("vosh://profiles-changed", &name);
+    broadcast(&app, "vosh://profiles-changed", &name);
     Ok(())
 }
 
@@ -1689,7 +1689,7 @@ pub(crate) async fn profile_rename(
         };
         set.rename(&old, &new).map_err(|e| e.to_string())?;
     }
-    let _ = app.emit("vosh://profiles-changed", &new);
+    broadcast(&app, "vosh://profiles-changed", &new);
     Ok(())
 }
 
@@ -1708,7 +1708,7 @@ pub(crate) async fn profile_duplicate(
         };
         set.duplicate(&source, &new).map_err(|e| e.to_string())?;
     }
-    let _ = app.emit("vosh://profiles-changed", &new);
+    broadcast(&app, "vosh://profiles-changed", &new);
     Ok(())
 }
 
@@ -1744,7 +1744,7 @@ pub(crate) async fn profile_set_scope(
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    let _ = app.emit("vosh://profiles-changed", "scope");
+    broadcast(&app, "vosh://profiles-changed", &"scope");
     Ok(())
 }
 
@@ -1764,7 +1764,7 @@ pub(crate) async fn profile_set_metadata(
         set.set_metadata(&name, description, auto_match)
             .map_err(|e| e.to_string())?;
     }
-    let _ = app.emit("vosh://profiles-changed", &name);
+    broadcast(&app, "vosh://profiles-changed", &name);
     Ok(())
 }
 
@@ -1909,7 +1909,7 @@ pub(crate) async fn apply_profile_switch(
     // the new values when windows react to the switch.
     broadcast_profile_ui(app, state).await;
 
-    let _ = app.emit("vosh://profile-switched", name);
+    broadcast(app, "vosh://profile-switched", &name);
     Ok(())
 }
 
