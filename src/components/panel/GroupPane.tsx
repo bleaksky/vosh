@@ -6,12 +6,14 @@ import {
   type GroupMember,
   type GroupState,
 } from '../../lib/groupStore';
+import { thirdsTone } from '../../lib/vitalsView';
 import { PaneHeader, PaneMeta } from './PaneHeader';
 
 // Your group at a glance (SPEC 9). One dense row per member: the name,
 // a `lead` tag on the leader, a 48 by 3 health meter, and the percent.
 // The meter and percent stay quiet until a member drops into the
-// middle third (warn) or the bottom third (danger).
+// middle third (warn) or the bottom third (danger). Your own vitals
+// read the same thirds while Warn before you run low is on.
 
 // groupStore builds a fresh snapshot object on every read, so keep
 // the last one while its parts are unchanged. useSyncExternalStore
@@ -65,7 +67,8 @@ export function GroupPane() {
 
 function MemberRow({ member, leader }: { member: GroupMember; leader: boolean }) {
   const hp = asPct(member.hp_pct);
-  const tone = hp === null ? '' : hpTone(hp);
+  const third = hp === null ? 'quiet' : thirdsTone(hp);
+  const tone = third === 'quiet' ? '' : third;
   return (
     <li className={`pane-row pane-member${tone ? ` pane-member-${tone}` : ''}`}>
       <span className="pane-row-name">
@@ -78,14 +81,6 @@ function MemberRow({ member, leader }: { member: GroupMember; leader: boolean })
       <span className="pane-member-pct">{hp === null ? '' : `${hp}%`}</span>
     </li>
   );
-}
-
-/** Thirds, like the old roster: the top third stays quiet, the middle
- *  third warns, the bottom third is danger. */
-function hpTone(pct: number): '' | 'warn' | 'danger' {
-  if (pct >= 67) return '';
-  if (pct >= 34) return 'warn';
-  return 'danger';
 }
 
 function asPct(value: unknown): number | null {
