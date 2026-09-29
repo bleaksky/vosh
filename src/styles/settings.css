@@ -281,6 +281,25 @@
   font-weight: 400;
 }
 
+/* A page inside a group names the group as a link back, in the
+   tertiary tone like Settings (SettingsGeneralLogs). */
+.st-crumb-link {
+  flex: none;
+  border-radius: var(--r-key);
+  color: var(--tertiary);
+  text-decoration: none;
+  cursor: default;
+}
+
+.st-crumb-link:hover {
+  color: var(--secondary);
+}
+
+.st-crumb-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .st-window-controls {
   display: flex;
   align-items: center;

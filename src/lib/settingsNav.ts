@@ -46,6 +46,22 @@ export interface SettingsTarget {
 // to scroll to.
 const SECTION_IS_STATE: ReadonlySet<SettingsGroup> = new Set(['automation', 'characters']);
 
+// Pages that open inside a group, by the section that names them, with
+// the title the breadcrumb adds. The group stays active in the nav.
+const SETTINGS_SUBPAGES: Readonly<
+  Partial<Record<SettingsGroup, Readonly<Record<string, string>>>>
+> = {
+  general: { logs: 'Session logs' },
+};
+
+/** The title of the page inside a group that `target` opens, like
+ *  `Session logs` for `general:logs`, or null for the group's own
+ *  page. */
+export function settingsSubpage(target: SettingsTarget): string | null {
+  if (!target.section) return null;
+  return SETTINGS_SUBPAGES[target.group]?.[target.section] ?? null;
+}
+
 // The tab ids the old Settings window used, from the palette, the pane
 // menu, and any pending tab left over from an older build.
 const LEGACY_TARGETS: Readonly<Record<string, SettingsTarget>> = {
@@ -97,10 +113,13 @@ export function formatSettingsTarget(target: SettingsTarget): string {
 }
 
 /** The anchors the page should scroll to for `target`, best first:
- *  the anchor, then the section when the section names a place. */
+ *  the anchor, then the section when the section names a place. A
+ *  section that opens a page inside the group is not a place. */
 export function settingsScrollIds(target: SettingsTarget): string[] {
   const ids: string[] = [];
   if (target.anchor) ids.push(target.anchor);
-  if (target.section && !SECTION_IS_STATE.has(target.group)) ids.push(target.section);
+  if (target.section && !SECTION_IS_STATE.has(target.group) && !settingsSubpage(target)) {
+    ids.push(target.section);
+  }
   return ids;
 }

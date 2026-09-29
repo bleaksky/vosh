@@ -3,6 +3,7 @@ import {
   formatSettingsTarget,
   resolveSettingsTarget,
   settingsScrollIds,
+  settingsSubpage,
   SETTINGS_GROUPS,
   type SettingsTarget,
 } from './settingsNav';
@@ -82,6 +83,19 @@ describe('resolveSettingsTarget', () => {
   });
 });
 
+describe('settingsSubpage', () => {
+  it('names the session logs page inside General', () => {
+    expect(settingsSubpage(resolveSettingsTarget('general:logs'))).toBe('Session logs');
+    expect(settingsSubpage(resolveSettingsTarget('logs'))).toBe('Session logs');
+  });
+
+  it('is null for a group page and its sections', () => {
+    expect(settingsSubpage({ group: 'general' })).toBeNull();
+    expect(settingsSubpage({ group: 'general', section: 'updates' })).toBeNull();
+    expect(settingsSubpage({ group: 'automation', section: 'logs' })).toBeNull();
+  });
+});
+
 describe('formatSettingsTarget', () => {
   it('writes the string resolveSettingsTarget reads back', () => {
     const targets: SettingsTarget[] = [
@@ -105,8 +119,12 @@ describe('settingsScrollIds', () => {
       'size',
       'text',
     ]);
-    expect(settingsScrollIds({ group: 'general', section: 'logs' })).toEqual(['logs']);
+    expect(settingsScrollIds({ group: 'general', section: 'updates' })).toEqual(['updates']);
     expect(settingsScrollIds({ group: 'layout' })).toEqual([]);
+  });
+
+  it('never scrolls to a page inside a group', () => {
+    expect(settingsScrollIds({ group: 'general', section: 'logs' })).toEqual([]);
   });
 
   it('never scrolls to an Automation kind or a Characters profile', () => {
