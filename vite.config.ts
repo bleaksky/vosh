@@ -44,6 +44,11 @@ export default defineConfig(async () => ({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
+  // Agent worktrees live under .claude/ inside the repo. Their copies
+  // of the tests are not this checkout's tests.
+  test: {
+    exclude: ['**/node_modules/**', '**/dist/**', '.claude/**'],
+  },
   clearScreen: false,
   server: {
     port: 1420,
