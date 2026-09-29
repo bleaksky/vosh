@@ -1,0 +1,50 @@
+/* One Window overlays: the command palette, the terminal menu, the
+   find bar, toasts, the confirm dialog, and the scroll depth chip.
+   Every floating surface takes the SPEC 3 recipe (--raised ground,
+   radius 16, --shadow-float) and reads only the One Window tokens.
+   Class names carry the ov- prefix so nothing in the legacy
+   styles.css reaches them. */
+
+/* Scroll depth. Sits at the terminal's top right, 8 below the band
+   and 16 in from the panel edge, and drops under the find bar (8 + 40
+   + 8) while find is open. Never takes the pointer, so a selection
+   drag passes straight through to the terminal. */
+.ov-depth {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 10px 0 8px;
+  border-radius: 999px;
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ov-depth svg {
+  display: block;
+  flex: none;
+  color: var(--tertiary);
+}
+
+.ov-depth-of {
+  color: var(--tertiary);
+}
+
+.ov-depth.is-below-find,
+.ov-find ~ .ov-depth {
+  top: 56px;
+}
