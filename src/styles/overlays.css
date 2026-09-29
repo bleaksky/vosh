@@ -701,3 +701,13 @@
   grid-column: 1 / 2;
   grid-row: 2 / 3;
 }
+
+/* The update notice mounts the same way. Its legacy rule pins it 40
+   above the bottom of the whole window, which lands on the panel's
+   vitals, so it takes the terminal cell and the toasts' 16 px inset. */
+.shell > .update-notice {
+  grid-column: 1 / 2;
+  grid-row: 2 / 3;
+  right: 16px;
+  bottom: 16px;
+}
