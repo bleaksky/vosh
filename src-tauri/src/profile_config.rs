@@ -2107,6 +2107,114 @@ pub(crate) fn strip_global_fields(config: &mut ProfileConfig, scope: &ScopeConfi
     }
 }
 
+/// The profile file and global.toml when Vosh could not read them at
+/// launch. The live profile holds the defaults where their settings
+/// belong, so a save would write those defaults over your settings, and
+/// ten more saves would rotate the last good copy out of the backups.
+/// [`write_with_backup`] refuses every path held here. A switch that
+/// reads the files again, or a `#profile load` that reads the profile
+/// file, lets them go. Held by path, so tests over their own folders
+/// never meet.
+static UNREAD_FILES: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+fn unread_files() -> std::sync::MutexGuard<'static, Vec<PathBuf>> {
+    UNREAD_FILES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Refuse every write to `path` until [`release_unread`] lets it go.
+pub(crate) fn hold_unread(path: &Path) {
+    let mut files = unread_files();
+    if !files.iter().any(|held| held == path) {
+        files.push(path.to_path_buf());
+    }
+}
+
+/// Let writes to `path` resume. The live profile holds what the file
+/// says again, or no longer stands in for it.
+pub(crate) fn release_unread(path: &Path) {
+    unread_files().retain(|held| held != path);
+}
+
+/// True when Vosh could not read `path` at launch and still holds it.
+pub(crate) fn is_unread(path: &Path) -> bool {
+    unread_files().iter().any(|held| held == path)
+}
+
+/// Keep holding a file that a rename moved from `from` to `to`.
+pub(crate) fn follow_unread(from: &Path, to: &Path) {
+    for held in unread_files().iter_mut() {
+        if held == from {
+            *held = to.to_path_buf();
+        }
+    }
+}
+
+/// What Vosh tells you at launch when the active profile file does not
+/// read.
+pub(crate) fn unread_profile_notice(name: &str) -> String {
+    format!(
+        "Vosh could not read the {} profile file, so it will not save over it. Fix the file or \
+         switch to another profile.",
+        crate::profile_set::display_name(name)
+    )
+}
+
+/// What Vosh tells you at launch when global.toml does not read.
+pub(crate) const UNREAD_GLOBAL_NOTICE: &str = "Vosh could not read global.toml, which holds your \
+     shared settings, so it will not save over it. Fix the file and restart Vosh.";
+
+/// Load the active profile file and the shared part of global.toml into
+/// `profile` at launch. A file that does not read stays as it is on
+/// disk. Vosh holds it with [`hold_unread`], keeps the defaults in its
+/// place for this session, and returns the sentence that tells you so.
+pub(crate) fn load_at_launch(set: &ProfileSet, profile: &mut Profile) -> Vec<String> {
+    let mut notices = Vec::new();
+    let active_path = set.active_path();
+    if active_path.exists() {
+        match ProfileConfig::load(&active_path) {
+            Ok(snapshot) => {
+                for warning in snapshot.apply_to(profile) {
+                    tracing::info!(warning = %warning, "profile apply warning");
+                }
+                tracing::info!(
+                    path = %active_path.display(),
+                    active = %set.active_name(),
+                    "loaded profile",
+                );
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    path = %active_path.display(),
+                    "active profile unreadable at startup; it will not be saved over",
+                );
+                hold_unread(&active_path);
+                notices.push(unread_profile_notice(set.active_name()));
+            }
+        }
+    }
+    let global_path = set.global_path();
+    match GlobalConfig::load_shared(&global_path, set.scope()) {
+        Ok(Some(global)) => {
+            global.apply_to(profile);
+            tracing::info!(path = %global_path.display(), "loaded global config");
+        }
+        Ok(None) => {}
+        Err(e) => {
+            tracing::error!(
+                error = %e,
+                path = %global_path.display(),
+                "global.toml unreadable at startup; it will not be saved over",
+            );
+            hold_unread(&global_path);
+            notices.push(UNREAD_GLOBAL_NOTICE.to_string());
+        }
+    }
+    notices
+}
+
 /// Number of timestamped backups to retain alongside each profile /
 /// global config file. Each call to a top-level `save()` rotates the
 /// pre-write file off to a new backup before the new content lands,
@@ -2134,7 +2242,16 @@ const BACKUP_RETENTION: usize = 10;
 /// or 3 is fatal and the original file is left untouched (the backup
 /// either does not exist yet, or has already been renamed away
 /// successfully).
+///
+/// A file held by [`hold_unread`] is refused before any step, so no
+/// save writes the defaults over settings Vosh could not read.
 pub(crate) fn write_with_backup(path: &Path, contents: &str) -> std::io::Result<()> {
+    if is_unread(path) {
+        return Err(std::io::Error::other(format!(
+            "Vosh could not read {} at launch, so it will not save over it",
+            path.display()
+        )));
+    }
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -2270,6 +2387,27 @@ mod tests {
         let path = dir.path().join("nested/under/here/config.toml");
         write_with_backup(&path, "ok\n").unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "ok\n");
+    }
+
+    #[test]
+    fn a_file_held_as_unread_is_never_written_or_moved() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Healer.toml");
+        std::fs::write(&path, "tracked = = [\n").unwrap();
+        hold_unread(&path);
+        assert!(write_with_backup(&path, "defaults = true\n").is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "tracked = = [\n");
+        assert!(list_backups(&path).is_empty());
+
+        // A rename carries the hold to the new name.
+        let renamed = dir.path().join("Cleric.toml");
+        follow_unread(&path, &renamed);
+        assert!(!is_unread(&path));
+        assert!(write_with_backup(&renamed, "defaults = true\n").is_err());
+
+        release_unread(&renamed);
+        write_with_backup(&renamed, "fixed = true\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&renamed).unwrap(), "fixed = true\n");
     }
 
     /// Helper for the backup tests: list every `<file>.bak.<digits>`
