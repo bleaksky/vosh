@@ -64,6 +64,7 @@ fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(), tauri::E
 
 #[cfg(native_surface)]
 mod cell_render;
+mod characters;
 mod commands;
 mod connection;
 mod fonts;
@@ -476,6 +477,7 @@ pub fn run() {
             commands::pane_layout_get,
             commands::pane_layout_set,
             commands::tracked_affects_set,
+            characters::profile_detail_get,
             commands::ui_set_theme,
             fonts_list,
             macros_list,

@@ -106,7 +106,6 @@ fn default_true() -> bool {
     true
 }
 
-#[allow(clippy::trivially_copy_pass_by_ref)] // serde passes a reference
 fn is_true(value: &bool) -> bool {
     *value
 }
@@ -388,6 +387,29 @@ impl ProfileSet {
         best.map(|(name, _)| name.to_string())
     }
 
+    /// Whether the login toggle for `name` reads on: its first character
+    /// logging in on its world would load this profile. That needs the
+    /// toggle on, a world, a character, and `resolve_match` picking this
+    /// profile over any other that claims the same character, so a
+    /// profile that loses a tie in index order reads off. A profile
+    /// that pins no port is checked at its known world's port.
+    pub(crate) fn login_on(&self, name: &str) -> bool {
+        let Some(am) = self.get(name).and_then(|e| e.auto_match.as_ref()) else {
+            return false;
+        };
+        let (Some(host), Some(character)) = (am.host.as_deref(), am.characters.first()) else {
+            return false;
+        };
+        if !am.enabled {
+            return false;
+        }
+        let port = am
+            .port
+            .or_else(|| known_world(host).map(|w| w.port))
+            .unwrap_or(0);
+        self.resolve_match(host, port, Some(character)).as_deref() == Some(name)
+    }
+
     /// Create an empty entry. The per-profile file is created on the
     /// next save (so a brand-new profile inherits whatever defaults
     /// `ProfileConfig::default()` produces on first persist).
@@ -519,6 +541,41 @@ impl ProfileSet {
     }
 }
 
+/// A world Vosh knows by name. Mirrors `KNOWN_WORLDS` in
+/// src/lib/useConnection.ts.
+pub(crate) struct KnownWorld {
+    /// A host matches this domain or any subdomain of it.
+    pub domain: &'static str,
+    pub name: &'static str,
+    /// The port you connect to it on.
+    pub port: u16,
+}
+
+pub(crate) const KNOWN_WORLDS: &[KnownWorld] = &[KnownWorld {
+    domain: "theforsakenlands.com",
+    name: "The Forsaken Lands",
+    port: 1848,
+}];
+
+/// The known world a host belongs to, if any.
+pub(crate) fn known_world(host: &str) -> Option<&'static KnownWorld> {
+    let lower = host.trim().to_ascii_lowercase();
+    let clean = lower.strip_suffix('.').unwrap_or(&lower);
+    KNOWN_WORLDS.iter().find(|w| {
+        clean == w.domain
+            || clean
+                .strip_suffix(w.domain)
+                .is_some_and(|rest| rest.ends_with('.'))
+    })
+}
+
+/// The name Vosh shows for a host, like `The Forsaken Lands` for
+/// `play.theforsakenlands.com`. Unknown hosts show as typed. Mirrors
+/// `worldName` in src/lib/useConnection.ts.
+pub(crate) fn world_name(host: &str) -> String {
+    known_world(host).map_or_else(|| host.trim().to_string(), |w| w.name.to_string())
+}
+
 /// The name Vosh shows for a profile. The reserved `default` profile
 /// reads `Default`, and every other name shows as typed.
 pub(crate) fn display_name(name: &str) -> String {
@@ -550,7 +607,7 @@ pub(crate) fn sanitize_name(name: &str) -> Result<String, ProfileSetError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use tempfile::tempdir;
 
@@ -745,6 +802,100 @@ characters = ["Erelei", "Vanek"]
         assert_eq!(set.resolve_match("h", 1848, Some("Erelei")), None);
         // A host-only entry that is off is no fallback at connect.
         assert_eq!(set.resolve_match("h", 1848, None), None);
+    }
+
+    #[test]
+    fn world_name_knows_the_forsaken_lands_by_any_subdomain() {
+        assert_eq!(
+            world_name("play.theforsakenlands.com"),
+            "The Forsaken Lands"
+        );
+        assert_eq!(world_name(" TheForsakenLands.com. "), "The Forsaken Lands");
+        assert_eq!(world_name("mud.example.org"), "mud.example.org");
+        assert_eq!(
+            world_name("nottheforsakenlands.com"),
+            "nottheforsakenlands.com"
+        );
+        let world = known_world("play.theforsakenlands.com").unwrap();
+        assert_eq!(world.port, 1848);
+    }
+
+    pub(crate) fn claim(host: &str, port: Option<u16>, characters: &[&str]) -> AutoMatch {
+        AutoMatch {
+            host: Some(host.into()),
+            port,
+            characters: characters.iter().map(ToString::to_string).collect(),
+            enabled: true,
+        }
+    }
+
+    /// James's index: default and Test-Prompt both claim Erelei on the
+    /// same world, and Healer claims Caelaor.
+    pub(crate) fn james_like_set(dir: &std::path::Path) -> ProfileSet {
+        let mut set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
+        let world = "play.theforsakenlands.com";
+        set.set_metadata(
+            DEFAULT_PROFILE_NAME,
+            Some("Immortal".into()),
+            Some(claim(world, Some(1848), &["Erelei"])),
+        )
+        .unwrap();
+        set.create("Healer").unwrap();
+        set.set_metadata("Healer", None, Some(claim(world, Some(1848), &["Caelaor"])))
+            .unwrap();
+        set.create("Test-Prompt").unwrap();
+        set.set_metadata(
+            "Test-Prompt",
+            None,
+            Some(claim(world, Some(1848), &["Erelei"])),
+        )
+        .unwrap();
+        set
+    }
+
+    #[test]
+    fn login_on_reads_on_only_for_the_profile_that_wins_the_login() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        assert!(set.login_on(DEFAULT_PROFILE_NAME));
+        assert!(set.login_on("Healer"));
+        // Test-Prompt claims Erelei too but loses the tie in index order.
+        assert!(!set.login_on("Test-Prompt"));
+
+        // Off, or with no world or no character, reads off.
+        let mut off = claim("play.theforsakenlands.com", Some(1848), &["Caelaor"]);
+        off.enabled = false;
+        set.set_metadata("Healer", None, Some(off)).unwrap();
+        assert!(!set.login_on("Healer"));
+        set.create("Blank").unwrap();
+        assert!(!set.login_on("Blank"));
+        set.set_metadata("Blank", None, Some(claim("h", None, &[])))
+            .unwrap();
+        assert!(!set.login_on("Blank"));
+        assert!(!set.login_on("Nobody"));
+    }
+
+    #[test]
+    fn login_on_checks_a_portless_claim_at_its_known_world_port() {
+        let dir = tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.set_metadata(
+            DEFAULT_PROFILE_NAME,
+            None,
+            Some(claim("play.theforsakenlands.com", None, &["Vanek"])),
+        )
+        .unwrap();
+        assert!(set.login_on(DEFAULT_PROFILE_NAME));
+        // A profile pinned to the real port outscores it at login.
+        set.create("Pinned").unwrap();
+        set.set_metadata(
+            "Pinned",
+            None,
+            Some(claim("play.theforsakenlands.com", Some(1848), &["Vanek"])),
+        )
+        .unwrap();
+        assert!(!set.login_on(DEFAULT_PROFILE_NAME));
+        assert!(set.login_on("Pinned"));
     }
 
     #[test]
