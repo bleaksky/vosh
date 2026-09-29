@@ -585,7 +585,7 @@ Example. The pattern `dragon|wyvern` finds lines containing either word.
 
 The `copy` button on a session row copies that whole session to your clipboard as plain text. There is no file download yet. The store is `logs.sqlite` in the app data folder and it fills on every connection, so logging needs no setup.
 
-The log keeps what the game sent and each line you sent, marked `> `. Lines you type at a password prompt are not saved. Each one shows as `> (hidden)` in its place.
+The log keeps what the game sent and each line you sent, marked `> `. Lines you type at a password prompt are not saved. Each one shows as `> (hidden)` in its place. Older versions of Vosh saved those lines in full, so a session you logged before updating can still show your password after a `> `. To clear it, quit Vosh and delete `logs.sqlite` and its `-wal` and `-shm` files from the app data folder. That removes every saved session. If you copied or shared one of those sessions, change your password in the game.
 
 ### 7.5 Check for updates
 
