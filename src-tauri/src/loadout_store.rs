@@ -127,6 +127,54 @@ pub(crate) fn save_loadout_set(app_data: &Path, set: &LoadoutSet) -> Result<(), 
     Ok(())
 }
 
+/// What Vosh tells you at launch when catalog.toml does not read.
+pub(crate) const UNREAD_CATALOG_NOTICE: &str =
+    "Vosh could not read catalog.toml, which holds your shared aliases, triggers, and macros, so \
+     they are off and Vosh will not save over it. Fix the file and restart Vosh.";
+
+/// What Vosh tells you at launch when loadouts.toml does not read.
+pub(crate) const UNREAD_LOADOUTS_NOTICE: &str =
+    "Vosh could not read loadouts.toml, so your shared aliases, triggers, and macros are off and \
+     Vosh will not save over it or catalog.toml. Fix the file and restart Vosh.";
+
+/// Read catalog.toml and loadouts.toml at launch in loadout mode. When
+/// either one does not read, the session runs on the profile files alone,
+/// so a save from it would write a catalog without your shared items.
+/// Vosh then holds both files with [`crate::profile_config::hold_unread`],
+/// since the pair only makes sense together, and the error carries the
+/// sentences that tell you so.
+pub(crate) fn load_path_b_at_launch(
+    app_data: &Path,
+) -> Result<(GlobalCatalog, LoadoutSet), Vec<String>> {
+    let catalog = load_global_catalog(app_data);
+    let set = load_loadout_set(app_data);
+    let mut notices = Vec::new();
+    if let Err(e) = &catalog {
+        tracing::error!(
+            error = %e,
+            path = %catalog_path(app_data).display(),
+            "catalog.toml unreadable at startup; it will not be saved over",
+        );
+        notices.push(UNREAD_CATALOG_NOTICE.to_string());
+    }
+    if let Err(e) = &set {
+        tracing::error!(
+            error = %e,
+            path = %loadouts_path(app_data).display(),
+            "loadouts.toml unreadable at startup; it will not be saved over",
+        );
+        notices.push(UNREAD_LOADOUTS_NOTICE.to_string());
+    }
+    match (catalog, set) {
+        (Ok(catalog), Ok(set)) => Ok((catalog, set)),
+        _ => {
+            crate::profile_config::hold_unread(&catalog_path(app_data));
+            crate::profile_config::hold_unread(&loadouts_path(app_data));
+            Err(notices)
+        }
+    }
+}
+
 /// What `ui.enabled_presets` holds when you turned every preset off. An
 /// empty list means the defaults. Mirrors `PRESETS_OFF_MARKER` in
 /// src/lib/automationRecords.ts.
@@ -382,6 +430,48 @@ mod tests {
         save_global_catalog(&dir, &GlobalCatalog::default()).unwrap();
         assert!(path_b_mode_active(&dir));
         fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_path_b_file_that_does_not_read_holds_both_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut catalog = GlobalCatalog::default();
+        catalog.aliases.push(Alias::new("kk", "kick %1"));
+        save_global_catalog(dir.path(), &catalog).unwrap();
+        fs::write(loadouts_path(dir.path()), "active = = [\n").unwrap();
+        let catalog_text = fs::read_to_string(catalog_path(dir.path())).unwrap();
+
+        assert_eq!(
+            load_path_b_at_launch(dir.path()).unwrap_err(),
+            [UNREAD_LOADOUTS_NOTICE]
+        );
+        // The session runs without your shared items, so a save from it
+        // would write an empty catalog over them.
+        assert!(save_global_catalog(dir.path(), &GlobalCatalog::default()).is_err());
+        assert!(save_loadout_set(dir.path(), &LoadoutSet::default()).is_err());
+        assert_eq!(
+            fs::read_to_string(catalog_path(dir.path())).unwrap(),
+            catalog_text
+        );
+        assert_eq!(
+            fs::read_to_string(loadouts_path(dir.path())).unwrap(),
+            "active = = [\n"
+        );
+    }
+
+    #[test]
+    fn a_catalog_that_does_not_read_is_named_in_the_notice() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(catalog_path(dir.path()), "aliases = = [\n").unwrap();
+        assert_eq!(
+            load_path_b_at_launch(dir.path()).unwrap_err(),
+            [UNREAD_CATALOG_NOTICE]
+        );
+        assert!(save_global_catalog(dir.path(), &GlobalCatalog::default()).is_err());
+        // Nothing wrote loadouts.toml, and nothing can while the catalog
+        // is held.
+        assert!(save_loadout_set(dir.path(), &LoadoutSet::default()).is_err());
+        assert!(!loadouts_path(dir.path()).exists());
     }
 
     #[test]
