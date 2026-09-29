@@ -1,0 +1,11 @@
+{
+  "settings": "Mod+,",
+  "connect": "Mod+R",
+  "close-window": "Mod+W",
+  "copy": "Mod+C",
+  "find": "Mod+F",
+  "palette": "Mod+K",
+  "panel": "Mod+Shift+L",
+  "split": "Mod+\\",
+  "help": "Mod+/"
+}

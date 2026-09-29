@@ -62,6 +62,7 @@ fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(), tauri::E
     })
 }
 
+mod app_menu;
 #[cfg(native_surface)]
 mod cell_render;
 mod characters;
@@ -125,7 +126,15 @@ pub fn run() {
 
     let state: SharedState = Arc::new(AppState::default());
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // The macOS menu bar (app_menu.rs). Windows and Linux get no menu, so
+    // their frameless windows never grow a native menubar.
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .menu(app_menu::build)
+        .on_menu_event(app_menu::on_event);
+
+    builder
         // Serves font files by family name. Frontend mints @font-face
         // blocks pointing at font://<family> so the webview can render
         // user-installed fonts WebKit otherwise refuses to match.
@@ -512,6 +521,8 @@ pub fn run() {
             timers_delete,
             import_detect,
             import_apply,
+            app_menu::menu_set_state,
+            app_menu::menu_copy,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
