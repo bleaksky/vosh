@@ -2,6 +2,7 @@ import { startChatStore } from '../chatStore';
 import { startGroupStore } from '../groupStore';
 import { startImmStore } from '../immStore';
 import { startAffectsStore } from './affectsStore';
+import { startChipStyleStore } from './chipStyleStore';
 import { startCombatStore } from './combatStore';
 import { startRoomStore } from './roomStore';
 import { startTargetStore } from './targetStore';
@@ -29,4 +30,5 @@ export function startStores(): void {
   startRoomStore();
   startTargetStore();
   startTickStore();
+  startChipStyleStore();
 }

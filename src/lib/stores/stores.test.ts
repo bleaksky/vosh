@@ -49,6 +49,7 @@ async function load() {
     room: await import('./roomStore'),
     target: await import('./targetStore'),
     tick: await import('./tickStore'),
+    chipStyle: await import('./chipStyleStore'),
   };
 }
 
@@ -177,5 +178,19 @@ describe('stores on the event bus', () => {
     expect(s.tick.getTick().warn).toBe(true);
     vi.advanceTimersByTime(2_000);
     expect(s.tick.getTick().active).toBe(false);
+  });
+
+  it('follow the tick and time style Settings saves and each profile keeps', async () => {
+    commands.set('ui_get_config', { tracked_affects: [], chip_style: 'caption_value' });
+    const s = await load();
+    expect(s.chipStyle.getChipStyle()).toBe('caption_value');
+    fire('vosh://chip-style-changed', 'icon_value');
+    expect(s.chipStyle.getChipStyle()).toBe('icon_value');
+    fire('vosh://chip-style-changed', 'sparkles');
+    expect(s.chipStyle.getChipStyle()).toBe('value_only');
+    commands.set('ui_get_config', { tracked_affects: [], chip_style: 'icon_value' });
+    fire('vosh://profile-switched', 'Erelei');
+    await settle();
+    expect(s.chipStyle.getChipStyle()).toBe('icon_value');
   });
 });
