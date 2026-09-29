@@ -482,6 +482,7 @@ pub fn run() {
             characters::profile_set_login,
             characters::profile_set_world,
             characters::session_identity_get,
+            characters::profile_export_file,
             commands::ui_set_theme,
             fonts_list,
             macros_list,
