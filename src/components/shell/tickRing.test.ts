@@ -53,6 +53,38 @@ describe('tickArc', () => {
     expect(tickArc(75, 60)).toEqual({ kind: 'whole' });
   });
 
+  it('closes the circle when a long interval is a hair short of the tick', () => {
+    // At two decimals the end of these arcs lands back on 8,2.25, and
+    // SVG drops an arc whose ends meet, so the ring would read empty.
+    expect(tickArc(7299, 7300)).toEqual({ kind: 'whole' });
+    expect(tickArc(9999, 10000)).toEqual({ kind: 'whole' });
+    expect(tickArc(86399, 86400)).toEqual({ kind: 'whole' });
+    expect(tickArc(29.999, 30)).toEqual({ kind: 'whole' });
+  });
+
+  it('keeps a nearly closed arc while its end still stands apart from the top', () => {
+    expect(tickArc(9998, 10000)).toMatchObject({
+      kind: 'part',
+      path: 'M8 2.25A5.75 5.75 0 1 1 7.99 2.25',
+    });
+  });
+
+  it('draws nothing on top while a long interval has barely begun', () => {
+    expect(tickArc(1, 10000)).toEqual({ kind: 'empty' });
+    expect(tickArc(1, 86400)).toEqual({ kind: 'empty' });
+    expect(tickArc(0.001, 30)).toEqual({ kind: 'empty' });
+  });
+
+  it('never draws an arc that ends where it starts', () => {
+    for (const interval of [30, 3600, 7226, 7300, 10000, 36000, 86400]) {
+      for (let secs = 1; secs < interval; secs++) {
+        const arc = tickArc(secs, interval);
+        if (arc.kind === 'part') expect(arc.path.endsWith(' 8 2.25')).toBe(false);
+        else expect(arc.kind).toBe(secs / interval > 0.5 ? 'whole' : 'empty');
+      }
+    }
+  });
+
   it('clamps a count below zero to an empty ring', () => {
     expect(tickArc(-3, 30)).toEqual({ kind: 'empty' });
     expect(tickArc(Number.NaN, 30)).toEqual({ kind: 'empty' });

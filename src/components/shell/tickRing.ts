@@ -12,10 +12,11 @@ export const TICK_RING_RADIUS = 5.75;
 export const TICK_RING_TRACK_OPACITY = 0.35;
 
 export type TickArc =
-  /** The faint ring alone. At 0 seconds, or while the interval is
-   *  unknown. */
+  /** The faint ring alone. At 0 seconds, while the interval is unknown,
+   *  and while the arc is too short to end apart from the top. */
   | { kind: 'empty' }
-  /** The whole circle on top, at the interval and past it. */
+  /** The whole circle on top, at the interval and past it, and in the
+   *  last moment before it once the arc's end meets the top again. */
   | { kind: 'whole' }
   /** An arc from the top to `end`, clockwise. */
   | { kind: 'part'; share: number; end: { x: number; y: number }; path: string };
@@ -26,7 +27,14 @@ function num(n: number): string {
 
 /** The arc for `secs` since the last tick against an interval of
  *  `interval` seconds. The share clamps to 0..1. An interval that is
- *  unknown or not positive leaves the faint ring alone. */
+ *  unknown or not positive leaves the faint ring alone.
+ *
+ *  The end is written to two decimals. On a long interval, such as one
+ *  set with `#tick interval 10000`, the end of the first and last
+ *  seconds rounds back onto the top of the ring. SVG drops an arc whose
+ *  ends meet, so that path would draw nothing and the nearly closed
+ *  ring would read empty. Past the half it closes the circle instead,
+ *  and before it the faint ring stands alone. */
 export function tickArc(secs: number, interval: number | null): TickArc {
   if (interval === null || !Number.isFinite(interval) || interval <= 0) return { kind: 'empty' };
   if (Number.isNaN(secs)) return { kind: 'empty' };
@@ -37,7 +45,10 @@ export function tickArc(secs: number, interval: number | null): TickArc {
   const c = TICK_RING_CENTER;
   const r = TICK_RING_RADIUS;
   const end = { x: c + r * Math.sin(angle), y: c - r * Math.cos(angle) };
+  const start = `${num(c)} ${num(c - r)}`;
+  const stop = `${num(end.x)} ${num(end.y)}`;
+  if (stop === start) return share > 0.5 ? { kind: 'whole' } : { kind: 'empty' };
   const large = share > 0.5 ? 1 : 0;
-  const path = `M${num(c)} ${num(c - r)}A${num(r)} ${num(r)} 0 ${large} 1 ${num(end.x)} ${num(end.y)}`;
+  const path = `M${start}A${num(r)} ${num(r)} 0 ${large} 1 ${stop}`;
   return { kind: 'part', share, end, path };
 }
