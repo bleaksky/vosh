@@ -375,6 +375,7 @@ mod tests {
                 key: "F1".into(),
                 command: "north".into(),
                 group: Some("movement".into()),
+                enabled: true,
             }],
         );
 
@@ -398,6 +399,7 @@ mod tests {
                 key: "F1".into(),
                 command: "north".into(),
                 group: Some("movement".into()),
+                enabled: true,
             }],
         );
 
@@ -527,6 +529,7 @@ mod tests {
                 key: "F1".into(),
                 command: "north".into(),
                 group: Some("movement".into()),
+                enabled: true,
             }],
         );
 
