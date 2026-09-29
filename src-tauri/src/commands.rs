@@ -6730,6 +6730,35 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn a_script_that_sets_its_own_alias_again_keeps_it_to_its_character() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
+            write_alias(&set, "Healer", "hl");
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+
+            // A script the Healer runs at launch sets its alias again.
+            let state = relaunch_as(dir.path(), "Healer").await;
+            let outcome = vosh_script::ScriptOutcome {
+                actions: vec![vosh_script::Action::SetAlias {
+                    name: "hl".into(),
+                    expansion: "cast heal".into(),
+                }],
+            };
+            crate::script_state::apply_actions(&mut *state.profile.lock().await, outcome);
+            assert_eq!(items_on(&*state.profile.lock().await), ["alias hl"]);
+            persist(&state, dir.path()).await;
+
+            // The alias lost its group, so it came on for Default too.
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            assert_eq!(items_on(&*state.profile.lock().await), ["alias kk"]);
+        }
+
+        #[tokio::test]
         async fn a_wizard_that_cannot_finish_puts_every_file_back() {
             use crate::profile_set::DEFAULT_PROFILE_NAME;
             let dir = tempfile::tempdir().unwrap();

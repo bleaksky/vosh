@@ -369,7 +369,7 @@ fn slash_alias(profile: &mut Profile, args: &str) -> InputResult {
             "quick-key `{name}` exists — `#qkey clear {name}` first if you want this name"
         ));
     }
-    profile.aliases.set(Alias::new(name, expansion));
+    crate::script_state::define_alias(profile, name, expansion);
     echo_one(format!("alias {name} set"))
 }
 
@@ -1970,6 +1970,18 @@ mod tests {
         let mut p = Profile::default();
         let r = process(&mut p, "look;sip water");
         assert_eq!(r.bytes, b"look\r\nsip water\r\n");
+    }
+
+    #[test]
+    fn slash_alias_replaces_an_alias_in_its_group() {
+        let mut p = Profile::default();
+        let mut heal = Alias::new("hl", "cast heal");
+        heal.group = Some("healing".into());
+        p.aliases.set(heal);
+        let _ = process(&mut p, "#alias hl cast 'cure light'");
+        let hl = p.aliases.get("hl").unwrap();
+        assert_eq!(hl.expansion, "cast 'cure light'");
+        assert_eq!(hl.group.as_deref(), Some("healing"));
     }
 
     #[test]

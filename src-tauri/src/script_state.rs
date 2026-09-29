@@ -134,7 +134,7 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                 result.echoes.push(format!("[lua] {line}"));
             }
             Action::SetAlias { name, expansion } => {
-                profile.aliases.set(Alias::new(name, expansion));
+                define_alias(profile, name, expansion);
                 result.durable_changed = true;
             }
             Action::RemoveAlias(name) => {
@@ -203,6 +203,25 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
     result
 }
 
+/// Define the alias `name`, or replace the one of that name, the way
+/// `mud.alias` and `#alias` do. A replaced alias stays in its group, so
+/// the group still turns it on and off. In loadout mode that group is
+/// what keeps a character's alias to that character, and a script that
+/// set the alias again at launch used to put it in front of every other
+/// character too.
+pub(crate) fn define_alias(
+    profile: &mut Profile,
+    name: impl Into<String>,
+    expansion: impl Into<String>,
+) {
+    let mut alias = Alias::new(name, expansion);
+    alias.group = profile
+        .aliases
+        .get(&alias.name)
+        .and_then(|old| old.group.clone());
+    profile.aliases.set(alias);
+}
+
 fn scope_to_internal(scope: VarScope) -> Scope {
     match scope {
         VarScope::Profile => Scope::Profile,
@@ -255,4 +274,40 @@ pub(crate) fn toggle_group(profile: &mut Profile, name: &str, enabled: bool) -> 
         report.macros = true;
     }
     report
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn set_alias(name: &str, expansion: &str) -> ScriptOutcome {
+        ScriptOutcome {
+            actions: vec![Action::SetAlias {
+                name: name.into(),
+                expansion: expansion.into(),
+            }],
+        }
+    }
+
+    #[test]
+    fn a_lua_alias_replaces_one_in_its_group() {
+        let mut p = Profile::default();
+        let mut heal = Alias::new("hl", "cast heal");
+        heal.group = Some("healing".into());
+        p.aliases.set(heal);
+        apply_actions(&mut p, set_alias("hl", "cast 'cure light'"));
+        let hl = p.aliases.get("hl").unwrap();
+        assert_eq!(hl.expansion, "cast 'cure light'");
+        // It used to lose its group, so turning the group off no longer
+        // turned it off, and in loadout mode it came on for every
+        // character.
+        assert_eq!(hl.group.as_deref(), Some("healing"));
+    }
+
+    #[test]
+    fn a_new_lua_alias_has_no_group() {
+        let mut p = Profile::default();
+        apply_actions(&mut p, set_alias("hl", "cast heal"));
+        assert_eq!(p.aliases.get("hl").unwrap().group, None);
+    }
 }
