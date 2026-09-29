@@ -920,6 +920,33 @@ function App() {
     return () => observer.disconnect();
   }, []);
 
+  // Under the underlay the DOM owns the pointer over the terminal, but
+  // only the native surface knows what sits under it: the split divider
+  // wants a resize cursor and an armed link wants a hand. It reports the
+  // cursor on each change and the sizer takes it through a variable.
+  useEffect(() => {
+    if (!nativeUnderlay()) return;
+    const root = document.documentElement;
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void listen<string>('vosh://terminal-cursor', (event) => {
+      const cursor = event.payload;
+      if (cursor === 'row-resize' || cursor === 'pointer') {
+        root.style.setProperty('--terminal-cursor', cursor);
+      } else {
+        root.style.removeProperty('--terminal-cursor');
+      }
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+      root.style.removeProperty('--terminal-cursor');
+    };
+  }, []);
+
   // Clicks on the native surface are eaten by the opaque view, so the
   // backend emits an event on mouse-up and the input focuses here —
   // matching the DOM mouseup handler that covers the rest of the window.

@@ -1253,7 +1253,8 @@ body {
    and the status line carry no fill, so the same ground shows under
    them. The input band and the panel paint their own surfaces over it.
    The xterm copy stays mounted for sizing but is never shown, and the
-   DOM owns the cursor over the pane. */
+   DOM owns the cursor over the pane, taking the shape the native
+   surface asks for through --terminal-cursor. */
 html[data-underlay] .app.shell,
 html[data-underlay] .shell-slot-term,
 html[data-underlay] .terminal-area,
@@ -1267,7 +1268,7 @@ html[data-underlay] .terminal-pane-live .terminal-host {
   visibility: hidden;
 }
 html[data-underlay] .terminal-pane-live .terminal-sizer {
-  cursor: default;
+  cursor: var(--terminal-cursor, default);
   touch-action: none;
 }
 
