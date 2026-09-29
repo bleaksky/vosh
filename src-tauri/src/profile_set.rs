@@ -270,6 +270,37 @@ impl Default for ScopeConfig {
     }
 }
 
+impl ScopeConfig {
+    /// The categories `self` shares that `next` keeps per profile, marked
+    /// `Global`, with every other category `Profile`. None when no
+    /// category stops being shared.
+    pub(crate) fn stopped_sharing(&self, next: &ScopeConfig) -> Option<ScopeConfig> {
+        let stop = |was: Scope, now: Scope| {
+            if was == Scope::Global && now == Scope::Profile {
+                Scope::Global
+            } else {
+                Scope::Profile
+            }
+        };
+        let stopped = ScopeConfig {
+            theme: stop(self.theme, next.theme),
+            font: stop(self.font, next.font),
+            dock_layout: stop(self.dock_layout, next.dock_layout),
+            keep_last_command: stop(self.keep_last_command, next.keep_last_command),
+            auto_update: stop(self.auto_update, next.auto_update),
+        };
+        let any = [
+            stopped.theme,
+            stopped.font,
+            stopped.dock_layout,
+            stopped.keep_last_command,
+            stopped.auto_update,
+        ]
+        .contains(&Scope::Global);
+        any.then_some(stopped)
+    }
+}
+
 const INDEX_FILENAME: &str = "profiles.toml";
 const PROFILES_DIR: &str = "profiles";
 const LEGACY_PROFILE_FILENAME: &str = "profile.toml";

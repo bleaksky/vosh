@@ -1948,6 +1948,134 @@ pub(crate) fn share_custom_themes(
     Ok(gained)
 }
 
+/// Set `field` to `value` and say whether that changed it.
+fn replace_value<T: PartialEq>(field: &mut T, value: T) -> bool {
+    if *field == value {
+        return false;
+    }
+    *field = value;
+    true
+}
+
+impl GlobalConfig {
+    /// Give `ui` the values this holds, for each category that stops
+    /// being shared, where `ui` holds none of its own. A profile file saved
+    /// while a category was shared holds the defaults for it, so without
+    /// this that profile opens with the defaults once the category is per
+    /// profile. Values a file holds of its own stay. The shared custom
+    /// themes join the file's own list through `merge_custom_themes`, so
+    /// both copies stay when an id clashes, and `owner` names the profile
+    /// in a label that clashes too. Returns true when `ui` changed.
+    fn hand_out(&self, ui: &mut UiConfig, owner: &str) -> bool {
+        let defaults = UiConfig::default();
+        let mut changed = false;
+        if let Some(theme) = &self.theme {
+            let own_pick = ui.theme != defaults.theme
+                || ui.follow_system_appearance != defaults.follow_system_appearance
+                || ui.light_theme != defaults.light_theme
+                || ui.dark_theme != defaults.dark_theme;
+            if let Some(shared) = &self.custom_themes {
+                let own = std::mem::take(&mut ui.custom_themes);
+                let mut list = shared.clone();
+                let landed = merge_custom_themes(&mut list, &own, owner);
+                if own_pick {
+                    follow_moved_ids(ui, &own, &landed);
+                }
+                changed |= list != own;
+                ui.custom_themes = list;
+            }
+            if !own_pick {
+                changed |= replace_value(&mut ui.theme, theme.clone());
+                if let Some(v) = self.follow_system_appearance {
+                    changed |= replace_value(&mut ui.follow_system_appearance, v);
+                }
+                if let Some(v) = &self.light_theme {
+                    changed |= replace_value(&mut ui.light_theme, v.clone());
+                }
+                if let Some(v) = &self.dark_theme {
+                    changed |= replace_value(&mut ui.dark_theme, v.clone());
+                }
+            }
+        }
+        if let Some(family) = &self.font_family {
+            let own_font = ui.font_family != defaults.font_family
+                || ui.font_size != defaults.font_size
+                || ui.terminal_line_height != defaults.terminal_line_height;
+            if !own_font {
+                changed |= replace_value(&mut ui.font_family, family.clone());
+                if let Some(v) = self.font_size {
+                    changed |= replace_value(&mut ui.font_size, v);
+                }
+                if let Some(v) = &self.terminal_line_height {
+                    changed |= replace_value(&mut ui.terminal_line_height, v.clone());
+                }
+            }
+        }
+        if let Some(v) = self.keep_last_command {
+            if ui.keep_last_command == defaults.keep_last_command {
+                changed |= replace_value(&mut ui.keep_last_command, v);
+            }
+        }
+        if let Some(v) = self.auto_update {
+            if ui.auto_update == defaults.auto_update {
+                changed |= replace_value(&mut ui.auto_update, v);
+            }
+        }
+        if let Some(v) = &self.dock_layout {
+            if ui.dock_layout.is_empty() && !v.is_empty() {
+                ui.dock_layout.clone_from(v);
+                changed = true;
+            }
+        }
+        changed
+    }
+}
+
+/// Copy the values in `shared` into the file of every profile but the
+/// active one, for the categories that stop being shared, where the file
+/// holds none of its own. Call with the persist lock held and before
+/// global.toml drops those values. The active profile needs none of this,
+/// since the save that follows writes its live values into its own file.
+/// A profile that never saved a file gets one when it has values to take.
+/// Every file is read before any is written, so a file Vosh cannot read
+/// stops the move with nothing changed. Returns how many files it wrote,
+/// or a sentence naming the profile whose file stopped the move, so the
+/// caller keeps those categories shared.
+pub(crate) fn hand_out_shared(set: &ProfileSet, shared: &GlobalConfig) -> Result<usize, String> {
+    let active = set.active_name();
+    let mut changed = Vec::new();
+    for entry in set.list() {
+        if entry.name == active {
+            continue;
+        }
+        let path = set.profile_path(&entry.name);
+        let owner = crate::profile_set::display_name(&entry.name);
+        let mut config = if path.exists() {
+            ProfileConfig::load(&path).map_err(|e| {
+                tracing::warn!(error = %e, path = %path.display(), "profile file unreadable");
+                format!(
+                    "Vosh could not read the {owner} profile file, so these settings stay the same for every character."
+                )
+            })?
+        } else {
+            ProfileConfig::default()
+        };
+        if shared.hand_out(&mut config.ui, &owner) {
+            changed.push((owner, path, config));
+        }
+    }
+    let written = changed.len();
+    for (owner, path, config) in changed {
+        config.save(&path).map_err(|e| {
+            tracing::warn!(error = %e, path = %path.display(), "profile file kept the defaults");
+            format!(
+                "Vosh could not save the {owner} profile file, so these settings stay the same for every character."
+            )
+        })?;
+    }
+    Ok(written)
+}
+
 /// Zero out the fields whose scope is `Global` on a
 /// `ProfileConfig` so the per-profile file does not duplicate
 /// values that actually live in `global.toml`. Profile-scoped
