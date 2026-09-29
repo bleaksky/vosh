@@ -66,6 +66,13 @@ describe('searchSettingsRows', () => {
     expect(labels('loadouts', { pathB: true, mac: true })).toContain('Loadouts');
   });
 
+  it('finds the Advanced appearance rows', () => {
+    expect(labels('font stack')).toEqual(['Font stack']);
+    expect(labels('fallback')).toEqual(['Font stack']);
+    expect(labels('palette')[0]).toBe('Base palette');
+    expect(labels('echo')).toContain('Sent command color');
+  });
+
   it('hides GPU rendering on macOS', () => {
     expect(labels('gpu')).toEqual([]);
     expect(labels('gpu', { pathB: false, mac: false })).toEqual(['GPU rendering']);
