@@ -5,7 +5,7 @@ import { moonLabel, useWorld } from '../../lib/stores/worldStore';
 import { formatGameTime } from './gameTime';
 
 // The quiet line under the input band (SPEC 10 G4): your target, the
-// seconds to the next tick, the game time, and the moon, 20 px apart
+// seconds since the last tick, the game time, and the moon, 20 px apart
 // in the UI face with tabular numbers. The tick turns the warn tone at
 // the threshold you set in the tick config. With the panel hidden, the
 // vitals it pins lead the line so you never lose them.
@@ -49,8 +49,8 @@ export function StatusLine({ connected, showVitals }: Props) {
           Target<span className="shell-status-value">{target.name}</span>
         </span>
       )}
-      {tick.active && tick.secsToTick !== null && (
-        <span className={tick.warn ? 'is-warn' : undefined}>Tick {tick.secsToTick}</span>
+      {tick.active && tick.secsSinceTick !== null && (
+        <span className={tick.warn ? 'is-warn' : undefined}>Tick {tick.secsSinceTick}s</span>
       )}
       {time && <span>{time}</span>}
       {moon && <span>{moon}</span>}

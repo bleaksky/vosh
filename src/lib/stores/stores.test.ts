@@ -160,7 +160,7 @@ describe('stores on the event bus', () => {
     expect(s.room.getRoom().info).toMatchObject({ areaVnum: 52, areaColor: '#a3be8c' });
   });
 
-  it('count the tick down, warn at your threshold, and hide when reports stop', async () => {
+  it('count up from the last tick, warn at your threshold, and hide when reports stop', async () => {
     const s = await load();
     vi.useFakeTimers();
     const tick = (remaining_ms: number) =>
@@ -172,7 +172,7 @@ describe('stores on the event bus', () => {
         sound: false,
       });
     tick(14_000);
-    expect(s.tick.getTick()).toEqual({ active: true, secsToTick: 14, warnAt: 8, warn: false });
+    expect(s.tick.getTick()).toEqual({ active: true, secsSinceTick: 16, warnAt: 8, warn: false });
     tick(7_500);
     expect(s.tick.getTick().warn).toBe(true);
     vi.advanceTimersByTime(2_000);
