@@ -50,6 +50,27 @@ pub(crate) struct GlobalCatalog {
     pub triggers: Vec<Trigger>,
     #[serde(default)]
     pub macros: Vec<Macro>,
+    /// The trigger presets that are on, in the `ui.enabled_presets`
+    /// shape. The preset triggers live in `triggers` above, which every
+    /// profile shares, so the list that says which presets are on is
+    /// shared too. `None` in a catalog written before the list moved
+    /// here. Startup then takes the active profile's list once, see
+    /// [`crate::loadout_store::adopt_catalog_presets`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled_presets: Option<Vec<String>>,
+}
+
+impl GlobalCatalog {
+    /// The catalog as the live profile holds it: its aliases, triggers,
+    /// macros, and enabled presets. Path B persistence writes this.
+    pub(crate) fn from_profile(profile: &crate::profile::Profile) -> Self {
+        Self {
+            aliases: profile.aliases.list().into_iter().cloned().collect(),
+            triggers: profile.triggers.list(),
+            macros: profile.macros.clone(),
+            enabled_presets: Some(profile.ui.enabled_presets.clone()),
+        }
+    }
 }
 
 /// One named loadout. Replaces today's "profile" concept from the
@@ -220,6 +241,40 @@ mod tests {
         set.loadouts = vec![a];
         set.active = vec!["a".into(), "ghost".into()];
         assert_eq!(set.effective_enabled_groups(), vec!["combat"]);
+    }
+
+    #[test]
+    fn catalog_enabled_presets_round_trip_and_older_files_read_as_none() {
+        // A catalog written before the list moved here.
+        let older: GlobalCatalog = toml::from_str("").unwrap();
+        assert_eq!(older.enabled_presets, None);
+        // Nothing to write until startup fills it, so the file stays as
+        // an older build wrote it.
+        let text = toml::to_string_pretty(&GlobalCatalog::default()).unwrap();
+        assert!(!text.contains("enabled_presets"));
+
+        // An empty list means the default presets, and stays apart from
+        // a catalog that never took a list.
+        for list in [vec![], vec!["healing_basics".to_string()]] {
+            let catalog = GlobalCatalog {
+                enabled_presets: Some(list.clone()),
+                ..GlobalCatalog::default()
+            };
+            let text = toml::to_string_pretty(&catalog).unwrap();
+            let parsed: GlobalCatalog = toml::from_str(&text).unwrap();
+            assert_eq!(parsed.enabled_presets, Some(list));
+        }
+    }
+
+    #[test]
+    fn catalog_from_profile_carries_the_enabled_presets() {
+        let mut profile = crate::profile::Profile::default();
+        profile.ui.enabled_presets = vec!["healing_basics".into(), "potion_labels".into()];
+        let catalog = GlobalCatalog::from_profile(&profile);
+        assert_eq!(
+            catalog.enabled_presets.as_deref(),
+            Some(&["healing_basics".to_string(), "potion_labels".to_string()][..])
+        );
     }
 
     #[test]

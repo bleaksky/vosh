@@ -126,6 +126,24 @@ pub(crate) fn save_loadout_set(app_data: &Path, set: &LoadoutSet) -> Result<(), 
     Ok(())
 }
 
+/// Make the catalog own the list of trigger presets that are on. The
+/// preset triggers live in the catalog, which every profile shares, so
+/// a list kept per profile let a launch as another character put back a
+/// preset you had turned off. A catalog written before the list moved
+/// here has none, so it takes the active profile's list, once. Either
+/// way the live profile then holds the catalog's list. The profile files
+/// keep their own lists as they are. Returns true when the catalog took
+/// the profile's list and needs saving.
+pub(crate) fn adopt_catalog_presets(catalog: &mut GlobalCatalog, profile: &mut Profile) -> bool {
+    if let Some(list) = &catalog.enabled_presets {
+        profile.ui.enabled_presets.clone_from(list);
+        false
+    } else {
+        catalog.enabled_presets = Some(profile.ui.enabled_presets.clone());
+        true
+    }
+}
+
 /// Apply whatever group state the loadout set actually calls for:
 /// explicit dormancy wins, otherwise the union rules run (including
 /// the no-opinion guard). Every apply point (startup, profile switch,
@@ -618,5 +636,81 @@ mod tests {
         let set = LoadoutSet::default();
         apply_loadout_state(&set, &mut profile);
         assert!(profile.aliases.disabled_groups().is_empty());
+    }
+
+    fn presets(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    /// Startup in loadout mode over the profile files in `dir`: load the
+    /// active profile, then let the catalog take or hand out the preset
+    /// list, and save the catalog when it took one.
+    fn launch(dir: &Path, set: &crate::profile_set::ProfileSet) -> Profile {
+        let mut profile = Profile::default();
+        let config = crate::profile_config::ProfileConfig::load(&set.active_path()).unwrap();
+        let _warnings = config.apply_to(&mut profile);
+        let mut catalog = load_global_catalog(dir).unwrap();
+        if adopt_catalog_presets(&mut catalog, &mut profile) {
+            save_global_catalog(dir, &catalog).unwrap();
+        }
+        profile
+    }
+
+    #[test]
+    fn a_launch_as_another_character_keeps_the_presets_you_turned_off() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = crate::profile_set::tests::james_like_set(dir.path());
+        // Each profile file holds its own list from before the move.
+        // Erelei (default) turned the potion labels off. Healer never did.
+        let write = |name: &str, list: &[&str]| {
+            let mut config = crate::profile_config::ProfileConfig::default();
+            config.ui.enabled_presets = presets(list);
+            config.save(&set.profile_path(name)).unwrap();
+        };
+        write(
+            crate::profile_set::DEFAULT_PROFILE_NAME,
+            &["healing_basics"],
+        );
+        write("Healer", &["healing_basics", "potion_labels"]);
+        // A catalog saved before the list moved into it.
+        save_global_catalog(dir.path(), &GlobalCatalog::default()).unwrap();
+
+        // The first launch takes the active profile's list, once.
+        let erelei = launch(dir.path(), &set);
+        assert_eq!(erelei.ui.enabled_presets, presets(&["healing_basics"]));
+        assert_eq!(
+            load_global_catalog(dir.path()).unwrap().enabled_presets,
+            Some(presets(&["healing_basics"]))
+        );
+
+        // A launch as Healer keeps the catalog's list. Before, Healer's
+        // own list turned the potion labels back on for everyone.
+        set.switch("Healer").unwrap();
+        let healer = launch(dir.path(), &set);
+        assert_eq!(healer.ui.enabled_presets, presets(&["healing_basics"]));
+        assert_eq!(
+            load_global_catalog(dir.path()).unwrap().enabled_presets,
+            Some(presets(&["healing_basics"]))
+        );
+
+        // The profile file keeps its own list.
+        let file = crate::profile_config::ProfileConfig::load(&set.profile_path("Healer")).unwrap();
+        assert_eq!(
+            file.ui.enabled_presets,
+            presets(&["healing_basics", "potion_labels"])
+        );
+    }
+
+    #[test]
+    fn a_catalog_list_wins_over_the_profile_list() {
+        let mut catalog = GlobalCatalog {
+            enabled_presets: Some(presets(&["none"])),
+            ..GlobalCatalog::default()
+        };
+        let mut profile = Profile::default();
+        profile.ui.enabled_presets = presets(&["healing_basics"]);
+        assert!(!adopt_catalog_presets(&mut catalog, &mut profile));
+        assert_eq!(profile.ui.enabled_presets, presets(&["none"]));
+        assert_eq!(catalog.enabled_presets, Some(presets(&["none"])));
     }
 }
