@@ -1920,6 +1920,33 @@ fn settings_window_fit(restored: (f64, f64)) -> Option<(f64, f64)> {
     ))
 }
 
+/// Whether opening Settings again brings the open window forward now.
+/// A window neither on screen nor minimized is still loading. Its page
+/// shows it once it has painted your theme, and showing it sooner would
+/// put a frame without your theme on screen.
+fn settings_shows_on_reopen(visible: bool, minimized: bool) -> bool {
+    visible || minimized
+}
+
+/// How long a Settings window may stay hidden after an open before the
+/// backend shows it anyway. The page shows it well before this, within
+/// its own 500 ms fallback once it runs. This covers a page that never
+/// gets that far, so Settings always opens.
+const SETTINGS_SHOW_BACKSTOP: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Show the Settings window after [`SETTINGS_SHOW_BACKSTOP`] if its page
+/// has not shown it by then.
+fn show_settings_backstop(window: tauri::WebviewWindow) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(SETTINGS_SHOW_BACKSTOP).await;
+        if !window.is_visible().unwrap_or(true) && !window.is_minimized().unwrap_or(false) {
+            warn!("settings: the page never showed its window, showing it now");
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    });
+}
+
 /// Open (or focus, if already open) the standalone settings window.
 /// The settings window is a separate webview pointed at the same
 /// frontend bundle with `?view=settings`, so the React entry can
@@ -1928,8 +1955,12 @@ fn settings_window_fit(restored: (f64, f64)) -> Option<(f64, f64)> {
 #[tauri::command]
 pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
     if let Some(existing) = app.get_webview_window("settings") {
-        existing.show().map_err(|e| e.to_string())?;
-        existing.set_focus().map_err(|e| e.to_string())?;
+        let visible = existing.is_visible().unwrap_or(true);
+        let minimized = existing.is_minimized().unwrap_or(false);
+        if settings_shows_on_reopen(visible, minimized) {
+            existing.show().map_err(|e| e.to_string())?;
+            existing.set_focus().map_err(|e| e.to_string())?;
+        }
         return Ok(());
     }
     let builder = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("index.html?view=settings".into()))
@@ -1965,6 +1996,7 @@ pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
     let builder = builder.decorations(false);
     let window = builder.build().map_err(|e| e.to_string())?;
+    show_settings_backstop(window.clone());
     if let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) {
         let current = size.to_logical::<f64>(scale);
         if let Some((width, height)) = settings_window_fit((current.width, current.height)) {
@@ -4152,7 +4184,7 @@ pub(crate) async fn updater_install_and_relaunch(app: AppHandle) -> Result<(), S
 
 #[cfg(test)]
 mod tests {
-    use super::{settings_window_fit, ScrollbackLoad, UiConfigPayload};
+    use super::{settings_shows_on_reopen, settings_window_fit, ScrollbackLoad, UiConfigPayload};
     use crate::profile_config::{ProfileConfig, UiConfig};
     use crate::profile_set::tests::james_like_set;
     use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
@@ -5001,6 +5033,17 @@ mod tests {
         assert_eq!(settings_window_fit((880.0, 600.0)), None);
         assert_eq!(settings_window_fit((820.0, 560.0)), None);
         assert_eq!(settings_window_fit((1200.0, 900.0)), None);
+    }
+
+    #[test]
+    fn reopening_settings_leaves_a_loading_window_to_its_page() {
+        // On screen, or minimized: bring it forward now.
+        assert!(settings_shows_on_reopen(true, false));
+        assert!(settings_shows_on_reopen(false, true));
+        assert!(settings_shows_on_reopen(true, true));
+        // Neither: the page has not painted your theme yet, and shows
+        // the window itself once it has.
+        assert!(!settings_shows_on_reopen(false, false));
     }
 
     #[test]
