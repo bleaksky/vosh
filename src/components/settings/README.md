@@ -105,6 +105,15 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 - `expanded` sets aria-expanded and turns the chevron down. Render the content after it and point `aria-controls` at it.
 - `anchor` as on `Row`.
 
+Put the rows it opens in a `div` with the class `st-disclosure-panel` right after it in the same card. Each row in the panel draws the inset hairline, the first one included, and the last one takes the card's bottom corners.
+
+`ColorField` is a color control for a row or a grid: a 16 px swatch that opens the system color picker, then the color as text, on the field fill.
+
+- `value` is CSS color text, or an empty string for none. `onChange(value)` runs with each color the page can draw. Text that does not read as a color yet stays in the field, and leaving the field puts the saved color back.
+- `allowEmpty` lets you clear the text, which runs `onChange('')`, for a color that falls back to the theme. `placeholder` names that fallback, like `Theme color`, and `emptySwatch` is the color the swatch shows meanwhile, var() included.
+- `width` in px or any CSS length, 120 by default.
+- `pickerLabel` names the swatch's picker, like `Choose the split divider color`. Inside a `Row` the row label names the text. Outside one, pass `id` for a `<label>` or `aria-label`.
+
 `VisuallyHidden` holds text a screen reader reads and the page does not show, like a list row's On or Off.
 
 `useRowIds` returns the ids of the enclosing `Row` for a custom control.
