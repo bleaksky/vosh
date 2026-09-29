@@ -6,12 +6,9 @@ import {
   UNKNOWN_GLYPH,
   hexToRgba,
   mapThemeSignature,
-  plainColors,
   sectorForCode,
   sectorGlyphColor,
-  type PlainColors,
 } from '../lib/mapPalette';
-import { PLAIN, layoutPlain, type PlainCell } from '../lib/mapPlain';
 import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from '../lib/mapStyle';
 import { drawTerrainDecorations } from '../lib/terrainDecor';
 import { subscribeThemeChanges } from '../lib/theme';
@@ -412,8 +409,8 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     let unsubRoom: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
 
-    // Room.Info carries the same `area` field RoomStrip renders; the
-    // header only wants the name, lowercased for the caps label.
+    // Room.Info carries the area name in its `area` field. The header
+    // only wants the name, lowercased for the caps label.
     onGmcpPackage<{ area?: string }>('Room.Info', (data) => {
       const name =
         data && typeof data === 'object' && typeof data.area === 'string' ? data.area : '';
@@ -462,11 +459,7 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     // Squares, glyphs, and tileset paint on the terminal ground their
     // sector colors were tuned against, so deep water and lava stay
     // visible, and in a pane the drawing reads as a well in the panel.
-    // Only the plain drawing sits on the panel's own color. One style
-    // read serves the whole plain draw.
-    const plain =
-      style === 'plain' ? plainColors(getComputedStyle(document.documentElement)) : null;
-    const ground = embedded && plain ? plain.ground : MAP_COLORS.bg;
+    const ground = MAP_COLORS.bg;
     ctx.fillStyle = ground;
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
@@ -484,12 +477,6 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
       ctx.fillStyle = '#6e7681';
       ctx.font = '12px monospace';
       ctx.fillText('Map.Tiles payload has no grid yet', 10, 22);
-      return;
-    }
-
-    // The plain drawing has no terrain around it and no sector colors.
-    if (plain) {
-      drawPlain(ctx, cssWidth, cssHeight, tiles, rows, cols, zoom, plain);
       return;
     }
 
@@ -868,139 +855,6 @@ function playerCellOf(
     return { row: payload.r + 1, col: payload.r + 1 };
   }
   return { row: Math.floor((rows + 1) / 2), col: Math.floor((cols + 1) / 2) };
-}
-
-/// Every room on your floor as the plain drawing wants it. A push
-/// with no `g` grid falls back to the text rows, which carry rooms
-/// but no exits.
-function plainCellsOf(payload: MapTilesPayload): PlainCell[] {
-  const cells: PlainCell[] = [];
-  if (payload.g) {
-    for (const [rKey, row] of Object.entries(payload.g)) {
-      if (!row || typeof row !== 'object') continue;
-      for (const [cKey, cell] of Object.entries(row)) {
-        if (!cell || typeof cell === 'string') continue;
-        const r = Number(rKey);
-        const c = Number(cKey);
-        if (!Number.isFinite(r) || !Number.isFinite(c)) continue;
-        const plain: PlainCell = {
-          row: r,
-          col: c,
-          exits: typeof cell.e === 'string' ? cell.e : '',
-          flags: typeof cell.f === 'string' ? cell.f : '',
-        };
-        if (cell.d) plain.doors = cell.d;
-        cells.push(plain);
-      }
-    }
-    return cells;
-  }
-  parseTextGrid(payload.t).forEach((line, r) => {
-    for (let c = 0; c < line.length; c++) {
-      if (line[c] !== ' ') cells.push({ row: r, col: c, exits: '', flags: '' });
-    }
-  });
-  return cells;
-}
-
-/// The One Window drawing (SPEC 10 G7): rooms in the secondary text
-/// color at 45%, lines at 35% with round caps, your room in the accent
-/// with a 45% accent ring, and place labels in the tertiary color. No
-/// terrain, no sector colors. Geometry comes from lib/mapPlain.
-function drawPlain(
-  ctx: CanvasRenderingContext2D,
-  cssWidth: number,
-  cssHeight: number,
-  payload: MapTilesPayload,
-  rows: number,
-  cols: number,
-  zoom: number,
-  colors: PlainColors,
-) {
-  const { room, accent } = colors;
-  ctx.save();
-  ctx.font = `${PLAIN.font}px ${colors.font}`;
-  const scene = layoutPlain({
-    cells: plainCellsOf(payload),
-    current: playerCellOf(payload, rows, cols),
-    width: cssWidth,
-    height: cssHeight,
-    zoom,
-    measure: (text) => ctx.measureText(text).width,
-  });
-
-  // One path per stroke, so lines that meet never double their alpha.
-  ctx.lineWidth = PLAIN.lineWidth;
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = room;
-  ctx.globalAlpha = 0.35;
-  strokeSegments(ctx, scene.lines);
-  if (scene.hidden.length > 0) {
-    ctx.setLineDash([2, 3]);
-    strokeSegments(ctx, scene.hidden);
-    ctx.setLineDash([]);
-  }
-
-  ctx.globalAlpha = 0.45;
-  ctx.fillStyle = room;
-  ctx.beginPath();
-  for (const r of scene.rooms) {
-    roundRectPath(ctx, r.x, r.y, scene.size, scene.size, scene.radius);
-  }
-  ctx.fill();
-
-  if (scene.ring && scene.current) {
-    const { ring, current } = scene;
-    ctx.strokeStyle = accent;
-    ctx.lineWidth = PLAIN.ringWidth;
-    ctx.beginPath();
-    roundRectPath(ctx, ring.x, ring.y, ring.w, ring.h, ring.radius);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = accent;
-    ctx.beginPath();
-    roundRectPath(ctx, current.x, current.y, scene.size, scene.size, scene.radius);
-    ctx.fill();
-  }
-
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = colors.label;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  for (const label of scene.labels) ctx.fillText(label.text, label.x, label.y);
-  ctx.restore();
-}
-
-function strokeSegments(
-  ctx: CanvasRenderingContext2D,
-  segments: { x1: number; y1: number; x2: number; y2: number }[],
-) {
-  if (segments.length === 0) return;
-  ctx.beginPath();
-  for (const s of segments) {
-    ctx.moveTo(s.x1, s.y1);
-    ctx.lineTo(s.x2, s.y2);
-  }
-  ctx.stroke();
-}
-
-// A rounded rect subpath. Drawn by hand because roundRect is missing
-// from older WebKitGTK builds that Linux users run.
-function roundRectPath(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-) {
-  const radius = Math.max(0, Math.min(r, w / 2, h / 2));
-  ctx.moveTo(x + radius, y);
-  ctx.arcTo(x + w, y, x + w, y + h, radius);
-  ctx.arcTo(x + w, y + h, x, y + h, radius);
-  ctx.arcTo(x, y + h, x, y, radius);
-  ctx.arcTo(x, y, x + w, y, radius);
-  ctx.closePath();
 }
 
 interface Anchor {

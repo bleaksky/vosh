@@ -262,7 +262,7 @@ export async function presetsRemove(presetId: string): Promise<number> {
 // (`session://gmcp/<package>`) so listeners run only on packets
 // they care about, instead of every consumer running a string
 // compare on every packet. For listeners that handle multiple
-// packages (RoomStrip, useCharStats, chatStore, groupStore), call
+// packages (roomStore, chatStore, groupStore), call
 // this once per package and manage the unsubscribes individually.
 //
 // Tauri event names only allow alphanumeric + `-/:_`, so dots in
@@ -839,8 +839,8 @@ export const DEFAULT_VITALS_CONFIG: VitalsConfig = {
   strip_align: 'left',
 };
 
-// Dedupe the mount-time burst: App, VitalsBar, CombatPane, AffectsBar,
-// and useChipStyle all call getUiConfig on first render. Sharing one
+// Dedupe the mount-time burst: App, Input, and the tracked affects
+// store all call getUiConfig on first render. Sharing one
 // in-flight promise turns that into a single IPC round-trip. The cache
 // clears once resolved, so a later call (after a config change) still
 // re-fetches fresh — no staleness.
@@ -1211,32 +1211,6 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
   // custom theme id. `broadcastUiConfigChanges` preserves that
   // ordering.
   await broadcastUiConfigChanges(config);
-}
-
-export async function subscribeMoonsPositionChanged(
-  cb: (value: MoonsPosition) => void,
-): Promise<UnlistenFn> {
-  return listen<string>('vosh://moons-position-changed', (event) => {
-    const v = event.payload;
-    cb(v === 'before-time' || v === 'after-time' ? v : 'right-edge');
-  });
-}
-
-export async function subscribeChipStyleChanged(
-  cb: (value: ChipStyle) => void,
-): Promise<UnlistenFn> {
-  return listen<string>('vosh://chip-style-changed', (event) => {
-    const v = event.payload;
-    cb(v === 'caption_value' || v === 'icon_value' ? v : 'value_only');
-  });
-}
-
-export async function subscribeVitalsConfigChanged(
-  cb: (config: VitalsConfig) => void,
-): Promise<UnlistenFn> {
-  return listen<Partial<VitalsConfig>>('vosh://vitals-config-changed', (event) => {
-    cb(normalizeVitalsConfig(event.payload));
-  });
 }
 
 export async function subscribeSidePanelsFillHeightChanged(
