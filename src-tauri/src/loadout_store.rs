@@ -362,10 +362,13 @@ pub(crate) fn load_path_b_at_launch(
 /// triggers, so it only writes where neither file is on disk yet. A file
 /// Vosh could not read at launch stays refused even once it is gone. It
 /// also refuses while profiles/legacy holds a copy from an earlier run,
-/// which may be the only copy of your items, since a run over files an
-/// earlier run took the items out of would copy those over it. That
-/// refusal says to copy them back first, since a catalog built from the
-/// files without their items would leave every character with nothing.
+/// the backup of each profile as it was before that run, since a run over
+/// files an earlier run took the items out of would copy those over it.
+/// The catalog.toml of that run holds the items, with every change since,
+/// so that refusal says to put it back to keep them. It says what a
+/// backup copied back brings back and drops for a new catalog, since one
+/// built from the files without their items would leave every character
+/// with nothing.
 pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
     if journal_path(app_data).exists() {
         return Some(
@@ -394,11 +397,15 @@ pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
     }
     if legacy_copies_present(app_data) {
         return Some(
-            "Vosh found copies of your profile files in profiles/legacy from an earlier shared \
-             catalog and will not save over them. The copies hold your aliases, triggers, and \
-             macros as they were before that run. Quit Vosh, copy them back over the files in the \
-             profiles folder, and move the legacy folder out of the profiles folder. Then open \
-             Vosh again to build a new catalog.",
+            "Vosh found copies of your profile files in profiles/legacy from an earlier move to \
+             loadouts and will not save over them. Each copy is a backup of its profile as it \
+             was before that move. Your aliases, triggers, and macros are in the catalog.toml \
+             that move wrote, with every change you made since. To keep them, quit Vosh and put \
+             catalog.toml and loadouts.toml back in the Vosh folder. To build a new catalog from \
+             the backups instead, quit Vosh, copy each backup over its file in the profiles \
+             folder, and move the legacy folder out of the profiles folder. A backup brings back \
+             every setting of its profile as it was before the move and drops every change you \
+             made since.",
         );
     }
     None

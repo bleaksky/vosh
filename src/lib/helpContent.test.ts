@@ -79,11 +79,26 @@ describe('the help on loadouts', () => {
     expect(text).toContain('The migration wizard runs once');
     expect(text).toContain('while `profiles/legacy/` holds the copies from an earlier run');
     expect(text).toContain('or while an earlier run waits to finish at the next launch');
-    // Moving the legacy folder out alone left the catalog to be built
-    // from files without their items.
-    expect(text).toContain(
-      'copy the files in `profiles/legacy/` back over the ones in `profiles/`',
-    );
+  });
+
+  it('says what the legacy copies are and what copying one back loses', () => {
+    // The help used to say only the copies held your items, which is
+    // false in loadout mode, and copying them back threw away every
+    // change since the move.
+    const text = body('characters-and-data.loadouts');
+    const truth = [
+      'After the move, `catalog.toml` holds your aliases, triggers, and macros, with every one you add or change later.',
+      'Each file in `profiles/legacy/` is a backup of its profile as it was before the move.',
+      'Copying a backup over its file in `profiles/` brings back that profile as it was then, every setting included, and drops every change you made since, to the profile and to your shared items.',
+      'To keep your items, leave `catalog.toml` where it is and change them in Automation settings.',
+      'To build a new catalog from the backups anyway, quit Vosh, move `catalog.toml` and `loadouts.toml` out of the app data folder, copy the files in `profiles/legacy/` back over the ones in `profiles/`, and move `profiles/legacy/` out too.',
+    ];
+    for (const sentence of truth) {
+      expect(text).toContain(sentence);
+      expect(helpMd).toContain(sentence);
+    }
+    expect(text).not.toMatch(/only the copies hold/);
+    expect(helpMd).not.toMatch(/only the copies hold/);
   });
 
   it('says what the folders become in the shared catalog', () => {

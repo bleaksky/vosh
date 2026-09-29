@@ -5692,11 +5692,57 @@ mod tests {
         }
 
         const LEGACY_REFUSAL: &str =
-            "Vosh found copies of your profile files in profiles/legacy from an earlier shared \
-             catalog and will not save over them. The copies hold your aliases, triggers, and \
-             macros as they were before that run. Quit Vosh, copy them back over the files in the \
-             profiles folder, and move the legacy folder out of the profiles folder. Then open \
-             Vosh again to build a new catalog.";
+            "Vosh found copies of your profile files in profiles/legacy from an earlier move to \
+             loadouts and will not save over them. Each copy is a backup of its profile as it \
+             was before that move. Your aliases, triggers, and macros are in the catalog.toml \
+             that move wrote, with every change you made since. To keep them, quit Vosh and put \
+             catalog.toml and loadouts.toml back in the Vosh folder. To build a new catalog from \
+             the backups instead, quit Vosh, copy each backup over its file in the profiles \
+             folder, and move the legacy folder out of the profiles folder. A backup brings back \
+             every setting of its profile as it was before the move and drops every change you \
+             made since.";
+
+        #[tokio::test]
+        async fn putting_the_catalog_back_keeps_every_item_you_added_since() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+            // In loadout mode you add an alias and set a variable, which
+            // the backups in legacy never saw.
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            {
+                let mut p = state.profile.lock().await;
+                p.aliases.set(vosh_alias::Alias::new("zz", "sleep"));
+                p.vars.set(vosh_vars::Scope::Profile, "target", "dragon");
+            }
+            persist(&state, dir.path()).await;
+
+            // You move the catalog and the loadouts out, and the wizard
+            // refuses over the backups. It used to say that only the
+            // backups held your items, and copying them back lost zz and
+            // the target.
+            let aside = tempfile::tempdir().unwrap();
+            for path in [catalog_path(dir.path()), loadouts_path(dir.path())] {
+                std::fs::rename(&path, aside.path().join(path.file_name().unwrap())).unwrap();
+            }
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            assert_eq!(refused(&state, dir.path()).await, LEGACY_REFUSAL);
+
+            // You put them back, as it says, and keep everything.
+            for path in [catalog_path(dir.path()), loadouts_path(dir.path())] {
+                std::fs::rename(aside.path().join(path.file_name().unwrap()), &path).unwrap();
+            }
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            let p = state.profile.lock().await;
+            assert_eq!(items_on(&p), ["alias kk", "alias zz"]);
+            let kept = ProfileConfig::from_profile(&p);
+            assert_eq!(kept.profile_vars.get("target").unwrap(), "dragon");
+        }
 
         #[tokio::test]
         async fn following_the_refusals_builds_the_catalog_again_with_every_item() {
