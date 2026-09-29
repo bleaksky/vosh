@@ -4,7 +4,7 @@
 
 ## Pages
 
-A page is a component in `groups/` that takes `SettingsPageProps` from `pageTypes.ts`.
+A page is a component in `pages/` or `groups/` that takes `SettingsPageProps` from `pageTypes.ts`.
 
 - `target` is where the page should land. `target.section` and `target.anchor` come from the nav, a deep link, or a search hit.
 - `navSeq` goes up on every navigation, even to the same target. React to it when the target changes state on the page, like the Automation kind or the Characters profile.
@@ -14,7 +14,7 @@ A page is a component in `groups/` that takes `SettingsPageProps` from `pageType
 
 Register a page in `PAGES` in `SettingsApp.tsx`. A page that pins its own bar and scrolls inside itself, like the Automation save bar, sets `selfScroll` there.
 
-The placeholders for Appearance, Automation, and Characters show the old editors under the board's headings. Replace each whole component with its board. General, Layout, and Input have no board yet. Their old editors sit in `legacy/` and render inside `LegacyIsland`, which marks them `data-interim`.
+A page built on its board lives in `pages/`. `pages/CharactersPage.tsx` is the Characters board, with its parts in `pages/characters/`. The placeholders for Appearance and Automation still show the old editors under the board's headings. Replace each whole component with its board. General, Layout, and Input have no board yet. Their old editors sit in `legacy/` and render inside `LegacyIsland`, which marks them `data-interim`.
 
 ## Deep links and search
 

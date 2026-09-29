@@ -876,6 +876,328 @@
   }
 }
 
+/* ── Characters ────────────────────────────────────────────────────── */
+
+/* SettingsCharacters: the profile list 220 wide at content x 24, the
+   detail column 16 to its right (396 wide at 880). The list starts 35
+   below the detail so its first row lines up with the first card, and
+   it stays in view while the detail scrolls. */
+.st-chars {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  column-gap: 16px;
+  align-items: start;
+}
+
+.st-chars-list {
+  position: sticky;
+  top: 0;
+  min-width: 0;
+  padding-top: 35px;
+}
+
+.st-chars-detail {
+  min-width: 0;
+}
+
+.st-profiles {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Rows on the 38 pitch, 36 high. */
+.st-profile {
+  position: relative;
+  height: 38px;
+  padding: 1px 0;
+}
+
+.st-profile-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  margin: 0;
+  padding: 1px 11px 0 10px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  text-align: left;
+}
+
+.st-profile-select:hover {
+  background: var(--hover);
+}
+
+.st-profile-select[aria-current='true'] {
+  background: var(--selrow);
+  color: var(--text);
+  box-shadow: var(--st-selrow-ring);
+}
+
+.st-profile-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The profile in use. Every row keeps the slot so names line up. */
+.st-profile-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+}
+
+.st-profile-dot.is-active {
+  background: var(--accent);
+}
+
+.st-profile-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.st-profile-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tertiary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.st-profile-select[aria-current='true'] .st-profile-meta {
+  color: var(--secondary);
+}
+
+/* The more button shows on hover, on keyboard focus, and while its
+   menu is open, over the world meta. */
+.st-profile-more {
+  position: absolute;
+  top: 7px;
+  right: 4px;
+  opacity: 0;
+}
+
+.st-profile:hover .st-profile-more,
+.st-profile-more:focus-visible,
+.st-profile.is-open .st-profile-more {
+  opacity: 1;
+}
+
+.st-profile:hover .st-profile-meta,
+.st-profile:has(.st-profile-more:focus-visible) .st-profile-meta,
+.st-profile.is-open .st-profile-meta {
+  visibility: hidden;
+}
+
+.st-profile-edit {
+  display: flex;
+  align-items: center;
+  height: 36px;
+}
+
+.st-chars-new {
+  margin-top: 12px;
+}
+
+.st-chars-status {
+  margin: 12px 0 0;
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.st-chars-status:empty {
+  display: none;
+}
+
+.st-menu-danger {
+  color: var(--danger-text);
+}
+
+/* Tracked affects: padding 12 16 16, the note, then chips 8 apart. */
+.st-tracked {
+  padding: 12px 16px 16px;
+}
+
+.st-tracked-note {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.st-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-chip-slot {
+  position: relative;
+  display: flex;
+}
+
+/* Add affect as a field, in the chip's shape. */
+.st-chip-input {
+  display: block;
+  width: 168px;
+  height: 24px;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  outline: none;
+  background: var(--st-fill);
+  box-shadow: inset 0 0 0 1px var(--sep);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.st-chip-input::placeholder {
+  color: var(--tertiary);
+  opacity: 1;
+}
+
+.st-chip-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Suggestions hang under the field on the floating recipe (SPEC 7). */
+.st-suggest {
+  --st-menu-hi: rgba(255, 255, 255, 0.08);
+
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  min-width: 200px;
+  max-height: 222px;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+  border-radius: var(--r-float);
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+}
+
+:root[data-appearance='light'] .st-suggest {
+  --st-menu-hi: rgba(0, 0, 0, 0.05);
+}
+
+.st-suggest[hidden] {
+  display: none;
+}
+
+.st-suggest-item {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--r-row);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.st-suggest-item[aria-selected='true'] {
+  background: var(--st-menu-hi);
+}
+
+/* Panel layout: the 180×110 schematic and a column beside it that
+   wraps under it when the window is too narrow. */
+.st-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px;
+}
+
+.st-schematic {
+  display: block;
+  flex: none;
+}
+
+.st-schematic-frame {
+  fill: var(--bg);
+  stroke: var(--sep);
+  stroke-width: 1;
+}
+
+.st-schematic-lines {
+  fill: none;
+  stroke: var(--sep);
+  stroke-width: 1;
+}
+
+.st-schematic-label {
+  fill: var(--tertiary);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.st-layout-side {
+  display: flex;
+  flex: 1 1 128px;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.st-layout-note {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* The quiet Advanced row at the end, its rows under a hairline each. */
+.st-advanced {
+  margin-top: 16px;
+}
+
+.st-advanced-rows > .st-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: var(--sep);
+}
+
+.st-affect-row .st-row-label {
+  overflow-wrap: anywhere;
+}
+
 /* ── Interim blocks ────────────────────────────────────────────────── */
 
 /* General, Layout, and Input have no approved board yet, and the

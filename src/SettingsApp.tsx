@@ -32,7 +32,7 @@ import { AppearanceGroup } from './components/settings/groups/AppearanceGroup';
 import { LayoutGroup } from './components/settings/groups/LayoutGroup';
 import { InputGroup } from './components/settings/groups/InputGroup';
 import { AutomationGroup } from './components/settings/groups/AutomationGroup';
-import { CharactersGroup } from './components/settings/groups/CharactersGroup';
+import { CharactersPage } from './components/settings/pages/CharactersPage';
 
 // The Settings window (the approved Settings boards). A 200 px sidebar
 // with search and the six group nav, and a content column with the
@@ -58,7 +58,7 @@ const PAGES: Record<SettingsGroup, GroupPage> = {
   layout: { Page: LayoutGroup },
   input: { Page: InputGroup },
   automation: { Page: AutomationGroup },
-  characters: { Page: CharactersGroup },
+  characters: { Page: CharactersPage },
 };
 
 /** The target a cold open should land on, left by the main window. */
