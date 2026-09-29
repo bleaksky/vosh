@@ -233,9 +233,11 @@ pub(crate) enum Scope {
     Global,
 }
 
-/// User-controllable mapping of UI categories to scope. `font`
-/// covers both `font_family` and `font_size` since they always
-/// move together visually.
+/// User-controllable mapping of UI categories to scope. `theme`
+/// covers `theme`, the follow switch, the light and dark pair, and
+/// `custom_themes`, so a custom theme travels with the theme that
+/// names it. `font` covers `font_family`, `font_size`, and
+/// `terminal_line_height` since they move together visually.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(crate) struct ScopeConfig {
     #[serde(default = "scope_default_global")]

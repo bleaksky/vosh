@@ -1394,6 +1394,11 @@ impl ProfileConfig {
 // Stage 3 v1 ships with a fixed default split (the categories
 // listed below are global; everything else is profile-scoped).
 // A future pass can add per-category Settings toggles.
+//
+// The `theme` category carries theme, follow_system_appearance,
+// light_theme, dark_theme, and custom_themes, so a custom theme picked
+// as the global theme exists in every profile. The `font` category
+// carries font_family, font_size, and terminal_line_height.
 // ============================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1409,7 +1414,17 @@ pub(crate) struct GlobalConfig {
     #[serde(default)]
     pub font_size: Option<u32>,
     #[serde(default)]
+    pub follow_system_appearance: Option<bool>,
+    #[serde(default)]
+    pub light_theme: Option<String>,
+    #[serde(default)]
+    pub dark_theme: Option<String>,
+    #[serde(default)]
+    pub terminal_line_height: Option<String>,
+    #[serde(default)]
     pub dock_layout: Option<Vec<DockEntryPersist>>,
+    #[serde(default)]
+    pub custom_themes: Option<Vec<CustomTheme>>,
 }
 
 impl GlobalConfig {
@@ -1419,15 +1434,21 @@ impl GlobalConfig {
     /// scoped show up as `None`, so global.toml stays clean.
     pub(crate) fn from_profile(profile: &Profile, scope: &ScopeConfig) -> Self {
         use crate::profile_set::Scope;
+        let theme = matches!(scope.theme, Scope::Global);
+        let font = matches!(scope.font, Scope::Global);
         Self {
-            theme: matches!(scope.theme, Scope::Global).then(|| profile.ui.theme.clone()),
+            theme: theme.then(|| profile.ui.theme.clone()),
+            follow_system_appearance: theme.then_some(profile.ui.follow_system_appearance),
+            light_theme: theme.then(|| profile.ui.light_theme.clone()),
+            dark_theme: theme.then(|| profile.ui.dark_theme.clone()),
+            custom_themes: theme.then(|| profile.ui.custom_themes.clone()),
             auto_update: matches!(scope.auto_update, Scope::Global)
                 .then_some(profile.ui.auto_update),
             keep_last_command: matches!(scope.keep_last_command, Scope::Global)
                 .then_some(profile.ui.keep_last_command),
-            font_family: matches!(scope.font, Scope::Global)
-                .then(|| profile.ui.font_family.clone()),
-            font_size: matches!(scope.font, Scope::Global).then_some(profile.ui.font_size),
+            font_family: font.then(|| profile.ui.font_family.clone()),
+            font_size: font.then_some(profile.ui.font_size),
+            terminal_line_height: font.then(|| profile.ui.terminal_line_height.clone()),
             dock_layout: matches!(scope.dock_layout, Scope::Global)
                 .then(|| profile.ui.dock_layout.clone()),
         }
@@ -1455,6 +1476,21 @@ impl GlobalConfig {
         if let Some(v) = &self.dock_layout {
             profile.ui.dock_layout.clone_from(v);
         }
+        if let Some(v) = self.follow_system_appearance {
+            profile.ui.follow_system_appearance = v;
+        }
+        if let Some(v) = &self.light_theme {
+            profile.ui.light_theme.clone_from(v);
+        }
+        if let Some(v) = &self.dark_theme {
+            profile.ui.dark_theme.clone_from(v);
+        }
+        if let Some(v) = &self.terminal_line_height {
+            profile.ui.terminal_line_height.clone_from(v);
+        }
+        if let Some(v) = &self.custom_themes {
+            profile.ui.custom_themes = merge_custom_themes(v, &profile.ui.custom_themes);
+        }
     }
 
     pub(crate) fn save(&self, path: &Path) -> Result<(), ConfigError> {
@@ -1470,6 +1506,21 @@ impl GlobalConfig {
     }
 }
 
+/// The shared custom themes, then any theme only the profile file still
+/// holds. Profile files written before custom themes joined the `theme`
+/// scope carry their own lists, and this keeps each of those themes
+/// until the next save moves it into global.toml. The shared copy wins
+/// when both hold the same id.
+fn merge_custom_themes(global: &[CustomTheme], profile: &[CustomTheme]) -> Vec<CustomTheme> {
+    let mut merged = global.to_vec();
+    for theme in profile {
+        if !merged.iter().any(|t| t.id == theme.id) {
+            merged.push(theme.clone());
+        }
+    }
+    merged
+}
+
 /// Zero out the fields whose scope is `Global` on a
 /// `ProfileConfig` so the per-profile file does not duplicate
 /// values that actually live in `global.toml`. Profile-scoped
@@ -1480,6 +1531,10 @@ pub(crate) fn strip_global_fields(config: &mut ProfileConfig, scope: &ScopeConfi
     let defaults = UiConfig::default();
     if matches!(scope.theme, Scope::Global) {
         config.ui.theme = defaults.theme;
+        config.ui.follow_system_appearance = defaults.follow_system_appearance;
+        config.ui.light_theme = defaults.light_theme;
+        config.ui.dark_theme = defaults.dark_theme;
+        config.ui.custom_themes = defaults.custom_themes;
     }
     if matches!(scope.auto_update, Scope::Global) {
         config.ui.auto_update = defaults.auto_update;
@@ -1490,6 +1545,7 @@ pub(crate) fn strip_global_fields(config: &mut ProfileConfig, scope: &ScopeConfi
     if matches!(scope.font, Scope::Global) {
         config.ui.font_family = defaults.font_family;
         config.ui.font_size = defaults.font_size;
+        config.ui.terminal_line_height = defaults.terminal_line_height;
     }
     if matches!(scope.dock_layout, Scope::Global) {
         config.ui.dock_layout = defaults.dock_layout;
@@ -2207,5 +2263,170 @@ name = "haste"
             load(&set).ui.panes,
             Some(PaneLayoutPersist::default_layout())
         );
+    }
+
+    fn theme(id: &str, background: &str) -> CustomTheme {
+        CustomTheme {
+            id: id.into(),
+            label: id.into(),
+            description: String::new(),
+            xterm: [("background".to_string(), background.to_string())]
+                .into_iter()
+                .collect(),
+            chrome: BTreeMap::new(),
+        }
+    }
+
+    /// A profile with every theme and font scope field off its default.
+    fn styled_profile() -> Profile {
+        let mut profile = Profile::default();
+        profile.ui.theme = "night-ink".into();
+        profile.ui.follow_system_appearance = true;
+        profile.ui.light_theme = "classic-vivid".into();
+        profile.ui.dark_theme = "night-ink".into();
+        profile.ui.custom_themes = vec![theme("night-ink", "#000000")];
+        profile.ui.font_size = 16;
+        profile.ui.terminal_line_height = "loose".into();
+        profile
+    }
+
+    /// Mirror `persist_profile` and a reload. The stripped profile file
+    /// loads first, then global.toml over it.
+    fn split_and_reload(profile: &Profile, scope: &ScopeConfig) -> (ProfileConfig, Profile) {
+        let mut per_profile = ProfileConfig::from_profile(profile);
+        strip_global_fields(&mut per_profile, scope);
+        let global_text = toml::to_string_pretty(&GlobalConfig::from_profile(profile, scope))
+            .expect("global config serializes");
+        let parsed_per = ProfileConfig::from_toml(&per_profile.to_toml().unwrap()).unwrap();
+        let parsed_global: GlobalConfig = toml::from_str(&global_text).unwrap();
+        let mut restored = Profile::default();
+        parsed_per.apply_to(&mut restored);
+        parsed_global.apply_to(&mut restored);
+        (per_profile, restored)
+    }
+
+    #[test]
+    fn theme_scope_carries_the_theme_pair_and_custom_themes() {
+        let profile = styled_profile();
+        let (per_profile, restored) = split_and_reload(&profile, &ScopeConfig::default());
+
+        let defaults = UiConfig::default();
+        assert!(!per_profile.ui.follow_system_appearance);
+        assert_eq!(per_profile.ui.light_theme, defaults.light_theme);
+        assert_eq!(per_profile.ui.dark_theme, defaults.dark_theme);
+        assert!(per_profile.ui.custom_themes.is_empty());
+
+        assert!(restored.ui.follow_system_appearance);
+        assert_eq!(restored.ui.light_theme, "classic-vivid");
+        assert_eq!(restored.ui.dark_theme, "night-ink");
+        assert_eq!(restored.ui.theme, "night-ink");
+        assert_eq!(restored.ui.custom_themes.len(), 1);
+        assert_eq!(restored.ui.custom_themes[0].id, "night-ink");
+        assert_eq!(
+            restored.ui.custom_themes[0].xterm,
+            profile.ui.custom_themes[0].xterm
+        );
+    }
+
+    #[test]
+    fn font_scope_carries_the_line_height() {
+        let profile = styled_profile();
+        let (per_profile, restored) = split_and_reload(&profile, &ScopeConfig::default());
+        assert_eq!(per_profile.ui.terminal_line_height, "default");
+        assert_eq!(restored.ui.terminal_line_height, "loose");
+        assert_eq!(restored.ui.font_size, 16);
+    }
+
+    #[test]
+    fn profile_scope_keeps_the_appearance_fields_in_the_profile_file() {
+        use crate::profile_set::Scope as Kind;
+        let scope = ScopeConfig {
+            theme: Kind::Profile,
+            font: Kind::Profile,
+            ..ScopeConfig::default()
+        };
+        let profile = styled_profile();
+        let global_text = toml::to_string_pretty(&GlobalConfig::from_profile(&profile, &scope))
+            .expect("global config serializes");
+        for key in [
+            "follow_system_appearance",
+            "light_theme",
+            "dark_theme",
+            "custom_themes",
+            "terminal_line_height",
+        ] {
+            assert!(!global_text.contains(key), "{key} leaked: {global_text}");
+        }
+        let (per_profile, restored) = split_and_reload(&profile, &scope);
+        assert!(per_profile.ui.follow_system_appearance);
+        assert_eq!(per_profile.ui.custom_themes.len(), 1);
+        assert_eq!(per_profile.ui.terminal_line_height, "loose");
+        assert_eq!(restored.ui.dark_theme, "night-ink");
+    }
+
+    #[test]
+    fn a_custom_theme_only_an_older_profile_file_holds_survives() {
+        // global.toml already holds the shared list, and this profile
+        // file was written before custom themes went global.
+        let global = GlobalConfig {
+            custom_themes: Some(vec![theme("shared", "#101010")]),
+            ..GlobalConfig::default()
+        };
+        let mut profile = Profile::default();
+        profile.ui.custom_themes = vec![theme("shared", "#ffffff"), theme("mine", "#202020")];
+        global.apply_to(&mut profile);
+        let ids: Vec<&str> = profile
+            .ui
+            .custom_themes
+            .iter()
+            .map(|t| t.id.as_str())
+            .collect();
+        assert_eq!(ids, ["shared", "mine"]);
+        // The shared copy wins a clash.
+        assert_eq!(
+            profile.ui.custom_themes[0]
+                .xterm
+                .get("background")
+                .map(String::as_str),
+            Some("#101010")
+        );
+    }
+
+    #[test]
+    fn an_imported_theme_picked_globally_survives_a_profile_switch() {
+        use crate::profile_set::ProfileSet;
+
+        fn persist(set: &ProfileSet, profile: &Profile) {
+            let mut snapshot = ProfileConfig::from_profile(profile);
+            strip_global_fields(&mut snapshot, set.scope());
+            snapshot.save(&set.active_path()).unwrap();
+            GlobalConfig::from_profile(profile, set.scope())
+                .save(&set.global_path())
+                .unwrap();
+        }
+        fn load(set: &ProfileSet) -> Profile {
+            let mut profile = Profile::default();
+            let path = set.active_path();
+            if path.exists() {
+                ProfileConfig::load(&path).unwrap().apply_to(&mut profile);
+            }
+            GlobalConfig::load(&set.global_path())
+                .unwrap()
+                .apply_to(&mut profile);
+            profile
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        persist(&set, &styled_profile());
+
+        set.create("alt").unwrap();
+        set.switch("alt").unwrap();
+        let alt = load(&set);
+        assert_eq!(alt.ui.theme, "night-ink");
+        assert_eq!(alt.ui.custom_themes.len(), 1);
+        assert_eq!(alt.ui.custom_themes[0].id, "night-ink");
+        assert!(alt.ui.follow_system_appearance);
+        assert_eq!(alt.ui.terminal_line_height, "loose");
     }
 }
