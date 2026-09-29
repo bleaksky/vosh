@@ -5939,7 +5939,8 @@ mod tests {
              the backups instead, quit Vosh, copy each backup over its file in the profiles \
              folder, and move the legacy folder out of the profiles folder. A backup brings back \
              every setting of its profile as it was before the move and drops every change you \
-             made since.";
+             made since. Never do both, since a backup copied back beside catalog.toml lays its \
+             old items over the catalog for every character.";
 
         #[tokio::test]
         async fn putting_the_catalog_back_keeps_every_item_you_added_since() {
@@ -5981,6 +5982,56 @@ mod tests {
             assert_eq!(items_on(&p), ["alias kk", "alias zz"]);
             let kept = ProfileConfig::from_profile(&p);
             assert_eq!(kept.profile_vars.get("target").unwrap(), "dragon");
+        }
+
+        #[tokio::test]
+        async fn a_backup_copied_back_beside_the_catalog_spreads_its_old_items() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
+            write_alias(&set, "Healer", "hh");
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
+                .await
+                .unwrap();
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            state
+                .profile
+                .lock()
+                .await
+                .aliases
+                .set(vosh_alias::Alias::new("zz", "sleep"));
+            persist(&state, dir.path()).await;
+            let state = relaunch_as(dir.path(), "Healer").await;
+            assert_eq!(
+                items_on(&*state.profile.lock().await),
+                ["alias hh", "alias zz"]
+            );
+
+            // The help used to say a backup copied back drops every change
+            // since. With catalog.toml in place it does not. zz stays, the
+            // default character gets the alias of the Healer, and the next
+            // save shares the old kk with every character. The help says
+            // never to do this.
+            let legacy = crate::loadout_store::legacy_dir(dir.path());
+            let default_file = set.profile_path(DEFAULT_PROFILE_NAME);
+            std::fs::copy(
+                legacy.join(default_file.file_name().unwrap()),
+                &default_file,
+            )
+            .unwrap();
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            assert_eq!(
+                items_on(&*state.profile.lock().await),
+                ["alias hh", "alias kk", "alias zz"]
+            );
+            persist(&state, dir.path()).await;
+            let state = relaunch_as(dir.path(), "Healer").await;
+            assert_eq!(
+                items_on(&*state.profile.lock().await),
+                ["alias hh", "alias kk", "alias zz"]
+            );
         }
 
         #[tokio::test]
