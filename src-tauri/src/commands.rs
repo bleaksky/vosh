@@ -1977,9 +1977,11 @@ pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
             // intercepts HTML5 drag-and-drop inside the webview, which
             // can break overlay drag interactions.
             .disable_drag_drop_handler();
-    // Open on the theme's ground and appearance, which the last theme
-    // paint reported, so even a frame the page has not painted yet is
-    // in your theme. Before any paint the window keeps the defaults.
+    // Open on the theme's appearance, which the last theme paint
+    // reported, and on macOS on its ground as well, so even a frame the
+    // page has not painted yet is in your theme. Windows and Linux keep
+    // the window clear (window_backdrop explains why). Before any paint
+    // the window keeps the defaults.
     let builder = match crate::window_backdrop::current() {
         Some(backdrop) => backdrop.dress(builder),
         None => builder,
