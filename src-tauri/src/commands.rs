@@ -1590,6 +1590,36 @@ pub(crate) async fn pane_layout_set(
     Ok(true)
 }
 
+/// The Settings window's default size, the approved boards' 880×600.
+const SETTINGS_SIZE: (f64, f64) = (880.0, 600.0);
+/// The smallest Settings window whose two column layouts still fit.
+const SETTINGS_MIN_SIZE: (f64, f64) = (820.0, 560.0);
+
+/// The logical size a Settings window should take when the window state
+/// plugin restored it at `restored`, or None when it already fits. A
+/// side under the minimum, saved by an older and smaller Settings
+/// window, goes back to the default. The system does not apply the
+/// minimum to a size set from code, so this has to.
+fn settings_window_fit(restored: (f64, f64)) -> Option<(f64, f64)> {
+    let (width, height) = restored;
+    let (min_width, min_height) = SETTINGS_MIN_SIZE;
+    if width >= min_width && height >= min_height {
+        return None;
+    }
+    Some((
+        if width < min_width {
+            SETTINGS_SIZE.0
+        } else {
+            width
+        },
+        if height < min_height {
+            SETTINGS_SIZE.1
+        } else {
+            height
+        },
+    ))
+}
+
 /// Open (or focus, if already open) the standalone settings window.
 /// The settings window is a separate webview pointed at the same
 /// frontend bundle with `?view=settings`, so the React entry can
@@ -1602,24 +1632,37 @@ pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
         existing.set_focus().map_err(|e| e.to_string())?;
         return Ok(());
     }
-    WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("index.html?view=settings".into()))
-        .title("Vosh · settings")
-        .inner_size(780.0, 640.0)
-        .min_inner_size(520.0, 420.0)
-        .resizable(true)
-        // Frameless + transparent so the React side can draw the same
-        // rounded Ghostty-style chrome the main window uses.
-        .decorations(false)
-        .transparent(true)
-        // Stay hidden until the React app calls show() on first render
-        // so the user never sees the unstyled default state.
-        .visible(false)
-        // Disable Tauri's OS file-drop handler. When enabled it
-        // intercepts HTML5 drag-and-drop inside the webview, which
-        // can break overlay drag interactions.
-        .disable_drag_drop_handler()
-        .build()
-        .map_err(|e| e.to_string())?;
+    let builder = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("index.html?view=settings".into()))
+            .title("Settings")
+            .inner_size(SETTINGS_SIZE.0, SETTINGS_SIZE.1)
+            .min_inner_size(SETTINGS_MIN_SIZE.0, SETTINGS_MIN_SIZE.1)
+            .resizable(true)
+            .transparent(true)
+            // Stay hidden until the React app calls show() on first render
+            // so the user never sees the unstyled default state.
+            .visible(false)
+            // Disable Tauri's OS file-drop handler. When enabled it
+            // intercepts HTML5 drag-and-drop inside the webview, which
+            // can break overlay drag interactions.
+            .disable_drag_drop_handler();
+    // macOS gives Settings the main window's titled frame: native
+    // traffic lights over the sidebar at the same centers, a hidden
+    // title, and the system's corners and rim. Windows and Linux stay
+    // frameless, and the page draws its own window controls.
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .decorations(true)
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true);
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.decorations(false);
+    let window = builder.build().map_err(|e| e.to_string())?;
+    if let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) {
+        let current = size.to_logical::<f64>(scale);
+        if let Some((width, height)) = settings_window_fit((current.width, current.height)) {
+            let _ = window.set_size(tauri::LogicalSize::new(width, height));
+        }
+    }
     Ok(())
 }
 
@@ -3145,7 +3188,7 @@ pub(crate) async fn updater_install_and_relaunch(app: AppHandle) -> Result<(), S
 
 #[cfg(test)]
 mod tests {
-    use super::{ScrollbackLoad, UiConfigPayload};
+    use super::{settings_window_fit, ScrollbackLoad, UiConfigPayload};
     use crate::profile_config::{ProfileConfig, UiConfig};
 
     /// Send `ui` the way Settings does: out through `ui_get_config`,
@@ -3268,6 +3311,21 @@ mod tests {
             super::auto_switch_line("default"),
             "\r\n\x1b[33mVosh switched to the Default profile.\x1b[0m\r\n"
         );
+    }
+
+    #[test]
+    fn settings_window_keeps_a_size_that_fits() {
+        assert_eq!(settings_window_fit((880.0, 600.0)), None);
+        assert_eq!(settings_window_fit((820.0, 560.0)), None);
+        assert_eq!(settings_window_fit((1200.0, 900.0)), None);
+    }
+
+    #[test]
+    fn settings_window_grows_a_side_left_under_the_minimum() {
+        // The old Settings window opened at 780×640.
+        assert_eq!(settings_window_fit((780.0, 640.0)), Some((880.0, 640.0)));
+        assert_eq!(settings_window_fit((900.0, 420.0)), Some((900.0, 600.0)));
+        assert_eq!(settings_window_fit((520.0, 420.0)), Some((880.0, 600.0)));
     }
 
     #[test]
