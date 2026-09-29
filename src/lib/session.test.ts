@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { emit } from '@tauri-apps/api/event';
 import {
+  broadcastUiConfigChanges,
   normalizeTerminalLineHeight,
   normalizeUiConfig,
   seedDarkTheme,
@@ -93,5 +95,35 @@ describe('terminal line heights', () => {
     expect(normalizeTerminalLineHeight('default')).toBe('default');
     expect(normalizeTerminalLineHeight(1.35)).toBe('default');
     expect(normalizeTerminalLineHeight(undefined)).toBe('default');
+  });
+});
+
+describe('broadcastUiConfigChanges theme events', () => {
+  it('sends the resolved theme and the four theme fields when they change', async () => {
+    const sent = vi.mocked(emit);
+    const base = normalizeUiConfig(raw({ theme: 'nord' }));
+    await broadcastUiConfigChanges(base);
+    sent.mockClear();
+
+    // Follow on, and outside a browser the OS reads as light.
+    await broadcastUiConfigChanges({ ...base, follow_system_appearance: true });
+    expect(sent).toHaveBeenCalledWith('vosh://theme-changed', 'vellum');
+    expect(sent).toHaveBeenCalledWith('vosh://theme-prefs-changed', {
+      theme: 'nord',
+      follow_system_appearance: true,
+      light_theme: 'vellum',
+      dark_theme: 'nord',
+    });
+  });
+
+  it('stays quiet when a pair entry the OS is not showing changes', async () => {
+    const sent = vi.mocked(emit);
+    const base = normalizeUiConfig(raw({ theme: 'nord', follow_system_appearance: true }));
+    await broadcastUiConfigChanges(base);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, dark_theme: 'dracula' });
+    const events = sent.mock.calls.map(([event]) => event);
+    expect(events).toContain('vosh://theme-prefs-changed');
+    expect(events).not.toContain('vosh://theme-changed');
   });
 });
