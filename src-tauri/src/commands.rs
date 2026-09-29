@@ -3673,9 +3673,8 @@ fn migration_sources(set: &crate::profile_set::ProfileSet) -> Result<MigrationSo
 
 /// One conflict resolution from the wizard. Identifies a single
 /// conflicted item (kind + name) and the source profile whose variant
-/// should win. Resolutions not present in the list fall back to the
-/// first variant in the conflict (the analyzer iterates source
-/// profiles in index order, so this is deterministic).
+/// should win. A conflict with no resolution in the list keeps the
+/// version of its `default_source`, see [`crate::migration::Conflict`].
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ConflictResolution {
     pub kind: crate::migration::ItemKind,
@@ -3685,7 +3684,7 @@ pub(crate) struct ConflictResolution {
 
 /// Commit the Path B migration. Saves the live profile, re-runs the
 /// analyzer, applies the user's per-conflict resolutions (or the
-/// first-variant default for any missing resolution), copies every
+/// default version for any missing resolution), copies every
 /// existing per-profile file into
 /// `profiles/legacy/`, writes `catalog.toml` + `loadouts.toml`, takes the
 /// aliases, triggers, and macros out of each profile file, which keeps
@@ -3807,10 +3806,9 @@ async fn apply_migration_with(
         let chosen_source = resolutions
             .iter()
             .find(|r| r.kind == conflict.kind && r.name == conflict.name)
-            .map_or_else(
-                || conflict.variants[0].source_profile.as_str(),
-                |r| r.source_profile.as_str(),
-            );
+            .map_or(conflict.default_source.as_str(), |r| {
+                r.source_profile.as_str()
+            });
         let chosen = conflict
             .variants
             .iter()
@@ -5808,6 +5806,42 @@ mod tests {
             refused(&state, dir.path()).await;
             assert_eq!(read(&catalog_path(dir.path())), before);
             assert!(ProfileConfig::load(&healer).unwrap().aliases.is_empty());
+        }
+
+        #[tokio::test]
+        async fn a_conflict_you_leave_alone_keeps_the_version_that_was_on() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            // Default keeps its kk off, and the Healer uses its own.
+            let mut off = vosh_alias::Alias::new("kk", "kick %1");
+            off.enabled = false;
+            let mut config = ProfileConfig::default();
+            config.aliases.push(off);
+            config
+                .save(&set.profile_path(DEFAULT_PROFILE_NAME))
+                .unwrap();
+            let mut config = ProfileConfig::default();
+            config.aliases.push(vosh_alias::Alias::new("kk", "kick 1."));
+            config.save(&set.profile_path("Healer")).unwrap();
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            let plan = super::super::analyze_migration(&state, dir.path())
+                .await
+                .unwrap();
+            assert_eq!(plan.conflicts[0].default_source, "Healer");
+
+            // You apply without a pick, and the Healer keeps the kk it
+            // used. It used to get the version Default had off.
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+            let state = relaunch_as(dir.path(), "Healer").await;
+            let p = state.profile.lock().await;
+            assert_eq!(p.aliases.get("kk").unwrap().expansion, "kick 1.");
+            assert_eq!(items_on(&p), ["alias kk"]);
+            drop(p);
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            assert!(items_on(&*state.profile.lock().await).is_empty());
         }
 
         #[tokio::test]

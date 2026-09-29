@@ -50,5 +50,47 @@ describe('the shared catalog preview', () => {
 
   it('writes no dashes', () => {
     expect(draw(PLAN)).not.toMatch(/[‒-―]/);
+    expect(draw(CONFLICT_PLAN)).not.toMatch(/[‒-―]/);
+  });
+});
+
+// Default kept its kk off, and only the Healer's version was on.
+const CONFLICT_PLAN: MigrationPlan = {
+  ...PLAN,
+  auto_resolved: { aliases: [], triggers: [], macros: [] },
+  conflicts: [
+    {
+      kind: 'alias',
+      name: 'kk',
+      default_source: 'Healer',
+      variants: [
+        {
+          source_profile: 'default',
+          switched_on: false,
+          item: { kind: 'alias', item: { name: 'kk', expansion: 'kick %1' } },
+        },
+        {
+          source_profile: 'Healer',
+          switched_on: true,
+          item: { kind: 'alias', item: { name: 'kk', expansion: 'kick 1.' } },
+        },
+      ],
+    },
+  ],
+};
+
+describe('a conflict in the shared catalog preview', () => {
+  it('picks the one version that was on until you pick another', () => {
+    const checked = (draw(CONFLICT_PLAN).match(/<input[^>]*>/g) ?? [])
+      .filter((input) => input.includes('checked=""'))
+      .map((input) => /value="([^"]*)"/.exec(input)?.[1]);
+    expect(checked).toEqual(['Healer']);
+  });
+
+  it('shows which version each profile had on', () => {
+    const html = draw(CONFLICT_PLAN);
+    expect(html).toContain('Healer</span><span class="migration-variant-state is-on">on</span>');
+    expect(html).toContain('default</span><span class="migration-variant-state">off</span>');
+    expect(html).toContain('When only one version is on, the wizard picks it for you.');
   });
 });

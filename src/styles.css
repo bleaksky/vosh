@@ -5699,6 +5699,19 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   color: var(--c-text-faint);
 }
 
+.migration-variant-state {
+  padding: 0 5px;
+  font-size: 0.78em;
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  color: var(--c-text-faint);
+}
+
+.migration-variant-state.is-on {
+  color: var(--c-accent);
+  border-color: var(--c-accent);
+}
+
 .migration-variant-body {
   color: var(--c-text);
   font-family: inherit;

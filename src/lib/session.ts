@@ -2012,6 +2012,8 @@ export type MigrationItemKind = 'alias' | 'trigger' | 'macro';
 
 export interface MigrationVariant {
   source_profile: string;
+  /** Whether its profile had this copy switched on. */
+  switched_on: boolean;
   item: { kind: MigrationItemKind; item: Record<string, unknown> };
 }
 
@@ -2019,6 +2021,10 @@ export interface MigrationConflict {
   kind: MigrationItemKind;
   name: string;
   variants: MigrationVariant[];
+  /** The profile whose version the wizard keeps unless you pick another:
+   *  the one version switched on anywhere when exactly one is, or else
+   *  the first profile. */
+  default_source: string;
 }
 
 export interface MigrationLoadoutPreview {
