@@ -898,36 +898,19 @@ fn slash_group(profile: &mut Profile, args: &str) -> InputResult {
 }
 
 fn slash_group_show(profile: &Profile, name: &str) -> InputResult {
-    let trigger_state = profile
-        .triggers
-        .groups()
-        .into_iter()
-        .find(|(g, _)| g == name)
-        .map(|(_, enabled)| enabled);
-    let alias_state = profile
-        .aliases
-        .groups()
-        .into_iter()
-        .find(|(g, _)| g == name)
-        .map(|(_, enabled)| enabled);
-    let has_macros = profile
-        .macros
-        .iter()
-        .any(|m| m.group.as_deref() == Some(name));
-    let macro_state = if has_macros {
-        Some(!profile.disabled_macro_groups.contains(name))
-    } else {
-        None
-    };
+    use crate::script_state::GroupState;
+    let [trigger_state, alias_state, macro_state] =
+        crate::script_state::group_states(profile, name);
     if trigger_state.is_none() && alias_state.is_none() && macro_state.is_none() {
         return error_echo(format!(
             "group `{name}` not found in triggers, aliases, or macros"
         ));
     }
     let mut lines = vec![format!("group `{name}`:")];
-    let fmt = |store: &str, state: Option<bool>| match state {
-        Some(true) => format!("  {store}: on"),
-        Some(false) => format!("  {store}: off"),
+    let fmt = |store: &str, state: Option<GroupState>| match state {
+        Some(GroupState::On) => format!("  {store}: on"),
+        Some(GroupState::Off) => format!("  {store}: off"),
+        Some(GroupState::Mixed) => format!("  {store}: partly on"),
         None => format!("  {store}: (none tagged)"),
     };
     lines.push(fmt("triggers", trigger_state));

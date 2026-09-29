@@ -3643,7 +3643,7 @@ async fn apply_migration_with(
     let live_presets = state.profile.lock().await.ui.enabled_presets.clone();
 
     let plan = crate::migration::analyze_profiles(&sources.profiles);
-    let mut catalog = plan.auto_resolved;
+    let mut catalog = plan.auto_resolved.clone();
     // The catalog owns which presets are on. It takes the list here, by
     // the rule launch uses, so the first launch in loadout mode keeps on
     // every preset any character had on and nothing more.
@@ -3682,7 +3682,7 @@ async fn apply_migration_with(
     // character you switch to. With none on, the loadouts have no opinion
     // and the group checkboxes each profile file keeps below decide.
     let loadout_set = crate::loadout::LoadoutSet {
-        loadouts: plan.loadouts,
+        loadouts: plan.loadouts.clone(),
         active: Vec::new(),
         dormant: false,
     };
@@ -3694,9 +3694,10 @@ async fn apply_migration_with(
     // the catalog holds them now. A file that kept them would lay its
     // copies, with their old group names, over the catalog at launch.
     // Its group checkbox lists name the catalog groups of each kind that
-    // are off for the profile, see `migration::profile_file_for_catalog`,
-    // and a profile that never saved a file gets one when it has lists to
-    // keep. The file keeps its own enabled preset list, which loadout
+    // are off for the profile, and its folder map names the catalog groups
+    // each of its folders became, see `migration::profile_file_for_catalog`.
+    // A profile that never saved a file gets one when it has lists or a
+    // map to keep. The file keeps its own enabled preset list, which loadout
     // mode replaces with the catalog's at every load. Everything is built
     // before the first write, so a file that does not serialize changes
     // nothing.
@@ -3706,10 +3707,11 @@ async fn apply_migration_with(
             Some(text) => ProfileConfig::from_toml(text).map_err(|e| e.to_string())?,
             None => ProfileConfig::default(),
         };
-        crate::migration::profile_file_for_catalog(&mut config, &file.name, &plan.groups);
+        crate::migration::profile_file_for_catalog(&mut config, &file.name, &plan);
         let lists = !config.disabled_alias_groups.is_empty()
             || !config.disabled_trigger_groups.is_empty()
-            || !config.disabled_macro_groups.is_empty();
+            || !config.disabled_macro_groups.is_empty()
+            || !config.group_folders.is_empty();
         if file.text.is_some() || lists {
             kept.push((file, config.to_toml().map_err(|e| e.to_string())?));
         }
@@ -5587,7 +5589,7 @@ mod tests {
             // A profile that never saved a file gets one that keeps the
             // Healer alias off for it, as it had no such alias.
             let prompt = ProfileConfig::load(&set.profile_path("Test-Prompt")).unwrap();
-            assert_eq!(prompt.disabled_alias_groups, ["Healer"]);
+            assert_eq!(prompt.disabled_alias_groups, ["(Healer)"]);
             assert!(!legacy.with_file_name("Test-Prompt.toml").exists());
 
             // A second run in the same session would read the profile
@@ -5856,15 +5858,16 @@ mod tests {
         }
 
         /// What `config` holds besides the items and the preset list the
-        /// shared catalog owns, and the group checkbox lists, which name
-        /// the catalog groups in loadout mode. As TOML, so it compares
-        /// every field.
+        /// shared catalog owns, and the group checkbox lists and the
+        /// folder map, which name the catalog groups in loadout mode. As
+        /// TOML, so it compares every field.
         fn settings(mut config: ProfileConfig) -> String {
             config.clear_catalog_items();
             config.ui.enabled_presets.clear();
             config.disabled_alias_groups.clear();
             config.disabled_trigger_groups.clear();
             config.disabled_macro_groups.clear();
+            config.group_folders = crate::profile_config::GroupFolders::default();
             config.to_toml().unwrap()
         }
 
@@ -6119,12 +6122,13 @@ mod tests {
                 let found = catalog.aliases.iter().find(|a| a.name == alias).unwrap();
                 found.group.clone().unwrap()
             };
-            // What both characters had sits in a group of its own.
-            assert_eq!(group("kk"), "default+Test-Prompt");
-            assert_eq!(group("cc"), "default+Test-Prompt");
-            assert_eq!(group("bash"), "default+Test-Prompt.combat");
-            assert_eq!(group("dd"), "default");
-            assert_eq!(group("tp"), "Test-Prompt");
+            // What both characters had sits in a group of its own, and
+            // the combat folder they share keeps its name.
+            assert_eq!(group("kk"), "(default, Test-Prompt)");
+            assert_eq!(group("cc"), "(default, Test-Prompt)");
+            assert_eq!(group("bash"), "combat");
+            assert_eq!(group("dd"), "(default)");
+            assert_eq!(group("tp"), "(Test-Prompt)");
 
             for (n, name) in names.iter().enumerate() {
                 let mut loadouts = crate::loadout_store::load_loadout_set(dir.path()).unwrap();
@@ -6174,20 +6178,20 @@ mod tests {
                 .unwrap();
             let (_, loadouts) = load_path_b_at_launch(dir.path()).unwrap();
             let groups = |name: &str| loadouts.get(name).unwrap().enabled_groups.clone();
-            assert_eq!(groups("Healer"), ["Healer"]);
+            assert_eq!(groups("Healer"), ["(Healer)"]);
             assert!(groups("Test-Prompt").is_empty());
             assert!(groups("Bard").is_empty());
             // The Settings group checkboxes of each file say the same.
             let healer = ProfileConfig::load(&set.profile_path("Healer")).unwrap();
             assert_eq!(
                 healer.disabled_alias_groups,
-                ["Healer.combat", "default", "default.combat"]
+                ["(default)", "combat", "combat (Healer)"]
             );
             let bard = ProfileConfig::load(&set.profile_path("Bard")).unwrap();
             assert_eq!(bard.profile_vars.get("target").unwrap(), "rat");
             assert_eq!(
                 bard.disabled_trigger_groups,
-                ["Healer", "Healer.combat", "default", "default.combat"]
+                ["(Healer)", "(default)", "combat", "combat (Healer)"]
             );
 
             // With its own loadout on, and with that loadout on beside
@@ -6207,6 +6211,66 @@ mod tests {
                     assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
                 }
             }
+        }
+
+        #[tokio::test]
+        async fn group_turns_a_folder_on_and_off_as_before_after_the_wizard() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            let in_combat = |name: &str| {
+                let mut t = send_trigger(name, &format!("^{name}$"), name);
+                t.group = Some("combat".into());
+                t
+            };
+            // Both have flee in combat, and the Healer has bash there too.
+            let mut config = ProfileConfig {
+                triggers: vec![in_combat("flee")],
+                ..ProfileConfig::default()
+            };
+            config
+                .save(&set.profile_path(DEFAULT_PROFILE_NAME))
+                .unwrap();
+            config.triggers.push(in_combat("bash"));
+            config.save(&set.profile_path("Healer")).unwrap();
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+
+            // The Healer folder landed in two catalog groups. `#group
+            // combat` used to find no group of that name at all.
+            let state = relaunch_as(dir.path(), "Healer").await;
+            let mut p = state.profile.lock().await;
+            assert_eq!(items_on(&p), ["trigger bash", "trigger flee"]);
+            let r = crate::input::process(&mut p, "#group combat off");
+            assert_eq!(r.echo, ["group `combat` disabled for triggers"]);
+            assert!(items_on(&p).is_empty());
+            let r = crate::input::process(&mut p, "#group combat");
+            assert_eq!(r.echo[1], "  triggers: off");
+            crate::input::process(&mut p, "#group combat on");
+            assert_eq!(items_on(&p), ["trigger bash", "trigger flee"]);
+            drop(p);
+
+            // For Default it turns off flee alone, and never turns the
+            // Healer's bash on.
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            let mut p = state.profile.lock().await;
+            crate::input::process(&mut p, "#group combat off");
+            assert!(items_on(&p).is_empty());
+            crate::input::process(&mut p, "#group combat on");
+            assert_eq!(items_on(&p), ["trigger flee"]);
+            drop(p);
+
+            // Test-Prompt had no combat folder, and still has none.
+            let state = relaunch_as(dir.path(), "Test-Prompt").await;
+            let mut p = state.profile.lock().await;
+            let r = crate::input::process(&mut p, "#group combat on");
+            assert_eq!(
+                r.echo,
+                ["[group `combat` not found in triggers, aliases, or macros]"]
+            );
+            assert!(items_on(&p).is_empty());
         }
 
         /// A trigger that sends `command` on lines matching `pattern`.

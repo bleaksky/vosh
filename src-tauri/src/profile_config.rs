@@ -62,6 +62,36 @@ pub(crate) struct ProfileConfig {
     pub disabled_trigger_groups: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub disabled_macro_groups: Vec<String>,
+    /// The catalog groups each of your folders became in the shared
+    /// catalog, which `#group` follows. See [`GroupFolders`].
+    #[serde(default, skip_serializing_if = "GroupFolders::is_empty")]
+    pub group_folders: GroupFolders,
+}
+
+/// The catalog groups each folder of one profile became when the shared
+/// catalog wizard built the catalog, one map per kind. The catalog is
+/// shared, so a folder two characters filled differently lands in more
+/// than one catalog group, such as `combat` for the items both had and
+/// `combat (Healer)` for the ones only the Healer had. `#group combat`
+/// and `mud.set_group_enabled` then turn on or off every catalog group in
+/// the profile's `combat` entry, which is exactly what the profile had
+/// in its combat folder, and an empty entry turns nothing on, since the
+/// profile had no such folder. A folder with no entry is its catalog
+/// group of the same name. Empty in per profile mode.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct GroupFolders {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub aliases: BTreeMap<String, Vec<String>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub triggers: BTreeMap<String, Vec<String>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub macros: BTreeMap<String, Vec<String>>,
+}
+
+impl GroupFolders {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.aliases.is_empty() && self.triggers.is_empty() && self.macros.is_empty()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -1369,6 +1399,7 @@ impl ProfileConfig {
             disabled_alias_groups,
             disabled_trigger_groups,
             disabled_macro_groups,
+            group_folders: profile.group_folders.clone(),
         }
     }
 
@@ -1461,6 +1492,7 @@ impl ProfileConfig {
             .filter(|s| !s.is_empty())
             .cloned()
             .collect();
+        profile.group_folders.clone_from(&self.group_folders);
 
         warnings
     }
@@ -1469,7 +1501,8 @@ impl ProfileConfig {
     /// catalog holds in loadout mode. A profile file that kept a copy
     /// would lay it over the catalog at the next launch, bringing back an
     /// item you deleted or an older version of one you changed. The group
-    /// checkbox lists stay, since the profile file is where they persist.
+    /// checkbox lists and the folder map stay, since the profile file is
+    /// where they persist.
     pub(crate) fn clear_catalog_items(&mut self) {
         self.aliases.clear();
         self.triggers.clear();

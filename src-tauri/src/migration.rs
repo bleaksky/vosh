@@ -4,49 +4,49 @@
 //!
 //! ## What it does
 //!
-//! For each (alias / trigger / macro) name that appears in two or
-//! more source profiles:
-//!
-//!   - If every variant is the same apart from its group and whether
-//!     it is on, which the catalog group carries (see below), the item
-//!     is **auto-resolved** — a single catalog entry collapses every
-//!     copy. No user input needed. So are the copies of a preset
-//!     trigger, since a launch installs the library version.
-//!   - If the variants differ, the item is a **conflict**. The
-//!     plan retains every variant alongside its source profile so
-//!     the migration wizard can show the user "default has `kk =
-//!     kick %1` and aabahran-erelei has `kk = kick 1.`, which wins,
-//!     or keep both?".
-//!
-//! Items unique to one profile pass through into `auto_resolved`
-//! as-is.
+//! Each alias, trigger, and macro name that one or more profiles hold
+//! becomes one catalog item. When the copies differ only in their folder
+//! and in whether they are on, which the catalog groups carry (see
+//! below), the item is **auto-resolved** with no question. So are the
+//! copies of a preset trigger, since a launch installs the library
+//! version. When the copies differ in anything else, the item is a
+//! **conflict**, and the wizard shows each version with its profile and
+//! asks which to keep.
 //!
 //! ## Group names
 //!
-//! Every item lands in a catalog group named for the profiles that had
-//! it on, joined with `+` in index order, then a dot and the group the
-//! first of them had it in, when it had one. So `default.combat` holds
-//! what only the default profile had on in its combat group, and
-//! `default+Healer` holds what both had on without a group. An item no
-//! profile had on, in a group it had off or turned off itself, takes the
-//! names of the profiles that held it, and its group is off for every
-//! profile. Every item in one catalog group is on for the same profiles,
-//! so the group checkbox lists each profile file keeps (see
-//! [`profile_file_for_catalog`]) turn on exactly what each profile had
-//! on. Each kind keeps its own groups, as it keeps its own checkbox
-//! list. A name two groups of one kind would share gets a number after
-//! it, such as `default.combat 2`.
+//! The catalog is shared, and each profile keeps its own group checkbox
+//! lists, so every item sits in a group that is on for exactly the
+//! profiles that had it on. What each profile has of an item is its
+//! role: off (it lacks the item, or turned it off while another profile
+//! had it on), on without a folder, or in one of its folders, whose
+//! checkbox then decides. Items with the same role for every profile
+//! share a group. Items every profile has on without a folder need none.
+//!
+//! A group whose items sit in folder `combat` takes that name, one group
+//! per folder: the one the most profiles have in their `combat` folder,
+//! on a tie the one of the first profile.
+//! Another group of the folder adds the profiles that have its items,
+//! such as `combat (Healer)`, and a group of items that were in no
+//! folder is named for those profiles alone, such as `(Healer)`. A name
+//! taken twice, or one that is also a folder name, gets a number, such as
+//! `combat (Healer) 2`.
+//!
+//! One folder of one profile can so land in several catalog groups. Each
+//! profile file keeps a folder map that names them (see
+//! [`crate::profile_config::GroupFolders`]), so `#group combat off` still
+//! turns off exactly what that profile had in its combat folder. Each
+//! kind keeps its own groups, as it keeps its own checkbox list.
 //!
 //! The derived loadout for each profile names every group on for it, so
 //! turning on loadout `default` turns on what the default profile had
 //! on, the items it shared included, and nothing it did not have.
 //!
 //! A preset trigger follows the list of presets that are on, which every
-//! profile shares in loadout mode, so it counts as on for every profile,
-//! the ones whose file lacks it included, since a launch installs every
-//! preset that is on. It keeps the group it had, most often none, and
-//! gets a group named for profiles only where a profile had it in a
-//! group it kept off.
+//! profile shares in loadout mode, so it is on for every profile, the
+//! ones whose file lacks it included, since a launch installs every
+//! preset that is on. It stays in a folder only for a profile that had
+//! it there.
 //!
 //! ## Scope
 //!
@@ -67,7 +67,7 @@ use vosh_trigger::Trigger;
 
 use crate::loadout::{GlobalCatalog, Loadout};
 use crate::profile::Macro;
-use crate::profile_config::ProfileConfig;
+use crate::profile_config::{GroupFolders, ProfileConfig};
 
 /// Which kind of item a conflict or auto-resolved entry refers to.
 /// The frontend wizard renders different summaries per kind.
@@ -116,8 +116,8 @@ pub(crate) struct MigrationPlan {
     /// source agreed on the content. Already carry their catalog group
     /// (see module docs).
     pub auto_resolved: GlobalCatalog,
-    /// Items with diverging variants. The wizard asks the user to
-    /// pick one or rename-and-keep-all.
+    /// Items with diverging variants. The wizard asks the user to pick
+    /// the one to keep.
     pub conflicts: Vec<Conflict>,
     /// One loadout per source profile, with `enabled_groups` naming
     /// every catalog group on for that profile. Connection defaults,
@@ -126,15 +126,29 @@ pub(crate) struct MigrationPlan {
     /// Names of source profiles the plan covered. Useful for the
     /// wizard summary header.
     pub source_profiles: Vec<String>,
-    /// Each catalog group of each kind with the profiles it is on for,
-    /// which the group checkbox lists of each profile file follow. See
-    /// [`profile_file_for_catalog`].
+    /// What each profile file keeps of the catalog groups, by profile.
+    /// See [`profile_file_for_catalog`].
     #[serde(skip)]
-    pub groups: CatalogGroups,
+    pub files: BTreeMap<String, FileGroups>,
 }
 
-/// Walk every source profile, bucket items by (kind, name), classify
-/// each bucket as auto-resolved or conflicted, and emit the plan.
+/// The group checkbox lists and the folder map one profile file keeps in
+/// loadout mode.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct FileGroups {
+    /// The catalog alias groups off for the profile, sorted.
+    pub(crate) disabled_alias_groups: Vec<String>,
+    /// The catalog trigger groups off for the profile, sorted.
+    pub(crate) disabled_trigger_groups: Vec<String>,
+    /// The catalog macro groups off for the profile, sorted.
+    pub(crate) disabled_macro_groups: Vec<String>,
+    /// The catalog groups each folder of the profile became.
+    pub(crate) folders: GroupFolders,
+}
+
+/// Walk every source profile, gather each alias, trigger, and macro into
+/// one catalog item, put each in its catalog group, classify each as
+/// auto-resolved or conflicted, and emit the plan.
 ///
 /// `profiles` is an ordered list so determinism is preserved: group
 /// names list profiles in this order, and when every variant agrees,
@@ -144,145 +158,91 @@ pub(crate) fn analyze_profiles(profiles: &[(String, ProfileConfig)]) -> Migratio
         source_profiles: profiles.iter().map(|(name, _)| name.clone()).collect(),
         ..MigrationPlan::default()
     };
+    let reserved = every_folder(profiles);
 
-    // Bucket aliases / triggers / macros by name across every
-    // profile, tagging each variant with its source. Each bucket is
-    // a Vec of (source_profile, item) where item has its `group` and
-    // on state rewritten per the migration rule, the same for every
-    // variant in the bucket.
-    let mut aliases_by_name: BTreeMap<String, Vec<(String, Alias)>> = BTreeMap::new();
-    let mut triggers_by_name: BTreeMap<String, Vec<(String, Trigger)>> = BTreeMap::new();
-    let mut macros_by_key: BTreeMap<String, Vec<(String, Macro)>> = BTreeMap::new();
+    let aliases = keyed_entries(profiles, |c| &c.aliases);
+    let triggers = trigger_entries(profiles);
+    let macros = keyed_entries(profiles, |c| &c.macros);
+    let alias_plan = plan_kind(profiles, &aliases, &reserved);
+    let trigger_plan = plan_kind(profiles, &triggers, &reserved);
+    let macro_plan = plan_kind(profiles, &macros, &reserved);
 
-    for (profile_name, cfg) in profiles {
-        for alias in &cfg.aliases {
-            aliases_by_name
-                .entry(alias.name.clone())
-                .or_default()
-                .push((profile_name.clone(), alias.clone()));
+    for (n, (name, _)) in profiles.iter().enumerate() {
+        plan.files.insert(
+            name.clone(),
+            FileGroups {
+                disabled_alias_groups: alias_plan.off[n].clone(),
+                disabled_trigger_groups: trigger_plan.off[n].clone(),
+                disabled_macro_groups: macro_plan.off[n].clone(),
+                folders: GroupFolders {
+                    aliases: alias_plan.folders[n].clone(),
+                    triggers: trigger_plan.folders[n].clone(),
+                    macros: macro_plan.folders[n].clone(),
+                },
+            },
+        );
+        let mut loadout = Loadout::empty(name);
+        for group in [&alias_plan, &trigger_plan, &macro_plan]
+            .iter()
+            .flat_map(|kind| &kind.on[n])
+        {
+            if !loadout.enabled_groups.contains(group) {
+                loadout.enabled_groups.push(group.clone());
+            }
         }
-        for trigger in &cfg.triggers {
-            triggers_by_name
-                .entry(trigger.name.clone())
-                .or_default()
-                .push((profile_name.clone(), trigger.clone()));
-        }
-        for mac in &cfg.macros {
-            macros_by_key
-                .entry(mac.key.clone())
-                .or_default()
-                .push((profile_name.clone(), mac.clone()));
-        }
-    }
-    plan.groups = CatalogGroups {
-        aliases: group_buckets(profiles, &mut aliases_by_name),
-        triggers: group_buckets(profiles, &mut triggers_by_name),
-        macros: group_buckets(profiles, &mut macros_by_key),
-    };
-
-    // Classify each bucket.
-    for (name, variants) in aliases_by_name {
-        if let Some(canonical) = collapse(&variants) {
-            plan.auto_resolved.aliases.push(canonical);
-        } else {
-            plan.conflicts.push(Conflict {
-                kind: ItemKind::Alias,
-                name,
-                variants: variants
-                    .into_iter()
-                    .map(|(src, item)| Variant {
-                        source_profile: src,
-                        item: ItemPayload::Alias { item },
-                    })
-                    .collect(),
-            });
-        }
-    }
-    for (name, variants) in triggers_by_name {
-        // A launch installs the version of a preset trigger the library
-        // holds, whichever one the catalog keeps, so there is nothing to
-        // ask you.
-        let presets = variants.iter().all(|(_, t)| t.preset.is_some());
-        let canonical = if presets {
-            variants.first().map(|(_, t)| t.clone())
-        } else {
-            collapse(&variants)
-        };
-        if let Some(canonical) = canonical {
-            plan.auto_resolved.triggers.push(canonical);
-        } else {
-            plan.conflicts.push(Conflict {
-                kind: ItemKind::Trigger,
-                name,
-                variants: variants
-                    .into_iter()
-                    .map(|(src, item)| Variant {
-                        source_profile: src,
-                        item: ItemPayload::Trigger { item },
-                    })
-                    .collect(),
-            });
-        }
-    }
-    for (key, variants) in macros_by_key {
-        if let Some(canonical) = collapse(&variants) {
-            plan.auto_resolved.macros.push(canonical);
-        } else {
-            plan.conflicts.push(Conflict {
-                kind: ItemKind::Macro,
-                name: key,
-                variants: variants
-                    .into_iter()
-                    .map(|(src, item)| Variant {
-                        source_profile: src,
-                        item: ItemPayload::Macro { item },
-                    })
-                    .collect(),
-            });
-        }
+        plan.loadouts.push(loadout);
     }
 
-    plan.loadouts = profiles
-        .iter()
-        .map(|(name, _)| derive_loadout(name, &plan.groups))
-        .collect();
-
+    resolve(
+        profiles,
+        aliases,
+        &alias_plan,
+        ItemKind::Alias,
+        &mut plan.auto_resolved.aliases,
+        &mut plan.conflicts,
+    );
+    resolve(
+        profiles,
+        triggers,
+        &trigger_plan,
+        ItemKind::Trigger,
+        &mut plan.auto_resolved.triggers,
+        &mut plan.conflicts,
+    );
+    resolve(
+        profiles,
+        macros,
+        &macro_plan,
+        ItemKind::Macro,
+        &mut plan.auto_resolved.macros,
+        &mut plan.conflicts,
+    );
     plan
 }
 
-/// Each catalog group of one kind, with the profiles it is on for.
-pub(crate) type GroupsOn = BTreeMap<String, BTreeSet<String>>;
-
-/// The catalog groups of each kind, with the profiles each is on for.
-/// Each kind stands alone, the way each kind keeps its own group
-/// checkbox list, so a group name one profile had on for aliases and off
-/// for triggers stays on for the aliases and off for the triggers.
-#[derive(Debug, Clone, Default)]
-pub(crate) struct CatalogGroups {
-    pub(crate) aliases: GroupsOn,
-    pub(crate) triggers: GroupsOn,
-    pub(crate) macros: GroupsOn,
-}
-
-impl CatalogGroups {
-    /// Every group of any kind that is on for `profile`, once each, the
-    /// aliases first, then the triggers, then the macros.
-    fn on_for(&self, profile: &str) -> Vec<String> {
-        let mut on: Vec<String> = Vec::new();
-        for groups in [&self.aliases, &self.triggers, &self.macros] {
-            for (group, profiles) in groups {
-                if profiles.contains(profile) && !on.contains(group) {
-                    on.push(group.clone());
-                }
-            }
-        }
-        on
+/// Every folder any profile puts an item of any kind in. A group named
+/// for the profiles that have it never takes one of these names, so
+/// `#group` with the name of a folder never reaches it.
+fn every_folder(profiles: &[(String, ProfileConfig)]) -> BTreeSet<String> {
+    let mut folders = BTreeSet::new();
+    for (_, config) in profiles {
+        let groups = config
+            .aliases
+            .iter()
+            .map(|a| a.group.as_deref())
+            .chain(config.triggers.iter().map(|t| t.group.as_deref()))
+            .chain(config.macros.iter().map(|m| m.group.as_deref()));
+        folders.extend(groups.flatten().filter(|g| !g.is_empty()).map(String::from));
     }
+    folders
 }
 
 /// What the wizard reads and rewrites on an alias, a trigger, or a
 /// macro.
 trait CatalogItem: Clone + Serialize {
+    /// The name that identifies it in its store: the alias name, the
+    /// trigger name, or the macro key.
+    fn key(&self) -> &str;
     fn group(&self) -> Option<&str>;
     fn set_group(&mut self, group: Option<String>);
     fn enabled(&self) -> bool;
@@ -294,9 +254,13 @@ trait CatalogItem: Clone + Serialize {
     fn preset(&self) -> Option<&str> {
         None
     }
+    fn payload(self) -> ItemPayload;
 }
 
 impl CatalogItem for Alias {
+    fn key(&self) -> &str {
+        &self.name
+    }
     fn group(&self) -> Option<&str> {
         self.group.as_deref()
     }
@@ -312,9 +276,15 @@ impl CatalogItem for Alias {
     fn groups_off(config: &ProfileConfig) -> &[String] {
         &config.disabled_alias_groups
     }
+    fn payload(self) -> ItemPayload {
+        ItemPayload::Alias { item: self }
+    }
 }
 
 impl CatalogItem for Trigger {
+    fn key(&self) -> &str {
+        &self.name
+    }
     fn group(&self) -> Option<&str> {
         self.group.as_deref()
     }
@@ -333,9 +303,15 @@ impl CatalogItem for Trigger {
     fn preset(&self) -> Option<&str> {
         self.preset.as_deref()
     }
+    fn payload(self) -> ItemPayload {
+        ItemPayload::Trigger { item: self }
+    }
 }
 
 impl CatalogItem for Macro {
+    fn key(&self) -> &str {
+        &self.key
+    }
     fn group(&self) -> Option<&str> {
         self.group.as_deref()
     }
@@ -351,21 +327,67 @@ impl CatalogItem for Macro {
     fn groups_off(config: &ProfileConfig) -> &[String] {
         &config.disabled_macro_groups
     }
+    fn payload(self) -> ItemPayload {
+        ItemPayload::Macro { item: self }
+    }
 }
 
-/// Where one name of one kind lands in the catalog, see
-/// [`group_buckets`].
-struct Placement {
-    /// The group it asks for, None for a preset trigger that stays
-    /// without one.
-    group: Option<String>,
-    /// The profiles it is on for.
-    on: BTreeSet<String>,
-    /// True when some profile had the item turned on. It comes over
-    /// turned on, and its group decides whom it is on for. An item every
-    /// profile turned off comes over turned off, stays off in any group,
-    /// and joins a group of its name whomever that is on for.
-    enabled: bool,
+/// One catalog item: the copy of it each profile that holds it has, in
+/// profile order, by profile index.
+struct Entry<T> {
+    copies: Vec<(usize, T)>,
+    /// A preset trigger, which the shared preset list turns on.
+    preset: bool,
+}
+
+/// What one profile has of an item.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Role {
+    /// It lacks the item, or turned the item off while another profile
+    /// had it on, so the item's group stays off for it.
+    Off,
+    /// It has the item on without a folder, so the item's group stays on
+    /// for it.
+    On,
+    /// It has the item in this folder, whose checkbox decides, and
+    /// `#group` with the folder's name turns the item's group on or off.
+    Folder(String),
+}
+
+/// The items of one kind in `configs`, one entry per name. A store keeps
+/// the last copy of a name, so a later copy in one file wins.
+fn keyed_entries<T: CatalogItem>(
+    profiles: &[(String, ProfileConfig)],
+    items: impl Fn(&ProfileConfig) -> &[T],
+) -> Vec<Entry<T>> {
+    let mut by_key: BTreeMap<String, Entry<T>> = BTreeMap::new();
+    for (n, (_, config)) in profiles.iter().enumerate() {
+        let mut last: BTreeMap<&str, &T> = BTreeMap::new();
+        for item in items(config) {
+            last.insert(item.key(), item);
+        }
+        for (key, item) in last {
+            by_key
+                .entry(key.to_string())
+                .or_insert_with(|| Entry {
+                    copies: Vec::new(),
+                    preset: false,
+                })
+                .copies
+                .push((n, item.clone()));
+        }
+    }
+    by_key.into_values().collect()
+}
+
+/// The triggers in `configs`, one entry per name. A name whose every
+/// copy is a preset trigger is a preset entry.
+fn trigger_entries(profiles: &[(String, ProfileConfig)]) -> Vec<Entry<Trigger>> {
+    let mut entries = keyed_entries(profiles, |c| &c.triggers);
+    for entry in &mut entries {
+        entry.preset = entry.copies.iter().all(|(_, t)| t.preset.is_some());
+    }
+    entries
 }
 
 /// True when `list`, an `enabled_presets` list, has `preset` on. An
@@ -375,236 +397,264 @@ fn preset_on(list: &[String], preset: &str) -> bool {
     list.is_empty() || list.iter().any(|id| id == preset)
 }
 
-/// Where the variants of one name land, from each holder's copy. A store
-/// keeps the last copy of a name, so a later copy in one file wins.
-fn place<T: CatalogItem>(
-    profiles: &[(String, ProfileConfig)],
-    variants: &[(String, T)],
-) -> Placement {
-    let presets = variants.iter().all(|(_, item)| item.preset().is_some());
-    // The holders in index order, the group each copy sits in, whether
-    // that group is on for its holder, whether the copy is on, and for a
-    // preset trigger, whether its holder kept it off by its group.
-    let mut holders: Vec<&str> = Vec::new();
-    let mut group_of: BTreeMap<&str, Option<&str>> = BTreeMap::new();
-    let mut group_on: BTreeSet<&str> = BTreeSet::new();
-    let mut enabled: BTreeSet<&str> = BTreeSet::new();
-    let mut kept_off: BTreeSet<&str> = BTreeSet::new();
-    for (source, item) in variants {
-        if !holders.contains(&source.as_str()) {
-            holders.push(source);
-        }
-        let config = profiles
-            .iter()
-            .find(|(name, _)| name == source)
-            .map(|(_, config)| config);
-        let group = item.group().filter(|g| !g.is_empty());
-        group_of.insert(source, group);
-        let off = group.is_some_and(|g| {
-            config.is_some_and(|config| T::groups_off(config).iter().any(|o| o == g))
-        });
-        if off {
-            group_on.remove(source.as_str());
-        } else {
-            group_on.insert(source);
-        }
-        if item.enabled() {
-            enabled.insert(source);
-        } else {
-            enabled.remove(source.as_str());
-        }
-        // A launch takes out the triggers of a preset that is off, so
-        // only a preset its holder had on can have been off by a group.
-        let preset_was_on = item
-            .preset()
-            .zip(config)
-            .is_some_and(|(preset, config)| preset_on(&config.ui.enabled_presets, preset));
-        if off && preset_was_on {
-            kept_off.insert(source);
-        } else {
-            kept_off.remove(source.as_str());
-        }
-    }
-    let first_group = || {
-        holders
-            .first()
-            .and_then(|h| group_of.get(h).copied())
-            .flatten()
-    };
-    if presets {
-        // A launch installs every preset that is on, whatever the file
-        // held, so a preset trigger is on for every profile but one that
-        // kept it off by its group, and comes over turned on.
-        let on: Vec<&str> = profiles
-            .iter()
-            .map(|(name, _)| name.as_str())
-            .filter(|name| !kept_off.contains(name))
-            .collect();
-        if on.len() == profiles.len() {
-            return Placement {
-                group: first_group().map(str::to_string),
-                on: on.iter().map(|p| (*p).to_string()).collect(),
-                enabled: true,
-            };
-        }
-        let named_for = if on.is_empty() { &holders } else { &on };
-        return Placement {
-            group: Some(group_name(named_for, &group_of)),
-            on: on.iter().map(|p| (*p).to_string()).collect(),
-            enabled: true,
-        };
-    }
-    let any_enabled = !enabled.is_empty();
-    // An item some profile had on is on for each holder whose copy was
-    // on in a group it had on. An item every profile turned off would be
-    // on, once you turn it on, where its group was on.
-    let on: Vec<&str> = holders
-        .iter()
-        .copied()
-        .filter(|h| group_on.contains(h) && (!any_enabled || enabled.contains(h)))
-        .collect();
-    let named_for = if on.is_empty() { &holders } else { &on };
-    Placement {
-        group: Some(group_name(named_for, &group_of)),
-        on: on.iter().map(|p| (*p).to_string()).collect(),
-        enabled: any_enabled,
-    }
+/// The folder a copy sits in, None for none.
+fn folder_of<T: CatalogItem>(item: &T) -> Option<String> {
+    item.group().filter(|g| !g.is_empty()).map(String::from)
 }
 
-/// The group named for `profiles`, joined with `+`, then a dot and the
-/// group the first of them that holds the item had it in, when it had
-/// one.
-fn group_name(profiles: &[&str], group_of: &BTreeMap<&str, Option<&str>>) -> String {
-    let prefix = profiles.join("+");
-    let group = profiles
-        .iter()
-        .find_map(|p| group_of.get(p).copied())
-        .flatten();
-    match group {
-        Some(g) => format!("{prefix}.{g}"),
-        None => prefix,
-    }
+/// What each profile has of `entry`, in profile order.
+fn roles<T: CatalogItem>(profiles: &[(String, ProfileConfig)], entry: &Entry<T>) -> Vec<Role> {
+    let any_on = entry.copies.iter().any(|(_, item)| item.enabled());
+    (0..profiles.len())
+        .map(|n| {
+            let copy = entry
+                .copies
+                .iter()
+                .find(|(holder, _)| *holder == n)
+                .map(|(_, item)| item);
+            if entry.preset {
+                // A launch installs every preset that is on, whatever the
+                // file held, and turns its triggers on. A launch also takes
+                // out the triggers of a preset that is off, so only a
+                // preset its holder had on can sit in its folder.
+                let config = &profiles[n].1;
+                return match copy {
+                    Some(item)
+                        if item
+                            .preset()
+                            .is_some_and(|id| preset_on(&config.ui.enabled_presets, id)) =>
+                    {
+                        folder_of(item).map_or(Role::On, Role::Folder)
+                    }
+                    _ => Role::On,
+                };
+            }
+            match copy {
+                None => Role::Off,
+                // It comes over turned on for another profile, so its
+                // group keeps it off for this one.
+                Some(item) if any_on && !item.enabled() => Role::Off,
+                Some(item) => folder_of(item).map_or(Role::On, Role::Folder),
+            }
+        })
+        .collect()
 }
 
-/// Put every variant in each bucket of one kind in its catalog group,
-/// and return each catalog group with the profiles it is on for. The
-/// group is named for the profiles that had the item on, see the module
-/// docs, so every item in one group is on for the same profiles. An item
-/// on for any profile comes over turned on, since its group decides for
-/// whom, and an item every profile turned off comes over turned off. The
-/// holders of an item used to share one group whatever each had on, so
-/// an item a profile had off came on for it with the others.
-fn group_buckets<T: CatalogItem>(
+/// Where the items of one kind land, see [`plan_kind`].
+struct KindPlan {
+    /// The catalog group of each entry, None for one every profile has
+    /// on without a folder.
+    groups: Vec<Option<String>>,
+    /// Whether each entry comes over turned on: when any profile had it
+    /// on, since its group decides for whom.
+    enabled: Vec<bool>,
+    /// The groups of this kind off for each profile, sorted.
+    off: Vec<Vec<String>>,
+    /// The groups of this kind on for each profile, sorted.
+    on: Vec<Vec<String>>,
+    /// The folder map of this kind for each profile.
+    folders: Vec<BTreeMap<String, Vec<String>>>,
+}
+
+/// Put each entry of one kind in its catalog group, see the module docs,
+/// and work out what each profile file keeps of the groups.
+fn plan_kind<T: CatalogItem>(
     profiles: &[(String, ProfileConfig)],
-    buckets: &mut BTreeMap<String, Vec<(String, T)>>,
-) -> GroupsOn {
-    let placements: Vec<Placement> = buckets
-        .values()
-        .map(|variants| place(profiles, variants))
-        .collect();
-    // The items that decide whom a group is on for claim their names
-    // first, so an item turned off everywhere never pushes one of them
-    // to a numbered name.
-    let mut groups = GroupsOn::new();
-    let mut names: Vec<Option<String>> = placements
-        .iter()
-        .map(|p| {
-            let group = p.group.clone().filter(|_| p.enabled)?;
-            Some(claim_group(&mut groups, group, p.on.clone()))
+    entries: &[Entry<T>],
+    reserved: &BTreeSet<String>,
+) -> KindPlan {
+    let roles: Vec<Vec<Role>> = entries.iter().map(|e| roles(profiles, e)).collect();
+    let names = name_groups(profiles, &roles, reserved);
+    let folders: BTreeSet<&String> = names
+        .keys()
+        .flatten()
+        .filter_map(|role| match role {
+            Role::Folder(folder) => Some(folder),
+            _ => None,
         })
         .collect();
-    for (placement, name) in placements.iter().zip(names.iter_mut()) {
-        if let (None, false, Some(group)) = (&name, placement.enabled, &placement.group) {
-            groups
-                .entry(group.clone())
-                .or_insert_with(|| placement.on.clone());
-            *name = Some(group.clone());
-        }
-    }
-    for ((variants, placement), name) in buckets.values_mut().zip(&placements).zip(names) {
-        for (_, item) in variants.iter_mut() {
-            item.set_group(name.clone());
-            item.set_enabled(placement.enabled);
-        }
-    }
-    groups
-}
-
-/// Record `name` as a group on for `on`, and return the name it takes.
-/// A name another group of this kind already holds, on for other
-/// profiles, gets a number after it, so no group is on for two sets of
-/// profiles.
-fn claim_group(groups: &mut GroupsOn, name: String, on: BTreeSet<String>) -> String {
-    let mut candidate = name.clone();
-    let mut n = 2;
-    loop {
-        match groups.get(&candidate) {
-            None => {
-                groups.insert(candidate.clone(), on);
-                return candidate;
-            }
-            Some(existing) if *existing == on => return candidate,
-            Some(_) => {
-                candidate = format!("{name} {n}");
-                n += 1;
+    let mut plan = KindPlan {
+        groups: roles.iter().map(|r| names.get(r).cloned()).collect(),
+        enabled: entries
+            .iter()
+            .map(|e| e.preset || e.copies.iter().any(|(_, item)| item.enabled()))
+            .collect(),
+        off: Vec::new(),
+        on: Vec::new(),
+        folders: Vec::new(),
+    };
+    for (n, (_, config)) in profiles.iter().enumerate() {
+        let (mut off, mut on) = (Vec::new(), Vec::new());
+        for (roles, group) in &names {
+            let is_off = match &roles[n] {
+                Role::Off => true,
+                Role::On => false,
+                Role::Folder(folder) => T::groups_off(config).contains(folder),
+            };
+            if is_off {
+                off.push(group.clone());
+            } else {
+                on.push(group.clone());
             }
         }
+        off.sort();
+        on.sort();
+        let mut map = BTreeMap::new();
+        for folder in &folders {
+            let mut mine: Vec<String> = names
+                .iter()
+                .filter(|(roles, _)| roles[n] == Role::Folder((*folder).clone()))
+                .map(|(_, group)| group.clone())
+                .collect();
+            mine.sort();
+            // A folder that is its catalog group of the same name needs
+            // no entry, and neither does one no group bears the name of.
+            let same = mine.len() == 1 && mine[0] == **folder;
+            let named = names.values().any(|group| group == *folder);
+            if !same && (!mine.is_empty() || named) {
+                map.insert((*folder).clone(), mine);
+            }
+        }
+        plan.off.push(off);
+        plan.on.push(on);
+        plan.folders.push(map);
     }
+    plan
 }
 
-/// Collapse the variants of one name into one catalog item when every
-/// variant is the same in every field, or None when they differ and the
-/// wizard asks you which to keep. The variants of one name already share
-/// their catalog group and on state, see [`group_buckets`].
-fn collapse<T: CatalogItem>(variants: &[(String, T)]) -> Option<T> {
-    let first = &variants.first()?.1;
-    let text = serde_json::to_string(first).ok()?;
-    variants[1..]
-        .iter()
-        .all(|(_, other)| serde_json::to_string(other).ok().as_deref() == Some(text.as_str()))
-        .then(|| first.clone())
+/// How many profiles have a group in a folder, then how early the first
+/// of them comes, for the group that takes the folder's own name.
+type Rank = (usize, std::cmp::Reverse<usize>);
+
+/// The catalog group name of each set of roles `roles` holds, but the
+/// one every profile has on without a folder, which needs no group. See
+/// the module docs.
+fn name_groups(
+    profiles: &[(String, ProfileConfig)],
+    roles: &[Vec<Role>],
+    reserved: &BTreeSet<String>,
+) -> BTreeMap<Vec<Role>, String> {
+    let mut distinct: Vec<&Vec<Role>> = Vec::new();
+    for r in roles {
+        if !r.iter().all(|role| *role == Role::On) && !distinct.contains(&r) {
+            distinct.push(r);
+        }
+    }
+    let base = |r: &[Role]| {
+        r.iter().find_map(|role| match role {
+            Role::Folder(folder) => Some(folder.clone()),
+            _ => None,
+        })
+    };
+    // Each folder's own name goes to the group of it the most profiles
+    // have in that folder, on a tie the one whose first such profile
+    // comes first.
+    let mut main: BTreeMap<String, (Rank, &Vec<Role>)> = BTreeMap::new();
+    for r in &distinct {
+        let Some(folder) = base(r) else {
+            continue;
+        };
+        let mine = |role: &Role| *role == Role::Folder(folder.clone());
+        let count = r.iter().filter(|role| mine(role)).count();
+        let first = r.iter().position(mine).unwrap_or(usize::MAX);
+        let rank = (count, std::cmp::Reverse(first));
+        if main.get(&folder).map_or(true, |(best, _)| rank > *best) {
+            main.insert(folder, (rank, r));
+        }
+    }
+    let mut names: BTreeMap<Vec<Role>, String> = BTreeMap::new();
+    for (folder, (_, r)) in &main {
+        names.insert((*r).clone(), folder.clone());
+    }
+    let mut taken: BTreeSet<String> = names.values().cloned().collect();
+    for r in &distinct {
+        if names.contains_key(*r) {
+            continue;
+        }
+        let who: Vec<&str> = profiles
+            .iter()
+            .zip(r.iter())
+            .filter(|(_, role)| **role != Role::Off)
+            .map(|((name, _), _)| name.as_str())
+            .collect();
+        let stem = match base(r) {
+            Some(folder) => format!("{folder} ({})", who.join(", ")),
+            None => format!("({})", who.join(", ")),
+        };
+        let mut name = stem.clone();
+        let mut n = 2;
+        while taken.contains(&name) || reserved.contains(&name) {
+            name = format!("{stem} {n}");
+            n += 1;
+        }
+        taken.insert(name.clone());
+        names.insert((*r).clone(), name);
+    }
+    names
 }
 
-/// Build a loadout for one source profile. `enabled_groups` names every
-/// catalog group of any kind that is on for the profile (see
-/// [`group_buckets`]), so turning the loadout on turns on what the
-/// profile had on. A loadout names groups for every kind at once, so a group
-/// name on for one kind and off for another stays in.
-fn derive_loadout(profile_name: &str, groups: &CatalogGroups) -> Loadout {
-    // The variables, tick, and connection stay in the profile file, which
-    // loadout mode loads them from. No runtime code reads them from a
-    // loadout, so a copy here would only go stale beside the file.
-    let mut loadout = Loadout::empty(profile_name);
-    loadout.enabled_groups = groups.on_for(profile_name);
-    loadout
+/// Give each copy of each entry its catalog group and on state, then
+/// collapse every entry whose copies agree into `auto`, the copy of the
+/// first profile that holds it, and hand the others to `conflicts`. The
+/// copies of a preset trigger always collapse, since a launch installs
+/// the version the library holds, whichever one the catalog keeps.
+fn resolve<T: CatalogItem>(
+    profiles: &[(String, ProfileConfig)],
+    entries: Vec<Entry<T>>,
+    plan: &KindPlan,
+    kind: ItemKind,
+    auto: &mut Vec<T>,
+    conflicts: &mut Vec<Conflict>,
+) {
+    for (n, mut entry) in entries.into_iter().enumerate() {
+        for (_, item) in &mut entry.copies {
+            item.set_group(plan.groups[n].clone());
+            item.set_enabled(plan.enabled[n]);
+        }
+        let first = serde_json::to_string(&entry.copies[0].1).ok();
+        let agree = entry
+            .copies
+            .iter()
+            .all(|(_, item)| serde_json::to_string(item).ok() == first);
+        if entry.preset || agree {
+            auto.push(entry.copies.swap_remove(0).1);
+            continue;
+        }
+        conflicts.push(Conflict {
+            kind,
+            name: entry.copies[0].1.key().to_string(),
+            variants: entry
+                .copies
+                .into_iter()
+                .map(|(holder, item)| Variant {
+                    source_profile: profiles[holder].0.clone(),
+                    item: item.payload(),
+                })
+                .collect(),
+        });
+    }
 }
 
 /// Make `config` the file `profile` keeps in loadout mode, once the
 /// catalog holds every item. The aliases, triggers, and macros leave the
 /// file. Each group checkbox list names every catalog group of its kind
-/// that is off for the profile (see [`group_buckets`]), built from that
-/// kind alone. While no active loadout declares any groups, the lists keep
-/// the profile to what it had on. Without them a profile with no items
-/// of its own, or with every group off, would turn on every other
-/// character's items.
+/// that is off for the profile, built from that kind alone, and the
+/// folder map names the catalog groups each of its folders became (see
+/// [`FileGroups`]). While no active loadout declares any groups, the
+/// lists keep the profile to what it had on. Without them a profile with
+/// no items of its own, or with every group off, would turn on every
+/// other character's items.
 pub(crate) fn profile_file_for_catalog(
     config: &mut ProfileConfig,
     profile: &str,
-    groups: &CatalogGroups,
+    plan: &MigrationPlan,
 ) {
     config.clear_catalog_items();
-    config.disabled_alias_groups = groups_left_off(&groups.aliases, profile);
-    config.disabled_trigger_groups = groups_left_off(&groups.triggers, profile);
-    config.disabled_macro_groups = groups_left_off(&groups.macros, profile);
-}
-
-/// Each group in `groups` that is off for `profile`, sorted.
-fn groups_left_off(groups: &GroupsOn, profile: &str) -> Vec<String> {
-    groups
-        .iter()
-        .filter(|(_, on)| !on.contains(profile))
-        .map(|(group, _)| group.clone())
-        .collect()
+    let groups = plan.files.get(profile).cloned().unwrap_or_default();
+    config.disabled_alias_groups = groups.disabled_alias_groups;
+    config.disabled_trigger_groups = groups.disabled_trigger_groups;
+    config.disabled_macro_groups = groups.disabled_macro_groups;
+    config.group_folders = groups.folders;
 }
 
 #[cfg(test)]
@@ -648,6 +698,24 @@ mod tests {
         }
     }
 
+    fn grouped(name: &str, expansion: &str, group: &str) -> Alias {
+        let mut alias = Alias::new(name, expansion);
+        alias.group = Some(group.into());
+        alias
+    }
+
+    /// The file `profile` keeps after the wizard.
+    fn file_after(plan: &MigrationPlan, profile: &str) -> ProfileConfig {
+        let mut file = ProfileConfig::default();
+        profile_file_for_catalog(&mut file, profile, plan);
+        file
+    }
+
+    fn alias_group(plan: &MigrationPlan, name: &str) -> Option<String> {
+        let found = plan.auto_resolved.aliases.iter().find(|a| a.name == name);
+        found.unwrap().group.clone()
+    }
+
     #[test]
     fn unique_items_pass_through_as_auto_resolved() {
         let kk = Alias::new("kk", "kick %1");
@@ -657,11 +725,8 @@ mod tests {
         )]);
         assert_eq!(plan.conflicts.len(), 0);
         assert_eq!(plan.auto_resolved.aliases.len(), 1);
-        // Migrated alias picks up the source-profile group tag.
-        assert_eq!(
-            plan.auto_resolved.aliases[0].group.as_deref(),
-            Some("default")
-        );
+        // Every profile has it on without a folder, so it needs no group.
+        assert_eq!(plan.auto_resolved.aliases[0].group, None);
     }
 
     #[test]
@@ -678,38 +743,44 @@ mod tests {
             ),
         ]);
         assert_eq!(plan.conflicts.len(), 0);
-        // One catalog entry, not two, in a group that names both
-        // profiles, which both loadouts turn on.
+        // One catalog entry, not two, on for both without a group.
         assert_eq!(plan.auto_resolved.aliases.len(), 1);
-        assert_eq!(
-            plan.auto_resolved.aliases[0].group.as_deref(),
-            Some("default+warrior")
-        );
+        assert_eq!(plan.auto_resolved.aliases[0].group, None);
         for loadout in &plan.loadouts {
-            assert_eq!(loadout.enabled_groups, ["default+warrior"]);
+            assert!(loadout.enabled_groups.is_empty());
         }
     }
 
     #[test]
     fn every_variant_of_a_conflict_lands_in_the_group_of_all_its_holders() {
-        let mut kk = Alias::new("kk", "kick 1.");
-        kk.group = Some("combat".into());
         let plan = analyze_profiles(&[
             (
                 "default".into(),
                 profile_with(vec![Alias::new("kk", "kick %1")], vec![], vec![]),
             ),
             ("bard".into(), profile_with(vec![], vec![], vec![])),
-            ("warrior".into(), profile_with(vec![kk], vec![], vec![])),
+            (
+                "warrior".into(),
+                profile_with(vec![grouped("kk", "kick 1.", "combat")], vec![], vec![]),
+            ),
         ]);
         let ItemPayload::Alias { item } = &plan.conflicts[0].variants[1].item else {
             panic!("an alias conflict");
         };
-        // The first holder had kk ungrouped, so whichever version you
-        // keep, it stays on for both of them and off for the bard.
-        assert_eq!(item.group.as_deref(), Some("default+warrior"));
+        // Whichever version you keep, it stays on for both of them, in
+        // the warrior's combat folder, and off for the bard.
+        assert_eq!(item.group.as_deref(), Some("combat"));
+        assert_eq!(plan.loadouts[0].enabled_groups, ["combat"]);
         assert!(plan.loadouts[1].enabled_groups.is_empty());
-        assert_eq!(plan.loadouts[2].enabled_groups, ["default+warrior"]);
+        assert_eq!(plan.loadouts[2].enabled_groups, ["combat"]);
+        assert_eq!(file_after(&plan, "bard").disabled_alias_groups, ["combat"]);
+        // Neither the default profile nor the bard had a combat folder, so
+        // `#group combat` turns nothing on or off for them.
+        for name in ["default", "bard"] {
+            let folders = file_after(&plan, name).group_folders;
+            assert_eq!(folders.aliases["combat"], Vec::<String>::new());
+        }
+        assert!(file_after(&plan, "warrior").group_folders.is_empty());
     }
 
     #[test]
@@ -781,10 +852,9 @@ mod tests {
 
     #[test]
     fn identical_triggers_collapse_even_when_only_group_differs() {
-        // The post-retag group always differs across source profiles
-        // by construction. That difference must not surface as a
-        // conflict — the comparison strips it before equality.
         let t = trigger("greet", "^hi$", "HELLO");
+        let mut in_folder = t.clone();
+        in_folder.group = Some("social".into());
         let plan = analyze_profiles(&[
             (
                 "default".into(),
@@ -792,7 +862,7 @@ mod tests {
             ),
             (
                 "warrior".into(),
-                profile_with(vec![], vec![t.clone()], vec![]),
+                profile_with(vec![], vec![in_folder], vec![]),
             ),
         ]);
         assert_eq!(plan.conflicts.len(), 0);
@@ -801,56 +871,72 @@ mod tests {
 
     #[test]
     fn loadouts_carry_enabled_groups_per_source() {
-        let kk = Alias::new("kk", "kick %1");
-        let mut combat_alias = Alias::new("punch", "punch %1");
-        combat_alias.group = Some("combat".into());
         let plan = analyze_profiles(&[(
             "default".into(),
-            profile_with(vec![kk, combat_alias], vec![], vec![]),
+            profile_with(
+                vec![
+                    Alias::new("kk", "kick %1"),
+                    grouped("punch", "punch %1", "combat"),
+                ],
+                vec![],
+                vec![],
+            ),
         )]);
         assert_eq!(plan.loadouts.len(), 1);
         let loadout = &plan.loadouts[0];
         assert_eq!(loadout.name, "default");
-        // Ungrouped items contribute the bare profile name; items
-        // pre-grouped as `combat` contribute `default.combat`.
-        assert!(loadout.enabled_groups.contains(&"default".to_string()));
-        assert!(loadout
-            .enabled_groups
-            .contains(&"default.combat".to_string()));
+        // The folder keeps its name, and the ungrouped alias needs none.
+        assert_eq!(loadout.enabled_groups, ["combat"]);
+        assert_eq!(alias_group(&plan, "punch").as_deref(), Some("combat"));
+        assert_eq!(alias_group(&plan, "kk"), None);
     }
 
     #[test]
     fn a_loadout_leaves_out_a_group_its_profile_had_off() {
-        let mut punch = Alias::new("punch", "punch %1");
-        punch.group = Some("combat".into());
-        let mut sanc = Alias::new("sanc", "cast sanctuary");
-        sanc.group = Some("buffs".into());
         let mut flee = trigger("flee", "^You flee", "flee");
         flee.group = Some("combat".into());
-        let mut cfg = profile_with(vec![punch, sanc], vec![flee], vec![]);
+        let mut cfg = profile_with(
+            vec![
+                grouped("punch", "punch %1", "combat"),
+                grouped("sanc", "cast sanctuary", "buffs"),
+            ],
+            vec![flee],
+            vec![],
+        );
         cfg.disabled_alias_groups = vec!["combat".into(), "buffs".into()];
         let plan = analyze_profiles(&[("default".into(), cfg)]);
         // Buffs was off in the only list that has it. The combat triggers
         // were on, so combat stays in for them.
-        assert_eq!(plan.loadouts[0].enabled_groups, ["default.combat"]);
+        assert_eq!(plan.loadouts[0].enabled_groups, ["combat"]);
+        let file = file_after(&plan, "default");
+        assert_eq!(file.disabled_alias_groups, ["buffs", "combat"]);
+        assert!(file.disabled_trigger_groups.is_empty());
     }
 
     #[test]
     fn a_profile_file_turns_off_every_catalog_group_its_loadout_leaves_off() {
-        let mut punch = Alias::new("punch", "punch %1");
-        punch.group = Some("combat".into());
         let plan = analyze_profiles(&[
             (
                 "default".into(),
-                profile_with(vec![Alias::new("kk", "kick %1"), punch], vec![], vec![]),
+                profile_with(
+                    vec![
+                        Alias::new("kk", "kick %1"),
+                        grouped("punch", "punch %1", "combat"),
+                    ],
+                    vec![],
+                    vec![],
+                ),
             ),
             ("bard".into(), profile_with(vec![], vec![], vec![])),
         ]);
         let mut file = profile_with(vec![Alias::new("kk", "kick %1")], vec![], vec![]);
         file.disabled_alias_groups = vec!["combat".into()];
-        profile_file_for_catalog(&mut file, "bard", &plan.groups);
+        profile_file_for_catalog(&mut file, "bard", &plan);
         assert!(file.aliases.is_empty());
-        assert_eq!(file.disabled_alias_groups, ["default", "default.combat"]);
+        // kk was on for the default profile without a folder, so its
+        // group is named for that profile.
+        assert_eq!(alias_group(&plan, "kk").as_deref(), Some("(default)"));
+        assert_eq!(file.disabled_alias_groups, ["(default)", "combat"]);
         assert!(file.disabled_trigger_groups.is_empty());
     }
 
@@ -858,27 +944,21 @@ mod tests {
     fn each_kind_keeps_its_own_group_state_under_one_name() {
         // The Healer had its loot alias on and its auto loot trigger off,
         // both in a group named loot.
-        let mut loot_alias = Alias::new("loot", "get all corpse");
-        loot_alias.group = Some("loot".into());
         let mut loot_trigger = trigger("autoloot", "^You killed", "get all corpse");
         loot_trigger.group = Some("loot".into());
-        let mut cfg = profile_with(vec![loot_alias], vec![loot_trigger], vec![]);
+        let mut cfg = profile_with(
+            vec![grouped("loot", "get all corpse", "loot")],
+            vec![loot_trigger],
+            vec![],
+        );
         cfg.disabled_trigger_groups = vec!["loot".into()];
         let plan = analyze_profiles(&[("Healer".into(), cfg)]);
 
-        let mut file = ProfileConfig::default();
-        profile_file_for_catalog(&mut file, "Healer", &plan.groups);
+        let file = file_after(&plan, "Healer");
         // The trigger group stays off. It used to come on with the alias
         // group of the same name, so the trigger looted every kill.
         assert!(file.disabled_alias_groups.is_empty());
-        assert_eq!(file.disabled_trigger_groups, ["Healer.loot"]);
-    }
-
-    /// The group checkbox lists `profile` keeps after the wizard.
-    fn file_after(plan: &MigrationPlan, profile: &str) -> ProfileConfig {
-        let mut file = ProfileConfig::default();
-        profile_file_for_catalog(&mut file, profile, &plan.groups);
-        file
+        assert_eq!(file.disabled_trigger_groups, ["loot"]);
     }
 
     #[test]
@@ -896,20 +976,20 @@ mod tests {
         assert!(plan.conflicts.is_empty());
         let group = |name: &str| {
             let found = plan.auto_resolved.triggers.iter().find(|t| t.name == name);
-            found.unwrap().group.clone().unwrap()
+            found.unwrap().group.clone()
         };
-        // Only the default profile had auto loot on, so its group names
-        // only that profile, and it used to name both.
-        assert_eq!(group("autoloot"), "default.loot");
-        assert_eq!(group("flee"), "default+Healer");
+        // Both keep auto loot in their loot folder, which the Healer has
+        // off, and flee is on for both without one.
+        assert_eq!(group("autoloot").as_deref(), Some("loot"));
+        assert_eq!(group("flee"), None);
         assert!(file_after(&plan, "default")
             .disabled_trigger_groups
             .is_empty());
         assert_eq!(
             file_after(&plan, "Healer").disabled_trigger_groups,
-            ["default.loot"]
+            ["loot"]
         );
-        assert_eq!(plan.loadouts[1].enabled_groups, ["default+Healer"]);
+        assert!(plan.loadouts[1].enabled_groups.is_empty());
     }
 
     #[test]
@@ -940,94 +1020,179 @@ mod tests {
         assert!(plan.conflicts.is_empty());
         let kk = &plan.auto_resolved.aliases[0];
         assert!(kk.enabled);
-        assert_eq!(kk.group.as_deref(), Some("default"));
+        assert_eq!(kk.group.as_deref(), Some("(default)"));
         assert!(plan.auto_resolved.macros[0].enabled);
         let healer = file_after(&plan, "Healer");
-        assert_eq!(healer.disabled_alias_groups, ["default"]);
-        assert_eq!(healer.disabled_macro_groups, ["default"]);
+        assert_eq!(healer.disabled_alias_groups, ["(default)"]);
+        assert_eq!(healer.disabled_macro_groups, ["(default)"]);
     }
 
     #[test]
     fn an_item_no_holder_had_on_stays_as_each_left_it() {
         let mut off = Alias::new("kk", "kick %1");
         off.enabled = false;
-        let mut punch = Alias::new("punch", "punch %1");
-        punch.group = Some("combat".into());
-        let mut cfg = profile_with(vec![off, punch], vec![], vec![]);
+        let mut cfg = profile_with(
+            vec![off, grouped("punch", "punch %1", "combat")],
+            vec![],
+            vec![],
+        );
         cfg.disabled_alias_groups = vec!["combat".into()];
         let plan = analyze_profiles(&[("Healer".into(), cfg)]);
         let alias = |name: &str| {
             let found = plan.auto_resolved.aliases.iter().find(|a| a.name == name);
             found.unwrap().clone()
         };
-        // The one you turned off stays off, and the one in a group you
-        // had off stays on inside that group, which stays off.
+        // The one you turned off stays off, and the one in a folder you
+        // had off stays on inside that folder, which stays off.
         assert!(!alias("kk").enabled);
-        assert_eq!(alias("kk").group.as_deref(), Some("Healer"));
+        assert_eq!(alias("kk").group, None);
         assert!(alias("punch").enabled);
-        assert_eq!(alias("punch").group.as_deref(), Some("Healer.combat"));
+        assert_eq!(alias("punch").group.as_deref(), Some("combat"));
         assert_eq!(
             file_after(&plan, "Healer").disabled_alias_groups,
-            ["Healer.combat"]
+            ["combat"]
         );
-        assert_eq!(plan.loadouts[0].enabled_groups, ["Healer"]);
+        assert!(plan.loadouts[0].enabled_groups.is_empty());
     }
 
     #[test]
     fn an_item_you_turned_off_stays_in_the_group_you_kept_on() {
-        let mut bash = Alias::new("bash", "bash %1");
-        bash.group = Some("combat".into());
-        let mut dirt = Alias::new("dirt", "dirt %1");
-        dirt.group = Some("combat".into());
+        let mut dirt = grouped("dirt", "dirt %1", "combat");
         dirt.enabled = false;
         let plan = analyze_profiles(&[(
             "Healer".into(),
-            profile_with(vec![bash, dirt], vec![], vec![]),
+            profile_with(
+                vec![grouped("bash", "bash %1", "combat"), dirt],
+                vec![],
+                vec![],
+            ),
         )]);
-        // Both stay in Healer.combat, which stays on, and dirt stays off
-        // by its own switch, as you left them.
+        // Both stay in combat, which stays on, and dirt stays off by its
+        // own switch, as you left them.
         for alias in &plan.auto_resolved.aliases {
-            assert_eq!(alias.group.as_deref(), Some("Healer.combat"));
+            assert_eq!(alias.group.as_deref(), Some("combat"));
             assert_eq!(alias.enabled, alias.name == "bash");
         }
         assert!(file_after(&plan, "Healer").disabled_alias_groups.is_empty());
     }
 
     #[test]
-    fn a_name_two_groups_of_one_kind_would_share_gets_a_number() {
-        // Both hold dig and kk. Each had dig off its own way, the default
-        // profile by turning it off and the warrior by its group, and both
-        // had kk on. Both land under default+warrior, which cannot be on
-        // for no one and for both at once.
-        let mut dig = Alias::new("dig", "dig");
-        dig.enabled = false;
-        let mut dig_in_off_group = Alias::new("dig", "dig");
-        dig_in_off_group.group = Some("mining".into());
-        let mut warrior = profile_with(
-            vec![dig_in_off_group, Alias::new("kk", "kick %1")],
-            vec![],
-            vec![],
-        );
-        warrior.disabled_alias_groups = vec!["mining".into()];
+    fn a_folder_two_characters_filled_differently_keeps_its_name_for_both() {
+        // Both have flee in combat, and only the default profile has bash
+        // there too.
         let plan = analyze_profiles(&[
             (
                 "default".into(),
-                profile_with(vec![dig, Alias::new("kk", "kick %1")], vec![], vec![]),
+                profile_with(
+                    vec![
+                        grouped("flee", "flee", "combat"),
+                        grouped("bash", "bash %1", "combat"),
+                    ],
+                    vec![],
+                    vec![],
+                ),
             ),
-            ("warrior".into(), warrior),
+            (
+                "Healer".into(),
+                profile_with(vec![grouped("flee", "flee", "combat")], vec![], vec![]),
+            ),
         ]);
-        let group = |name: &str| {
-            let found = plan.auto_resolved.aliases.iter().find(|a| a.name == name);
-            found.unwrap().group.clone().unwrap()
-        };
-        assert_eq!(group("dig"), "default+warrior");
-        assert_eq!(group("kk"), "default+warrior 2");
-        for name in ["default", "warrior"] {
-            assert_eq!(
-                file_after(&plan, name).disabled_alias_groups,
-                ["default+warrior"]
-            );
-        }
+        // The group both have takes the folder's name, and the other is
+        // named for the profile that has it.
+        assert_eq!(alias_group(&plan, "flee").as_deref(), Some("combat"));
+        assert_eq!(
+            alias_group(&plan, "bash").as_deref(),
+            Some("combat (default)")
+        );
+        // `#group combat` for the default profile turns both on and off.
+        // For the Healer it is the combat group alone, which needs no
+        // entry.
+        let default = file_after(&plan, "default");
+        assert_eq!(
+            default.group_folders.aliases["combat"],
+            ["combat", "combat (default)"]
+        );
+        assert!(file_after(&plan, "Healer").group_folders.is_empty());
+        assert_eq!(
+            file_after(&plan, "Healer").disabled_alias_groups,
+            ["combat (default)"]
+        );
+    }
+
+    #[test]
+    fn a_name_two_groups_of_one_kind_would_share_gets_a_number() {
+        // Each alias sits in the default combat folder. The warrior has
+        // dig in combat too, kk without a folder, and xx in its loot
+        // folder. kk and xx both land in a group named for both profiles.
+        let plan = analyze_profiles(&[
+            (
+                "default".into(),
+                profile_with(
+                    vec![
+                        grouped("dig", "dig", "combat"),
+                        grouped("kk", "kick %1", "combat"),
+                        grouped("xx", "xx", "combat"),
+                    ],
+                    vec![],
+                    vec![],
+                ),
+            ),
+            (
+                "warrior".into(),
+                profile_with(
+                    vec![
+                        grouped("dig", "dig", "combat"),
+                        Alias::new("kk", "kick %1"),
+                        grouped("xx", "xx", "loot"),
+                    ],
+                    vec![],
+                    vec![],
+                ),
+            ),
+        ]);
+        assert_eq!(alias_group(&plan, "dig").as_deref(), Some("combat"));
+        assert_eq!(
+            alias_group(&plan, "kk").as_deref(),
+            Some("combat (default, warrior)")
+        );
+        assert_eq!(
+            alias_group(&plan, "xx").as_deref(),
+            Some("combat (default, warrior) 2")
+        );
+        let warrior = file_after(&plan, "warrior").group_folders;
+        assert_eq!(warrior.aliases["loot"], ["combat (default, warrior) 2"]);
+        assert!(!warrior.aliases.contains_key("combat"));
+        let default = file_after(&plan, "default").group_folders;
+        assert_eq!(
+            default.aliases["combat"],
+            [
+                "combat",
+                "combat (default, warrior)",
+                "combat (default, warrior) 2"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_group_named_for_profiles_never_takes_a_folder_name() {
+        // The Healer keeps its own aliases in a folder named (default),
+        // and kk, on for the default profile alone, would take that name.
+        let plan = analyze_profiles(&[
+            (
+                "default".into(),
+                profile_with(vec![Alias::new("kk", "kick %1")], vec![], vec![]),
+            ),
+            (
+                "Healer".into(),
+                profile_with(
+                    vec![grouped("hl", "cast heal", "(default)")],
+                    vec![],
+                    vec![],
+                ),
+            ),
+        ]);
+        assert_eq!(alias_group(&plan, "hl").as_deref(), Some("(default)"));
+        assert_eq!(alias_group(&plan, "kk").as_deref(), Some("(default) 2"));
     }
 
     /// A trigger of the healing basics preset, as a profile file holds it.
@@ -1073,13 +1238,20 @@ mod tests {
             ("Healer".into(), healer),
             ("Bard".into(), ProfileConfig::default()),
         ]);
+        // It keeps the Healer's labels folder, which the Healer has off,
+        // and every other profile has on.
         let group = plan.auto_resolved.triggers[0].group.clone();
-        assert_eq!(group.as_deref(), Some("default+Bard"));
+        assert_eq!(group.as_deref(), Some("labels"));
         assert_eq!(
             file_after(&plan, "Healer").disabled_trigger_groups,
-            ["default+Bard"]
+            ["labels"]
         );
-        assert!(file_after(&plan, "Bard").disabled_trigger_groups.is_empty());
+        for name in ["default", "Bard"] {
+            let file = file_after(&plan, name);
+            assert!(file.disabled_trigger_groups.is_empty());
+            // Neither had a labels folder, so `#group labels` finds none.
+            assert_eq!(file.group_folders.triggers["labels"], Vec::<String>::new());
+        }
     }
 
     #[test]

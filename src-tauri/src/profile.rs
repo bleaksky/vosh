@@ -9,7 +9,7 @@ use vosh_script::ScriptEngine;
 use vosh_trigger::TriggerStore;
 use vosh_vars::VariableStore;
 
-use crate::profile_config::{PluginsPersist, UiConfig};
+use crate::profile_config::{GroupFolders, PluginsPersist, UiConfig};
 use crate::tick::TickRuntime;
 
 #[derive(Debug, Default)]
@@ -45,6 +45,9 @@ pub(crate) struct Profile {
     /// `TriggerStore` but lives here directly because there is no
     /// `MacroStore` wrapper.
     pub(crate) disabled_macro_groups: BTreeSet<String>,
+    /// The catalog groups each of this profile's folders became in the
+    /// shared catalog, which `#group` follows. See [`GroupFolders`].
+    pub(crate) group_folders: GroupFolders,
     /// Live "prompt vars" — written by user triggers via
     /// `mud.set_prompt_var(name, value)` and read with priority
     /// over GMCP by the vitals template resolver. Session-only;
