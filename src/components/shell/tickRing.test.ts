@@ -1,0 +1,67 @@
+import { describe, expect, it } from 'vitest';
+import { TICK_RING_CENTER, TICK_RING_RADIUS, tickArc, type TickArc } from './tickRing';
+
+/** The arc's end point, or null when nothing partial draws on top. */
+function end(arc: TickArc): { x: number; y: number } | null {
+  return arc.kind === 'part' ? arc.end : null;
+}
+
+describe('tickArc', () => {
+  it('sits on the 5.75 ring at the center of the 16 unit grid', () => {
+    expect(TICK_RING_CENTER).toBe(8);
+    expect(TICK_RING_RADIUS).toBe(5.75);
+  });
+
+  it('draws nothing on top at 0 seconds', () => {
+    expect(tickArc(0, 60)).toEqual({ kind: 'empty' });
+    expect(tickArc(0, 30)).toEqual({ kind: 'empty' });
+  });
+
+  it('ends at 3 o clock a quarter of the way through', () => {
+    const arc = tickArc(15, 60);
+    expect(arc.kind).toBe('part');
+    expect(end(arc)?.x).toBeCloseTo(13.75, 9);
+    expect(end(arc)?.y).toBeCloseTo(8, 9);
+    expect(arc).toMatchObject({ share: 0.25, path: 'M8 2.25A5.75 5.75 0 0 1 13.75 8' });
+  });
+
+  it('ends at 6 o clock halfway through', () => {
+    const arc = tickArc(30, 60);
+    expect(end(arc)?.x).toBeCloseTo(8, 9);
+    expect(end(arc)?.y).toBeCloseTo(13.75, 9);
+    expect(arc).toMatchObject({ share: 0.5, path: 'M8 2.25A5.75 5.75 0 0 1 8 13.75' });
+  });
+
+  it('takes the long way round past the half', () => {
+    const arc = tickArc(45, 60);
+    expect(end(arc)?.x).toBeCloseTo(2.25, 9);
+    expect(end(arc)?.y).toBeCloseTo(8, 9);
+    expect(arc).toMatchObject({ share: 0.75, path: 'M8 2.25A5.75 5.75 0 1 1 2.25 8' });
+  });
+
+  it('runs clockwise from the top for the share of the interval gone', () => {
+    const arc = tickArc(3, 30);
+    const angle = Math.PI / 5;
+    expect(end(arc)?.x).toBeCloseTo(8 + 5.75 * Math.sin(angle), 9);
+    expect(end(arc)?.y).toBeCloseTo(8 - 5.75 * Math.cos(angle), 9);
+    expect(arc).toMatchObject({ share: 0.1, path: 'M8 2.25A5.75 5.75 0 0 1 11.38 3.35' });
+  });
+
+  it('closes the whole circle at the interval and past it', () => {
+    expect(tickArc(60, 60)).toEqual({ kind: 'whole' });
+    expect(tickArc(30, 30)).toEqual({ kind: 'whole' });
+    expect(tickArc(75, 60)).toEqual({ kind: 'whole' });
+  });
+
+  it('clamps a count below zero to an empty ring', () => {
+    expect(tickArc(-3, 30)).toEqual({ kind: 'empty' });
+    expect(tickArc(Number.NaN, 30)).toEqual({ kind: 'empty' });
+  });
+
+  it('leaves the faint ring alone while the interval is unknown or not positive', () => {
+    expect(tickArc(14, null)).toEqual({ kind: 'empty' });
+    expect(tickArc(14, 0)).toEqual({ kind: 'empty' });
+    expect(tickArc(14, -30)).toEqual({ kind: 'empty' });
+    expect(tickArc(14, Number.NaN)).toEqual({ kind: 'empty' });
+  });
+});

@@ -220,7 +220,13 @@ describe('stores on the event bus', () => {
         sound: false,
       });
     tick(14_000);
-    expect(s.tick.getTick()).toEqual({ active: true, secsSinceTick: 16, warnAt: 8, warn: false });
+    expect(s.tick.getTick()).toEqual({
+      active: true,
+      secsSinceTick: 16,
+      intervalSecs: 30,
+      warnAt: 8,
+      warn: false,
+    });
     tick(7_500);
     expect(s.tick.getTick().warn).toBe(true);
     vi.advanceTimersByTime(2_000);

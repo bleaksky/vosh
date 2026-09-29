@@ -26,6 +26,7 @@ describe('computeTick', () => {
     expect(computeTick(payload(16_000), config(null))).toEqual({
       active: true,
       secsSinceTick: 14,
+      intervalSecs: 30,
       warnAt: DEFAULT_TICK_WARN_SECS,
       warn: false,
     });
@@ -38,6 +39,13 @@ describe('computeTick', () => {
     expect(computeTick(payload(45_000, true, 60_000), null).secsSinceTick).toBe(15);
     expect(computeTick(payload(45_000, true, 0), config(null, true, 60)).secsSinceTick).toBe(15);
     expect(computeTick(payload(20_000, true, 0), null).secsSinceTick).toBe(10);
+  });
+
+  it('reports the interval it counts against, for the tick ring', () => {
+    expect(computeTick(payload(45_000, true, 60_000), config(null)).intervalSecs).toBe(60);
+    expect(computeTick(payload(45_000, true, 0), config(null, true, 60)).intervalSecs).toBe(60);
+    expect(computeTick(payload(20_000, true, 0), null).intervalSecs).toBe(30);
+    expect(computeTick(payload(20_000, true, 12_500), null).intervalSecs).toBe(12.5);
   });
 
   it('never counts below zero or past the interval', () => {
@@ -61,7 +69,7 @@ describe('computeTick', () => {
   });
 
   it('is inactive without a report or with the timer off', () => {
-    const off = { active: false, secsSinceTick: null, warnAt: 5, warn: false };
+    const off = { active: false, secsSinceTick: null, intervalSecs: null, warnAt: 5, warn: false };
     expect(computeTick(null, config(null))).toEqual(off);
     expect(computeTick(payload(3_000, false), null)).toEqual(off);
     expect(computeTick(payload(3_000), config(null, false))).toEqual(off);

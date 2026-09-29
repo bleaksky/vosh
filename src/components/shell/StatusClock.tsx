@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { ChipStyle } from '../../lib/session';
-import { MoonIcon, StopwatchIcon, SunIcon } from './icons';
+import { MoonIcon, SunIcon, TickRingIcon } from './icons';
 import { MoonPhaseIcon } from './MoonPhaseIcon';
 
 // The tick, the game time, and the moons as one status line item,
@@ -12,6 +12,9 @@ export interface ClockTick {
   secs: number;
   /** Inside the warn window before the next tick. */
   warn: boolean;
+  /** The tick interval in seconds the ring fills against, null while
+   *  unknown. */
+  interval: number | null;
 }
 
 export interface ClockTime {
@@ -59,7 +62,7 @@ export function StatusClock({ style, tick, time, moons = null }: Props) {
         <Reading
           style={style}
           caption="Tick"
-          icon={<StopwatchIcon />}
+          icon={<TickRingIcon secs={tick.secs} interval={tick.interval} />}
           warn={tick.warn}
           value={`${tick.secs}s`}
         />
