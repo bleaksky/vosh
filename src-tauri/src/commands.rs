@@ -2034,10 +2034,6 @@ pub(crate) async fn profile_resolve_match(
     Ok(set.resolve_match(&host, port, character.as_deref()))
 }
 
-/// Shared body for switching the active profile. The
-/// `profile_switch` Tauri command and the Char.Status auto-switch
-/// path in `handle_char_known_for_auto_switch` both call this so the
-/// persist + flip + reload sequence stays identical.
 /// Re-apply Path B's catalog + active loadout set onto the live
 /// profile. Used after a per-profile load on profile-switch to make
 /// sure the catalog (the authoritative source for aliases / triggers /
@@ -2078,6 +2074,111 @@ async fn apply_path_b_overlays(state: &SharedState) {
     }
 }
 
+/// The files a switch to a profile loads: its own file, None for a
+/// profile that never saved one, and global.toml, None before the first
+/// save.
+struct SwitchFiles {
+    per_profile: Option<ProfileConfig>,
+    global: Option<GlobalConfig>,
+}
+
+/// Read the files a switch to `name` loads, and only then point the
+/// index at it. A file that does not read changes nothing, so the index
+/// keeps naming the profile the live state holds and the next persist
+/// still writes that profile to its own file.
+fn open_profile_for_switch(
+    set: &mut crate::profile_set::ProfileSet,
+    name: &str,
+) -> Result<SwitchFiles, String> {
+    use crate::profile_set::{display_name, ProfileSetError};
+    if set.get(name).is_none() {
+        return Err(ProfileSetError::NotFound(name.to_string()).to_string());
+    }
+    let refused = |what: &str| {
+        format!(
+            "Vosh could not open the {} profile because it could not read {what}. You are \
+             still using the {} profile.",
+            display_name(name),
+            display_name(set.active_name()),
+        )
+    };
+    let path = set.profile_path(name);
+    let per_profile = if path.exists() {
+        match ProfileConfig::load(&path) {
+            Ok(config) => Some(config),
+            Err(e) => {
+                warn!(error = %e, path = %path.display(), "profile file unreadable at switch");
+                return Err(refused("the profile file"));
+            }
+        }
+    } else {
+        None
+    };
+    let global_path = set.global_path();
+    // Only the categories the scope shares, so a value global.toml still
+    // holds from before cannot cover the one the profile file owns.
+    let global = match GlobalConfig::load_shared(&global_path, set.scope()) {
+        Ok(config) => config,
+        Err(e) => {
+            warn!(error = %e, path = %global_path.display(), "global config unreadable at switch");
+            return Err(refused("global.toml, which holds your shared settings"));
+        }
+    };
+    set.switch(name).map_err(|e| e.to_string())?;
+    Ok(SwitchFiles {
+        per_profile,
+        global,
+    })
+}
+
+/// Steps 2 and 3 of a switch, after the flush of the outgoing profile.
+/// Call with [`PERSIST_LOCK`] held. Loads the incoming profile's file
+/// and global.toml, points the index at it, then lays both over the
+/// live profile. Either every step lands or none does.
+async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), String> {
+    // Step 2: read the incoming files, then flip the active pointer in
+    // the index.
+    let SwitchFiles {
+        per_profile,
+        global,
+    } = {
+        let mut guard = state.profile_set.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Err(PROFILES_NOT_LOADED.into());
+        };
+        open_profile_for_switch(set, name)?
+    };
+
+    // Step 3: apply the per-profile file (or defaults) and then overlay
+    // global.toml so theme/font/keep-last/auto-update/dock_layout
+    // survive the switch.
+    {
+        let mut p = state.profile.lock().await;
+        match per_profile {
+            Some(snap) => {
+                snap.apply_to(&mut p);
+            }
+            None => {
+                let default = ProfileConfig::default();
+                default.apply_to(&mut p);
+            }
+        }
+        if let Some(g) = global {
+            g.apply_to(&mut p);
+        }
+        // Under the same lock as the swap, so a pane layout write edited
+        // from the old profile's tree is refused from here on.
+        bump_panes_generation();
+    }
+    Ok(())
+}
+
+/// Shared body for switching the active profile. The
+/// `profile_switch` Tauri command and the Char.Status auto-switch
+/// path in `handle_char_known_for_auto_switch` both call this so the
+/// persist + load + flip sequence stays identical. An error is a
+/// sentence for you, and leaves the index and the live profile on the
+/// profile you were using.
 pub(crate) async fn apply_profile_switch(
     app: &AppHandle,
     state: &SharedState,
@@ -2098,43 +2199,7 @@ pub(crate) async fn apply_profile_switch(
         persist_profile_locked(app, state).await;
     }
 
-    // Step 2: flip the active pointer in the index.
-    let (new_path, global_path, scope) = {
-        let mut guard = state.profile_set.lock().await;
-        let Some(set) = guard.as_mut() else {
-            return Err(PROFILES_NOT_LOADED.into());
-        };
-        set.switch(name).map_err(|e| e.to_string())?;
-        (set.active_path(), set.global_path(), *set.scope())
-    };
-
-    // Step 3: load per-profile file (or seed defaults) and then
-    // overlay global.toml so theme/font/keep-last/auto-update/
-    // dock_layout survive the switch.
-    let per_profile = if new_path.exists() {
-        Some(ProfileConfig::load(&new_path).map_err(|e| e.to_string())?)
-    } else {
-        None
-    };
-    let global = GlobalConfig::load_shared(&global_path, &scope).map_err(|e| e.to_string())?;
-    {
-        let mut p = state.profile.lock().await;
-        match per_profile {
-            Some(snap) => {
-                snap.apply_to(&mut p);
-            }
-            None => {
-                let default = ProfileConfig::default();
-                default.apply_to(&mut p);
-            }
-        }
-        if let Some(g) = global {
-            g.apply_to(&mut p);
-        }
-        // Under the same lock as the swap, so a pane layout write edited
-        // from the old profile's tree is refused from here on.
-        bump_panes_generation();
-    }
+    switch_live_profile(state, name).await?;
     drop(persist_guard);
 
     // Path B catalog re-overlay. The per-profile file in Path B mode
@@ -2207,32 +2272,37 @@ pub(crate) async fn handle_char_known_for_auto_switch(
 /// Switch to the profile that claims `character` on the live
 /// connection, when that is not the active one already.
 async fn auto_switch_for_character(app: &AppHandle, state: &SharedState, character: &str) {
-    let Some((host, port)) = state.current_connection.lock().ok().and_then(|g| g.clone()) else {
+    let Some(new_name) = auto_switch_target(state, character).await else {
         return;
     };
-    let target = {
-        let guard = state.profile_set.lock().await;
-        let Some(set) = guard.as_ref() else {
-            return;
-        };
-        let resolved = set.resolve_match(&host, port, Some(character));
-        match resolved {
-            Some(name) if name != set.active_name() => Some(name),
-            _ => None,
+    // A switch that fails leaves the live profile and the index as they
+    // were, and says so on the terminal, since nothing else would tell
+    // you the login kept the old profile.
+    let line = match apply_profile_switch(app, state, &new_name).await {
+        Ok(()) => auto_switch_line(&new_name),
+        Err(e) => {
+            warn!(error = %e, "auto profile switch failed");
+            auto_switch_failed_line(&e)
         }
     };
-    let Some(new_name) = target else {
-        return;
-    };
-    if let Err(e) = apply_profile_switch(app, state, &new_name).await {
-        warn!(error = %e, "auto profile switch failed");
-        return;
-    }
-    let line = auto_switch_line(&new_name);
     let _ = app.emit(
         "session://output",
         OutputPayload::from_bytes(line.as_bytes()),
     );
+}
+
+/// The profile that `character` logging in on the live connection
+/// should load, when that is not the active one already.
+async fn auto_switch_target(state: &SharedState, character: &str) -> Option<String> {
+    let (host, port) = state
+        .current_connection
+        .lock()
+        .ok()
+        .and_then(|g| g.clone())?;
+    let guard = state.profile_set.lock().await;
+    let set = guard.as_ref()?;
+    set.resolve_match(&host, port, Some(character))
+        .filter(|name| name != set.active_name())
 }
 
 /// The terminal line that says a login switched the profile, in the
@@ -2242,6 +2312,12 @@ fn auto_switch_line(profile: &str) -> String {
         "\r\n\x1b[33mVosh switched to the {} profile.\x1b[0m\r\n",
         crate::profile_set::display_name(profile)
     )
+}
+
+/// The terminal line that says a login switch did not happen, in the
+/// same yellow. `error` is the sentence the switch returned.
+fn auto_switch_failed_line(error: &str) -> String {
+    format!("\r\n\x1b[33m{error}\x1b[0m\r\n")
 }
 
 #[tauri::command]
@@ -3401,6 +3477,8 @@ pub(crate) async fn updater_install_and_relaunch(app: AppHandle) -> Result<(), S
 mod tests {
     use super::{settings_window_fit, ScrollbackLoad, UiConfigPayload};
     use crate::profile_config::{ProfileConfig, UiConfig};
+    use crate::profile_set::tests::james_like_set;
+    use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
 
     /// Send `ui` the way Settings does: out through `ui_get_config`,
     /// across the JSON bridge, and back through `ui_set_config` onto a
@@ -3592,6 +3670,134 @@ mod tests {
             super::auto_switch_line("default"),
             "\r\n\x1b[33mVosh switched to the Default profile.\x1b[0m\r\n"
         );
+    }
+
+    /// App state over James's profile set in `dir`, with `default` live
+    /// and tracking Sanctuary.
+    async fn switch_state(dir: &std::path::Path) -> super::SharedState {
+        let state: super::SharedState = std::sync::Arc::new(super::AppState::default());
+        state.profile.lock().await.ui.tracked_affects = vec![affect("Sanctuary")];
+        *state.profile_set.lock().await = Some(james_like_set(dir));
+        state
+    }
+
+    fn affect(name: &str) -> crate::profile_config::TrackedAffect {
+        crate::profile_config::TrackedAffect {
+            name: name.into(),
+            label: None,
+        }
+    }
+
+    async fn live_affects(state: &super::SharedState) -> Vec<String> {
+        let p = state.profile.lock().await;
+        p.ui.tracked_affects
+            .iter()
+            .map(|t| t.name.clone())
+            .collect()
+    }
+
+    async fn active(state: &super::SharedState) -> String {
+        let guard = state.profile_set.lock().await;
+        guard.as_ref().unwrap().active_name().to_string()
+    }
+
+    fn healer_file(dir: &std::path::Path) -> std::path::PathBuf {
+        ProfileSet::load_or_migrate(dir.to_path_buf())
+            .unwrap()
+            .profile_path("Healer")
+    }
+
+    const UNREADABLE: &str = "tracked = = [\n";
+
+    #[tokio::test]
+    async fn a_switch_loads_the_named_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = switch_state(dir.path()).await;
+        let mut config = ProfileConfig::default();
+        config.ui.tracked_affects = vec![affect("Haste")];
+        config.save(&healer_file(dir.path())).unwrap();
+
+        super::switch_live_profile(&state, "Healer").await.unwrap();
+        assert_eq!(active(&state).await, "Healer");
+        assert_eq!(live_affects(&state).await, ["Haste"]);
+        let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        assert_eq!(reloaded.active_name(), "Healer");
+    }
+
+    #[tokio::test]
+    async fn a_profile_file_that_does_not_read_keeps_the_live_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = switch_state(dir.path()).await;
+        std::fs::write(healer_file(dir.path()), UNREADABLE).unwrap();
+
+        let err = super::switch_live_profile(&state, "Healer")
+            .await
+            .unwrap_err();
+        assert_eq!(
+            err,
+            "Vosh could not open the Healer profile because it could not read the profile \
+             file. You are still using the Default profile."
+        );
+        // The index still names the live profile, in memory and on
+        // disk, so the next persist writes it to its own file.
+        assert_eq!(active(&state).await, DEFAULT_PROFILE_NAME);
+        let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        assert_eq!(reloaded.active_name(), DEFAULT_PROFILE_NAME);
+        assert_eq!(live_affects(&state).await, ["Sanctuary"]);
+        // The file that did not read stays as it was.
+        assert_eq!(
+            std::fs::read_to_string(healer_file(dir.path())).unwrap(),
+            UNREADABLE
+        );
+    }
+
+    #[tokio::test]
+    async fn a_global_file_that_does_not_read_keeps_the_live_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = switch_state(dir.path()).await;
+        let mut config = ProfileConfig::default();
+        config.ui.tracked_affects = vec![affect("Haste")];
+        config.save(&healer_file(dir.path())).unwrap();
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        std::fs::write(set.global_path(), UNREADABLE).unwrap();
+
+        let err = super::switch_live_profile(&state, "Healer")
+            .await
+            .unwrap_err();
+        assert_eq!(
+            err,
+            "Vosh could not open the Healer profile because it could not read global.toml, \
+             which holds your shared settings. You are still using the Default profile."
+        );
+        assert_eq!(active(&state).await, DEFAULT_PROFILE_NAME);
+        let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        assert_eq!(reloaded.active_name(), DEFAULT_PROFILE_NAME);
+        assert_eq!(live_affects(&state).await, ["Sanctuary"]);
+    }
+
+    #[tokio::test]
+    async fn a_login_switch_to_a_file_that_does_not_read_keeps_the_live_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = switch_state(dir.path()).await;
+        std::fs::write(healer_file(dir.path()), UNREADABLE).unwrap();
+        *state.current_connection.lock().unwrap() =
+            Some(("play.theforsakenlands.com".into(), 1848));
+
+        // Caelaor logging in picks Healer, whose file does not read.
+        let target = super::auto_switch_target(&state, "Caelaor").await;
+        assert_eq!(target.as_deref(), Some("Healer"));
+        let err = super::switch_live_profile(&state, "Healer")
+            .await
+            .unwrap_err();
+        assert_eq!(
+            super::auto_switch_failed_line(&err),
+            "\r\n\x1b[33mVosh could not open the Healer profile because it could not read \
+             the profile file. You are still using the Default profile.\x1b[0m\r\n"
+        );
+        assert_eq!(active(&state).await, DEFAULT_PROFILE_NAME);
+        assert_eq!(live_affects(&state).await, ["Sanctuary"]);
+        // Erelei belongs to the live profile, so nothing switches.
+        assert_eq!(super::auto_switch_target(&state, "Erelei").await, None);
     }
 
     #[test]

@@ -723,13 +723,19 @@ impl ProfileSet {
 
     /// Set the active profile. Caller is responsible for writing the
     /// previous active profile to disk BEFORE calling switch (so the
-    /// in-memory state is not lost).
+    /// in-memory state is not lost), and for reading the new profile's
+    /// files before it, so a file that does not read never leaves the
+    /// index naming a profile the live state does not hold. An index
+    /// that does not save keeps the old active name in memory too.
     pub(crate) fn switch(&mut self, name: &str) -> Result<(), ProfileSetError> {
         if self.get(name).is_none() {
             return Err(ProfileSetError::NotFound(name.to_string()));
         }
-        self.index.active = name.to_string();
-        self.save_index()?;
+        let previous = std::mem::replace(&mut self.index.active, name.to_string());
+        if let Err(e) = self.save_index() {
+            self.index.active = previous;
+            return Err(e);
+        }
         Ok(())
     }
 
@@ -1504,6 +1510,18 @@ characters = ["Erelei", "Vanek"]
 
         let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert_eq!(reloaded.active_name(), "alt");
+    }
+
+    #[test]
+    fn a_switch_whose_index_does_not_save_keeps_the_active_name() {
+        let dir = tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.create("alt").unwrap();
+        // A folder where the index writes its temporary file makes the
+        // save fail.
+        std::fs::create_dir(dir.path().join(format!("{INDEX_FILENAME}.tmp"))).unwrap();
+        assert!(set.switch("alt").is_err());
+        assert_eq!(set.active_name(), DEFAULT_PROFILE_NAME);
     }
 
     #[test]
