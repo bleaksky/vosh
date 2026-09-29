@@ -145,7 +145,7 @@ function ClockItem({ connected }: { connected: boolean }) {
           ? { secs: tick.secsSinceTick, warn: tick.warn, interval: tick.intervalSecs }
           : null
       }
-      time={text ? { text, tint, daytime: isDaytime(world.time) } : null}
+      time={text ? { text, tint, daytime: isDaytime(world.time), hour } : null}
       moons={moons}
     />
   );

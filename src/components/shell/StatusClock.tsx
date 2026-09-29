@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { ChipStyle } from '../../lib/session';
-import { MoonIcon, SunIcon, TickRingIcon } from './icons';
+import { SunPathIcon, TickRingIcon } from './icons';
 import { MoonPhaseIcon } from './MoonPhaseIcon';
 
 // The tick, the game time, and the moons as one status line item,
@@ -24,6 +24,9 @@ export interface ClockTime {
   tint: string | null;
   /** Whether the sun is up, null while unknown. */
   daytime: boolean | null;
+  /** The 0..23 game hour that places the sun on its path, null while
+   *  unknown. */
+  hour: number | null;
 }
 
 export interface ClockMoon {
@@ -71,7 +74,7 @@ export function StatusClock({ style, tick, time, moons = null }: Props) {
         <Reading
           style={style}
           caption="Time"
-          icon={time.daytime === false ? <MoonIcon /> : <SunIcon />}
+          icon={<SunPathIcon hour={time.hour} daytime={time.daytime} />}
           value={time.text}
           valueStyle={time.tint ? { color: time.tint } : undefined}
         />
