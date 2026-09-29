@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pickTheme, resolveActiveTheme, themeAppearance, type ThemePrefs } from './theme';
 
-const { setTheme, emit } = vi.hoisted(() => ({
+const { setTheme, emit, invoke } = vi.hoisted(() => ({
   setTheme: vi.fn((_theme?: string | null) => Promise.resolve()),
   emit: vi.fn((_event: string, _payload?: unknown) => Promise.resolve()),
+  invoke: vi.fn((_cmd: string, _args?: unknown) => Promise.resolve()),
 }));
 
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({ setTheme }),
 }));
+vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('@tauri-apps/api/event', () => ({
   emit,
   listen: vi.fn(() => Promise.resolve(() => {})),
@@ -271,6 +273,39 @@ describe('the paint cache', () => {
     const paint = await cached();
     expect(paint?.follow === false && paint.manual.vars['--xterm-bg']).toBe('#fdfcf8');
     expect(paint?.follow === false && paint.manual.appearance).toBe('light');
+  });
+
+  const backdrops = () =>
+    invoke.mock.calls.filter(([cmd]) => cmd === 'window_backdrop_set').map(([, args]) => args);
+
+  it('tells the backend what a new window opens on', async () => {
+    invoke.mockClear();
+    const theme = await import('./theme');
+    const { findTheme, themeTokens } = await import('./themes');
+    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    expect(backdrops()).toEqual([
+      { background: themeTokens(findTheme('vellum')).bg, appearance: 'light' },
+    ]);
+  });
+
+  it('leaves the native appearance to the system while the theme follows it', async () => {
+    invoke.mockClear();
+    const theme = await import('./theme');
+    const { findTheme, themeTokens } = await import('./themes');
+    theme.applyThemePrefs(prefs({ follow_system_appearance: true }));
+    flip(false);
+    expect(backdrops()).toEqual([
+      { background: themeTokens(findTheme('tokyo-night')).bg, appearance: null },
+      { background: themeTokens(findTheme('vellum')).bg, appearance: null },
+    ]);
+  });
+
+  it('reports no backdrop for a theme id ahead of its fields', async () => {
+    const theme = await import('./theme');
+    theme.applyThemePrefs(prefs({ theme: 'nord' }));
+    invoke.mockClear();
+    theme.applyTheme('gruvbox');
+    expect(backdrops()).toEqual([]);
   });
 
   it('says whether the startup paint already shows the active theme', async () => {
