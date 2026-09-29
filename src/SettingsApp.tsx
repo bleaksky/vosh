@@ -9,6 +9,7 @@ import {
   primeUiConfigTheme,
   primeUiConfigThemePrefs,
   subscribeLoadoutsChanged,
+  subscribeProfilesChanged,
   subscribeProfileSwitched,
   type UiConfig,
 } from './lib/session';
@@ -216,6 +217,31 @@ export function SettingsApp() {
           setConfig(cfg);
           applyThemePrefs(cfg);
           primeUiConfigBroadcast(cfg);
+        })
+        .catch((e) => setError(String(e)));
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+
+  // Turning the theme scope global folds the custom themes of every
+  // other profile into the shared list. Take the new list, or the next
+  // save from this window writes the old one back and drops them.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void subscribeProfilesChanged((changed) => {
+      if (changed !== 'scope') return;
+      getUiConfig()
+        .then((cfg) => {
+          if (cancelled) return;
+          setCustomThemes(cfg.custom_themes.map(customToAppTheme));
+          setConfig((prev) => (prev ? { ...prev, custom_themes: cfg.custom_themes } : prev));
         })
         .catch((e) => setError(String(e)));
     }).then((fn) => {
