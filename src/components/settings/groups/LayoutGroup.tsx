@@ -20,6 +20,7 @@ import {
 } from '../../panel/panelLayoutStore';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
+import { TickCountRow } from '../rows/TickCountRow';
 import { TickTimeStyleRow } from '../rows/TickTimeStyleRow';
 import {
   ColorField,
@@ -170,10 +171,23 @@ export function LayoutGroup({ config, setConfig, onError, navigate }: SettingsPa
         </Section>
       )}
 
-      <Section id="status" title="Status line">
-        <TickTimeStyleRow config={config} setConfig={setConfig} onError={onError} />
-      </Section>
+      <StatusLineSection config={config} setConfig={setConfig} onError={onError} />
     </>
+  );
+}
+
+/** The Status line card: how the tick, the time, and the moons show,
+ *  and under it which way the tick counts. Exported for its test. */
+export function StatusLineSection({
+  config,
+  setConfig,
+  onError,
+}: Pick<SettingsPageProps, 'config' | 'setConfig' | 'onError'>) {
+  return (
+    <Section id="status" title="Status line">
+      <TickTimeStyleRow config={config} setConfig={setConfig} onError={onError} />
+      <TickCountRow config={config} setConfig={setConfig} onError={onError} />
+    </Section>
   );
 }
 
