@@ -74,6 +74,7 @@ mod fonts;
 mod gmcp_bind;
 mod import;
 mod input;
+mod launch;
 mod line_accumulator;
 mod list_events;
 mod loadout;
@@ -194,178 +195,15 @@ pub fn run() {
             if let Ok(path) = app.path().app_data_dir() {
                 migrate_from_mudclient_dir(&path);
 
-                // Load (or migrate from the legacy single-file layout)
-                // the named-profile collection. Then load whichever
-                // profile the index marks as active and apply it to
-                // the live in-memory state, finally overlaying the
-                // shared global.toml (theme / font / dock_layout /
-                // keep_last / auto_update) so those UI prefs are
-                // consistent across all profiles.
-                match profile_set::ProfileSet::load_or_migrate(path.clone()) {
-                    Ok(set) => {
-                        // Before any profile loads, move the custom
-                        // themes older profile files still hold into
-                        // global.toml, which owns the list from here on.
-                        // It writes only files it read, so a file that
-                        // does not read stays as it is.
-                        match profile_config::migrate_custom_themes(&set) {
-                            Ok(0) => {}
-                            Ok(files) => {
-                                info!(files, "moved custom themes into global.toml");
-                            }
-                            Err(e) => {
-                                error!(error = %e, "failed to move custom themes into global.toml");
-                            }
-                        }
-                        // A file that does not read keeps the defaults in
-                        // its place for this session, and no save writes
-                        // over it. The notices tell you so once the main
-                        // window shows.
-                        let profile = state.profile.clone();
-                        let notices = tauri::async_runtime::block_on(async {
-                            let mut p = profile.lock().await;
-                            profile_config::load_at_launch(&set, &mut p)
-                        });
-                        state.add_launch_notices(notices);
-                        let profile_set = state.profile_set.clone();
-                        tauri::async_runtime::block_on(async move {
-                            let mut guard = profile_set.lock().await;
-                            *guard = Some(set);
-                        });
-                    }
-                    Err(e) => {
-                        error!(error = %e, "failed to load profile set; using in-memory defaults");
-                    }
-                }
-
-                // Path B startup hook. Detect catalog.toml; if present,
-                // start from the catalog (shared defaults) and overlay
-                // per-profile triggers/aliases/macros ON TOP — same-name
-                // entries from the per-profile file win, new names are
-                // added. Before this, the catalog overlay outright
-                // replaced per-profile state, which silently wiped any
-                // trigger or alias a user authored against their per-
-                // profile file. Loadouts still apply on top to gate
-                // catalog groups by the active enabled_groups set.
-                if loadout_store::path_b_mode_active(&path) {
-                    match loadout_store::load_path_b_at_launch(&path) {
-                        Ok((mut catalog, set)) => {
-                            let profile = state.profile.clone();
-                            // The catalog owns which presets are on, with
-                            // the preset triggers. An older catalog takes
-                            // every preset any profile file had on, once,
-                            // and saves it so a launch as another
-                            // character keeps it. A profile file that does
-                            // not read is left out, and the notices name
-                            // it.
-                            let preset_lists = if catalog.enabled_presets.is_none() {
-                                tauri::async_runtime::block_on(async {
-                                    state
-                                        .profile_set
-                                        .lock()
-                                        .await
-                                        .as_ref()
-                                        .map(loadout_store::profile_preset_lists)
-                                })
-                            } else {
-                                None
-                            };
-                            let presets_moved = tauri::async_runtime::block_on(async {
-                                let mut p = profile.lock().await;
-                                loadout_store::adopt_catalog_presets(
-                                    &mut catalog,
-                                    &mut p,
-                                    preset_lists.as_ref(),
-                                )
-                            });
-                            if let Some(lists) = &preset_lists {
-                                state.add_launch_notices(lists.unread_notices(presets_moved));
-                            }
-                            if presets_moved {
-                                match loadout_store::save_global_catalog(&path, &catalog) {
-                                    Ok(()) => info!("moved the enabled presets into catalog.toml"),
-                                    Err(e) => {
-                                        error!(error = %e, "failed to save the enabled presets to catalog.toml");
-                                    }
-                                }
-                            }
-                            let catalog_for_state = catalog.clone();
-                            let set_for_state = set.clone();
-                            tauri::async_runtime::block_on(async move {
-                                let mut p = profile.lock().await;
-                                // Snapshot what the per-profile load
-                                // just put into the live stores so we
-                                // can replay it on top of the catalog.
-                                let per_profile_aliases: Vec<_> =
-                                    p.aliases.list().into_iter().cloned().collect();
-                                let per_profile_triggers: Vec<_> = p.triggers.list();
-                                let per_profile_macros = p.macros.clone();
-                                // The per-profile file also restored the
-                                // user's group checkbox state; carry it
-                                // across the catalog rebuild or every
-                                // group comes back enabled.
-                                let alias_disabled = p.aliases.disabled_groups();
-                                let trigger_disabled = p.triggers.disabled_groups();
-
-                                // Catalog first.
-                                let mut aliases = vosh_alias::AliasStore::new();
-                                for a in &catalog.aliases {
-                                    aliases.set(a.clone());
-                                }
-                                // Per-profile overrides by name.
-                                for a in per_profile_aliases {
-                                    aliases.set(a);
-                                }
-                                aliases.set_disabled_groups(alias_disabled);
-                                p.aliases = aliases;
-
-                                let mut triggers = vosh_trigger::TriggerStore::new();
-                                for t in &catalog.triggers {
-                                    if let Err(e) = triggers.set(t.clone()) {
-                                        info!(error = %e, "catalog trigger rejected at startup");
-                                    }
-                                }
-                                for t in per_profile_triggers {
-                                    if let Err(e) = triggers.set(t) {
-                                        info!(error = %e, "per-profile trigger rejected at startup");
-                                    }
-                                }
-                                triggers.set_disabled_groups(trigger_disabled);
-                                p.triggers = triggers;
-
-                                // Macros: catalog defaults, per-profile
-                                // overrides by `key` (the canonical
-                                // keypress identifier). Per-profile
-                                // entries with no catalog match are
-                                // simply appended.
-                                let mut macros = catalog.macros.clone();
-                                for m in per_profile_macros {
-                                    macros.retain(|x| x.key != m.key);
-                                    macros.push(m);
-                                }
-                                p.macros = macros;
-
-                                loadout_store::apply_effective_state(&set, &mut p);
-                            });
-                            let catalog_arc = state.global_catalog.clone();
-                            let set_arc = state.loadout_set.clone();
-                            tauri::async_runtime::block_on(async move {
-                                *catalog_arc.lock().await = Some(catalog_for_state);
-                                *set_arc.lock().await = Some(set_for_state);
-                            });
-                            info!("loaded Path B catalog + loadout set");
-                            crate::input::PATH_B_ACTIVE
-                                .store(true, std::sync::atomic::Ordering::Release);
-                        }
-                        // A file that does not read keeps the session on
-                        // the profile files alone. Both files are held so
-                        // no save writes a catalog without your shared
-                        // items, and the notices tell you so.
-                        Err(notices) => {
-                            error!("Path B files present but failed to load; falling back to per-profile state");
-                            state.add_launch_notices(notices);
-                        }
-                    }
+                // The profile set and the active profile, then the
+                // shared catalog and loadouts in loadout mode. See
+                // launch.rs.
+                let loadout_mode = tauri::async_runtime::block_on(async {
+                    launch::load_profiles(&state, &path).await;
+                    launch::load_loadout_mode(&state, &path).await
+                });
+                if loadout_mode {
+                    crate::input::PATH_B_ACTIVE.store(true, std::sync::atomic::Ordering::Release);
                 }
                 match open_log_store(&path) {
                     Ok(store) => {
