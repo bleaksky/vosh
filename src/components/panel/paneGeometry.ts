@@ -85,29 +85,43 @@ const SUBLABEL_PX = 5 + 10 + 15 + 4;
 const LIST_MIN_ROWS = 12;
 /** Group members a Group pane holds on to as its minimum. */
 const GROUP_MIN_ROWS = 6;
+/** Half a row. A list cut at its minimum shows this much of the next
+ *  row, under the bottom fade, so you can tell it goes on. */
+const PEEK_PX = PANE_ROW_PX / 2;
+
+// A minimum that shows `shows` px of a `total` px list, plus a peek at
+// the next row when the list goes on past it.
+function withPeek(shows: number, total: number): number {
+  return total > shows ? Math.min(total, shows + PEEK_PX) : shows;
+}
 
 /** The Affects pane's minimum for the rows it shows: every tracked
  *  affect you are missing, and while something harmful is on you,
  *  every row down to the last harmful one under Not tracked. Never
- *  under the stock minimum, and never over a dozen rows. */
+ *  under the stock minimum, and never over a dozen rows. A peek at the
+ *  next row follows when there is one. */
 export function affectsMinH(rows: readonly AffectRow[]): number {
   const tracked = rows.filter(isTrackedRow).length;
   const missing = rows.filter((r) => r.state === 'missing').length;
   const harmful = rows.filter((r) => r.state === 'harmful').length;
+  const label = tracked > 0 && tracked < rows.length ? SUBLABEL_PX : 0;
   // With nothing tracked the harmful rows sit at the top, no label.
-  const need =
-    harmful > 0
-      ? (tracked + harmful) * PANE_ROW_PX + (tracked > 0 ? SUBLABEL_PX : 0)
-      : missing * PANE_ROW_PX;
+  const need = harmful > 0 ? (tracked + harmful) * PANE_ROW_PX + label : missing * PANE_ROW_PX;
   const cap = PANE_HEADER_PX + LIST_MIN_ROWS * PANE_ROW_PX + SUBLABEL_PX;
-  return Math.min(cap, Math.max(PANE_MIN_H.affects, PANE_HEADER_PX + need));
+  const shows = Math.min(cap, Math.max(PANE_MIN_H.affects, PANE_HEADER_PX + need));
+  return withPeek(shows, PANE_HEADER_PX + rows.length * PANE_ROW_PX + label);
 }
 
 /** The Group pane's minimum for `members` rows: every member up to
- *  six, so the one in danger is never the row cut off. */
+ *  six, so the one in danger is never the row cut off, then a peek at
+ *  the seventh. */
 export function groupMinH(members: number): number {
-  const rows = Math.min(GROUP_MIN_ROWS, Math.max(0, Math.floor(members)));
-  return Math.max(PANE_MIN_H.group, PANE_HEADER_PX + rows * PANE_ROW_PX);
+  const count = Math.max(0, Math.floor(members));
+  const shows = Math.max(
+    PANE_MIN_H.group,
+    PANE_HEADER_PX + Math.min(GROUP_MIN_ROWS, count) * PANE_ROW_PX,
+  );
+  return withPeek(shows, PANE_HEADER_PX + count * PANE_ROW_PX);
 }
 
 /** The least room `node` needs along `dir`'s axis, height for a
