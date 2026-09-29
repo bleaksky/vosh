@@ -36,13 +36,13 @@
 //!
 //! ## Scope
 //!
-//! This module produces the plan only. Applying the plan (writing
-//! `catalog.toml` and `loadouts.toml`, renaming the old per-profile
-//! files into a `legacy/` subdir for safekeeping) is a follow-up
-//! `migration_apply` command, gated on the user confirming conflict
-//! resolutions in the wizard. The `migration_analyze` Tauri command
-//! consumes [`analyze_profiles`] today; the variant accessors stay
-//! on the type for the apply path.
+//! This module produces the plan only. The `migration_apply` command
+//! applies it once you confirm the conflict resolutions in the wizard.
+//! It copies each profile file into `profiles/legacy/`, writes
+//! `catalog.toml` and `loadouts.toml`, and takes the aliases, triggers,
+//! and macros out of each profile file, which keeps every other setting
+//! of its profile. The `migration_analyze` Tauri command consumes
+//! [`analyze_profiles`] for the preview.
 #![allow(dead_code)]
 
 use std::collections::BTreeMap;

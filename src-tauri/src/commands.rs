@@ -299,9 +299,9 @@ pub(crate) async fn persist_state(state: &SharedState, app_data: Option<&std::pa
     // Path B branch. When `state.global_catalog` is `Some`, the user is
     // post-migration: authored items live in catalog.toml and the live
     // Profile is the cache. Write the live aliases / triggers / macros
-    // back to the catalog plus the loadout set; the per-profile branch
-    // below is skipped entirely (legacy profiles are in profiles/legacy/
-    // and never reopened from a Path B session).
+    // back to the catalog plus the loadout set, and every other setting
+    // to the active profile file; the per-profile branch below is
+    // skipped entirely.
     if state.global_catalog.lock().await.is_some() {
         if let Some(dir) = app_data {
             persist_path_b(state, dir).await;
@@ -311,11 +311,11 @@ pub(crate) async fn persist_state(state: &SharedState, app_data: Option<&std::pa
 
     // Post-migration window: migration_apply has written catalog.toml
     // but `state.global_catalog` only loads at the next launch. Running
-    // the legacy branch here would resurrect the just-archived
-    // per-profile file from the live pre-migration profile — with
-    // pre-retag group names that would overlay and corrupt the catalog
-    // on relaunch. Persist nothing until the restart completes the
-    // migration.
+    // the legacy branch here would write the live pre-migration items
+    // back into the profile file the migration just took them out of —
+    // with pre-retag group names that would overlay and corrupt the
+    // catalog on relaunch. Persist nothing until the restart completes
+    // the migration.
     if MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire) {
         tracing::debug!("persist skipped: post-migration window before relaunch");
         return;
@@ -3181,8 +3181,8 @@ pub(crate) async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, S
 /// migration would generate. Nothing is written to disk; the wizard
 /// uses this for the preview pane only. The companion
 /// [`migration_apply`] command commits the plan once the user picks
-/// winners for any conflicts. Refused while catalog.toml or
-/// loadouts.toml is on disk, see
+/// winners for any conflicts. Refused while a profile file did not read
+/// at launch, or while catalog.toml or loadouts.toml is on disk, see
 /// [`crate::loadout_store::migration_refusal`].
 #[tauri::command]
 pub(crate) async fn migration_analyze(
@@ -3206,34 +3206,62 @@ async fn analyze_migration(
     let Some(set) = guard.as_ref() else {
         return Err(PROFILES_NOT_LOADED.into());
     };
-    let (sources, _) = migration_sources(set)?;
-    Ok(crate::migration::analyze_profiles(&sources))
+    let sources = migration_sources(set)?;
+    Ok(crate::migration::analyze_profiles(&sources.profiles))
 }
 
-/// What [`migration_sources`] reads: each profile with what its file
-/// holds, and the enabled preset lists of the saved files.
-type MigrationSources = (Vec<(String, ProfileConfig)>, Vec<Vec<String>>);
+/// What the shared catalog wizard reads, see [`migration_sources`].
+struct MigrationSources {
+    /// Every profile in index order with what its file holds.
+    profiles: Vec<(String, ProfileConfig)>,
+    /// The enabled preset list of each profile that saved a file.
+    preset_lists: Vec<Vec<String>>,
+    /// Each profile file on disk, in index order, with the text Vosh read.
+    files: Vec<MigrationFile>,
+}
+
+/// One profile file the wizard read.
+struct MigrationFile {
+    path: std::path::PathBuf,
+    text: String,
+}
 
 /// Every profile in index order with what its file holds, for the shared
-/// catalog wizard, and the enabled preset list of each profile that saved
-/// a file. A profile that never saved a file brings the defaults and no
-/// preset list, the way launch leaves it out. A file that does not read
-/// stops the wizard, since the catalog would miss its items.
+/// catalog wizard, the enabled preset list of each profile that saved a
+/// file, and the text of each file. A profile that never saved a file
+/// brings the defaults and no preset list, the way launch leaves it out.
+/// A file that does not read stops the wizard, since the catalog would
+/// miss its items. So does a file Vosh could not read at launch, since
+/// the wizard rewrites every profile file and Vosh never saves over one
+/// of those.
 fn migration_sources(set: &crate::profile_set::ProfileSet) -> Result<MigrationSources, String> {
-    let mut sources = Vec::with_capacity(set.list().len());
-    let mut preset_lists = Vec::new();
+    let mut sources = MigrationSources {
+        profiles: Vec::with_capacity(set.list().len()),
+        preset_lists: Vec::new(),
+        files: Vec::new(),
+    };
     for entry in set.list() {
         let path = set.profile_path(&entry.name);
+        if crate::profile_config::is_unread(&path) {
+            return Err(format!(
+                "Vosh could not read the {} profile file when it started, so it will not change \
+                 the file. Restart Vosh and try again.",
+                crate::profile_set::display_name(&entry.name)
+            ));
+        }
         let cfg = if path.exists() {
-            let cfg = ProfileConfig::load(&path).map_err(|e| e.to_string())?;
-            preset_lists.push(cfg.ui.enabled_presets.clone());
+            let text = std::fs::read_to_string(&path)
+                .map_err(|e| crate::profile_config::ConfigError::from(e).to_string())?;
+            let cfg = ProfileConfig::from_toml(&text).map_err(|e| e.to_string())?;
+            sources.preset_lists.push(cfg.ui.enabled_presets.clone());
+            sources.files.push(MigrationFile { path, text });
             cfg
         } else {
             ProfileConfig::default()
         };
-        sources.push((entry.name.clone(), cfg));
+        sources.profiles.push((entry.name.clone(), cfg));
     }
-    Ok((sources, preset_lists))
+    Ok(sources)
 }
 
 /// One conflict resolution from the wizard. Identifies a single
@@ -3250,12 +3278,14 @@ pub(crate) struct ConflictResolution {
 
 /// Commit the Path B migration. Re-runs the analyzer, applies the
 /// user's per-conflict resolutions (or the first-variant default for
-/// any missing resolution), writes `catalog.toml` + `loadouts.toml`,
-/// moves every existing per-profile file into `profiles/legacy/`, and
-/// restarts the app so the startup hook picks up Path B mode. The
-/// previously-active profile name (from the index) becomes the sole
-/// initial active loadout so the user's first post-restart session
-/// keeps the same authoring set live. Refused while catalog.toml or
+/// any missing resolution), copies every existing per-profile file into
+/// `profiles/legacy/`, writes `catalog.toml` + `loadouts.toml`, takes the
+/// aliases, triggers, and macros out of each profile file, which keeps
+/// every other setting, and asks for a relaunch so the startup hook
+/// picks up Path B mode. The previously-active profile name (from the
+/// index) becomes the sole initial active loadout so the user's first
+/// post-restart session keeps the same authoring set live. Refused
+/// while a profile file did not read at launch, or while catalog.toml or
 /// loadouts.toml is on disk, see
 /// [`crate::loadout_store::migration_refusal`].
 #[tauri::command]
@@ -3291,13 +3321,17 @@ pub(crate) async fn migration_apply(
 
 /// [`migration_apply`] over the app data folder `app_data`, so a test
 /// can run it over a folder of its own. `written` runs once catalog.toml
-/// and loadouts.toml are on disk, before the profile files move.
+/// and loadouts.toml are on disk, before the items leave the profile
+/// files.
 async fn apply_migration(
     state: &SharedState,
     app_data: &std::path::Path,
     resolutions: &[ConflictResolution],
     written: impl FnOnce(),
 ) -> Result<(), String> {
+    // Every save of a profile file takes this lock, so none lands
+    // between the read of a file below and its rewrite without the items.
+    let _persist_guard = PERSIST_LOCK.lock().await;
     if let Some(reason) = crate::loadout_store::migration_refusal(app_data) {
         return Err(reason.into());
     }
@@ -3306,7 +3340,7 @@ async fn apply_migration(
     // same set the user just previewed, but a few seconds may have
     // passed and we want the fresh snapshot rather than caching across
     // commands.
-    let (previously_active, (sources, preset_lists)) = {
+    let (previously_active, sources) = {
         let guard = state.profile_set.lock().await;
         let Some(set) = guard.as_ref() else {
             return Err(PROFILES_NOT_LOADED.into());
@@ -3315,15 +3349,13 @@ async fn apply_migration(
     };
     let live_presets = state.profile.lock().await.ui.enabled_presets.clone();
 
-    let plan = crate::migration::analyze_profiles(&sources);
+    let plan = crate::migration::analyze_profiles(&sources.profiles);
     let mut catalog = plan.auto_resolved;
-    // The catalog owns which presets are on. The profile files move to
-    // legacy below, so a catalog without a list would find none at the
-    // next launch and take the defaults, turning on presets every
-    // character had off. It takes the list here instead, by the rule
-    // launch uses.
+    // The catalog owns which presets are on. It takes the list here, by
+    // the rule launch uses, so the first launch in loadout mode keeps on
+    // every preset any character had on and nothing more.
     catalog.enabled_presets = Some(crate::loadout_store::first_catalog_presets(
-        &preset_lists,
+        &sources.preset_lists,
         &live_presets,
     ));
     for conflict in &plan.conflicts {
@@ -3364,40 +3396,51 @@ async fn apply_migration(
         loadout_set.active.push(previously_active);
     }
 
+    // Each profile file stays where it is and keeps every setting of its
+    // profile, its timers, variables, tick, panels, theme, and vitals
+    // among them, since loadout mode reads them from there at launch and
+    // on a switch. Only the aliases, triggers, and macros leave it, as
+    // the catalog holds them now. A file that kept them would lay its
+    // copies, with their old group names, over the catalog at launch.
+    // The file keeps its own enabled preset list, which loadout mode
+    // replaces with the catalog's at every load. Everything is built
+    // before the first write, so a file that does not serialize changes
+    // nothing.
+    let mut kept = Vec::with_capacity(sources.files.len());
+    for file in &sources.files {
+        let mut config = ProfileConfig::from_toml(&file.text).map_err(|e| e.to_string())?;
+        config.clear_catalog_items();
+        kept.push(config.to_toml().map_err(|e| e.to_string())?);
+    }
+
+    // A full copy of each file first, so the files as they were wait in
+    // profiles/legacy before anything changes. A copy an earlier run
+    // left there moves to a backup beside it.
+    let legacy_dir = app_data.join("profiles").join("legacy");
+    for file in &sources.files {
+        let name = file.path.file_name().unwrap_or_default();
+        crate::profile_config::write_with_backup(&legacy_dir.join(name), &file.text).map_err(
+            |e| {
+                format!(
+                    "Vosh could not copy {} into profiles/legacy and changed nothing ({e}).",
+                    name.to_string_lossy()
+                )
+            },
+        )?;
+    }
+
     crate::loadout_store::save_global_catalog(app_data, &catalog).map_err(|e| e.to_string())?;
     crate::loadout_store::save_loadout_set(app_data, &loadout_set).map_err(|e| e.to_string())?;
     written();
 
-    // Move profiles/<name>.toml into profiles/legacy/. Keep the index
-    // file in place — it does not interfere with Path B mode and gives
-    // a recoverable rollback if the user reverts. Each move uses
-    // rename; cross-device or in-use cases fall through to copy-then-
-    // delete via the standard library's fallback.
-    let profiles_dir = app_data.join("profiles");
-    let legacy_dir = profiles_dir.join("legacy");
-    if let Err(e) = std::fs::create_dir_all(&legacy_dir) {
-        return Err(format!(
-            "failed to create legacy dir at {}: {e}",
-            legacy_dir.display()
-        ));
-    }
-    for (name, _) in &sources {
-        let src = profiles_dir.join(format!("{name}.toml"));
-        if !src.exists() {
-            continue;
-        }
-        let dst = legacy_dir.join(format!("{name}.toml"));
-        if let Err(e) = std::fs::rename(&src, &dst) {
-            // Cross-device fallback: copy then remove.
-            std::fs::copy(&src, &dst).map_err(|copy_err| {
-                format!(
-                    "failed to move {} to {}: {e}; copy fallback also failed: {copy_err}",
-                    src.display(),
-                    dst.display(),
-                )
-            })?;
-            let _ = std::fs::remove_file(&src);
-        }
+    for (file, text) in sources.files.iter().zip(&kept) {
+        crate::profile_config::write_with_backup(&file.path, text).map_err(|e| {
+            format!(
+                "Vosh built the shared catalog but could not take the items out of {} ({e}). A \
+                 full copy of the file waits in profiles/legacy.",
+                file.path.file_name().unwrap_or_default().to_string_lossy()
+            )
+        })?;
     }
     Ok(())
 }
@@ -4785,13 +4828,46 @@ mod tests {
             assert!(written);
             let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
             assert_eq!(catalog.aliases[0].name, "hh");
-            assert!(!set.profile_path("Healer").exists());
+            // The alias left the profile file, and the copy in legacy
+            // still holds it.
+            let healer = set.profile_path("Healer");
+            assert!(ProfileConfig::load(&healer).unwrap().aliases.is_empty());
+            let legacy = healer.parent().unwrap().join("legacy").join("Healer.toml");
+            assert_eq!(ProfileConfig::load(&legacy).unwrap().aliases[0].name, "hh");
+            // A profile that never saved a file still has none.
+            assert!(!set.profile_path("Test-Prompt").exists());
 
-            // A second run in the same session would read the moved
-            // files as empty and write that over the catalog.
+            // A second run in the same session would read the profile
+            // files, which hold no items now, and write that over the
+            // catalog.
             let before = read(&catalog_path(dir.path()));
             refused(&state, dir.path()).await;
             assert_eq!(read(&catalog_path(dir.path())), before);
+            assert!(ProfileConfig::load(&healer).unwrap().aliases.is_empty());
+        }
+
+        #[tokio::test]
+        async fn the_wizard_never_rewrites_a_profile_file_it_held_at_launch() {
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_alias(&set, "Healer", "hh");
+            std::fs::write(set.active_path(), UNREADABLE).unwrap();
+            let state = launch_state(dir.path()).await;
+            // You fix the file in an editor while Vosh runs.
+            let mut config = ProfileConfig::default();
+            config.aliases.push(vosh_alias::Alias::new("kk", "kick %1"));
+            let fixed = config.to_toml().unwrap();
+            std::fs::write(set.active_path(), &fixed).unwrap();
+
+            assert_eq!(
+                refused(&state, dir.path()).await,
+                "Vosh could not read the Default profile file when it started, so it will not \
+                 change the file. Restart Vosh and try again."
+            );
+            assert_eq!(read(&set.active_path()), fixed);
+            assert!(!catalog_path(dir.path()).exists());
+            assert!(!loadouts_path(dir.path()).exists());
+            assert!(!dir.path().join("profiles").join("legacy").exists());
         }
 
         /// Save `name`'s file with `list` as its enabled presets.
@@ -4818,21 +4894,328 @@ mod tests {
                 .unwrap();
 
             let on = vec!["healing_basics".to_string(), "herb_labels".to_string()];
-            let (mut catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+            let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
             assert_eq!(catalog.enabled_presets, Some(on.clone()));
 
-            // The first launch in loadout mode finds the profile files in
-            // legacy, so a catalog with no list would take the defaults
-            // and turn the potion labels back on.
-            let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
-            let mut live = crate::profile::Profile::default();
-            let _notices = crate::profile_config::load_at_launch(&set, &mut live);
-            let lists = catalog
-                .enabled_presets
-                .is_none()
-                .then(|| crate::loadout_store::profile_preset_lists(&set));
-            crate::loadout_store::adopt_catalog_presets(&mut catalog, &mut live, lists.as_ref());
-            assert_eq!(live.ui.enabled_presets, on);
+            // The first launch in loadout mode, as either character, keeps
+            // the potion labels off.
+            for name in [crate::profile_set::DEFAULT_PROFILE_NAME, "Healer"] {
+                let state = relaunch_as(dir.path(), name).await;
+                assert_eq!(state.profile.lock().await.ui.enabled_presets, on);
+            }
+        }
+
+        /// Everything one character keeps in per profile mode. `n` makes
+        /// every value differ between characters, so a profile that comes
+        /// back with the defaults or with another character's values
+        /// fails the comparison.
+        fn character(name: &str, n: u32, presets: &[&str]) -> ProfileConfig {
+            use crate::profile_config::{CustomTheme, PaneLayoutPersist, TrackedAffect};
+            let pick = |options: &[&str]| options[n as usize % options.len()].to_string();
+            let trigger = |what: &str, pattern: &str, group: Option<&str>| vosh_trigger::Trigger {
+                name: format!("{name} {what}"),
+                patterns: vec![vosh_trigger::TriggerPattern {
+                    pattern: pattern.into(),
+                    enabled: true,
+                }],
+                priority: 0,
+                enabled: true,
+                actions: vec![vosh_trigger::TriggerAction::Send {
+                    template: format!("say {what} {n}"),
+                }],
+                preset: None,
+                group: group.map(String::from),
+                target: vosh_trigger::TriggerTarget::Line,
+            };
+            let mut config = ProfileConfig::default();
+            config.connection.host = format!("{}.example", name.to_lowercase());
+            config.connection.port = 4000 + n as u16;
+            config.connection.tls = n % 2 == 1;
+            let mut combat = vosh_alias::Alias::new(format!("{name} bash"), "bash %1");
+            combat.group = Some("combat".into());
+            config.aliases = vec![
+                vosh_alias::Alias::new(format!("{name} kick"), format!("kick {n}")),
+                combat,
+            ];
+            config.triggers = vec![
+                trigger("greet", "^hi$", None),
+                trigger("flee", "^You flee", Some("combat")),
+            ];
+            config.macros = vec![
+                macro_on(&format!("f{n}"), &format!("cast {n}")),
+                crate::profile::Macro {
+                    group: Some("combat".into()),
+                    ..macro_on(&format!("ctrl+{n}"), "flee")
+                },
+            ];
+            config.timers = vec![crate::profile::Timer {
+                id: n,
+                name: format!("drink {n}"),
+                interval_secs: 60 + n,
+                command: format!("drink {name}"),
+                enabled: n % 2 == 0,
+            }];
+            config
+                .profile_vars
+                .insert("target".into(), format!("orc {n}"));
+            config.tick.enabled = n % 2 == 0;
+            config.tick.interval_secs = 30 + u64::from(n);
+            config.tick.auto_fire = Some(format!("stand {n}"));
+            config.tick.sound = n % 2 == 0;
+            config.tick.reset_pattern = Some(format!("^The day {n} has begun"));
+            config.tick.warn_at_secs = Some(u64::from(n));
+            config.tick.warn_message = Some(format!("tick {n} soon"));
+            config.tick.warn_color = Some("#ff0000".into());
+            config.plugins.enabled = vec![format!("plugin {n}")];
+            let ui = &mut config.ui;
+            ui.enabled_presets = presets.iter().map(|s| (*s).to_string()).collect();
+            ui.vitals_values = pick(&["current-max", "current", "percent"]);
+            ui.vitals_meter = pick(&["line", "bar", "none"]);
+            ui.vitals_density = pick(&["rows", "line"]);
+            ui.vitals_warn_thirds = n % 2 == 1;
+            ui.vitals.show_delta = n % 2 == 0;
+            ui.tracked_affects = vec![
+                TrackedAffect {
+                    name: format!("Sanctuary {n}"),
+                    label: Some(format!("S{n}")),
+                },
+                TrackedAffect {
+                    name: format!("Haste {n}"),
+                    label: None,
+                },
+            ];
+            ui.panes = Some(PaneLayoutPersist {
+                panel_open: n % 2 == 1,
+                panel_width: Some(300 + 20 * n),
+                ..PaneLayoutPersist::default_layout()
+            });
+            ui.custom_themes = vec![CustomTheme {
+                id: format!("night-ink-{n}"),
+                label: format!("Night ink {n}"),
+                ..CustomTheme::default()
+            }];
+            ui.theme = format!("night-ink-{n}");
+            ui.chip_style = pick(&["value_only", "caption", "icon"]);
+            ui.moons_position = pick(&["right-edge", "left-edge"]);
+            ui.paste_line_delay_ms = 10 * n;
+            ui.prompt_template_enabled = true;
+            ui.prompt_template = format!("<%h hp {n}>");
+            config
+        }
+
+        /// What `config` holds besides the items and the preset list the
+        /// shared catalog owns, and the group checkbox lists, which name
+        /// the catalog groups in loadout mode. As TOML, so it compares
+        /// every field.
+        fn settings(mut config: ProfileConfig) -> String {
+            config.clear_catalog_items();
+            config.ui.enabled_presets.clear();
+            config.disabled_alias_groups.clear();
+            config.disabled_trigger_groups.clear();
+            config.disabled_macro_groups.clear();
+            config.to_toml().unwrap()
+        }
+
+        /// What a save writes to the file of the live profile `p`.
+        fn saved_settings(p: &crate::profile::Profile, set: &ProfileSet) -> String {
+            let mut config = ProfileConfig::from_profile(p);
+            crate::profile_config::strip_global_fields(&mut config, set.scope());
+            settings(config)
+        }
+
+        /// The aliases, triggers, and macros that are on in `p`.
+        fn items_on(p: &crate::profile::Profile) -> Vec<String> {
+            let on = |group: Option<&str>, off: &[String]| {
+                group.is_none_or(|g| g.is_empty() || !off.iter().any(|o| o == g))
+            };
+            let alias_off = p.aliases.disabled_groups();
+            let trigger_off = p.triggers.disabled_groups();
+            let macro_off: Vec<String> = p.disabled_macro_groups.iter().cloned().collect();
+            let mut items: Vec<String> = p
+                .aliases
+                .list()
+                .into_iter()
+                .filter(|a| a.enabled && on(a.group.as_deref(), &alias_off))
+                .map(|a| format!("alias {}", a.name))
+                .chain(
+                    p.triggers
+                        .list()
+                        .into_iter()
+                        .filter(|t| t.enabled && on(t.group.as_deref(), &trigger_off))
+                        .map(|t| format!("trigger {}", t.name)),
+                )
+                .chain(
+                    p.macros
+                        .iter()
+                        .filter(|m| m.enabled && on(m.group.as_deref(), &macro_off))
+                        .map(|m| format!("macro {}", m.key)),
+                )
+                .collect();
+            items.sort();
+            items
+        }
+
+        /// Every alias, trigger, and macro in the three lists, one JSON
+        /// line each, sorted. The item types do not implement `PartialEq`.
+        fn item_rows(
+            aliases: &[vosh_alias::Alias],
+            triggers: &[vosh_trigger::Trigger],
+            macros: &[crate::profile::Macro],
+        ) -> Vec<String> {
+            let mut rows: Vec<String> = aliases
+                .iter()
+                .map(|a| serde_json::to_string(a).unwrap())
+                .chain(triggers.iter().map(|t| serde_json::to_string(t).unwrap()))
+                .chain(macros.iter().map(|m| serde_json::to_string(m).unwrap()))
+                .collect();
+            rows.sort();
+            rows
+        }
+
+        #[tokio::test]
+        async fn the_wizard_keeps_every_setting_of_every_profile() {
+            use crate::profile_set::{Scope, ScopeConfig, DEFAULT_PROFILE_NAME};
+            let dir = tempfile::tempdir().unwrap();
+            let mut set = james_like_set(dir.path());
+            // Your themes and panels differ per character, the way James
+            // keeps them.
+            set.set_scope(ScopeConfig {
+                theme: Scope::Profile,
+                dock_layout: Scope::Profile,
+                ..ScopeConfig::default()
+            })
+            .unwrap();
+            let names = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"];
+            let presets: [&[&str]; 3] = [
+                &["healing_basics"],
+                &["healing_basics", "herb_labels"],
+                &["potion_labels"],
+            ];
+            let mut originals = Vec::new();
+            for (n, name) in names.iter().enumerate() {
+                let path = set.profile_path(name);
+                character(name, n as u32 + 1, presets[n])
+                    .save(&path)
+                    .unwrap();
+                originals.push(read(&path));
+            }
+
+            // What each character holds in per profile mode.
+            let mut before = Vec::new();
+            for name in names {
+                let state = relaunch_as(dir.path(), name).await;
+                assert!(state.global_catalog.lock().await.is_none());
+                let p = state.profile.lock().await;
+                assert_eq!(items_on(&p).len(), 6, "{name}");
+                before.push((
+                    settings(ProfileConfig::from_profile(&p)),
+                    items_on(&p),
+                    saved_settings(&p, &set),
+                ));
+            }
+
+            // You build the catalog while you play Default.
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+
+            let (catalog, loadouts) = load_path_b_at_launch(dir.path()).unwrap();
+            assert_eq!(loadouts.active, [DEFAULT_PROFILE_NAME]);
+            // Every item sits in the catalog once.
+            let mut in_catalog: Vec<String> = catalog
+                .aliases
+                .iter()
+                .map(|a| format!("alias {}", a.name))
+                .chain(
+                    catalog
+                        .triggers
+                        .iter()
+                        .map(|t| format!("trigger {}", t.name)),
+                )
+                .chain(catalog.macros.iter().map(|m| format!("macro {}", m.key)))
+                .collect();
+            in_catalog.sort();
+            let mut every_item: Vec<String> =
+                before.iter().flat_map(|(_, on, _)| on.clone()).collect();
+            every_item.sort();
+            assert_eq!(in_catalog, every_item);
+            let shared_presets = vec![
+                "healing_basics".to_string(),
+                "herb_labels".to_string(),
+                "potion_labels".to_string(),
+            ];
+            assert_eq!(catalog.enabled_presets, Some(shared_presets.clone()));
+
+            let legacy = dir.path().join("profiles").join("legacy");
+            for (n, name) in names.iter().enumerate() {
+                let path = set.profile_path(name);
+                // A full copy of the file you had waits in legacy.
+                assert_eq!(read(&legacy.join(format!("{name}.toml"))), originals[n]);
+                // The file stays with every setting but the items.
+                let kept = ProfileConfig::load(&path).unwrap();
+                assert!(kept.aliases.is_empty(), "{name}");
+                assert!(kept.triggers.is_empty(), "{name}");
+                assert!(kept.macros.is_empty(), "{name}");
+                assert_eq!(
+                    kept.connection.host,
+                    format!("{}.example", name.to_lowercase())
+                );
+                assert_eq!(kept.connection.port, 4001 + n as u16);
+                // The rewrite kept a backup of the file beside it.
+                let backup = format!("{name}.toml.bak.");
+                let backups = std::fs::read_dir(path.parent().unwrap())
+                    .unwrap()
+                    .filter_map(Result::ok)
+                    .filter(|e| e.file_name().to_string_lossy().starts_with(&backup))
+                    .count();
+                assert!(backups >= 1, "{name}");
+            }
+
+            // Quit, then open Vosh as each character with its own loadout.
+            for (n, name) in names.iter().enumerate() {
+                let mut loadouts = crate::loadout_store::load_loadout_set(dir.path()).unwrap();
+                loadouts.active = vec![(*name).to_string()];
+                save_loadout_set(dir.path(), &loadouts).unwrap();
+                let state = relaunch_as(dir.path(), name).await;
+                assert!(state.global_catalog.lock().await.is_some(), "{name}");
+                {
+                    let p = state.profile.lock().await;
+                    assert_eq!(
+                        settings(ProfileConfig::from_profile(&p)),
+                        before[n].0,
+                        "{name}"
+                    );
+                    assert_eq!(items_on(&p), before[n].1, "{name}");
+                    assert_eq!(p.ui.enabled_presets, shared_presets, "{name}");
+                    // The live stores hold each catalog item once, as the
+                    // catalog has it.
+                    let aliases: Vec<_> = p.aliases.list().into_iter().cloned().collect();
+                    assert_eq!(
+                        item_rows(&aliases, &p.triggers.list(), &p.macros),
+                        item_rows(&catalog.aliases, &catalog.triggers, &catalog.macros),
+                        "{name}"
+                    );
+                }
+
+                // The first save in loadout mode.
+                persist(&state, dir.path()).await;
+                let saved = ProfileConfig::load(&set.profile_path(name)).unwrap();
+                assert!(saved.aliases.is_empty(), "{name}");
+                assert!(saved.triggers.is_empty(), "{name}");
+                assert!(saved.macros.is_empty(), "{name}");
+                assert_eq!(settings(saved), before[n].2, "{name}");
+                let (saved_catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+                assert_eq!(
+                    item_rows(
+                        &saved_catalog.aliases,
+                        &saved_catalog.triggers,
+                        &saved_catalog.macros
+                    ),
+                    item_rows(&catalog.aliases, &catalog.triggers, &catalog.macros),
+                    "{name}"
+                );
+            }
         }
     }
 }
