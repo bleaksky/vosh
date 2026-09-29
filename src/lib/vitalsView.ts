@@ -105,17 +105,22 @@ export function vitalsFooterHeight(geometry: VitalsGeometry, rows: number): numb
 export interface CombatHealth {
   name: string;
   hp_pct: number | null;
+  /** The game withholds the opponent's health. */
+  hidden?: boolean;
 }
 
 /** The target's health for the status line with the panel hidden. It
  *  shows only when the target you set is the one you are fighting, the
  *  Char.Combat opponent, with the names compared without case. Null
- *  otherwise, and while the server sends no percent. */
+ *  otherwise, while the server sends no percent, and while the game
+ *  withholds it. */
 export function targetHealthPercent(
   target: string | null,
   opponent: CombatHealth | null,
 ): number | null {
-  if (!target || opponent === null || opponent.hp_pct === null) return null;
+  if (!target || opponent === null || opponent.hidden === true || opponent.hp_pct === null) {
+    return null;
+  }
   return sameName(target, opponent.name) ? opponent.hp_pct : null;
 }
 

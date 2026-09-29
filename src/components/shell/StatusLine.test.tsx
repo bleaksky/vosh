@@ -35,6 +35,17 @@ const FIGHT: Vitals = {
   low: { hp: true, mana: false, move: false },
   hidden: false,
 };
+// Lamented tears: Char.Vitals all zeros with the hidden flag.
+const HIDDEN: Vitals = {
+  hp: 0,
+  maxhp: 0,
+  mana: 0,
+  maxmana: 0,
+  move: 0,
+  maxmove: 0,
+  low: { hp: false, mana: false, move: false },
+  hidden: true,
+};
 const GUARD: CombatHealth = { name: 'Blackwatch Guard', hp_pct: 38 };
 const DEFAULTS: VitalsOptions = { values: 'current-max', meter: 'line', warn_thirds: false };
 
@@ -54,7 +65,7 @@ function draw(props: Partial<StatusVitalsProps> = {}, options: Partial<VitalsOpt
 /** Each value on the line with its tone, in order. */
 function values(html: string): string[] {
   return [
-    ...html.matchAll(/<span class="shell-status-value( is-(?:low|warn))?">([^<]*)<\/span>/g),
+    ...html.matchAll(/<span class="shell-status-value( is-(?:low|warn|hidden))?">([^<]*)<\/span>/g),
   ].map((m) => (m[1] ? `${m[2]} ${m[1].trim()}` : m[2]));
 }
 
@@ -119,6 +130,45 @@ describe('StatusVitals', () => {
 
   it('draws nothing with no vitals shown and no target', () => {
     expect(draw({ showVitals: false, target: null })).toBe('');
+  });
+
+  it('shows ? for each hidden vital in the quiet tone and never warns', () => {
+    for (const warn_thirds of [false, true]) {
+      expect(values(draw({ vitals: HIDDEN, combat: null }, { warn_thirds }))).toEqual([
+        '? / ? is-hidden',
+        '? / ? is-hidden',
+        '? / ? is-hidden',
+        'Blackwatch Guard',
+      ]);
+    }
+    expect(values(draw({ vitals: HIDDEN }, { values: 'current' })).slice(0, 3)).toEqual([
+      '? is-hidden',
+      '? is-hidden',
+      '? is-hidden',
+    ]);
+    expect(values(draw({ vitals: HIDDEN }, { values: 'percent' })).slice(0, 3)).toEqual([
+      '?% is-hidden',
+      '?% is-hidden',
+      '?% is-hidden',
+    ]);
+    const html = draw({ vitals: HIDDEN, combat: null });
+    for (const label of ['Health', 'Mana', 'Moves']) expect(html).toContain(label);
+  });
+
+  it('drops the target health while the game withholds it', () => {
+    expect(values(draw({ combat: { ...GUARD, hidden: true } }))).toEqual([
+      '186 / 1020 is-low',
+      '344 / 800',
+      '870 / 930',
+      'Blackwatch Guard',
+    ]);
+    expect(values(draw({ combat: { ...GUARD, hp_pct: null } }))).not.toContain('38% is-warn');
+  });
+
+  it('sets the hidden tone in frame.css', () => {
+    const at = frameCss.indexOf('.shell-status-value.is-hidden {');
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(frameCss.slice(at, frameCss.indexOf('}', at))).toContain('color: var(--tertiary)');
   });
 
   it('sets the warn tone in frame.css', () => {

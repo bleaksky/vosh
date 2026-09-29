@@ -385,6 +385,11 @@
   color: var(--warn);
 }
 
+/* A vital the game hides (lamented tears) reads a quiet `?`. */
+.shell-status-value.is-hidden {
+  color: var(--tertiary);
+}
+
 /* The tick and the game time share one item, 8 apart inside it. Each
    reading is a caption or a 12 px icon in tertiary, 6 before its value
    in text. The warn tone takes the whole tick reading. */
