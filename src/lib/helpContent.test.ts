@@ -130,7 +130,7 @@ describe('the tick timer help', () => {
 
 describe('the help on forgetting passwords in the session log', () => {
   const logsParagraph =
-    'Type `#logs forget-passwords` to count the lines that hold a password. Vosh says how many it found and in how many sessions, and it never shows the lines themselves. Type `#logs forget-passwords now` to blank them. Each one then reads `> (hidden)`, and Vosh rewrites `logs.sqlite` so the old text is gone from the disk too. On a large log this takes a few seconds, and new game text waits until it finishes. The rewrite needs free disk space about the size of `logs.sqlite`. When Vosh cannot finish it, the lines stay blanked, Vosh says so, and the next `#logs forget-passwords now` finishes the rewrite. When a copy of your log from before Vosh took its name still sits in the old app data folder, the command names that file and leaves it alone.';
+    'Type `#logs forget-passwords` to count the lines that hold a password. Vosh says how many it found and in how many sessions, and it never shows the lines themselves. Type `#logs forget-passwords now` to blank them. Each one then reads `> (hidden)`, and Vosh rewrites `logs.sqlite` so the old text is gone from the disk too. On a large log this takes a few seconds, and new game text waits until it finishes. The rewrite needs free disk space about the size of `logs.sqlite`. When Vosh cannot finish it, the lines stay blanked, Vosh says so, and the next `#logs forget-passwords now` finishes the rewrite. A backup of your disk, like Time Machine, keeps its own copy of the old file.';
   const referenceBullet =
     '- `#logs forget-passwords` counts the lines in your session log where you sent a password, and `#logs forget-passwords now` blanks them.';
   const howToBullet =
@@ -146,6 +146,14 @@ describe('the help on forgetting passwords in the session log', () => {
   it('says how to count and blank them in the session logs topic', () => {
     expect(body('characters-and-data.search-logs')).toContain(logsParagraph);
     expect(helpMd).toContain(logsParagraph);
+  });
+
+  it('does not send you to the log from before Vosh took its name', () => {
+    // The builds that wrote that copy logged game output only, so it
+    // holds no line you sent.
+    for (const text of [body('characters-and-data.search-logs'), helpMd]) {
+      expect(text).not.toContain('took its name');
+    }
   });
 
   it('lists the command with every slash command', () => {

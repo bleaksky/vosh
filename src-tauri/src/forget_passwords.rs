@@ -6,8 +6,6 @@
 //! store hands back row ids and counts only, and an error names what
 //! failed, never a row.
 
-use std::path::{Path, PathBuf};
-
 use tauri::{AppHandle, Emitter, Manager};
 use tracing::warn;
 use vosh_log::{Forgotten, PasswordLines};
@@ -109,16 +107,13 @@ fn count(n: usize, one: &str, many: &str) -> String {
     }
 }
 
-/// The lines to echo for `outcome`. `legacy_copy` is the copy of the log
-/// that Vosh left behind when it took its name, when one exists.
-pub(crate) fn messages(outcome: &Outcome, legacy_copy: Option<&Path>) -> Vec<String> {
+/// The line to echo for `outcome`.
+pub(crate) fn message(outcome: &Outcome) -> String {
     const NONE: &str =
         "Vosh found no lines where you sent a password. Your log has nothing to blank.";
     const FINISH: &str = "Type #logs forget-passwords now again to finish.";
-    let first = match outcome {
-        Outcome::NoLog => {
-            return vec!["Vosh has no session log open, so there is nothing to blank.".to_string()]
-        }
+    match outcome {
+        Outcome::NoLog => "Vosh has no session log open, so there is nothing to blank.".to_string(),
         Outcome::ReadFailed => "Vosh could not read your session log. Nothing changed.".to_string(),
         Outcome::BlankFailed => {
             "Vosh could not blank the lines in your session log. Nothing changed.".to_string()
@@ -158,25 +153,7 @@ pub(crate) fn messages(outcome: &Outcome, legacy_copy: Option<&Path>) -> Vec<Str
             count(done.lines, "line", "lines"),
             if done.lines == 1 { "its" } else { "their" },
         ),
-    };
-    let mut lines = vec![first];
-    if let Some(copy) = legacy_copy {
-        lines.push(format!(
-            "Vosh also left a copy of your log from before it took its name at {}. \
-             This command leaves that copy alone, so delete the file to forget the lines it holds.",
-            copy.display()
-        ));
     }
-    lines
-}
-
-/// The log the app kept before it was named Vosh, still in the old app
-/// data folder next to `app_data`, when it exists. The rename copied it
-/// and never removed it.
-pub(crate) fn legacy_log_copy(app_data: &Path) -> Option<PathBuf> {
-    crate::mudclient_dir_for(app_data)
-        .map(|dir| crate::log_state::log_db_path(&dir))
-        .filter(|path| path.is_file())
 }
 
 /// The echo for a `#logs` line that is not a known command.
@@ -186,7 +163,7 @@ pub(crate) const USAGE: &str = "[usage #logs forget-passwords [now]]";
 pub(crate) fn start(app: &AppHandle, command: LogsCommand) {
     let now = match command {
         LogsCommand::Usage => {
-            echo(app, &[USAGE.to_string()]);
+            echo(app, USAGE);
             return;
         }
         LogsCommand::Preview => false,
@@ -196,28 +173,23 @@ pub(crate) fn start(app: &AppHandle, command: LogsCommand) {
     tauri::async_runtime::spawn(async move {
         let state: SharedState = app.state::<SharedState>().inner().clone();
         let outcome = forget(&state.logs, &state.log_reader, now).await;
-        let legacy = app
-            .path()
-            .app_data_dir()
-            .ok()
-            .and_then(|dir| legacy_log_copy(&dir));
-        echo(&app, &messages(&outcome, legacy.as_deref()));
+        echo(&app, &message(&outcome));
     });
 }
 
-/// Print `lines` in the terminal pane the way other slash commands do.
-fn echo(app: &AppHandle, lines: &[String]) {
-    let mut buf = Vec::new();
-    for line in lines {
-        buf.extend_from_slice(line.as_bytes());
-        buf.extend_from_slice(b"\r\n");
-    }
-    let _ = app.emit("session://output", OutputPayload::from_bytes(&buf));
+/// Print `line` in the terminal pane the way other slash commands do.
+fn echo(app: &AppHandle, line: &str) {
+    let buf = format!("{line}\r\n");
+    let _ = app.emit(
+        "session://output",
+        OutputPayload::from_bytes(buf.as_bytes()),
+    );
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use vosh_log::LogStore;
@@ -236,24 +208,18 @@ mod tests {
             wipe_pending: false,
         };
         assert_eq!(
-            messages(&Outcome::Found(found), None),
-            vec![
-                "Vosh found 5 lines where you sent a password, across 3 sessions. \
+            message(&Outcome::Found(found)),
+            "Vosh found 5 lines where you sent a password, across 3 sessions. \
                  Type #logs forget-passwords now to blank them."
-                    .to_string()
-            ]
         );
         let one = PasswordLines {
             lines: vec![(3, 1)],
             wipe_pending: false,
         };
         assert_eq!(
-            messages(&Outcome::Found(one), None),
-            vec![
-                "Vosh found 1 line where you sent a password, across 1 session. \
+            message(&Outcome::Found(one)),
+            "Vosh found 1 line where you sent a password, across 1 session. \
                  Type #logs forget-passwords now to blank it."
-                    .to_string()
-            ]
         );
     }
 
@@ -266,11 +232,8 @@ mod tests {
             wiped: true,
         };
         assert_eq!(
-            messages(&Outcome::Blanked(done), None),
-            vec![
-                "Vosh blanked 12 lines. Your log keeps the fact that you sent them, never the text."
-                    .to_string()
-            ]
+            message(&Outcome::Blanked(done)),
+            "Vosh blanked 12 lines. Your log keeps the fact that you sent them, never the text."
         );
         let one = Forgotten {
             lines: 1,
@@ -279,11 +242,8 @@ mod tests {
             wiped: true,
         };
         assert_eq!(
-            messages(&Outcome::Blanked(one), None),
-            vec![
-                "Vosh blanked 1 line. Your log keeps the fact that you sent it, never the text."
-                    .to_string()
-            ]
+            message(&Outcome::Blanked(one)),
+            "Vosh blanked 1 line. Your log keeps the fact that you sent it, never the text."
         );
         let unwiped = Forgotten {
             lines: 2,
@@ -292,13 +252,10 @@ mod tests {
             wiped: false,
         };
         assert_eq!(
-            messages(&Outcome::Blanked(unwiped), None),
-            vec![
-                "Vosh blanked 2 lines, but it could not rewrite the log file to clear \
+            message(&Outcome::Blanked(unwiped)),
+            "Vosh blanked 2 lines, but it could not rewrite the log file to clear \
                  old copies of their text from the disk. \
                  Type #logs forget-passwords now again to finish."
-                    .to_string()
-            ]
         );
     }
 
@@ -311,13 +268,10 @@ mod tests {
             wipe_pending: true,
         };
         assert_eq!(
-            messages(&Outcome::Found(pending), None),
-            vec![
-                "Vosh found no lines where you sent a password, but old copies of lines \
+            message(&Outcome::Found(pending)),
+            "Vosh found no lines where you sent a password, but old copies of lines \
                  it blanked before are still in the log file. \
                  Type #logs forget-passwords now to clear them."
-                    .to_string()
-            ]
         );
         // New lines to blank take the usual count, and the real run
         // clears the old copies with them.
@@ -326,12 +280,9 @@ mod tests {
             wipe_pending: true,
         };
         assert_eq!(
-            messages(&Outcome::Found(both), None),
-            vec![
-                "Vosh found 1 line where you sent a password, across 1 session. \
+            message(&Outcome::Found(both)),
+            "Vosh found 1 line where you sent a password, across 1 session. \
                  Type #logs forget-passwords now to blank it."
-                    .to_string()
-            ]
         );
 
         let finished = Forgotten {
@@ -341,12 +292,9 @@ mod tests {
             wiped: true,
         };
         assert_eq!(
-            messages(&Outcome::Blanked(finished), None),
-            vec![
-                "Vosh cleared old copies of lines it blanked before from the disk. \
+            message(&Outcome::Blanked(finished)),
+            "Vosh cleared old copies of lines it blanked before from the disk. \
                  It found no other lines where you sent a password."
-                    .to_string()
-            ]
         );
         let still = Forgotten {
             lines: 0,
@@ -355,12 +303,9 @@ mod tests {
             wiped: false,
         };
         assert_eq!(
-            messages(&Outcome::Blanked(still), None),
-            vec![
-                "Vosh still could not rewrite the log file to clear old copies of lines \
+            message(&Outcome::Blanked(still)),
+            "Vosh still could not rewrite the log file to clear old copies of lines \
                  it blanked before. Type #logs forget-passwords now again to finish."
-                    .to_string()
-            ]
         );
         let more = Forgotten {
             lines: 3,
@@ -369,77 +314,63 @@ mod tests {
             wiped: true,
         };
         assert_eq!(
-            messages(&Outcome::Blanked(more), None),
-            vec![
-                "Vosh blanked 3 lines. Your log keeps the fact that you sent them, never the text."
-                    .to_string()
-            ]
+            message(&Outcome::Blanked(more)),
+            "Vosh blanked 3 lines. Your log keeps the fact that you sent them, never the text."
         );
     }
 
     #[test]
     fn nothing_to_blank_says_so() {
         let none = "Vosh found no lines where you sent a password. Your log has nothing to blank.";
-        assert_eq!(
-            messages(&Outcome::Found(PasswordLines::default()), None),
-            vec![none.to_string()]
-        );
-        assert_eq!(
-            messages(&Outcome::Blanked(Forgotten::default()), None),
-            vec![none.to_string()]
-        );
+        assert_eq!(message(&Outcome::Found(PasswordLines::default())), none);
+        assert_eq!(message(&Outcome::Blanked(Forgotten::default())), none);
     }
 
     #[test]
     fn failures_say_nothing_changed() {
         assert_eq!(
-            messages(&Outcome::NoLog, None),
-            vec!["Vosh has no session log open, so there is nothing to blank.".to_string()]
+            message(&Outcome::NoLog),
+            "Vosh has no session log open, so there is nothing to blank."
         );
         assert_eq!(
-            messages(&Outcome::ReadFailed, None),
-            vec!["Vosh could not read your session log. Nothing changed.".to_string()]
+            message(&Outcome::ReadFailed),
+            "Vosh could not read your session log. Nothing changed."
         );
         assert_eq!(
-            messages(&Outcome::BlankFailed, None),
-            vec![
-                "Vosh could not blank the lines in your session log. Nothing changed.".to_string()
-            ]
+            message(&Outcome::BlankFailed),
+            "Vosh could not blank the lines in your session log. Nothing changed."
         );
     }
 
     #[test]
-    fn an_old_copy_of_the_log_is_named() {
-        let copy = Path::new("/data/com.aabahran.mudclient/logs.sqlite");
+    fn no_message_sends_you_to_the_log_from_before_the_rename() {
+        // The rename left a copy of logs.sqlite in the old app data
+        // folder. The builds that wrote it logged game output only, and
+        // the game never prints a password, so that copy holds none and
+        // no outcome points at it.
         let found = PasswordLines {
             lines: vec![(3, 1)],
-            wipe_pending: false,
+            wipe_pending: true,
         };
-        let lines = messages(&Outcome::Found(found), Some(copy));
-        assert_eq!(lines.len(), 2);
-        assert_eq!(
-            lines[1],
-            "Vosh also left a copy of your log from before it took its name at \
-             /data/com.aabahran.mudclient/logs.sqlite. This command leaves that copy alone, \
-             so delete the file to forget the lines it holds."
-        );
-        let lines = messages(&Outcome::Blanked(Forgotten::default()), Some(copy));
-        assert_eq!(lines.len(), 2);
-        // No log at all, no copy to mention either.
-        assert_eq!(messages(&Outcome::NoLog, Some(copy)).len(), 1);
-    }
-
-    #[test]
-    fn the_old_copy_is_found_next_to_the_app_data_folder() {
-        let root = tempfile::tempdir().unwrap();
-        let app_data = root.path().join("com.aabahran.vosh");
-        std::fs::create_dir_all(&app_data).unwrap();
-        assert_eq!(legacy_log_copy(&app_data), None);
-        let old = root.path().join("com.aabahran.mudclient");
-        std::fs::create_dir_all(&old).unwrap();
-        assert_eq!(legacy_log_copy(&app_data), None);
-        std::fs::write(old.join("logs.sqlite"), b"").unwrap();
-        assert_eq!(legacy_log_copy(&app_data), Some(old.join("logs.sqlite")));
+        let done = Forgotten {
+            lines: 1,
+            sessions: 1,
+            resumed: true,
+            wiped: false,
+        };
+        for outcome in [
+            Outcome::NoLog,
+            Outcome::ReadFailed,
+            Outcome::BlankFailed,
+            Outcome::Found(PasswordLines::default()),
+            Outcome::Found(found),
+            Outcome::Blanked(Forgotten::default()),
+            Outcome::Blanked(done),
+        ] {
+            let text = message(&outcome);
+            assert!(!text.contains("took its name"), "{outcome:?}");
+            assert!(!text.contains("delete"), "{outcome:?}");
+        }
     }
 
     /// A log with one session that holds two made up passwords: a line
