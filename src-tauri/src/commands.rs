@@ -3548,8 +3548,9 @@ pub(crate) async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, S
 /// [`migration_apply`] command commits the plan once the user picks
 /// winners for any conflicts. Refused while a profile file did not read
 /// at launch, while an earlier run is unfinished, while catalog.toml or
-/// loadouts.toml is on disk, or while profiles/legacy holds copies from
-/// an earlier run, see [`crate::loadout_store::migration_refusal`].
+/// loadouts.toml is on disk, while profiles/legacy holds copies from
+/// an earlier run, or in a session that runs in loadout mode, see
+/// [`migration_refusal`].
 #[tauri::command]
 pub(crate) async fn migration_analyze(
     app: AppHandle,
@@ -3565,7 +3566,7 @@ async fn analyze_migration(
     state: &SharedState,
     app_data: &std::path::Path,
 ) -> Result<crate::migration::MigrationPlan, String> {
-    if let Some(reason) = crate::loadout_store::migration_refusal(app_data) {
+    if let Some(reason) = migration_refusal(state, app_data).await {
         return Err(reason.into());
     }
     let guard = state.profile_set.lock().await;
@@ -3574,6 +3575,27 @@ async fn analyze_migration(
     };
     let sources = migration_sources(set)?;
     Ok(crate::migration::analyze_profiles(&sources.profiles))
+}
+
+/// Why the shared catalog wizard may not run, or None when it may. Past
+/// what the app data folder holds, see
+/// [`crate::loadout_store::migration_refusal`], it refuses a session that
+/// runs in loadout mode. Its profile files hold no items, so a run would
+/// build a catalog with none, even once catalog.toml has left the folder.
+async fn migration_refusal(
+    state: &SharedState,
+    app_data: &std::path::Path,
+) -> Option<&'static str> {
+    if let Some(reason) = crate::loadout_store::migration_refusal(app_data) {
+        return Some(reason);
+    }
+    if state.global_catalog.lock().await.is_some() {
+        return Some(
+            "You already use a shared catalog in this session, so Vosh will not build another \
+             one. Quit Vosh and open it again before you run the wizard.",
+        );
+    }
+    None
 }
 
 /// What the shared catalog wizard reads, see [`migration_sources`].
@@ -3670,8 +3692,9 @@ pub(crate) struct ConflictResolution {
 /// cannot put every file back, finishes at the next launch from the
 /// journal it saved first. Refused while a profile file did not read at
 /// launch, while an earlier run is unfinished, while catalog.toml or
-/// loadouts.toml is on disk, or while profiles/legacy holds copies from
-/// an earlier run, see [`crate::loadout_store::migration_refusal`].
+/// loadouts.toml is on disk, while profiles/legacy holds copies from
+/// an earlier run, or in a session that runs in loadout mode, see
+/// [`migration_refusal`].
 #[tauri::command]
 pub(crate) async fn migration_apply(
     app: AppHandle,
@@ -3738,7 +3761,7 @@ async fn apply_migration_with(
     // Every save of a profile file takes this lock, so none lands
     // between the read of a file below and its rewrite without the items.
     let _persist_guard = PERSIST_LOCK.lock().await;
-    if let Some(reason) = crate::loadout_store::migration_refusal(app_data) {
+    if let Some(reason) = migration_refusal(state, app_data).await {
         return Err(reason.into());
     }
 
@@ -5674,6 +5697,41 @@ mod tests {
             );
             assert_eq!(read(&catalog_path(dir.path())), catalog);
             assert!(set.active_path().exists());
+        }
+
+        #[tokio::test]
+        async fn the_wizard_never_runs_in_a_session_that_uses_a_catalog() {
+            use crate::loadout_store::legacy_dir;
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_alias(&set, "Healer", "hh");
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            assert!(state.global_catalog.lock().await.is_some());
+
+            // While Vosh runs on the catalog, you move it, the loadouts,
+            // and the backups out of the folder. The profile files hold no
+            // items, so a run would build a catalog with none.
+            let aside = tempfile::tempdir().unwrap();
+            for path in [catalog_path(dir.path()), loadouts_path(dir.path())] {
+                std::fs::rename(&path, aside.path().join(path.file_name().unwrap())).unwrap();
+            }
+            std::fs::rename(legacy_dir(dir.path()), aside.path().join("legacy")).unwrap();
+            let healer = read(&set.profile_path("Healer"));
+
+            assert_eq!(
+                refused(&state, dir.path()).await,
+                "You already use a shared catalog in this session, so Vosh will not build \
+                 another one. Quit Vosh and open it again before you run the wizard."
+            );
+            assert!(!catalog_path(dir.path()).exists());
+            assert!(!loadouts_path(dir.path()).exists());
+            assert!(!legacy_dir(dir.path()).exists());
+            assert_eq!(read(&set.profile_path("Healer")), healer);
         }
 
         #[tokio::test]
