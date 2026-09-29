@@ -1584,6 +1584,92 @@ impl GlobalConfig {
         let config: GlobalConfig = toml::from_str(&toml_str)?;
         Ok(config)
     }
+
+    /// Read global.toml for the categories `scope` shares, or None when
+    /// the file does not exist yet. Every load of a profile file ends by
+    /// laying this over it, at launch, on a switch, and after `#profile
+    /// load` or `#profile reset`, so the shared settings stay the same
+    /// in all of them.
+    pub(crate) fn load_shared(
+        path: &Path,
+        scope: &ScopeConfig,
+    ) -> Result<Option<Self>, ConfigError> {
+        if !path.exists() {
+            return Ok(None);
+        }
+        let mut global = Self::load(path)?;
+        global.keep_shared(scope);
+        Ok(Some(global))
+    }
+
+    /// Forget the values of every category `scope` keeps per profile, so
+    /// a value global.toml still holds from before cannot cover the one
+    /// the profile file owns.
+    fn keep_shared(&mut self, scope: &ScopeConfig) {
+        use crate::profile_set::Scope;
+        if !matches!(scope.theme, Scope::Global) {
+            self.theme = None;
+            self.follow_system_appearance = None;
+            self.light_theme = None;
+            self.dark_theme = None;
+            self.custom_themes = None;
+        }
+        if !matches!(scope.font, Scope::Global) {
+            self.font_family = None;
+            self.font_size = None;
+            self.terminal_line_height = None;
+        }
+        if !matches!(scope.keep_last_command, Scope::Global) {
+            self.keep_last_command = None;
+        }
+        if !matches!(scope.auto_update, Scope::Global) {
+            self.auto_update = None;
+        }
+        if !matches!(scope.dock_layout, Scope::Global) {
+            self.dock_layout = None;
+        }
+    }
+}
+
+/// The shared settings that `#profile load` and `#profile reset` keep.
+/// Both replace the whole UI config with a profile file or the defaults,
+/// and a profile file holds none of the settings the scope map shares.
+/// Without this the live theme, custom themes, font, and the rest drop
+/// to the defaults, and the next save writes those defaults into
+/// global.toml for every profile.
+pub(crate) struct SharedLayer {
+    scope: ScopeConfig,
+    file: Option<GlobalConfig>,
+}
+
+impl SharedLayer {
+    /// Read global.toml the way a switch does. When the file is missing
+    /// or Vosh cannot read it, the live values are the ones to keep.
+    pub(crate) fn read(global_path: &Path, scope: ScopeConfig) -> Self {
+        let file = GlobalConfig::load_shared(global_path, &scope).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, path = %global_path.display(), "global config unreadable");
+            None
+        });
+        Self { scope, file }
+    }
+
+    /// Run `replace`, which swaps another config into `profile`, then lay
+    /// the shared settings back over the result. global.toml goes on top
+    /// as it does after a switch, over the values `profile` held before
+    /// for any shared field the file lacks.
+    pub(crate) fn keep_across<R>(
+        &self,
+        profile: &mut Profile,
+        replace: impl FnOnce(&mut Profile) -> R,
+    ) -> R {
+        let before = GlobalConfig::from_profile(profile, &self.scope);
+        let out = replace(profile);
+        before.apply_to(profile);
+        if let Some(file) = &self.file {
+            file.apply_to(profile);
+        }
+        out
+    }
 }
 
 /// True when two custom themes paint the same colors under the same
@@ -2739,10 +2825,8 @@ name = "haste"
         if path.exists() {
             ProfileConfig::load(&path).unwrap().apply_to(&mut profile);
         }
-        if set.global_path().exists() {
-            GlobalConfig::load(&set.global_path())
-                .unwrap()
-                .apply_to(&mut profile);
+        if let Some(global) = GlobalConfig::load_shared(&set.global_path(), set.scope()).unwrap() {
+            global.apply_to(&mut profile);
         }
         profile
     }
@@ -3061,5 +3145,117 @@ name = "haste"
         assert_eq!(alt.ui.custom_themes[0].id, "night-ink");
         assert!(alt.ui.follow_system_appearance);
         assert_eq!(alt.ui.terminal_line_height, "loose");
+    }
+
+    /// Every shared setting off its default, custom themes included.
+    fn shared_profile() -> Profile {
+        let mut profile = styled_profile();
+        profile.ui.font_family = "Iosevka".into();
+        profile.ui.keep_last_command = true;
+        profile.ui.auto_update = true;
+        profile
+    }
+
+    fn assert_shared_settings(profile: &Profile) {
+        assert_eq!(profile.ui.theme, "night-ink");
+        assert!(profile.ui.follow_system_appearance);
+        assert_eq!(profile.ui.light_theme, "classic-vivid");
+        assert_eq!(profile.ui.dark_theme, "night-ink");
+        assert_eq!(theme_ids(&profile.ui.custom_themes), ["night-ink"]);
+        assert_eq!(profile.ui.font_family, "Iosevka");
+        assert_eq!(profile.ui.font_size, 16);
+        assert_eq!(profile.ui.terminal_line_height, "loose");
+        assert!(profile.ui.keep_last_command);
+        assert!(profile.ui.auto_update);
+    }
+
+    /// Mirror `#profile reset` as the input command runs it.
+    fn reset(set: &ProfileSet, live: &mut Profile) {
+        let layer = SharedLayer::read(&set.global_path(), *set.scope());
+        layer.keep_across(live, |p| crate::input::process(p, "#profile reset"));
+    }
+
+    #[test]
+    fn a_profile_reset_keeps_the_shared_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let mut live = shared_profile();
+        live.ui.tracked_affects = vec![TrackedAffect {
+            name: "Sanctuary".into(),
+            label: None,
+        }];
+        persist_live(&set, &live);
+        let global_before = std::fs::read_to_string(set.global_path()).unwrap();
+
+        reset(&set, &mut live);
+
+        assert_shared_settings(&live);
+        // What the profile owns goes back to the defaults.
+        assert!(live.ui.tracked_affects.is_empty());
+        // The next save writes the same shared settings back.
+        persist_live(&set, &live);
+        let global_after = std::fs::read_to_string(set.global_path()).unwrap();
+        assert_eq!(global_after, global_before);
+    }
+
+    #[test]
+    fn a_profile_reset_keeps_the_live_shared_settings_without_global_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let mut live = shared_profile();
+        assert!(!set.global_path().exists());
+        reset(&set, &mut live);
+        assert_shared_settings(&live);
+    }
+
+    #[test]
+    fn a_profile_reset_resets_a_category_each_profile_owns() {
+        use crate::profile_set::Scope as Kind;
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.set_scope(ScopeConfig {
+            theme: Kind::Profile,
+            ..ScopeConfig::default()
+        })
+        .unwrap();
+        let mut live = shared_profile();
+        persist_live(&set, &live);
+
+        reset(&set, &mut live);
+
+        let defaults = UiConfig::default();
+        assert_eq!(live.ui.theme, defaults.theme);
+        assert!(live.ui.custom_themes.is_empty());
+        assert!(!live.ui.follow_system_appearance);
+        // The font is still shared, so it stays.
+        assert_eq!(live.ui.font_size, 16);
+        assert_eq!(live.ui.font_family, "Iosevka");
+    }
+
+    #[test]
+    fn a_load_lays_only_the_shared_categories_over_the_profile() {
+        use crate::profile_set::Scope as Kind;
+        let dir = tempfile::tempdir().unwrap();
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        // global.toml still holds a theme from when it was shared.
+        GlobalConfig::from_profile(&shared_profile(), &ScopeConfig::default())
+            .save(&set.global_path())
+            .unwrap();
+        let scope = ScopeConfig {
+            theme: Kind::Profile,
+            ..ScopeConfig::default()
+        };
+        let global = GlobalConfig::load_shared(&set.global_path(), &scope)
+            .unwrap()
+            .unwrap();
+        assert!(global.theme.is_none());
+        assert!(global.custom_themes.is_none());
+        assert!(global.light_theme.is_none());
+        assert_eq!(global.font_size, Some(16));
+        assert_eq!(global.keep_last_command, Some(true));
+        let missing = dir.path().join("missing.toml");
+        assert!(GlobalConfig::load_shared(&missing, &scope)
+            .unwrap()
+            .is_none());
     }
 }
