@@ -13,6 +13,14 @@ import { asNumber, createStore, isHiddenFlag } from './store';
 // `"hidden": true`. The snapshot is then hidden until a Char.Vitals
 // without the flag arrives. Prompt vars never fill it in meanwhile,
 // and nothing reads low.
+//
+// The prompt vars a hidden Char.Vitals finds, and any a capture sets
+// while hidden, are held back after that too. A capture under the
+// song reads the zeros the text prompt prints, and one from before it
+// is out of date. Char.Vitals fills each held vital until the prompt
+// sets that var to a new value. The capture stops when you go AFK or
+// turn your prompt off, and the game still sends Char.Vitals, so a
+// held var can stay held for a long time.
 
 export interface VitalValues {
   hp: number;
@@ -87,6 +95,40 @@ export function mergeVitals(
   return merged;
 }
 
+/** The vital prompt vars and their values now. Taken when a hidden
+ *  Char.Vitals arrives and on each capture while hidden. */
+export function holdPromptVitals(vars: PromptVarsPayload): PromptVarsPayload {
+  const held: PromptVarsPayload = {};
+  for (const key of KEYS) {
+    const value = vars[key];
+    if (value !== undefined) held[key] = value;
+  }
+  return held;
+}
+
+/** Let go of each held var the prompt has since set to a new value.
+ *  Returns `held` itself when nothing changed. */
+export function releasePromptVitals(
+  held: PromptVarsPayload,
+  vars: PromptVarsPayload,
+): PromptVarsPayload {
+  const keys = Object.keys(held);
+  const kept = keys.filter((key) => vars[key] === held[key]);
+  if (kept.length === keys.length) return held;
+  const next: PromptVarsPayload = {};
+  for (const key of kept) next[key] = held[key];
+  return next;
+}
+
+/** The prompt vars without the held ones. */
+export function withoutHeld(vars: PromptVarsPayload, held: PromptVarsPayload): PromptVarsPayload {
+  const keys = Object.keys(held);
+  if (keys.length === 0) return vars;
+  const out = { ...vars };
+  for (const key of keys) delete out[key];
+  return out;
+}
+
 /** Whole percent, clamped to 0..100. 0 when there is no max. */
 export function vitalPercent(current: number, max: number): number {
   if (max <= 0) return 0;
@@ -134,6 +176,7 @@ export function nextVitals(
 const store = createStore<Vitals | null>(null);
 let gmcp: VitalsPacket | null = null;
 let promptVars: PromptVarsPayload = {};
+let held: PromptVarsPayload = {};
 let started = false;
 
 function publish(): void {
@@ -141,7 +184,7 @@ function publish(): void {
   const next =
     gmcp?.hidden === true
       ? nextVitals(store.get(), gmcp.values, true)
-      : nextVitals(store.get(), mergeVitals(gmcp?.values ?? null, promptVars));
+      : nextVitals(store.get(), mergeVitals(gmcp?.values ?? null, withoutHeld(promptVars, held)));
   store.set(next);
 }
 
@@ -150,16 +193,20 @@ export function startVitalsStore(): void {
   started = true;
   void onGmcpPackage<unknown>('Char.Vitals', (data) => {
     gmcp = parseVitalsPacket(data);
+    if (gmcp.hidden) held = holdPromptVitals(promptVars);
     publish();
   });
   void onPromptVars((payload) => {
     promptVars = payload && typeof payload === 'object' ? payload : {};
+    held =
+      gmcp?.hidden === true ? holdPromptVitals(promptVars) : releasePromptVitals(held, promptVars);
     publish();
   });
   void onState((payload) => {
     if (payload.kind === 'disconnected') {
       gmcp = null;
       promptVars = {};
+      held = {};
       store.set(null);
     }
   });

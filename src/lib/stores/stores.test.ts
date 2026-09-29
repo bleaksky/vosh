@@ -231,6 +231,79 @@ describe('stores on the event bus', () => {
     expect(s.vitals.getVitals()).toBeNull();
   });
 
+  it('fill your vitals from the game after the song, not from a prompt read under it', async () => {
+    const s = await load();
+    const shown = { hp: 850, maxhp: 900, mana: 760, maxmana: 820, move: 250, maxmove: 250 };
+    const notLow = { hp: false, mana: false, move: false };
+    packet('char-vitals.gmcp');
+    fire('session://prompt-vars', {
+      hp: '850',
+      maxhp: '900',
+      mana: '760',
+      maxmana: '820',
+      move: '250',
+      maxmove: '250',
+    });
+
+    // Under the song the capture reads the zeros the text prompt prints.
+    packet('char-vitals-hidden.gmcp');
+    const lament = { hp: '0', maxhp: '0', mana: '0', maxmana: '0', move: '0', maxmove: '0' };
+    fire('session://prompt-vars', lament);
+
+    // The song ends. Char.Vitals goes out before the text prompt, and
+    // AFK or prompt off keeps the capture from firing at all.
+    packet('char-vitals.gmcp');
+    expect(s.vitals.getVitals()).toEqual({ ...shown, low: notLow, hidden: false });
+    for (let i = 0; i < 3; i++) packet('char-vitals.gmcp');
+    expect(s.vitals.getVitals()).toEqual({ ...shown, low: notLow, hidden: false });
+
+    // A prompt trigger that sends the same map again changes nothing.
+    fire('session://prompt-vars', lament);
+    expect(s.vitals.getVitals()).toEqual({ ...shown, low: notLow, hidden: false });
+
+    // A capture with new numbers wins again, each var on its own.
+    fire('session://prompt-vars', { ...lament, hp: '150', maxhp: '900' });
+    expect(s.vitals.getVitals()).toEqual({
+      ...shown,
+      hp: 150,
+      low: { ...notLow, hp: true },
+      hidden: false,
+    });
+  });
+
+  it('fill your vitals from the game after the song when the prompt shows no max', async () => {
+    // The default prompt `<%hhp %mm %vmv>` reads the current values only.
+    const s = await load();
+    packet('char-vitals.gmcp');
+    fire('session://prompt-vars', { hp: '850', mana: '760', move: '250' });
+    packet('char-vitals-hidden.gmcp');
+    fire('session://prompt-vars', { hp: '0', mana: '0', move: '0' });
+    packet('char-vitals.gmcp');
+    expect(s.vitals.getVitals()).toMatchObject({
+      hp: 850,
+      maxhp: 900,
+      mana: 760,
+      move: 250,
+      low: { hp: false, mana: false, move: false },
+    });
+  });
+
+  it('fill your vitals from the game after the song when no prompt came during it', async () => {
+    const s = await load();
+    packet('char-vitals.gmcp');
+    // Your last prompt before you went AFK.
+    fire('session://prompt-vars', { hp: '150', maxhp: '900' });
+    packet('char-vitals-hidden.gmcp');
+    packet('char-vitals.gmcp');
+    expect(s.vitals.getVitals()).toMatchObject({ hp: 850, maxhp: 900, low: { hp: false } });
+
+    // A disconnect lets go of what the song held back.
+    disconnect();
+    packet('char-vitals.gmcp');
+    fire('session://prompt-vars', { hp: '150', maxhp: '900' });
+    expect(s.vitals.getVitals()).toMatchObject({ hp: 150, low: { hp: true } });
+  });
+
   it('hide your affects and your group apart from each other', async () => {
     const s = await load();
     packet('char-affects.gmcp');
