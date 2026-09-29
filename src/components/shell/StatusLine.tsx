@@ -1,5 +1,4 @@
-import { useMemo, type CSSProperties, type ReactNode } from 'react';
-import type { ChipStyle } from '../../lib/session';
+import { useMemo } from 'react';
 import { useChipStyle } from '../../lib/stores/chipStyleStore';
 import { useTarget } from '../../lib/stores/targetStore';
 import { useTick } from '../../lib/stores/tickStore';
@@ -9,7 +8,7 @@ import { themeTokens } from '../../lib/themes';
 import { useActiveTheme } from '../../lib/useActiveTheme';
 import { daylightTint, isDaytime } from './daylight';
 import { formatGameTime } from './gameTime';
-import { MoonIcon, StopwatchIcon, SunIcon } from './icons';
+import { StatusClock } from './StatusClock';
 
 // The quiet line under the input band (SPEC 10 G4): your target, the
 // tick and the game time together, and the moon, 20 px apart in the UI
@@ -65,62 +64,24 @@ export function StatusLine({ connected, showVitals }: Props) {
   );
 }
 
-/** The tick and the game time as one status line item, tick first.
- *  Renders nothing while neither is known. */
+/** Reads the tick, the game time, and the theme for StatusClock. */
 function TickAndTime() {
   const style = useChipStyle();
   const tick = useTick();
   const world = useWorld();
   const theme = useActiveTheme();
-  const time = formatGameTime(world.time);
+  const text = formatGameTime(world.time);
   const hour = world.time?.hour ?? null;
   const tint = useMemo(() => daylightTint(hour, theme.xterm, themeTokens(theme)), [hour, theme]);
-  const showTick = tick.active && tick.secsSinceTick !== null;
-  if (!showTick && !time) return null;
-
   return (
-    <span className="shell-status-clock">
-      {showTick && (
-        <Reading
-          style={style}
-          caption="Tick"
-          icon={<StopwatchIcon />}
-          warn={tick.warn}
-          value={`${tick.secsSinceTick}s`}
-        />
-      )}
-      {time && (
-        <Reading
-          style={style}
-          caption="Time"
-          icon={isDaytime(world.time) === false ? <MoonIcon /> : <SunIcon />}
-          value={time}
-          valueStyle={tint ? { color: tint } : undefined}
-        />
-      )}
-    </span>
-  );
-}
-
-interface ReadingProps {
-  style: ChipStyle;
-  caption: string;
-  icon: ReactNode;
-  value: string;
-  warn?: boolean;
-  valueStyle?: CSSProperties | undefined;
-}
-
-/** One value with its caption or icon, 6 px before it. A screen reader
- *  hears the caption in every style. */
-function Reading({ style, caption, icon, value, warn = false, valueStyle }: ReadingProps) {
-  return (
-    <span className={`shell-status-part${warn ? ' is-warn' : ''}`}>
-      {style === 'icon_value' && icon}
-      <span className={style === 'caption_value' ? undefined : 'shell-sr'}>{caption}</span>
-      <span className="shell-status-value" style={valueStyle}>
-        {value}
-      </span>
-    </span>
+    <StatusClock
+      style={style}
+      tick={
+        tick.active && tick.secsSinceTick !== null
+          ? { secs: tick.secsSinceTick, warn: tick.warn }
+          : null
+      }
+      time={text ? { text, tint, daytime: isDaytime(world.time) } : null}
+    />
   );
 }
