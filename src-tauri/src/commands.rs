@@ -2145,20 +2145,16 @@ pub(crate) async fn profile_resolve_match(
     Ok(set.resolve_match(&host, port, character.as_deref()))
 }
 
-/// Re-apply Path B's catalog + active loadout set onto the live
-/// profile. Used after a per-profile load on profile-switch to make
-/// sure the catalog (the authoritative source for aliases / triggers /
-/// macros in Path B mode) wins over whatever the per-profile file
-/// carried — the per-profile file's aliases are blanked out by
-/// `persist_path_b`, but the loadout's `enabled_groups` + tick still
-/// need to be replayed against the freshly-loaded profile state.
-async fn apply_path_b_overlays(state: &SharedState) {
-    let catalog = match state.global_catalog.lock().await.as_ref() {
-        Some(c) => c.clone(),
-        None => return,
-    };
-    let set = state.loadout_set.lock().await.clone();
-    let mut p = state.profile.lock().await;
+/// Lay loadout mode's catalog and active loadouts over the live profile
+/// `p`, right after a switch loaded a profile file into it. The catalog
+/// is the authoritative source for aliases, triggers, and macros in
+/// loadout mode, and the profile file holds none of them, so it fills
+/// the stores. The group state of `set` then applies to the result.
+fn lay_catalog_over(
+    p: &mut crate::profile::Profile,
+    catalog: &crate::loadout::GlobalCatalog,
+    set: Option<&crate::loadout::LoadoutSet>,
+) {
     // The per-profile file just restored this profile's group checkbox
     // state into the live stores; carry it across the catalog rebuild
     // (the rebuilt stores would otherwise start with everything
@@ -2185,8 +2181,8 @@ async fn apply_path_b_overlays(state: &SharedState) {
     if let Some(list) = &catalog.enabled_presets {
         p.ui.enabled_presets.clone_from(list);
     }
-    if let Some(set) = set.as_ref() {
-        crate::loadout_store::apply_effective_state(set, &mut p);
+    if let Some(set) = set {
+        crate::loadout_store::apply_effective_state(set, p);
     }
 }
 
@@ -2259,7 +2255,9 @@ fn open_profile_for_switch(
 /// Steps 2 and 3 of a switch, after the flush of the outgoing profile.
 /// Call with [`PERSIST_LOCK`] held. Loads the incoming profile's file
 /// and global.toml, points the index at it, then lays both over the
-/// live profile. Either every step lands or none does.
+/// live profile, and in loadout mode the catalog and the loadouts too.
+/// Either every step lands or none does, and a save that waits on the
+/// lock finds the live profile whole.
 async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), String> {
     // Step 2: read the incoming files, then flip the active pointer in
     // the index.
@@ -2273,6 +2271,13 @@ async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), Stri
         };
         open_profile_for_switch(set, name)?
     };
+
+    // In loadout mode the profile file holds no aliases, triggers, or
+    // macros, so the catalog fills the stores in the same step. Were a
+    // save to find the stores empty in between, it would write an empty
+    // catalog.
+    let catalog = state.global_catalog.lock().await.clone();
+    let loadouts = state.loadout_set.lock().await.clone();
 
     // Step 3: apply the per-profile file (or defaults) and then overlay
     // global.toml so theme/font/keep-last/auto-update/dock_layout
@@ -2290,6 +2295,9 @@ async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), Stri
         }
         if let Some(g) = global {
             g.apply_to(&mut p);
+        }
+        if let Some(catalog) = &catalog {
+            lay_catalog_over(&mut p, catalog, loadouts.as_ref());
         }
         // Under the same lock as the swap, so a pane layout write edited
         // from the old profile's tree is refused from here on.
@@ -2309,31 +2317,8 @@ pub(crate) async fn apply_profile_switch(
     state: &SharedState,
     name: &str,
 ) -> Result<(), String> {
-    // Hold the persist lock from the flush through loading the next
-    // file, so a Settings write to the incoming profile's file lands
-    // either before the load reads it or after the switch made the
-    // profile live, never in between.
-    let persist_guard = PERSIST_LOCK.lock().await;
-
-    // Step 1: snapshot + write the CURRENT active profile so user
-    // changes since the last persist are not lost on switch. Skipped
-    // after a #profile reset/load: the live profile is deliberately
-    // diverged from disk and a passive switch (the GMCP Char.Status
-    // auto-switch reaches here too) must not write it back.
-    if !AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
-        persist_profile_locked(app, state).await;
-    }
-
-    switch_live_profile(state, name).await?;
-    drop(persist_guard);
-
-    // Path B catalog re-overlay. The per-profile file in Path B mode
-    // is written with blank aliases / triggers / macros (catalog is
-    // authoritative), so after the apply_to above the live profile
-    // has empty stores. Re-pour the catalog onto the live profile and
-    // re-apply the loadout state so the freshly-switched profile
-    // starts from the right place.
-    apply_path_b_overlays(state).await;
+    let app_data = app.path().app_data_dir().ok();
+    switch_profile(state, app_data.as_deref(), name).await?;
 
     // Hand every window the new profile's panes and tracked affects
     // from here rather than leaving each window to re-fetch. The main
@@ -2345,6 +2330,31 @@ pub(crate) async fn apply_profile_switch(
 
     broadcast(app, "vosh://profile-switched", &name);
     Ok(())
+}
+
+/// Steps 1 to 3 of [`apply_profile_switch`] over the app data folder
+/// `app_data`, so a test can run them over a folder of its own.
+async fn switch_profile(
+    state: &SharedState,
+    app_data: Option<&std::path::Path>,
+    name: &str,
+) -> Result<(), String> {
+    // Hold the persist lock from the flush through loading the next
+    // file, so a Settings write to the incoming profile's file lands
+    // either before the load reads it or after the switch made the
+    // profile live, never in between.
+    let _persist_guard = PERSIST_LOCK.lock().await;
+
+    // Step 1: snapshot + write the CURRENT active profile so user
+    // changes since the last persist are not lost on switch. Skipped
+    // after a #profile reset/load: the live profile is deliberately
+    // diverged from disk and a passive switch (the GMCP Char.Status
+    // auto-switch reaches here too) must not write it back.
+    if !AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+        persist_state(state, app_data).await;
+    }
+
+    switch_live_profile(state, name).await
 }
 
 #[tauri::command]
@@ -4661,7 +4671,8 @@ mod tests {
         // The switch just loaded Healer's file, with its own older list.
         state.profile.lock().await.ui.enabled_presets =
             vec!["healing_basics".into(), "potion_labels".into()];
-        super::apply_path_b_overlays(&state).await;
+        let catalog = state.global_catalog.lock().await.clone().unwrap();
+        super::lay_catalog_over(&mut *state.profile.lock().await, &catalog, None);
         assert_eq!(
             state.profile.lock().await.ui.enabled_presets,
             vec!["healing_basics".to_string()]
@@ -5525,6 +5536,66 @@ mod tests {
             let bard = ProfileConfig::load(&set.profile_path("Bard")).unwrap();
             assert!(bard.aliases.is_empty());
             assert_eq!(bard.profile_vars.get("target").unwrap(), "orc 3");
+        }
+
+        /// Build the catalog over Default, Healer, and Test-Prompt, each set
+        /// up as `character` sets it up, and open Vosh again as Default.
+        /// Returns the live state and the items each character had on,
+        /// in that order.
+        async fn converted_three(
+            dir: &std::path::Path,
+        ) -> (super::super::SharedState, Vec<Vec<String>>) {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let set = james_like_set(dir);
+            let names = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"];
+            for (n, name) in names.iter().enumerate() {
+                character(name, n as u32 + 1, &[])
+                    .save(&set.profile_path(name))
+                    .unwrap();
+            }
+            let mut before = Vec::new();
+            for name in names {
+                let state = relaunch_as(dir, name).await;
+                before.push(items_on(&*state.profile.lock().await));
+            }
+            let state = relaunch_as(dir, DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir, &[], || {})
+                .await
+                .unwrap();
+            (relaunch_as(dir, DEFAULT_PROFILE_NAME).await, before)
+        }
+
+        /// The catalog items the live stores of `state` hold.
+        async fn live_rows(state: &super::super::SharedState) -> Vec<String> {
+            let p = state.profile.lock().await;
+            let aliases: Vec<_> = p.aliases.list().into_iter().cloned().collect();
+            item_rows(&aliases, &p.triggers.list(), &p.macros)
+        }
+
+        #[tokio::test]
+        async fn a_save_right_after_a_switch_keeps_the_catalog() {
+            let dir = tempfile::tempdir().unwrap();
+            let (state, _) = converted_three(dir.path()).await;
+            let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+            let rows = item_rows(&catalog.aliases, &catalog.triggers, &catalog.macros);
+            assert_eq!(rows.len(), 18);
+
+            // You switch to Healer while a save waits for the switch to
+            // let go of the lock.
+            {
+                let _persist_guard = super::super::PERSIST_LOCK.lock().await;
+                super::super::switch_live_profile(&state, "Healer")
+                    .await
+                    .unwrap();
+            }
+            persist(&state, dir.path()).await;
+
+            let (saved, _) = load_path_b_at_launch(dir.path()).unwrap();
+            assert_eq!(
+                item_rows(&saved.aliases, &saved.triggers, &saved.macros),
+                rows
+            );
+            assert_eq!(live_rows(&state).await, rows);
         }
     }
 }
