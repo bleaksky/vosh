@@ -29,6 +29,7 @@ import { recentNames } from '../lib/recentNames';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { nativeSurfaceEnabled } from './Terminal';
+import { isMacPlatform, shortcutKey } from '../lib/palette';
 
 export interface InputHandle {
   focus: () => void;
@@ -47,6 +48,9 @@ interface Props {
   /** Close the split-scrollback view. Fires on Esc; the host decides
    *  whether anything is currently open. */
   onExitSplit?: () => void;
+  /** Select the whole xterm buffer. Cmd+A on an empty command line
+   *  calls it, off the native surface, which selects on its own. */
+  onSelectAllTerminal?: () => void;
   /** Changes whenever the prompt font family or size changes. The
    *  autosize snap caches a pixel height computed from the current
    *  metrics, so it must re-run when the metrics move or the row
@@ -102,7 +106,15 @@ function colorizeEcho(line: string, color: string | null): string {
 }
 
 export const Input = forwardRef<InputHandle, Props>(function Input(
-  { enabled, onError, onLocalEcho, onScrollTerminal, onExitSplit, fontKey }: Props,
+  {
+    enabled,
+    onError,
+    onLocalEcho,
+    onScrollTerminal,
+    onExitSplit,
+    onSelectAllTerminal,
+    fontKey,
+  }: Props,
   ref,
 ) {
   const [value, setValue] = useState('');
@@ -787,6 +799,30 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         void invoke('native_surface_copy').catch(() => {});
         return;
       }
+    }
+
+    // Cmd+A (Ctrl+A off macOS) on an empty command line selects the
+    // whole terminal, the keyboard twin of the terminal menu's Select
+    // all, so Cmd+A then Cmd+C copies the scrollback. With text in the
+    // line it selects that text as usual, and Ctrl+A on macOS stays the
+    // move to line start.
+    const primary = isMacPlatform()
+      ? event.metaKey && !event.ctrlKey
+      : event.ctrlKey && !event.metaKey;
+    if (
+      primary &&
+      !event.altKey &&
+      !event.shiftKey &&
+      shortcutKey(event) === 'a' &&
+      event.currentTarget.value.length === 0
+    ) {
+      event.preventDefault();
+      if (nativeSurfaceEnabled()) {
+        void invoke('native_surface_select_all').catch(() => {});
+      } else {
+        onSelectAllTerminal?.();
+      }
+      return;
     }
 
     // Page-scroll the terminal scrollback. macOS sends PageUp/PageDown

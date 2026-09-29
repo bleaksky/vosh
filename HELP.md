@@ -136,6 +136,7 @@ Terminal text copies to the system clipboard through a drag selection.
 - Drag across the output you want. An active text selection stops the usual click from refocusing the command input, so the selection stays put.
 - Press `Cmd+C` on macOS or `Ctrl+C` elsewhere.
 - Or right click the terminal and choose `copy`. The menu shows the `⌘C` shortcut beside it.
+- To copy everything, press `Cmd+A` on macOS or `Ctrl+A` elsewhere while the command line is empty. It selects the whole terminal, scrollback included, and `Cmd+C` then copies it. The right click menu item `Select all` does the same.
 
 One priority rule. When the input box itself holds a selection, `Cmd+C` copies that selection rather than the terminal. Clear the input selection, or use the right click `copy` item, when the terminal text is what you want.
 
@@ -167,6 +168,7 @@ The terminal right click menu collects the terminal's everyday actions in one pl
 - Right click anywhere on the terminal to open it.
 - `copy` copies the current selection. The menu lists its `⌘C` shortcut.
 - `paste` inserts the clipboard into the input row. Nothing sends until you press `Enter` yourself.
+- `Select all` selects the whole terminal, scrollback included. The menu lists its `⌘A` shortcut, which works while the command line is empty.
 - `open splits` and `close splits` toggle the session, chat, and log panes inside the terminal well. These are workspace panes, separate from the scrollback split.
 - `search scrollback` opens the find toolbar.
 - `clear buffer` wipes the terminal. The item appears only on the xterm renderer. The native macOS grid has no clear command, so the item hides there.

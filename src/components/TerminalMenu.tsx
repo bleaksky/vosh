@@ -98,6 +98,16 @@ export function TerminalMenu({ x, y, termRef, inputRef, onOpenFind, onClose }: P
     }
   };
 
+  // The same fork as Cmd+A on an empty command line (see Input): the
+  // native grid selects through its own command, xterm otherwise.
+  const runSelectAll = () => {
+    if (nativeSurfaceEnabled()) {
+      void invoke('native_surface_select_all').catch(() => {});
+      return;
+    }
+    termRef.current?.selectAll();
+  };
+
   const runPaste = () => {
     void navigator.clipboard
       .readText()
@@ -114,6 +124,7 @@ export function TerminalMenu({ x, y, termRef, inputRef, onOpenFind, onClose }: P
     [
       { id: 'copy', label: 'Copy', keys: 'Mod+C', run: runCopy },
       { id: 'paste', label: 'Paste', keys: 'Mod+V', run: runPaste },
+      { id: 'select-all', label: 'Select all', keys: 'Mod+A', run: runSelectAll },
     ],
     [{ id: 'find', label: 'Find in scrollback…', keys: 'Mod+F', run: onOpenFind }],
   ];

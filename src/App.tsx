@@ -1210,6 +1210,7 @@ function App() {
       enabled={connected}
       fontKey={`${fontFamily}|${fontSize}`}
       onError={handleError}
+      onSelectAllTerminal={() => termRef.current?.selectAll()}
       onLocalEcho={(text) => {
         writeLive(text);
         // Mirror to the split history pane so typed lines appear
