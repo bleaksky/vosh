@@ -1,22 +1,24 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { groupPeople, useRoom } from '../../lib/stores/roomStore';
 import { ServerMapView } from '../ServerMapView';
+import { mapBandPeople, mapBandRows } from './mapBand';
 import { PaneHeader, PaneMeta } from './PaneHeader';
 import { exitsLabel } from './paneText';
 
 // The Map pane (SPEC 9): the server map drawing in a box inset 8 px
-// with radius 8, then one dense row for the room you stand in with its
-// exits, then a row per person here. The drawing takes whatever height
-// the rows leave down to its floor. Below that a short pane gives up
-// the people rows, whole rows from the bottom, and keeps the room row.
+// with radius 8, then a band of dense rows for the room you stand in
+// with its exits and the people here. The band's height follows the
+// pane alone, so the drawing keeps its size as you walk and as people
+// come and go. A crowded room counts the people past the last slot on
+// that slot, and a short pane gives up people slots before the room.
 
 export function MapPane() {
   const { info, people } = useRoom();
-  const groups = groupPeople(people);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const rowsRef = useRef<HTMLUListElement | null>(null);
-  const fit = useRowsThatFit(boxRef, rowsRef, info !== null);
-  const shown = fit === null ? groups : groups.slice(0, Math.max(0, fit - 1));
+  const rows = useBandRows(boxRef, rowsRef, info !== null);
+  const { shown, rest } = mapBandPeople(groupPeople(people), rows - 1);
+  const more = rest.reduce((sum, g) => sum + g.count, 0);
 
   return (
     <>
@@ -25,7 +27,11 @@ export function MapPane() {
         <ServerMapView embedded emptyText="The map appears when your MUD sends Map.Tiles." />
       </div>
       {info && (
-        <ul ref={rowsRef} className="pane-rows pane-map-rows">
+        <ul
+          ref={rowsRef}
+          className="pane-rows pane-map-rows"
+          style={{ '--band-rows': rows } as CSSProperties}
+        >
           <li className="pane-row">
             <span className="pane-row-name">{info.name}</span>
             {info.exits.length > 0 && (
@@ -38,39 +44,44 @@ export function MapPane() {
               {g.count > 1 && <span className="pane-row-value pane-map-count">{g.count}</span>}
             </li>
           ))}
+          {more > 0 && (
+            <li className="pane-row pane-map-more">
+              <span className="pane-row-name">{more} more here</span>
+            </li>
+          )}
         </ul>
       )}
     </>
   );
 }
 
-/** How many dense rows, the room row included, fit under the drawing.
- *  The rows may take what they hold now plus whatever the drawing
- *  holds above its floor. Null until measured. Watches the pane rather
- *  than the rows, so dropping a row never resizes what it watches. */
-function useRowsThatFit(
+/** How many rows the band holds, the room row included. The drawing
+ *  and the band split what the pane leaves under its header, and only
+ *  a new pane size changes that split, so the count never follows the
+ *  rows it lays out. */
+function useBandRows(
   boxRef: RefObject<HTMLDivElement | null>,
   rowsRef: RefObject<HTMLUListElement | null>,
   hasRows: boolean,
-): number | null {
-  const [fit, setFit] = useState<number | null>(null);
+): number {
+  const [rows, setRows] = useState(1);
   useLayoutEffect(() => {
     const box = boxRef.current;
     const pane = box?.parentElement;
     if (!box || !pane || !hasRows) return;
     const measure = () => {
-      const rows = rowsRef.current;
-      if (!rows) return;
-      const row = (rows.firstElementChild as HTMLElement | null)?.offsetHeight || 22;
+      const band = rowsRef.current;
+      if (!band) return;
+      const row = (band.firstElementChild as HTMLElement | null)?.offsetHeight || 22;
       const floor = parseFloat(getComputedStyle(box).minHeight) || 0;
-      const room = rows.clientHeight + Math.max(0, box.clientHeight - floor);
-      const next = Math.max(1, Math.floor((room + 0.5) / row));
-      setFit((prev) => (prev === next ? prev : next));
+      const shared = box.offsetHeight + band.offsetHeight;
+      const next = mapBandRows(shared, floor, row);
+      setRows((prev) => (prev === next ? prev : next));
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(pane);
     return () => observer.disconnect();
   }, [boxRef, rowsRef, hasRows]);
-  return fit;
+  return rows;
 }
