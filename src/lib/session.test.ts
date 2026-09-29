@@ -6,6 +6,8 @@ import {
   followReplacedUiConfig,
   getUiConfig,
   isOwnThemeEcho,
+  migrationAnalyze,
+  migrationApply,
   normalizeChipStyle,
   normalizeTerminalLineHeight,
   normalizeTickCount,
@@ -602,5 +604,23 @@ describe('sending a line', () => {
     vi.mocked(invoke).mockClear();
     await sendInput('look');
     expect(vi.mocked(invoke)).toHaveBeenCalledWith('session_send_input', { line: 'look' });
+  });
+});
+
+describe('the shared catalog wizard calls', () => {
+  // The backend knows the preset library only from these calls. A preset
+  // the library no longer has stays off for characters whose file lacks
+  // it.
+  it('send the preset library with the preview and the apply', async () => {
+    vi.mocked(invoke).mockClear();
+    await migrationAnalyze(['healing_basics', 'herb_labels']);
+    expect(invoke).toHaveBeenCalledWith('migration_analyze', {
+      library: ['healing_basics', 'herb_labels'],
+    });
+    await migrationApply([], ['healing_basics']);
+    expect(invoke).toHaveBeenCalledWith('migration_apply', {
+      resolutions: [],
+      library: ['healing_basics'],
+    });
   });
 });

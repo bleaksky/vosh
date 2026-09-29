@@ -2044,8 +2044,11 @@ export interface MigrationPlan {
   loadouts: MigrationLoadoutPreview[];
 }
 
-export async function migrationAnalyze(): Promise<MigrationPlan> {
-  return invoke('migration_analyze');
+/** Preview the shared catalog. `library` holds the id of every preset in
+ *  the library this build installs from, so a preset it no longer has
+ *  stays off for characters whose file lacks it. */
+export async function migrationAnalyze(library: string[]): Promise<MigrationPlan> {
+  return invoke('migration_analyze', { library });
 }
 
 export interface MigrationConflictResolution {
@@ -2061,8 +2064,11 @@ export interface MigrationConflictResolution {
 // launch and enters Path B mode. The wizard prompts the user to quit
 // + reopen via appQuit because app.restart() is fragile in dev mode
 // and silently leaves the WebView with no frontend to load.
-export async function migrationApply(resolutions: MigrationConflictResolution[]): Promise<void> {
-  return invoke('migration_apply', { resolutions });
+export async function migrationApply(
+  resolutions: MigrationConflictResolution[],
+  library: string[],
+): Promise<void> {
+  return invoke('migration_apply', { resolutions, library });
 }
 
 // Cleanly quit Vosh. The post-migration prompt uses this so the
