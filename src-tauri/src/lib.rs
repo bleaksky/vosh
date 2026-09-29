@@ -239,19 +239,18 @@ pub fn run() {
                                 }
                             }
                         }
-                        if global_path.exists() {
-                            match profile_config::GlobalConfig::load(&global_path) {
-                                Ok(global) => {
-                                    let profile = state.profile.clone();
-                                    tauri::async_runtime::block_on(async move {
-                                        let mut p = profile.lock().await;
-                                        global.apply_to(&mut p);
-                                    });
-                                    info!(path = %global_path.display(), "loaded global config");
-                                }
-                                Err(e) => {
-                                    error!(error = %e, "failed to load global.toml at startup");
-                                }
+                        match profile_config::GlobalConfig::load_shared(&global_path, set.scope()) {
+                            Ok(Some(global)) => {
+                                let profile = state.profile.clone();
+                                tauri::async_runtime::block_on(async move {
+                                    let mut p = profile.lock().await;
+                                    global.apply_to(&mut p);
+                                });
+                                info!(path = %global_path.display(), "loaded global config");
+                            }
+                            Ok(None) => {}
+                            Err(e) => {
+                                error!(error = %e, "failed to load global.toml at startup");
                             }
                         }
                         let profile_set = state.profile_set.clone();

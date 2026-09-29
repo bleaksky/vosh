@@ -109,7 +109,7 @@ use crate::plugins::{PluginRecord, SharedPluginManager};
 use crate::profile::{Macro, Profile, Timer};
 use crate::profile_config::{
     share_custom_themes, strip_global_fields, DockEntryPersist, GlobalConfig, HeldCustomThemes,
-    PaneLayoutPersist, ProfileConfig,
+    PaneLayoutPersist, ProfileConfig, SharedLayer,
 };
 use crate::script_state;
 use crate::script_state::SharedTimers;
@@ -512,6 +512,17 @@ pub(crate) async fn session_send(
     Ok(())
 }
 
+/// global.toml as a switch reads it, for `#profile reset` and `#profile
+/// load` to lay back over the config they swap in. Holds the persist
+/// lock for the read, so a save cannot move the file aside midway. None
+/// before startup loads the profile set.
+async fn read_shared_layer(state: &SharedState) -> Option<SharedLayer> {
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    let guard = state.profile_set.lock().await;
+    let set = guard.as_ref()?;
+    Some(SharedLayer::read(&set.global_path(), *set.scope()))
+}
+
 #[tauri::command]
 pub(crate) async fn session_send_input(
     app: AppHandle,
@@ -523,13 +534,23 @@ pub(crate) async fn session_send_input(
     // into echoes, so there they change nothing.
     let path_b_live = crate::input::PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire);
     let is_reset_or_load = !path_b_live && crate::input::is_profile_reset_or_load(&line);
+    // The profile file they read holds none of the shared settings, so
+    // global.toml goes back over the result the way a switch lays it.
+    let shared_layer = if is_reset_or_load {
+        read_shared_layer(state.inner()).await
+    } else {
+        None
+    };
     let (mut result, target_after, script_apply, lists) = {
         let mut profile = state.profile.lock().await;
         let lists_before = ListRevisions::of(&profile);
         let before_name = profile.target.name.clone();
         let before_idx = profile.target.room_idx;
         let before_keys = profile.target.quick_keys.clone();
-        let result = input::process(&mut profile, &line);
+        let result = match &shared_layer {
+            Some(layer) => layer.keep_across(&mut profile, |p| input::process(p, &line)),
+            None => input::process(&mut profile, &line),
+        };
         if is_reset_or_load {
             bump_panes_generation();
         }
@@ -2037,13 +2058,13 @@ pub(crate) async fn apply_profile_switch(
     }
 
     // Step 2: flip the active pointer in the index.
-    let (new_path, global_path) = {
+    let (new_path, global_path, scope) = {
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
             return Err(PROFILES_NOT_LOADED.into());
         };
         set.switch(name).map_err(|e| e.to_string())?;
-        (set.active_path(), set.global_path())
+        (set.active_path(), set.global_path(), *set.scope())
     };
 
     // Step 3: load per-profile file (or seed defaults) and then
@@ -2054,11 +2075,7 @@ pub(crate) async fn apply_profile_switch(
     } else {
         None
     };
-    let global = if global_path.exists() {
-        Some(GlobalConfig::load(&global_path).map_err(|e| e.to_string())?)
-    } else {
-        None
-    };
+    let global = GlobalConfig::load_shared(&global_path, &scope).map_err(|e| e.to_string())?;
     {
         let mut p = state.profile.lock().await;
         match per_profile {
