@@ -13,6 +13,7 @@ export { Field, type FieldProps } from './Field';
 export { FieldArea, type FieldAreaProps } from './FieldArea';
 export { IconButton, type IconButtonProps } from './IconButton';
 export { Keycap } from './Keycap';
+export { LinkRow, type LinkRowProps } from './LinkRow';
 export { NumberField, type NumberFieldProps } from './NumberField';
 export { Row, type RowProps } from './Row';
 export { useRowIds, type RowIds } from './rowContext';
