@@ -292,6 +292,22 @@ pub(crate) struct UiConfig {
     /// Unknown values coerce back to `rows` on save.
     #[serde(default = "default_vitals_density")]
     pub vitals_density: String,
+    /// What each vital's value shows: `current-max` (`186 / 1020`, the
+    /// default), `current` (`186`), or `percent` (`18%`). The status
+    /// line follows it while the panel is hidden. Unknown values coerce
+    /// back to `current-max` on save.
+    #[serde(default = "default_vitals_values")]
+    pub vitals_values: String,
+    /// The meter under each vital: `line` (2 px, the default), `bar`
+    /// (4 px), or `none`, which drops the meters and sets the rows at
+    /// the panes' 22 px pitch. Unknown values coerce back to `line`.
+    #[serde(default = "default_vitals_meter")]
+    pub vitals_meter: String,
+    /// Warn before a vital runs low. On, a vital warns under two thirds
+    /// and turns danger under one third, like the Group pane. Off, the
+    /// default, it stays quiet until it drops under 20 percent.
+    #[serde(default)]
+    pub vitals_warn_thirds: bool,
     /// Where to render the World.Moons phase glyphs in the status bar.
     /// Values: `"right-edge"` (the historical placement, far right of
     /// the status bar), `"before-time"` (left of the centered tick +
@@ -1116,6 +1132,9 @@ impl Default for UiConfig {
             prompt_template: String::new(),
             vitals: VitalsConfig::default(),
             vitals_density: default_vitals_density(),
+            vitals_values: default_vitals_values(),
+            vitals_meter: default_vitals_meter(),
+            vitals_warn_thirds: false,
             moons_position: default_moons_position(),
             chip_style: default_chip_style(),
         }
@@ -1161,6 +1180,38 @@ pub(crate) fn coerce_vitals_density(value: String) -> String {
         value
     } else {
         default_vitals_density()
+    }
+}
+
+/// The forms a vital's value takes. Anything else saves as the default.
+pub(crate) const VITALS_VALUES: [&str; 3] = ["current-max", "current", "percent"];
+
+fn default_vitals_values() -> String {
+    "current-max".to_string()
+}
+
+/// Keep a known value form and turn anything else into `current-max`.
+pub(crate) fn coerce_vitals_values(value: String) -> String {
+    if VITALS_VALUES.contains(&value.as_str()) {
+        value
+    } else {
+        default_vitals_values()
+    }
+}
+
+/// The meters the vitals draw. Anything else saves as the default.
+pub(crate) const VITALS_METERS: [&str; 3] = ["line", "bar", "none"];
+
+fn default_vitals_meter() -> String {
+    "line".to_string()
+}
+
+/// Keep a known meter and turn anything else into `line`.
+pub(crate) fn coerce_vitals_meter(value: String) -> String {
+    if VITALS_METERS.contains(&value.as_str()) {
+        value
+    } else {
+        default_vitals_meter()
     }
 }
 

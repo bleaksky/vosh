@@ -2416,6 +2416,9 @@ pub(crate) struct UiConfigPayload {
     pub prompt_template: String,
     pub vitals: crate::profile_config::VitalsConfig,
     pub vitals_density: String,
+    pub vitals_values: String,
+    pub vitals_meter: String,
+    pub vitals_warn_thirds: bool,
     pub moons_position: String,
     pub chip_style: String,
 }
@@ -2450,6 +2453,9 @@ impl UiConfigPayload {
             prompt_template: ui.prompt_template.clone(),
             vitals: ui.vitals.clone(),
             vitals_density: ui.vitals_density.clone(),
+            vitals_values: ui.vitals_values.clone(),
+            vitals_meter: ui.vitals_meter.clone(),
+            vitals_warn_thirds: ui.vitals_warn_thirds,
             moons_position: ui.moons_position.clone(),
             chip_style: ui.chip_style.clone(),
         }
@@ -2488,6 +2494,9 @@ impl UiConfigPayload {
             prompt_template,
             vitals,
             vitals_density,
+            vitals_values,
+            vitals_meter,
+            vitals_warn_thirds,
             moons_position,
             chip_style,
         } = self;
@@ -2553,6 +2562,9 @@ impl UiConfigPayload {
         ui.prompt_template_enabled = prompt_template_enabled;
         ui.prompt_template = prompt_template;
         ui.vitals_density = crate::profile_config::coerce_vitals_density(vitals_density);
+        ui.vitals_values = crate::profile_config::coerce_vitals_values(vitals_values);
+        ui.vitals_meter = crate::profile_config::coerce_vitals_meter(vitals_meter);
+        ui.vitals_warn_thirds = vitals_warn_thirds;
         // Normalize vitals glyphs + width. Empty glyph strings would
         // render zero-width bars; collapse to the default in that case
         // so the user cannot accidentally hide the bar via a typo.
@@ -3442,6 +3454,54 @@ mod tests {
         // An unknown density saves as rows.
         ui.vitals_density = "grid".into();
         assert_eq!(through_payload(&ui).vitals_density, "rows");
+    }
+
+    #[test]
+    fn vitals_values_round_trips() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.vitals_values, "current-max");
+        for id in ["current-max", "current", "percent"] {
+            ui.vitals_values = id.into();
+            assert_eq!(through_payload(&ui).vitals_values, id);
+            assert_eq!(through_toml(&ui).vitals_values, id);
+        }
+        // An unknown form saves as current and max.
+        ui.vitals_values = "both".into();
+        assert_eq!(through_payload(&ui).vitals_values, "current-max");
+    }
+
+    #[test]
+    fn vitals_meter_round_trips() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.vitals_meter, "line");
+        for id in ["line", "bar", "none"] {
+            ui.vitals_meter = id.into();
+            assert_eq!(through_payload(&ui).vitals_meter, id);
+            assert_eq!(through_toml(&ui).vitals_meter, id);
+        }
+        // An unknown meter saves as the line.
+        ui.vitals_meter = "gauge".into();
+        assert_eq!(through_payload(&ui).vitals_meter, "line");
+    }
+
+    #[test]
+    fn vitals_warn_thirds_round_trips() {
+        let mut ui = UiConfig::default();
+        assert!(!ui.vitals_warn_thirds);
+        assert!(!through_payload(&ui).vitals_warn_thirds);
+        ui.vitals_warn_thirds = true;
+        assert!(through_payload(&ui).vitals_warn_thirds);
+        assert!(through_toml(&ui).vitals_warn_thirds);
+    }
+
+    #[test]
+    fn a_profile_without_the_vitals_options_loads_the_defaults() {
+        let ui = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.vitals_values, "current-max");
+        assert_eq!(ui.vitals_meter, "line");
+        assert!(!ui.vitals_warn_thirds);
     }
 
     #[test]
