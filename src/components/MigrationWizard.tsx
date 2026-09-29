@@ -15,9 +15,11 @@ interface Props {
 // Wizard for the Path B migration. Shows the analyzer's plan in three
 // sections (auto-resolved, conflicts, derived loadouts), lets the user
 // pick a winner per conflict via a radio per source, then runs the
-// apply step which writes catalog.toml + loadouts.toml and moves the
-// per-profile files into profiles/legacy/. The runtime stays in legacy
-// mode until the user relaunches Vosh: the wizard switches to a
+// apply step which copies the per-profile files into profiles/legacy/,
+// writes catalog.toml + loadouts.toml, and takes the aliases, triggers,
+// and macros out of each profile file, which keeps every other setting.
+// The runtime stays in legacy mode until the user relaunches Vosh: the
+// wizard switches to a
 // "Migration complete" state with a [quit Vosh] button. Path B mode
 // activates on the next launch when the startup hook picks up the
 // freshly-written catalog.toml.
@@ -114,10 +116,9 @@ export function MigrationWizard({ onClose }: Props) {
             <div className="migration-wizard-status migration-wizard-applied">
               <div className="migration-wizard-applied-title">migration complete.</div>
               <div className="migration-wizard-applied-body">
-                catalog.toml and loadouts.toml are on disk; your per-profile files are preserved
-                under profiles/legacy/ in case you want to roll back. Vosh stays in legacy mode
-                until you quit and relaunch. Click quit Vosh below, then reopen Vosh to enter Path
-                B.
+                Vosh saved the shared catalog and a loadout for each profile. Each profile kept
+                every other setting, and a full copy of each old profile file waits in
+                profiles/legacy. Quit Vosh below, then open it again to use the catalog.
               </div>
             </div>
           )}
@@ -148,8 +149,9 @@ export function MigrationWizard({ onClose }: Props) {
           ) : (
             <>
               <span className="migration-wizard-hint">
-                applying writes catalog.toml + loadouts.toml and moves per-profile files into
-                profiles/legacy/. Vosh stays in legacy mode until you relaunch.
+                Applying moves your aliases, triggers, and macros into one shared catalog. Every
+                other setting stays with its profile, and Vosh copies each profile file to
+                profiles/legacy first.
               </span>
               <button
                 type="button"
@@ -250,8 +252,7 @@ function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
         )}
         {plan.conflicts.length > 0 && (
           <div className="migration-hint">
-            pick the variant you want preserved. unchecked profiles keep their version inside
-            profiles/legacy/ so nothing is permanently lost.
+            Pick the version to keep. The copies in profiles/legacy keep every version.
           </div>
         )}
       </Section>
@@ -283,8 +284,8 @@ function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
           </ul>
         )}
         <div className="migration-hint">
-          each loadout enables the groups its source profile contributed. the previously-active
-          profile becomes the sole initial active loadout so your day-one session matches today.
+          Each loadout turns on the groups its profile had on. The profile you use now becomes the
+          only active loadout, so your next session starts the same.
         </div>
       </Section>
     </>
