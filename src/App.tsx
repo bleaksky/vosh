@@ -1087,7 +1087,7 @@ function App() {
           if (termRef.current) {
             writeLive(`\r\n\x1b[31m[${payload.reason}]\x1b[0m\r\n`);
           }
-          pushToast({ kind: 'error', message: 'connection lost', meta: payload.reason });
+          pushToast({ kind: 'error', message: 'Connection lost', meta: payload.reason });
         }
       } else {
         setStatus(payload);
@@ -1098,7 +1098,7 @@ function App() {
         if (payload.kind === 'connected') {
           pushToast({
             kind: 'success',
-            message: 'connected',
+            message: 'Connected',
             meta: `${payload.host}:${payload.port}`,
           });
           const handle = termRef.current;
