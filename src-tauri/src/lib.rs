@@ -72,6 +72,7 @@ mod connection;
 mod exit_flush;
 mod fonts;
 mod gmcp_bind;
+mod hidden_input;
 mod import;
 mod input;
 mod launch;
