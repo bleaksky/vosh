@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "title": "Vosh",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 640,
+        "minHeight": 360,
+        "resizable": true,
+        "decorations": true,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "fullscreen": false,
+        "visible": false,
+        "dragDropEnabled": false
+      }
+    ]
+  }
+}
