@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { profilesList } from '../../lib/session';
 import { splitPane, type PaneLeaf, type SplitDir } from '../../lib/paneLayout';
+import { openSettingsTab } from '../../lib/settingsLink';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from './MenuSurface';
 import {
   closeHere,
-  openSettingsTab,
   paneToSplitIn,
   returnToCommandLine,
   showHereInstead,
