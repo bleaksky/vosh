@@ -19,7 +19,7 @@ A group can hold a page inside it, like the session logs at `general:logs`. Name
 
 A page that saves as you go takes `update` from `useSettingsAutoSave` in `legacy/`. `update(patch)` patches the config copy and saves the whole snapshot once typing settles. Pass `{ now: true }` for a discrete pick another window shows at once, like a theme or a toggle.
 
-A page built on its board lives in `pages/`. `pages/CharactersPage.tsx` is the Characters board, with its parts in `pages/characters/`. `pages/AppearancePage.tsx` is the Appearance board. Its parts sit in `pages/appearance/`. The split divider and sent command color rows are self contained, so either can move to another group by rendering it there with `config` and `update`. `pages/AutomationPage.tsx` is the Automation board, described under Automation below.
+A page built on its board lives in `pages/`. `pages/CharactersPage.tsx` is the Characters board, with its parts in `pages/characters/`. `pages/AppearancePage.tsx` is the Appearance board. Its parts sit in `pages/appearance/`. The split divider color lives only on Layout and the sent command color only on Input, so Appearance's Advanced does not show them. `pages/AutomationPage.tsx` is the Automation board, described under Automation below.
 
 `groups/GeneralGroup.tsx` is the General board, with the session log view in `groups/SessionLogs.tsx`. `groups/InputGroup.tsx` and `groups/LayoutGroup.tsx` are the Input and Layout boards. The old Appearance, Automation, and Characters placeholders, `groups/AppearanceGroup.tsx`, `groups/AutomationGroup.tsx`, and `groups/CharactersGroup.tsx`, no longer render, and they were the last pages to show old editors from `legacy/` inside `LegacyIsland`.
 

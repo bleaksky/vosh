@@ -46,8 +46,6 @@ const ADVANCED_ANCHORS: ReadonlySet<string> = new Set([
   'base-palette',
   'bright-bold',
   'font-stack',
-  'divider-color',
-  'sent-color',
 ]);
 
 /** A target that lands inside Advanced opens it. */
