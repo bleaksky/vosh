@@ -44,10 +44,11 @@ import {
   subscribeSplitDividerChanged,
   type StatePayload,
 } from './lib/session';
-import { applyAndBroadcastTheme } from './lib/theme';
+import { applyAndBroadcastTheme, getCurrentThemeId } from './lib/theme';
 import { loadFontStack } from './lib/fontLoader';
 import { defaultEnabledIds, PRESETS, presetTriggers } from './lib/presets';
-import { customToAppTheme, setCustomThemes } from './lib/themes';
+import { customToAppTheme, findTheme, setCustomThemes, themeTokens } from './lib/themes';
+import { parseHex, toRgba } from './lib/color';
 import { setBaseAnsi } from './lib/baseAnsi';
 import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
@@ -80,6 +81,26 @@ function applySplitDividerColor(color: string | null): void {
   if (nativeSurfaceEnabled()) {
     void invoke('native_surface_set_divider_color', { color }).catch(() => {});
   }
+}
+
+// Hand the native surface the chrome colors the page derives with its
+// theme tokens: the split divider, the selection, find matches in ANSI
+// yellow (28% for every match as Menus.dc.html draws them, stronger for
+// the current one), links in the accent, and the scrollbar in the
+// tertiary tone. Runs on every theme apply, so light themes never get
+// the renderer's dark defaults.
+function pushNativeChromeTokens(): void {
+  const theme = findTheme(getCurrentThemeId());
+  const tokens = themeTokens(theme);
+  const yellow = parseHex(theme.xterm.yellow);
+  void invoke('native_surface_set_tokens', {
+    divider: tokens.sep,
+    selection: tokens.selection,
+    findMatch: yellow ? toRgba(yellow, 0.28) : null,
+    currentMatch: yellow ? toRgba(yellow, 0.6) : null,
+    link: tokens.accent,
+    scrollbar: tokens.tertiary,
+  }).catch(() => {});
 }
 
 // Open Settings, or focus it, on the tab it last showed.
@@ -886,6 +907,17 @@ function App() {
       cancelled = true;
       unlisten?.();
     };
+  }, []);
+
+  // Keep the native surface's chrome colors on the theme. Every theme
+  // apply, from this window, a broadcast, or a profile switch, writes
+  // data-theme on the root, so one observer catches them all.
+  useEffect(() => {
+    if (!nativeSurfaceEnabled()) return;
+    pushNativeChromeTokens();
+    const observer = new MutationObserver(pushNativeChromeTokens);
+    observer.observe(document.documentElement, { attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
   }, []);
 
   // Clicks on the native surface are eaten by the opaque view, so the
