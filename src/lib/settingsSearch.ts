@@ -39,27 +39,52 @@ const at = (group: SettingsGroup, section?: string, anchor?: string): SettingsTa
 };
 
 export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
-  // General has no approved board yet. These point at its interim
-  // sections.
+  // General, from the approved board.
+  {
+    label: 'World',
+    keywords: 'connect connection mud server',
+    target: at('general', 'connection', 'world'),
+  },
+  {
+    label: 'Host and port',
+    keywords: 'connect connection address server',
+    target: at('general', 'connection', 'host'),
+  },
+  {
+    label: 'Use TLS',
+    keywords: 'connect connection secure ssl encrypted',
+    target: at('general', 'connection', 'tls'),
+  },
   {
     label: 'Check for updates',
-    keywords: 'update version install restart launch',
+    keywords: 'update version install restart',
     target: at('general', 'updates'),
   },
   {
-    label: 'Share settings across profiles',
-    keywords: 'scope global profile theme font keep last command',
+    label: 'Check for updates when Vosh opens',
+    keywords: 'update automatic launch start',
+    target: at('general', 'updates', 'auto-update'),
+  },
+  {
+    label: 'Keep the same for every character',
+    description: 'Turn one off and each character keeps its own.',
+    keywords: 'scope global profile share theme font size keep last command updates',
     target: at('general', 'scope'),
   },
   {
     label: 'Session logs',
-    keywords: 'log search history copy',
+    keywords: 'log saved sessions history lines',
+    target: at('general', 'session-logs'),
+  },
+  {
+    label: 'Search logs',
+    keywords: 'log history find copy text',
     target: at('general', 'logs'),
   },
   {
     label: 'GPU rendering',
-    keywords: 'webgl performance renderer',
-    target: at('general', 'rendering'),
+    keywords: 'advanced webgl performance renderer graphics',
+    target: at('general', 'advanced', 'gpu'),
     only: 'not-macos',
   },
 

@@ -1083,6 +1083,156 @@
   }
 }
 
+/* ── Session logs (SettingsGeneralLogs) ────────────────────────────── */
+
+/* The page pins its toolbar at y 48 and scrolls the results under it
+   from y 88 to the window's foot. */
+.st-logs {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.st-logs-bar {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 28px;
+  margin-top: 8px;
+}
+
+/* The pattern field gives way first when the window narrows. */
+.st-logs-query {
+  flex: 0 1 240px;
+  min-width: 120px;
+}
+
+.st-logs-count {
+  flex: 1 0 auto;
+  min-width: 0;
+  margin-left: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.st-logs-count[data-tone='danger'] {
+  color: var(--danger-text);
+}
+
+.st-logs-copy {
+  margin-left: 12px;
+}
+
+.st-logs-scope {
+  margin-left: 12px;
+}
+
+.st-logs-copy + .st-logs-scope {
+  margin-left: 8px;
+}
+
+.st-logs-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 12px;
+  padding-bottom: 12px;
+  overflow-y: auto;
+  outline: none;
+}
+
+.st-logs-results:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--r-row);
+}
+
+.st-logs-empty {
+  margin: 0;
+  padding: 12px 0;
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* Day headings are the Automation list's group heading: the first 32
+   tall, the rest 28 after a 16 px block that holds a divider line. */
+.st-logs-day {
+  height: 32px;
+  margin: 0;
+  padding: 12px 0 4px;
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.st-logs-group + .st-logs-group::before {
+  content: '';
+  display: block;
+  height: 1px;
+  margin: 7.5px 0;
+  background: var(--divider);
+}
+
+.st-logs-group + .st-logs-group .st-logs-day {
+  height: 28px;
+  padding-top: 8px;
+}
+
+.st-logs-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A dense row: the time in a 40 px column, then the line in the
+   terminal font with its own colors. */
+.st-logs-line {
+  display: flex;
+  align-items: flex-start;
+  min-height: 22px;
+  padding: 2.25px 0;
+}
+
+.st-logs-time {
+  flex: none;
+  width: 40px;
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 17.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.st-logs-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text);
+  font-family: var(--font-mud);
+  font-size: 13px;
+  line-height: 17.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* A match, the way the find bar marks one: ANSI yellow at 28%, set
+   inline from the theme, over the cell height. */
+.st-logs-match {
+  display: inline-block;
+  height: 17.5px;
+  padding: 0;
+  vertical-align: top;
+  background: transparent;
+  color: inherit;
+}
+
 /* ── Appearance ────────────────────────────────────────────────────── */
 
 /* The import hint and button at the right of the Theme heading. A deep

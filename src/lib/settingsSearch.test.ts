@@ -77,4 +77,16 @@ describe('searchSettingsRows', () => {
     expect(labels('gpu')).toEqual([]);
     expect(labels('gpu', { pathB: false, mac: false })).toEqual(['GPU rendering']);
   });
+
+  it('opens the GPU row inside General Advanced', () => {
+    const [row] = searchSettingsRows('gpu', { pathB: false, mac: false });
+    expect(row.target).toEqual({ group: 'general', section: 'advanced', anchor: 'gpu' });
+  });
+
+  it('finds the log view by the old tab id target', () => {
+    const [row] = searchSettingsRows('search logs', mac);
+    expect(row.label).toBe('Search logs');
+    expect(row.target).toEqual(resolveSettingsTarget('logs'));
+    expect(labels('saved sessions')[0]).toBe('Session logs');
+  });
 });
