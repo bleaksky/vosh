@@ -8,7 +8,7 @@ export { Card, type CardProps } from './Card';
 export { Chip, ChipButton, type ChipButtonProps, type ChipProps } from './Chip';
 export { ColorField, type ColorFieldProps } from './ColorField';
 export { cx } from './cx';
-export { Disclosure, type DisclosureProps } from './Disclosure';
+export { Disclosure, DisclosurePanel, type DisclosureProps } from './Disclosure';
 export { Field, type FieldProps } from './Field';
 export { FieldArea, type FieldAreaProps } from './FieldArea';
 export { IconButton, type IconButtonProps } from './IconButton';
