@@ -385,7 +385,7 @@ fn retag_group(profile_name: &str, current: Option<&str>) -> String {
 
 /// Try to collapse multiple alias variants of the same name into
 /// one. Returns `Some` when every variant carries identical user
-/// content (expansion, enabled, and PRE-RETAG group), `None`
+/// content (expansion, Lua body, enabled, and PRE-RETAG group), `None`
 /// when they diverge. The post-retag groups always differ for
 /// items from different profiles, so the comparison ignores the
 /// `group` field and falls back to the first variant's tagged
@@ -395,6 +395,7 @@ fn collapse_aliases(variants: &[(String, Alias)]) -> Option<Alias> {
     for (_, other) in &variants[1..] {
         if other.name != first.name
             || other.expansion != first.expansion
+            || other.script != first.script
             || other.enabled != first.enabled
         {
             return None;
@@ -610,6 +611,25 @@ mod tests {
             .collect();
         assert!(sources.contains(&"default"));
         assert!(sources.contains(&"warrior"));
+    }
+
+    #[test]
+    fn aliases_that_differ_only_in_their_lua_body_surface_as_conflict() {
+        let plain = Alias::new("bash", "bash %1");
+        let mut scripted = plain.clone();
+        scripted.script = Some("mud.send('bash ' .. args[2])".into());
+        let plan = analyze_profiles(&[
+            ("default".into(), profile_with(vec![plain], vec![], vec![])),
+            (
+                "warrior".into(),
+                profile_with(vec![scripted], vec![], vec![]),
+            ),
+        ]);
+        // One of them used to stand in for both, so the warrior lost its
+        // script without a word.
+        assert!(plan.auto_resolved.aliases.is_empty());
+        assert_eq!(plan.conflicts.len(), 1);
+        assert_eq!(plan.conflicts[0].name, "bash");
     }
 
     #[test]
