@@ -4,14 +4,20 @@
 //!
 //! ## What it does
 //!
-//! Each alias, trigger, and macro name that one or more profiles hold
-//! becomes one catalog item. When the copies differ only in their folder
-//! and in whether they are on, which the catalog groups carry (see
-//! below), the item is **auto-resolved** with no question. So are the
-//! copies of a preset trigger, since a launch installs the library
-//! version. When the copies differ in anything else, the item is a
-//! **conflict**, and the wizard shows each version with its profile and
-//! asks which to keep.
+//! Each alias and macro name that one or more profiles hold becomes one
+//! catalog item. When the copies differ only in their folder and in
+//! whether they are on, which the catalog groups carry (see below), the
+//! item is **auto-resolved** with no question. When the copies differ in
+//! anything else, the item is a **conflict**, and the wizard shows each
+//! version with its profile and asks which to keep, since the name is
+//! what you type or press and the catalog holds one of each.
+//!
+//! A trigger's name is only a label, so each version of a trigger stays,
+//! and the profiles that share one version share its copy. The version
+//! of the first profile keeps the name, and each other one adds the
+//! profiles that have it, such as `greet (Healer)`. The copies of a
+//! preset trigger always fold into one, since a launch installs the
+//! library version.
 //!
 //! ## Group names
 //!
@@ -116,8 +122,8 @@ pub(crate) struct MigrationPlan {
     /// source agreed on the content. Already carry their catalog group
     /// (see module docs).
     pub auto_resolved: GlobalCatalog,
-    /// Items with diverging variants. The wizard asks the user to pick
-    /// the one to keep.
+    /// Aliases and macros with diverging variants. The wizard asks the
+    /// user to pick the one to keep. A trigger keeps every version.
     pub conflicts: Vec<Conflict>,
     /// One loadout per source profile, with `enabled_groups` naming
     /// every catalog group on for that profile. Connection defaults,
@@ -380,14 +386,73 @@ fn keyed_entries<T: CatalogItem>(
     by_key.into_values().collect()
 }
 
-/// The triggers in `configs`, one entry per name. A name whose every
-/// copy is a preset trigger is a preset entry.
+/// The triggers in `configs`, one entry per version of each name. A name
+/// whose every copy is a preset trigger is one preset entry, since a
+/// launch installs the library version whichever copy the catalog keeps.
+/// The copies of any other trigger that are the same apart from their
+/// folder and whether they are on share an entry. A trigger's name is
+/// only a label, so each other version stays as an entry of its own,
+/// where an alias or a macro, whose name is what you type or press, can
+/// keep only one. The version of the first profile keeps the name, and
+/// each other one adds the profiles that have it, such as
+/// `greet (Healer)`, with a number when that name is taken too.
 fn trigger_entries(profiles: &[(String, ProfileConfig)]) -> Vec<Entry<Trigger>> {
-    let mut entries = keyed_entries(profiles, |c| &c.triggers);
-    for entry in &mut entries {
+    let mut entries = Vec::new();
+    let mut renamed = Vec::new();
+    for mut entry in keyed_entries(profiles, |c| &c.triggers) {
         entry.preset = entry.copies.iter().all(|(_, t)| t.preset.is_some());
+        if entry.preset {
+            entries.push(entry);
+            continue;
+        }
+        let mut versions: Vec<(String, Entry<Trigger>)> = Vec::new();
+        for (holder, trigger) in entry.copies {
+            let key = content_key(&trigger);
+            match versions.iter_mut().find(|(k, _)| *k == key) {
+                Some((_, version)) => version.copies.push((holder, trigger)),
+                None => versions.push((
+                    key,
+                    Entry {
+                        copies: vec![(holder, trigger)],
+                        preset: false,
+                    },
+                )),
+            }
+        }
+        let mut versions = versions.into_iter().map(|(_, version)| version);
+        entries.extend(versions.next());
+        renamed.extend(versions);
+    }
+    let mut taken: BTreeSet<String> = entries.iter().map(|e| e.copies[0].1.name.clone()).collect();
+    for mut entry in renamed {
+        let who: Vec<&str> = entry
+            .copies
+            .iter()
+            .map(|(holder, _)| profiles[*holder].0.as_str())
+            .collect();
+        let stem = format!("{} ({})", entry.copies[0].1.name, who.join(", "));
+        let mut name = stem.clone();
+        let mut n = 2;
+        while taken.contains(&name) {
+            name = format!("{stem} {n}");
+            n += 1;
+        }
+        taken.insert(name.clone());
+        for (_, trigger) in &mut entry.copies {
+            trigger.name.clone_from(&name);
+        }
+        entries.push(entry);
     }
     entries
+}
+
+/// What a copy holds apart from its folder and whether it is on, which
+/// the catalog group carries.
+fn content_key<T: CatalogItem>(item: &T) -> String {
+    let mut item = item.clone();
+    item.set_group(None);
+    item.set_enabled(true);
+    serde_json::to_string(&item).unwrap_or_default()
 }
 
 /// True when `list`, an `enabled_presets` list, has `preset` on. An
@@ -833,8 +898,13 @@ mod tests {
         assert_eq!(plan.conflicts[0].name, "bash");
     }
 
+    fn trigger_named<'a>(plan: &'a MigrationPlan, name: &str) -> &'a Trigger {
+        let found = plan.auto_resolved.triggers.iter().find(|t| t.name == name);
+        found.unwrap_or_else(|| panic!("no trigger {name}"))
+    }
+
     #[test]
-    fn divergent_triggers_surface_as_conflict() {
+    fn divergent_triggers_keep_each_version() {
         let plan = analyze_profiles(&[
             (
                 "default".into(),
@@ -845,9 +915,57 @@ mod tests {
                 profile_with(vec![], vec![trigger("greet", "^hi$", "GREETINGS")], vec![]),
             ),
         ]);
-        assert_eq!(plan.conflicts.len(), 1);
-        assert_eq!(plan.conflicts[0].kind, ItemKind::Trigger);
-        assert_eq!(plan.conflicts[0].name, "greet");
+        // A trigger's name is only a label, so both versions stay, each
+        // on for the profile that had it. The wizard used to keep one for
+        // both of them.
+        assert!(plan.conflicts.is_empty());
+        let default = trigger_named(&plan, "greet");
+        assert_eq!(default.group.as_deref(), Some("(default)"));
+        assert!(matches!(
+            &default.actions[0],
+            TriggerAction::Replace { template } if template == "HELLO"
+        ));
+        let warrior = trigger_named(&plan, "greet (warrior)");
+        assert_eq!(warrior.group.as_deref(), Some("(warrior)"));
+        assert!(matches!(
+            &warrior.actions[0],
+            TriggerAction::Replace { template } if template == "GREETINGS"
+        ));
+    }
+
+    #[test]
+    fn profiles_that_share_a_version_of_a_trigger_share_its_copy() {
+        let hello = trigger("greet", "^hi$", "HELLO");
+        let mut in_folder = hello.clone();
+        in_folder.group = Some("social".into());
+        let plan = analyze_profiles(&[
+            ("default".into(), profile_with(vec![], vec![hello], vec![])),
+            (
+                "Healer".into(),
+                profile_with(vec![], vec![in_folder], vec![]),
+            ),
+            (
+                "Bard".into(),
+                profile_with(vec![], vec![trigger("greet", "^hi$", "HI")], vec![]),
+            ),
+            (
+                "Rich".into(),
+                profile_with(vec![], vec![trigger("greet (Bard)", "^yo$", "YO")], vec![]),
+            ),
+        ]);
+        assert!(plan.conflicts.is_empty());
+        assert_eq!(plan.auto_resolved.triggers.len(), 3);
+        assert_eq!(
+            trigger_named(&plan, "greet").group.as_deref(),
+            Some("social")
+        );
+        // The name the Bard's version would take is a trigger of its own.
+        let bard = trigger_named(&plan, "greet (Bard) 2");
+        assert_eq!(bard.group.as_deref(), Some("(Bard)"));
+        assert_eq!(
+            trigger_named(&plan, "greet (Bard)").group.as_deref(),
+            Some("(Rich)")
+        );
     }
 
     #[test]

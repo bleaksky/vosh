@@ -6273,6 +6273,43 @@ mod tests {
             assert!(items_on(&p).is_empty());
         }
 
+        #[tokio::test]
+        async fn each_character_keeps_its_own_version_of_a_trigger() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            for (name, command) in [
+                (DEFAULT_PROFILE_NAME, "wave $1"),
+                ("Healer", "cast bless $1"),
+            ] {
+                ProfileConfig {
+                    triggers: vec![send_trigger("greet", r"^(\w+) arrives", command)],
+                    ..ProfileConfig::default()
+                }
+                .save(&set.profile_path(name))
+                .unwrap();
+            }
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            let plan = super::super::analyze_migration(&state, dir.path())
+                .await
+                .unwrap();
+            assert!(plan.conflicts.is_empty());
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+
+            // The wizard kept one version for both, so the Healer waved.
+            for (name, sent) in [
+                (DEFAULT_PROFILE_NAME, "wave Bob"),
+                ("Healer", "cast bless Bob"),
+            ] {
+                let state = relaunch_as(dir.path(), name).await;
+                let p = state.profile.lock().await;
+                let line = vosh_trigger::process(&p.triggers, b"Bob arrives");
+                assert_eq!(line.sends, [sent], "{name}");
+            }
+        }
+
         /// A trigger that sends `command` on lines matching `pattern`.
         fn send_trigger(name: &str, pattern: &str, command: &str) -> vosh_trigger::Trigger {
             vosh_trigger::Trigger {

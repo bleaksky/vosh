@@ -84,6 +84,7 @@ describe('the help on loadouts', () => {
     const text = body('characters-and-data.loadouts');
     expect(text).toContain('`combat (Healer)` holds the combat items only the Healer had');
     expect(text).toContain('`#group combat on` and `#group combat off` still turn on and off');
+    expect(text).toContain('keeps each version, and the second one takes a name');
   });
 
   it('says where the items live in loadout mode', () => {

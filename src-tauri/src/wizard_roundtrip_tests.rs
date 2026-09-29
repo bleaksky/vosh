@@ -15,9 +15,10 @@
 //! The presets that are on are shared in loadout mode, so where the
 //! characters had different preset lists, each character is compared to
 //! the per profile launch with the shared list in place of its own.
-//! Where two characters had different versions of one item, the wizard
-//! keeps the one you pick, so each character is compared to that
-//! version.
+//! Where two characters had different versions of one alias or macro,
+//! the wizard keeps the one you pick, so each character is compared to
+//! that version. Each version of a trigger stays, under a name of its
+//! own, so a trigger is compared without its name.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -204,15 +205,14 @@ fn alias_row(a: &Alias) -> String {
     format!("alias\t{}\t{}", a.name, serde_json::to_string(&a).unwrap())
 }
 
+/// A trigger's name is only a label, and the wizard gives each other
+/// version of one a name of its own, so the line leaves the name out too.
 fn trigger_row(t: &Trigger) -> String {
     let mut t = t.clone();
+    t.name.clear();
     t.group = None;
     t.enabled = true;
-    format!(
-        "trigger\t{}\t{}",
-        t.name,
-        serde_json::to_string(&t).unwrap()
-    )
+    format!("trigger\t\t{}", serde_json::to_string(&t).unwrap())
 }
 
 fn macro_row(m: &Macro) -> String {
@@ -671,16 +671,16 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         .await
         .map_err(|e| format!("analyze: {e}"))?;
     let mut resolutions = Vec::new();
-    let mut chosen: BTreeMap<String, Option<String>> = BTreeMap::new();
+    let mut chosen: BTreeMap<String, String> = BTreeMap::new();
     for conflict in &plan.conflicts {
         let variant = &conflict.variants[rng.below(conflict.variants.len())];
         let row = match &variant.item {
-            ItemPayload::Alias { item } => Some(alias_row(item)),
-            // The launch installs the library version of a preset
-            // trigger whichever version you keep.
-            ItemPayload::Trigger { item } if item.preset.is_some() => None,
-            ItemPayload::Trigger { item } => Some(trigger_row(item)),
-            ItemPayload::Macro { item } => Some(macro_row(item)),
+            ItemPayload::Alias { item } => alias_row(item),
+            // Each version of a trigger stays, so none is asked about.
+            ItemPayload::Trigger { item } => {
+                return Err(format!("the wizard asks about trigger {}", item.name));
+            }
+            ItemPayload::Macro { item } => macro_row(item),
         };
         chosen.insert(
             format!("{}\t{}", kind_word(conflict.kind), conflict.name),
@@ -696,8 +696,8 @@ async fn round_trip(seed: u64) -> Result<(), String> {
         let mut rows: Vec<String> = rows
             .iter()
             .map(|row| match chosen.get(&row_key(row)) {
-                Some(Some(kept)) => kept.clone(),
-                _ => row.clone(),
+                Some(kept) => kept.clone(),
+                None => row.clone(),
             })
             .collect();
         rows.sort();
