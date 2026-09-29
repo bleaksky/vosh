@@ -196,11 +196,11 @@ pub fn process_with_plain(
     }
 
     // Full-line wash. The first wash-flagged highlight (priority order)
-    // supplies the tint: the whole line gets the wash color's quarter-
+    // supplies the tint: the line's text gets the wash color's quarter-
     // strength truecolor background. The native renderer recognizes
-    // that exact tint on a row's first cell and draws the left-edge
-    // accent bar from it, so the wash bytes are the entire contract —
-    // no side channel, and the bar survives resize, reflow, and
+    // that exact tint on a row's first cell and paints the field across
+    // the whole row, so the wash bytes are the entire contract, with no
+    // side channel, and the field survives resize, reflow, and
     // scrollback reload wherever the bytes do.
     let wash_style = highlights.iter().find(|(_, s)| s.wash).map(|(_, s)| s);
     let wash_bg = wash_style.map(|s| s.wash_source().wash_tint());
@@ -223,11 +223,12 @@ pub fn process_with_plain(
         // wrap whatever the user ends up seeing.
         text = apply_highlights(&text, &highlights, wash_open.as_deref());
         if let Some(open) = &wash_open {
-            // `ESC [2K` with the background active erases the whole row
-            // to the wash color (BCE), so the tint runs edge to edge in
-            // both renderers; the final reset keeps the following line
-            // clean.
-            text = format!("{open}\x1b[2K{text}\x1b[0m");
+            // The tint covers the text only. Erasing the row to the wash
+            // color would fill its blank cells too, and a narrower
+            // terminal wraps those onto a tinted row of their own. The
+            // native renderer extends the field to the full width. The
+            // final reset keeps the following line clean.
+            text = format!("{open}{text}\x1b[0m");
         }
         Some(text)
     } else {
@@ -694,8 +695,10 @@ mod tests {
         let text = r.display.unwrap();
         // Quarter-strength canonical yellow (0xcd/4 = 0x33 = 51) —
         // NamedColor::Yellow.wash_tint(), the exact value the native
-        // renderer detects for the accent bar.
-        assert!(text.starts_with("\x1b[33;48;2;51;51;0m\x1b[2K"));
+        // renderer detects to paint the row's field. No row erase, so
+        // a narrower terminal never wraps blank tinted cells.
+        assert!(text.starts_with("\x1b[33;48;2;51;51;0mYour"));
+        assert!(!text.contains("\x1b[2K"));
         assert!(text.ends_with("\x1b[0m"));
         // The matched-text close re-opens the wash attributes so both the
         // field tint and the line's mark color survive past the
@@ -724,7 +727,7 @@ mod tests {
         let text = r.display.unwrap();
         // Wash derives from the explicit red bg (0xcd/4 = 51), not the
         // white fg.
-        assert!(text.starts_with("\x1b[37;48;2;51;0;0m\x1b[2K"));
+        assert!(text.starts_with("\x1b[37;48;2;51;0;0m"));
     }
 
     #[test]

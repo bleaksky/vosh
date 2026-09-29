@@ -1562,20 +1562,20 @@ impl CellRenderer {
         let (find_matches, find_active_match) = crate::term_grid::find_snapshot();
         // Wash paint. Washed lines carry a distinctive quarter-strength
         // truecolor background (NamedColor::wash_tint in the trigger
-        // crate) on every cell of the row. That value is a SIGNAL, not
+        // crate) on the text of the line. That value is a SIGNAL, not
         // the final color: the bytes stay canonical so they survive
         // resize, reflow, and scrollback reload, and the row is painted
         // here in the ACTIVE THEME's color instead. Canonical teal on a
         // warm near-black ground never matched the palette around it.
         //
-        // Each entry maps the canonical tint to the pair this renderer
-        // draws: the full-strength theme color for the left-edge accent
-        // bar, and the same color mixed down into the terminal ground
-        // for the field behind the text.
+        // Each entry maps the canonical tint to the field this renderer
+        // draws: the theme's color for that mark mixed down into the
+        // terminal ground. There is no edge bar, so a washed row reads
+        // as one quiet band, the way the rest of the window marks rows.
         // How far the field carries toward the mark color. Low enough
         // that a washed row reads as marked rather than painted.
         let wash_field_mix = 0.18_f32;
-        let wash_paint: HashMap<[u8; 3], (Rgba, Rgba)> = vosh_trigger::NamedColor::ALL
+        let wash_paint: HashMap<[u8; 3], Rgba> = vosh_trigger::NamedColor::ALL
             .iter()
             .enumerate()
             .map(|(idx, c)| {
@@ -1590,7 +1590,7 @@ impl CellRenderer {
                     g: mix(mark.g, ground.g),
                     b: mix(mark.b, ground.b),
                 };
-                ([tr, tg, tb], (rgb_to_rgba(mark), rgb_to_rgba(field)))
+                ([tr, tg, tb], rgb_to_rgba(field))
             })
             .collect();
         let finding = !find_matches.is_empty();
@@ -1710,6 +1710,33 @@ impl CellRenderer {
         // Shared per-cell styling: colors, selection, find highlight, hover,
         // and the underline/strike marks. Region closures wrap this with
         // their own line/pixel mapping.
+        // Washed rows among the visible lines. A row is washed when its
+        // first cell carries a wash signal and it holds text. The field
+        // then runs the full width, painted here rather than by erasing
+        // the row in the bytes, so a narrower terminal never wraps the
+        // tint onto a row of its own. A row of signal-colored blanks is
+        // the wrapped tail of an older wash that did erase its row, and
+        // paints as plain ground.
+        let mut washed: HashMap<i32, Rgba> = HashMap::new();
+        for reg in &regions {
+            for row in 0..reg.vis {
+                let grid_line = reg.line0 + row as i32;
+                let (_, _, first_bg, _) = grid.cell_at_line(grid_line, 0);
+                let Color::Spec(rgb) = first_bg else {
+                    continue;
+                };
+                let Some(&field) = wash_paint.get(&[rgb.r, rgb.g, rgb.b]) else {
+                    continue;
+                };
+                let has_text = (0..cols).any(|col| {
+                    let (ch, _, _, _) = grid.cell_at_line(grid_line, col);
+                    ch != ' ' && ch != '\0'
+                });
+                if has_text {
+                    washed.insert(grid_line, field);
+                }
+            }
+        }
         let style_cell = |grid_line: i32,
                           col: usize,
                           y_top: f32,
@@ -1717,11 +1744,19 @@ impl CellRenderer {
                           strikeouts: &mut Marks| {
             let (ch, fg, bg, flags) = grid.cell_at_line(grid_line, col);
             let (mut fg_rgba, mut bg_rgba) = styled_colors(fg, bg, flags);
-            // Repaint the canonical wash signal in theme colors. Runs
+            // Repaint the canonical wash signal in theme colors, and carry
+            // a washed row's field across its default-colored cells. Runs
             // before selection and find so both still win over a washed
             // row, the same as any other background.
-            if let Color::Spec(rgb) = bg {
-                if let Some(&(_, field)) = wash_paint.get(&[rgb.r, rgb.g, rgb.b]) {
+            let field = washed.get(&grid_line).copied();
+            let signal =
+                matches!(bg, Color::Spec(rgb) if wash_paint.contains_key(&[rgb.r, rgb.g, rgb.b]));
+            if signal {
+                bg_rgba = field.unwrap_or_else(|| {
+                    styled_colors(fg, Color::Named(NamedColor::Background), flags).1
+                });
+            } else if let Some(field) = field {
+                if matches!(bg, Color::Named(NamedColor::Background)) && !flags.inverse {
                     bg_rgba = field;
                 }
             }
@@ -1808,25 +1843,6 @@ impl CellRenderer {
                     uv_min: solid_uv.0,
                     uv_max: solid_uv.1,
                 });
-            }
-            // Wash accent bars: one slim full-height quad at the left
-            // edge of each washed row. Width scales with the cell so it
-            // lands near 2 logical px on hidpi surfaces.
-            let bar_w = (cell_h / 8.0).clamp(2.0, 4.0);
-            for row in 0..reg.vis {
-                let grid_line = reg.line0 + row as i32;
-                let (_, _, bg, _) = grid.cell_at_line(grid_line, 0);
-                if let Color::Spec(rgb) = bg {
-                    if let Some(&(bar, _)) = wash_paint.get(&[rgb.r, rgb.g, rgb.b]) {
-                        instances.push(CellInstance {
-                            offset: [0.0, reg.y0 + row as f32 * cell_h],
-                            size: [bar_w, cell_h],
-                            color: bar,
-                            uv_min: solid_uv.0,
-                            uv_max: solid_uv.1,
-                        });
-                    }
-                }
             }
             instances.extend(glyphs);
             region_ranges.push(start..instances.len() as u32);
