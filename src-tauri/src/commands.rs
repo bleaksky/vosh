@@ -5622,16 +5622,80 @@ mod tests {
 
             // A second run would copy the files without their items over
             // the only copy that still holds them.
-            assert_eq!(
-                refused(&state, dir.path()).await,
-                "Vosh found copies of your profile files in profiles/legacy from an earlier \
-                 shared catalog and will not save over them. Move the legacy folder out of the \
-                 profiles folder to build a new catalog."
-            );
+            assert_eq!(refused(&state, dir.path()).await, LEGACY_REFUSAL);
             assert_eq!(read(&legacy), copy);
             assert_eq!(ProfileConfig::load(&legacy).unwrap().aliases[0].name, "hh");
             assert_eq!(read(&set.profile_path("Healer")), healer);
             assert!(!catalog_path(dir.path()).exists());
+        }
+
+        const LEGACY_REFUSAL: &str =
+            "Vosh found copies of your profile files in profiles/legacy from an earlier shared \
+             catalog and will not save over them. The copies hold your aliases, triggers, and \
+             macros as they were before that run. Quit Vosh, copy them back over the files in the \
+             profiles folder, and move the legacy folder out of the profiles folder. Then open \
+             Vosh again to build a new catalog.";
+
+        #[tokio::test]
+        async fn following_the_refusals_builds_the_catalog_again_with_every_item() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let names = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"];
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            for (n, name) in names.iter().enumerate() {
+                character(name, n as u32 + 1, &[])
+                    .save(&set.profile_path(name))
+                    .unwrap();
+            }
+            let mut before = Vec::new();
+            for name in names {
+                before.push(items_on(
+                    &*relaunch_as(dir.path(), name).await.profile.lock().await,
+                ));
+            }
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+
+            // Later you want to build the catalog again, and you do what
+            // each refusal says, in turn.
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            let aside = tempfile::tempdir().unwrap();
+            assert_eq!(
+                refused(&state, dir.path()).await,
+                "You already have a shared catalog, so Vosh will not build another one over it."
+            );
+            let catalog = catalog_path(dir.path());
+            std::fs::rename(&catalog, aside.path().join("catalog.toml")).unwrap();
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            assert!(refused(&state, dir.path())
+                .await
+                .starts_with("Vosh found loadouts.toml"));
+            let loadouts = loadouts_path(dir.path());
+            std::fs::rename(&loadouts, aside.path().join("loadouts.toml")).unwrap();
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            assert_eq!(refused(&state, dir.path()).await, LEGACY_REFUSAL);
+            // The refusal used to say only to move the legacy folder out.
+            // The wizard then built the catalog from the files without
+            // their items, and every character came back with nothing.
+            let legacy = crate::loadout_store::legacy_dir(dir.path());
+            for entry in std::fs::read_dir(&legacy).unwrap() {
+                let entry = entry.unwrap();
+                let back = set.profile_path(entry.path().file_stem().unwrap().to_str().unwrap());
+                std::fs::copy(entry.path(), back).unwrap();
+            }
+            std::fs::rename(&legacy, aside.path().join("legacy")).unwrap();
+
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+            for (n, name) in names.iter().enumerate() {
+                let state = relaunch_as(dir.path(), name).await;
+                assert!(state.global_catalog.lock().await.is_some());
+                assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+            }
         }
 
         #[tokio::test]

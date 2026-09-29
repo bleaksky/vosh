@@ -363,7 +363,9 @@ pub(crate) fn load_path_b_at_launch(
 /// Vosh could not read at launch stays refused even once it is gone. It
 /// also refuses while profiles/legacy holds a copy from an earlier run,
 /// which may be the only copy of your items, since a run over files an
-/// earlier run took the items out of would copy those over it.
+/// earlier run took the items out of would copy those over it. That
+/// refusal says to copy them back first, since a catalog built from the
+/// files without their items would leave every character with nothing.
 pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
     if journal_path(app_data).exists() {
         return Some(
@@ -393,8 +395,10 @@ pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
     if legacy_copies_present(app_data) {
         return Some(
             "Vosh found copies of your profile files in profiles/legacy from an earlier shared \
-             catalog and will not save over them. Move the legacy folder out of the profiles \
-             folder to build a new catalog.",
+             catalog and will not save over them. The copies hold your aliases, triggers, and \
+             macros as they were before that run. Quit Vosh, copy them back over the files in the \
+             profiles folder, and move the legacy folder out of the profiles folder. Then open \
+             Vosh again to build a new catalog.",
         );
     }
     None

@@ -73,6 +73,11 @@ describe('the help on loadouts', () => {
     expect(text).toContain('The migration wizard runs once');
     expect(text).toContain('while `profiles/legacy/` holds the copies from an earlier run');
     expect(text).toContain('or while an earlier run waits to finish at the next launch');
+    // Moving the legacy folder out alone left the catalog to be built
+    // from files without their items.
+    expect(text).toContain(
+      'copy the files in `profiles/legacy/` back over the ones in `profiles/`',
+    );
   });
 
   it('says where the items live in loadout mode', () => {
