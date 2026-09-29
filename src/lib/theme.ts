@@ -42,7 +42,12 @@ const DARK_QUERY = '(prefers-color-scheme: dark)';
 
 let cleanupContrastListener: (() => void) | null = null;
 let cleanupSchemeListener: (() => void) | null = null;
-let currentThemeId: string = DEFAULT_THEME_ID;
+// The theme on screen. Before the first apply that is the one the
+// startup paint put there (src/prepaint.ts runs before this module), so
+// the terminal mounts on its palette instead of the default theme's.
+// A custom theme is not loaded yet at mount, and the terminal falls
+// back to the default theme until the config arrives.
+let currentThemeId: string = bootPaintSide()?.id ?? DEFAULT_THEME_ID;
 let windowAppearance: Appearance | 'system' | null = null;
 let themePrefs: ThemePrefs | null = null;
 let followingSystem = false;

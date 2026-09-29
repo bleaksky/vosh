@@ -308,6 +308,20 @@ describe('the paint cache', () => {
     expect(backdrops()).toEqual([]);
   });
 
+  it('starts on the theme the startup paint put on screen', async () => {
+    const first = await import('./theme');
+    expect(first.getCurrentThemeId()).toBe('obsidian-ember');
+    first.applyThemePrefs(prefs({ theme: 'vellum' }));
+
+    // The next window starts from that cache. The terminal reads the
+    // id when it mounts, before the config arrives.
+    vi.resetModules();
+    const { prepaintTheme } = await import('./themePaint');
+    prepaintTheme();
+    const theme = await import('./theme');
+    expect(theme.getCurrentThemeId()).toBe('vellum');
+  });
+
   it('says whether the startup paint already shows the active theme', async () => {
     const first = await import('./theme');
     first.applyThemePrefs(prefs({ theme: 'vellum' }));
