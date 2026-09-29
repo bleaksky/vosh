@@ -11,6 +11,8 @@ fixtures/
   gmcp/      GMCP message captures.
   mccp/      MCCP compressed stream captures.
   pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.
+  themes/    One theme file per format the Appearance import reads (Ghostty,
+             iTerm2, Kitty, Alacritty TOML, legacy Alacritty YAML).
 ```
 
 ## Capturing From Aabahran
