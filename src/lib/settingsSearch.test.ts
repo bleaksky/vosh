@@ -82,6 +82,15 @@ describe('searchSettingsRows', () => {
     expect(advanced?.target).toEqual({ group: 'input', section: 'advanced', anchor: 'prompt' });
   });
 
+  it('finds the Layout rows', () => {
+    expect(labels('vitals')).toContain('Density');
+    expect(labels('one line')).toEqual(['Density']);
+    expect(labels('panel width')[0]).toBe('Width');
+    expect(labels('divider')).toEqual(['Divider color']);
+    const divider = searchSettingsRows('divider', mac)[0];
+    expect(divider.target).toEqual({ group: 'layout', section: 'split', anchor: 'divider-color' });
+  });
+
   it('hides GPU rendering on macOS', () => {
     expect(labels('gpu')).toEqual([]);
     expect(labels('gpu', { pathB: false, mac: false })).toEqual(['GPU rendering']);

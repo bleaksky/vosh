@@ -1,24 +1,197 @@
+import { useEffect, useState } from 'react';
+import { PANEL_WIDTH_MAX, PANEL_WIDTH_MIN } from '../../../lib/paneLayout';
+import { isMacPlatform, shortcutKeys, shortcutLabel } from '../../../lib/palette';
+import { profilePossessive } from '../../../lib/profileLabel';
+import {
+  profilesList,
+  subscribeProfileSwitched,
+  subscribeProfilesChanged,
+  type UiConfig,
+  type VitalsDensity,
+} from '../../../lib/session';
+import {
+  panelWidthOf,
+  setPanelOpen,
+  setPanelWidth,
+  usePanelLayout,
+} from '../../panel/panelLayoutStore';
+import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
-import { Button, Row, Section } from '../ui';
+import {
+  ColorField,
+  Keycap,
+  LinkRow,
+  NumberField,
+  Row,
+  Section,
+  Segmented,
+  Toggle,
+  type SegmentedOption,
+} from '../ui';
 
-// Layout has no approved board yet, and nothing the old window showed
-// belongs here now: the vitals layouts, dock zones, chip style, and
-// moons position went with the One Window frame, and the panel layout
-// and tracked affects moved to Characters. This block says where to
-// look until the Layout board lands.
-export function LayoutGroup({ navigate }: SettingsPageProps) {
+// Settings, Layout (SettingsLayout.dc.html). How the window is
+// arranged. The Panel card edits the panel of the character you are
+// playing, named in its heading, and follows a profile switch live.
+// Show the panel and Width write that profile's pane layout through
+// the panel layout store, so the main window follows at once. What
+// each character keeps, its panes and tracked affects, stays in
+// Characters, which the last Panel row opens. Vitals and Split
+// terminal save with the rest of the config.
+
+const PANEL_KEYS = 'Mod+Shift+L';
+const SPLIT_KEYS = 'Mod+\\';
+
+/** The live profile's name, or null until it loads. Follows a switch
+ *  and a rename. */
+function useActiveProfile(): string | null {
+  const [active, setActive] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const unsubs: (() => void)[] = [];
+    const reload = () =>
+      profilesList()
+        .then((list) => {
+          if (!cancelled) setActive(list.active);
+        })
+        .catch(() => {});
+    void reload();
+    const keep = (pending: Promise<() => void>) =>
+      void pending.then((fn) => {
+        if (cancelled) fn();
+        else unsubs.push(fn);
+      });
+    keep(
+      subscribeProfileSwitched((name) => {
+        if (!cancelled) setActive(name);
+      }),
+    );
+    keep(
+      subscribeProfilesChanged(() => {
+        if (!cancelled) void reload();
+      }),
+    );
+    return () => {
+      cancelled = true;
+      for (const fn of unsubs) fn();
+    };
+  }, []);
+  return active;
+}
+
+export function LayoutGroup({ config, setConfig, onError, navigate }: SettingsPageProps) {
+  const { update } = useSettingsAutoSave(setConfig, onError);
+  const mac = isMacPlatform();
+  const profile = useActiveProfile();
+  const layout = usePanelLayout();
+  const owner = profile === null ? null : profilePossessive(profile);
+
   return (
-    <Section id="panel" title="Panel">
-      <div data-interim="">
+    <>
+      <Section id="panel" title={owner === null ? 'Panel' : `${owner} panel`}>
         <Row
-          label="Panel layout and tracked affects"
-          description="Arrange panes from the more button on each pane. Characters keeps each character's panes and tracked affects."
+          label="Show the panel"
+          description="When you hide it, your vitals move to the status line."
+          anchor="show-panel"
         >
-          <Button onClick={() => navigate({ group: 'characters', anchor: 'layout' })}>
-            Open Characters
-          </Button>
+          <span className="st-control-group">
+            <span className="st-keys" aria-hidden="true">
+              {shortcutKeys(PANEL_KEYS, mac).map((key) => (
+                <Keycap key={key}>{key}</Keycap>
+              ))}
+            </span>
+            <Toggle
+              checked={layout?.panel_open ?? true}
+              disabled={layout === null}
+              aria-keyshortcuts={mac ? 'Meta+Shift+L' : 'Control+Shift+L'}
+              onChange={setPanelOpen}
+            />
+          </span>
         </Row>
-      </div>
+        <Row label="Width" description="You can also drag the panel's edge." anchor="panel-width">
+          <NumberField
+            value={panelWidthOf(layout)}
+            disabled={layout === null}
+            onChange={setPanelWidth}
+            min={PANEL_WIDTH_MIN}
+            max={PANEL_WIDTH_MAX}
+            step={10}
+            unit="pt"
+            unitName="points"
+          />
+        </Row>
+        <LinkRow
+          label="Panes and tracked affects"
+          description={
+            owner === null
+              ? 'Vosh saves these for each character. Open Characters to change them.'
+              : `Vosh saves these for each character. Open Characters to change ${owner}.`
+          }
+          anchor="panes"
+          onClick={() =>
+            navigate(
+              profile === null
+                ? { group: 'characters' }
+                : { group: 'characters', section: profile },
+            )
+          }
+        />
+      </Section>
+
+      {config && <VitalsSection config={config} update={update} />}
+
+      {config && (
+        <Section id="split" title="Split terminal">
+          <Row
+            label="Divider color"
+            description={`Scroll up or press ${shortcutLabel(SPLIT_KEYS, mac)} to split the terminal.`}
+            anchor="divider-color"
+          >
+            <ColorField
+              value={config.split_divider_color ?? ''}
+              onChange={(color) => update({ split_divider_color: color || null })}
+              allowEmpty
+              placeholder="Theme default"
+              // The divider the terminal draws while no color is set:
+              // the native grid's hairline on macOS, the tertiary tone
+              // in the web terminal elsewhere.
+              emptySwatch={mac ? 'var(--sep)' : 'var(--tertiary)'}
+              pickerLabel="Choose a divider color"
+            />
+          </Row>
+        </Section>
+      )}
+    </>
+  );
+}
+
+const DENSITIES: readonly SegmentedOption<VitalsDensity>[] = [
+  { value: 'rows', label: 'Rows' },
+  { value: 'line', label: 'One line' },
+];
+
+/** The vitals under the panel's panes. One row per option, so the
+ *  options the VitalsOptions board settles on join Density here as
+ *  rows of this card. */
+function VitalsSection({
+  config,
+  update,
+}: {
+  config: UiConfig;
+  update: (patch: Partial<UiConfig>) => void;
+}) {
+  return (
+    <Section id="vitals" title="Vitals">
+      <Row
+        label="Density"
+        description="One line fits Health, Mana, and Moves on a single row."
+        anchor="density"
+      >
+        <Segmented
+          options={DENSITIES}
+          value={config.vitals_density}
+          onChange={(density) => update({ vitals_density: density })}
+        />
+      </Row>
     </Section>
   );
 }

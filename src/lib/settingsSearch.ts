@@ -153,18 +153,36 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'advanced family fallback css typeface',
     target: at('appearance', 'advanced', 'font-stack'),
   },
-  {
-    label: 'Split divider color',
-    description: 'The line between live output and scrollback while you split the terminal.',
-    keywords: 'advanced',
-    target: at('appearance', 'advanced', 'divider-color'),
-  },
 
-  // Layout has no approved board yet.
+  // Layout, from the approved board.
   {
-    label: 'Panel and panes',
-    keywords: 'panel pane split vitals',
-    target: at('layout', 'panel'),
+    label: 'Show the panel',
+    description: 'When you hide it, your vitals move to the status line.',
+    keywords: 'hide panel sidebar right',
+    target: at('layout', 'panel', 'show-panel'),
+  },
+  {
+    label: 'Width',
+    description: "You can also drag the panel's edge.",
+    keywords: 'panel width size wide narrow points',
+    target: at('layout', 'panel', 'panel-width'),
+  },
+  {
+    label: 'Panes and tracked affects',
+    description: 'Vosh saves these for each character.',
+    keywords: 'panel panes layout map affects characters',
+    target: at('layout', 'panel', 'panes'),
+  },
+  {
+    label: 'Density',
+    description: 'One line fits Health, Mana, and Moves on a single row.',
+    keywords: 'vitals rows one line compact health mana moves',
+    target: at('layout', 'vitals', 'density'),
+  },
+  {
+    label: 'Divider color',
+    keywords: 'split terminal scrollback divider line',
+    target: at('layout', 'split', 'divider-color'),
   },
 
   // Input, from the approved board.
