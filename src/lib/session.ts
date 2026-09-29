@@ -338,10 +338,21 @@ export async function onTarget(cb: (payload: TargetPayload) => void): Promise<Un
   });
 }
 
+/** The tick timer as the session loop reports it on session://tick,
+ *  four times a second and on every tick. */
 export interface TickPayload {
   enabled: boolean;
   interval_ms: number;
+  /** Time left until the expected tick, 0 once it has passed. */
   remaining_ms: number;
+  /** Time since the last tick. It keeps growing past the interval
+   *  while the game runs late. */
+  elapsed_ms: number;
+  /** The expected tick has come and the game's tick has not. */
+  overdue: boolean;
+  /** The game's own tick decides when the timer fires. */
+  synced: boolean;
+  /** This report is the tick itself, so the sound plays once. */
   fired: boolean;
   sound: boolean;
 }
