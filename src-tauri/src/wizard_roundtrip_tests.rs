@@ -233,15 +233,16 @@ fn row_key(row: &str) -> String {
 }
 
 /// What `config` holds besides the aliases, triggers, and macros, the
-/// preset list the catalog owns, and the group checkbox lists, which name
-/// the catalog groups in loadout mode. As TOML, so it compares every
-/// field.
+/// preset list the catalog owns, and the group checkbox lists and the
+/// folder map, which name the catalog groups in loadout mode. As TOML, so
+/// it compares every field.
 fn settings(mut config: ProfileConfig) -> String {
     config.clear_catalog_items();
     config.ui.enabled_presets.clear();
     config.disabled_alias_groups.clear();
     config.disabled_trigger_groups.clear();
     config.disabled_macro_groups.clear();
+    config.group_folders = crate::profile_config::GroupFolders::default();
     config.to_toml().unwrap()
 }
 
@@ -522,26 +523,62 @@ struct Before {
     /// The items it has on, with the shared preset list in place of its
     /// own.
     on: Vec<String>,
+    /// The items it has on after each step of [`group_steps`].
+    toggled: Vec<Vec<String>>,
+}
+
+/// The `#group` commands each character runs, the same before and after
+/// the wizard: every folder name off and on again, in an order of the
+/// set's own, and one of them off to end with. A character runs them for
+/// folders it never had too.
+fn group_steps(seed: u64) -> Vec<(&'static str, bool)> {
+    let mut rng = Rng(seed ^ 0x6a09_e667);
+    let mut folders = GROUPS.to_vec();
+    for i in (1..folders.len()).rev() {
+        folders.swap(i, rng.below(i + 1));
+    }
+    let mut steps: Vec<(&str, bool)> = folders
+        .iter()
+        .flat_map(|folder| [(*folder, false), (*folder, true)])
+        .collect();
+    steps.push((rng.pick(&GROUPS), false));
+    steps
+}
+
+/// Run `steps` as `#group` commands on the live profile of `state`, and
+/// return the items on after each.
+async fn run_group_steps(state: &SharedState, steps: &[(&str, bool)]) -> Vec<Vec<String>> {
+    let mut p = state.profile.lock().await;
+    steps
+        .iter()
+        .map(|(folder, on)| {
+            let word = if *on { "on" } else { "off" };
+            crate::input::process(&mut p, &format!("#group {folder} {word}"));
+            on_rows(&p)
+        })
+        .collect()
 }
 
 /// Launch as each character over a copy of `dir`, in per profile mode.
-async fn before_wizard(dir: &Path, names: &[String], shared: &[&str]) -> Vec<Before> {
+async fn before_wizard(
+    dir: &Path,
+    names: &[String],
+    shared: &[&str],
+    steps: &[(&str, bool)],
+) -> Vec<Before> {
     let mut out = Vec::new();
     for name in names {
         let copy = tempfile::tempdir().unwrap();
         copy_dir(dir, copy.path());
-        let state = launch_as(copy.path(), name).await;
-        let (settings_now, on_now, list) = {
+        let mut state = launch_as(copy.path(), name).await;
+        let (settings_now, list) = {
             let p = state.profile.lock().await;
             (
                 settings(ProfileConfig::from_profile(&p)),
-                on_rows(&p),
                 p.ui.enabled_presets.clone(),
             )
         };
-        let on = if presets_on(&list) == shared {
-            on_now
-        } else {
+        if presets_on(&list) != shared {
             // The launch saved this profile's file. Give it the shared
             // list and launch again.
             let path = ProfileSet::load_or_migrate(copy.path().to_path_buf())
@@ -550,13 +587,13 @@ async fn before_wizard(dir: &Path, names: &[String], shared: &[&str]) -> Vec<Bef
             let mut config = ProfileConfig::load(&path).unwrap();
             config.ui.enabled_presets = stored_list(shared);
             config.save(&path).unwrap();
-            let state = launch_as(copy.path(), name).await;
-            let p = state.profile.lock().await;
-            on_rows(&p)
-        };
+            state = launch_as(copy.path(), name).await;
+        }
+        let on = on_rows(&*state.profile.lock().await);
         out.push(Before {
             settings: settings_now,
             on,
+            toggled: run_group_steps(&state, steps).await,
         });
     }
     out
@@ -625,7 +662,8 @@ async fn round_trip(seed: u64) -> Result<(), String> {
             .map(|n| std::fs::read_to_string(profiles.profile_path(n)).ok())
             .collect()
     };
-    let before = before_wizard(dir, names, &shared).await;
+    let steps = group_steps(seed);
+    let before = before_wizard(dir, names, &shared, &steps).await;
 
     // Pick a version of each item in conflict.
     let mut rng = Rng(seed ^ 0xa5a5_a5a5);
@@ -654,19 +692,21 @@ async fn round_trip(seed: u64) -> Result<(), String> {
             source_profile: variant.source_profile.clone(),
         });
     }
-    let want: Vec<Vec<String>> = before
+    let kept = |rows: &[String]| {
+        let mut rows: Vec<String> = rows
+            .iter()
+            .map(|row| match chosen.get(&row_key(row)) {
+                Some(Some(kept)) => kept.clone(),
+                _ => row.clone(),
+            })
+            .collect();
+        rows.sort();
+        rows
+    };
+    let want: Vec<Vec<String>> = before.iter().map(|b| kept(&b.on)).collect();
+    let want_toggled: Vec<Vec<Vec<String>>> = before
         .iter()
-        .map(|b| {
-            let mut rows: Vec<String> =
-                b.on.iter()
-                    .map(|row| match chosen.get(&row_key(row)) {
-                        Some(Some(kept)) => kept.clone(),
-                        _ => row.clone(),
-                    })
-                    .collect();
-            rows.sort();
-            rows
-        })
+        .map(|b| b.toggled.iter().map(|rows| kept(rows)).collect())
         .collect();
 
     super::apply_migration(&wizard, dir, &resolutions, || {})
@@ -710,6 +750,17 @@ async fn round_trip(seed: u64) -> Result<(), String> {
             return Err(format!("{name}: no loadout mode after the wizard"));
         }
         check(&state, name, "at the first launch", &before[n], &want[n]).await?;
+        // `#group` with a folder name turns on and off what it did.
+        let toggled = run_group_steps(&state, &steps).await;
+        for (step, rows) in toggled.iter().enumerate() {
+            let (folder, on) = steps[step];
+            diff(
+                name,
+                &format!("after #group {folder} {}", if on { "on" } else { "off" }),
+                rows,
+                &want_toggled[n][step],
+            )?;
+        }
     }
 
     // Switch between the characters with saves in between.

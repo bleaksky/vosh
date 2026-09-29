@@ -80,6 +80,12 @@ describe('the help on loadouts', () => {
     );
   });
 
+  it('says what the folders become in the shared catalog', () => {
+    const text = body('characters-and-data.loadouts');
+    expect(text).toContain('`combat (Healer)` holds the combat items only the Healer had');
+    expect(text).toContain('`#group combat on` and `#group combat off` still turn on and off');
+  });
+
   it('says where the items live in loadout mode', () => {
     const text = body('fix-it.data-on-disk');
     expect(text).toContain(

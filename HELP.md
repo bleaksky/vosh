@@ -549,6 +549,8 @@ Loadouts flip whole groups of aliases, triggers, and macros on and off from one 
 - Apply the migration. Vosh copies each profile file to `profiles/legacy/`, writes the catalog and the loadouts, and takes the aliases, triggers, and macros out of each profile file. Every other setting stays with its profile. Loadout mode waits for the next launch, so click `quit Vosh` in the wizard and reopen the app. Every loadout starts off, so each profile keeps on the items it had on, at launch and when you switch.
 - Reopen Settings and pick the `loadouts` tab, which now appears under `characters`. Check the boxes for the loadouts you want live. The runtime enables the union of their groups across every active loadout.
 
+The catalog keeps your folder names where it can. Each alias, trigger, and macro lands in a group that is on for exactly the profiles that had it on, so a folder two characters filled differently can become more than one group. `combat` holds what most characters kept in their combat folder, `combat (Healer)` holds the combat items only the Healer had, and `(Healer)` holds the items the Healer had outside any folder. Each profile file remembers which groups its folders became, so `#group combat on` and `#group combat off` still turn on and off exactly what that profile had in its combat folder.
+
 Click `deactivate all` to park the catalog dormant. Dormant disables every grouped alias, trigger, and macro, and it survives restarts and profile switches. Items without a group always stay live.
 
 When no active loadout declares any enabled groups, the loadouts impose nothing and your durable checkbox state from the automation tabs stands.
