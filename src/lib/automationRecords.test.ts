@@ -1,0 +1,225 @@
+import { describe, expect, it } from 'vitest';
+import {
+  addDraftItem,
+  createDraft,
+  removeDraftItem,
+  updateDraftItem,
+  isDraftDirty,
+} from './automationDraft';
+import {
+  activeLoadouts,
+  aliasesForSave,
+  automationSaveError,
+  blankTimer,
+  enabledPresetIds,
+  loadoutToggles,
+  macroSavePlan,
+  normalizeAlias,
+  normalizeMacro,
+  normalizeTick,
+  normalizeTimer,
+  presetSavePlan,
+  presetToggles,
+  PRESETS_OFF_MARKER,
+  storedPresetIds,
+  timerLabel,
+  timerSavePlan,
+  validateAliases,
+  validateMacros,
+  validateTimers,
+} from './automationRecords';
+import { defaultEnabledIds, PRESETS } from './presets';
+
+describe('aliases', () => {
+  it('normalizes and saves in the shape aliases_import reads', () => {
+    const raw = [
+      { name: 'kk', expansion: 'kick %1', enabled: true, group: 'combat' },
+      { name: 'lua', expansion: '', enabled: false, script: 'mud.send("look")', group: null },
+    ];
+    const list = raw.map(normalizeAlias);
+    expect(list[1]).toEqual({
+      name: 'lua',
+      expansion: '',
+      enabled: false,
+      script: 'mud.send("look")',
+    });
+    const back = (JSON.parse(aliasesForSave(list)) as unknown[]).map(normalizeAlias);
+    expect(back).toEqual(list);
+  });
+
+  it('keeps an empty Lua body as Lua mode', () => {
+    expect(normalizeAlias({ name: 'x', expansion: 'y', script: '' }).script).toBe('');
+  });
+
+  it('asks for unique names', () => {
+    expect(validateAliases([normalizeAlias({ name: 'kk', expansion: '' })])).toBeNull();
+    expect(validateAliases([normalizeAlias({ name: ' ' })])).toContain('name');
+    expect(
+      validateAliases([normalizeAlias({ name: 'kk' }), normalizeAlias({ name: 'kk' })]),
+    ).toContain('Two aliases');
+  });
+});
+
+describe('macros', () => {
+  const macros = [
+    normalizeMacro({ key: 'F1', command: 'kick' }),
+    normalizeMacro({ key: 'F2', command: 'bash', group: 'combat', enabled: false }),
+    normalizeMacro({ key: 'F3', command: 'flee' }),
+  ];
+
+  it('reads a missing enabled as on', () => {
+    expect(macros[0]).toEqual({ key: 'F1', command: 'kick', enabled: true });
+    expect(macros[1].enabled).toBe(false);
+  });
+
+  it('plans unbinds before binds, including a key that moved', () => {
+    let draft = createDraft(macros);
+    const [f1, f2, f3] = draft.items;
+    draft = updateDraftItem(draft, f1.uid, (m) => ({ ...m, key: 'F5' }));
+    draft = updateDraftItem(draft, f2.uid, (m) => ({ ...m, enabled: true }));
+    draft = removeDraftItem(draft, f3.uid);
+    draft = addDraftItem(draft, { key: 'F1', command: 'rescue', enabled: true });
+    const plan = macroSavePlan(draft);
+    expect(plan.remove.sort()).toEqual(['F1', 'F3']);
+    expect(plan.set.map((m) => m.key).sort()).toEqual(['F1', 'F2', 'F5']);
+  });
+
+  it('plans nothing for a clean draft', () => {
+    expect(macroSavePlan(createDraft(macros))).toEqual({ remove: [], set: [] });
+  });
+
+  it('asks for a key, a command, and unique keys', () => {
+    expect(validateMacros(macros)).toBeNull();
+    expect(validateMacros([{ key: '', command: 'x', enabled: true }])).toContain('Press a key');
+    expect(validateMacros([{ key: 'F1', command: ' ', enabled: true }])).toBe(
+      'The macro on F1 needs a command.',
+    );
+    expect(validateMacros([macros[0], macros[0]])).toContain('Two macros use F1');
+  });
+});
+
+describe('timers', () => {
+  const timers = [
+    normalizeTimer({ id: 1, name: 'Hydrate', interval_secs: 300, command: 'drink', enabled: true }),
+    normalizeTimer({
+      id: 2,
+      name: '',
+      interval_secs: 60,
+      command: 'save\n#echo saved',
+      enabled: 0,
+    }),
+  ];
+
+  it('normalizes the backend shape', () => {
+    expect(timers[1]).toEqual({
+      id: 2,
+      name: '',
+      interval_secs: 60,
+      command: 'save\n#echo saved',
+      enabled: true,
+    });
+    expect(normalizeTimer({ interval_secs: 0, command: 'x' }).interval_secs).toBe(1);
+  });
+
+  it('plans updates, creates, and deletes by id', () => {
+    let draft = createDraft(timers);
+    draft = updateDraftItem(draft, draft.items[0].uid, (t) => ({ ...t, interval_secs: 120 }));
+    draft = removeDraftItem(draft, draft.items[1].uid);
+    draft = addDraftItem(draft, { ...blankTimer(), command: 'look' });
+    const plan = timerSavePlan(draft);
+    expect(plan.remove).toEqual([2]);
+    expect(plan.set.map((t) => [t.id, t.command])).toEqual([
+      [1, 'drink'],
+      [null, 'look'],
+    ]);
+  });
+
+  it('names a timer by its name or its first command line', () => {
+    expect(timerLabel(timers[0])).toBe('Hydrate');
+    expect(timerLabel(timers[1])).toBe('save');
+  });
+
+  it('asks for a command', () => {
+    expect(validateTimers(timers)).toBeNull();
+    expect(validateTimers([{ ...blankTimer(), name: 'Rest' }])).toContain('Rest');
+  });
+});
+
+describe('tick', () => {
+  it('stores blank text as null and whole seconds', () => {
+    expect(
+      normalizeTick({
+        enabled: true,
+        interval_secs: 30.7,
+        auto_fire: '',
+        sound: false,
+        reset_pattern: 'You are hungry',
+        warn_at_secs: 0,
+        warn_message: '',
+        warn_color: null,
+      }),
+    ).toEqual({
+      enabled: true,
+      interval_secs: 30,
+      auto_fire: null,
+      sound: false,
+      reset_pattern: 'You are hungry',
+      warn_at_secs: null,
+      warn_message: null,
+      warn_color: null,
+    });
+  });
+});
+
+describe('presets', () => {
+  it('reads an empty stored list as the defaults', () => {
+    expect(enabledPresetIds([])).toEqual(defaultEnabledIds());
+  });
+
+  it('round trips every preset turned off', () => {
+    const off = presetToggles([]).map((t) => ({ ...t, enabled: false }));
+    const stored = storedPresetIds(off);
+    expect(stored).toEqual([PRESETS_OFF_MARKER]);
+    expect(enabledPresetIds(stored)).toEqual([]);
+    expect(presetToggles(stored).every((t) => !t.enabled)).toBe(true);
+  });
+
+  it('round trips a partial pick in library order', () => {
+    const pick = [PRESETS[2].id, PRESETS[0].id];
+    const toggles = presetToggles(pick);
+    expect(storedPresetIds(toggles)).toEqual([PRESETS[0].id, PRESETS[2].id]);
+  });
+
+  it('plans installs and removals from the toggles that changed', () => {
+    let draft = createDraft(presetToggles([PRESETS[0].id]));
+    draft = updateDraftItem(draft, draft.items[0].uid, (t) => ({ ...t, enabled: false }));
+    draft = updateDraftItem(draft, draft.items[1].uid, (t) => ({ ...t, enabled: true }));
+    expect(presetSavePlan(draft)).toEqual({ install: [PRESETS[1].id], remove: [PRESETS[0].id] });
+    draft = updateDraftItem(draft, draft.items[1].uid, (t) => ({ ...t, enabled: false }));
+    draft = updateDraftItem(draft, draft.items[0].uid, (t) => ({ ...t, enabled: true }));
+    expect(isDraftDirty(draft)).toBe(false);
+  });
+});
+
+describe('loadouts', () => {
+  it('round trips the active list', () => {
+    const toggles = loadoutToggles([{ name: 'warrior' }, { name: 'crafter' }], ['crafter']);
+    expect(toggles).toEqual([
+      { name: 'warrior', active: false },
+      { name: 'crafter', active: true },
+    ]);
+    expect(activeLoadouts(toggles)).toEqual(['crafter']);
+  });
+});
+
+describe('automationSaveError', () => {
+  it('turns store errors into sentences', () => {
+    expect(automationSaveError('invalid regex `(`: unclosed group')).toBe(
+      'Vosh could not read the pattern (. Fix it and save again.',
+    );
+    expect(automationSaveError('command cannot be empty')).toBe(
+      'Every item needs a command before you save.',
+    );
+    expect(automationSaveError(new Error('Disk full.'))).toBe('Disk full.');
+  });
+});
