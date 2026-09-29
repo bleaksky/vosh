@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { emit, listen } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 import {
@@ -64,6 +64,7 @@ import { pushToast } from './lib/toasts';
 import { CommandPalette } from './components/CommandPalette';
 import { disconnectSession } from './lib/session';
 import { isMacPlatform, shortcutKey, type PaletteDeps } from './lib/palette';
+import { openSettingsTab, openSettingsWindow } from './lib/settingsLink';
 import { getNativeScroll } from './lib/nativeScroll';
 import {
   addPane,
@@ -126,13 +127,6 @@ function pushNativeChromeTokens(): void {
     link: tokens.accent,
     scrollbar: tokens.tertiary,
   }).catch(() => {});
-}
-
-// Open Settings, or focus it, on the tab it last showed.
-function openSettingsWindow(): void {
-  invoke('open_settings_window').catch((e) => {
-    console.error('[app] open_settings_window failed', e);
-  });
 }
 
 // The id of the leaf showing `pane`, or null when the panel does not
@@ -1376,18 +1370,7 @@ function App() {
     openHelp: () => setHelpOpen(true),
     openFind: () => setFindOpen(true),
     openSettings: openSettingsWindow,
-    openSettingsTab: (tab) => {
-      // The settings window may not exist yet, so the target tab
-      // travels twice: localStorage for a cold open, the event for a
-      // window that is already up.
-      try {
-        localStorage.setItem('vosh.settings.pendingTab', tab);
-      } catch {
-        // storage unavailable; the event path still covers a warm window
-      }
-      void emit('vosh://settings-goto-tab', tab);
-      openSettingsWindow();
-    },
+    openSettingsTab,
     connect: () => void connection.connect(),
     disconnect: () => void disconnectSession(),
     insertInput: (text) => inputRef.current?.insert(text),

@@ -1,6 +1,4 @@
 import { createContext, useContext } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { emit } from '@tauri-apps/api/event';
 import {
   addPane,
   closePane,
@@ -96,19 +94,4 @@ export function updateLeafProps(id: string, patch: Record<string, string>): void
  *  menus do when they close. App listens for this event. */
 export function returnToCommandLine(): void {
   window.dispatchEvent(new CustomEvent('vosh:focus-input'));
-}
-
-/** Open Settings on `tab`. The window may not exist yet, so the tab
- *  travels twice, the way the command palette sends it: through
- *  localStorage for a cold open and an event for a window already up. */
-export function openSettingsTab(tab: string): void {
-  try {
-    localStorage.setItem('vosh.settings.pendingTab', tab);
-  } catch {
-    // Storage unavailable. The event still reaches an open window.
-  }
-  void emit('vosh://settings-goto-tab', tab);
-  invoke('open_settings_window').catch((e: unknown) => {
-    console.error('[panel] open_settings_window failed', e);
-  });
 }
