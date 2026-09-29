@@ -107,7 +107,8 @@ use crate::map_state::SharedMap;
 use crate::plugins::{PluginRecord, SharedPluginManager};
 use crate::profile::{Macro, Profile, Timer};
 use crate::profile_config::{
-    strip_global_fields, DockEntryPersist, GlobalConfig, PaneLayoutPersist, ProfileConfig,
+    share_custom_themes, strip_global_fields, DockEntryPersist, GlobalConfig, HeldCustomThemes,
+    PaneLayoutPersist, ProfileConfig,
 };
 use crate::script_state;
 use crate::script_state::SharedTimers;
@@ -1870,21 +1871,53 @@ pub(crate) async fn profile_get_scope(
 /// persist the active profile so values move to the correct file
 /// (a category flipped Global -> Profile lands in the per-profile
 /// file on next save; Profile -> Global lands in global.toml).
+///
+/// Turning the theme category global also folds the custom themes the
+/// other profile files hold into the shared list and clears them from
+/// those files, or a switch to one of those profiles would lose them.
+/// When the list grows, `vosh://custom-themes-changed` carries it to
+/// every window.
 #[tauri::command]
 pub(crate) async fn profile_set_scope(
     app: AppHandle,
     state: State<'_, SharedState>,
     scope: crate::profile_set::ScopeConfig,
 ) -> Result<(), String> {
-    {
+    use crate::profile_set::Scope;
+    // Held from the scope change through the persist, so no other
+    // profile file write lands between the theme move and the save.
+    let persist_guard = PERSIST_LOCK.lock().await;
+    let (held, global_path) = {
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
             return Err(PROFILES_NOT_LOADED.into());
         };
+        let theme_was_global = matches!(set.scope().theme, Scope::Global);
         set.set_scope(scope).map_err(|e| e.to_string())?;
+        // Nothing may write profile files while a migration relaunch is
+        // pending. The next launch moves the themes instead.
+        let theme_turned_global = !theme_was_global
+            && matches!(scope.theme, Scope::Global)
+            && !MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
+        let held =
+            theme_turned_global.then(|| HeldCustomThemes::find(set, Some(set.active_name())));
+        (held, set.global_path())
+    };
+    let mut gained = None;
+    if let Some(held) = held {
+        let mut p = state.profile.lock().await;
+        match share_custom_themes(held, &scope, &global_path, &mut p) {
+            Ok(true) => gained = Some(p.ui.custom_themes.clone()),
+            Ok(false) => {}
+            Err(e) => warn!(error = %e, "custom themes stayed in their profile files"),
+        }
     }
     let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
+    persist_profile_locked(&app, &shared).await;
+    drop(persist_guard);
+    if let Some(list) = gained {
+        broadcast(&app, "vosh://custom-themes-changed", &list);
+    }
     broadcast(&app, "vosh://profiles-changed", &"scope");
     Ok(())
 }
