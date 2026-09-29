@@ -176,4 +176,9 @@ describe('targetHealthPercent', () => {
     expect(targetHealthPercent('', guard)).toBeNull();
     expect(targetHealthPercent('Blackwatch Guard', { ...guard, hp_pct: null })).toBeNull();
   });
+
+  it('shows nothing while the game withholds the opponent health', () => {
+    expect(targetHealthPercent('Blackwatch Guard', { ...guard, hidden: true })).toBeNull();
+    expect(targetHealthPercent('Blackwatch Guard', { ...guard, hidden: false })).toBe(38);
+  });
 });

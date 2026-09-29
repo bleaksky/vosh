@@ -12,6 +12,7 @@ import { themeTokens } from '../../lib/themes';
 import { useActiveTheme } from '../../lib/useActiveTheme';
 import {
   formatVital,
+  hiddenVital,
   targetHealthPercent,
   vitalTone,
   type CombatHealth,
@@ -29,6 +30,10 @@ import { statusMoons } from './statusMoons';
 // Warn before you run low from Settings, Layout, Vitals, and never draw
 // a meter (VitalsOptions.dc.html). While you fight the target you set,
 // its health follows its name in the warn tone.
+//
+// While the game hides your vitals (lamented tears) each one reads `?`
+// in its Values form in tertiary and never warns. The target health
+// leaves the line while Char.Combat withholds it.
 //
 // The tick, the game time, and the moons share one item, the way the
 // old input row chip kept the tick and the time, 8 px apart inside it.
@@ -96,13 +101,17 @@ export function StatusVitals({ showVitals, vitals, target, combat, options }: St
         VITAL_ROWS.map(({ key, label, max }) => (
           <span key={key}>
             {label}
-            <span
-              className={toneClass(
-                vitalTone(vitals[key], vitals[max], vitals.low[key], options.warn_thirds),
-              )}
-            >
-              {formatVital(options.values, vitals[key], vitals[max])}
-            </span>
+            {vitals.hidden ? (
+              <span className={toneClass('hidden')}>{hiddenVital(options.values)}</span>
+            ) : (
+              <span
+                className={toneClass(
+                  vitalTone(vitals[key], vitals[max], vitals.low[key], options.warn_thirds),
+                )}
+              >
+                {formatVital(options.values, vitals[key], vitals[max])}
+              </span>
+            )}
           </span>
         ))}
       {target && (
@@ -120,6 +129,7 @@ export function StatusVitals({ showVitals, vitals, target, combat, options }: St
 function toneClass(tone: VitalTone): string {
   if (tone === 'danger') return 'shell-status-value is-low';
   if (tone === 'warn') return 'shell-status-value is-warn';
+  if (tone === 'hidden') return 'shell-status-value is-hidden';
   return 'shell-status-value';
 }
 
