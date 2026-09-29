@@ -612,7 +612,11 @@ async fn round_trip(seed: u64) -> Result<(), String> {
     let names = &set.names;
 
     // You play the wizard's character, as a launch leaves it.
+    // The wizard saves the live profile before it reads the files, as any
+    // save does, and the files as they stand after that save are the
+    // ones it keeps.
     let wizard = launch_as(dir, &names[set.wizard]).await;
+    save(&wizard, dir).await;
     let live = wizard.profile.lock().await.ui.enabled_presets.clone();
     let shared = shared_presets(dir, names, &live);
     let files_before: Vec<Option<String>> = {
