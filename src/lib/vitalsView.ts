@@ -1,0 +1,115 @@
+import type { VitalsMeter, VitalsValues } from './session';
+import { vitalPercent } from './stores/vitalsStore';
+
+// How your vitals read in the panel footer and in the status line, from
+// the rows under Layout, Vitals (VitalsOptions.dc.html). Values picks
+// the form of each number, Meter the line under it, and Warn before you
+// run low the thresholds that color it. Kept pure for the unit tests.
+
+/** A vital's color. Quiet at rest, warn in the middle third while Warn
+ *  before you run low is on, danger when it runs low. */
+export type VitalTone = 'quiet' | 'warn' | 'danger';
+
+/** The Group pane's thirds, by whole percent: quiet from 67, warn from
+ *  34, danger under 34. */
+export function thirdsTone(pct: number): VitalTone {
+  if (pct >= 67) return 'quiet';
+  if (pct >= 34) return 'warn';
+  return 'danger';
+}
+
+/** A vital's tone. With Warn before you run low off it turns danger
+ *  only while the vitals store's low latch holds (under 20 percent,
+ *  until it climbs back to 25). With it on it follows the thirds. A
+ *  vital with no max stays quiet either way. */
+export function vitalTone(
+  current: number,
+  max: number,
+  low: boolean,
+  warnThirds: boolean,
+): VitalTone {
+  if (!warnThirds) return low ? 'danger' : 'quiet';
+  if (max <= 0) return 'quiet';
+  return thirdsTone(vitalPercent(current, max));
+}
+
+/** A vital's value in the form Values asks for: `186 / 1020`, `186`,
+ *  or `18%` in whole percent. A vital with no max has no percent, so
+ *  Percent shows the value alone. */
+export function formatVital(values: VitalsValues, current: number, max: number): string {
+  if (values === 'current') return String(current);
+  if (values === 'percent') return max > 0 ? `${vitalPercent(current, max)}%` : String(current);
+  return `${current} / ${max}`;
+}
+
+/** The widest a vital with this max reads, the vital at full. One line
+ *  fits by it, so the row keeps its form while a value loses a digit in
+ *  a fight. */
+export function widestVital(values: VitalsValues, max: number): string {
+  return formatVital(values, max, max);
+}
+
+/** Meter fill in percent, unrounded so the meter moves smoothly. */
+export function meterFill(current: number, max: number): number {
+  if (max <= 0) return 0;
+  return Math.max(0, Math.min(100, (current / max) * 100));
+}
+
+/** How the vitals rows measure for a Meter choice, in CSS pixels. */
+export interface VitalsGeometry {
+  /** The row pitch. */
+  row: number;
+  /** Space above the 16 px text line inside a row. */
+  rowTop: number;
+  /** The meter's height. 0 draws no meter. */
+  meter: number;
+  /** Space between the text line and the meter. */
+  meterGap: number;
+  meterRadius: number;
+  /** Space inside the footer above the first row and below the last. */
+  padTop: number;
+  padBottom: number;
+}
+
+const GEOMETRY: Record<VitalsMeter, VitalsGeometry> = {
+  // The 2 px meter 1 px under the text on a 28 px pitch (SPEC 5, G3).
+  line: { row: 28, rowTop: 4, meter: 2, meterGap: 1, meterRadius: 1, padTop: 8, padBottom: 11 },
+  // Twice as thick and 2 px under the text, on the same pitch.
+  bar: { row: 28, rowTop: 4, meter: 4, meterGap: 2, meterRadius: 2, padTop: 8, padBottom: 11 },
+  // The panes' dense 22 px row with the text centered. 9 above and 13
+  // below keep the text 12 and 16 from the footer's edges, as in Rows.
+  none: { row: 22, rowTop: 3, meter: 0, meterGap: 0, meterRadius: 0, padTop: 9, padBottom: 13 },
+};
+
+export function vitalsGeometry(meter: VitalsMeter): VitalsGeometry {
+  return GEOMETRY[meter];
+}
+
+/** The footer's height for `rows` rows, the 1 px line on top included.
+ *  The footer holds this while it waits for your vitals, so logging in
+ *  moves nothing. */
+export function vitalsFooterHeight(geometry: VitalsGeometry, rows: number): number {
+  return 1 + geometry.padTop + rows * geometry.row + geometry.padBottom;
+}
+
+/** The opponent Char.Combat names, as far as the status line needs it. */
+export interface CombatHealth {
+  name: string;
+  hp_pct: number | null;
+}
+
+/** The target's health for the status line with the panel hidden. It
+ *  shows only when the target you set is the one you are fighting, the
+ *  Char.Combat opponent, with the names compared without case. Null
+ *  otherwise, and while the server sends no percent. */
+export function targetHealthPercent(
+  target: string | null,
+  opponent: CombatHealth | null,
+): number | null {
+  if (!target || opponent === null || opponent.hp_pct === null) return null;
+  return sameName(target, opponent.name) ? opponent.hp_pct : null;
+}
+
+function sameName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
