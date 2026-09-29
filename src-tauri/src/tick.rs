@@ -94,7 +94,8 @@ pub(crate) struct TickRuntime {
     /// [`SAME_TICK_WINDOW`].
     pub last_local_fire: Option<Instant>,
     /// Whether the warning echo has already fired for the current cycle.
-    /// Resets on each tick, on `reset()`, and on interval changes.
+    /// Resets each time the count restarts: on each tick, on `reset()`,
+    /// and on an interval change while unsynced.
     pub warned_this_cycle: bool,
     /// A session is connected. A profile switch arms a timer its new
     /// config turns on only while one is.
@@ -184,15 +185,15 @@ impl TickRuntime {
         self.warned_this_cycle = false;
     }
 
-    /// Set the interval. Unsynced it restarts the count, as it always
-    /// has. Synced the interval is only the expected length, so the count
-    /// carries on and the expected tick moves.
+    /// Set the interval. Unsynced it restarts the count and opens a new
+    /// warning cycle, as it always has. Synced the interval is only the
+    /// expected length, so the count carries on, the expected tick moves,
+    /// and a warning this tick already printed does not print again.
     pub(crate) fn set_interval(&mut self, secs: u64, now: Instant) {
         self.config.interval = Duration::from_secs(secs.max(1));
         if self.config.enabled && !self.synced {
-            self.last_tick = Some(now);
+            self.restart(now);
         }
-        self.warned_this_cycle = false;
     }
 
     pub(crate) fn set_reset_pattern(
@@ -776,6 +777,58 @@ mod tests {
             step.warn_echo.as_deref(),
             Some("\r\n\x1b[1;31mTICK IN 5s\x1b[0m\r\n")
         );
+    }
+
+    /// Count the warnings the session loop prints polling every 250 ms
+    /// from `from` up to and not including `to`.
+    fn warns_between(t: &mut TickRuntime, from: Instant, to: Instant) -> usize {
+        let mut n = 0;
+        let mut at = from;
+        while at < to {
+            if t.poll(at).warn_echo.is_some() {
+                n += 1;
+            }
+            at += Duration::from_millis(250);
+        }
+        n
+    }
+
+    #[test]
+    fn a_new_interval_while_synced_does_not_warn_again_this_tick() {
+        let t0 = Instant::now();
+        let mut t = session(t0);
+        t.config.warn_at_secs = Some(5);
+        let tick = t0 + secs(10.0);
+        assert!(t.on_game_tick(tick).is_some());
+        assert_eq!(warns_between(&mut t, tick, tick + secs(26.5)), 1);
+        // The same interval again, as a Settings save of another field
+        // or `#tick interval 30` does, inside the warn window.
+        t.set_interval(30, tick + secs(26.5));
+        assert_eq!(
+            warns_between(&mut t, tick + secs(26.5), tick + secs(33.0)),
+            0
+        );
+        // Overdue, a longer interval puts the expected tick ahead again.
+        t.set_interval(35, tick + secs(33.0));
+        assert_eq!(
+            warns_between(&mut t, tick + secs(33.0), tick + secs(40.0)),
+            0
+        );
+        // The next tick opens a new cycle, and it warns again.
+        let next = tick + secs(40.0);
+        assert!(t.on_game_tick(next).is_some());
+        assert_eq!(warns_between(&mut t, next, next + secs(35.0)), 1);
+    }
+
+    #[test]
+    fn a_new_interval_unsynced_restarts_the_count_and_the_warning() {
+        let t0 = Instant::now();
+        let mut t = session(t0);
+        t.config.warn_at_secs = Some(5);
+        assert_eq!(warns_between(&mut t, t0, t0 + secs(27.0)), 1);
+        t.set_interval(30, t0 + secs(27.0));
+        assert_eq!(t.last_tick, Some(t0 + secs(27.0)));
+        assert_eq!(warns_between(&mut t, t0 + secs(27.0), t0 + secs(57.0)), 1);
     }
 
     #[test]

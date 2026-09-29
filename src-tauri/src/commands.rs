@@ -4385,6 +4385,35 @@ mod tests {
     }
 
     #[test]
+    fn a_tick_save_inside_the_warn_window_does_not_warn_twice() {
+        let t0 = tokio::time::Instant::now();
+        let at = |s: f64| t0 + std::time::Duration::from_secs_f64(s);
+        let mut tick = crate::tick::TickRuntime::default();
+        tick.start_session(t0);
+        tick.config.warn_at_secs = Some(5);
+        assert!(tick.on_game_tick(at(1.0)).is_some());
+        let mut warns = 0;
+        let mut now = 1.0;
+        while now < 40.0 {
+            if (now - 28.0_f64).abs() < f64::EPSILON {
+                // Untick Play a sound in Settings, which saves the whole
+                // Tick block at the same interval.
+                let mut quiet = tick_payload("");
+                quiet.enabled = true;
+                quiet.interval_secs = 30;
+                quiet.sound = false;
+                super::apply_tick_config(&mut tick, &quiet, at(now)).unwrap();
+            }
+            if tick.poll(at(now)).warn_echo.is_some() {
+                warns += 1;
+            }
+            now += 0.25;
+        }
+        assert_eq!(warns, 1);
+        assert!(tick.synced);
+    }
+
+    #[test]
     fn settings_window_keeps_a_size_that_fits() {
         assert_eq!(settings_window_fit((880.0, 600.0)), None);
         assert_eq!(settings_window_fit((820.0, 560.0)), None);
