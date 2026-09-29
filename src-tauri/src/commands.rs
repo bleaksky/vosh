@@ -3424,9 +3424,9 @@ pub(crate) async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, S
 /// uses this for the preview pane only. The companion
 /// [`migration_apply`] command commits the plan once the user picks
 /// winners for any conflicts. Refused while a profile file did not read
-/// at launch, while catalog.toml or loadouts.toml is on disk, or while
-/// profiles/legacy holds copies from an earlier run, see
-/// [`crate::loadout_store::migration_refusal`].
+/// at launch, while an earlier run is unfinished, while catalog.toml or
+/// loadouts.toml is on disk, or while profiles/legacy holds copies from
+/// an earlier run, see [`crate::loadout_store::migration_refusal`].
 #[tauri::command]
 pub(crate) async fn migration_analyze(
     app: AppHandle,
@@ -3546,9 +3546,9 @@ pub(crate) struct ConflictResolution {
 /// profile mode and can run it again. A run that stops partway, or
 /// cannot put every file back, finishes at the next launch from the
 /// journal it saved first. Refused while a profile file did not read at
-/// launch, while catalog.toml or loadouts.toml is on disk, or while
-/// profiles/legacy holds copies from an earlier run, see
-/// [`crate::loadout_store::migration_refusal`].
+/// launch, while an earlier run is unfinished, while catalog.toml or
+/// loadouts.toml is on disk, or while profiles/legacy holds copies from
+/// an earlier run, see [`crate::loadout_store::migration_refusal`].
 #[tauri::command]
 pub(crate) async fn migration_apply(
     app: AppHandle,
@@ -6609,6 +6609,60 @@ mod tests {
                 assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
             }
             assert!(!journal_path(dir.path()).exists());
+        }
+
+        #[tokio::test]
+        async fn the_wizard_waits_while_an_earlier_run_is_unfinished() {
+            use crate::loadout_store::{journal_path, legacy_dir};
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            character(DEFAULT_PROFILE_NAME, 1, &[])
+                .save(&set.profile_path(DEFAULT_PROFILE_NAME))
+                .unwrap();
+            character("Healer", 2, &[])
+                .save(&set.profile_path("Healer"))
+                .unwrap();
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            // The run took the items out of the Default file and then
+            // stopped, the way a failed write it could not undo leaves it,
+            // with catalog.toml and loadouts.toml put back to nothing.
+            super::super::WIZARD_WRITES_BEFORE_A_CRASH.set(Some(3));
+            let run = tokio::spawn({
+                let state = state.clone();
+                let dir = dir.path().to_path_buf();
+                async move { super::super::apply_migration(&state, &dir, &[], || {}).await }
+            })
+            .await;
+            super::super::WIZARD_WRITES_BEFORE_A_CRASH.set(None);
+            assert!(run.is_err());
+            std::fs::remove_file(catalog_path(dir.path())).unwrap();
+            std::fs::remove_file(loadouts_path(dir.path())).unwrap();
+            // You move the legacy folder out, as its refusal says.
+            let aside = tempfile::tempdir().unwrap();
+            std::fs::rename(legacy_dir(dir.path()), aside.path().join("legacy")).unwrap();
+            let journal = read(&journal_path(dir.path()));
+            let default_file = read(&set.profile_path(DEFAULT_PROFILE_NAME));
+
+            // A second run would read the Default file without its items
+            // and write a journal without them over the one that holds
+            // them, so Default would come back with nothing.
+            assert_eq!(
+                refused(&state, dir.path()).await,
+                "Vosh has not finished an earlier move to loadouts. Quit Vosh and open it again \
+                 to finish it."
+            );
+            assert_eq!(read(&journal_path(dir.path())), journal);
+            assert_eq!(read(&set.profile_path(DEFAULT_PROFILE_NAME)), default_file);
+            assert!(!catalog_path(dir.path()).exists());
+
+            // The next launch finishes the run from the journal.
+            let before = character(DEFAULT_PROFILE_NAME, 1, &[]);
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            assert!(state.global_catalog.lock().await.is_some());
+            let p = state.profile.lock().await;
+            assert_eq!(p.aliases.list().len(), 4);
+            assert!(p.aliases.get(&before.aliases[0].name).is_some());
         }
 
         #[tokio::test]

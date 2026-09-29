@@ -354,7 +354,10 @@ pub(crate) fn load_path_b_at_launch(
 }
 
 /// Why the shared catalog wizard may not write catalog.toml and
-/// loadouts.toml, or None when it may. The wizard builds the catalog
+/// loadouts.toml, or None when it may. It refuses while the journal of
+/// an earlier run is on disk, since that run took the items out of some
+/// profile files and the next launch finishes it from the journal, which
+/// a new run would write over. The wizard builds the catalog
 /// from the profile files, and in loadout mode those hold no aliases or
 /// triggers, so it only writes where neither file is on disk yet. A file
 /// Vosh could not read at launch stays refused even once it is gone. It
@@ -362,6 +365,12 @@ pub(crate) fn load_path_b_at_launch(
 /// which may be the only copy of your items, since a run over files an
 /// earlier run took the items out of would copy those over it.
 pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
+    if journal_path(app_data).exists() {
+        return Some(
+            "Vosh has not finished an earlier move to loadouts. Quit Vosh and open it again to \
+             finish it.",
+        );
+    }
     let catalog = catalog_path(app_data);
     let loadouts = loadouts_path(app_data);
     if crate::profile_config::is_unread(&catalog) || crate::profile_config::is_unread(&loadouts) {
