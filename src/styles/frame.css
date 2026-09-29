@@ -420,6 +420,29 @@
   background: color-mix(in srgb, var(--warn) 14%, transparent);
 }
 
+/* Past the expected tick, while the game runs late, the tick reading
+   pulses gently in the warn tone until the tick lands, once a second. */
+.shell-status-part.is-warn.is-overdue {
+  animation: shell-tick-late 1s ease-in-out infinite;
+}
+
+@keyframes shell-tick-late {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* With reduced motion it holds still in the warn tone. */
+@media (prefers-reduced-motion: reduce) {
+  .shell-status-part.is-warn.is-overdue {
+    animation: none;
+  }
+}
+
 .shell-status-part > svg {
   flex: none;
 }

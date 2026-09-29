@@ -3,7 +3,8 @@ import type { VitalsOptions } from '../../lib/session';
 import { useChipStyle } from '../../lib/stores/chipStyleStore';
 import { useCombat } from '../../lib/stores/combatStore';
 import { useTarget } from '../../lib/stores/targetStore';
-import { useTick } from '../../lib/stores/tickStore';
+import { useTickCount } from '../../lib/stores/tickCountStore';
+import { shownTick, useTick } from '../../lib/stores/tickStore';
 import { useVitalsOptions } from '../../lib/stores/vitalsOptionsStore';
 import { useVitals, type Vitals, type VitalKey } from '../../lib/stores/vitalsStore';
 import { useWorld } from '../../lib/stores/worldStore';
@@ -122,11 +123,12 @@ function toneClass(tone: VitalTone): string {
   return 'shell-status-value';
 }
 
-/** Reads the tick, the game time, the moons, and the theme for
- *  StatusClock. The moons show only while connected. */
+/** Reads the tick, the way it counts, the game time, the moons, and the
+ *  theme for StatusClock. The moons show only while connected. */
 function ClockItem({ connected }: { connected: boolean }) {
   const style = useChipStyle();
   const tick = useTick();
+  const shown = shownTick(tick, useTickCount());
   const world = useWorld();
   const theme = useActiveTheme();
   const text = formatGameTime(world.time);
@@ -141,9 +143,13 @@ function ClockItem({ connected }: { connected: boolean }) {
     <StatusClock
       style={style}
       tick={
-        tick.active && tick.secsSinceTick !== null
-          ? { secs: tick.secsSinceTick, warn: tick.warn, interval: tick.intervalSecs }
-          : null
+        shown && {
+          secs: shown.secs,
+          count: shown.count,
+          warn: tick.warn,
+          overdue: tick.overdue,
+          interval: tick.intervalSecs,
+        }
       }
       time={text ? { text, tint, daytime: isDaytime(world.time), hour } : null}
       moons={moons}

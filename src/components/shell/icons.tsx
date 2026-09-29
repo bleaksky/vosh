@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { TickCount } from '../../lib/session';
 import {
   SUN_ARC_PATH,
   SUN_DOWN,
@@ -7,7 +8,13 @@ import {
   SUN_UP_RADIUS,
   sunDot,
 } from './sunPath';
-import { TICK_RING_CENTER, TICK_RING_RADIUS, TICK_RING_TRACK_OPACITY, tickArc } from './tickRing';
+import {
+  TICK_RING_CENTER,
+  TICK_RING_RADIUS,
+  TICK_RING_TRACK_OPACITY,
+  tickArc,
+  tickArcLeft,
+} from './tickRing';
 
 // The One Window icon set (SPEC 6): 16 unit strokes at 1.25, round caps
 // and joins, drawn in currentColor so each button sets the tone.
@@ -104,16 +111,22 @@ interface SmallIconProps {
 }
 
 interface TickRingIconProps extends SmallIconProps {
-  /** Whole seconds since the last tick. */
+  /** The count the tick shows: whole seconds since the last tick
+   *  counting up, or left until the next counting down. */
   secs: number;
   /** The tick interval in seconds, null while unknown. */
   interval: number | null;
+  /** Which way the count runs. Up when left out. */
+  count?: TickCount;
 }
 
-/** The tick. A faint ring, and on top an arc from 12 o clock that runs
- *  clockwise as the seconds pass and closes when the tick lands. */
-export function TickRingIcon({ secs, interval, size = 12 }: TickRingIconProps) {
-  const arc = tickArc(secs, interval);
+/** The tick. A faint ring, and on top an arc. Counting up it runs
+ *  clockwise from 12 o clock as the seconds pass and closes when the
+ *  tick is due. Counting down it is the share left, emptying clockwise
+ *  toward 12 o clock, and only the faint ring shows while the tick is
+ *  late. */
+export function TickRingIcon({ secs, interval, count = 'up', size = 12 }: TickRingIconProps) {
+  const arc = count === 'up' ? tickArc(secs, interval) : tickArcLeft(secs, interval);
   const c = TICK_RING_CENTER;
   const r = TICK_RING_RADIUS;
   return (

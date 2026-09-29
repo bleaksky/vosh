@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { TickConfig, TickPayload } from '../session';
-import { computeTick, DEFAULT_TICK_WARN_SECS } from './tickStore';
+import type { TickConfig, TickCount, TickPayload } from '../session';
+import { computeTick, DEFAULT_TICK_WARN_SECS, shownTick } from './tickStore';
 
 /** A report `elapsed_ms` into a tick of `interval_ms`, the way the
  *  session loop sends it. */
@@ -153,5 +153,76 @@ describe('computeTick', () => {
     expect(computeTick(null, config(null))).toEqual(off);
     expect(computeTick(payload(3_000, false), null)).toEqual(off);
     expect(computeTick(payload(3_000), config(null, false))).toEqual(off);
+  });
+});
+
+describe('shownTick', () => {
+  /** What the status line shows `elapsed_ms` into a tick, counting
+   *  `count`. */
+  const shown = (count: TickCount, elapsed_ms: number, interval_ms = 30_000) =>
+    shownTick(computeTick(payload(elapsed_ms, true, interval_ms), null), count);
+  const secs = (count: TickCount, elapsed_ms: number) => shown(count, elapsed_ms)?.secs;
+
+  it('counts up the seconds since the last tick, past the interval while late', () => {
+    expect(shown('up', 14_000)).toEqual({ secs: 14, count: 'up' });
+    expect(secs('up', 0)).toBe(0);
+    expect(secs('up', 30_000)).toBe(30);
+    expect(secs('up', 31_000)).toBe(31);
+    expect(secs('up', 32_900)).toBe(32);
+  });
+
+  it('counts down the seconds left and waits at 0 until the tick lands', () => {
+    expect(shown('down', 0)).toEqual({ secs: 30, count: 'down' });
+    expect(secs('down', 500)).toBe(30);
+    expect(secs('down', 1_000)).toBe(29);
+    expect(secs('down', 29_000)).toBe(1);
+    expect(secs('down', 29_500)).toBe(1);
+    expect(secs('down', 30_000)).toBe(0);
+    expect(Object.is(secs('down', 30_500), 0)).toBe(true);
+    expect(secs('down', 35_000)).toBe(0);
+    expect(secs('down', 59_000)).toBe(0);
+  });
+
+  it('counts down past 0 below zero until the tick lands', () => {
+    expect(shown('down_past_zero', 0)).toEqual({ secs: 30, count: 'down_past_zero' });
+    expect(secs('down_past_zero', 500)).toBe(30);
+    expect(secs('down_past_zero', 1_000)).toBe(29);
+    expect(secs('down_past_zero', 29_000)).toBe(1);
+    expect(secs('down_past_zero', 29_500)).toBe(1);
+    expect(secs('down_past_zero', 30_000)).toBe(0);
+    // Half a second late still reads 0, and never minus zero.
+    expect(Object.is(secs('down_past_zero', 30_500), 0)).toBe(true);
+    expect(secs('down_past_zero', 31_000)).toBe(-1);
+    expect(secs('down_past_zero', 35_000)).toBe(-5);
+  });
+
+  it('restarts from the interval when a tick lands early', () => {
+    for (const count of ['down', 'down_past_zero'] as const) {
+      expect(secs(count, 24_000)).toBe(6);
+      expect(secs(count, 0)).toBe(30);
+    }
+    expect(secs('up', 0)).toBe(0);
+  });
+
+  it('counts up instead while the interval is unknown or zero', () => {
+    for (const count of ['up', 'down', 'down_past_zero'] as const) {
+      expect(shown(count, 20_000, 0)).toEqual({ secs: 20, count: 'up' });
+    }
+  });
+
+  it('shows nothing while the timer is off or silent', () => {
+    expect(shownTick(computeTick(null, null), 'down')).toBeNull();
+    expect(shownTick(computeTick(payload(3_000, false), null), 'up')).toBeNull();
+  });
+
+  it('leaves the warning and the late tick the same in every count', () => {
+    const at = (elapsed_ms: number) => computeTick(payload(elapsed_ms), config(null));
+    for (const count of ['up', 'down', 'down_past_zero'] as const) {
+      expect(shownTick(at(24_000), count), count).not.toBeNull();
+    }
+    expect(at(24_000)).toMatchObject({ warn: false, overdue: false });
+    expect(at(25_000)).toMatchObject({ warn: true, overdue: false });
+    expect(at(30_000)).toMatchObject({ warn: true, overdue: true });
+    expect(at(41_000)).toMatchObject({ warn: true, overdue: true });
   });
 });
