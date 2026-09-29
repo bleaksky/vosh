@@ -228,6 +228,25 @@ export async function saveDraftOnto<T>(
   await store.write(mergeDraftChanges(current, draft, keyOf));
 }
 
+/** Save a kind's list and then the block pinned above it, like the Tick
+ *  above Timers. The list loads again as soon as it is written, so when
+ *  the pinned block fails after it, the page already matches the store
+ *  and the next Save does not write the list a second time. For Timers
+ *  that second write would create every new timer again. Pass null for
+ *  a part with nothing to save. The list loads at the end either way. */
+export async function saveListThenPinned(steps: {
+  list: (() => Promise<void>) | null;
+  pinned: (() => Promise<void>) | null;
+  reload: () => Promise<void>;
+}): Promise<void> {
+  if (steps.list) {
+    await steps.list();
+    await steps.reload();
+  }
+  if (steps.pinned) await steps.pinned();
+  if (!steps.list) await steps.reload();
+}
+
 /** How many items Save would add, remove, or change. */
 export function draftChangeCount<T>(draft: Draft<T>): number {
   const { added, removed, changed } = draftChanges(draft);
