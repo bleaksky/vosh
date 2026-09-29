@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { isMacPlatform, shortcutLabel } from '../../lib/palette';
 import type { PaneSplit, PaneType } from '../../lib/paneLayout';
 import { PANE_LABELS, paneTypesToAdd } from '../panel/paneTypes';
@@ -88,7 +89,7 @@ export function TitleBand({
         <button
           type="button"
           className="shell-icon-button"
-          aria-label={`Search commands (${shortcutLabel('Mod+K')})`}
+          aria-label={`Search commands (${shortcutLabel(APP_SHORTCUTS.palette)})`}
           // The palette leaves presses on its own button to this toggle.
           data-palette-anchor=""
           onClick={onTogglePalette}
@@ -101,7 +102,7 @@ export function TitleBand({
           // The label says what a press does, so no pressed state on top
           // of it ("Hide panel, pressed" reads backward).
           aria-label={panelLabel}
-          title={`${panelLabel} (${shortcutLabel('Mod+Shift+L')})`}
+          title={`${panelLabel} (${shortcutLabel(APP_SHORTCUTS.panel)})`}
           onClick={onTogglePanel}
         >
           <PanelIcon />

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import APP_SHORTCUTS from '../../lib/appShortcuts.json';
 import { shortcutLabel } from '../../lib/palette';
 import {
   parseTarget,
@@ -63,7 +64,10 @@ export function SessionMenu({ connection, anchor, onClose }: Props) {
   return (
     <ShellMenu anchor={anchor} align="center" width={MENU_WIDTH} label="Session" onClose={onClose}>
       {!live && (
-        <ShellMenuItem shortcut={shortcutLabel('Mod+R')} onSelect={() => run(connection.connect)}>
+        <ShellMenuItem
+          shortcut={shortcutLabel(APP_SHORTCUTS.connect)}
+          onSelect={() => run(connection.connect)}
+        >
           Connect to {worldName(target.host)}
         </ShellMenuItem>
       )}
