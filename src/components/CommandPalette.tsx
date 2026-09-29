@@ -3,9 +3,14 @@ import {
   buildAliasEntries,
   buildPaletteEntries,
   filterEntries,
+  initialSelection,
+  paletteSections,
+  readRecent,
+  recordRecent,
+  shortcutKeys,
   type PaletteDeps,
   type PaletteEntry,
-  type PaletteGroup,
+  type PaletteSectionView,
 } from '../lib/palette';
 
 interface Props {
@@ -13,51 +18,60 @@ interface Props {
   onClose: () => void;
 }
 
-const GROUP_ORDER: PaletteGroup[] = ['commands', 'aliases', 'panes', 'settings'];
-const SCOPES: ('all' | PaletteGroup)[] = ['all', 'commands', 'aliases', 'panes', 'settings'];
+/** A submenu level: the rows it lists and its section header. */
+interface Level {
+  label: string;
+  entries: PaletteEntry[];
+}
 
-function GroupIcon({ group }: { group: PaletteGroup }) {
+const ICON = {
+  width: 16,
+  height: 16,
+  viewBox: '0 0 16 16',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.25,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+  'aria-hidden': true,
+} as const;
+
+/** Keycaps for a shortcut spec, in the platform's glyphs. */
+function Keycaps({ spec }: { spec: string }) {
   return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 15 15"
-      fill="none"
-      strokeWidth="1.3"
-      aria-hidden="true"
-    >
-      {group === 'commands' && <path d="M3 3.5 7 7.5 3 11.5M8 11.5h4" />}
-      {group === 'aliases' && <path d="M8.5 1.5 4 8.5h3l-1 5L11 6.5H8z" />}
-      {group === 'panes' && (
-        <>
-          <rect x="2" y="3" width="11" height="9" rx="1" />
-          <path d="M8.5 3v9" />
-        </>
-      )}
-      {group === 'settings' && (
-        <>
-          <circle cx="7.5" cy="7.5" r="2.2" />
-          <path d="M7.5 1.5v2M7.5 11.5v2M1.5 7.5h2M11.5 7.5h2M3.3 3.3l1.4 1.4M10.3 10.3l1.4 1.4M11.7 3.3l-1.4 1.4M4.7 10.3l-1.4 1.4" />
-        </>
-      )}
-    </svg>
+    <kbd className="ov-keys">
+      {shortcutKeys(spec).map((key, i) => (
+        <kbd key={i} className={`ov-key${key.length > 1 ? ' is-wide' : ''}`}>
+          {key}
+        </kbd>
+      ))}
+    </kbd>
   );
 }
 
-// The ⌘K command palette from the Ember canvas: scrim, raised panel,
-// scope chips, grouped results with type icons, keyboard-first.
-// Entries rebuild on every open so labels track live state; aliases
-// stream in async from the backend.
+// The ⌘K command palette (SPEC 7, Palette board): 560 wide, centered
+// on the window with its top at 15% of the window height, no scrim.
+// Sections with caps headers (Recent, View, Settings, Session), check
+// marks on toggles that are on, keycaps on the right, and a submenu
+// row that opens its list in place. Disconnect is the last row and
+// the palette never opens with a destructive row selected, so ⌘K then
+// Enter cannot drop the session. Entries rebuild on every open so
+// checks track live state. Aliases stream in from the backend and,
+// like the pane toggles and the settings tabs, show once you type.
 export function CommandPalette({ deps, onClose }: Props) {
   const [query, setQuery] = useState('');
-  const [scope, setScope] = useState<'all' | PaletteGroup>('all');
-  const [selected, setSelected] = useState(0);
+  const [levels, setLevels] = useState<Level[]>([]);
   const [aliasEntries, setAliasEntries] = useState<PaletteEntry[]>([]);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const baseEntries = useMemo(() => buildPaletteEntries(deps), [deps]);
+  const recent = useMemo(readRecent, []);
 
   useEffect(() => {
+    // Hand focus back when the palette goes away with nothing else
+    // taking it, so the command line and its macros keep working.
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     inputRef.current?.focus();
     let cancelled = false;
     void buildAliasEntries(deps).then((rows) => {
@@ -65,141 +79,208 @@ export function CommandPalette({ deps, onClose }: Props) {
     });
     return () => {
       cancelled = true;
+      const active = document.activeElement;
+      if (!active || active === document.body) previous?.focus();
     };
     // deps is stable for the lifetime of one palette open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const visible = useMemo(() => {
-    const all = [...baseEntries, ...aliasEntries];
-    const scoped = scope === 'all' ? all : all.filter((e) => e.group === scope);
-    const filtered = filterEntries(scoped, query);
-    // Stable group presentation: keep result order inside each group,
-    // groups in fixed order.
-    return GROUP_ORDER.flatMap((g) => filtered.filter((e) => e.group === g));
-  }, [baseEntries, aliasEntries, scope, query]);
+  // Close on a press anywhere outside the palette. There is no scrim,
+  // so the terminal and panel stay visible and clickable behind it.
+  useEffect(() => {
+    const onPointer = (e: PointerEvent) => {
+      if (e.target instanceof Node && rootRef.current?.contains(e.target)) return;
+      onClose();
+    };
+    document.addEventListener('pointerdown', onPointer, true);
+    return () => document.removeEventListener('pointerdown', onPointer, true);
+  }, [onClose]);
+
+  const level = levels.length > 0 ? levels[levels.length - 1] : null;
+
+  const sections = useMemo<PaletteSectionView[]>(() => {
+    if (level) {
+      const rows = filterEntries(level.entries, query);
+      return rows.length > 0 ? [{ key: 'view', label: level.label, rows }] : [];
+    }
+    return paletteSections([...baseEntries, ...aliasEntries], query, recent);
+  }, [level, baseEntries, aliasEntries, query, recent]);
+
+  const rows = useMemo(() => sections.flatMap((s) => s.rows), [sections]);
+  const [selected, setSelected] = useState(() => initialSelection(rows));
 
   useEffect(() => {
-    setSelected(0);
-  }, [query, scope, aliasEntries.length]);
+    // A submenu opens on its checked row (the current theme).
+    const checked = level && query.length === 0 ? rows.findIndex((e) => e.checked) : -1;
+    setSelected(checked >= 0 ? checked : initialSelection(rows));
+    // Reset only when the list itself changes shape, not on every
+    // render of the same rows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, levels, aliasEntries.length]);
 
-  const run = (entry: PaletteEntry | undefined) => {
+  // Keep the selected row in view during keyboard navigation.
+  useEffect(() => {
+    const row = listRef.current?.querySelector('[aria-selected="true"]');
+    row?.scrollIntoView({ block: 'nearest' });
+  }, [selected]);
+
+  const openLevel = (entry: PaletteEntry) => {
+    if (!entry.children) return;
+    setLevels((ls) => [
+      ...ls,
+      { label: entry.childLabel ?? entry.title, entries: entry.children!() },
+    ]);
+    setQuery('');
+  };
+
+  const closeLevel = () => {
+    setLevels((ls) => ls.slice(0, -1));
+    setQuery('');
+  };
+
+  const activate = (entry: PaletteEntry | undefined) => {
     if (!entry) return;
+    if (entry.children) {
+      openLevel(entry);
+      return;
+    }
+    if (!level) recordRecent(entry);
     onClose();
     void entry.run();
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
+    const current = selected >= 0 ? rows[selected] : undefined;
     if (e.key === 'Escape') {
       e.preventDefault();
-      onClose();
+      e.stopPropagation();
+      if (level) closeLevel();
+      else onClose();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelected((s) => Math.min(s + 1, visible.length - 1));
+      setSelected((s) => Math.min(s + 1, rows.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSelected((s) => Math.max(s - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      run(visible[selected]);
-    } else if (e.key === 'Tab') {
+      activate(current);
+    } else if (e.key === 'ArrowRight' && current?.children) {
       e.preventDefault();
-      const dir = e.shiftKey ? -1 : 1;
-      setScope((s) => SCOPES[(SCOPES.indexOf(s) + dir + SCOPES.length) % SCOPES.length]);
+      openLevel(current);
+    } else if ((e.key === 'ArrowLeft' || e.key === 'Backspace') && level && query.length === 0) {
+      e.preventDefault();
+      closeLevel();
+    } else if (e.key === 'Tab') {
+      // Focus stays in the search field.
+      e.preventDefault();
     }
   };
 
-  // Keep the selected row scrolled into view during keyboard nav.
-  useEffect(() => {
-    const row = listRef.current?.querySelector('[data-selected="true"]');
-    row?.scrollIntoView({ block: 'nearest' });
-  }, [selected]);
-
+  const optionId = (i: number) => `ov-pal-opt-${i}`;
   let flatIndex = -1;
+
   return (
-    <div className="palette-scrim" data-occludes-surface="true" onPointerDown={onClose}>
+    <div
+      ref={rootRef}
+      className="ov-palette"
+      role="dialog"
+      aria-label="Command palette"
+      onKeyDown={onKeyDown}
+      // Keep the window's click-to-type handler from pulling focus out
+      // of the search field when you press a header or the padding.
+      onMouseUp={(e) => e.stopPropagation()}
+    >
+      <div className="ov-pal-search">
+        <svg {...ICON} className="ov-pal-search-icon">
+          <circle cx="7" cy="7" r="4.5" />
+          <path d="M10.5 10.5l3.5 3.5" />
+        </svg>
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          placeholder={level ? `Search ${level.label.toLowerCase()}…` : 'Search commands…'}
+          spellCheck={false}
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          role="combobox"
+          aria-label="Search commands"
+          aria-expanded="true"
+          aria-controls="ov-pal-list"
+          aria-autocomplete="list"
+          aria-activedescendant={selected >= 0 ? optionId(selected) : undefined}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+      <div className="ov-pal-divider" aria-hidden="true" />
       <div
-        className="palette"
-        role="dialog"
-        aria-label="command palette"
-        onPointerDown={(e) => e.stopPropagation()}
-        onKeyDown={onKeyDown}
+        className="ov-pal-list"
+        id="ov-pal-list"
+        role="listbox"
+        aria-label="Commands"
+        ref={listRef}
       >
-        <div className="palette-input-row">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" strokeWidth="1.3">
-            <circle cx="6" cy="6" r="4" />
-            <path d="M9 9l3.5 3.5" />
-          </svg>
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            placeholder="type a command, alias, pane, or setting"
-            spellCheck={false}
-            aria-label="palette query"
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <span className="kbd">esc</span>
-        </div>
-        <div className="palette-scopes">
-          {SCOPES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={`palette-scope${scope === s ? ' is-active' : ''}`}
-              onClick={() => setScope(s)}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-        <div className="palette-results" ref={listRef}>
-          {visible.length === 0 && <div className="palette-empty">nothing matches</div>}
-          {GROUP_ORDER.map((g) => {
-            const rows = visible.filter((e) => e.group === g);
-            if (rows.length === 0) return null;
-            return (
-              <div key={g}>
-                <div className="caps palette-group">{g}</div>
-                {rows.map((entry) => {
-                  flatIndex += 1;
-                  const idx = flatIndex;
-                  const isSel = idx === selected;
-                  return (
-                    <button
-                      key={entry.id}
-                      type="button"
-                      className={`palette-row${isSel ? ' is-selected' : ''}`}
-                      data-selected={isSel}
-                      onPointerEnter={() => setSelected(idx)}
-                      onClick={() => run(entry)}
-                    >
-                      <GroupIcon group={entry.group} />
-                      <span className="palette-row-title">{entry.title}</span>
-                      {entry.hint && <span className="palette-row-hint">{entry.hint}</span>}
-                      {isSel && <span className="palette-row-run">run</span>}
-                      {entry.kbd ? (
-                        <span className="kbd">{entry.kbd}</span>
-                      ) : (
-                        isSel && <span className="kbd">&#9166;</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-        <div className="palette-footer">
-          <span>&#8593;&#8595; navigate</span>
-          <span>&#9166; run</span>
-          <span>tab scope</span>
-          <span className="palette-footer-count">
-            {visible.length === 0
-              ? '0'
-              : `${Math.min(selected + 1, visible.length)} of ${visible.length}`}
-          </span>
-        </div>
+        {rows.length === 0 && <div className="ov-pal-empty">No commands match</div>}
+        {sections.map((section) => (
+          <div
+            key={section.key}
+            className="ov-pal-group"
+            role="group"
+            aria-labelledby={`ov-pal-head-${section.key}`}
+          >
+            <div className="ov-pal-head" id={`ov-pal-head-${section.key}`}>
+              {section.label}
+              {section.key === 'session' && deps.connected && deps.host && (
+                <span className="ov-pal-chip">{deps.host}</span>
+              )}
+            </div>
+            {section.rows.map((entry) => {
+              flatIndex += 1;
+              const idx = flatIndex;
+              const isSel = idx === selected;
+              return (
+                <div key={`${section.key}-${entry.id}`} className="ov-pal-slot" role="none">
+                  <button
+                    type="button"
+                    role="option"
+                    id={optionId(idx)}
+                    tabIndex={-1}
+                    aria-selected={isSel}
+                    aria-haspopup={entry.children ? 'true' : undefined}
+                    className={`ov-pal-row${isSel ? ' is-selected' : ''}${
+                      entry.destructive ? ' is-danger' : ''
+                    }`}
+                    onPointerMove={() => {
+                      if (!isSel) setSelected(idx);
+                    }}
+                    onClick={() => activate(entry)}
+                  >
+                    {entry.checked && (
+                      <svg {...ICON} className="ov-pal-check">
+                        <path d="M3.5 8.5l3 3 6-7" />
+                      </svg>
+                    )}
+                    <span className="ov-pal-title">{entry.title}</span>
+                    {entry.meta && (
+                      <span className={`ov-pal-meta${entry.metaMono ? ' is-mono' : ''}`}>
+                        {entry.meta}
+                      </span>
+                    )}
+                    {entry.children && (
+                      <svg {...ICON} className="ov-pal-chevron">
+                        <path d="M6.25 4.5L9.75 8l-3.5 3.5" />
+                      </svg>
+                    )}
+                    {entry.keys && <Keycaps spec={entry.keys} />}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );
