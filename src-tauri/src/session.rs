@@ -26,7 +26,7 @@ use crate::map_state::{self, SharedMap};
 use crate::profile::Profile;
 use crate::profile_config::SharedLayer;
 use crate::script_state::{self, ApplyResult, PendingTimer, SharedTimers};
-use crate::tick::{TickPayload, TickRuntime};
+use crate::tick::{TickRuntime, TickStep};
 
 const TICK_EMIT_INTERVAL: Duration = Duration::from_millis(250);
 
@@ -343,11 +343,11 @@ async fn io_loop(
     // re-wraps its output at the new column count.
     let mut naws_active = false;
 
-    // Activate the tick timer for this session. The user can disable it
-    // later through the slash command.
+    // Activate the tick timer for this session, unsynced until the game's
+    // first tick. The user can disable it later through the slash command.
     {
         let mut p = profile.lock().await;
-        p.tick.enable(Instant::now());
+        p.tick.start_session(Instant::now());
     }
 
     let mut tick_interval = tokio::time::interval(TICK_EMIT_INTERVAL);
@@ -557,7 +557,7 @@ async fn io_loop(
 
     {
         let mut p = profile.lock().await;
-        p.tick.disable();
+        p.tick.end_session();
     }
 
     // Close the log session row and flush the scrollback ring buffer to
@@ -623,73 +623,36 @@ async fn handle_tick(
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
 ) -> std::io::Result<()> {
-    let now = Instant::now();
-    // Take the firing decision under the lock. If the timer fired, capture
-    // the auto-fire command (if any) so we can run it after releasing the
-    // lock.
-    let (payload, auto_fire, warn_echo) = {
+    // Take the firing decision under the lock, then run the Send each
+    // tick command, if the timer fired, after releasing it.
+    let step = {
         let mut p = profile.lock().await;
-        let fired = p.tick.try_consume_fire(now);
-        let warned = p.tick.try_consume_warn(now);
-        let payload = TickPayload::from_runtime(&p.tick, now, fired);
-        let auto_fire = if fired {
-            p.tick.config.auto_fire.clone()
-        } else {
-            None
-        };
-        let warn_echo = if warned {
-            let message = p.tick.config.warn_message.clone().unwrap_or_else(|| {
-                match p.tick.config.warn_at_secs {
-                    Some(s) => format!("TICK IN {s}s"),
-                    None => "TICK INCOMING".to_string(),
-                }
-            });
-            let color = crate::tick::warn_color_escape(p.tick.config.warn_color.as_deref());
-            Some(format!("\r\n{color}{message}\x1b[0m\r\n"))
-        } else {
-            None
-        };
-        (payload, auto_fire, warn_echo)
+        p.tick.poll(Instant::now())
     };
-
-    if !payload.enabled && !payload.fired {
+    if !step.payload.enabled && !step.payload.fired {
         return Ok(());
     }
-
-    if let Some(text) = warn_echo {
-        emit_output(app, text.into_bytes());
+    if let Some(text) = &step.warn_echo {
+        emit_output(app, text.clone().into_bytes());
     }
+    deliver_tick_step(app, stream, profile, step).await
+}
 
-    if let Err(e) = app.emit("session://tick", &payload) {
+/// Report a tick step on `session://tick`, so the frontend counts and
+/// plays the sound when it fired, then run its Send each tick command
+/// through the full input pipeline like a timer command.
+async fn deliver_tick_step(
+    app: &AppHandle,
+    stream: &mut Stream,
+    profile: &Arc<Mutex<Profile>>,
+    step: TickStep,
+) -> std::io::Result<()> {
+    if let Err(e) = app.emit("session://tick", &step.payload) {
         warn!(error = %e, "failed to emit tick payload");
     }
-
-    if let Some(command) = auto_fire {
-        let shared = crate::commands::shared_layer_for_lines(app, [command.as_str()]).await;
-        let mut effects = input::LineEffects::default();
-        let (result, lists) = {
-            let mut p = profile.lock().await;
-            let before = ListRevisions::of(&p);
-            let result = process_fired_line(&mut p, &command, &mut effects, shared.as_ref());
-            (result, ListChanges::since(before, &p))
-        };
-        broadcast_list_changes(app, lists);
-        crate::commands::settle_line_effects(app, effects).await;
-        if !result.echo.is_empty() {
-            let mut buf = Vec::new();
-            for line in &result.echo {
-                buf.extend_from_slice(b"\r\n");
-                buf.extend_from_slice(line.as_bytes());
-            }
-            buf.extend_from_slice(b"\r\n");
-            emit_output(app, buf);
-        }
-        if !result.bytes.is_empty() {
-            stream.write_all(&result.bytes).await?;
-            stream.flush().await?;
-        }
+    if let Some(command) = step.command {
+        run_fired_command(app, stream, profile, &command).await?;
     }
-
     Ok(())
 }
 
@@ -898,16 +861,14 @@ async fn handle_event(
                         perf.lines_processed += 1;
                         let plain = vosh_ansi::plain_text(&bytes);
                         let trigger_t0 = std::time::Instant::now();
-                        // Phase 5 perf fix: build the tick-reset payload
-                        // under the same lock as trigger/Lua matching so
-                        // we never reacquire `profile` later just to read
-                        // five fields out of `p.tick`. `TickPayload` is
-                        // trivially cheap (no allocations), so computing
-                        // it under lock is free; the second
-                        // `profile.lock().await` it replaces was an
-                        // unconditional await every time a line matched
-                        // the user's tick reset pattern.
-                        let (result, tick_reset_payload, script_apply, rendered_prompt) = {
+                        // Phase 5 perf fix: take the tick step for a line
+                        // that matches the Reset on pattern under the same
+                        // lock as trigger/Lua matching so we never
+                        // reacquire `profile` later just to read the tick.
+                        // The line is the game's tick, so the step fires
+                        // once per tick and carries the Send each tick
+                        // command to run after the lock drops.
+                        let (result, tick_step, script_apply, rendered_prompt) = {
                             let lock_t0 = std::time::Instant::now();
                             let mut p = profile.lock().await;
                             perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
@@ -922,9 +883,8 @@ async fn handle_event(
                                 &plain,
                                 vosh_trigger::MatchScope::Line,
                             );
-                            let tick_payload = if p.tick.check_reset_match(&plain) {
-                                p.tick.reset(Instant::now());
-                                Some(TickPayload::from_runtime(&p.tick, Instant::now(), false))
+                            let tick_step = if p.tick.check_reset_match(&plain) {
+                                p.tick.on_game_tick(Instant::now())
                             } else {
                                 None
                             };
@@ -981,7 +941,7 @@ async fn handle_event(
                             } else {
                                 None
                             };
-                            (result, tick_payload, apply, rendered_prompt)
+                            (result, tick_step, apply, rendered_prompt)
                         };
                         perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
                         // In-place echo replacement. When a trigger gags the
@@ -1043,10 +1003,8 @@ async fn handle_event(
                         }
                         send_trigger_outputs(stream, &result.sends).await?;
                         apply_script_result(app, stream, profile, timers, script_apply).await?;
-                        if let Some(payload) = tick_reset_payload {
-                            if let Err(e) = app.emit("session://tick", &payload) {
-                                warn!(error = %e, "failed to emit tick reset payload");
-                            }
+                        if let Some(step) = tick_step {
+                            deliver_tick_step(app, stream, profile, step).await?;
                         }
                     }
                 }
@@ -1163,10 +1121,10 @@ async fn handle_gmcp(
     // duplicate-member server bug).
     info!(package = %msg.package, "gmcp received");
     tracing::debug!(package = %msg.package, data = %msg.data, "gmcp payload");
-    // Phase 5: same fold as the per-line path. Build the tick-reset
-    // payload under the existing lock so a World.Time hour change
-    // doesn't force a second `profile.lock().await` after release.
-    let (tick_reset_payload, script_apply) = {
+    // Phase 5: same fold as the per-line path. Take the tick step for a
+    // World.Time hour change under the existing lock so it does not force
+    // a second `profile.lock().await` after release.
+    let (tick_step, script_apply) = {
         let lock_t0 = std::time::Instant::now();
         let mut p = profile.lock().await;
         perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
@@ -1200,12 +1158,7 @@ async fn handle_gmcp(
                 crate::input::set_room_chars(&mut p, chars);
             }
         }
-        let ticked = observe_world_time_for_tick(&mut p.tick, &msg);
-        let tick_payload = if ticked {
-            Some(TickPayload::from_runtime(&p.tick, Instant::now(), false))
-        } else {
-            None
-        };
+        let tick_step = observe_world_time_for_tick(&mut p.tick, &msg, Instant::now());
         script_state::snapshot_vars(&p.script, &p.vars);
         let outcome = match p.script.dispatch_gmcp(&msg.package, &msg.data) {
             Ok(o) => o,
@@ -1215,7 +1168,7 @@ async fn handle_gmcp(
             }
         };
         let apply = script_state::apply_actions(&mut p, outcome);
-        (tick_payload, apply)
+        (tick_step, apply)
     };
 
     // Char.Status / Char.Name carry the logged-in character name on
@@ -1234,12 +1187,9 @@ async fn handle_gmcp(
             }
         }
     }
-    if let Some(payload) = tick_reset_payload {
-        if let Err(e) = app.emit("session://tick", &payload) {
-            warn!(error = %e, "failed to emit tick payload after world hour change");
-        } else {
-            perf.tick_emits += 1;
-        }
+    if let Some(step) = tick_step {
+        perf.tick_emits += 1;
+        deliver_tick_step(app, stream, profile, step).await?;
     }
     apply_script_result(app, stream, profile, timers, script_apply).await?;
     if msg.package == "Room.Info" {
@@ -1297,30 +1247,27 @@ fn map_writer(
     })
 }
 
-/// Detect a tick fire from a GMCP `World.Time` push. Aabahran (and most ROM
-/// derivatives that ship World.Time) advance the `hour` field every server
-/// tick, so an hour change is the natural reset signal. Returns true when
-/// the tick was reset.
-fn observe_world_time_for_tick(tick: &mut TickRuntime, msg: &vosh_gmcp::Message) -> bool {
+/// Detect the game's tick from a GMCP `World.Time` push. Aabahran (and
+/// most ROM derivatives that ship World.Time) advance the `hour` field
+/// every server tick, so an hour change is the tick. Returns the step to
+/// deliver when the change counted as a tick.
+fn observe_world_time_for_tick(
+    tick: &mut TickRuntime,
+    msg: &vosh_gmcp::Message,
+    now: Instant,
+) -> Option<TickStep> {
     if msg.package != "World.Time" {
-        return false;
+        return None;
     }
-    let Some(obj) = msg.data.as_object() else {
-        return false;
-    };
-    let Some(hour_value) = obj.get("hour") else {
-        return false;
-    };
-    let hour_str = match hour_value {
+    let hour_str = match msg.data.as_object()?.get("hour")? {
         serde_json::Value::String(s) => s.clone(),
         serde_json::Value::Number(n) => n.to_string(),
-        _ => return false,
+        _ => return None,
     };
     if tick.observe_world_hour(&hour_str) {
-        tick.reset(Instant::now());
-        true
+        tick.on_game_tick(now)
     } else {
-        false
+        None
     }
 }
 
@@ -1848,6 +1795,55 @@ mod tests {
         assert_eq!(p.ui.theme, "night-ink");
         assert_eq!(p.ui.font_family, "Iosevka");
         assert!(p.ui.keep_last_command);
+    }
+
+    fn world_time(hour: serde_json::Value) -> vosh_gmcp::Message {
+        vosh_gmcp::Message {
+            package: "World.Time".into(),
+            data: serde_json::json!({ "hour": hour }),
+        }
+    }
+
+    #[test]
+    fn a_world_hour_change_is_the_tick_and_fires_once() {
+        let t0 = tokio::time::Instant::now();
+        let mut tick = crate::tick::TickRuntime::default();
+        tick.config.auto_fire = Some("score".into());
+        tick.start_session(t0);
+        let at = |s: u64| t0 + std::time::Duration::from_secs(s);
+
+        // The first hour of the session primes.
+        assert!(
+            super::observe_world_time_for_tick(&mut tick, &world_time(9.into()), at(1)).is_none()
+        );
+        // The same hour again is no tick.
+        assert!(
+            super::observe_world_time_for_tick(&mut tick, &world_time(9.into()), at(5)).is_none()
+        );
+        let step = super::observe_world_time_for_tick(&mut tick, &world_time("10".into()), at(12))
+            .expect("the hour moved");
+        assert!(step.payload.fired);
+        assert_eq!(step.command.as_deref(), Some("score"));
+        assert!(tick.synced);
+        // A Reset on line for the same tick does not fire again.
+        assert!(tick.on_game_tick(at(13)).is_none());
+        // Past the interval the timer waits for the next hour.
+        assert!(!tick.poll(at(45)).payload.fired);
+        let step = super::observe_world_time_for_tick(&mut tick, &world_time(11.into()), at(46))
+            .expect("the next tick");
+        assert!(step.payload.fired);
+
+        // Other packages and a World.Time without an hour are no tick.
+        let other = vosh_gmcp::Message {
+            package: "Char.Vitals".into(),
+            data: serde_json::json!({ "hour": 12 }),
+        };
+        assert!(super::observe_world_time_for_tick(&mut tick, &other, at(80)).is_none());
+        let no_hour = vosh_gmcp::Message {
+            package: "World.Time".into(),
+            data: serde_json::json!({ "sunlight": "light" }),
+        };
+        assert!(super::observe_world_time_for_tick(&mut tick, &no_hour, at(80)).is_none());
     }
 
     #[test]

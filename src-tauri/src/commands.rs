@@ -4292,7 +4292,7 @@ mod tests {
         let now = tokio::time::Instant::now();
         let mut tick = running_tick(now);
         let before = format!("{:?}", tick.config);
-        let next_fire = tick.next_fire;
+        let next_fire = tick.next_fire();
 
         let err = super::apply_tick_config(&mut tick, &tick_payload("[bad"), now).unwrap_err();
         assert_eq!(
@@ -4304,7 +4304,7 @@ mod tests {
         assert_eq!(format!("{:?}", tick.config), before);
         assert!(tick.config.enabled);
         assert_eq!(tick.config.interval.as_secs(), 30);
-        assert_eq!(tick.next_fire, next_fire);
+        assert_eq!(tick.next_fire(), next_fire);
         assert!(tick.check_reset_match("You feel less tired."));
     }
 
@@ -4320,7 +4320,7 @@ mod tests {
         assert_eq!(saved.reset_pattern.as_deref(), Some("^Dawn"));
         assert_eq!(saved.warn_at_secs, Some(5));
         assert!(!tick.config.enabled);
-        assert_eq!(tick.next_fire, None);
+        assert_eq!(tick.next_fire(), None);
         assert_eq!(tick.config.interval.as_secs(), 60);
         assert!(!tick.config.sound);
         assert!(tick.check_reset_match("Dawn breaks."));
@@ -4334,7 +4334,7 @@ mod tests {
         assert!(saved.enabled);
         assert_eq!(saved.reset_pattern, None);
         assert_eq!(
-            tick.next_fire,
+            tick.next_fire(),
             Some(now + std::time::Duration::from_secs(60))
         );
         assert!(!tick.check_reset_match("Dawn breaks."));
