@@ -2,7 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { defaultLayout, splitPane } from '../../lib/paneLayout';
 import type { ImmQueues } from '../../lib/immStore';
 import { immRows, immSummary } from './immRows';
-import { chatTime, exitsLabel, splitSpeaker, ticksLabel, vitalValue } from './paneText';
+import {
+  affectStateWord,
+  chatTime,
+  exitsLabel,
+  splitSpeaker,
+  ticksLabel,
+  vitalValue,
+} from './paneText';
 
 // paneActions pulls in the Tauri bridge through the layout store, so
 // stub it. The pure tree helper under test never calls it.
@@ -54,6 +61,16 @@ describe('ticksLabel', () => {
     expect(ticksLabel('expiring', 0)).toBe('0');
     expect(ticksLabel('present', -1)).toBe('permanent');
     expect(ticksLabel('untracked', null)).toBe('');
+  });
+});
+
+describe('affectStateWord', () => {
+  it('names the states only the marker color shows', () => {
+    expect(affectStateWord('expiring')).toBe('expiring');
+    expect(affectStateWord('harmful')).toBe('harmful');
+    expect(affectStateWord('missing')).toBeNull();
+    expect(affectStateWord('present')).toBeNull();
+    expect(affectStateWord('untracked')).toBeNull();
   });
 });
 

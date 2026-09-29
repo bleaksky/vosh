@@ -25,6 +25,14 @@ export function ticksLabel(state: string, ticks: number | null): string {
   return String(ticks);
 }
 
+/** The state an Affects row shows only through its marker color, as
+ *  words for a screen reader: `expiring` or `harmful`. Null for rows
+ *  whose visible text already says it (missing) or that need nothing. */
+export function affectStateWord(state: string): string | null {
+  if (state === 'expiring' || state === 'harmful') return state;
+  return null;
+}
+
 /** A vitals value, `1020 / 1020`. */
 export function vitalValue(current: number, max: number): string {
   return `${current} / ${max}`;
