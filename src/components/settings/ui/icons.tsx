@@ -114,6 +114,14 @@ export function ChevronDownIcon(props: IconProps) {
   );
 }
 
+export function ChevronUpIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M4.5 9.75L8 6.25l3.5 3.5" {...scale(props.size)} />
+    </Glyph>
+  );
+}
+
 export function CloseIcon(props: IconProps) {
   return (
     <Glyph {...props}>

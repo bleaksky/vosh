@@ -84,6 +84,11 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 - `variant` is `secondary` (the default, a hairline ring), `primary` (accent fill, `--on-accent` text), or `danger` (danger text, no fill).
 - `icon` adds a leading 16 px icon in the secondary color, like `New profile`.
 
+`IconButton` is a 28×24 button that shows only a 16 px icon, the one the window controls use. It forwards its ref.
+
+- `label` is its accessible name, like `Erelei options` or `Move Haste up`. It is required, since the button shows no text.
+- `icon` is the icon.
+
 `Keycap` draws one key. Build the keys with `shortcutKeys` from `src/lib/palette.ts` so macOS reads ⌘ and the other systems read Ctrl.
 
 `Chip` is a pill with an optional close button.
@@ -108,7 +113,7 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 
 ## Icons
 
-`ui/icons.tsx` holds the SPEC 6 set. `GearIcon`, `AppearanceIcon`, `LayoutIcon`, `KeyboardIcon`, `BoltIcon`, `UserIcon`, `SearchIcon`, `ChevronRightIcon`, `ChevronDownIcon`, `CloseIcon`, `PlusIcon`, `CheckIcon`, `MoreIcon`, `MinimizeIcon`, and `MaximizeIcon`. Each takes `size` (16 by default, or 12) and `className`. A 12 px icon keeps the 1.25 px stroke.
+`ui/icons.tsx` holds the SPEC 6 set. `GearIcon`, `AppearanceIcon`, `LayoutIcon`, `KeyboardIcon`, `BoltIcon`, `UserIcon`, `SearchIcon`, `ChevronRightIcon`, `ChevronDownIcon`, `ChevronUpIcon`, `CloseIcon`, `PlusIcon`, `CheckIcon`, `MoreIcon`, `MinimizeIcon`, and `MaximizeIcon`. Each takes `size` (16 by default, or 12) and `className`. A 12 px icon keeps the 1.25 px stroke.
 
 ## Focus and motion
 
