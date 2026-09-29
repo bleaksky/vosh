@@ -6,7 +6,7 @@ import { GroupPane } from './GroupPane';
 import { ImmPane } from './ImmPane';
 import { MapPane } from './MapPane';
 import { PaneLeafContext } from './paneActions';
-import { MIN_PANE_H, MIN_PANE_W, dragSizes, layoutPanes, type HandleBox } from './paneGeometry';
+import { PANE_MIN_H, dragSizes, layoutPanes, type HandleBox } from './paneGeometry';
 import { getPanelLayout, setPaneTree, usePanelLayout } from './panelLayoutStore';
 import { PANE_LABELS } from './paneTypes';
 import { VitalsFooter } from './VitalsFooter';
@@ -21,6 +21,11 @@ import { VitalsFooter } from './VitalsFooter';
 // showing a pane somewhere else only moves boxes, so the map canvas
 // and each pane's scroll position survive every tree edit, and a pane
 // moved with Show here instead keeps its state too.
+//
+// No pane drops below the height it reads at while the panel has room
+// (PANE_MIN_H). On a panel too short for every pane, the lightest ones
+// come up short and scroll inside their box, header and all for the
+// map, whose drawing has no list of its own to scroll.
 
 // Arrow keys move a focused handle this far, Shift for bigger steps.
 const KEY_STEP = 8;
@@ -73,7 +78,13 @@ export function PanelHost() {
             key={leaf.pane}
             className={`pane pane-${leaf.pane}`}
             aria-label={PANE_LABELS[leaf.pane]}
-            style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
+            style={{
+              left: rect.x,
+              top: rect.y,
+              width: rect.w,
+              height: rect.h,
+              overflowY: rect.h < PANE_MIN_H[leaf.pane] ? 'auto' : undefined,
+            }}
           >
             <PaneLeafContext.Provider value={leaf}>{PANES[leaf.pane]()}</PaneLeafContext.Provider>
           </section>
@@ -93,12 +104,13 @@ export function PanelHost() {
 }
 
 /** The line between two sibling panes. Drag it, or focus it and use
- *  the arrow keys. */
+ *  the arrow keys. Neither neighbour goes below its minimum. */
 function PaneHandle({ handle }: { handle: HandleBox }) {
   const drag = useRef<{ start: number; sizes: number[] } | null>(null);
   const vertical = handle.dir === 'column';
-  const min = vertical ? MIN_PANE_H : MIN_PANE_W;
-  const { rect } = handle;
+  const { rect, index, mins } = handle;
+  const resize = (sizes: number[], delta: number) =>
+    dragSizes(sizes, index, delta, mins[index], mins[index + 1]);
 
   const apply = (sizes: number[]) => {
     const root = getPanelLayout()?.root;
@@ -146,7 +158,7 @@ function PaneHandle({ handle }: { handle: HandleBox }) {
       onPointerMove={(e) => {
         const d = drag.current;
         if (!d) return;
-        apply(dragSizes(d.sizes, handle.index, coord(e) - d.start, min));
+        apply(resize(d.sizes, coord(e) - d.start));
       }}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
@@ -156,7 +168,7 @@ function PaneHandle({ handle }: { handle: HandleBox }) {
         const fwd = vertical ? 'ArrowDown' : 'ArrowRight';
         if (e.key !== back && e.key !== fwd) return;
         e.preventDefault();
-        apply(dragSizes(handle.sizes, handle.index, e.key === fwd ? step : -step, min));
+        apply(resize(handle.sizes, e.key === fwd ? step : -step));
       }}
     />
   );
