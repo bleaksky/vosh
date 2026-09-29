@@ -30,13 +30,14 @@ export interface Preset {
   triggers: Omit<TriggerRecord, 'preset'>[];
 }
 
+// Category names as Settings, Automation shows them over the presets.
 export const PRESET_CATEGORIES: Record<PresetCategory, string> = {
-  healing: 'Healing & Cure',
-  defensive: 'Defensive Combat',
-  disarm_buff: 'Disarm & Buff Fade',
-  events: 'Combat & Spell Events',
-  loot: 'Loot & Progression',
-  labels: 'Potion & Herb Labels',
+  healing: 'Healing and cures',
+  defensive: 'Defense',
+  disarm_buff: 'Disarms and fading buffs',
+  events: 'Combat and spell events',
+  loot: 'Loot and progress',
+  labels: 'Potion and herb labels',
 };
 
 // Helper to build a highlight trigger compactly. Default priority of 5
@@ -153,10 +154,8 @@ export const PRESETS: Preset[] = [
   {
     id: 'healing_basics',
     category: 'healing',
-    name: 'Cure & heal messages',
-    description:
-      'You feel a lot better! / You are no longer poisoned. / etc. ' +
-      'Greens up the line so you spot heals at a glance.',
+    name: 'Cures and heals',
+    description: 'Turns cure and heal lines green so you spot them at a glance.',
     defaultEnabled: true,
     triggers: [
       highlight('cure.feel_lot_better', 'You feel a lot better!$', GREEN),
@@ -178,10 +177,8 @@ export const PRESETS: Preset[] = [
   {
     id: 'defensive_combat',
     category: 'defensive',
-    name: 'Parries, dodges, blocks',
-    description:
-      'Greys out routine defensive saves (parry, dodge, block, etc.) ' +
-      'using the same dark-grey shade your tintin uses (<g08>).',
+    name: 'Parries, dodges, and blocks',
+    description: 'Dims routine parries, dodges, and blocks to the dark grey your TinTin++ uses.',
     defaultEnabled: true,
     triggers: [
       // Generic "You dodge X." / "You parry X." — matches the bare
@@ -257,8 +254,9 @@ export const PRESETS: Preset[] = [
   {
     id: 'disarm_buff_fade',
     category: 'disarm_buff',
-    name: 'Disarm & buff fade',
-    description: 'Disarms and buff drops from highlights.tin 105-134.',
+    // From highlights.tin lines 105 to 134.
+    name: 'Disarms and fading buffs',
+    description: 'Marks a disarm and a buff that wears off.',
     defaultEnabled: true,
     triggers: [
       // Visual recolor + auto-rearm send, demonstrating the
@@ -334,8 +332,9 @@ export const PRESETS: Preset[] = [
   {
     id: 'terror_events',
     category: 'events',
+    // From highlights.tin line 124.
     name: 'Terror weapon drop',
-    description: 'Bold red on the line + auto get/wield from highlights.tin 124.',
+    description: 'Turns the line bold red, then picks up your weapon and wields it.',
     defaultEnabled: true,
     triggers: [
       {
@@ -363,10 +362,10 @@ export const PRESETS: Preset[] = [
   {
     id: 'combat_outgoing',
     category: 'events',
-    name: 'Your damage verbs (amber)',
+    name: 'Your damage verbs',
     description:
-      "Highlights damage verbs in lines that start with 'Your ...' " +
-      'so outgoing hits stand out without recoloring the rest of the line.',
+      'Colors the damage verb amber in lines that start with Your, so your hits stand out ' +
+      'and the rest of the line keeps its color.',
     defaultEnabled: true,
     triggers: [
       // Mirrors the TinTin `You%1` form so both "Your kick LACERATES
@@ -397,10 +396,10 @@ export const PRESETS: Preset[] = [
   {
     id: 'combat_incoming',
     category: 'events',
-    name: 'Damage to you (grey line, red verb)',
+    name: 'Damage to you',
     description:
-      'Tones lines where something hits you to grey, with the damage ' +
-      'verb in red and missed swings in pale cyan.',
+      'Dims lines where something hits you to grey, with the damage verb in red and ' +
+      'misses in pale cyan.',
     defaultEnabled: true,
     triggers: [
       replace(
@@ -424,8 +423,9 @@ export const PRESETS: Preset[] = [
   {
     id: 'loot_progression',
     category: 'loot',
-    name: 'Gold / xp / level / skill-up',
-    description: 'Loot and progression lines from highlights.tin 170-174.',
+    // From highlights.tin lines 170 to 174.
+    name: 'Gold, experience, and levels',
+    description: 'Marks the gold, experience, levels, and skills you gain.',
     defaultEnabled: true,
     triggers: [
       replace(
@@ -457,8 +457,9 @@ export const PRESETS: Preset[] = [
   {
     id: 'potion_labels',
     category: 'labels',
+    // From highlights.tin lines 180 to 186.
     name: 'Potion labels',
-    description: 'Spell-name annotations for potions from highlights.tin 180-186.',
+    description: 'Adds the spell a potion casts after its name.',
     defaultEnabled: true,
     triggers: [
       replace(
@@ -504,8 +505,9 @@ export const PRESETS: Preset[] = [
   {
     id: 'herb_labels',
     category: 'labels',
+    // From highlights.tin lines 192 to 209.
     name: 'Herb labels',
-    description: 'Spell-name annotations for herbs from highlights.tin 192-209.',
+    description: 'Adds the spell an herb casts after its name.',
     defaultEnabled: true,
     triggers: [
       replace(

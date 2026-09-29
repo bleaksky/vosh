@@ -7,7 +7,7 @@
 // active list.
 
 import { draftChanges, type Draft } from './automationDraft';
-import { defaultEnabledIds, PRESETS, type PresetCategory } from './presets';
+import { defaultEnabledIds, PRESETS } from './presets';
 import type { TickConfig } from './session';
 
 const quote = (name: string) => `“${name}”`;
@@ -245,16 +245,6 @@ export function presetSavePlan(draft: Draft<PresetToggle>): PresetSavePlan {
     remove: changed.filter((c) => !c.after.enabled).map((c) => c.after.id),
   };
 }
-
-/** Preset categories as list headings, in sentence case. */
-export const PRESET_CATEGORY_LABELS: Record<PresetCategory, string> = {
-  healing: 'Healing and cures',
-  defensive: 'Defense',
-  disarm_buff: 'Disarms and fading buffs',
-  events: 'Combat and spell events',
-  loot: 'Loot and progress',
-  labels: 'Potion and herb labels',
-};
 
 // ── Loadouts ────────────────────────────────────────────────────────
 
