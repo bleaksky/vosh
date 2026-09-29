@@ -31,21 +31,23 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub(crate) enum ProfileSetError {
-    #[error("io error: {0}")]
+    #[error("Vosh could not read or write a profile file ({0}).")]
     Io(#[from] std::io::Error),
-    #[error("toml parse error: {0}")]
+    #[error("Vosh could not read profiles.toml because it is not valid TOML.")]
     Deserialize(#[from] toml::de::Error),
-    #[error("toml serialize error: {0}")]
+    #[error("Vosh could not save the profile list.")]
     Serialize(#[from] toml::ser::Error),
-    #[error("profile `{0}` already exists")]
+    #[error("You already have a profile named {0}.")]
     AlreadyExists(String),
-    #[error("profile `{0}` not found")]
+    #[error("Vosh cannot find a profile named {0}.")]
     NotFound(String),
-    #[error("cannot delete the active profile (`{0}`); switch first")]
+    #[error("You cannot delete the profile you are using. Switch to another profile first.")]
     CannotDeleteActive(String),
-    #[error("profile name cannot be empty")]
+    #[error("Give the profile a name.")]
     EmptyName,
-    #[error("profile name `{0}` is invalid")]
+    #[error(
+        "You cannot name a profile {0}. Use letters, numbers, spaces, hyphens, and underscores."
+    )]
     InvalidName(String),
 }
 
@@ -517,6 +519,16 @@ impl ProfileSet {
     }
 }
 
+/// The name Vosh shows for a profile. The reserved `default` profile
+/// reads `Default`, and every other name shows as typed.
+pub(crate) fn display_name(name: &str) -> String {
+    if name == DEFAULT_PROFILE_NAME {
+        "Default".to_string()
+    } else {
+        name.to_string()
+    }
+}
+
 /// Profile names are filesystem-bound. Allow only a conservative set
 /// of characters; reject empty or path-bound names so we never reach
 /// outside the profiles/ directory.
@@ -589,6 +601,38 @@ mod tests {
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         let err = set.delete(DEFAULT_PROFILE_NAME).unwrap_err();
         assert!(matches!(err, ProfileSetError::CannotDeleteActive(_)));
+    }
+
+    #[test]
+    fn errors_read_as_sentences() {
+        let dir = tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        assert_eq!(
+            set.delete(DEFAULT_PROFILE_NAME).unwrap_err().to_string(),
+            "You cannot delete the profile you are using. Switch to another profile first."
+        );
+        assert_eq!(
+            set.create("with:colon").unwrap_err().to_string(),
+            "You cannot name a profile with:colon. Use letters, numbers, spaces, hyphens, and underscores."
+        );
+        assert_eq!(
+            set.create("  ").unwrap_err().to_string(),
+            "Give the profile a name."
+        );
+        assert_eq!(
+            set.create(DEFAULT_PROFILE_NAME).unwrap_err().to_string(),
+            "You already have a profile named default."
+        );
+        assert_eq!(
+            set.switch("Nobody").unwrap_err().to_string(),
+            "Vosh cannot find a profile named Nobody."
+        );
+    }
+
+    #[test]
+    fn default_profile_displays_as_default() {
+        assert_eq!(display_name(DEFAULT_PROFILE_NAME), "Default");
+        assert_eq!(display_name("Test-Prompt"), "Test-Prompt");
     }
 
     #[test]
