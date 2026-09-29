@@ -74,7 +74,18 @@ describe('the help on loadouts', () => {
     const text = body('characters-and-data.loadouts');
     expect(text).not.toMatch(/parks/);
     expect(text).toContain('copies each profile file to `profiles/legacy/`');
-    expect(text).toContain('Every other setting stays with its profile.');
+    // The preset list is shared in loadout mode, so the help no longer
+    // says every other setting stays with its profile.
+    expect(text).not.toContain('Every other setting stays with its profile.');
+    const presets = [
+      'Every other setting stays with its profile except the presets.',
+      'Loadout mode keeps one list of presets that are on, and every character shares it.',
+      'The list starts with every preset that any profile file had on, and the preview names each character that gains or loses a preset.',
+    ];
+    for (const sentence of presets) {
+      expect(text).toContain(sentence);
+      expect(helpMd).toContain(sentence);
+    }
     expect(text).not.toMatch(/run the migration wizard again/);
     expect(text).toContain('The migration wizard runs once');
     expect(text).toContain('while `profiles/legacy/` holds the copies from an earlier run');

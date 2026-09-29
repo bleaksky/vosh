@@ -5759,6 +5759,18 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   color: var(--c-text-faint);
 }
 
+.migration-preset-change {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.migration-preset-verb {
+  color: var(--c-text);
+  font-size: 0.85em;
+}
+
 /* Import tab — file picker + paste-in textarea + apply, with a
    per-format radio row and a post-apply summary that lists counts
    plus details panels for rejected / unsupported / unparsed. */

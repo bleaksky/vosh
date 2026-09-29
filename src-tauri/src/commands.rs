@@ -3573,15 +3573,36 @@ async fn analyze_migration(
     if let Some(reason) = migration_refusal(state, app_data).await {
         return Err(reason.into());
     }
+    let live_presets = state.profile.lock().await.ui.enabled_presets.clone();
     let guard = state.profile_set.lock().await;
     let Some(set) = guard.as_ref() else {
         return Err(PROFILES_NOT_LOADED.into());
     };
     let sources = migration_sources(set)?;
-    Ok(crate::migration::analyze_profiles(
-        &sources.profiles,
-        library,
-    ))
+    Ok(plan_migration(&sources, &live_presets, library))
+}
+
+/// The plan for `sources`, with the preset list every character shares
+/// in loadout mode and the list each profile has now, so the preview can
+/// say who gains or loses a preset. The catalog takes the shared list by
+/// the rule launch uses, see
+/// [`crate::loadout_store::first_catalog_presets`], so the first launch
+/// in loadout mode keeps on every preset any saved profile had on and
+/// nothing more. `live_presets` is the live profile's list.
+fn plan_migration(
+    sources: &MigrationSources,
+    live_presets: &[String],
+    library: &[&str],
+) -> crate::migration::MigrationPlan {
+    let mut plan = crate::migration::analyze_profiles(&sources.profiles, library);
+    plan.shared_presets =
+        crate::loadout_store::first_catalog_presets(&sources.preset_lists, live_presets);
+    plan.profile_presets = sources
+        .profiles
+        .iter()
+        .map(|(_, config)| config.ui.enabled_presets.clone())
+        .collect();
+    plan
 }
 
 /// Why the shared catalog wizard may not run, or None when it may. Past
@@ -3806,15 +3827,11 @@ async fn apply_migration_with(
     };
     let live_presets = state.profile.lock().await.ui.enabled_presets.clone();
 
-    let plan = crate::migration::analyze_profiles(&sources.profiles, library);
+    let plan = plan_migration(&sources, &live_presets, library);
     let mut catalog = plan.auto_resolved.clone();
-    // The catalog owns which presets are on. It takes the list here, by
-    // the rule launch uses, so the first launch in loadout mode keeps on
-    // every preset any character had on and nothing more.
-    catalog.enabled_presets = Some(crate::loadout_store::first_catalog_presets(
-        &sources.preset_lists,
-        &live_presets,
-    ));
+    // The catalog owns which presets are on, and takes the list the
+    // preview showed.
+    catalog.enabled_presets = Some(plan.shared_presets.clone());
     for conflict in &plan.conflicts {
         let chosen_source = resolutions
             .iter()
@@ -6082,6 +6099,44 @@ mod tests {
                 let state = relaunch_as(dir.path(), name).await;
                 assert_eq!(state.profile.lock().await.ui.enabled_presets, on);
             }
+        }
+
+        #[tokio::test]
+        async fn the_preview_holds_the_shared_preset_list_and_each_characters_own() {
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_presets(
+                &set,
+                crate::profile_set::DEFAULT_PROFILE_NAME,
+                &["healing_basics"],
+            );
+            write_presets(&set, "Healer", &["healing_basics", "herb_labels"]);
+            // Test-Prompt never saved a file, so it has every preset on,
+            // and the shared list leaves out the ones no saved profile has
+            // on.
+            let state = launch_state(dir.path()).await;
+            let plan = super::super::analyze_migration(&state, dir.path(), LIBRARY)
+                .await
+                .unwrap();
+            let list = |ids: &[&str]| ids.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+            assert_eq!(
+                plan.shared_presets,
+                list(&["healing_basics", "herb_labels"])
+            );
+            assert_eq!(
+                plan.profile_presets,
+                [
+                    list(&["healing_basics"]),
+                    list(&["healing_basics", "herb_labels"]),
+                    Vec::new(),
+                ]
+            );
+            // The catalog takes the list the preview showed.
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
+                .await
+                .unwrap();
+            let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+            assert_eq!(catalog.enabled_presets, Some(plan.shared_presets));
         }
 
         /// Everything one character keeps in per profile mode. `n` makes

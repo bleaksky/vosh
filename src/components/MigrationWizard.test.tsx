@@ -28,6 +28,8 @@ const PLAN: MigrationPlan = {
     { name: 'default', enabled_groups: ['(default)'] },
     { name: 'Healer', enabled_groups: ['(Healer)'] },
   ],
+  shared_presets: ['healing_basics', 'herb_labels'],
+  profile_presets: [['healing_basics'], ['healing_basics', 'herb_labels']],
 };
 
 function draw(plan: MigrationPlan): string {
@@ -92,5 +94,30 @@ describe('a conflict in the shared catalog preview', () => {
     expect(html).toContain('Healer</span><span class="migration-variant-state is-on">on</span>');
     expect(html).toContain('default</span><span class="migration-variant-state">off</span>');
     expect(html).toContain('When only one version is on, the wizard picks it for you.');
+  });
+});
+
+describe('the shared presets in the preview', () => {
+  it('says the preset list is shared and who gains or loses which preset', () => {
+    const html = draw(PLAN);
+    expect(html).toContain(
+      'Loadout mode keeps one list of presets that are on, and every character shares it.',
+    );
+    // Default gains the herb labels, and the Healer keeps what it had.
+    expect(html).toContain(
+      '<span class="migration-loadout-name">default</span><span class="migration-preset-verb">gains</span><span class="migration-group-tag">Herb labels</span>',
+    );
+    expect(html).not.toContain(
+      '<span class="migration-loadout-name">Healer</span><span class="migration-preset-verb">',
+    );
+  });
+
+  it('says so when no character gains or loses a preset', () => {
+    const html = draw({
+      ...PLAN,
+      shared_presets: ['healing_basics'],
+      profile_presets: [['healing_basics'], ['healing_basics']],
+    });
+    expect(html).toContain('Every character has the same presets on as now.');
   });
 });

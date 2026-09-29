@@ -755,6 +755,26 @@ async fn round_trip(seed: u64) -> Result<(), String> {
     let plan = super::analyze_migration(&wizard, dir, &library_ids())
         .await
         .map_err(|e| format!("analyze: {e}"))?;
+    // The preview holds the preset list every character shares and the
+    // list each one had, so it can say who gains or loses a preset. A
+    // profile that never saved a file has every preset on.
+    let previewed = presets_on(&plan.shared_presets);
+    if previewed != shared {
+        return Err(format!("the preview shares {previewed:?}, not {shared:?}"));
+    }
+    for (n, name) in names.iter().enumerate() {
+        let own = files_before[n].as_deref().map_or_else(Vec::new, |text| {
+            ProfileConfig::from_toml(text).unwrap().ui.enabled_presets
+        });
+        let previewed = plan.profile_presets.get(n).map(|list| presets_on(list));
+        if previewed != Some(presets_on(&own)) {
+            return Err(format!(
+                "{name}: the preview has {previewed:?} on, not {:?}",
+                presets_on(&own)
+            ));
+        }
+    }
+
     // Now and then leave a conflict to the version the wizard picks.
     let mut resolutions = Vec::new();
     let mut chosen: BTreeMap<String, String> = BTreeMap::new();

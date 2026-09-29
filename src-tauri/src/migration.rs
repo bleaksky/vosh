@@ -145,6 +145,16 @@ pub(crate) struct MigrationPlan {
     /// Names of source profiles the plan covered. Useful for the
     /// wizard summary header.
     pub source_profiles: Vec<String>,
+    /// The enabled preset list the catalog takes, in the
+    /// `enabled_presets` shape. Every character shares it in loadout
+    /// mode. The caller fills it, see
+    /// [`crate::loadout_store::first_catalog_presets`].
+    pub shared_presets: Vec<String>,
+    /// Each source profile's own enabled preset list, in the order of
+    /// `source_profiles`, so the preview can say which characters gain or
+    /// lose a preset. A profile that never saved a file holds the
+    /// defaults, the empty list, which turns every preset on.
+    pub profile_presets: Vec<Vec<String>>,
     /// What each profile file keeps of the catalog groups, by profile.
     /// See [`profile_file_for_catalog`].
     #[serde(skip)]
