@@ -25,7 +25,7 @@
 // there. macOS and Windows still enforce dead-code on it.
 #![cfg_attr(target_os = "linux", allow(dead_code))]
 
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
@@ -468,14 +468,10 @@ fn pointer_down(ev: &PointerEvent) {
         return;
     }
     // Grab the divider where it is DRAWN (divider_frac), not at the raw
-    // ratio. The band is a bit wider than the cursor rect for forgiving
-    // grabs.
-    if let Some(drawn) = divider_frac() {
-        let dpr = f64::from(load_f32(&DPR, 2.0));
-        if ev.height > 0.0 && (ev.y - f64::from(drawn) * ev.height).abs() <= 8.0 * dpr {
-            DRAGGING.store(true, Ordering::Release);
-            return;
-        }
+    // ratio, in the same band that shows the page's resize cursor.
+    if near_divider(ev) {
+        DRAGGING.store(true, Ordering::Release);
+        return;
     }
     crate::term_grid::clear_selection();
     if let Some((line, col)) = cell {
@@ -578,6 +574,89 @@ pub(crate) fn forward_pointer(kind: &str, x: f64, y: f64, open_modifier: bool) {
         "leave" => pointer_moved(None),
         "middle" => middle_click(),
         _ => {}
+    }
+    let hint = if kind == "leave" {
+        CursorHint::Default
+    } else {
+        cursor_hint(
+            DRAGGING.load(Ordering::Acquire),
+            SELECTING.load(Ordering::Acquire) || SCROLLBAR_DRAGGING.load(Ordering::Acquire),
+            // A press in the scrollbar zone grabs the thumb first.
+            near_divider(&ev) && !in_scrollbar_zone(&ev),
+            ev.open_modifier && hover_url().is_some(),
+        )
+    };
+    report_cursor(hint);
+}
+
+/// Half the height of the divider's grab band, in points. A press inside
+/// it starts a divider drag, and under the underlay the page shows the
+/// resize cursor across the same band.
+const DIVIDER_GRAB_PT: f64 = 8.0;
+
+/// True when the point sits on the divider as drawn, within the grab band.
+fn near_divider(ev: &PointerEvent) -> bool {
+    let Some(drawn) = divider_frac() else {
+        return false;
+    };
+    let dpr = f64::from(load_f32(&DPR, 2.0));
+    ev.height > 0.0 && (ev.y - f64::from(drawn) * ev.height).abs() <= DIVIDER_GRAB_PT * dpr
+}
+
+/// The pointer cursor the page should show over the pane. Under the
+/// underlay the page owns the cursor, so the surface reports what the
+/// pointer is over and the page sets it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CursorHint {
+    Default = 0,
+    RowResize = 1,
+    Pointer = 2,
+}
+
+impl CursorHint {
+    fn css(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::RowResize => "row-resize",
+            Self::Pointer => "pointer",
+        }
+    }
+}
+
+/// Pick the cursor. A divider drag holds the resize cursor wherever the
+/// pointer goes, and a selection or scrollbar drag holds the arrow even
+/// across the divider. Otherwise the divider band shows the resize cursor
+/// and a link under the open modifier shows the hand.
+fn cursor_hint(
+    dragging_divider: bool,
+    dragging_other: bool,
+    on_divider: bool,
+    link_armed: bool,
+) -> CursorHint {
+    if dragging_divider {
+        CursorHint::RowResize
+    } else if dragging_other {
+        CursorHint::Default
+    } else if on_divider {
+        CursorHint::RowResize
+    } else if link_armed {
+        CursorHint::Pointer
+    } else {
+        CursorHint::Default
+    }
+}
+
+// The cursor last reported to the page, as a `CursorHint` discriminant.
+static CURSOR_HINT: AtomicU8 = AtomicU8::new(CursorHint::Default as u8);
+
+/// Send `vosh://terminal-cursor` with the CSS cursor name, only when it
+/// changes.
+fn report_cursor(hint: CursorHint) {
+    if CURSOR_HINT.swap(hint as u8, Ordering::AcqRel) == hint as u8 {
+        return;
+    }
+    if let Some(app) = APP.get() {
+        let _ = app.emit("vosh://terminal-cursor", hint.css());
     }
 }
 
@@ -984,6 +1063,44 @@ mod tests {
         assert_ne!(scroll_report_key(5, 100), scroll_report_key(6, 100));
         assert_ne!(scroll_report_key(5, 100), scroll_report_key(5, 101));
         assert_eq!(scroll_report_key(5, 100), (5 << 32) + 100);
+    }
+
+    #[test]
+    fn cursor_rests_as_the_arrow() {
+        assert_eq!(cursor_hint(false, false, false, false), CursorHint::Default);
+    }
+
+    #[test]
+    fn cursor_shows_resize_on_the_divider_and_through_its_drag() {
+        assert_eq!(
+            cursor_hint(false, false, true, false),
+            CursorHint::RowResize
+        );
+        assert_eq!(
+            cursor_hint(true, false, false, false),
+            CursorHint::RowResize
+        );
+        assert_eq!(cursor_hint(true, false, false, true), CursorHint::RowResize);
+    }
+
+    #[test]
+    fn cursor_keeps_the_arrow_through_a_selection_drag() {
+        assert_eq!(cursor_hint(false, true, true, false), CursorHint::Default);
+        assert_eq!(cursor_hint(false, true, false, true), CursorHint::Default);
+    }
+
+    #[test]
+    fn cursor_shows_the_hand_on_an_armed_link() {
+        assert_eq!(cursor_hint(false, false, false, true), CursorHint::Pointer);
+        // The divider band wins over a link under it.
+        assert_eq!(cursor_hint(false, false, true, true), CursorHint::RowResize);
+    }
+
+    #[test]
+    fn cursor_hints_name_css_cursors() {
+        assert_eq!(CursorHint::Default.css(), "default");
+        assert_eq!(CursorHint::RowResize.css(), "row-resize");
+        assert_eq!(CursorHint::Pointer.css(), "pointer");
     }
 
     #[test]
