@@ -9,6 +9,8 @@ import {
   subscribeProfilesChanged,
   type UiConfig,
   type VitalsDensity,
+  type VitalsMeter,
+  type VitalsValues,
 } from '../../../lib/session';
 import {
   panelWidthOf,
@@ -177,10 +179,24 @@ const DENSITIES: readonly SegmentedOption<VitalsDensity>[] = [
   { value: 'line', label: 'One line' },
 ];
 
-/** The vitals under the panel's panes. One row per option, so the
- *  options the VitalsOptions board settles on join Density here as
- *  rows of this card. */
-function VitalsSection({
+const VALUES: readonly SegmentedOption<VitalsValues>[] = [
+  { value: 'current-max', label: 'Current and max' },
+  { value: 'current', label: 'Current' },
+  { value: 'percent', label: 'Percent' },
+];
+
+const METERS: readonly SegmentedOption<VitalsMeter>[] = [
+  { value: 'line', label: 'Line' },
+  { value: 'bar', label: 'Bar' },
+  { value: 'none', label: 'None' },
+];
+
+/** The vitals under the panel's panes (VitalsOptions.dc.html). Each
+ *  default is the panel you had before these rows, so nothing changes
+ *  until you pick something. The main window redraws as you click, so
+ *  the card carries no preview. Values and the warning also shape the
+ *  status line while the panel is hidden. Exported for its test. */
+export function VitalsSection({
   config,
   update,
 }: {
@@ -198,6 +214,38 @@ function VitalsSection({
           options={DENSITIES}
           value={config.vitals_density}
           onChange={(density) => update({ vitals_density: density })}
+        />
+      </Row>
+      <Row
+        label="Values"
+        description="Current drops the maximum. Percent matches the Group pane."
+        anchor="values"
+      >
+        <Segmented
+          options={VALUES}
+          value={config.vitals_values}
+          onChange={(values) => update({ vitals_values: values })}
+        />
+      </Row>
+      <Row
+        label="Meter"
+        description="Bar is easier to read in a fight. None keeps only the numbers."
+        anchor="meter"
+      >
+        <Segmented
+          options={METERS}
+          value={config.vitals_meter}
+          onChange={(meter) => update({ vitals_meter: meter })}
+        />
+      </Row>
+      <Row
+        label="Warn before you run low"
+        description="Vitals turn yellow under two thirds and red under one third, like your group's health."
+        anchor="warn-low"
+      >
+        <Toggle
+          checked={config.vitals_warn_thirds}
+          onChange={(on) => update({ vitals_warn_thirds: on })}
         />
       </Row>
     </Section>

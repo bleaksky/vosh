@@ -91,6 +91,25 @@ describe('searchSettingsRows', () => {
     expect(divider.target).toEqual({ group: 'layout', section: 'split', anchor: 'divider-color' });
   });
 
+  it('finds the Vitals rows the VitalsOptions board adds', () => {
+    expect(labels('vitals')).toEqual(
+      expect.arrayContaining(['Density', 'Values', 'Meter', 'Warn before you run low']),
+    );
+    expect(labels('percent')[0]).toBe('Values');
+    expect(labels('meter')[0]).toBe('Meter');
+    expect(labels('bar')).toContain('Meter');
+    expect(labels('warn')[0]).toBe('Warn before you run low');
+    expect(labels('run low')).toEqual(['Warn before you run low']);
+    const targets = ['values', 'meter', 'warn-low'].map(
+      (anchor) => SETTINGS_ROWS.find((r) => r.target.anchor === anchor)?.target,
+    );
+    expect(targets).toEqual([
+      { group: 'layout', section: 'vitals', anchor: 'values' },
+      { group: 'layout', section: 'vitals', anchor: 'meter' },
+      { group: 'layout', section: 'vitals', anchor: 'warn-low' },
+    ]);
+  });
+
   it('finds the tick and time style under Layout', () => {
     const [row] = searchSettingsRows('chip style', mac);
     expect(row.label).toBe('Tick and time');
