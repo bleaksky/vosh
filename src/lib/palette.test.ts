@@ -8,6 +8,8 @@ import {
   shortcutKey,
   shortcutKeys,
   shortcutLabel,
+  themeEntries,
+  themesInGalleryOrder,
   type PaletteDeps,
 } from './palette';
 import { resolveSettingsTarget } from './settingsNav';
@@ -242,6 +244,40 @@ describe('initialSelection', () => {
     const onlyDisconnect = flat(paletteSections(entries, 'disconnect', []));
     expect(initialSelection(onlyDisconnect, 'disconnect')).toBe(0);
     expect(initialSelection([], 'nothing matches')).toBe(-1);
+  });
+});
+
+describe('theme order', () => {
+  afterEach(async () => {
+    const { setCustomThemes } = await import('./themes');
+    setCustomThemes([]);
+  });
+
+  it('lists the themes in the gallery order, your own themes last', async () => {
+    const { customToAppTheme, setCustomThemes } = await import('./themes');
+    setCustomThemes([
+      customToAppTheme({
+        id: 'mine',
+        label: 'Nord (custom)',
+        description: '',
+        xterm: {},
+        chrome: {},
+      }),
+    ]);
+    const ordered = themesInGalleryOrder();
+    expect(ordered.slice(0, 6).map((t) => t.theme.id)).toEqual([
+      'nord',
+      'obsidian-ember',
+      'vellum',
+      'gruvbox',
+      'rose-pine',
+      'tokyo-night',
+    ]);
+    const rest = ordered.slice(6, -1).map((t) => t.theme.label);
+    expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
+    expect(ordered.at(-1)).toMatchObject({ theme: { id: 'mine' }, custom: true });
+    expect(ordered.filter((t) => t.custom)).toHaveLength(1);
+    expect(themeEntries().map((e) => e.id)).toEqual(ordered.map((t) => `theme-${t.theme.id}`));
   });
 });
 

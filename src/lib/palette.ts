@@ -9,7 +9,8 @@ import {
   getThemePrefs,
   pickTheme,
 } from './theme';
-import { THEMES } from './themes';
+import { galleryThemes } from './themeThumb';
+import { BUILTIN_THEMES, THEMES, type AppTheme } from './themes';
 
 // Command registry for the ⌘K palette. Commands are built fresh each
 // time the palette opens so checks and labels reflect live state
@@ -388,13 +389,24 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
   return entries;
 }
 
-/** Every theme as a submenu row, the active one checked. Picking one
- *  follows pickTheme, so while follow system appearance is on it fills
- *  the light or dark slot and shows only when that matches the OS. The
- *  pick applies in every window and saves. */
+/** Every theme in the gallery's order (Appearance and the menu bar's
+ *  Choose theme list them the same way): the board's six, the other
+ *  built in themes by name, then your own themes as you added them. */
+export function themesInGalleryOrder(): { theme: AppTheme; custom: boolean }[] {
+  const custom = THEMES.filter((t) => !BUILTIN_THEMES.includes(t));
+  return galleryThemes(BUILTIN_THEMES, custom).map((theme) => ({
+    theme,
+    custom: custom.includes(theme),
+  }));
+}
+
+/** Every theme as a submenu row in gallery order, the active one
+ *  checked. Picking one follows pickTheme, so while follow system
+ *  appearance is on it fills the light or dark slot and shows only when
+ *  that matches the OS. The pick applies in every window and saves. */
 export function themeEntries(): PaletteEntry[] {
   const current = getCurrentThemeId();
-  return THEMES.map((t) => ({
+  return themesInGalleryOrder().map(({ theme: t }) => ({
     id: `theme-${t.id}`,
     section: 'view' as const,
     title: t.label,
