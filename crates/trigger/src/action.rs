@@ -16,10 +16,10 @@ pub struct HighlightStyle {
     pub underline: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub inverse: bool,
-    /// Full-line wash. The whole line gets a dim truecolor background
-    /// derived from the highlight color, and the engine reports a line
-    /// mark so the native renderer can draw an accent bar at the left
-    /// edge. Old profiles deserialize with the flag off.
+    /// Full-line wash. The line's text gets a dim truecolor background
+    /// derived from the highlight color, and the native renderer paints
+    /// that field across the whole row. Old profiles deserialize with
+    /// the flag off.
     #[serde(default, skip_serializing_if = "is_false")]
     pub wash: bool,
 }

@@ -95,8 +95,8 @@ impl NamedColor {
 
     /// The quarter-strength wash tint for this color. The trigger
     /// engine bakes this exact value into washed lines as a truecolor
-    /// background, and the native renderer recognizes it to place the
-    /// accent bar — both sides MUST derive it from here or detection
+    /// background, and the native renderer recognizes it to paint the
+    /// row's field. Both sides MUST derive it from here or detection
     /// breaks.
     pub fn wash_tint(self) -> (u8, u8, u8) {
         let (r, g, b) = self.rgb();
@@ -104,8 +104,8 @@ impl NamedColor {
     }
 
     /// Canonical xterm RGB for the named color. Used to derive the
-    /// truecolor full-line wash and the renderer's accent bar, so the
-    /// wash tint stays stable regardless of the active theme palette.
+    /// truecolor full-line wash signal, so the wash tint stays stable
+    /// regardless of the active theme palette.
     pub fn rgb(self) -> (u8, u8, u8) {
         match self {
             Self::Black => (0x00, 0x00, 0x00),
