@@ -140,7 +140,7 @@ function lasting(ticks: number | null): number {
  *  lower case server name ("giant strength" reads "Giant strength").
  *  Names that already carry capitals keep the case the server or you
  *  wrote them in. */
-function sentenceCase(raw: string): string {
+export function sentenceCase(raw: string): string {
   const name = raw.replace(/\s+/g, ' ').trim();
   if (name.length === 0 || name !== name.toLowerCase()) return name;
   return name.charAt(0).toUpperCase() + name.slice(1);
