@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 're
 import { invoke } from '@tauri-apps/api/core';
 import { nativeSurfaceEnabled, type TerminalHandle } from './Terminal';
 import { type InputHandle } from './Input';
+import APP_SHORTCUTS from '../lib/appShortcuts.json';
 import { shortcutLabel } from '../lib/palette';
 
 interface Props {
@@ -122,11 +123,11 @@ export function TerminalMenu({ x, y, termRef, inputRef, onOpenFind, onClose }: P
   // would visibly do nothing.
   const groups: Item[][] = [
     [
-      { id: 'copy', label: 'Copy', keys: 'Mod+C', run: runCopy },
+      { id: 'copy', label: 'Copy', keys: APP_SHORTCUTS.copy, run: runCopy },
       { id: 'paste', label: 'Paste', keys: 'Mod+V', run: runPaste },
       { id: 'select-all', label: 'Select all', keys: 'Mod+A', run: runSelectAll },
     ],
-    [{ id: 'find', label: 'Find in scrollback…', keys: 'Mod+F', run: onOpenFind }],
+    [{ id: 'find', label: 'Find in scrollback…', keys: APP_SHORTCUTS.find, run: onOpenFind }],
   ];
   if (!nativeSurfaceEnabled()) {
     groups.push([

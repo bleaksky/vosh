@@ -1,4 +1,5 @@
 import { resetPanelLayout } from '../components/panel/panelReset';
+import APP_SHORTCUTS from './appShortcuts.json';
 import { exportAliases, sendInput, setUiTheme } from './session';
 import type { PaneType } from './paneLayout';
 import {
@@ -269,7 +270,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       section: 'view',
       title: 'Show panel',
       keywords: 'hide sidebar',
-      keys: 'Mod+Shift+L',
+      keys: APP_SHORTCUTS.panel,
       checked: deps.panelOpen ?? false,
       run: toggle,
     });
@@ -280,7 +281,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       section: 'view',
       title: 'Split terminal',
       keywords: 'scrollback history scroll back',
-      keys: 'Mod+\\',
+      keys: APP_SHORTCUTS.split,
       checked: deps.splitOpen ?? false,
       run: deps.toggleSplit,
     });
@@ -323,7 +324,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
     section: 'view',
     title: 'Find in scrollback…',
     keywords: 'search',
-    keys: 'Mod+F',
+    keys: APP_SHORTCUTS.find,
     searchOnly: true,
     run: deps.openFind,
   });
@@ -332,7 +333,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
     section: 'view',
     title: 'Open help',
     keywords: 'docs manual',
-    keys: 'Mod+/',
+    keys: APP_SHORTCUTS.help,
     searchOnly: true,
     run: deps.openHelp,
   });
@@ -341,7 +342,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
     section: 'view',
     title: 'Open settings',
     keywords: 'preferences options',
-    keys: 'Mod+,',
+    keys: APP_SHORTCUTS.settings,
     searchOnly: true,
     run: deps.openSettings ?? (() => deps.openSettingsTab('general')),
   });
@@ -381,7 +382,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
           section: 'session',
           title: deps.worldName ? `Connect to ${deps.worldName}` : 'Connect',
           keywords: 'open session login',
-          keys: 'Mod+R',
+          keys: APP_SHORTCUTS.connect,
           run: deps.connect,
         },
   );
