@@ -10,7 +10,9 @@
 //! item is **auto-resolved** with no question. When the copies differ in
 //! anything else, the item is a **conflict**, and the wizard shows each
 //! version with its profile and asks which to keep, since the name is
-//! what you type or press and the catalog holds one of each.
+//! what you type or press and the catalog holds one of each. Each version
+//! says whether its profile had it on, and when exactly one version is on
+//! anywhere, the wizard keeps that one unless you pick another.
 //!
 //! A trigger's name is only a label, so each version of a trigger stays,
 //! and the profiles that share one version share its copy. The version
@@ -90,7 +92,12 @@ pub(crate) enum ItemKind {
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct Variant {
     pub source_profile: String,
+    /// The version with its catalog group and the on state the catalog
+    /// gives the version you keep.
     pub item: ItemPayload,
+    /// Whether its profile had this copy switched on, so the preview can
+    /// show which version was on.
+    pub switched_on: bool,
 }
 
 /// Serializable union of the three item types. The wizard renders
@@ -112,6 +119,11 @@ pub(crate) struct Conflict {
     pub kind: ItemKind,
     pub name: String,
     pub variants: Vec<Variant>,
+    /// The profile whose version the wizard keeps unless you pick another.
+    /// When exactly one version is switched on anywhere, it is the first
+    /// profile that has that version on, since the others fire nothing.
+    /// Otherwise it is the first profile.
+    pub default_source: String,
 }
 
 /// Result of analyzing the existing profiles. Phase B2 turns this
@@ -755,6 +767,9 @@ fn resolve<T: CatalogItem>(
     conflicts: &mut Vec<Conflict>,
 ) {
     for (n, mut entry) in entries.into_iter().enumerate() {
+        // Whether each profile had its copy on, before the copies take
+        // the on state of the catalog.
+        let switched_on: Vec<bool> = entry.copies.iter().map(|(_, i)| i.enabled()).collect();
         for (_, item) in &mut entry.copies {
             item.set_group(plan.groups[n].clone());
             item.set_enabled(plan.enabled[n]);
@@ -768,14 +783,35 @@ fn resolve<T: CatalogItem>(
             auto.push(entry.copies.swap_remove(0).1);
             continue;
         }
+        // Copies of one version hold the same text once they share the
+        // catalog group and on state.
+        let versions_on: BTreeSet<String> = entry
+            .copies
+            .iter()
+            .zip(&switched_on)
+            .filter(|(_, on)| **on)
+            .filter_map(|((_, item), _)| serde_json::to_string(item).ok())
+            .collect();
+        let default_holder = match versions_on.len() {
+            1 => entry
+                .copies
+                .iter()
+                .zip(&switched_on)
+                .find(|(_, on)| **on)
+                .map_or(entry.copies[0].0, |((holder, _), _)| *holder),
+            _ => entry.copies[0].0,
+        };
         conflicts.push(Conflict {
             kind,
             name: entry.copies[0].1.key().to_string(),
+            default_source: profiles[default_holder].0.clone(),
             variants: entry
                 .copies
                 .into_iter()
-                .map(|(holder, item)| Variant {
+                .zip(switched_on)
+                .map(|((holder, item), switched_on)| Variant {
                     source_profile: profiles[holder].0.clone(),
+                    switched_on,
                     item: item.payload(),
                 })
                 .collect(),
@@ -979,6 +1015,116 @@ mod tests {
         assert!(plan.auto_resolved.aliases.is_empty());
         assert_eq!(plan.conflicts.len(), 1);
         assert_eq!(plan.conflicts[0].name, "bash");
+    }
+
+    fn switched_off(mut alias: Alias) -> Alias {
+        alias.enabled = false;
+        alias
+    }
+
+    /// Which profile each variant of the first conflict came from, with
+    /// whether its profile had that copy on.
+    fn variants_on(conflict: &Conflict) -> Vec<(&str, bool)> {
+        conflict
+            .variants
+            .iter()
+            .map(|v| (v.source_profile.as_str(), v.switched_on))
+            .collect()
+    }
+
+    #[test]
+    fn a_conflict_defaults_to_the_one_version_switched_on() {
+        // Default and the Bard keep their kk off, and only the Healer's
+        // version is on.
+        let f1 = |command: &str, enabled: bool| Macro {
+            key: "f1".into(),
+            command: command.into(),
+            group: None,
+            enabled,
+        };
+        let plan = analyze_profiles(&[
+            (
+                "default".into(),
+                profile_with(
+                    vec![switched_off(Alias::new("kk", "kick %1"))],
+                    vec![],
+                    vec![f1("cast heal", false)],
+                ),
+            ),
+            (
+                "Healer".into(),
+                profile_with(
+                    vec![Alias::new("kk", "kick 1.")],
+                    vec![],
+                    vec![f1("cast sanctuary", true)],
+                ),
+            ),
+            (
+                "Bard".into(),
+                profile_with(
+                    vec![switched_off(Alias::new("kk", "kick %1"))],
+                    vec![],
+                    vec![f1("cast sanctuary", true)],
+                ),
+            ),
+        ]);
+        let kk = plan.conflicts.iter().find(|c| c.name == "kk").unwrap();
+        // The pick used to be the first profile, whose version fired
+        // nothing, so the Healer lost the kk it used.
+        assert_eq!(kk.default_source, "Healer");
+        assert_eq!(
+            variants_on(kk),
+            [("default", false), ("Healer", true), ("Bard", false)]
+        );
+        // The version you keep comes over on, in the group of the Healer.
+        let ItemPayload::Alias { item } = &kk.variants[0].item else {
+            panic!("an alias conflict");
+        };
+        assert!(item.enabled);
+        assert_eq!(item.group.as_deref(), Some("(Healer)"));
+        // Two profiles have the one version that is on, and the first of
+        // them is the pick.
+        let f1 = plan.conflicts.iter().find(|c| c.name == "f1").unwrap();
+        assert_eq!(f1.default_source, "Healer");
+        assert_eq!(
+            variants_on(f1),
+            [("default", false), ("Healer", true), ("Bard", true)]
+        );
+    }
+
+    #[test]
+    fn a_conflict_with_two_versions_on_or_none_defaults_to_the_first_profile() {
+        let plan = analyze_profiles(&[
+            (
+                "default".into(),
+                profile_with(vec![Alias::new("kk", "kick %1")], vec![], vec![]),
+            ),
+            (
+                "Healer".into(),
+                profile_with(
+                    vec![
+                        Alias::new("kk", "kick 1."),
+                        switched_off(Alias::new("dd", "dirt 1.")),
+                    ],
+                    vec![],
+                    vec![],
+                ),
+            ),
+            (
+                "Bard".into(),
+                profile_with(
+                    vec![switched_off(Alias::new("dd", "dirt %1"))],
+                    vec![],
+                    vec![],
+                ),
+            ),
+        ]);
+        for conflict in &plan.conflicts {
+            let first = conflict.variants[0].source_profile.as_str();
+            assert_eq!(conflict.default_source, first, "{}", conflict.name);
+        }
+        let dd = plan.conflicts.iter().find(|c| c.name == "dd").unwrap();
+        assert_eq!(variants_on(dd), [("Healer", false), ("Bard", false)]);
     }
 
     fn trigger_named<'a>(plan: &'a MigrationPlan, name: &str) -> &'a Trigger {

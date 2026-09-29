@@ -721,27 +721,61 @@ async fn round_trip(seed: u64) -> Result<(), String> {
     let plan = super::analyze_migration(&wizard, dir)
         .await
         .map_err(|e| format!("analyze: {e}"))?;
+    // Now and then leave a conflict to the version the wizard picks.
     let mut resolutions = Vec::new();
     let mut chosen: BTreeMap<String, String> = BTreeMap::new();
     for conflict in &plan.conflicts {
-        let variant = &conflict.variants[rng.below(conflict.variants.len())];
-        let row = match &variant.item {
-            ItemPayload::Alias { item } => alias_row(item),
+        let row = |item: &ItemPayload| match item {
+            ItemPayload::Alias { item } => Ok(alias_row(item)),
             // Each version of a trigger stays, so none is asked about.
             ItemPayload::Trigger { item } => {
-                return Err(format!("the wizard asks about trigger {}", item.name));
+                Err(format!("the wizard asks about trigger {}", item.name))
             }
-            ItemPayload::Macro { item } => macro_row(item),
+            ItemPayload::Macro { item } => Ok(macro_row(item)),
+        };
+        // The one version switched on anywhere, when exactly one is, is
+        // the one the wizard keeps unless you pick another.
+        let mut on = BTreeSet::new();
+        for v in conflict.variants.iter().filter(|v| v.switched_on) {
+            on.insert(row(&v.item)?);
+        }
+        let default = conflict
+            .variants
+            .iter()
+            .find(|v| v.source_profile == conflict.default_source)
+            .ok_or_else(|| format!("{}: the default is no variant", conflict.name))?;
+        let first = &conflict.variants[0];
+        match on.len() {
+            1 if !default.switched_on || !on.contains(&row(&default.item)?) => {
+                return Err(format!(
+                    "{}: the wizard picks {}, not the one version that was on",
+                    conflict.name, conflict.default_source
+                ));
+            }
+            1 => {}
+            _ if default.source_profile != first.source_profile => {
+                return Err(format!(
+                    "{}: the wizard picks {} over the first profile",
+                    conflict.name, conflict.default_source
+                ));
+            }
+            _ => {}
+        }
+        let variant = if rng.chance(30) {
+            default
+        } else {
+            let variant = &conflict.variants[rng.below(conflict.variants.len())];
+            resolutions.push(super::ConflictResolution {
+                kind: conflict.kind,
+                name: conflict.name.clone(),
+                source_profile: variant.source_profile.clone(),
+            });
+            variant
         };
         chosen.insert(
             format!("{}\t{}", kind_word(conflict.kind), conflict.name),
-            row,
+            row(&variant.item)?,
         );
-        resolutions.push(super::ConflictResolution {
-            kind: conflict.kind,
-            name: conflict.name.clone(),
-            source_profile: variant.source_profile.clone(),
-        });
     }
     // A kept version has the name of the one it stands for, so the
     // aliases and macros stay sorted.

@@ -28,7 +28,8 @@ export function MigrationWizard({ onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(true);
   // Map of conflict-key -> chosen source profile. Missing entries
-  // fall back to the first variant (the analyzer's default).
+  // fall back to the analyzer's default, the one version that was on
+  // when exactly one was.
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
@@ -41,13 +42,11 @@ export function MigrationWizard({ onClose }: Props) {
         if (!cancelled) {
           setPlan(p);
           setPending(false);
-          // Seed picks with each conflict's first variant so the
-          // submission payload is explicit even when the user does
-          // not interact.
+          // Seed picks with each conflict's default so the submission
+          // payload is explicit even when the user does not interact.
           const seed: Record<string, string> = {};
           for (const c of p.conflicts) {
-            const first = c.variants[0]?.source_profile;
-            if (first) seed[conflictKey(c.kind, c.name)] = first;
+            seed[conflictKey(c.kind, c.name)] = c.default_source;
           }
           setPicks(seed);
         }
@@ -68,7 +67,7 @@ export function MigrationWizard({ onClose }: Props) {
     return plan.conflicts.map((c) => ({
       kind: c.kind,
       name: c.name,
-      source_profile: picks[conflictKey(c.kind, c.name)] ?? c.variants[0].source_profile,
+      source_profile: picks[conflictKey(c.kind, c.name)] ?? c.default_source,
     }));
   }, [plan, picks]);
 
@@ -222,7 +221,7 @@ export function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
           <ul className="migration-conflict-list">
             {plan.conflicts.map((c) => {
               const key = conflictKey(c.kind, c.name);
-              const chosen = picks[key] ?? c.variants[0].source_profile;
+              const chosen = picks[key] ?? c.default_source;
               return (
                 <li key={key} className="migration-conflict">
                   <div className="migration-conflict-head">
@@ -244,6 +243,11 @@ export function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
                             disabled={disabled}
                           />
                           <span className="migration-variant-source">{v.source_profile}</span>
+                          <span
+                            className={`migration-variant-state${v.switched_on ? ' is-on' : ''}`}
+                          >
+                            {v.switched_on ? 'on' : 'off'}
+                          </span>
                         </label>
                         <span className="migration-variant-body">
                           {summarizeVariant(c.kind, v)}
@@ -258,7 +262,8 @@ export function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
         )}
         {plan.conflicts.length > 0 && (
           <div className="migration-hint">
-            Pick the version to keep. The copies in profiles/legacy keep every version.
+            Pick the version to keep. When only one version is on, the wizard picks it for you. The
+            copies in profiles/legacy keep every version.
           </div>
         )}
       </Section>
