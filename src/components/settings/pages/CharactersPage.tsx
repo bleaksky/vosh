@@ -40,10 +40,13 @@ import { TrackedAffects } from './characters/TrackedAffects';
 // Settings > Characters (SettingsCharacters.dc.html). The profile list
 // on the left, and on the right the selected profile: its login toggle
 // and world, its tracked affects, and its panel layout, then a quiet
-// Advanced row. Selecting a profile edits it in place, active or not,
-// and never switches the live session. A deep link names the profile
-// as its section (`characters:Erelei#tracked`), and no section means
-// the profile in use.
+// Advanced row with a label and an order for each tracked affect. The
+// board leaves out the description, host, port, and extra character
+// names, so they stay in the data and off the page. Selecting a
+// profile edits it in place, active or not, and never switches the
+// live session. A deep link names the profile as its section
+// (`characters:Erelei#tracked`), and no section means the profile in
+// use.
 //
 // Every edit goes through the per profile Characters commands, never
 // the whole UI config, so editing an inactive profile cannot reach the
@@ -255,7 +258,6 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
       .finally(() => setResetting(false));
   };
 
-  const entry = detail ? list?.profiles.find((p) => p.name === detail.name) : undefined;
   const loginNote = !detail
     ? undefined
     : !character
@@ -315,14 +317,11 @@ export function CharactersPage({ target, navSeq, setConfig, onError }: SettingsP
               onReset={resetPanes}
               resetting={resetting}
             />
-            {entry && (
+            {detail.tracked_affects.length > 0 && (
               <ProfileAdvanced
                 key={`advanced ${detail.name}`}
-                entry={entry}
                 tracked={detail.tracked_affects}
                 onTracked={editTracked}
-                onError={onError}
-                onChanged={reloadAll}
               />
             )}
           </>
