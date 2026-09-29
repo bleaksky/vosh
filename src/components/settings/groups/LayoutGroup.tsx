@@ -17,6 +17,7 @@ import {
 } from '../../panel/panelLayoutStore';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
+import { TickTimeStyleRow } from '../rows/TickTimeStyleRow';
 import {
   ColorField,
   Keycap,
@@ -35,8 +36,8 @@ import {
 // Show the panel and Width write that profile's pane layout through
 // the panel layout store, so the main window follows at once. What
 // each character keeps, its panes and tracked affects, stays in
-// Characters, which the last Panel row opens. Vitals and Split
-// terminal save with the rest of the config.
+// Characters, which the last Panel row opens. Vitals, Split terminal,
+// and Status line save with the rest of the config.
 
 const PANEL_KEYS = 'Mod+Shift+L';
 const SPLIT_KEYS = 'Mod+\\';
@@ -160,6 +161,10 @@ export function LayoutGroup({ config, setConfig, onError, navigate }: SettingsPa
           </Row>
         </Section>
       )}
+
+      <Section id="status" title="Status line">
+        <TickTimeStyleRow config={config} setConfig={setConfig} onError={onError} />
+      </Section>
     </>
   );
 }
