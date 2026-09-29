@@ -9,11 +9,13 @@ import {
   draftChanges,
   draftValues,
   isDraftDirty,
+  listChangedNote,
   mergeDraftChanges,
   removeDraftItem,
   replaceDraftValues,
   saveDraftOnto,
   serializeValue,
+  storeChangeAction,
   updateDraftItem,
 } from './automationDraft';
 
@@ -235,6 +237,24 @@ describe('saving over the store as it is now', () => {
       items[1],
       { ...items[2], enabled: false },
     ]);
+  });
+});
+
+describe('a change from outside the page', () => {
+  it('follows the store while clean and warns over unsaved edits', () => {
+    expect(storeChangeAction({ dirty: false, saving: false })).toBe('reload');
+    expect(storeChangeAction({ dirty: true, saving: false })).toBe('warn');
+  });
+
+  it('waits out its own save', () => {
+    expect(storeChangeAction({ dirty: true, saving: true })).toBe('ignore');
+    expect(storeChangeAction({ dirty: false, saving: true })).toBe('ignore');
+  });
+
+  it('says what changed and what Save does', () => {
+    expect(listChangedNote({ one: 'trigger', many: 'triggers' })).toBe(
+      'Your triggers changed outside Settings while you edited them. Save keeps those changes and adds yours.',
+    );
   });
 });
 

@@ -485,6 +485,18 @@ export async function subscribeTriggerGroupsChanged(
   });
 }
 
+/** The trigger list changed: Settings saved it, or #trigger, an import,
+ *  a preset, or a script edited it. */
+export async function subscribeTriggersChanged(cb: () => void): Promise<UnlistenFn> {
+  return listen<string>('vosh://triggers-changed', () => cb());
+}
+
+/** The alias list changed: Settings saved it, or #alias, an import, or a
+ *  Lua mud.alias edited it. */
+export async function subscribeAliasesChanged(cb: () => void): Promise<UnlistenFn> {
+  return listen<string>('vosh://aliases-changed', () => cb());
+}
+
 export async function subscribeMacroGroupsChanged(
   cb: (group: string) => void,
 ): Promise<UnlistenFn> {
