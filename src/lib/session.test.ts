@@ -349,15 +349,18 @@ describe('a replaced UI config', () => {
     vi.mocked(invoke).mockImplementation(() => Promise.resolve());
   });
 
-  /** Follow the replace notice the way the Settings window does, and
-   *  hand back a way to send it. */
-  async function follow(apply: (config: UiConfig) => void): Promise<() => void> {
+  /** Follow the replace notice the way the Settings window does, or
+   *  the main window with `broadcast`, and hand back a way to send it. */
+  async function follow(
+    apply: (config: UiConfig) => void,
+    options: { broadcast?: boolean } = {},
+  ): Promise<() => void> {
     let heard: EventCallback<unknown> | undefined;
     vi.mocked(listen).mockImplementationOnce((event, handler) => {
       if (event === REPLACED) heard = handler as EventCallback<unknown>;
       return Promise.resolve(() => {});
     });
-    await followReplacedUiConfig(apply, () => {});
+    await followReplacedUiConfig(apply, () => {}, options);
     return () => heard?.({ event: REPLACED, id: 0, payload: null });
   }
 
@@ -414,13 +417,64 @@ describe('a replaced UI config', () => {
       chip_style: 'value_only',
       vitals_density: 'rows',
     });
-    // Every window already heard the loaded values, so the save sends
-    // only what you changed.
+    // The main window sends every loaded value to every window after
+    // the replace, so the save sends only what you changed.
     const events = sent.mock.calls.map(([event]) => event);
     expect(events).toContain('vosh://font-changed');
     expect(events).not.toContain('vosh://tick-count-changed');
     expect(events).not.toContain('vosh://chip-style-changed');
     expect(events).not.toContain('vosh://vitals-density-changed');
+  });
+
+  it('has the main window send every loaded field, even one it sent before', async () => {
+    // The main window last sent these values at a profile switch.
+    // Settings then saved others, and its saves never move the main
+    // window's last broadcast, so a diff there would skip them.
+    const loaded = raw({
+      echo_macros: false,
+      paste_line_delay_ms: 200,
+      spellcheck_prompt: true,
+      input_cursor_style: 'underline',
+      input_echo_color: '#ff8800',
+      vitals_density: 'line',
+      moons_position: 'before-time',
+      prompt_template_enabled: true,
+      prompt_template: '<%h>',
+    });
+    await broadcastUiConfigChanges(normalizeUiConfig(loaded));
+    const sent = vi.mocked(emit);
+    let sentBeforeApply = -1;
+    const applied: UiConfig[] = [];
+    const replace = await follow(
+      (next) => {
+        sentBeforeApply = sent.mock.calls.length;
+        applied.push(next);
+      },
+      { broadcast: true },
+    );
+
+    // #profile load brings that profile back.
+    sent.mockClear();
+    answer(loaded);
+    replace();
+    await vi.waitFor(() =>
+      expect(sent.mock.calls.map(([event]) => event)).toContain('vosh://tick-count-changed'),
+    );
+    expect(applied).toHaveLength(1);
+    // The window takes the config itself before it tells the others.
+    expect(sentBeforeApply).toBe(0);
+    const payloads = new Map(sent.mock.calls.map(([event, payload]) => [event, payload]));
+    expect(payloads.get('vosh://echo-macros-changed')).toBe(false);
+    expect(payloads.get('vosh://paste-line-delay-changed')).toBe(200);
+    expect(payloads.get('vosh://spellcheck-prompt-changed')).toBe(true);
+    expect(payloads.get('vosh://input-cursor-style-changed')).toBe('underline');
+    expect(payloads.get('vosh://input-echo-color-changed')).toBe('#ff8800');
+    expect(payloads.get('vosh://vitals-density-changed')).toBe('line');
+    expect(payloads.get('vosh://moons-position-changed')).toBe('before-time');
+    expect(payloads.get('vosh://prompt-template-changed')).toEqual({
+      enabled: true,
+      template: '<%h>',
+    });
   });
 
   it('applies only the newest read when two replaces come close together', async () => {
