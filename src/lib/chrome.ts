@@ -17,6 +17,10 @@
 //   danger text danger lifted to 4.5:1, for words drawn in danger,
 //               while markers, dots, and meter fills keep danger
 //
+// Tertiary and the status colors also draw on raised surfaces (menu
+// shortcuts, palette keycaps, a danger row), so their floors hold on
+// whichever of the panel and raised reads worse.
+//
 // A theme can pin any token with an override. Overridden base colors
 // (bg, panel, text, accent) feed the tokens derived from them.
 
@@ -217,20 +221,31 @@ export function deriveChrome(x: XtermPalette, overrides: ChromeOverrides = {}): 
       : liftToContrast(ink, accent.rgb, ON_ACCENT_CONTRAST, -1),
   );
 
+  const raised = pick(o.raised, dark ? shiftLightness(bg.rgb, r.raisedShift) : WHITE);
+  const grounds = [panel.rgb, raised.rgb];
+  const floor = (c: Rgb, target: number) =>
+    grounds.reduce((out, ground) => liftToContrast(out, ground, target, dir), c);
+
   const secondary = solveAlphaForContrast(text.rgb, panel.rgb, SECONDARY_CONTRAST).color;
-  const tertiary = solveAlphaForContrast(text.rgb, panel.rgb, TERTIARY_CONTRAST).color;
+  // Tertiary is the foreground over the panel at the lowest alpha that
+  // clears 3.1:1 on both grounds.
+  let tertiary = text.rgb;
+  for (let i = 0; i <= 100; i += 1) {
+    const c = composite(text.rgb, panel.rgb, i / 100);
+    if (grounds.every((ground) => contrast(c, ground) >= TERTIARY_CONTRAST)) {
+      tertiary = c;
+      break;
+    }
+  }
 
   // Dark themes read the bright ANSI slots, light themes the normal
-  // ones, and each moves away from the panel until it clears 3:1.
+  // ones, and each moves away from the grounds until it clears 3:1.
   const status = (normal: string, bright: string, fallback: Rgb) =>
-    liftToContrast(hexOr(dark ? bright : normal, fallback), panel.rgb, STATUS_CONTRAST, dir);
+    floor(hexOr(dark ? bright : normal, fallback), STATUS_CONTRAST);
   const danger = pick(o.danger, status(x.red, x.brightRed, { r: 224, g: 108, b: 117 }));
   // A danger that clears 3:1 as a dot can still be too dim to read as
   // words (Nord's red sits near 3:1), so text takes its own tier.
-  const dangerText = pick(
-    o.dangerText,
-    liftToContrast(danger.rgb, panel.rgb, STATUS_TEXT_CONTRAST, dir),
-  );
+  const dangerText = pick(o.dangerText, floor(danger.rgb, STATUS_TEXT_CONTRAST));
 
   return {
     appearance,
@@ -245,7 +260,7 @@ export function deriveChrome(x: XtermPalette, overrides: ChromeOverrides = {}): 
     secondary: pick(o.secondary, secondary).css,
     tertiary: pick(o.tertiary, tertiary).css,
     title: pick(o.title, composite(wash, bg.rgb, r.title)).css,
-    raised: pick(o.raised, dark ? shiftLightness(bg.rgb, r.raisedShift) : WHITE).css,
+    raised: raised.css,
     accent: accent.css,
     onAccent: onAccent.css,
     danger: danger.css,
