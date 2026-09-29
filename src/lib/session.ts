@@ -911,6 +911,11 @@ export interface UiConfig {
   chip_style: ChipStyle;
   /** Which way the status line tick counts, one of TICK_COUNTS. */
   tick_count: TickCount;
+  /** How many times the backend had replaced the live config when this
+   *  copy was read. setUiConfig sends it back, and the backend turns
+   *  away a save from a copy read before a later replace. Absent on a
+   *  config that never came from the backend. */
+  generation?: number;
 }
 
 export type MoonsPosition = 'right-edge' | 'before-time' | 'after-time';
@@ -1104,6 +1109,7 @@ export interface RawUiConfig {
   moons_position?: string;
   chip_style?: string;
   tick_count?: string;
+  generation?: number;
 }
 
 async function fetchUiConfig(): Promise<UiConfig> {
@@ -1175,6 +1181,7 @@ export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
         : 'right-edge',
     chip_style: normalizeChipStyle(cfg.chip_style),
     tick_count: normalizeTickCount(cfg.tick_count),
+    ...(typeof cfg.generation === 'number' ? { generation: cfg.generation } : {}),
   };
 }
 
@@ -1445,6 +1452,10 @@ export async function subscribeUiConfigReplaced(cb: () => void): Promise<Unliste
   return listen<unknown>(UI_CONFIG_REPLACED_EVENT, () => cb());
 }
 
+/** The reads followReplacedUiConfig runs in this window. A save the
+ *  backend turned away runs them too. */
+const replaceFollowers = new Set<() => void>();
+
 /** How followReplacedUiConfig hands a window the replaced config. */
 export interface FollowReplacedOptions {
   /** After `apply`, send every field to every window. The main window
@@ -1463,21 +1474,22 @@ export interface FollowReplacedOptions {
  *
  *  A window that saves the whole UiConfig (Settings) sends every field
  *  with each save, so a copy from before the replace would write the
- *  old profile's values back. Its read becomes this window's last
- *  broadcast, so the next save sends only what you change, since the
- *  main window has sent the rest. The main window passes `broadcast`
- *  and sends them. */
+ *  old profile's values back. The backend turns such a save away, and
+ *  that reads the config again here too. The read becomes this
+ *  window's last broadcast, so the next save sends only what you
+ *  change, since the main window has sent the rest. The main window
+ *  passes `broadcast` and sends them. */
 export async function followReplacedUiConfig(
   apply: (config: UiConfig) => void,
   onError: (error: unknown) => void,
   options: FollowReplacedOptions = {},
 ): Promise<UnlistenFn> {
-  let generation = 0;
-  return subscribeUiConfigReplaced(() => {
-    const mine = ++generation;
+  let latestRead = 0;
+  const reread = () => {
+    const mine = ++latestRead;
     fetchUiConfig()
       .then(async (config) => {
-        if (mine !== generation) return;
+        if (mine !== latestRead) return;
         if (!options.broadcast) {
           primeUiConfigBroadcast(config);
           apply(config);
@@ -1488,7 +1500,13 @@ export async function followReplacedUiConfig(
         await broadcastUiConfigChanges(config);
       })
       .catch(onError);
-  });
+  };
+  replaceFollowers.add(reread);
+  const unlisten = await subscribeUiConfigReplaced(reread);
+  return () => {
+    replaceFollowers.delete(reread);
+    unlisten();
+  };
 }
 
 // Adopt a theme another window already applied and broadcast, and
@@ -1543,11 +1561,16 @@ export async function setUiTheme(
   });
 }
 
-export async function setUiConfig(config: UiConfig): Promise<void> {
+/** Save the whole config and tell every window what changed. Resolves
+ *  false when the backend turned the save away, because it replaced
+ *  the live config after this copy was read (a profile switch, a
+ *  #profile load or reset, or an import). Nothing is sent then, and
+ *  this window reads the config again. */
+export async function setUiConfig(config: UiConfig): Promise<boolean> {
   // Single snake_case payload matching the Rust `UiConfigPayload` DTO,
   // the same shape `ui_get_config` returns. `dock_layout` is omitted on
   // purpose; it travels through dock_layout_get/set.
-  await invoke('ui_set_config', {
+  const applied = await invoke<boolean | undefined>('ui_set_config', {
     config: {
       theme: config.theme,
       follow_system_appearance: config.follow_system_appearance,
@@ -1586,13 +1609,21 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
       moons_position: config.moons_position,
       chip_style: config.chip_style,
       tick_count: config.tick_count,
+      generation: config.generation ?? null,
     },
   });
+  if (applied === false) {
+    // The old profile's values stay off the new one. Take the new copy,
+    // even if the replace notice never reached this window.
+    for (const reread of replaceFollowers) reread();
+    return false;
+  }
   // Theme + custom-themes go out first so any other window's theme
   // registry is current by the time `theme-changed` points at a
   // custom theme id. `broadcastUiConfigChanges` preserves that
   // ordering.
   await broadcastUiConfigChanges(config);
+  return true;
 }
 
 /** Hear a new chip style saved from Settings. setUiConfig emits it to
