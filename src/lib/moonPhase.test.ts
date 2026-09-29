@@ -242,22 +242,6 @@ describe('moonPhaseShape', () => {
     expect(contains(flatten(moonPhaseShape(5)?.litPath ?? ''), middle)).toBe(true);
   });
 
-  it('traces the limb on the lit side and no other', () => {
-    expect(moonPhaseShape(0)?.litLimbPath).toBeNull();
-    expect(moonPhaseShape(4)?.litLimbPath).toBe(moonPhaseShape(4)?.litPath);
-    for (const p of [1, 2, 3, 5, 6, 7]) {
-      const shape = moonPhaseShape(p);
-      const limb = flatten(shape?.litLimbPath ?? '');
-      expect(limb.length).toBeGreaterThan(10);
-      for (const [x, y] of limb) {
-        expect(Math.hypot(x - MOON_CENTER, y - MOON_CENTER)).toBeCloseTo(MOON_RADIUS, 6);
-        if (shape?.side === 'right') expect(x).toBeGreaterThanOrEqual(MOON_CENTER - 1e-9);
-        else expect(x).toBeLessThanOrEqual(MOON_CENTER + 1e-9);
-      }
-      expect(shape?.litPath?.startsWith(shape.litLimbPath ?? '')).toBe(true);
-    }
-  });
-
   it('stays inside the disc', () => {
     for (const p of PHASES) {
       for (const [x, y] of flatten(moonPhaseShape(p)?.litPath ?? '')) {

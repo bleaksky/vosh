@@ -20,23 +20,34 @@ describe('MoonPhaseIcon', () => {
     expect(svg).toContain('<title>Nercuros, half-lit and growing</title>');
   });
 
-  it('shows the faint disc and outline under the lit part', () => {
+  it('fills the lit part over a faint disc', () => {
     const svg = draw(3);
-    expect(svg).toMatch(
-      /<circle cx="8" cy="8" r="6.25" fill="#88c0d0" fill-opacity="0.22" stroke="#88c0d0" stroke-opacity="0.55" stroke-width="1.25"/,
-    );
-    const shape = moonPhaseShape(3);
-    expect(svg).toContain(`<path d="${shape?.litPath}" fill="#88c0d0"`);
     expect(svg).toContain(
-      `<path d="${shape?.litLimbPath}" fill="none" stroke="#88c0d0" stroke-width="1.25"`,
+      '<circle cx="8" cy="8" r="6.25" fill="#88c0d0" fill-opacity="0.2"></circle>',
     );
+    expect(svg).toContain(`<path d="${moonPhaseShape(3)?.litPath}" fill="#88c0d0"></path>`);
     expect(svg.indexOf('<circle')).toBeLessThan(svg.indexOf('<path'));
   });
 
-  it('lights nothing at new or without a phase', () => {
-    expect(draw(0)).not.toContain('<path');
-    expect(draw(null)).not.toContain('<path');
-    expect(draw(0)).toContain('<circle');
+  it('draws no ring and no stroke at any phase', () => {
+    for (const p of [null, 0, 1, 2, 3, 4, 5, 6, 7]) expect(draw(p)).not.toContain('stroke');
+  });
+
+  it('draws the lit part as one solid shape from 1 to 7', () => {
+    for (const p of [1, 2, 3, 4, 5, 6, 7]) {
+      const svg = draw(p);
+      expect(svg.match(/<path /g)).toHaveLength(1);
+      expect(svg).toContain(`<path d="${moonPhaseShape(p)?.litPath}" fill="#88c0d0"></path>`);
+    }
+  });
+
+  it('draws new as the faint disc alone and full as a solid disc', () => {
+    for (const svg of [draw(0), draw(null)]) {
+      expect(svg).not.toContain('<path');
+      expect(svg.match(/<circle /g)).toHaveLength(1);
+      expect(svg).toContain('fill-opacity="0.2"');
+    }
+    expect(draw(4)).toContain(`<path d="${moonPhaseShape(4)?.litPath}" fill="#88c0d0"></path>`);
   });
 });
 

@@ -1,7 +1,6 @@
 import { useId } from 'react';
 import {
   MOON_CENTER,
-  MOON_OUTLINE_OPACITY,
   MOON_OUTLINE_WIDTH,
   MOON_RADIUS,
   MOON_UNLIT_OPACITY,
@@ -9,11 +8,11 @@ import {
 } from '../../lib/moonPhase';
 
 // One moon at its phase, drawn in its own color. On a dark theme the
-// moon glows: the whole disc shows faintly with a faint outline, so a
-// new moon still reads as a moon, the lit part fills at full color on
-// top, and the outline takes the full color along the lit limb. On a
+// moon glows. The whole disc shows faintly, so a new moon still reads
+// as a moon, and the lit part fills at full color on top as one solid
+// shape. No ring runs round it, so a full moon is a solid disc. On a
 // light theme it is ink on paper, the way a printed calendar draws the
-// moon: the outline runs the whole limb and the dark part fills in, so
+// moon. The outline runs the whole limb and the dark part fills in, so
 // a new moon is a solid disc and a full moon an open ring. The status
 // line draws it at 14 px. The label names the moon and its phase for a
 // screen reader and shows on hover.
@@ -88,20 +87,8 @@ export function MoonPhaseIcon({ phase, color, label, size = 14, onLight = false 
         r={MOON_RADIUS}
         fill={color}
         fillOpacity={MOON_UNLIT_OPACITY}
-        stroke={color}
-        strokeOpacity={MOON_OUTLINE_OPACITY}
-        strokeWidth={MOON_OUTLINE_WIDTH}
       />
       {shape?.litPath && <path d={shape.litPath} fill={color} />}
-      {shape?.litLimbPath && (
-        <path
-          d={shape.litLimbPath}
-          fill="none"
-          stroke={color}
-          strokeWidth={MOON_OUTLINE_WIDTH}
-          strokeLinecap="butt"
-        />
-      )}
     </svg>
   );
 }

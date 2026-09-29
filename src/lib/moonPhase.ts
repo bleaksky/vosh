@@ -22,8 +22,9 @@
 // shape. litFraction still gives the true share of the disc the sky
 // lights, and terminatorRx the radius the icon draws.
 //
-// The outline around the disc is faint on the dark limb and takes the
-// full color on the lit limb.
+// The lit part is one solid shape, the limb and the terminator closed
+// into a single path, so the icon fills it whole with no stroke along
+// its edge.
 
 export const MOON_PHASE_COUNT = 8;
 export const MOON_CENTER = 8;
@@ -33,9 +34,8 @@ export const MOON_RADIUS = 6.25;
 export const MOON_DRAWN_TERMINATOR = 0.4;
 
 /** The unlit disc, the moon color at this opacity. */
-export const MOON_UNLIT_OPACITY = 0.22;
-/** The outline around the dark limb, at this opacity. */
-export const MOON_OUTLINE_OPACITY = 0.55;
+export const MOON_UNLIT_OPACITY = 0.2;
+/** The ring round the whole limb on a light theme. */
 export const MOON_OUTLINE_WIDTH = 1.25;
 
 export type MoonLitSide = 'left' | 'right';
@@ -53,9 +53,6 @@ export interface MoonPhaseShape {
   terminatorRx: number;
   /** SVG path data for the lit part, to fill. Null at new. */
   litPath: string | null;
-  /** SVG path data for the limb on the lit side, to stroke. The whole
-   *  circle at full. Null at new. */
-  litLimbPath: string | null;
 }
 
 const TOP = MOON_CENTER - MOON_RADIUS;
@@ -83,23 +80,23 @@ export function moonPhaseShape(phase: number | null): MoonPhaseShape | null {
   const bottom = `${c} ${num(BOTTOM)}`;
 
   if (phase === 0) {
-    return { phase, litFraction, side: null, terminatorRx, litPath: null, litLimbPath: null };
+    return { phase, litFraction, side: null, terminatorRx, litPath: null };
   }
   if (phase === 4) {
     const disc = `M${top}A${r} ${r} 0 0 1 ${bottom}A${r} ${r} 0 0 1 ${top}Z`;
-    return { phase, litFraction, side: null, terminatorRx, litPath: disc, litLimbPath: disc };
+    return { phase, litFraction, side: null, terminatorRx, litPath: disc };
   }
 
   const side: MoonLitSide = phase < 4 ? 'right' : 'left';
   // Top to bottom along the limb on the lit side. In SVG, sweep 1 runs
   // clockwise on screen, through the right.
   const limbSweep = side === 'right' ? 1 : 0;
-  const litLimbPath = `M${top}A${r} ${r} 0 0 ${limbSweep} ${bottom}`;
+  const limb = `M${top}A${r} ${r} 0 0 ${limbSweep} ${bottom}`;
   // Bottom back to top along the terminator. A crescent's terminator
   // bows toward the light, a gibbous one's away from it.
   const crescent = cos > 0;
   const termSweep = crescent ? 1 - limbSweep : limbSweep;
   const terminator = halfLit ? `L${top}` : `A${num(terminatorRx)} ${r} 0 0 ${termSweep} ${top}`;
-  const litPath = `${litLimbPath}${terminator}Z`;
-  return { phase, litFraction, side, terminatorRx, litPath, litLimbPath };
+  const litPath = `${limb}${terminator}Z`;
+  return { phase, litFraction, side, terminatorRx, litPath };
 }
