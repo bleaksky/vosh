@@ -4002,14 +4002,9 @@ mod tests {
     /// Launch over the profile set in `dir` the way lib.rs runs it, and
     /// hand back the app state with the notices launch kept.
     async fn launch_state(dir: &std::path::Path) -> super::SharedState {
-        let set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
         let state: super::SharedState = std::sync::Arc::new(super::AppState::default());
-        let notices = {
-            let mut p = state.profile.lock().await;
-            crate::profile_config::load_at_launch(&set, &mut p)
-        };
-        state.add_launch_notices(notices);
-        *state.profile_set.lock().await = Some(set);
+        crate::launch::load_profiles(&state, dir).await;
+        assert!(state.profile_set.lock().await.is_some());
         state
     }
 
