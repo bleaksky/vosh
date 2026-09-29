@@ -129,7 +129,11 @@ export function startWorldStore(): void {
     if (moons) store.set({ ...store.get(), moons });
   });
   void onState((payload) => {
-    if (payload.kind === 'disconnected') store.set({ time: null, moons: null });
+    // The status line keeps the last game time after the link drops,
+    // next to Not connected. The moons go, and a new connection starts
+    // from nothing since it may reach another world.
+    if (payload.kind === 'disconnected') store.set({ ...store.get(), moons: null });
+    if (payload.kind === 'connecting') store.set({ time: null, moons: null });
   });
 }
 

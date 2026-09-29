@@ -100,10 +100,16 @@ describe('stores on the event bus', () => {
     expect(s.vitals.getVitals()).toBeNull();
     expect(s.affects.getAffects()).toBeNull();
     expect(s.combat.getCombat()).toBeNull();
-    expect(s.world.getWorld()).toEqual({ time: null, moons: null });
+    // The last game time stays for the status line, the moons go.
+    expect(s.world.getWorld().time?.hour).toBe(8);
+    expect(s.world.getWorld().moons).toBeNull();
     // The last room stays, like the last map.
     expect(s.room.getRoom().info?.name).toBe('The Bank');
     expect(s.room.getRoom().people).toHaveLength(1);
+
+    // A new connection may reach another world, so the time clears.
+    fire('session://state', { kind: 'connecting', host: 'example.org', port: 4000, tls: false });
+    expect(s.world.getWorld()).toEqual({ time: null, moons: null });
   });
 
   it('notify subscribers once per change and not for repeats', async () => {
