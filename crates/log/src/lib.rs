@@ -14,6 +14,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use vosh_ansi::plain_text;
 
+mod forget;
+
+pub use forget::{is_password_prompt, Forgotten, PasswordFinder, PasswordLines, HIDDEN_SENT_TEXT};
+
 #[derive(Debug, Error)]
 pub enum LogError {
     #[error("sqlite: {0}")]
