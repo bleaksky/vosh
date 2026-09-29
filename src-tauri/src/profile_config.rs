@@ -775,19 +775,11 @@ impl PaneLayoutPersist {
         shown.sort_by_key(|&(rank, _)| rank);
 
         let has_map = shown.iter().any(|&(_, id)| id == "map");
-        let others = count_as_f64(shown.len() - usize::from(has_map));
+        let has_affects = shown.iter().any(|&(_, id)| id == "affects");
+        let others = shown.len() - usize::from(has_map);
         let children: Vec<PaneNode> = shown
             .iter()
-            .map(|&(_, id)| {
-                // The map takes 0.6 and the rest share 0.4, as in the
-                // default layout. Without a map the panes split evenly.
-                let weight = match (has_map, id == "map") {
-                    (true, true) if others > 0.0 => 0.6,
-                    (true, false) => 0.4 / others,
-                    _ => 1.0,
-                };
-                PaneNode::leaf(id, weight)
-            })
+            .map(|&(_, id)| PaneNode::leaf(id, migrated_weight(id, has_map, has_affects, others)))
             .collect();
 
         let mut layout = Self {
@@ -842,6 +834,27 @@ impl UiConfig {
 #[allow(clippy::cast_precision_loss)]
 fn count_as_f64(n: usize) -> f64 {
     n as f64
+}
+
+/// Weight for a pane migrated from the old dock. Over a single pane the
+/// map takes 0.6, as in the default layout. With two or more panes under
+/// it the map drops to 0.45 and affects, the longest list, takes 0.3 so
+/// its rows still show, and the rest share what is left. Without a map
+/// the panes split evenly. `others` counts the panes that are not the
+/// map. Sanitize normalizes the weights afterward.
+fn migrated_weight(id: &str, has_map: bool, has_affects: bool, others: usize) -> f64 {
+    if !has_map || others == 0 {
+        return 1.0;
+    }
+    if others == 1 {
+        return if id == "map" { 0.6 } else { 0.4 };
+    }
+    match id {
+        "map" => 0.45,
+        "affects" => 0.3,
+        _ if has_affects => 0.25 / count_as_f64(others - 1),
+        _ => 0.55 / count_as_f64(others),
+    }
 }
 
 /// Walks a raw tree once, handing out ids and remembering which pane
@@ -1891,12 +1904,28 @@ name = "haste"
             leaf_panes(&layout.root),
             ["map", "affects", "group", "chat"]
         );
+        // Affects gets the largest share under the map so its rows show.
         let weights: Vec<f64> = layout.root.children.iter().map(|n| n.weight).collect();
-        assert!(close(weights[0], 0.6));
-        assert!(weights[1..].iter().all(|w| close(*w, 0.1333)));
+        assert!(close(weights[0], 0.45));
+        assert!(close(weights[1], 0.3));
+        assert!(weights[2..].iter().all(|w| close(*w, 0.125)));
         // Ids are the pane types, so every read of the same dock layout
         // hands the frontend the same ids.
         assert_eq!(layout.root.children[0].id, "map");
+    }
+
+    #[test]
+    fn from_dock_without_affects_splits_the_rest_under_the_map() {
+        let layout = PaneLayoutPersist::from_dock(&dock(&[
+            ("map", "right", Some("top")),
+            ("group", "right", Some("top")),
+            ("chat", "right", None),
+            ("affects", "hidden", None),
+        ]));
+        assert_eq!(leaf_panes(&layout.root), ["map", "group", "chat"]);
+        let weights: Vec<f64> = layout.root.children.iter().map(|n| n.weight).collect();
+        assert!(close(weights[0], 0.45));
+        assert!(weights[1..].iter().all(|w| close(*w, 0.275)));
     }
 
     #[test]
