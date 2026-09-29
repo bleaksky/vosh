@@ -186,14 +186,14 @@ const REQUESTED_GMCP_PACKAGES: &[&str] = &[
 /// Bytes flowing to the server. The frontend echoes typed commands into the
 /// terminal pane synchronously, so the `io_loop` only writes to the wire.
 pub(crate) enum OutgoingMsg {
-    Send(Vec<u8>),
+    /// Bytes for the wire. `masked` is true for a line typed into the
+    /// masked password field, which the session log hides even when the
+    /// server has already handed echo back.
+    Send { bytes: Vec<u8>, masked: bool },
     /// Update the advertised terminal size and, if NAWS has already
     /// been negotiated, push a fresh NAWS subnegotiation to the wire
     /// so the server re-wraps its output at the new width.
-    WindowSize {
-        cols: u16,
-        rows: u16,
-    },
+    WindowSize { cols: u16, rows: u16 },
 }
 
 pub(crate) struct SessionHandle {
@@ -205,7 +205,24 @@ impl SessionHandle {
     /// Send raw bytes to the connection. Returns false when the session has
     /// already been torn down.
     pub(crate) fn send(&self, bytes: Vec<u8>) -> bool {
-        self.tx_outgoing.send(OutgoingMsg::Send(bytes)).is_ok()
+        self.tx_outgoing
+            .send(OutgoingMsg::Send {
+                bytes,
+                masked: false,
+            })
+            .is_ok()
+    }
+
+    /// Send a line typed into the masked password field. The session
+    /// log keeps `> (hidden)` for it whatever the echo state is when it
+    /// leaves. Returns false when the session has already been torn down.
+    pub(crate) fn send_masked(&self, bytes: Vec<u8>) -> bool {
+        self.tx_outgoing
+            .send(OutgoingMsg::Send {
+                bytes,
+                masked: true,
+            })
+            .is_ok()
     }
 
     /// Push a terminal resize event into the session task so it can
@@ -376,7 +393,7 @@ async fn io_loop(
         tokio::select! {
             biased;
             outgoing = rx_outgoing.recv() => match outgoing {
-                Some(OutgoingMsg::Send(bytes)) => {
+                Some(OutgoingMsg::Send { bytes, masked }) => {
                     // The frontend already echoed the typed line inline
                     // with the on-screen prompt. Drop the buffered partial
                     // so the next chunk from the server starts fresh on a
@@ -385,11 +402,13 @@ async fn io_loop(
                     // Append the input line(s) to the same log session
                     // as server output so transcripts include both
                     // directions. While the server holds echo (a
-                    // password prompt) each line is logged as
-                    // `> (hidden)` and its text never reaches the
-                    // store. See `hidden_input::sent_log_rows`.
+                    // password prompt), and for any line typed into the
+                    // masked field, each line is logged as `> (hidden)`
+                    // and its text never reaches the store. See
+                    // `hidden_input::sent_log_rows`.
                     if let Some(sid) = log_session_id {
-                        let rows = hidden_input::sent_log_rows(&bytes, server_echo.held());
+                        let rows =
+                            hidden_input::sent_log_rows(&bytes, server_echo.hides(masked));
                         if !rows.is_empty() {
                             let mut guard = logs.lock().await;
                             if let Some(store) = guard.as_mut() {

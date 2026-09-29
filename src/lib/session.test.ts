@@ -16,6 +16,8 @@ import {
   normalizeVitalsValues,
   primeUiConfigThemePrefs,
   seedDarkTheme,
+  sendInput,
+  sendMaskedInput,
   setUiConfig,
   TERMINAL_LINE_HEIGHTS,
   TICK_COUNTS,
@@ -578,5 +580,27 @@ describe('a replaced UI config', () => {
     await early;
     await settle();
     expect(applied.map((c) => c.tick_count)).toEqual(['down']);
+  });
+});
+
+describe('sending a line', () => {
+  // Made up value only. It is nobody's password.
+  const SECRET = 'Tr0ub4dor&3';
+
+  afterEach(() => {
+    vi.mocked(invoke).mockClear();
+  });
+
+  it('sends a line from the masked field through the masked send only', async () => {
+    vi.mocked(invoke).mockClear();
+    await sendMaskedInput(SECRET);
+    expect(vi.mocked(invoke)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith('session_send_masked', { line: SECRET });
+  });
+
+  it('runs a typed command through the input pipeline', async () => {
+    vi.mocked(invoke).mockClear();
+    await sendInput('look');
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith('session_send_input', { line: 'look' });
   });
 });

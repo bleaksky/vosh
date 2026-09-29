@@ -113,6 +113,13 @@ export async function sendInput(line: string): Promise<void> {
   await invoke('session_send_input', { line });
 }
 
+/// Send a line typed into the masked password field. It goes to the
+/// server exactly as typed, past aliases, variables, and slash commands,
+/// and the session log keeps `> (hidden)` in its place.
+export async function sendMaskedInput(line: string): Promise<void> {
+  await invoke('session_send_masked', { line });
+}
+
 export type TriggerAction =
   | { kind: 'highlight'; style: HighlightStyle }
   | { kind: 'gag' }

@@ -17,6 +17,7 @@ import {
   onInputMode,
   onTarget,
   sendInput,
+  sendMaskedInput,
   subscribeMacroGroupsChanged,
   subscribeMacrosChanged,
   type GroupState,
@@ -25,6 +26,7 @@ import {
   type QuickKey,
 } from '../lib/session';
 import { canonicalKeyFromEvent } from '../lib/macroKeys';
+import { colorizeEcho, planSubmit } from '../lib/maskedInput';
 import { recentNames } from '../lib/recentNames';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
@@ -90,19 +92,6 @@ function looksLikeChat(line: string): boolean {
   const trimmed = line.trimStart();
   if (trimmed.length === 0) return false;
   return CHAT_PREFIXES.some((re) => re.test(trimmed));
-}
-
-// Wrap an echoed input line in a truecolor SGR sequence so the user can
-// spot their own commands. Returns the line unchanged when no color is set
-// or the hex cannot be parsed. The reset closes before the trailing CRLF.
-function colorizeEcho(line: string, color: string | null): string {
-  if (!color) return line;
-  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(color.trim());
-  if (!m) return line;
-  const r = parseInt(m[1], 16);
-  const g = parseInt(m[2], 16);
-  const b = parseInt(m[3], 16);
-  return `\x1b[38;2;${r};${g};${b}m${line}\x1b[0m`;
 }
 
 export const Input = forwardRef<InputHandle, Props>(function Input(
@@ -631,8 +620,20 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // pressing Enter on an empty prompt is a valid MUD command on many
   // worlds (re-shows the prompt). The paste handler filters empties
   // before calling so accidental trailing newlines don't flood.
+  //
+  // A line from the masked password field leaves no trace. planSubmit
+  // gives it a bare line break for an echo, keeps it out of history, and
+  // routes it through the masked send, which skips the input pipeline.
   const submitLine = async (line: string) => {
-    if (line.length > 0 && !passwordMode) {
+    const masked = passwordMode;
+    const firstWord = line.split(/\s+/)[0] ?? '';
+    const plan = planSubmit(line, {
+      masked,
+      quickKey:
+        !masked && quickKeysRef.current.some((q) => q.name === firstWord && q.verb.length > 0),
+      echoColor: echoColorRef.current,
+    });
+    if (plan.remember) {
       setHistory((prev) => {
         if (prev[prev.length - 1] === line) return prev;
         return [...prev, line];
@@ -643,7 +644,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     // startup). `on` forces the native surface on any platform (the
     // Windows/Linux tester path), `off` forces xterm, `default` restores
     // the platform default (native on macOS, xterm elsewhere).
-    if (/^#nativesurface\b/i.test(line)) {
+    if (plan.local) {
       const arg = (line.split(/\s+/)[1] ?? '').toLowerCase();
       const notice = (text: string) => onLocalEcho?.(`\x1b[38;5;244m${text}\x1b[0m\r\n`);
       if (arg === 'on' || arg === 'off') {
@@ -657,15 +658,9 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       }
       return;
     }
-    const firstWord = line.split(/\s+/)[0] ?? '';
-    const isQuickKey = quickKeysRef.current.some((q) => q.name === firstWord && q.verb.length > 0);
-    if (passwordMode) {
-      onLocalEcho?.('\r\n');
-    } else if (!isQuickKey) {
-      onLocalEcho?.(`${colorizeEcho(line, echoColorRef.current)}\r\n`);
-    }
+    if (plan.echo !== null) onLocalEcho?.(plan.echo);
     try {
-      await sendInput(line);
+      await (plan.masked ? sendMaskedInput(line) : sendInput(line));
     } catch (e) {
       onError?.(String(e));
     }

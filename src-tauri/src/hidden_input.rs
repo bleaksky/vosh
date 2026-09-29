@@ -38,11 +38,26 @@ impl ServerEcho {
         }
     }
 
-    /// Whether the server holds echo, so a line leaving now is hidden
-    /// input.
-    pub(crate) fn held(&self) -> bool {
-        self.held
+    /// Whether a line leaving now is hidden input. That is true while
+    /// the server holds echo, and always for a `masked` line, one typed
+    /// into the masked password field. The masked case covers the
+    /// moment after the server hands echo back and before the input row
+    /// unmasks, when what you submit was still typed as a secret.
+    pub(crate) fn hides(&self, masked: bool) -> bool {
+        masked || self.held
     }
+}
+
+/// The wire bytes for a line typed into the masked password field: the
+/// line exactly as typed, then a line end. It never runs through the
+/// input pipeline, so no alias, variable, `;` split, target keyword,
+/// macro recording, Lua alias body, or `#` command sees a password or
+/// echoes any part of it back to the terminal.
+pub(crate) fn masked_line_bytes(line: &str) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(line.len() + 2);
+    bytes.extend_from_slice(line.as_bytes());
+    bytes.extend_from_slice(b"\r\n");
+    bytes
 }
 
 /// What the session log keeps of a line sent while your input is
@@ -95,7 +110,7 @@ pub(crate) fn append_sent_rows(
 
 #[cfg(test)]
 mod tests {
-    use super::{append_sent_rows, sent_log_rows, ServerEcho};
+    use super::{append_sent_rows, masked_line_bytes, sent_log_rows, ServerEcho};
     use vosh_telnet::{codes, option, Parser, IAC};
 
     // Made up values only. None of these is anyone's password.
@@ -131,8 +146,20 @@ mod tests {
             }
         }
 
+        /// A line from the input pipeline, as `SessionHandle::send`
+        /// queues it.
         fn send(&mut self, line: &str) {
-            let rows = sent_log_rows(format!("{line}\r\n").as_bytes(), self.echo.held());
+            self.leave(format!("{line}\r\n").as_bytes(), false);
+        }
+
+        /// A line typed into the masked field, as `session_send_masked`
+        /// queues it.
+        fn send_masked(&mut self, line: &str) {
+            self.leave(&masked_line_bytes(line), true);
+        }
+
+        fn leave(&mut self, bytes: &[u8], masked: bool) {
+            let rows = sent_log_rows(bytes, self.echo.hides(masked));
             append_sent_rows(&mut self.store, self.id, 1, &rows);
         }
 
@@ -239,6 +266,31 @@ mod tests {
         for event in &events {
             assert_eq!(echo.observe(event), None);
         }
-        assert!(!echo.held());
+        assert!(!echo.hides(false));
+    }
+
+    #[test]
+    fn a_line_typed_masked_stays_hidden_after_the_server_hands_echo_back() {
+        // The server handed echo back, but the input row had not yet
+        // unmasked when you pressed Enter.
+        let mut s = Session::start(vosh_log::LogStore::in_memory().unwrap());
+        s.read(&chunk(&[&WILL_ECHO, b"Password: "]));
+        s.read(&WONT_ECHO);
+        s.send_masked(SECRET);
+        s.send("look");
+
+        let log = s.log();
+        assert!(!log.contains(SECRET), "the password reached the log: {log}");
+        assert_eq!(log, "> (hidden)\n> look\n");
+    }
+
+    #[test]
+    fn a_masked_line_goes_out_exactly_as_typed() {
+        // A password can hold characters the input pipeline acts on. From
+        // the masked field none of them runs as an alias, a variable, a
+        // command separator, a target keyword, or a # command.
+        for line in ["#tr0ub4dor", "pa;ss$word", "tarn", "a b c", ""] {
+            assert_eq!(masked_line_bytes(line), format!("{line}\r\n").into_bytes());
+        }
     }
 }

@@ -802,6 +802,32 @@ pub(crate) async fn session_send_input(
     Ok(())
 }
 
+/// Send a line typed into the masked password field, the one the input
+/// row shows while the server holds echo. The line goes to the server
+/// exactly as typed and skips the input pipeline, so no alias, variable,
+/// macro recording, Lua alias body, or `#` command sees it and nothing
+/// of it echoes to the terminal. The session log keeps `> (hidden)` in
+/// its place.
+#[tauri::command]
+pub(crate) async fn session_send_masked(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    line: String,
+) -> Result<(), String> {
+    let current = state.session.lock().await;
+    let Some(handle) = current.as_ref() else {
+        let _ = app.emit(
+            "session://output",
+            OutputPayload::from_bytes(b"\r\n[not connected]\r\n"),
+        );
+        return Ok(());
+    };
+    if !handle.send_masked(crate::hidden_input::masked_line_bytes(&line)) {
+        return Err("session task gone".to_string());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub(crate) async fn session_disconnect(
     app: AppHandle,
