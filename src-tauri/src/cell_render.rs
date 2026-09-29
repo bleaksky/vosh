@@ -175,6 +175,10 @@ pub(crate) struct Placement {
     /// Draw the sunk-well strips. Off under the underlay, where the page
     /// draws its own vignette over the grid.
     pub vignette: bool,
+    /// Draw the scroll-depth pill and the copy toast. Off under the
+    /// underlay, where the page shows both from the scroll and copy events
+    /// and can place them around its own find bar.
+    pub indicators: bool,
 }
 
 fn theme_fg() -> Rgb {
@@ -1877,9 +1881,10 @@ impl CellRenderer {
         }
 
         // Scroll-depth indicator: "<back>/<max>" in a pill at the top-right
-        // when scrolled up. The DOM cannot show this (it sits behind the
-        // opaque surface), so it is drawn here.
-        if offset > 0 {
+        // when scrolled up. On the on-top path the DOM cannot show this (it
+        // sits behind the opaque surface), so it is drawn here. Under the
+        // underlay the page shows it from the native-scroll event.
+        if placement.indicators && offset > 0 {
             let text = format!("{offset}/{}", grid.scrollback_len());
             let n = text.chars().count() as f32;
             let pill_w = (n + 1.0) * cell_w;
@@ -1913,8 +1918,9 @@ impl CellRenderer {
             }
         }
         // Transient "copied N chars" toast in the bottom-right, confirming
-        // a selection copy. Same pill styling as the scroll indicator.
-        if let Some(text) = crate::native_surface::copy_notice() {
+        // a selection copy. Same pill styling as the scroll indicator, and
+        // the page's own toast under the underlay.
+        if let Some(text) = crate::native_surface::copy_notice().filter(|_| placement.indicators) {
             let n = text.chars().count() as f32;
             let pill_w = (n + 1.0) * cell_w;
             let x0 = (surface_w as f32 - pill_w - cell_w).max(0.0);

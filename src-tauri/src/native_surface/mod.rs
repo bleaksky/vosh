@@ -25,7 +25,7 @@
 // there. macOS and Windows still enforce dead-code on it.
 #![cfg_attr(target_os = "linux", allow(dead_code))]
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
@@ -196,6 +196,40 @@ fn push_native_size_if_changed(cols: usize, rows: usize) {
         if let Some(handle) = session.as_ref() {
             handle.set_window_size(cols, rows);
         }
+    }
+}
+
+// The scroll state last reported to the page, as a `scroll_report_key`.
+// Starts at a value no key reaches, so the first frame reports.
+static LAST_SCROLL: AtomicU64 = AtomicU64::new(u64::MAX);
+
+/// The key that decides whether a scroll report is news: the display
+/// offset and the history length packed together, with the length zeroed
+/// at the live tail. The page hides the depth there, and the length grows
+/// with every line of output. Each half stops one short of `u32::MAX`, so
+/// no key equals the unset marker.
+fn scroll_report_key(offset: usize, max: usize) -> u64 {
+    let cap = u64::from(u32::MAX - 1);
+    let clamp = |n: usize| u64::try_from(n).map_or(cap, |n| n.min(cap));
+    let max = if offset == 0 { 0 } else { clamp(max) };
+    (clamp(offset) << 32) | max
+}
+
+/// Under the underlay the page draws the scroll depth, so send it the
+/// display offset and the history length as `vosh://native-scroll`
+/// `[offset, max]`. Only fires when `scroll_report_key` changes, so the
+/// live tail reports once as `[0, max]` and then stays quiet.
+fn report_scroll_if_changed() {
+    if !UNDERLAY {
+        return;
+    }
+    let (offset, max) = crate::term_grid::scroll_metrics();
+    let key = scroll_report_key(offset, max);
+    if LAST_SCROLL.swap(key, Ordering::AcqRel) == key {
+        return;
+    }
+    if let Some(app) = APP.get() {
+        let _ = app.emit("vosh://native-scroll", (offset, max));
     }
 }
 
@@ -576,7 +610,8 @@ pub(crate) fn copy_notice() -> Option<String> {
 
 /// Copy the current selection to the clipboard (no-op when empty) and show
 /// the "copied N chars" toast for a moment so the copy is visibly
-/// confirmed.
+/// confirmed. Under the underlay the page shows the toast, so the count
+/// goes out as `vosh://native-copied` instead.
 fn copy_selection() {
     let Some(text) = crate::term_grid::selection_text() else {
         return;
@@ -586,6 +621,12 @@ fn copy_selection() {
     }
     platform::set_clipboard(&text);
     let chars = text.chars().count();
+    if UNDERLAY {
+        if let Some(app) = APP.get() {
+            let _ = app.emit("vosh://native-copied", chars);
+        }
+        return;
+    }
     let plural = if chars == 1 { "" } else { "s" };
     if let Ok(mut guard) = COPY_NOTICE.lock() {
         *guard = Some((
@@ -873,6 +914,7 @@ fn render(state: &mut GpuState) {
         x: pane_x,
         y: pane_y,
         vignette: !UNDERLAY,
+        indicators: !UNDERLAY,
     };
     let cell_renderer = &mut state.cell_renderer;
     let drew = crate::term_grid::with_grid(|grid| {
@@ -921,4 +963,32 @@ fn render(state: &mut GpuState) {
     }
     state.queue.submit(Some(encoder.finish()));
     frame.present();
+    // Every scroll path repaints through here, and the grid lock is free
+    // again, so this is where the page hears about the new offset.
+    report_scroll_if_changed();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scroll_key_ignores_history_growth_at_the_live_tail() {
+        assert_eq!(scroll_report_key(0, 100), scroll_report_key(0, 250));
+        assert_eq!(scroll_report_key(0, 0), 0);
+    }
+
+    #[test]
+    fn scroll_key_changes_with_offset_or_history_when_scrolled() {
+        assert_ne!(scroll_report_key(0, 100), scroll_report_key(1, 100));
+        assert_ne!(scroll_report_key(5, 100), scroll_report_key(6, 100));
+        assert_ne!(scroll_report_key(5, 100), scroll_report_key(5, 101));
+        assert_eq!(scroll_report_key(5, 100), (5 << 32) + 100);
+    }
+
+    #[test]
+    fn scroll_key_never_reaches_the_unset_marker() {
+        assert_ne!(scroll_report_key(usize::MAX, usize::MAX - 1), u64::MAX);
+        assert_ne!(scroll_report_key(1, usize::MAX), u64::MAX);
+    }
 }
