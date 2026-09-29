@@ -10,6 +10,7 @@ import {
   shortcutLabel,
   type PaletteDeps,
 } from './palette';
+import { resolveSettingsTarget } from './settingsNav';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -156,6 +157,74 @@ describe('paletteSections', () => {
     expect(sections.map((s) => s.label)).toEqual(['View']);
     expect(sections[0].rows[0].id).toBe('settings');
     expect(sections[0].rows.map((r) => r.id)).toContain('settings-themes');
+  });
+});
+
+describe('settings rows', () => {
+  const settingsRows = (over: Partial<PaletteDeps> = {}) =>
+    buildPaletteEntries(deps(over)).filter((r) => r.id.startsWith('settings-'));
+
+  it('keeps the old ids so Recent rows survive, except vitals', () => {
+    const ids = settingsRows().map((r) => r.id);
+    for (const id of [
+      'themes',
+      'typography',
+      'tick',
+      'panels',
+      'general',
+      'profiles',
+      'triggers',
+      'aliases',
+      'macros',
+      'timers',
+      'import',
+      'logs',
+    ]) {
+      expect(ids).toContain(`settings-${id}`);
+    }
+    expect(ids).not.toContain('settings-vitals');
+    // A Recent row for the removed vitals entry drops out quietly.
+    const recent = paletteSections(buildPaletteEntries(deps()), '', [
+      'settings-vitals',
+      'settings-themes',
+    ]);
+    expect(recent[0].rows.map((r) => r.id)).toEqual(['settings-themes']);
+  });
+
+  it('names the places the rows open now', () => {
+    const title = (id: string) => settingsRows().find((r) => r.id === `settings-${id}`)?.title;
+    expect(title('themes')).toBe('Open theme settings');
+    expect(title('typography')).toBe('Open terminal text settings');
+    expect(title('panels')).toBe('Open panel layout settings');
+    expect(title('profiles')).toBe('Open character settings');
+    expect(title('input')).toBe('Open input settings');
+    expect(title('import')).toBe('Import from another client…');
+  });
+
+  it('opens each row on a place the resolver knows', () => {
+    const opened: string[] = [];
+    for (const row of settingsRows({ openSettingsTab: (tab) => opened.push(tab) })) row.run();
+    const groups = opened.map((tab) => resolveSettingsTarget(tab).group);
+    expect(groups).toEqual([
+      'appearance',
+      'appearance',
+      'automation',
+      'characters',
+      'general',
+      'input',
+      'characters',
+      'automation',
+      'automation',
+      'automation',
+      'automation',
+      'automation',
+      'general',
+    ]);
+    expect(resolveSettingsTarget(opened[0])).toEqual({ group: 'appearance', section: 'theme' });
+    expect(resolveSettingsTarget(opened[opened.length - 1])).toEqual({
+      group: 'general',
+      section: 'logs',
+    });
   });
 });
 
