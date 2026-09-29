@@ -59,8 +59,18 @@ pub(crate) static MIGRATION_RELAUNCH_PENDING: std::sync::atomic::AtomicBool =
 /// reaches profile.toml/catalog.toml within a couple of seconds; the
 /// exit hook flushes immediately as a backstop.
 pub(crate) fn mark_profile_dirty(app: &AppHandle) {
+    AUTO_PERSIST_SUPPRESSED.store(false, std::sync::atomic::Ordering::Release);
+    schedule_profile_persist(app);
+}
+
+/// Persist shortly after the burst settles, like `mark_profile_dirty`,
+/// but without counting as consent to save a profile that `#profile
+/// reset` or `#profile load` left diverged from disk. While that holds,
+/// the write is skipped and the change waits in memory for the next
+/// durable change or an explicit `#profile save`. For incidental edits
+/// such as a pane layout drag.
+pub(crate) fn schedule_profile_persist(app: &AppHandle) {
     use std::sync::atomic::Ordering;
-    AUTO_PERSIST_SUPPRESSED.store(false, Ordering::Release);
     let gen = PROFILE_DIRTY_GEN.fetch_add(1, Ordering::AcqRel) + 1;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -461,12 +471,20 @@ pub(crate) async fn session_send_input(
     state: State<'_, SharedState>,
     line: String,
 ) -> Result<(), String> {
+    // `#profile reset` and `#profile load` replace the live profile
+    // wholesale, panes and tracked affects included. Path B turns them
+    // into echoes, so there they change nothing.
+    let path_b_live = crate::input::PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire);
+    let is_reset_or_load = !path_b_live && crate::input::is_profile_reset_or_load(&line);
     let (mut result, target_after, script_apply) = {
         let mut profile = state.profile.lock().await;
         let before_name = profile.target.name.clone();
         let before_idx = profile.target.room_idx;
         let before_keys = profile.target.quick_keys.clone();
         let result = input::process(&mut profile, &line);
+        if is_reset_or_load {
+            bump_panes_generation();
+        }
         let after_name = profile.target.name.clone();
         let after_idx = profile.target.room_idx;
         let after_keys = profile.target.quick_keys.clone();
@@ -525,10 +543,12 @@ pub(crate) async fn session_send_input(
     // dirty-mark branch and persist the just-blanked profile. Path B
     // gates the whole save/load/reset trio to echo-only, so suppression
     // only applies where the commands still act.
-    let path_b_live = crate::input::PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire);
-    let is_reset_or_load = !path_b_live && crate::input::is_profile_reset_or_load(&line);
     if is_reset_or_load {
         AUTO_PERSIST_SUPPRESSED.store(true, std::sync::atomic::Ordering::Release);
+        // Every window drops its copy of the old panes and tracked
+        // affects, so a later panel edit cannot write them back.
+        let shared: SharedState = state.inner().clone();
+        broadcast_profile_ui(&app, &shared).await;
     } else if line.trim_start().starts_with('#')
         || script_apply.as_ref().is_some_and(|a| a.durable_changed)
     {
@@ -1450,6 +1470,19 @@ fn pane_layout_envelope(p: &Profile) -> PaneLayoutEnvelope {
     }
 }
 
+/// Hand every window the active profile's panes and tracked affects.
+/// For the paths that replace the live UI config wholesale (a profile
+/// switch, an import, `#profile load` and `reset`), which must also
+/// bump the pane generation under the profile lock as they swap.
+pub(crate) async fn broadcast_profile_ui(app: &AppHandle, state: &SharedState) {
+    let (panes, tracked) = {
+        let p = state.profile.lock().await;
+        (pane_layout_envelope(&p), p.ui.tracked_affects.clone())
+    };
+    broadcast(app, "vosh://pane-layout-changed", &panes);
+    broadcast(app, "vosh://tracked-affects-changed", &tracked);
+}
+
 /// Read the active profile's pane layout. A profile that has never
 /// saved one gets a tree migrated from its dock layout (or the
 /// default), with nothing written to disk until the first edit.
@@ -1490,7 +1523,9 @@ pub(crate) async fn pane_layout_set(
         p.ui.panes = Some(layout.clone());
         current
     };
-    mark_profile_dirty(&app);
+    // A layout tweak after `#profile reset` must not save the blanked
+    // profile, so this schedules without clearing the suppression.
+    schedule_profile_persist(&app);
     broadcast(
         &app,
         "vosh://pane-layout-changed",
@@ -1551,10 +1586,15 @@ pub(crate) async fn profile_import(
     let snapshot = ProfileConfig::from_toml(&toml).map_err(|e| e.to_string())?;
     let applied = {
         let mut p = state.profile.lock().await;
-        snapshot.apply_to(&mut p)
+        let applied = snapshot.apply_to(&mut p);
+        bump_panes_generation();
+        applied
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
+    // The import replaced the panes and tracked affects too, and the
+    // main window would otherwise write its old tree back.
+    broadcast_profile_ui(&app, &shared).await;
     Ok(applied)
 }
 
@@ -1845,12 +1885,7 @@ pub(crate) async fn apply_profile_switch(
     // snapshot, so it can skip a list that Settings changed meanwhile.
     // These go out before profile-switched so the stores already hold
     // the new values when windows react to the switch.
-    let (panes, tracked) = {
-        let p = state.profile.lock().await;
-        (pane_layout_envelope(&p), p.ui.tracked_affects.clone())
-    };
-    broadcast(app, "vosh://pane-layout-changed", &panes);
-    broadcast(app, "vosh://tracked-affects-changed", &tracked);
+    broadcast_profile_ui(app, state).await;
 
     let _ = app.emit("vosh://profile-switched", name);
     Ok(())
