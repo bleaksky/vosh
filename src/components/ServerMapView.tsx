@@ -245,6 +245,29 @@ function sectorCodeOf(s: unknown): string {
   return String(s);
 }
 
+type TilesSnap = { payload: MapTilesPayload; json: string };
+
+// The last Map.Tiles push, kept at module scope. Map.Tiles arrives
+// only when you move, so a map that remounts (moved in the panel, or
+// shown again after you hide the panel) draws the last map at once
+// instead of a blank box until your next step. It also outlives a
+// disconnect, so the panel keeps showing where you logged out.
+let lastTiles: TilesSnap | null = null;
+const tilesListeners = new Set<(snap: TilesSnap) => void>();
+let tilesStarted = false;
+
+function startTilesCache(): void {
+  if (tilesStarted) return;
+  tilesStarted = true;
+  void onGmcpPackage<MapTilesPayload>('Map.Tiles', (data) => {
+    const payload = data ?? ({} as MapTilesPayload);
+    const json = JSON.stringify(payload);
+    if (lastTiles && lastTiles.json === json) return;
+    lastTiles = { payload, json };
+    for (const cb of tilesListeners) cb(lastTiles);
+  });
+}
+
 export function ServerMapView() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -254,9 +277,7 @@ export function ServerMapView() {
   // content matches the current payload without re-stringifying
   // current state, and gives GlyphsOverlay a cheap content-equality
   // key for its memo comparison.
-  const [tilesSnap, setTilesSnap] = useState<{ payload: MapTilesPayload; json: string } | null>(
-    null,
-  );
+  const [tilesSnap, setTilesSnap] = useState<TilesSnap | null>(() => lastTiles);
   const tiles = tilesSnap?.payload ?? null;
   const [style, setStyle] = useState<Style>(loadStyle);
   const [tilesetUrl, setTilesetUrl] = useState<string | null>(loadTileset);
@@ -351,25 +372,22 @@ export function ServerMapView() {
     img.src = tilesetUrl;
   }, [tilesetUrl]);
 
+  // Map.Tiles is the sole tile source; updating `tilesSnap` re-runs
+  // the draw effect. The cache drops a push whose JSON matches the
+  // last one, so server re-sends with identical content cause no
+  // repaint and no glyph DOM rebuild.
   useEffect(() => {
-    let unsubGmcp: (() => void) | undefined;
+    startTilesCache();
+    setTilesSnap(lastTiles);
+    tilesListeners.add(setTilesSnap);
+    return () => {
+      tilesListeners.delete(setTilesSnap);
+    };
+  }, []);
+
+  useEffect(() => {
     let unsubRoom: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
-
-    // Map.Tiles is the sole tile source; updating `tilesSnap` re-runs
-    // the draw effect. The old `onMap` -> getAreaSnapshot round-trip
-    // drove a second full redraw per move with data nothing rendered,
-    // so it is gone. A push whose JSON matches the cached string of
-    // the current payload returns `prev` from the updater, so React
-    // bails out of the re-render entirely — no repaint, no glyph DOM
-    // rebuild for server re-sends with identical content.
-    onGmcpPackage<MapTilesPayload>('Map.Tiles', (data) => {
-      const payload = data ?? ({} as MapTilesPayload);
-      const json = JSON.stringify(payload);
-      setTilesSnap((prev) => (prev && prev.json === json ? prev : { payload, json }));
-    }).then((fn) => {
-      unsubGmcp = fn;
-    });
 
     // Room.Info carries the same `area` field RoomStrip renders; the
     // header only wants the name, lowercased for the caps label.
@@ -382,16 +400,12 @@ export function ServerMapView() {
     });
 
     onState((payload) => {
-      if (payload.kind === 'disconnected') {
-        setTilesSnap(null);
-        setArea(null);
-      }
+      if (payload.kind === 'disconnected') setArea(null);
     }).then((fn) => {
       unsubState = fn;
     });
 
     return () => {
-      unsubGmcp?.();
       unsubRoom?.();
       unsubState?.();
     };
