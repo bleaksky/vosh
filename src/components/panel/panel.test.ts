@@ -2,14 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { defaultLayout, splitPane } from '../../lib/paneLayout';
 import type { ImmQueues } from '../../lib/immStore';
 import { immRows, immSummary } from './immRows';
-import {
-  affectStateWord,
-  chatTime,
-  exitsLabel,
-  splitSpeaker,
-  ticksLabel,
-  vitalValue,
-} from './paneText';
+import { affectStateWord, chatTime, exitsLabel, splitSpeaker, ticksLabel } from './paneText';
 
 // paneActions pulls in the Tauri bridge through the layout store, so
 // stub it. The pure tree helper under test never calls it.
@@ -89,8 +82,8 @@ describe('affectStateWord', () => {
 });
 
 describe('row text', () => {
-  it('formats vitals and exits the way the mockup does', () => {
-    expect(vitalValue(186, 1020)).toBe('186 / 1020');
+  // The vitals values moved to vitalsView.ts with the Values row.
+  it('formats exits the way the mockup does', () => {
     expect(exitsLabel(['north', 'east', 'south', 'west'])).toBe('north east south west');
   });
 });

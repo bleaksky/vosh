@@ -1,23 +1,45 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { useCombat } from '../../lib/stores/combatStore';
-import { useVitals, type Vitals, type VitalKey } from '../../lib/stores/vitalsStore';
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Ref,
+  type RefObject,
+} from 'react';
+import type { VitalsDensity, VitalsOptions } from '../../lib/session';
+import { useCombat, type CombatOpponent } from '../../lib/stores/combatStore';
 import { useVitalsDensity } from '../../lib/stores/vitalsDensityStore';
-import { vitalValue } from './paneText';
+import { useVitalsOptions } from '../../lib/stores/vitalsOptionsStore';
+import { useVitals, type Vitals, type VitalKey } from '../../lib/stores/vitalsStore';
+import {
+  formatVital,
+  meterFill,
+  vitalsFooterHeight,
+  vitalsGeometry,
+  vitalTone,
+  widestVital,
+  type VitalsGeometry,
+  type VitalTone,
+} from '../../lib/vitalsView';
 import { panelWidthOf, usePanelLayout } from './panelLayoutStore';
-import { vitalsLineFit } from './vitalsLine';
+import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
 
 // Vitals pinned under the panes (SPEC 5, G3). Each vital is a label,
-// the value, and a 2 px meter that stays tertiary at rest and turns
-// danger when the vital runs low. In a fight the opponent gets a row on
-// top with its health in warn. Nothing pulses.
+// the value, and a meter that stays tertiary at rest and turns danger
+// when the vital runs low. In a fight the opponent gets a row on top
+// with its health in warn. Nothing pulses.
 //
-// The density comes from Settings, Layout. Rows gives each vital its
-// own row. One line sets Health, Mana, and Moves side by side, each
-// with its label at the left, its value at the right, and its meter
-// under both, and drops the labels only when they no longer fit beside
-// the values,
-// under about 360 pt for four digit health. A panel too narrow for even
-// the values stacks them in rows (vitalsLine.ts).
+// Settings, Layout, Vitals shapes it (VitalsOptions.dc.html). Density
+// picks Rows, one row per vital, or One line, Health, Mana, and Moves
+// side by side, each with its label at the left, its value at the
+// right, and its meter under both. One line drops the labels only when
+// they no longer fit beside the values, under about 360 pt for four
+// digit health, and a panel too narrow for even the values stacks them
+// in rows (vitalsLine.ts). Values writes each number as current and
+// max, the current alone, or percent. Meter draws the 2 px line, the
+// 4 px bar, or none at the panes' 22 px pitch. Warn before you run low
+// turns a vital warn under two thirds and danger under one third. The
+// rules live in vitalsView.ts.
 
 const ROWS: { key: VitalKey; label: string; max: 'maxhp' | 'maxmana' | 'maxmove' }[] = [
   { key: 'hp', label: 'Health', max: 'maxhp' },
@@ -34,29 +56,77 @@ export function VitalsFooter() {
   const vitals = useVitals();
   const combat = useCombat();
   const density = useVitalsDensity();
+  const options = useVitalsOptions();
   const sectionRef = useRef<HTMLElement | null>(null);
   const box = useFooterBox(sectionRef, density === 'line');
-  const rows = vitals === null ? [] : shownRows(vitals);
-  const values = vitals === null ? [] : rows.map((r) => vitalValue(vitals[r.key], vitals[r.max]));
   // Fit by each vital at its max, the widest its value reads, so the
   // line does not jump between forms as a value loses a digit in a
-  // fight. Only a new max or a new panel width moves it.
+  // fight. Only a new max, a new Values form, or a new panel width
+  // moves it.
   const fit =
     density === 'line' && vitals !== null
       ? vitalsLineFit(
           box.width,
-          rows.map((r) => ({
+          shownRows(vitals).map((r) => ({
             label: textWidth(r.label, `400 12px ${box.family}`),
-            value: textWidth(vitalValue(vitals[r.max], vitals[r.max]), `500 12px ${box.family}`),
+            value: textWidth(widestVital(options.values, vitals[r.max]), `500 12px ${box.family}`),
           })),
         )
       : 'rows';
-  const line = fit !== 'rows';
+
+  return (
+    <VitalsBlock
+      sectionRef={sectionRef}
+      vitals={vitals}
+      combat={combat}
+      density={density}
+      fit={fit}
+      options={options}
+    />
+  );
+}
+
+export interface VitalsBlockProps {
+  vitals: Vitals | null;
+  combat: CombatOpponent | null;
+  density: VitalsDensity;
+  /** How One line fits the panel. Rows ignores it. */
+  fit: VitalsLineFit;
+  options: VitalsOptions;
+  sectionRef?: Ref<HTMLElement>;
+}
+
+/** The footer drawn from plain values, so every combination of the
+ *  Vitals rows renders in a test. */
+export function VitalsBlock({
+  vitals,
+  combat,
+  density,
+  fit,
+  options,
+  sectionRef,
+}: VitalsBlockProps) {
+  const line = density === 'line' && fit !== 'rows';
+  const geometry = vitalsGeometry(options.meter);
+  const meter = geometry.meter > 0;
+  const rows =
+    vitals === null
+      ? []
+      : shownRows(vitals).map((r) => ({
+          key: r.key,
+          label: r.label,
+          value: formatVital(options.values, vitals[r.key], vitals[r.max]),
+          pct: meterFill(vitals[r.key], vitals[r.max]),
+          tone: vitalTone(vitals[r.key], vitals[r.max], vitals.low[r.key], options.warn_thirds),
+        }));
 
   return (
     <section
       ref={sectionRef}
       className={`panel-vitals${line ? ' is-one-line' : ''}`}
+      // The footer holds one row for One line and three for Rows while
+      // it waits for your vitals, so logging in moves nothing.
+      style={footerStyle(geometry, density === 'line' ? 1 : 3)}
       aria-label="Vitals"
     >
       {combat && (
@@ -65,6 +135,7 @@ export function VitalsFooter() {
           label={combat.name}
           value={combat.hp_pct !== null ? `${combat.hp_pct}%` : (combat.condition ?? '')}
           pct={combat.hp_pct}
+          meter={meter}
         />
       )}
       {vitals === null ? (
@@ -73,30 +144,52 @@ export function VitalsFooter() {
         </div>
       ) : line ? (
         <div className="panel-vitals-row panel-vitals-oneline">
-          {rows.map((r, i) => (
+          {rows.map((r) => (
             <VitalItem
               key={r.key}
-              low={vitals.low[r.key]}
               label={r.label}
               showLabel={fit === 'labels'}
-              value={values[i]}
-              pct={meterPercent(vitals[r.key], vitals[r.max])}
+              value={r.value}
+              pct={r.pct}
+              tone={r.tone}
+              meter={meter}
             />
           ))}
         </div>
       ) : (
-        rows.map((r, i) => (
+        rows.map((r) => (
           <VitalRow
             key={r.key}
-            className={vitals.low[r.key] ? 'panel-vitals-row-low' : undefined}
+            className={toneClass(r.tone)}
             label={r.label}
-            value={values[i]}
-            pct={meterPercent(vitals[r.key], vitals[r.max])}
+            value={r.value}
+            pct={r.pct}
+            meter={meter}
           />
         ))
       )}
     </section>
   );
+}
+
+/** The geometry as custom properties panel.css reads. */
+function footerStyle(geometry: VitalsGeometry, rows: number): CSSProperties {
+  return {
+    '--vitals-pad-top': `${geometry.padTop}px`,
+    '--vitals-pad-bottom': `${geometry.padBottom}px`,
+    '--vitals-min-height': `${vitalsFooterHeight(geometry, rows)}px`,
+    '--vitals-row': `${geometry.row}px`,
+    '--vitals-row-top': `${geometry.rowTop}px`,
+    '--vitals-meter': `${geometry.meter}px`,
+    '--vitals-meter-gap': `${geometry.meterGap}px`,
+    '--vitals-meter-radius': `${geometry.meterRadius}px`,
+  } as CSSProperties;
+}
+
+function toneClass(tone: VitalTone): string | undefined {
+  if (tone === 'danger') return 'panel-vitals-row-low';
+  if (tone === 'warn') return 'panel-vitals-row-warn';
+  return undefined;
 }
 
 /** The footer's drawn width and UI font while One line is chosen. The
@@ -153,11 +246,13 @@ function VitalRow({
   label,
   value,
   pct,
+  meter,
   className,
 }: {
   label: string;
   value: string;
   pct: number | null;
+  meter: boolean;
   className?: string | undefined;
 }) {
   return (
@@ -166,7 +261,7 @@ function VitalRow({
         <span className="panel-vitals-label">{label}</span>
         <span className="panel-vitals-value">{value}</span>
       </div>
-      <Meter pct={pct} />
+      {meter && <Meter pct={pct} />}
     </div>
   );
 }
@@ -179,25 +274,26 @@ function VitalItem({
   showLabel,
   value,
   pct,
-  low,
+  tone,
+  meter,
 }: {
   label: string;
   showLabel: boolean;
   value: string;
   pct: number;
-  low: boolean;
+  tone: VitalTone;
+  meter: boolean;
 }) {
+  const toned = toneClass(tone);
   return (
-    <div
-      className={`panel-vitals-item${showLabel ? '' : ' is-bare'}${low ? ' panel-vitals-row-low' : ''}`}
-    >
+    <div className={`panel-vitals-item${showLabel ? '' : ' is-bare'}${toned ? ` ${toned}` : ''}`}>
       <div className="panel-vitals-line">
         <span className={showLabel ? 'panel-vitals-label' : 'panel-vitals-label-hidden'}>
           {label}
         </span>
         <span className="panel-vitals-value">{value}</span>
       </div>
-      <Meter pct={pct} />
+      {meter && <Meter pct={pct} />}
     </div>
   );
 }
@@ -208,10 +304,4 @@ function Meter({ pct }: { pct: number | null }) {
       {pct !== null && <div className="panel-vitals-fill" style={{ width: `${pct}%` }} />}
     </div>
   );
-}
-
-/** Meter fill in percent, unrounded so the 2 px line moves smoothly. */
-function meterPercent(current: number, max: number): number {
-  if (max <= 0) return 0;
-  return Math.max(0, Math.min(100, (current / max) * 100));
 }

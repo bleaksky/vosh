@@ -48,9 +48,10 @@ export default defineConfig(async () => ({
   // of the tests are not this checkout's tests.
   test: {
     exclude: ['**/node_modules/**', '**/dist/**', '.claude/**'],
-    // Vitest hands back CSS as an empty string. The status line test
-    // reads frame.css as text to check the rule behind a class.
-    css: { include: [/frame\.css/] },
+    // Vitest hands back CSS as an empty string. The status line and
+    // vitals footer tests read frame.css and panel.css as text to check
+    // the rule behind a class.
+    css: { include: [/frame\.css/, /panel\.css/] },
   },
   clearScreen: false,
   server: {
