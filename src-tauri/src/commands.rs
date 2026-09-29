@@ -430,8 +430,9 @@ pub(crate) async fn session_connect(
     // applied only when the frontend never called
     // `session_set_window_size` before this connect.
     let initial_size = state.window_size.lock().map_or((80, 24), |g| *g);
+    let target = (host.clone(), port);
 
-    let handle = session::spawn(
+    let spawned = session::spawn(
         app.clone(),
         host,
         port,
@@ -444,25 +445,39 @@ pub(crate) async fn session_connect(
         scrollback_path,
         initial_size,
     )
-    .await
-    .map_err(|e| {
-        // Surface the disconnected state so the UI does not stay stuck on
-        // "connecting...". The frontend listens for session://state.
-        let _ = app.emit(
-            "session://state",
-            crate::session::StatePayload::Disconnected {
-                reason: Some(e.to_string()),
-            },
-        );
-        e.to_string()
-    })?;
+    .await;
+    let handle = match spawned {
+        Ok(handle) => handle,
+        Err(e) => {
+            // Surface the disconnected state so the UI does not stay stuck
+            // on "connecting...". The frontend listens for session://state.
+            let _ = app.emit(
+                "session://state",
+                crate::session::StatePayload::Disconnected {
+                    reason: Some(e.to_string()),
+                },
+            );
+            // Nothing reached the target, so nobody is logged in there.
+            // A connect that raced this one keeps its own target.
+            if let Ok(mut g) = state.current_connection.lock() {
+                if g.as_ref() == Some(&target) {
+                    *g = None;
+                }
+            }
+            crate::characters::broadcast_session_identity(&app, state.inner()).await;
+            return Err(e.to_string());
+        }
+    };
 
-    let mut current = state.session.lock().await;
-    if let Some(prev) = current.take() {
-        // A concurrent connect raced us. Shut down our old handle.
-        prev.shutdown().await;
+    {
+        let mut current = state.session.lock().await;
+        if let Some(prev) = current.take() {
+            // A concurrent connect raced us. Shut down our old handle.
+            prev.shutdown().await;
+        }
+        *current = Some(handle);
     }
-    *current = Some(handle);
+    crate::characters::broadcast_session_identity(&app, state.inner()).await;
     Ok(())
 }
 
@@ -613,10 +628,15 @@ pub(crate) async fn session_send_input(
 }
 
 #[tauri::command]
-pub(crate) async fn session_disconnect(state: State<'_, SharedState>) -> Result<(), String> {
-    let mut current = state.session.lock().await;
-    if let Some(handle) = current.take() {
-        handle.shutdown().await;
+pub(crate) async fn session_disconnect(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+) -> Result<(), String> {
+    {
+        let mut current = state.session.lock().await;
+        if let Some(handle) = current.take() {
+            handle.shutdown().await;
+        }
     }
     if let Ok(mut g) = state.current_connection.lock() {
         *g = None;
@@ -624,6 +644,7 @@ pub(crate) async fn session_disconnect(state: State<'_, SharedState>) -> Result<
     if let Ok(mut g) = state.current_character.lock() {
         *g = None;
     }
+    crate::characters::broadcast_session_identity(&app, state.inner()).await;
     Ok(())
 }
 
@@ -1973,7 +1994,7 @@ pub(crate) async fn profile_switch(
 /// (host, port, character) against the profile set. When the resolved
 /// profile differs from the currently-active one, swap to it and
 /// announce on the terminal so the user knows the active profile
-/// changed.
+/// changed. Either way, a new name updates the session identity.
 pub(crate) async fn handle_char_known_for_auto_switch(
     app: &AppHandle,
     state: &SharedState,
@@ -2000,6 +2021,13 @@ pub(crate) async fn handle_char_known_for_auto_switch(
     if !should_resolve {
         return;
     }
+    auto_switch_for_character(app, state, trimmed).await;
+    crate::characters::broadcast_session_identity(app, state).await;
+}
+
+/// Switch to the profile that claims `character` on the live
+/// connection, when that is not the active one already.
+async fn auto_switch_for_character(app: &AppHandle, state: &SharedState, character: &str) {
     let Some((host, port)) = state.current_connection.lock().ok().and_then(|g| g.clone()) else {
         return;
     };
@@ -2008,7 +2036,7 @@ pub(crate) async fn handle_char_known_for_auto_switch(
         let Some(set) = guard.as_ref() else {
             return;
         };
-        let resolved = set.resolve_match(&host, port, Some(trimmed));
+        let resolved = set.resolve_match(&host, port, Some(character));
         match resolved {
             Some(name) if name != set.active_name() => Some(name),
             _ => None,

@@ -481,6 +481,7 @@ pub fn run() {
             characters::pane_layout_reset,
             characters::profile_set_login,
             characters::profile_set_world,
+            characters::session_identity_get,
             commands::ui_set_theme,
             fonts_list,
             macros_list,

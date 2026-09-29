@@ -463,6 +463,17 @@ impl ProfileSet {
         self.resolve_match(host, port, Some(character)).as_deref() == Some(name)
     }
 
+    /// The profile that claims `character` at login on this connection:
+    /// the one `resolve_match` picks, when that profile lists the
+    /// character. None when no profile with its toggle on lists it, even
+    /// if a host wide fallback would load, so Characters can offer a
+    /// new profile for that character.
+    pub(crate) fn claimed_by(&self, host: &str, port: u16, character: &str) -> Option<String> {
+        let name = self.resolve_match(host, port, Some(character))?;
+        let am = self.get(&name)?.auto_match.as_ref()?;
+        am.names(character).then_some(name)
+    }
+
     /// Turn the login toggle for `name` on or off for `character`.
     ///
     /// On lists the character first if the profile does not list it
@@ -1308,6 +1319,37 @@ characters = ["Erelei", "Vanek"]
             Err(ProfileSetError::AlreadyExists(_))
         ));
         assert!(set.get("Other").is_none());
+    }
+
+    #[test]
+    fn claimed_by_names_the_profile_a_login_loads() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        let world = "play.theforsakenlands.com";
+        assert_eq!(
+            set.claimed_by(world, 1848, "erelei"),
+            Some(DEFAULT_PROFILE_NAME.into())
+        );
+        assert_eq!(
+            set.claimed_by(world, 1848, "Caelaor"),
+            Some("Healer".into())
+        );
+        set.set_login("Test-Prompt", "Erelei", true).unwrap();
+        assert_eq!(
+            set.claimed_by(world, 1848, "Erelei"),
+            Some("Test-Prompt".into())
+        );
+
+        // A host wide fallback loads for Vanek but does not claim him.
+        set.create("Fallback").unwrap();
+        set.set_metadata("Fallback", None, Some(claim(world, None, &[])))
+            .unwrap();
+        assert_eq!(
+            set.resolve_match(world, 1848, Some("Vanek")),
+            Some("Fallback".into())
+        );
+        assert_eq!(set.claimed_by(world, 1848, "Vanek"), None);
+        assert_eq!(set.claimed_by("mud.example.org", 4000, "Erelei"), None);
     }
 
     #[test]
