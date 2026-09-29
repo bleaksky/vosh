@@ -5171,6 +5171,7 @@ dependencies = [
  "font-kit",
  "gdk",
  "gtk",
+ "muda",
  "objc2 0.5.2",
  "pathfinder_geometry",
  "pollster",
