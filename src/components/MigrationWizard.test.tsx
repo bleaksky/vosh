@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { MigrationPlan } from '../lib/session';
-import { PlanView } from './MigrationWizard';
+import { AppliedNotice, PlanView } from './MigrationWizard';
 
 // The wizard reaches the Tauri bridge only when it analyzes or applies.
 // PlanView, under test, draws from the plan it is given.
@@ -119,5 +119,21 @@ describe('the shared presets in the preview', () => {
       profile_presets: [['healing_basics'], ['healing_basics']],
     });
     expect(html).toContain('Every character has the same presets on as now.');
+  });
+});
+
+describe('the wizard once the move is done', () => {
+  const html = renderToStaticMarkup(<AppliedNotice />);
+
+  it('says the preset list is shared', () => {
+    expect(html).toContain('Every character now shares one list of presets that are on.');
+    expect(html).not.toContain('kept every other setting');
+  });
+
+  it('says Vosh saves nothing you change before you quit', () => {
+    expect(html).toContain(
+      'Vosh does not save the changes you make before you quit, so quit Vosh below and open it again to use the catalog.',
+    );
+    expect(html).not.toMatch(/[;‒-―]/);
   });
 });

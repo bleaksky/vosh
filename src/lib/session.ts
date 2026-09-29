@@ -2077,6 +2077,12 @@ export async function migrationApply(
   return invoke('migration_apply', { resolutions, library });
 }
 
+/** Hear that the shared catalog wizard wrote its files. Nothing saves
+ *  until Vosh opens again, and the main window says so. */
+export async function subscribeMigrationApplied(cb: () => void): Promise<UnlistenFn> {
+  return listen<unknown>('vosh://migration-applied', () => cb());
+}
+
 // Cleanly quit Vosh. The post-migration prompt uses this so the
 // user can relaunch into Path B mode in one click.
 export async function appQuit(): Promise<void> {

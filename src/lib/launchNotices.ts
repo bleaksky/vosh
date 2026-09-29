@@ -28,3 +28,16 @@ export async function showLaunchNotices(write: (text: string) => void): Promise<
     pushToast({ kind: 'error', message: sentence });
   }
 }
+
+/** What the main window says once the shared catalog wizard wrote its
+ *  files. Nothing the session changes saves until Vosh opens again, since
+ *  the live profile still holds the items the move took out of the files. */
+export const MIGRATION_APPLIED_NOTICE =
+  'The move to loadouts is done. Vosh does not save the changes you make before you quit, so quit Vosh and open it again now.';
+
+/** Show the notice after the move to loadouts in the terminal through
+ *  `write`, and in a toast that stays up until you close it. */
+export function showMigrationApplied(write: (text: string) => void): void {
+  write(launchNoticeLine(MIGRATION_APPLIED_NOTICE));
+  pushToast({ kind: 'info', message: MIGRATION_APPLIED_NOTICE, sticky: true });
+}

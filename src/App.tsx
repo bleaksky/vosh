@@ -40,6 +40,7 @@ import {
   subscribeBrightBoldChanged,
   subscribeBaseAnsiChanged,
   subscribeCustomThemesChanged,
+  subscribeMigrationApplied,
   subscribeSplitDividerChanged,
   subscribeTerminalLineHeightChanged,
   normalizeTerminalLineHeight,
@@ -62,7 +63,7 @@ import { parseHex, toRgba } from './lib/color';
 import { setBaseAnsi } from './lib/baseAnsi';
 import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
-import { showLaunchNotices } from './lib/launchNotices';
+import { showLaunchNotices, showMigrationApplied } from './lib/launchNotices';
 import { CommandPalette } from './components/CommandPalette';
 import { disconnectSession } from './lib/session';
 import {
@@ -1156,6 +1157,24 @@ function App() {
     let cancelled = false;
     subscribeBaseAnsiChanged((colors) => {
       setBaseAnsi(colors);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    // The shared catalog wizard wrote its files. Nothing this session
+    // changes saves until Vosh opens again, so say so in the terminal and
+    // in a toast that stays up.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    subscribeMigrationApplied(() => {
+      showMigrationApplied(writeLive);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;

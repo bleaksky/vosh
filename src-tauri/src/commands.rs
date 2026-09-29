@@ -3756,8 +3756,11 @@ pub(crate) async fn migration_apply(
     // banner and offers an explicit [Quit Vosh] button (handled
     // separately by app_quit) that cleanly exits the process. The
     // user re-opens Vosh and the Path B startup hook picks the new
-    // catalog up. Path B mode is durable on disk either way.
-    let _ = app.emit("vosh://migration-applied", &());
+    // catalog up. Path B mode is durable on disk either way. The main
+    // window hears the event and says that nothing saves until then, in
+    // the terminal and in a toast that stays up. Sent to each window, as
+    // the settings window runs the wizard and the main window listens.
+    broadcast(&app, "vosh://migration-applied", &());
     Ok(())
 }
 
