@@ -414,14 +414,18 @@
 }
 
 .st-card > .st-row:last-child,
-.st-card > .st-disclosure:last-child {
+.st-card > .st-disclosure:last-child,
+.st-card > .st-disclosure-panel:last-child > .st-row:last-child {
   border-bottom-left-radius: var(--r-card);
   border-bottom-right-radius: var(--r-card);
 }
 
-/* Every row after the first draws a hairline inset 16. */
+/* Every row after the first draws a hairline inset 16. Rows a
+   Disclosure opens sit in a panel after it, so each of them draws one
+   too. */
 .st-card > * + .st-row::before,
-.st-card > * + .st-disclosure::before {
+.st-card > * + .st-disclosure::before,
+.st-disclosure-panel > .st-row::before {
   content: '';
   position: absolute;
   top: 0;
@@ -682,6 +686,69 @@
   display: flex;
   color: var(--tertiary);
   pointer-events: none;
+}
+
+/* A color field: the field fill with a 16 px swatch that opens the
+   system color picker, then the color as text. */
+.st-color {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px 0 6px;
+  border-radius: var(--r-row);
+  background: var(--st-fill);
+  box-shadow: var(--st-fill-ring);
+}
+
+.st-color:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.st-color-swatch {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-key);
+  box-shadow: inset 0 0 0 1px var(--st-key-ring);
+}
+
+.st-color-picker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+}
+
+.st-color-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.st-color-text::placeholder {
+  color: var(--tertiary);
+  opacity: 1;
 }
 
 .st-button {
