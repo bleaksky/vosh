@@ -3,15 +3,15 @@ import { groupKeyOf, searchText } from '../../../../lib/automationList';
 import {
   blankMacro,
   jsonListText,
-  macroSavePlan,
   normalizeMacro,
   parseJsonList,
+  saveMacroDraft,
   validateMacros,
   type MacroRecord,
 } from '../../../../lib/automationRecords';
 import { withGroup } from '../../../../lib/automationTriggers';
 import { labelForKey } from '../../../../lib/macroKeys';
-import { deleteMacro, listMacros, setMacro, subscribeMacrosChanged } from '../../../../lib/session';
+import { listMacros, subscribeMacrosChanged } from '../../../../lib/session';
 import { Card, Field, Row, Toggle } from '../../ui';
 import { GroupField, KeyCaptureField } from './fields';
 import { DraftEditor } from './DraftEditor';
@@ -27,11 +27,7 @@ const MACROS_SPEC: KindSpec<MacroRecord> = {
   load: async () => (await listMacros()).map(normalizeMacro),
   // One call per binding, the way the old Macros tab saved rows.
   // Unbinding goes first, so a key another macro takes over stays bound.
-  save: async (draft) => {
-    const plan = macroSavePlan(draft);
-    for (const key of plan.remove) await deleteMacro(key);
-    for (const m of plan.set) await setMacro(m.key, m.command, m.group ?? null, m.enabled);
-  },
+  save: (draft, written) => saveMacroDraft(draft, written),
   validate: validateMacros,
   entry: (m) => ({
     name: m.key ? labelForKey(m.key) : '',

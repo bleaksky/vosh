@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Draft, KindNoun } from '../../../../lib/automationDraft';
+import type { Draft, KindNoun, SavedWrite } from '../../../../lib/automationDraft';
 import type { ListEntry } from '../../../../lib/automationList';
 
 /** The kinds on the Automation switcher. Loadouts shows in loadout
@@ -65,8 +65,11 @@ export interface KindSpec<T> {
   /** `You have no triggers yet.` */
   emptyList: string;
   load: () => Promise<T[]>;
-  /** Write the draft through the kind's API. */
-  save: (draft: Draft<T>) => Promise<void>;
+  /** Write the draft through the kind's API. A kind that writes one
+   *  call per item reports each call the store took to `written`, so a
+   *  Save that fails partway marks those items saved and the next Save
+   *  does not send them again. */
+  save: (draft: Draft<T>, written: (write: SavedWrite<T>) => void) => Promise<void>;
   /** Why the draft cannot save yet, or null. */
   validate?: (values: T[]) => string | null;
   /** The list row for a value, less its uid. */

@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   addDraftItem,
   createDraft,
+  draftChangeCount,
+  draftValues,
+  markAllWritten,
   removeDraftItem,
   replaceDraftValues,
   saveListThenPinned,
   updateDraftItem,
   isDraftDirty,
   type Draft,
+  type SavedWrite,
 } from './automationDraft';
 import {
   activeLoadouts,
@@ -30,6 +34,8 @@ import {
   presetSavePlan,
   presetToggles,
   PRESETS_OFF_MARKER,
+  saveMacroDraft,
+  saveTimerDraft,
   storedPresetIds,
   timerKey,
   timerLabel,
@@ -37,7 +43,10 @@ import {
   validateAliases,
   validateMacros,
   validateTimers,
+  type MacroRecord,
+  type MacroStoreApi,
   type TimerRecord,
+  type TimerStoreApi,
 } from './automationRecords';
 import { defaultEnabledIds, PRESETS } from './presets';
 
@@ -118,8 +127,91 @@ describe('macros', () => {
     draft = removeDraftItem(draft, f3.uid);
     draft = addDraftItem(draft, { key: 'F1', command: 'rescue', enabled: true });
     const plan = macroSavePlan(draft);
-    expect(plan.remove.sort()).toEqual(['F1', 'F3']);
-    expect(plan.set.map((m) => m.key).sort()).toEqual(['F1', 'F2', 'F5']);
+    expect(plan.remove.map((r) => r.key).sort()).toEqual(['F1', 'F3']);
+    expect(plan.remove.find((r) => r.key === 'F1')?.uids).toEqual([f1.uid]);
+    expect(plan.remove.find((r) => r.key === 'F3')?.uids).toEqual([f3.uid]);
+    expect(plan.set.map((s) => s.macro.key).sort()).toEqual(['F1', 'F2', 'F5']);
+  });
+
+  /** macros_set and macros_delete over one list. `failOn` makes the
+   *  bind of that key throw once. */
+  function macroStore(start: MacroRecord[]) {
+    const store = start.map((m) => ({ ...m }));
+    const calls: string[] = [];
+    let failOn: string | null = null;
+    const api: MacroStoreApi = {
+      deleteMacro: async (key) => {
+        calls.push(`delete ${key}`);
+        store.splice(0, store.length, ...store.filter((m) => m.key !== key));
+      },
+      setMacro: async (key, command, group, enabled) => {
+        if (key === failOn) {
+          failOn = null;
+          throw new Error('disk full');
+        }
+        calls.push(`set ${key}`);
+        const next = { key, command, enabled, ...(group ? { group } : {}) };
+        const at = store.findIndex((m) => m.key === key);
+        if (at >= 0) store[at] = next;
+        else store.push(next);
+      },
+    };
+    return { store, calls, api, failNext: (key: string) => (failOn = key) };
+  }
+
+  /** Save the way the page does: on a failure, keep the draft and mark
+   *  what the store took as saved. */
+  async function saveMacros(draft: Draft<MacroRecord>, api: MacroStoreApi) {
+    const writes: SavedWrite<MacroRecord>[] = [];
+    try {
+      await saveMacroDraft(draft, (w) => writes.push(w), api);
+      return { draft: createDraft(draft.items.map((i) => i.value)), error: null };
+    } catch (e) {
+      return { draft: markAllWritten(draft, writes), error: e };
+    }
+  }
+
+  it('binds only the rest after a failure after the first of three new macros', async () => {
+    const { store, calls, api, failNext } = macroStore(macros);
+    let draft = createDraft(macros.map((m) => ({ ...m })));
+    for (const key of ['F6', 'F7', 'F8']) {
+      draft = addDraftItem(draft, { key, command: `cast ${key}`, enabled: true });
+    }
+    failNext('F7');
+    const first = await saveMacros(draft, api);
+    expect(first.error).toBeInstanceOf(Error);
+    // F6 is saved. F7 and F8 stay as your unsaved changes.
+    expect(macroSavePlan(first.draft).set.map((s) => s.macro.key)).toEqual(['F7', 'F8']);
+    expect(draftValues(first.draft).map((m) => m.key)).toEqual([
+      'F1',
+      'F2',
+      'F3',
+      'F6',
+      'F7',
+      'F8',
+    ]);
+
+    const second = await saveMacros(first.draft, api);
+    expect(second.error).toBeNull();
+    expect(calls).toEqual(['set F6', 'set F7', 'set F8']);
+    expect(store.map((m) => m.key)).toEqual(['F1', 'F2', 'F3', 'F6', 'F7', 'F8']);
+  });
+
+  it('binds a moved key after the old key unbound and the bind failed', async () => {
+    const { store, calls, api, failNext } = macroStore(macros);
+    let draft = createDraft(macros.map((m) => ({ ...m })));
+    draft = updateDraftItem(draft, draft.items[0].uid, (m) => ({ ...m, key: 'F5' }));
+    failNext('F5');
+    const first = await saveMacros(draft, api);
+    expect(first.error).toBeInstanceOf(Error);
+    // F1 is gone from the store, so the macro now reads as new on F5.
+    expect(macroSavePlan(first.draft)).toEqual({
+      remove: [],
+      set: [{ uid: draft.items[0].uid, macro: { key: 'F5', command: 'kick', enabled: true } }],
+    });
+    await saveMacros(first.draft, api);
+    expect(calls).toEqual(['delete F1', 'set F5']);
+    expect(store.map((m) => m.key).sort()).toEqual(['F2', 'F3', 'F5']);
   });
 
   it('plans nothing for a clean draft', () => {
@@ -165,8 +257,8 @@ describe('timers', () => {
     draft = removeDraftItem(draft, draft.items[1].uid);
     draft = addDraftItem(draft, { ...blankTimer(), command: 'look' });
     const plan = timerSavePlan(draft);
-    expect(plan.remove).toEqual([2]);
-    expect(plan.set.map((t) => [t.id, t.command])).toEqual([
+    expect(plan.remove.map((r) => r.id)).toEqual([2]);
+    expect(plan.set.map((s) => [s.timer.id, s.timer.command])).toEqual([
       [1, 'drink'],
       [null, 'look'],
     ]);
@@ -179,14 +271,100 @@ describe('timers', () => {
     const next = replaceDraftValues(draft, parseJsonList(text, normalizeTimer) ?? [], timerKey);
     const plan = timerSavePlan(next);
     expect(plan.remove).toEqual([]);
-    expect(plan.set).toEqual([{ ...timers[0], id: null }]);
+    expect(plan.set.map((s) => s.timer)).toEqual([{ ...timers[0], id: null }]);
   });
 
   it('updates the id a timer loaded with, whatever id the JSON view gives it', () => {
     const draft = createDraft(timers);
     const edited = [{ ...timers[0], id: 2, interval_secs: 600 }, timers[1]];
     const plan = timerSavePlan(replaceDraftValues(draft, edited, timerKey));
-    expect(plan.set.map((t) => [t.id, t.interval_secs])).toEqual([[1, 600]]);
+    expect(plan.set.map((s) => [s.timer.id, s.timer.interval_secs])).toEqual([[1, 600]]);
+  });
+
+  /** timers_set and timers_delete over one list, the way the backend
+   *  keeps it: a new timer takes the next id at the end. `failNext`
+   *  makes the next create throw once. */
+  function timerStore(start: TimerRecord[]) {
+    const store = start.map((t) => ({ ...t }));
+    let creates = 0;
+    let failAt: number | null = null;
+    const api: TimerStoreApi = {
+      timersDelete: async (id) => {
+        store.splice(0, store.length, ...store.filter((t) => t.id !== id));
+        return store.map((t) => ({ ...t }));
+      },
+      timersSet: async (id, name, interval_secs, command, enabled) => {
+        const at = store.findIndex((t) => t.id === id);
+        if (at >= 0) {
+          store[at] = { id, name, interval_secs, command, enabled };
+        } else {
+          creates += 1;
+          if (creates === failAt) throw new Error('disk full');
+          const next = Math.max(0, ...store.map((t) => t.id ?? 0)) + 1;
+          store.push({ id: next, name, interval_secs, command, enabled });
+        }
+        return store.map((t) => ({ ...t }));
+      },
+    };
+    return { store, api, failCreate: (n: number) => (failAt = creates + n) };
+  }
+
+  async function saveTimers(draft: Draft<TimerRecord>, api: TimerStoreApi) {
+    const writes: SavedWrite<TimerRecord>[] = [];
+    try {
+      await saveTimerDraft(draft, (w) => writes.push(w), api);
+      return { draft: null, error: null };
+    } catch (e) {
+      return { draft: markAllWritten(draft, writes), error: e };
+    }
+  }
+
+  it('creates each new timer once after a failure after the first of three creates', async () => {
+    const { store, api, failCreate } = timerStore(timers);
+    let draft = createDraft(timers.map((t) => ({ ...t })));
+    for (const command of ['look', 'score', 'inventory']) {
+      draft = addDraftItem(draft, { ...blankTimer(), command });
+    }
+    failCreate(2);
+    const first = await saveTimers(draft, api);
+    expect(first.error).toBeInstanceOf(Error);
+    expect(store.map((t) => t.command)).toEqual(['drink', 'save\n#echo saved', 'look']);
+    const rebased = first.draft as Draft<TimerRecord>;
+    // look is saved under the id the store gave it. score and inventory
+    // are still yours to save, and nothing else is.
+    expect(draftValues(rebased).find((t) => t.command === 'look')?.id).toBe(3);
+    expect(draftChangeCount(rebased)).toBe(2);
+    expect(timerSavePlan(rebased).set.map((s) => [s.timer.id, s.timer.command])).toEqual([
+      [null, 'score'],
+      [null, 'inventory'],
+    ]);
+
+    const second = await saveTimers(rebased, api);
+    expect(second.error).toBeNull();
+    expect(store.map((t) => [t.id, t.command])).toEqual([
+      [1, 'drink'],
+      [2, 'save\n#echo saved'],
+      [3, 'look'],
+      [4, 'score'],
+      [5, 'inventory'],
+    ]);
+  });
+
+  it('keeps a saved timer editable under its new id after a failed Save', async () => {
+    const { store, api, failCreate } = timerStore(timers);
+    let draft = addDraftItem(createDraft(timers.map((t) => ({ ...t }))), {
+      ...blankTimer(),
+      command: 'look',
+    });
+    draft = addDraftItem(draft, { ...blankTimer(), command: 'score' });
+    failCreate(2);
+    const rebased = (await saveTimers(draft, api)).draft as Draft<TimerRecord>;
+    const look = rebased.items.find((i) => i.value.command === 'look');
+    const edited = updateDraftItem(rebased, look?.uid ?? '', (t) => ({ ...t, interval_secs: 90 }));
+    await saveTimers(edited, api);
+    expect(store.filter((t) => t.command === 'look')).toEqual([
+      { id: 3, name: '', interval_secs: 90, command: 'look', enabled: true },
+    ]);
   });
 
   it('creates a new timer once when the tick fails after it', async () => {
@@ -194,7 +372,7 @@ describe('timers', () => {
     const store: TimerRecord[] = timers.map((t) => ({ ...t }));
     const write = async (d: Draft<TimerRecord>) => {
       const plan = timerSavePlan(d);
-      for (const t of plan.set) {
+      for (const { timer: t } of plan.set) {
         if (t.id === null) store.push({ ...t, id: Math.max(...store.map((s) => s.id ?? 0)) + 1 });
         else
           store.splice(

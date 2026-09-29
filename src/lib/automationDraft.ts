@@ -247,6 +247,48 @@ export async function saveListThenPinned(steps: {
   if (!steps.list) await steps.reload();
 }
 
+/** One write the store took during a Save that sends one call per item,
+ *  like Macros and Timers. `stored` is what the store now holds for the
+ *  draft item `uid`, or null once the store no longer holds it. */
+export interface SavedWrite<T> {
+  uid: string;
+  stored: T | null;
+  /** The item's value when Save planned the write. Give it when the
+   *  store keeps something other than what the page sent, like a new
+   *  timer that gets its id from the store. An item that still holds
+   *  this value takes the stored one, so it reads as saved. */
+  sent?: T;
+}
+
+/** Move one write the store took into the saved items. A Save that
+ *  fails partway keeps its unsaved changes, and without this the next
+ *  Save would send every write again, creating each new timer twice.
+ *  A write for an item the draft no longer knows changes nothing. */
+export function markWritten<T>(draft: Draft<T>, write: SavedWrite<T>): Draft<T> {
+  const { uid, stored, sent } = write;
+  if (stored === null) {
+    const saved = draft.saved.filter((item) => item.uid !== uid);
+    return saved.length === draft.saved.length ? draft : { ...draft, saved };
+  }
+  const current = draft.items.find((item) => item.uid === uid);
+  let items = draft.items;
+  if (current && sent !== undefined && serializeValue(current.value) === serializeValue(sent)) {
+    items = draft.items.map((item) => (item.uid === uid ? { uid, value: stored } : item));
+  }
+  let saved = draft.saved;
+  if (draft.saved.some((item) => item.uid === uid)) {
+    saved = draft.saved.map((item) => (item.uid === uid ? { uid, value: stored } : item));
+  } else if (current) {
+    saved = [...draft.saved, { uid, value: stored }];
+  }
+  return items === draft.items && saved === draft.saved ? draft : { items, saved };
+}
+
+/** markWritten for each write, in the order the store took them. */
+export function markAllWritten<T>(draft: Draft<T>, writes: readonly SavedWrite<T>[]): Draft<T> {
+  return writes.reduce((next, write) => markWritten(next, write), draft);
+}
+
 /** How many items Save would add, remove, or change. */
 export function draftChangeCount<T>(draft: Draft<T>): number {
   const { added, removed, changed } = draftChanges(draft);
