@@ -2,12 +2,15 @@ import { memo, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { onGmcpPackage, onState } from '../lib/session';
 import {
   MAP_COLORS,
+  PLAIN_COLORS,
   SECTORS,
   UNKNOWN_GLYPH,
   hexToRgba,
+  mapThemeSignature,
   sectorForCode,
   sectorGlyphColor,
 } from '../lib/mapPalette';
+import { PLAIN, layoutPlain, type PlainCell } from '../lib/mapPlain';
 import { drawTerrainDecorations } from '../lib/terrainDecor';
 import { subscribeThemeChanges } from '../lib/theme';
 
@@ -84,9 +87,15 @@ interface MapTilesPayload {
   areas?: Record<string, AreaInfo>;
 }
 
-type Style = 'squares' | 'glyphs' | 'tileset';
+/** How the map draws. `plain` is the One Window drawing (SPEC 10 G7)
+ *  and the default. The other three are the earlier styles. */
+export type MapStyle = 'plain' | 'squares' | 'glyphs' | 'tileset';
+type Style = MapStyle;
 
-const STYLE_KEY = 'vosh.layout.serverMapStyle';
+const STYLE_KEY = 'vosh.map.style';
+// The earlier key. It held `squares` by default, written on every
+// mount, so only `glyphs` or `tileset` there is a choice you made.
+const LEGACY_STYLE_KEY = 'vosh.layout.serverMapStyle';
 const TILESET_KEY = 'vosh.layout.serverMapTileset';
 const ZOOM_KEY = 'vosh.layout.serverMapZoom';
 const CONTROLS_KEY = 'vosh.map.controlsOpen';
@@ -98,13 +107,19 @@ const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3.0;
 const ZOOM_STEP = 0.25;
 
+function isStyle(value: string | null): value is Style {
+  return value === 'plain' || value === 'squares' || value === 'glyphs' || value === 'tileset';
+}
+
 function loadStyle(): Style {
   try {
     const value = localStorage.getItem(STYLE_KEY);
-    if (value === 'glyphs' || value === 'tileset') return value;
-    return 'squares';
+    if (isStyle(value)) return value;
+    const legacy = localStorage.getItem(LEGACY_STYLE_KEY);
+    if (legacy === 'glyphs' || legacy === 'tileset') return legacy;
+    return 'plain';
   } catch {
-    return 'squares';
+    return 'plain';
   }
 }
 
@@ -471,6 +486,13 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
       ctx.fillText('Map.Tiles payload has no grid yet', 10, 22);
       return;
     }
+
+    // The plain drawing has no terrain around it and no sector colors.
+    if (style === 'plain') {
+      drawPlain(ctx, cssWidth, cssHeight, tiles, rows, cols, zoom);
+      return;
+    }
+
     const centerR = Math.floor((rows + 1) / 2);
     const centerC = Math.floor((cols + 1) / 2);
 
@@ -612,6 +634,34 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     };
   }, []);
 
+  // Every theme write lands on the root element's inline style, from
+  // this window or a broadcast, and so does a change the theme event
+  // never announces (the system contrast setting). Repaint when a
+  // color the map paints with actually changed, at most once a frame.
+  useEffect(() => {
+    const root = document.documentElement;
+    let last = mapThemeSignature();
+    let frame = 0;
+    const observer = new MutationObserver(() => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const next = mapThemeSignature();
+        if (next === last) return;
+        last = next;
+        drawRef.current();
+      });
+    });
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ['style', 'data-theme', 'data-appearance'],
+    });
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+
   const handleLoadTileset = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -674,6 +724,13 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
       {!embedded && controlsOpen && (
         <div className="map-controls-row">
           <div className="map-mode-toggle">
+            <button
+              type="button"
+              aria-pressed={style === 'plain'}
+              onClick={() => setStyle('plain')}
+            >
+              plain
+            </button>
             <button
               type="button"
               aria-pressed={style === 'squares'}
@@ -766,6 +823,172 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
       </div>
     </div>
   );
+}
+
+/// Find the player cell. Aabahran tags it with `h: 1`; falling back
+/// to (radius+1) per the GMCP spec when no cell carries the flag. Old
+/// "midpoint of observed cells" math broke on sparse grids — the
+/// player @ would not paint because the computed center missed the
+/// player's row.
+///
+/// The h-check is permissive so a JSON quirk (`h: "1"`, `h: true`)
+/// still resolves to the player. Without that, going up into an
+/// indoor area sometimes lost the marker entirely.
+function playerCellOf(
+  payload: MapTilesPayload,
+  rows: number,
+  cols: number,
+): { row: number; col: number } {
+  if (payload.g) {
+    for (const [rKey, row] of Object.entries(payload.g)) {
+      for (const [cKey, cell] of Object.entries(row)) {
+        if (!cell || typeof cell === 'string') continue;
+        const h = (cell as { h?: unknown }).h;
+        if (h === 1 || h === '1' || h === true) {
+          const r = Number(rKey);
+          const c = Number(cKey);
+          if (r > 0 && c > 0) return { row: r, col: c };
+        }
+      }
+    }
+  }
+  if (typeof payload.r === 'number' && payload.r > 0) {
+    return { row: payload.r + 1, col: payload.r + 1 };
+  }
+  return { row: Math.floor((rows + 1) / 2), col: Math.floor((cols + 1) / 2) };
+}
+
+/// Every room on your floor as the plain drawing wants it. A push
+/// with no `g` grid falls back to the text rows, which carry rooms
+/// but no exits.
+function plainCellsOf(payload: MapTilesPayload): PlainCell[] {
+  const cells: PlainCell[] = [];
+  if (payload.g) {
+    for (const [rKey, row] of Object.entries(payload.g)) {
+      if (!row || typeof row !== 'object') continue;
+      for (const [cKey, cell] of Object.entries(row)) {
+        if (!cell || typeof cell === 'string') continue;
+        const r = Number(rKey);
+        const c = Number(cKey);
+        if (!Number.isFinite(r) || !Number.isFinite(c)) continue;
+        const plain: PlainCell = {
+          row: r,
+          col: c,
+          exits: typeof cell.e === 'string' ? cell.e : '',
+          flags: typeof cell.f === 'string' ? cell.f : '',
+        };
+        if (cell.d) plain.doors = cell.d;
+        cells.push(plain);
+      }
+    }
+    return cells;
+  }
+  parseTextGrid(payload.t).forEach((line, r) => {
+    for (let c = 0; c < line.length; c++) {
+      if (line[c] !== ' ') cells.push({ row: r, col: c, exits: '', flags: '' });
+    }
+  });
+  return cells;
+}
+
+/// The One Window drawing (SPEC 10 G7): rooms in the secondary text
+/// color at 45%, lines at 35% with round caps, your room in the accent
+/// with a 45% accent ring, and place labels in the tertiary color. No
+/// terrain, no sector colors. Geometry comes from lib/mapPlain.
+function drawPlain(
+  ctx: CanvasRenderingContext2D,
+  cssWidth: number,
+  cssHeight: number,
+  payload: MapTilesPayload,
+  rows: number,
+  cols: number,
+  zoom: number,
+) {
+  const room = PLAIN_COLORS.room;
+  const accent = PLAIN_COLORS.accent;
+  ctx.save();
+  ctx.font = `${PLAIN.font}px ${PLAIN_COLORS.font}`;
+  const scene = layoutPlain({
+    cells: plainCellsOf(payload),
+    current: playerCellOf(payload, rows, cols),
+    width: cssWidth,
+    height: cssHeight,
+    zoom,
+    measure: (text) => ctx.measureText(text).width,
+  });
+
+  // One path per stroke, so lines that meet never double their alpha.
+  ctx.lineWidth = PLAIN.lineWidth;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = room;
+  ctx.globalAlpha = 0.35;
+  strokeSegments(ctx, scene.lines);
+  if (scene.hidden.length > 0) {
+    ctx.setLineDash([2, 3]);
+    strokeSegments(ctx, scene.hidden);
+    ctx.setLineDash([]);
+  }
+
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = room;
+  ctx.beginPath();
+  for (const r of scene.rooms) {
+    roundRectPath(ctx, r.x, r.y, scene.size, scene.size, scene.radius);
+  }
+  ctx.fill();
+
+  if (scene.ring && scene.current) {
+    const { ring, current } = scene;
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = PLAIN.ringWidth;
+    ctx.beginPath();
+    roundRectPath(ctx, ring.x, ring.y, ring.w, ring.h, ring.radius);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    roundRectPath(ctx, current.x, current.y, scene.size, scene.size, scene.radius);
+    ctx.fill();
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = PLAIN_COLORS.label;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  for (const label of scene.labels) ctx.fillText(label.text, label.x, label.y);
+  ctx.restore();
+}
+
+function strokeSegments(
+  ctx: CanvasRenderingContext2D,
+  segments: { x1: number; y1: number; x2: number; y2: number }[],
+) {
+  if (segments.length === 0) return;
+  ctx.beginPath();
+  for (const s of segments) {
+    ctx.moveTo(s.x1, s.y1);
+    ctx.lineTo(s.x2, s.y2);
+  }
+  ctx.stroke();
+}
+
+// A rounded rect subpath. Drawn by hand because roundRect is missing
+// from older WebKitGTK builds that Linux users run.
+function roundRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  const radius = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
 }
 
 interface Anchor {
@@ -1178,39 +1401,7 @@ const GlyphsOverlay = memo(
       return <div className="map-glyph-empty">no glyph data in payload</div>;
     }
 
-    // Find the player cell. Aabahran tags it with `h: 1`; falling
-    // back to (radius+1) per the GMCP spec when no cell carries the
-    // flag. Old "midpoint of observed cells" math broke on sparse
-    // grids — the player @ would not paint because the computed center
-    // missed the player's row.
-    //
-    // The h-check is permissive so a JSON quirk (`h: "1"`, `h: true`)
-    // still resolves to the player. Without that, going up into an
-    // indoor area sometimes lost the marker entirely.
-    let centerR = 0;
-    let centerC = 0;
-    if (payload.g) {
-      outer: for (const [rKey, row] of Object.entries(payload.g)) {
-        for (const [cKey, cell] of Object.entries(row)) {
-          if (!cell || typeof cell === 'string') continue;
-          const h = (cell as { h?: unknown }).h;
-          if (h === 1 || h === '1' || h === true) {
-            centerR = Number(rKey);
-            centerC = Number(cKey);
-            break outer;
-          }
-        }
-      }
-    }
-    if (centerR === 0 || centerC === 0) {
-      if (typeof payload.r === 'number' && payload.r > 0) {
-        centerR = payload.r + 1;
-        centerC = payload.r + 1;
-      } else {
-        centerR = Math.floor((rows + 1) / 2);
-        centerC = Math.floor((cols + 1) / 2);
-      }
-    }
+    const { row: centerR, col: centerC } = playerCellOf(payload, rows, cols);
 
     const textFallback = parseTextGrid(payload.t);
     const hasGrid = !!payload.g;
