@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(() => Promise.resolve(() => undefined)),
+}));
+
 import {
   commitFocusedField,
   createDebouncedWrite,
+  createFlushResponder,
   createPendingWrites,
   runCloseRequest,
   sendPendingWrites,
@@ -207,5 +214,16 @@ describe('leaving the focused field', () => {
     await commitFocusedField({ activeElement: null });
     await commitFocusedField(undefined);
     expect(blur).not.toHaveBeenCalled();
+  });
+});
+
+describe('the quit request', () => {
+  it('answers each round once', () => {
+    const respond = vi.fn(() => Promise.resolve());
+    const answer = createFlushResponder(respond);
+    expect(answer(1)).toBe(true);
+    expect(answer(1)).toBe(false);
+    expect(answer(2)).toBe(true);
+    expect(respond).toHaveBeenCalledTimes(2);
   });
 });

@@ -69,6 +69,7 @@ mod cell_render;
 mod characters;
 mod commands;
 mod connection;
+mod exit_flush;
 mod fonts;
 mod gmcp_bind;
 mod import;
@@ -513,6 +514,7 @@ pub fn run() {
             migration_analyze,
             migration_apply,
             app_quit,
+            exit_flush::pending_writes_flushed,
             loadouts_get_state,
             loadouts_set_active,
             tick_get_config,
@@ -560,46 +562,70 @@ pub fn run() {
             // Backstop flush: slash-command and Lua edits ride a debounced
             // persist that may not have fired when the user quits (Cmd+Q,
             // window close). Write the profile out before the process
-            // ends so nothing authored this session is lost. Matches both
-            // exit events because macOS quit paths that go through
-            // NSApplication terminate can deliver Exit without a
-            // preceding ExitRequested; the once-guard keeps the flush
-            // single when both arrive.
-            let quitting = matches!(
-                event,
-                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
-            );
-            if quitting {
-                static EXIT_FLUSHED: std::sync::atomic::AtomicBool =
-                    std::sync::atomic::AtomicBool::new(false);
-                if EXIT_FLUSHED.swap(true, std::sync::atomic::Ordering::AcqRel) {
-                    return;
-                }
-                // Honor a #profile reset/load: the in-memory profile is
-                // deliberately diverged from disk; do not write it back.
-                if commands::AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
-                    info!("exit flush: skipped, persist suppressed by profile reset or load");
-                    return;
-                }
-                info!("exit flush: persisting profile");
-                let state: commands::SharedState =
-                    app_handle.state::<commands::SharedState>().inner().clone();
-                // Bounded: a wedged Lua trigger holding the profile lock
-                // must not turn quit into a hang. The timeout cuts the
-                // lock waits; the file writes themselves are sync and
-                // small.
-                let flush = commands::persist_profile(app_handle, &state);
-                let outcome = tauri::async_runtime::block_on(async {
-                    tokio::time::timeout(std::time::Duration::from_secs(3), flush).await
-                });
-                match outcome {
-                    Ok(()) => info!("exit flush: done"),
-                    Err(_) => {
-                        tracing::warn!("exit flush: timed out after 3s, exiting without it");
+            // ends so nothing authored this session is lost. Before that
+            // write, an exit request asks the open windows for the edits
+            // they hold back (the Settings autosave, a pane width, the
+            // field you are typing in) and waits a short, bounded time
+            // for them (exit_flush.rs). Matches both exit events because
+            // macOS quit paths that go through NSApplication terminate
+            // can deliver Exit without a preceding ExitRequested. The
+            // exit flow keeps the write to exactly once when both arrive.
+            match event {
+                tauri::RunEvent::ExitRequested { code, api, .. } => {
+                    // Tauri does not let a restart be held.
+                    let can_hold = code != Some(tauri::RESTART_EXIT_CODE);
+                    let windows = app_handle.webview_windows().len();
+                    match exit_flush::exit_requested(can_hold, windows) {
+                        exit_flush::ExitStep::AskWindows => {
+                            api.prevent_exit();
+                            let app = app_handle.clone();
+                            let code = code.unwrap_or(0);
+                            tauri::async_runtime::spawn(async move {
+                                exit_flush::ask_windows_to_flush(&app).await;
+                                app.exit(code);
+                            });
+                        }
+                        exit_flush::ExitStep::Hold => api.prevent_exit(),
+                        exit_flush::ExitStep::Flush => flush_profile_on_exit(app_handle),
+                        exit_flush::ExitStep::Done => {}
                     }
                 }
+                tauri::RunEvent::Exit => {
+                    let step = exit_flush::exit();
+                    if step == exit_flush::ExitStep::Flush {
+                        flush_profile_on_exit(app_handle);
+                    }
+                }
+                _ => {}
             }
         });
+}
+
+/// Write the live profile once on the way out. The exit flow in
+/// [`exit_flush`] decides when, so this runs exactly once.
+fn flush_profile_on_exit(app_handle: &tauri::AppHandle) {
+    // Honor a #profile reset/load: the in-memory profile is
+    // deliberately diverged from disk; do not write it back.
+    if commands::AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+        info!("exit flush: skipped, persist suppressed by profile reset or load");
+        return;
+    }
+    info!("exit flush: persisting profile");
+    let state: commands::SharedState = app_handle.state::<commands::SharedState>().inner().clone();
+    // Bounded: a wedged Lua trigger holding the profile lock
+    // must not turn quit into a hang. The timeout cuts the
+    // lock waits; the file writes themselves are sync and
+    // small.
+    let flush = commands::persist_profile(app_handle, &state);
+    let outcome = tauri::async_runtime::block_on(async {
+        tokio::time::timeout(std::time::Duration::from_secs(3), flush).await
+    });
+    match outcome {
+        Ok(()) => info!("exit flush: done"),
+        Err(_) => {
+            tracing::warn!("exit flush: timed out after 3s, exiting without it");
+        }
+    }
 }
 
 /// One-shot rename migration: when the bundle identifier flipped from

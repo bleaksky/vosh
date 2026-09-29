@@ -168,11 +168,19 @@ enum Route {
     Find,
     /// Run in the main window, raising it first unless `raise` is off.
     Main { raise: bool },
+    /// Quit through the exit request, so the windows send their pending
+    /// writes first.
+    Quit,
 }
+
+/// The shortcut for Quit Vosh, the one the system Quit row uses.
+#[cfg(target_os = "macos")]
+const QUIT_ACCELERATOR: &str = "Cmd+Q";
 
 #[cfg(target_os = "macos")]
 fn route(id: &str) -> Route {
     match id {
+        "quit" => Route::Quit,
         "settings" => Route::OpenSettings,
         "close-window" => Route::CloseWindow,
         "copy" => Route::Copy,
@@ -241,7 +249,8 @@ mod mac {
 
     use super::{
         accelerator, connect_label, is_check_id, route, staff_listed, theme_rows, MenuState,
-        MenuTheme, Route, ThemeRow, APP_MENU_EVENT, PANE_ROWS, SETTINGS_FIND_EVENT,
+        MenuTheme, Route, ThemeRow, APP_MENU_EVENT, PANE_ROWS, QUIT_ACCELERATOR,
+        SETTINGS_FIND_EVENT,
     };
 
     const COPYRIGHT: &str = "Copyright © 2026 James Wright";
@@ -306,9 +315,12 @@ mod mac {
                 &PredefinedMenuItem::hide_others(app, Some("Hide others"))?,
                 &PredefinedMenuItem::show_all(app, Some("Show all"))?,
                 &sep()?,
-                // Quit stays the predefined row. The exit flush in lib.rs
-                // saves the profile once on the way out.
-                &PredefinedMenuItem::quit(app, Some("Quit Vosh"))?,
+                // Quit is Vosh's own row. The system row ends the app
+                // with Exit alone, which leaves no time to ask the
+                // windows for the edits they hold back. This one exits
+                // through the exit request, which asks them first and
+                // then saves the profile once (exit_flush.rs).
+                &MenuItem::with_id(app, "quit", "Quit Vosh", true, Some(QUIT_ACCELERATOR))?,
             ],
         )?;
 
@@ -449,6 +461,7 @@ mod mac {
                     }
                 });
             }
+            Route::Quit => app.exit(0),
             Route::CloseWindow => {
                 if is_front(app, "settings") {
                     if let Some(settings) = app.get_webview_window("settings") {
@@ -727,6 +740,21 @@ mod tests {
         assert_eq!(spec_to_accelerator("Mod+Shift+L"), "Cmd+Shift+L");
         assert_eq!(spec_to_accelerator("Mod+\\"), "Cmd+\\");
         assert_eq!(spec_to_accelerator("Mod++"), "Cmd++");
+    }
+
+    #[test]
+    fn quit_goes_through_the_exit_request_on_the_system_shortcut() {
+        assert_eq!(route("quit"), Route::Quit);
+        let parsed = muda::accelerator::Accelerator::from_str(QUIT_ACCELERATOR).unwrap();
+        assert_eq!(
+            parsed,
+            muda::accelerator::Accelerator::new(
+                Some(muda::accelerator::Modifiers::SUPER),
+                muda::accelerator::Code::KeyQ
+            )
+        );
+        // Quit is not a page command, so the shared table leaves it out.
+        assert_eq!(accelerator("quit"), None);
     }
 
     #[test]
