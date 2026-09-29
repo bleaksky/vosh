@@ -37,7 +37,7 @@ pub(crate) const DEFAULT_INTERVAL_SECS: u64 = 30;
 /// this close after a local fire restarts the count without firing again.
 pub(crate) const SAME_TICK_WINDOW: Duration = Duration::from_secs(2);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct TickConfig {
     pub enabled: bool,
     pub interval: Duration,

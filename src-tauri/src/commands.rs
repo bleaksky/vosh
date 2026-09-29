@@ -119,16 +119,45 @@ pub(crate) fn schedule_profile_persist(app: &AppHandle) {
 pub(crate) async fn settle_line_effects(app: &AppHandle, effects: crate::input::LineEffects) {
     if effects.replaced {
         AUTO_PERSIST_SUPPRESSED.store(true, std::sync::atomic::Ordering::Release);
-        // Every window drops its copy of the old panes and tracked
-        // affects, so a later panel edit cannot write them back.
+    }
+    if effects.replaced || effects.tick_changed {
         let shared: SharedState = app.state::<SharedState>().inner().clone();
-        broadcast_profile_ui(app, &shared).await;
+        let events = {
+            let p = shared.profile.lock().await;
+            line_effect_events(&effects, &p)
+        };
+        for (event, payload) in events {
+            broadcast(app, event, &payload);
+        }
     }
     // A durable change after the replace counts as wanting the live
     // state saved, the way a line typed after `#profile reset` does.
     if effects.dirty {
         mark_profile_dirty(app);
     }
+}
+
+/// What every window hears after a run of lines, read from the live
+/// profile. After a replace, every window drops its copy of the old
+/// panes, tracked affects, and the rest through [`ProfileUiEvents`], so
+/// a later panel edit cannot write them back. The tick settings go out
+/// with those. Without a replace, a `#tick` command that changed the
+/// tick settings sends them alone, so the status line warns with the
+/// lead the terminal uses and the Settings Tick card shows it.
+pub(crate) fn line_effect_events(
+    effects: &crate::input::LineEffects,
+    p: &Profile,
+) -> Vec<(&'static str, serde_json::Value)> {
+    if effects.replaced {
+        return profile_ui_events(p).events();
+    }
+    if effects.tick_changed {
+        let tick = tick_config_payload(&p.tick.config);
+        return event_json(TICK_CONFIG_CHANGED_EVENT, &tick)
+            .into_iter()
+            .collect();
+    }
+    Vec::new()
 }
 
 pub(crate) fn broadcast<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: &S) {
@@ -655,7 +684,7 @@ pub(crate) async fn session_send_input(
         };
         // Only a reset, or a load that read its file, replaced the
         // profile. A load that failed leaves it for the saves to write.
-        effects.note(&line, ran.replaced);
+        effects.note_ran(&line, &ran);
         if ran.replaced {
             bump_panes_generation();
         }
@@ -1647,6 +1676,10 @@ pub(crate) fn pane_layout_envelope(p: &Profile) -> PaneLayoutEnvelope {
     }
 }
 
+/// Sent to every window with the tick settings whenever they change:
+/// a Settings Tick save, a `#tick` command, or a replace.
+pub(crate) const TICK_CONFIG_CHANGED_EVENT: &str = "vosh://tick-config-changed";
+
 /// Sent last by [`broadcast_profile_ui`]. The live profile's whole UI
 /// config was replaced, by a switch, an import, `#profile load` or
 /// `reset`. A window that saves the whole config (Settings) reads it
@@ -1673,7 +1706,7 @@ impl ProfileUiEvents {
             event_json("vosh://tracked-affects-changed", &self.tracked),
             event_json("vosh://tick-count-changed", &self.tick_count),
             event_json("vosh://chip-style-changed", &self.chip_style),
-            event_json("vosh://tick-config-changed", &self.tick),
+            event_json(TICK_CONFIG_CHANGED_EVENT, &self.tick),
             Some((UI_CONFIG_REPLACED_EVENT, serde_json::Value::Null)),
         ]
         .into_iter()
@@ -3779,7 +3812,7 @@ pub(crate) async fn tick_set_config(
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    broadcast(&app, "vosh://tick-config-changed", &snapshot);
+    broadcast(&app, TICK_CONFIG_CHANGED_EVENT, &snapshot);
     Ok(snapshot)
 }
 
@@ -4539,6 +4572,72 @@ mod tests {
             ]
         );
         assert_eq!(super::UI_CONFIG_REPLACED_EVENT, "vosh://ui-config-replaced");
+    }
+
+    /// Run `lines` the way the typed path does and hand back what every
+    /// window hears after them.
+    fn heard_after(
+        profile: &mut crate::profile::Profile,
+        lines: &[&str],
+    ) -> Vec<(&'static str, serde_json::Value)> {
+        let mut effects = crate::input::LineEffects::default();
+        for line in lines {
+            let ran = crate::input::run_line(profile, line);
+            effects.note_ran(line, &ran);
+        }
+        super::line_effect_events(&effects, profile)
+    }
+
+    #[test]
+    fn a_tick_warn_command_hands_every_window_the_new_lead() {
+        let mut profile = crate::profile::Profile::default();
+        profile.tick.config.warn_at_secs = Some(5);
+        let heard = heard_after(&mut profile, &["#tick warn at 10"]);
+        assert_eq!(heard.len(), 1, "{heard:?}");
+        assert_eq!(heard[0].0, "vosh://tick-config-changed");
+        assert_eq!(heard[0].1["warn_at_secs"], serde_json::json!(10));
+
+        let heard = heard_after(&mut profile, &["#tick warn off", "look"]);
+        assert_eq!(heard.len(), 1, "{heard:?}");
+        assert_eq!(heard[0].0, "vosh://tick-config-changed");
+        assert_eq!(heard[0].1["warn_at_secs"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn every_tick_setting_a_command_changes_reaches_every_window() {
+        let mut profile = crate::profile::Profile::default();
+        let heard = heard_after(
+            &mut profile,
+            &["#tick interval 40", "#tick fire score", "#tick sound off"],
+        );
+        assert_eq!(heard.len(), 1, "{heard:?}");
+        let tick = &heard[0].1;
+        assert_eq!(tick["interval_secs"], serde_json::json!(40));
+        assert_eq!(tick["auto_fire"], serde_json::json!("score"));
+        assert_eq!(tick["sound"], serde_json::json!(false));
+    }
+
+    #[test]
+    fn lines_that_leave_the_tick_alone_send_nothing() {
+        let mut profile = crate::profile::Profile::default();
+        assert!(heard_after(
+            &mut profile,
+            &["look", "#tick", "#tick warn", "#tick reset"]
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn a_tick_command_after_a_reset_goes_out_once_with_the_profile() {
+        let mut profile = crate::profile::Profile::default();
+        let heard = heard_after(&mut profile, &["#profile reset", "#tick warn at 10"]);
+        let ticks: Vec<_> = heard
+            .iter()
+            .filter(|(event, _)| *event == "vosh://tick-config-changed")
+            .collect();
+        assert_eq!(ticks.len(), 1, "{heard:?}");
+        assert_eq!(ticks[0].1["warn_at_secs"], serde_json::json!(10));
+        assert_eq!(heard.last().unwrap().0, super::UI_CONFIG_REPLACED_EVENT);
     }
 
     #[test]
