@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { defaultLayout, splitPane, type PaneSplit } from '../../lib/paneLayout';
-import { distribute, dragSizes, layoutPanes, MIN_PANE_H } from './paneGeometry';
+import { addPane, defaultLayout, splitPane, type PaneSplit } from '../../lib/paneLayout';
+import {
+  allocate,
+  distribute,
+  dragSizes,
+  fitsPanel,
+  layoutPanes,
+  minExtent,
+  PANE_FLOOR_H,
+  PANE_MIN_H,
+} from './paneGeometry';
+
+const total = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
 describe('distribute', () => {
   it('splits into whole pixels that sum to the total', () => {
@@ -22,6 +33,89 @@ describe('distribute', () => {
   it('returns nothing for no children and zero for no space', () => {
     expect(distribute(100, [])).toEqual([]);
     expect(distribute(-5, [1, 1])).toEqual([0, 0]);
+  });
+});
+
+describe('PANE_MIN_H', () => {
+  it('reads each pane type at its header plus its rows, or a set height', () => {
+    // 28 px header, 22 px rows.
+    expect(PANE_MIN_H).toEqual({ map: 180, affects: 160, group: 94, chat: 120, imm: 94 });
+    expect(PANE_FLOOR_H).toBe(50);
+  });
+});
+
+describe('minExtent', () => {
+  it('adds up a stack and takes the tallest of a row', () => {
+    const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    // map, then affects beside group, with a 1 px handle between.
+    expect(minExtent(tree, 'column')).toBe(180 + 1 + 160);
+    expect(minExtent(tree, 'row')).toBe(120 + 1 + 120);
+    expect(minExtent(tree, 'column', true)).toBe(50 + 1 + 50);
+  });
+
+  it('needs nothing for an empty panel', () => {
+    const empty: PaneSplit = { id: 'root', split: 'column', weight: 1, children: [] };
+    expect(minExtent(empty, 'column')).toBe(0);
+    expect(fitsPanel(empty, 0, 0)).toBe(true);
+  });
+});
+
+describe('fitsPanel', () => {
+  it('holds a panel that has room for every minimum', () => {
+    const root = defaultLayout().root;
+    expect(fitsPanel(root, 300, 341)).toBe(true);
+    expect(fitsPanel(root, 300, 340)).toBe(false);
+  });
+
+  it('refuses a third pane side by side in the stock width', () => {
+    const two = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    expect(fitsPanel(two, 300, 664)).toBe(true);
+    const three = splitPane(two, 'group', 'row', 'chat');
+    expect(fitsPanel(three, 300, 664)).toBe(false);
+    expect(fitsPanel(three, 362, 664)).toBe(true);
+  });
+});
+
+describe('allocate', () => {
+  it('shares by weight when every share clears its minimum', () => {
+    expect(allocate(663, [0.6, 0.4], [180, 160])).toEqual(distribute(663, [0.6, 0.4]));
+  });
+
+  it('lifts a short share to its minimum and gives the rest by weight', () => {
+    expect(allocate(400, [0.9, 0.1], [180, 160])).toEqual([240, 160]);
+    const sizes = allocate(500, [0.8, 0.1, 0.1], [180, 94, 120]);
+    expect(sizes).toEqual([286, 94, 120]);
+    expect(total(sizes)).toBe(500);
+  });
+
+  it('keeps every pane at its minimum or more across many heights', () => {
+    const mins = [180, 94, 160, 120, 94];
+    const weights = [0.45, 0.125, 0.3, 0.1, 0.025];
+    for (let h = total(mins); h < 1400; h += 7) {
+      const sizes = allocate(h, weights, mins);
+      expect(total(sizes)).toBe(h);
+      sizes.forEach((s, i) => expect(s).toBeGreaterThanOrEqual(mins[i]));
+    }
+  });
+
+  it('squeezes the lightest panes first when the minimums do not fit', () => {
+    // Floors of 50 each, then the heaviest (affects) takes its 160,
+    // then group, and the map, lightest, keeps its floor.
+    expect(allocate(300, [0.2, 0.5, 0.3], [180, 160, 94], [50, 50, 50])).toEqual([50, 160, 90]);
+    // Map over affects on a short panel: the map first.
+    expect(allocate(299, [0.6, 0.4], [180, 160], [50, 50])).toEqual([180, 119]);
+  });
+
+  it('gives ties to the earlier pane', () => {
+    expect(allocate(250, [0.5, 0.5], [180, 180], [50, 50])).toEqual([180, 70]);
+  });
+
+  it('shares the floors when even they do not fit', () => {
+    expect(allocate(80, [0.6, 0.4], [180, 160], [50, 50])).toEqual([40, 40]);
+  });
+
+  it('returns nothing for no children', () => {
+    expect(allocate(100, [], [])).toEqual([]);
   });
 });
 
@@ -52,6 +146,34 @@ describe('layoutPanes', () => {
     expect(vertical?.rect).toEqual({ x: 220, y: 399, w: 1, h: 265 });
   });
 
+  it('keeps a light pane at its minimum on a tall panel', () => {
+    const root = { ...defaultLayout().root };
+    root.children = [
+      { ...root.children[0], weight: 0.95 },
+      { ...root.children[1], weight: 0.05 },
+    ];
+    const { leaves, handles } = layoutPanes(root, 300, 664);
+    expect(leaves[1].rect.h).toBe(PANE_MIN_H.affects);
+    expect(leaves[0].rect.h).toBe(664 - 1 - PANE_MIN_H.affects);
+    expect(handles[0].mins).toEqual([180, 160]);
+  });
+
+  it('stacks without overlap when the panel is too short for every minimum', () => {
+    const tree = addPane(addPane(defaultLayout().root, 'group'), 'chat');
+    const { leaves } = layoutPanes(tree, 300, 400);
+    const rects = leaves.map((l) => l.rect);
+    for (let i = 1; i < rects.length; i += 1) {
+      expect(rects[i].y).toBe(rects[i - 1].y + rects[i - 1].h + 1);
+    }
+    const last = rects[rects.length - 1];
+    expect(last.y + last.h).toBe(400);
+    // Every pane keeps its header and a row.
+    for (const r of rects) expect(r.h).toBeGreaterThanOrEqual(PANE_FLOOR_H);
+    // The map, heaviest, reads in full.
+    expect(leaves[0].leaf.pane).toBe('map');
+    expect(rects[0].h).toBeGreaterThanOrEqual(PANE_MIN_H.map);
+  });
+
   it('lays out nothing for an empty root', () => {
     const empty: PaneSplit = { id: 'root', split: 'column', weight: 1, children: [] };
     expect(layoutPanes(empty, 300, 600)).toEqual({ leaves: [], handles: [] });
@@ -60,15 +182,23 @@ describe('layoutPanes', () => {
 
 describe('dragSizes', () => {
   it('trades space between the two neighbours only', () => {
-    expect(dragSizes([100, 200, 300], 1, 50, MIN_PANE_H)).toEqual([100, 250, 250]);
+    expect(dragSizes([100, 200, 300], 1, 50, 50)).toEqual([100, 250, 250]);
   });
 
   it('stops each neighbour at the minimum', () => {
-    expect(dragSizes([100, 200], 0, -90, MIN_PANE_H)).toEqual([50, 250]);
-    expect(dragSizes([100, 200], 0, 900, MIN_PANE_H)).toEqual([250, 50]);
+    expect(dragSizes([100, 200], 0, -90, 50)).toEqual([50, 250]);
+    expect(dragSizes([100, 200], 0, 900, 50)).toEqual([250, 50]);
+  });
+
+  it('stops each neighbour at its own minimum', () => {
+    // Map above affects: the map keeps 180, affects keeps 160.
+    expect(dragSizes([300, 200], 0, -500, 180, 160)).toEqual([180, 320]);
+    expect(dragSizes([300, 200], 0, 500, 180, 160)).toEqual([340, 160]);
   });
 
   it('leaves a pair with no room to give alone', () => {
-    expect(dragSizes([40, 40], 0, 10, MIN_PANE_H)).toEqual([40, 40]);
+    expect(dragSizes([40, 40], 0, 10, 50)).toEqual([40, 40]);
+    // A squeezed pair on a short panel does not move.
+    expect(dragSizes([180, 119], 0, -20, 180, 160)).toEqual([180, 119]);
   });
 });
