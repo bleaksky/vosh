@@ -13,6 +13,8 @@ import {
 import { PLAIN, layoutPlain, type PlainCell } from '../lib/mapPlain';
 import { drawTerrainDecorations } from '../lib/terrainDecor';
 import { subscribeThemeChanges } from '../lib/theme';
+import { pushToast } from '../lib/toasts';
+import { MapPaneControls } from './panel/MapPaneControls';
 
 /// One cell of the server-side map grid (player's floor only).
 /// Per the Aabahran GMCP wiki:
@@ -313,6 +315,9 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
   const [tilesetUrl, setTilesetUrl] = useState<string | null>(loadTileset);
   const [tilesetImage, setTilesetImage] = useState<HTMLImageElement | null>(null);
   const [tilesetError, setTilesetError] = useState<string | null>(null);
+  // Set while a tileset you just picked decodes. A pane has no status
+  // row, so a failure there says so in a toast.
+  const pickedRef = useRef(false);
   const [zoom, setZoom] = useState<number>(loadZoom);
   // Current area name from Room.Info, lowercased for the caps header
   // ("map · ashen quarter"). Null until the first push and after
@@ -392,15 +397,20 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     }
     const img = new Image();
     img.onload = () => {
+      pickedRef.current = false;
       setTilesetImage(img);
       setTilesetError(null);
     };
     img.onerror = () => {
       setTilesetImage(null);
       setTilesetError('failed to decode tileset image');
+      if (embedded && pickedRef.current) {
+        pushToast({ kind: 'error', message: 'Vosh could not read that tileset image.' });
+      }
+      pickedRef.current = false;
     };
     img.src = tilesetUrl;
-  }, [tilesetUrl]);
+  }, [tilesetUrl, embedded]);
 
   // Map.Tiles is the sole tile source; updating `tilesSnap` re-runs
   // the draw effect. The cache drops a push whose JSON matches the
@@ -664,7 +674,10 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
 
   const handleLoadTileset = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    // Clear the picker so choosing the same file again still loads it.
+    event.target.value = '';
     if (!file) return;
+    pickedRef.current = true;
     const reader = new FileReader();
     reader.onload = () => {
       const url = String(reader.result ?? '');
@@ -675,7 +688,11 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
         // ignore (quota or private mode)
       }
     };
-    reader.onerror = () => setTilesetError('file read failed');
+    reader.onerror = () => {
+      pickedRef.current = false;
+      setTilesetError('file read failed');
+      if (embedded) pushToast({ kind: 'error', message: 'Vosh could not read that tileset file.' });
+    };
     reader.readAsDataURL(file);
   };
 
@@ -786,15 +803,15 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
           </span>
         </div>
       )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        onChange={handleLoadTileset}
+        hidden
+      />
       {!embedded && style === 'tileset' && (
         <div className="tileset-bar">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            onChange={handleLoadTileset}
-            hidden
-          />
           <button type="button" onClick={() => fileInputRef.current?.click()}>
             load tileset
           </button>
@@ -820,6 +837,21 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
           <GlyphsOverlay payload={tilesSnap.payload} payloadJson={tilesSnap.json} zoom={zoom} />
         )}
         {embedded && !tiles && emptyText && <p className="pane-map-empty">{emptyText}</p>}
+        {embedded && (
+          <MapPaneControls
+            style={style}
+            onStyle={setStyle}
+            zoom={zoom}
+            canZoomIn={zoom < ZOOM_MAX - 1e-6}
+            canZoomOut={zoom > ZOOM_MIN + 1e-6}
+            onZoomIn={() => setZoom((z) => clampZoom(z + ZOOM_STEP))}
+            onZoomOut={() => setZoom((z) => clampZoom(z - ZOOM_STEP))}
+            onZoomReset={() => setZoom(1)}
+            tilesetLoaded={tilesetUrl !== null}
+            onLoadTileset={() => fileInputRef.current?.click()}
+            onClearTileset={clearTileset}
+          />
+        )}
       </div>
     </div>
   );
