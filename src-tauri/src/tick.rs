@@ -128,6 +128,26 @@ impl TickRuntime {
         self.disable();
     }
 
+    /// Take another profile's tick settings mid session, as a live
+    /// profile switch, `#profile load`, or `#profile reset` does. The
+    /// running count carries across: the last tick, the synced state, the
+    /// world hour, and whether this cycle warned. Only the settings
+    /// change, so the expected tick moves with a new interval. A config
+    /// that turns the timer off stops it, and one that turns it on while
+    /// a session runs starts it now. Between sessions the timer stays
+    /// stopped until the next connection starts it.
+    pub(crate) fn adopt(&mut self, config: TickConfig, reset_regex: Option<Regex>, now: Instant) {
+        let was_on = self.config.enabled;
+        self.config = config;
+        self.reset_regex = reset_regex;
+        if !self.config.enabled {
+            self.stop();
+        } else if self.in_session && (!was_on || self.last_tick.is_none()) {
+            self.forget_sync();
+            self.restart(now);
+        }
+    }
+
     pub(crate) fn enable(&mut self, now: Instant) {
         if !self.config.enabled {
             self.forget_sync();
