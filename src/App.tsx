@@ -53,7 +53,7 @@ import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
 import { CommandPalette } from './components/CommandPalette';
 import { disconnectSession } from './lib/session';
-import type { PaletteDeps } from './lib/palette';
+import { isMacPlatform, type PaletteDeps } from './lib/palette';
 import {
   addPane,
   allPanes,
@@ -63,6 +63,7 @@ import {
   type PaneType,
 } from './lib/paneLayout';
 import { useConnection, type ConnectionStatus } from './lib/useConnection';
+import { useEscape } from './lib/escapeStack';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
@@ -543,77 +544,97 @@ function App() {
     setFindOpen(false);
     inputRef.current?.focus();
   };
+  const closePalette = () => {
+    setPaletteOpen(false);
+    inputRef.current?.focus();
+  };
 
-  // Cmd+F (macOS) / Ctrl+F (others) opens the scrollback find toolbar.
-  // Attached at the capture phase so it fires before xterm's own
-  // keybindings or the webview's default find dialog. A second press
-  // while the toolbar is already open re-focuses + selects the input
-  // so the user can type a new query immediately.
-  //
-  // Skipped only when the help modal is open (its own search box is
-  // already taking that role). In every other context — including
-  // while focus sits in the command input, which is the common case —
-  // Cmd+F opens the scrollback search.
+  // Esc closes the open surface on top and nothing under it (see
+  // lib/escapeStack). The find bar closes from anywhere, so a click
+  // that drifted focus away (or the split auto-closing when history
+  // scrolled back to its tail) still leaves Esc working. The palette
+  // handles Esc inside itself, where it first steps back out of a
+  // submenu.
+  useEscape(findOpen, closeFind);
+  useEscape(paletteOpen, closePalette, () => document.querySelector('.ov-palette'));
+  useEscape(terminalMenu !== null, () => {
+    setTerminalMenu(null);
+    inputRef.current?.focus();
+  });
+  useEscape(helpOpen, () => setHelpOpen(false));
+
+  // Window shortcuts, in the capture phase so they fire before xterm's
+  // own keybindings, the webview's find and reload, and the command
+  // line's macros. macOS binds Cmd only, because Ctrl belongs to your
+  // macros there. Windows and Linux bind Ctrl.
+  //   Mod+K        command palette (toggles)
+  //   Mod+F        find in scrollback (again refocuses the find field)
+  //   Mod+R        connect to the saved world. Ctrl+R never reloads the
+  //                page on Windows, even while connected.
+  //   Mod+,        settings
+  //   Mod+/        help
+  //   Mod+Shift+L  show or hide the panel
+  // The help modal carries its own search, so Mod+F and Mod+K stand
+  // down while it is open.
+  const shortcutState = useRef({ helpOpen, findOpen, paletteOpen, live: connection.live });
+  const connectRef = useRef(connection.connect);
   useEffect(() => {
+    shortcutState.current = { helpOpen, findOpen, paletteOpen, live: connection.live };
+    connectRef.current = connection.connect;
+  });
+  useEffect(() => {
+    const mac = isMacPlatform();
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key.toLowerCase() !== 'f') return;
-      const primary = e.metaKey || e.ctrlKey;
+      const primary = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       if (!primary || e.altKey) return;
-      if (helpOpen) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (findOpen) {
-        findToolbarRef.current?.focus();
-      } else {
+      const key = e.key.toLowerCase();
+      const {
+        helpOpen: inHelp,
+        findOpen: finding,
+        paletteOpen: inPalette,
+        live,
+      } = shortcutState.current;
+      const take = () => {
+        e.preventDefault();
+        e.stopPropagation();
+      };
+      if (key === 'r') {
+        take();
+        if (!e.shiftKey && !e.repeat && !live) void connectRef.current();
+        return;
+      }
+      if (e.shiftKey) {
+        if (key === 'l') {
+          take();
+          if (!e.repeat) togglePanelOpen();
+        }
+        return;
+      }
+      if (key === 'k') {
+        if (inHelp) return;
+        take();
+        if (e.repeat) return;
+        setPaletteOpen(!inPalette);
+        if (inPalette) inputRef.current?.focus();
+      } else if (key === 'f') {
+        if (inHelp) return;
+        take();
         // Open just the toolbar. Whether to open the split is decided
-        // per-search: only when a match would scroll the live pane up
+        // per search: only when a match would scroll the live pane up
         // off its tail (see submitFind below).
-        setFindOpen(true);
+        if (finding) findToolbarRef.current?.focus();
+        else setFindOpen(true);
+      } else if (key === ',') {
+        take();
+        if (!e.repeat) openSettingsWindow();
+      } else if (key === '/') {
+        take();
+        setHelpOpen(true);
       }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [findOpen, helpOpen]);
-
-  // ⌘K toggles the command palette from anywhere in the main window.
-  useEffect(() => {
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key.toLowerCase() !== 'k') return;
-      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
-      if (helpOpen) return;
-      e.preventDefault();
-      e.stopPropagation();
-      setPaletteOpen((v) => !v);
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [helpOpen]);
-
-  // Esc closes the find toolbar regardless of which element has
-  // focus. The toolbar's own Esc handler is attached to its input,
-  // so a click that drifted focus away (or the split auto-closing
-  // when history scrolled back to its tail) would otherwise leave
-  // the user pressing Esc to no effect. Capture-phase + stopPropagation
-  // keeps this from also firing Input.tsx's split-close handler.
-  useEffect(() => {
-    if (!findOpen) return;
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      e.stopPropagation();
-      termRef.current?.clearSearch();
-      historyTermRef.current?.clearSearch();
-      if (nativeSurfaceEnabled()) {
-        void invoke('native_surface_find_clear').catch(() => {});
-      }
-      pendingFindRef.current = null;
-      setFindResults({ index: -1, count: 0 });
-      setFindOpen(false);
-      inputRef.current?.focus();
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [findOpen]);
+  }, []);
 
   // The native surface is opaque and on top, so DOM popovers (dropdowns,
   // menus, modals) that overlap the terminal would be occluded by it. Watch
@@ -1370,7 +1391,7 @@ function App() {
           onClose={() => setTerminalMenu(null)}
         />
       )}
-      {paletteOpen && <CommandPalette deps={paletteDeps()} onClose={() => setPaletteOpen(false)} />}
+      {paletteOpen && <CommandPalette deps={paletteDeps()} onClose={closePalette} />}
       {helpOpen && <HelpView onClose={() => setHelpOpen(false)} />}
     </AppShell>
   );
