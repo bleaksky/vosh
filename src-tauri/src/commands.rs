@@ -3493,9 +3493,10 @@ pub(crate) struct ConflictResolution {
     pub source_profile: String,
 }
 
-/// Commit the Path B migration. Re-runs the analyzer, applies the
-/// user's per-conflict resolutions (or the first-variant default for
-/// any missing resolution), copies every existing per-profile file into
+/// Commit the Path B migration. Saves the live profile, re-runs the
+/// analyzer, applies the user's per-conflict resolutions (or the
+/// first-variant default for any missing resolution), copies every
+/// existing per-profile file into
 /// `profiles/legacy/`, writes `catalog.toml` + `loadouts.toml`, takes the
 /// aliases, triggers, and macros out of each profile file, which keeps
 /// every other setting, and asks for a relaunch so the startup hook
@@ -3548,11 +3549,41 @@ async fn apply_migration(
     resolutions: &[ConflictResolution],
     written: impl FnOnce(),
 ) -> Result<(), String> {
+    apply_migration_with(
+        state,
+        app_data,
+        resolutions,
+        &AUTO_PERSIST_SUPPRESSED,
+        written,
+    )
+    .await
+}
+
+/// [`apply_migration`] with `suppressed` in place of
+/// [`AUTO_PERSIST_SUPPRESSED`], so a test can run it after a `#profile
+/// reset` without touching the flag every other test reads.
+async fn apply_migration_with(
+    state: &SharedState,
+    app_data: &std::path::Path,
+    resolutions: &[ConflictResolution],
+    suppressed: &std::sync::atomic::AtomicBool,
+    written: impl FnOnce(),
+) -> Result<(), String> {
     // Every save of a profile file takes this lock, so none lands
     // between the read of a file below and its rewrite without the items.
     let _persist_guard = PERSIST_LOCK.lock().await;
     if let Some(reason) = crate::loadout_store::migration_refusal(app_data) {
         return Err(reason.into());
+    }
+
+    // The live profile can run two seconds ahead of its file, with a
+    // variable a script set or a splitter you dragged, and once this run
+    // is done nothing saves it until the relaunch. Write it first, as a
+    // switch does, so the wizard reads it. After `#profile reset` or
+    // `load` the live profile is deliberately diverged from its file,
+    // and the file stands as it is.
+    if !suppressed.load(std::sync::atomic::Ordering::Acquire) {
+        persist_state(state, Some(app_data)).await;
     }
 
     // Re-load sources from disk — the analyze call has to walk the
@@ -5716,8 +5747,12 @@ mod tests {
                 ));
             }
 
-            // You build the catalog while you play Default.
+            // You build the catalog while you play Default. A save of the
+            // live profile has run by then, as one runs at every launch.
+            // The wizard saves it again first.
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            persist(&state, dir.path()).await;
+            originals[0] = read(&set.profile_path(DEFAULT_PROFILE_NAME));
             super::super::apply_migration(&state, dir.path(), &[], || {})
                 .await
                 .unwrap();
@@ -5760,11 +5795,8 @@ mod tests {
                 assert!(kept.aliases.is_empty(), "{name}");
                 assert!(kept.triggers.is_empty(), "{name}");
                 assert!(kept.macros.is_empty(), "{name}");
-                assert_eq!(
-                    kept.connection.host,
-                    format!("{}.example", name.to_lowercase())
-                );
-                assert_eq!(kept.connection.port, 4001 + n as u16);
+                let original = ProfileConfig::from_toml(&originals[n]).unwrap();
+                assert_eq!(settings(kept), settings(original), "{name}");
                 // The rewrite kept a backup of the file beside it.
                 let backup = format!("{name}.toml.bak.");
                 let backups = std::fs::read_dir(path.parent().unwrap())
@@ -6153,6 +6185,78 @@ mod tests {
             }
         }
 
+        /// Default with the alias kk, a target, and a 300 pixel panel.
+        fn default_with_a_target(set: &ProfileSet) {
+            let mut default = ProfileConfig::default();
+            default
+                .aliases
+                .push(vosh_alias::Alias::new("kk", "kick %1"));
+            default.profile_vars.insert("target".into(), "orc".into());
+            default.ui.panes = Some(crate::profile_config::PaneLayoutPersist {
+                panel_width: Some(300),
+                ..crate::profile_config::PaneLayoutPersist::default_layout()
+            });
+            default
+                .save(&set.profile_path(crate::profile_set::DEFAULT_PROFILE_NAME))
+                .unwrap();
+        }
+
+        #[tokio::test]
+        async fn the_wizard_keeps_what_you_changed_since_the_last_save() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            default_with_a_target(&set);
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            // Within the two seconds before the save, a script sets your
+            // target, you drag the splitter, and you add an alias.
+            {
+                let mut p = state.profile.lock().await;
+                p.vars.set(vosh_vars::Scope::Profile, "target", "dragon");
+                if let Some(panes) = p.ui.panes.as_mut() {
+                    panes.panel_width = Some(420);
+                }
+                p.aliases.set(vosh_alias::Alias::new("zz", "sleep"));
+            }
+
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+
+            // Nothing saves between the wizard and the relaunch, so these
+            // used to be lost.
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            let p = state.profile.lock().await;
+            let kept = ProfileConfig::from_profile(&p);
+            assert_eq!(kept.profile_vars.get("target").unwrap(), "dragon");
+            assert_eq!(kept.ui.panes.unwrap().panel_width, Some(420));
+            assert_eq!(items_on(&p), ["alias kk", "alias zz"]);
+        }
+
+        #[tokio::test]
+        async fn the_wizard_leaves_a_profile_you_reset_to_its_file() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            default_with_a_target(&set);
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            // `#profile reset` blanks the live profile and holds the saves
+            // back, and the file stays as you saved it.
+            ProfileConfig::default().apply_to(&mut *state.profile.lock().await);
+            let suppressed = std::sync::atomic::AtomicBool::new(true);
+
+            super::super::apply_migration_with(&state, dir.path(), &[], &suppressed, || {})
+                .await
+                .unwrap();
+
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            let p = state.profile.lock().await;
+            let kept = ProfileConfig::from_profile(&p);
+            assert_eq!(kept.profile_vars.get("target").unwrap(), "orc");
+            assert_eq!(kept.ui.panes.unwrap().panel_width, Some(300));
+            assert_eq!(items_on(&p), ["alias kk"]);
+        }
+
         #[tokio::test]
         async fn a_wizard_that_cannot_finish_puts_every_file_back() {
             use crate::profile_set::DEFAULT_PROFILE_NAME;
@@ -6171,8 +6275,10 @@ mod tests {
                     .unwrap();
             }
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
-            // Each file as launch left it, with its custom themes moved to
-            // global.toml.
+            // Each file as launch and a save of the live profile left it,
+            // with its custom themes moved to global.toml. The wizard
+            // saves the live profile first, as any save does.
+            persist(&state, dir.path()).await;
             let files: Vec<(std::path::PathBuf, Option<String>)> = set
                 .list()
                 .iter()
