@@ -1,8 +1,9 @@
 import { useMemo, type CSSProperties } from 'react';
-import CodeMirror from '@uiw/react-codemirror';
+import CodeMirror, { type Extension } from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
-import { StreamLanguage, type LanguageSupport } from '@codemirror/language';
+import { StreamLanguage } from '@codemirror/language';
 import { lua } from '@codemirror/legacy-modes/mode/lua';
+import { codeEditorAttributes } from '../lib/codeEditor';
 
 interface Props {
   value: string;
@@ -35,8 +36,14 @@ interface Props {
   readOnly?: boolean;
   /** Forwarded to the wrapper element for layout integration. */
   className?: string;
-  /** ARIA label so screen readers announce the editor purpose. */
+  /** The name a screen reader reads for the editor when no visible
+   *  label names it. */
   ariaLabel?: string;
+  /** The id of the visible label that names the editor. Wins over
+   *  `ariaLabel`. */
+  ariaLabelledBy?: string;
+  /** The id of the text that describes the editor. */
+  ariaDescribedBy?: string;
 }
 
 /** Vosh's shared code editor. CodeMirror 6 wrapped with a theme keyed
@@ -56,15 +63,23 @@ export function CodeEditor({
   readOnly = false,
   className,
   ariaLabel,
+  ariaLabelledBy,
+  ariaDescribedBy,
 }: Props) {
   // Language extensions. Lua comes from @codemirror/legacy-modes
   // wrapped via StreamLanguage — the modern CodeMirror 6 dedicated
   // Lua package does not exist (only JS / CSS / HTML / etc. have
-  // first-class @codemirror/lang-* packages).
-  const extensions = useMemo<LanguageSupport[] | unknown[]>(() => {
-    if (language === 'lua') return [StreamLanguage.define(lua)];
-    return [];
-  }, [language]);
+  // first-class @codemirror/lang-* packages). The label goes on the
+  // contenteditable text box, the element a screen reader reaches.
+  const extensions = useMemo<Extension[]>(() => {
+    const out: Extension[] = [
+      EditorView.contentAttributes.of(
+        codeEditorAttributes({ ariaLabel, ariaLabelledBy, ariaDescribedBy }),
+      ),
+    ];
+    if (language === 'lua') out.push(StreamLanguage.define(lua));
+    return out;
+  }, [language, ariaLabel, ariaLabelledBy, ariaDescribedBy]);
   const theme = useMemo(
     () =>
       EditorView.theme(
@@ -123,13 +138,13 @@ export function CodeEditor({
     : undefined;
 
   return (
-    <div className={className} style={wrapperStyle} aria-label={ariaLabel}>
+    <div className={className} style={wrapperStyle}>
       <CodeMirror
         value={value}
         onChange={onChange}
         {...(placeholder !== undefined ? { placeholder } : {})}
         theme={theme}
-        extensions={extensions as never[]}
+        extensions={extensions}
         readOnly={readOnly}
         {...(fill ? { height: '100%' } : {})}
         {...(mirrorStyle ? { style: mirrorStyle } : {})}

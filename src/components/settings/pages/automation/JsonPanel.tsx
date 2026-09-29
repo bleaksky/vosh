@@ -30,7 +30,8 @@ export function JsonPanel({ noun, text, bad, onChange, onDone }: JsonPanelProps)
       </div>
       <CodeEditor
         className="st-code st-auto-json-editor"
-        ariaLabel={`All ${noun.many} as JSON`}
+        ariaLabelledBy={headingId}
+        ariaDescribedBy={noteId}
         fill
         value={text}
         onChange={onChange}

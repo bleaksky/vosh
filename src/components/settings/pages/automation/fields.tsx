@@ -149,17 +149,24 @@ export function CodeRow({
   placeholder?: string;
 }) {
   const labelId = useId();
+  const descId = useId();
+  const described = description !== undefined;
   return (
     <div className="st-row st-auto-coderow">
       <div className="st-row-text">
         <span id={labelId} className="st-row-label">
           {label}
         </span>
-        {description !== undefined && <span className="st-row-desc">{description}</span>}
+        {described && (
+          <span id={descId} className="st-row-desc">
+            {description}
+          </span>
+        )}
       </div>
       <CodeEditor
         className="st-code"
-        ariaLabel={label}
+        ariaLabelledBy={labelId}
+        {...(described ? { ariaDescribedBy: descId } : {})}
         language="lua"
         inline
         minHeight="84px"
