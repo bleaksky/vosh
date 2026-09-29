@@ -9,6 +9,7 @@ import {
   type ProfileScope,
   type ScopeConfig,
 } from '../../../lib/session';
+import APP_SHORTCUTS from '../../../lib/appShortcuts.json';
 import { isMacPlatform, shortcutLabel } from '../../../lib/palette';
 import { savedSessionsText } from '../../../lib/logView';
 import { settingsSubpage } from '../../../lib/settingsNav';
@@ -161,7 +162,7 @@ function ConnectionSection() {
     <Section id="connection" title="Connection">
       <Row
         label="World"
-        description={`Where Connect and ${shortcutLabel('Mod+R')} take you.`}
+        description={`Where Connect and ${shortcutLabel(APP_SHORTCUTS.connect)} take you.`}
         anchor="world"
       >
         <Select value={value} onChange={pickWorld} options={options} width={296} />
