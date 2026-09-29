@@ -225,12 +225,25 @@ describe('setWeights', () => {
 });
 
 describe('addPane', () => {
-  it('appends to the root column with an even share', () => {
+  it('appends to the root column with a share sized to its reading height', () => {
+    // Group reads at 94 px against 340 for the map and affects above it.
     expect(shape(addPane(root(), 'group'))).toEqual({
       column: [
-        ['map', 0.35],
-        ['affects', 0.3167],
-        ['group', 0.3333],
+        ['map', 0.4113],
+        ['affects', 0.3721],
+        ['group', 0.2166],
+      ],
+    });
+  });
+
+  it('keeps the panes above in step as more panes join', () => {
+    const next = addPane(addPane(root(), 'group'), 'chat');
+    expect(shape(next)).toEqual({
+      column: [
+        ['map', 0.3222],
+        ['affects', 0.2915],
+        ['group', 0.1697],
+        ['chat', 0.2166],
       ],
     });
   });
@@ -248,6 +261,7 @@ describe('addPane', () => {
     });
     const next = addPane(row, 'affects');
     expect(next.id).toBe('root');
+    // The row reads at its tallest pane, the map's 180 px.
     expect(shape(next)).toEqual({
       column: [
         {
@@ -256,7 +270,7 @@ describe('addPane', () => {
             ['group', 0.5],
           ],
         },
-        ['affects', 0.5],
+        ['affects', 0.4706],
       ],
     });
   });
