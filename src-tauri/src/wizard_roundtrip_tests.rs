@@ -1,16 +1,18 @@
 //! A generated round trip of the shared catalog wizard. A seeded
 //! generator builds hundreds of profile sets, each with two to four
 //! profiles that hold aliases, triggers, and macros in groups, items
-//! several profiles share alike or in conflict, groups off for one kind
-//! and on for another under one name, presets on and off, preset
-//! triggers a file lacks, a profile that never saved a file, and settings
-//! that are not automation. For each set it launches as every character
-//! in per profile mode to see what each has on, runs the wizard, then
-//! launches as every character in loadout mode, switches between them
-//! with saves in between, and launches as each again. Every time, each
-//! character must have on exactly the aliases, triggers, and macros it
-//! had on before, with the same content, and every other setting as it
-//! was.
+//! several profiles share alike or in conflict, triggers in orders and at
+//! priorities of each profile's own, groups off for one kind and on for
+//! another under one name, presets on and off, preset triggers a file
+//! lacks, a profile that never saved a file, and settings that are not
+//! automation. For each set it launches as every character in per
+//! profile mode to see what each has on, and what each has on after each
+//! of a run of `#group` commands. It runs the wizard, then launches as
+//! every character in loadout mode, runs the same `#group` commands,
+//! switches between the characters with saves in between, and launches as
+//! each again. Every time, each character must have on exactly the
+//! aliases, triggers, and macros it had on before, with the same content,
+//! its triggers in the same order, and every other setting as it was.
 //!
 //! The presets that are on are shared in loadout mode, so where the
 //! characters had different preset lists, each character is compared to
@@ -169,20 +171,14 @@ async fn launch_as(dir: &Path, name: &str) -> SharedState {
 
 /// One line per alias, trigger, or macro that is on in `p`, with its
 /// content. The group and the enabled flag say whether it is on, so the
-/// line leaves them out.
+/// line leaves them out. The aliases and the macros come sorted, then the
+/// triggers in the order the store runs them, since every trigger that
+/// matches a line fires in that order.
 fn on_rows(p: &Profile) -> Vec<String> {
     let mut rows = Vec::new();
     for a in p.aliases.list() {
         if a.enabled && p.aliases.is_group_enabled(a.group.as_deref().unwrap_or("")) {
             rows.push(alias_row(a));
-        }
-    }
-    for t in p.triggers.list() {
-        if t.enabled
-            && p.triggers
-                .is_group_enabled(t.group.as_deref().unwrap_or(""))
-        {
-            rows.push(trigger_row(&t));
         }
     }
     for m in &p.macros {
@@ -195,6 +191,14 @@ fn on_rows(p: &Profile) -> Vec<String> {
         }
     }
     rows.sort();
+    for t in p.triggers.list() {
+        if t.enabled
+            && p.triggers
+                .is_group_enabled(t.group.as_deref().unwrap_or(""))
+        {
+            rows.push(trigger_row(&t));
+        }
+    }
     rows
 }
 
@@ -291,6 +295,15 @@ fn preset_list(rng: &mut Rng) -> Vec<String> {
     }
 }
 
+/// `items` in an order `rng` picks.
+fn shuffled<T: Clone>(rng: &mut Rng, items: &[T]) -> Vec<T> {
+    let mut out = items.to_vec();
+    for i in (1..out.len()).rev() {
+        out.swap(i, rng.below(i + 1));
+    }
+    out
+}
+
 fn some_group(rng: &mut Rng) -> Option<String> {
     if rng.chance(25) {
         None
@@ -326,6 +339,13 @@ fn generate(seed: u64) -> Set {
         .chain(MACROS.iter().map(|n| format!("macro {n}")))
         .map(|key| (key, some_group(&mut rng)))
         .collect();
+    // The order and the priority each trigger usually has. Some share the
+    // priority of the preset triggers.
+    let trigger_order = shuffled(&mut rng, &TRIGGERS);
+    let priorities: BTreeMap<&str, i32> = TRIGGERS
+        .iter()
+        .map(|name| (*name, if rng.chance(30) { 5 } else { 0 }))
+        .collect();
 
     let mut files = Vec::new();
     for i in 0..count {
@@ -358,18 +378,30 @@ fn generate(seed: u64) -> Set {
             a.group = item_group(&mut rng, usual[&format!("alias {name}")].as_ref());
             config.aliases.push(a);
         }
-        for name in TRIGGERS {
+        // Most files hold their triggers in the order the set uses, and
+        // some in an order of their own.
+        let order = if rng.chance(50) {
+            trigger_order.clone()
+        } else {
+            shuffled(&mut rng, &TRIGGERS)
+        };
+        for name in order {
             if !rng.chance(55) {
                 continue;
             }
             let version = if rng.chance(80) { "one" } else { "two" };
+            let priority = if rng.chance(90) {
+                priorities[name]
+            } else {
+                5 - priorities[name]
+            };
             config.triggers.push(Trigger {
                 name: name.to_string(),
                 patterns: vec![TriggerPattern {
                     pattern: format!("^{name} {version}$"),
                     enabled: true,
                 }],
-                priority: 0,
+                priority,
                 enabled: rng.chance(85),
                 actions: vec![TriggerAction::Send {
                     template: format!("say {name}"),
@@ -533,10 +565,7 @@ struct Before {
 /// folders it never had too.
 fn group_steps(seed: u64) -> Vec<(&'static str, bool)> {
     let mut rng = Rng(seed ^ 0x6a09_e667);
-    let mut folders = GROUPS.to_vec();
-    for i in (1..folders.len()).rev() {
-        folders.swap(i, rng.below(i + 1));
-    }
+    let folders = shuffled(&mut rng, &GROUPS);
     let mut steps: Vec<(&str, bool)> = folders
         .iter()
         .flat_map(|folder| [(*folder, false), (*folder, true)])
@@ -615,6 +644,11 @@ fn diff(name: &str, when: &str, got: &[String], want: &[String]) -> Result<(), S
     }
     let missing: Vec<&String> = want.iter().filter(|r| !got.contains(r)).collect();
     let extra: Vec<&String> = got.iter().filter(|r| !want.contains(r)).collect();
+    if missing.is_empty() && extra.is_empty() {
+        return Err(format!(
+            "{name} {when}: the triggers run in another order, {got:?} for {want:?}"
+        ));
+    }
     Err(format!(
         "{name} {when}: missing {missing:?}, extra {extra:?}"
     ))
@@ -692,16 +726,15 @@ async fn round_trip(seed: u64) -> Result<(), String> {
             source_profile: variant.source_profile.clone(),
         });
     }
-    let kept = |rows: &[String]| {
-        let mut rows: Vec<String> = rows
-            .iter()
+    // A kept version has the name of the one it stands for, so the
+    // aliases and macros stay sorted.
+    let kept = |rows: &[String]| -> Vec<String> {
+        rows.iter()
             .map(|row| match chosen.get(&row_key(row)) {
                 Some(kept) => kept.clone(),
                 None => row.clone(),
             })
-            .collect();
-        rows.sort();
-        rows
+            .collect()
     };
     let want: Vec<Vec<String>> = before.iter().map(|b| kept(&b.on)).collect();
     let want_toggled: Vec<Vec<Vec<String>>> = before

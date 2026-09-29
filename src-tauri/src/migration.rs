@@ -386,45 +386,55 @@ fn keyed_entries<T: CatalogItem>(
     by_key.into_values().collect()
 }
 
-/// The triggers in `configs`, one entry per version of each name. A name
-/// whose every copy is a preset trigger is one preset entry, since a
-/// launch installs the library version whichever copy the catalog keeps.
-/// The copies of any other trigger that are the same apart from their
-/// folder and whether they are on share an entry. A trigger's name is
-/// only a label, so each other version stays as an entry of its own,
-/// where an alias or a macro, whose name is what you type or press, can
-/// keep only one. The version of the first profile keeps the name, and
-/// each other one adds the profiles that have it, such as
-/// `greet (Healer)`, with a number when that name is taken too.
+/// The triggers in `configs`, in the order the catalog keeps them. A
+/// name whose every copy is a preset trigger is one preset entry, since
+/// a launch installs the library version whichever copy the catalog
+/// keeps, and puts it last among the triggers of its priority. The
+/// others come in an order that keeps the order each profile's store
+/// runs them in, see [`merge_run`], since every trigger that matches a
+/// line fires in that order.
+///
+/// The copies of a trigger that are the same apart from their folder and
+/// whether they are on share an entry. A trigger's name is only a label,
+/// so each other version stays as an entry of its own, where an alias or
+/// a macro, whose name is what you type or press, can keep only one. So
+/// does a copy whose place in its profile's order no shared copy can
+/// take. The first entry of a name keeps it, and each other one adds the
+/// profiles that have it, such as `greet (Healer)`, with a number when
+/// that name is taken too.
 fn trigger_entries(profiles: &[(String, ProfileConfig)]) -> Vec<Entry<Trigger>> {
-    let mut entries = Vec::new();
+    let mut presets: Vec<Entry<Trigger>> = keyed_entries(profiles, |c| &c.triggers)
+        .into_iter()
+        .filter(|e| e.copies.iter().all(|(_, t)| t.preset.is_some()))
+        .collect();
+    for entry in &mut presets {
+        entry.preset = true;
+    }
+    let preset_names: BTreeSet<&str> = presets.iter().map(|e| e.copies[0].1.key()).collect();
+    let mut order: Vec<(usize, Entry<Trigger>)> = Vec::new();
+    let mut created = 0;
+    for (n, (_, config)) in profiles.iter().enumerate() {
+        let run: Vec<&Trigger> = run_order(&config.triggers)
+            .into_iter()
+            .filter(|t| !preset_names.contains(t.name.as_str()))
+            .collect();
+        order = merge_run(order, n, &run, &mut created);
+    }
+    // The first entry made for a name belongs to the first profile that
+    // has the name, and keeps it.
+    let mut by_age: Vec<usize> = (0..order.len()).collect();
+    by_age.sort_by_key(|i| order[*i].0);
+    let mut taken: BTreeSet<String> = preset_names.iter().map(|n| (*n).to_string()).collect();
     let mut renamed = Vec::new();
-    for mut entry in keyed_entries(profiles, |c| &c.triggers) {
-        entry.preset = entry.copies.iter().all(|(_, t)| t.preset.is_some());
-        if entry.preset {
-            entries.push(entry);
+    for i in by_age {
+        let name = order[i].1.copies[0].1.name.clone();
+        if taken.insert(name) {
             continue;
         }
-        let mut versions: Vec<(String, Entry<Trigger>)> = Vec::new();
-        for (holder, trigger) in entry.copies {
-            let key = content_key(&trigger);
-            match versions.iter_mut().find(|(k, _)| *k == key) {
-                Some((_, version)) => version.copies.push((holder, trigger)),
-                None => versions.push((
-                    key,
-                    Entry {
-                        copies: vec![(holder, trigger)],
-                        preset: false,
-                    },
-                )),
-            }
-        }
-        let mut versions = versions.into_iter().map(|(_, version)| version);
-        entries.extend(versions.next());
-        renamed.extend(versions);
+        renamed.push(i);
     }
-    let mut taken: BTreeSet<String> = entries.iter().map(|e| e.copies[0].1.name.clone()).collect();
-    for mut entry in renamed {
+    for i in renamed {
+        let entry = &mut order[i].1;
         let who: Vec<&str> = entry
             .copies
             .iter()
@@ -441,9 +451,82 @@ fn trigger_entries(profiles: &[(String, ProfileConfig)]) -> Vec<Entry<Trigger>> 
         for (_, trigger) in &mut entry.copies {
             trigger.name.clone_from(&name);
         }
-        entries.push(entry);
     }
+    let mut entries: Vec<Entry<Trigger>> = order.into_iter().map(|(_, entry)| entry).collect();
+    entries.extend(presets);
     entries
+}
+
+/// The triggers of one profile file in the order its store runs them. A
+/// store keeps the last copy of a name, in the place of that copy, and
+/// runs a higher priority first, keeping the order within one priority.
+fn run_order(triggers: &[Trigger]) -> Vec<&Trigger> {
+    let mut run: Vec<&Trigger> = Vec::new();
+    for trigger in triggers {
+        run.retain(|t| t.name != trigger.name);
+        run.push(trigger);
+    }
+    run.sort_by_key(|t| std::cmp::Reverse(t.priority));
+    run
+}
+
+/// Merge `run`, the triggers of profile `holder` in the order its store
+/// runs them, into `order`, the catalog so far with the age of each
+/// entry. The longest run of copies that `order` already holds in the
+/// same order, the same in name and content, joins those entries, and
+/// every other copy becomes a new entry in its place, so the catalog
+/// keeps the order of every profile merged so far.
+fn merge_run(
+    order: Vec<(usize, Entry<Trigger>)>,
+    holder: usize,
+    run: &[&Trigger],
+    created: &mut usize,
+) -> Vec<(usize, Entry<Trigger>)> {
+    let keys: Vec<String> = run.iter().map(|t| content_key(*t)).collect();
+    let held: Vec<String> = order
+        .iter()
+        .map(|(_, e)| content_key(&e.copies[0].1))
+        .collect();
+    let (n, m) = (keys.len(), held.len());
+    // common[i][j] is the length of the longest common run of keys[i..]
+    // and held[j..].
+    let mut common = vec![vec![0u32; m + 1]; n + 1];
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            common[i][j] = if keys[i] == held[j] {
+                common[i + 1][j + 1] + 1
+            } else {
+                common[i + 1][j].max(common[i][j + 1])
+            };
+        }
+    }
+    let mut rest = order.into_iter();
+    let mut merged = Vec::with_capacity(n + m);
+    let (mut i, mut j) = (0, 0);
+    while i < n || j < m {
+        if i < n && j < m && keys[i] == held[j] {
+            if let Some(mut entry) = rest.next() {
+                entry.1.copies.push((holder, run[i].clone()));
+                merged.push(entry);
+            }
+            i += 1;
+            j += 1;
+        } else if j < m && (i == n || common[i][j + 1] >= common[i + 1][j]) {
+            merged.extend(rest.next());
+            j += 1;
+        } else {
+            merged.push((
+                *created,
+                Entry {
+                    copies: vec![(holder, run[i].clone())],
+                    preset: false,
+                },
+            ));
+            *created += 1;
+            i += 1;
+        }
+    }
+    merged
 }
 
 /// What a copy holds apart from its folder and whether it is on, which
@@ -966,6 +1049,98 @@ mod tests {
             trigger_named(&plan, "greet (Bard)").group.as_deref(),
             Some("(Rich)")
         );
+    }
+
+    fn with_priority(mut t: Trigger, priority: i32) -> Trigger {
+        t.priority = priority;
+        t
+    }
+
+    fn names(triggers: &[Trigger]) -> Vec<&str> {
+        triggers.iter().map(|t| t.name.as_str()).collect()
+    }
+
+    /// The triggers of `profile` in the order its store runs them after
+    /// the wizard, from the catalog.
+    fn run_order(plan: &MigrationPlan, profile: &str) -> Vec<String> {
+        let off = file_after(plan, profile).disabled_trigger_groups;
+        let mut store = vosh_trigger::TriggerStore::new();
+        for t in &plan.auto_resolved.triggers {
+            store.set(t.clone()).unwrap();
+        }
+        store.set_disabled_groups(off);
+        store
+            .list()
+            .into_iter()
+            .filter(|t| store.is_group_enabled(t.group.as_deref().unwrap_or("")))
+            .map(|t| t.actions_summary())
+            .collect()
+    }
+
+    trait Summary {
+        fn actions_summary(&self) -> String;
+    }
+
+    impl Summary for Trigger {
+        fn actions_summary(&self) -> String {
+            match &self.actions[0] {
+                TriggerAction::Replace { template } => template.clone(),
+                other => format!("{other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn triggers_keep_the_order_the_file_had() {
+        // Both match the same line at the same priority, and the file
+        // stands up before it bashes.
+        let plan = analyze_profiles(&[(
+            "default".into(),
+            profile_with(
+                vec![],
+                vec![
+                    trigger("zz stand", "^You are knocked down", "stand"),
+                    trigger("aa bash", "^You are knocked down", "bash"),
+                    with_priority(trigger("mm first", "^x", "first"), 5),
+                ],
+                vec![],
+            ),
+        )]);
+        // They used to come over in name order, so bash ran first. The
+        // catalog lists them in the order the store runs them.
+        assert_eq!(
+            names(&plan.auto_resolved.triggers),
+            ["mm first", "zz stand", "aa bash"]
+        );
+        assert_eq!(run_order(&plan, "default"), ["first", "stand", "bash"]);
+    }
+
+    #[test]
+    fn each_character_keeps_its_own_trigger_order() {
+        let stand = trigger("stand", "^You are knocked down", "stand");
+        let bash = trigger("bash", "^You are knocked down", "bash");
+        let flee = trigger("flee", "^You are knocked down", "flee");
+        let plan = analyze_profiles(&[
+            (
+                "default".into(),
+                profile_with(vec![], vec![stand.clone(), bash.clone()], vec![]),
+            ),
+            (
+                "Healer".into(),
+                profile_with(vec![], vec![bash, flee.clone(), stand.clone()], vec![]),
+            ),
+            (
+                "Bard".into(),
+                profile_with(vec![], vec![flee, stand], vec![]),
+            ),
+        ]);
+        assert!(plan.conflicts.is_empty());
+        assert_eq!(run_order(&plan, "default"), ["stand", "bash"]);
+        assert_eq!(run_order(&plan, "Healer"), ["bash", "flee", "stand"]);
+        assert_eq!(run_order(&plan, "Bard"), ["flee", "stand"]);
+        // No one order suits both default and the Healer, so one of them
+        // keeps a copy of its own.
+        assert_eq!(plan.auto_resolved.triggers.len(), 4);
     }
 
     #[test]

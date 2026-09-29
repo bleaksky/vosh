@@ -6310,6 +6310,57 @@ mod tests {
             }
         }
 
+        #[tokio::test]
+        async fn triggers_on_one_line_fire_in_the_order_they_had() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            let down = "^You are knocked down";
+            ProfileConfig {
+                triggers: vec![
+                    send_trigger("zz stand", down, "stand"),
+                    send_trigger("aa bash", down, "bash"),
+                ],
+                ..ProfileConfig::default()
+            }
+            .save(&set.profile_path(DEFAULT_PROFILE_NAME))
+            .unwrap();
+            ProfileConfig {
+                triggers: vec![
+                    send_trigger("aa bash", down, "bash"),
+                    send_trigger("zz stand", down, "stand"),
+                ],
+                ..ProfileConfig::default()
+            }
+            .save(&set.profile_path("Healer"))
+            .unwrap();
+            let fired = |state: &super::super::SharedState| {
+                let state = state.clone();
+                async move {
+                    let p = state.profile.lock().await;
+                    vosh_trigger::process(&p.triggers, b"You are knocked down!").sends
+                }
+            };
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            assert_eq!(fired(&state).await, ["stand", "bash"]);
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+
+            // They used to run in name order, so Default bashed while it
+            // was still on the ground.
+            for (name, sends) in [
+                (DEFAULT_PROFILE_NAME, ["stand", "bash"]),
+                ("Healer", ["bash", "stand"]),
+            ] {
+                let state = relaunch_as(dir.path(), name).await;
+                assert_eq!(fired(&state).await, sends, "{name}");
+                persist(&state, dir.path()).await;
+                let state = relaunch_as(dir.path(), name).await;
+                assert_eq!(fired(&state).await, sends, "{name}");
+            }
+        }
+
         /// A trigger that sends `command` on lines matching `pattern`.
         fn send_trigger(name: &str, pattern: &str, command: &str) -> vosh_trigger::Trigger {
             vosh_trigger::Trigger {
