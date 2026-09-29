@@ -123,10 +123,13 @@ impl TickRuntime {
         self.enable(now);
     }
 
-    /// Stop the timer when the connection ends.
+    /// Stop the timer when the connection ends. `config.enabled` is your
+    /// setting and the profile saves it, so the end of a session leaves
+    /// it alone and stops only the count. A save after the game
+    /// disconnects, the exit flush among them, then keeps the tick on.
     pub(crate) fn end_session(&mut self) {
         self.in_session = false;
-        self.disable();
+        self.stop();
     }
 
     /// Take another profile's tick settings mid session, as a live
@@ -746,6 +749,28 @@ mod tests {
         // The first hour of the new session primes, even when it moved.
         assert!(!t.observe_world_hour("11"));
         assert_eq!(t.remaining(t1), Some(secs(30.0)));
+    }
+
+    #[test]
+    fn the_end_of_a_session_stops_the_count_and_keeps_your_tick_setting() {
+        let t0 = Instant::now();
+        let mut t = session(t0);
+        assert!(t.on_game_tick(t0 + secs(10.0)).is_some());
+        t.end_session();
+        assert!(t.config.enabled, "the saved setting stays on");
+        assert!(!t.in_session);
+        assert!(!t.synced);
+        assert_eq!(t.next_fire(), None);
+        assert!(t.on_game_tick(t0 + secs(40.0)).is_none());
+    }
+
+    #[test]
+    fn a_tick_you_turned_off_stays_off_when_the_session_ends() {
+        let t0 = Instant::now();
+        let mut t = session(t0);
+        t.disable();
+        t.end_session();
+        assert!(!t.config.enabled);
     }
 
     #[test]
