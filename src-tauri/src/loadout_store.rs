@@ -175,6 +175,34 @@ pub(crate) fn load_path_b_at_launch(
     }
 }
 
+/// Why the shared catalog wizard may not write catalog.toml and
+/// loadouts.toml, or None when it may. The wizard builds the catalog
+/// from the profile files, and in loadout mode those hold no aliases or
+/// triggers, so it only writes where neither file is on disk yet. A file
+/// Vosh could not read at launch stays refused even once it is gone.
+pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
+    let catalog = catalog_path(app_data);
+    let loadouts = loadouts_path(app_data);
+    if crate::profile_config::is_unread(&catalog) || crate::profile_config::is_unread(&loadouts) {
+        return Some(
+            "Vosh could not read your shared catalog at launch, so it will not build a new one \
+             over it. Fix catalog.toml or loadouts.toml and restart Vosh.",
+        );
+    }
+    if catalog.exists() {
+        return Some(
+            "You already have a shared catalog, so Vosh will not build another one over it.",
+        );
+    }
+    if loadouts.exists() {
+        return Some(
+            "Vosh found loadouts.toml from an earlier shared catalog and will not save over it. \
+             Move the file out of the Vosh folder to build a new catalog.",
+        );
+    }
+    None
+}
+
 /// What `ui.enabled_presets` holds when you turned every preset off. An
 /// empty list means the defaults. Mirrors `PRESETS_OFF_MARKER` in
 /// src/lib/automationRecords.ts.

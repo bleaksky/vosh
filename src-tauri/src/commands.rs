@@ -3182,16 +3182,43 @@ pub(crate) async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, S
 /// migration would generate. Nothing is written to disk; the wizard
 /// uses this for the preview pane only. The companion
 /// [`migration_apply`] command commits the plan once the user picks
-/// winners for any conflicts.
+/// winners for any conflicts. Refused while catalog.toml or
+/// loadouts.toml is on disk, see
+/// [`crate::loadout_store::migration_refusal`].
 #[tauri::command]
 pub(crate) async fn migration_analyze(
+    app: AppHandle,
     state: State<'_, SharedState>,
 ) -> Result<crate::migration::MigrationPlan, String> {
+    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    analyze_migration(&state, &app_data).await
+}
+
+/// [`migration_analyze`] over the app data folder `app_data`, so a test
+/// can run it over a folder of its own.
+async fn analyze_migration(
+    state: &SharedState,
+    app_data: &std::path::Path,
+) -> Result<crate::migration::MigrationPlan, String> {
+    if let Some(reason) = crate::loadout_store::migration_refusal(app_data) {
+        return Err(reason.into());
+    }
     let guard = state.profile_set.lock().await;
     let Some(set) = guard.as_ref() else {
         return Err(PROFILES_NOT_LOADED.into());
     };
-    let mut sources: Vec<(String, ProfileConfig)> = Vec::with_capacity(set.list().len());
+    let sources = migration_sources(set)?;
+    Ok(crate::migration::analyze_profiles(&sources))
+}
+
+/// Every profile in index order with what its file holds, for the shared
+/// catalog wizard. A profile that never saved a file brings the defaults.
+/// A file that does not read stops the wizard, since the catalog would
+/// miss its items.
+fn migration_sources(
+    set: &crate::profile_set::ProfileSet,
+) -> Result<Vec<(String, ProfileConfig)>, String> {
+    let mut sources = Vec::with_capacity(set.list().len());
     for entry in set.list() {
         let path = set.profile_path(&entry.name);
         let cfg = if path.exists() {
@@ -3201,7 +3228,7 @@ pub(crate) async fn migration_analyze(
         };
         sources.push((entry.name.clone(), cfg));
     }
-    Ok(crate::migration::analyze_profiles(&sources))
+    Ok(sources)
 }
 
 /// One conflict resolution from the wizard. Identifies a single
@@ -3223,7 +3250,9 @@ pub(crate) struct ConflictResolution {
 /// restarts the app so the startup hook picks up Path B mode. The
 /// previously-active profile name (from the index) becomes the sole
 /// initial active loadout so the user's first post-restart session
-/// keeps the same authoring set live.
+/// keeps the same authoring set live. Refused while catalog.toml or
+/// loadouts.toml is on disk, see
+/// [`crate::loadout_store::migration_refusal`].
 #[tauri::command]
 pub(crate) async fn migration_apply(
     app: AppHandle,
@@ -3231,32 +3260,53 @@ pub(crate) async fn migration_apply(
     resolutions: Vec<ConflictResolution>,
 ) -> Result<(), String> {
     let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    apply_migration(&state, &app_data, &resolutions, || {
+        // Path B is now on disk but the live session still holds the
+        // pre-migration profile. Block every persist until the relaunch
+        // loads the catalog, and flip the input layer into Path B mode
+        // so the legacy #profile trio stops writing files.
+        MIGRATION_RELAUNCH_PENDING.store(true, std::sync::atomic::Ordering::Release);
+        crate::input::PATH_B_ACTIVE.store(true, std::sync::atomic::Ordering::Release);
+    })
+    .await?;
 
-    let previously_active = {
-        let guard = state.profile_set.lock().await;
-        guard.as_ref().map(|s| s.active_name().to_string())
-    };
+    // Returning Ok rather than calling `app.restart()` here. Restart
+    // is fragile in dev mode: it tears down the binary out from under
+    // the `tauri dev` watcher and leaves the next process trying to
+    // load a frontend whose Vite dev server may have been killed
+    // with the parent, ending in a hidden window with no JS reveal.
+    // The frontend shows a "migration complete, please relaunch"
+    // banner and offers an explicit [Quit Vosh] button (handled
+    // separately by app_quit) that cleanly exits the process. The
+    // user re-opens Vosh and the Path B startup hook picks the new
+    // catalog up. Path B mode is durable on disk either way.
+    let _ = app.emit("vosh://migration-applied", &());
+    Ok(())
+}
+
+/// [`migration_apply`] over the app data folder `app_data`, so a test
+/// can run it over a folder of its own. `written` runs once catalog.toml
+/// and loadouts.toml are on disk, before the profile files move.
+async fn apply_migration(
+    state: &SharedState,
+    app_data: &std::path::Path,
+    resolutions: &[ConflictResolution],
+    written: impl FnOnce(),
+) -> Result<(), String> {
+    if let Some(reason) = crate::loadout_store::migration_refusal(app_data) {
+        return Err(reason.into());
+    }
 
     // Re-load sources from disk — the analyze call has to walk the
     // same set the user just previewed, but a few seconds may have
     // passed and we want the fresh snapshot rather than caching across
     // commands.
-    let sources = {
+    let (previously_active, sources) = {
         let guard = state.profile_set.lock().await;
         let Some(set) = guard.as_ref() else {
             return Err(PROFILES_NOT_LOADED.into());
         };
-        let mut sources = Vec::with_capacity(set.list().len());
-        for entry in set.list() {
-            let path = set.profile_path(&entry.name);
-            let cfg = if path.exists() {
-                ProfileConfig::load(&path).map_err(|e| e.to_string())?
-            } else {
-                ProfileConfig::default()
-            };
-            sources.push((entry.name.clone(), cfg));
-        }
-        sources
+        (set.active_name().to_string(), migration_sources(set)?)
     };
 
     let plan = crate::migration::analyze_profiles(&sources);
@@ -3291,20 +3341,17 @@ pub(crate) async fn migration_apply(
         active: Vec::new(),
         dormant: false,
     };
-    if let Some(name) = previously_active {
-        if loadout_set.loadouts.iter().any(|l| l.name == name) {
-            loadout_set.active.push(name);
-        }
+    if loadout_set
+        .loadouts
+        .iter()
+        .any(|l| l.name == previously_active)
+    {
+        loadout_set.active.push(previously_active);
     }
 
-    crate::loadout_store::save_global_catalog(&app_data, &catalog).map_err(|e| e.to_string())?;
-    crate::loadout_store::save_loadout_set(&app_data, &loadout_set).map_err(|e| e.to_string())?;
-    // Path B is now on disk but the live session still holds the
-    // pre-migration profile. Block every persist until the relaunch
-    // loads the catalog, and flip the input layer into Path B mode so
-    // the legacy #profile trio stops writing files.
-    MIGRATION_RELAUNCH_PENDING.store(true, std::sync::atomic::Ordering::Release);
-    crate::input::PATH_B_ACTIVE.store(true, std::sync::atomic::Ordering::Release);
+    crate::loadout_store::save_global_catalog(app_data, &catalog).map_err(|e| e.to_string())?;
+    crate::loadout_store::save_loadout_set(app_data, &loadout_set).map_err(|e| e.to_string())?;
+    written();
 
     // Move profiles/<name>.toml into profiles/legacy/. Keep the index
     // file in place — it does not interfere with Path B mode and gives
@@ -3337,18 +3384,6 @@ pub(crate) async fn migration_apply(
             let _ = std::fs::remove_file(&src);
         }
     }
-
-    // Returning Ok rather than calling `app.restart()` here. Restart
-    // is fragile in dev mode: it tears down the binary out from under
-    // the `tauri dev` watcher and leaves the next process trying to
-    // load a frontend whose Vite dev server may have been killed
-    // with the parent, ending in a hidden window with no JS reveal.
-    // The frontend shows a "migration complete, please relaunch"
-    // banner and offers an explicit [Quit Vosh] button (handled
-    // separately by app_quit) that cleanly exits the process. The
-    // user re-opens Vosh and the Path B startup hook picks the new
-    // catalog up. Path B mode is durable on disk either way.
-    let _ = app.emit("vosh://migration-applied", &());
     Ok(())
 }
 
@@ -4523,5 +4558,174 @@ mod tests {
         persist(&state, dir.path()).await;
         let saved = crate::loadout_store::load_global_catalog(dir.path()).unwrap();
         assert_eq!(saved.enabled_presets, Some(vec!["healing_basics".into()]));
+    }
+
+    /// The shared catalog wizard and the loadout mode files it writes.
+    mod shared_catalog {
+        use super::{james_like_set, launch_state, persist, read, UNREADABLE};
+        use crate::loadout::{GlobalCatalog, Loadout, LoadoutSet};
+        use crate::loadout_store::{
+            catalog_path, load_path_b_at_launch, loadouts_path, save_global_catalog,
+            save_loadout_set,
+        };
+        use crate::profile_config::ProfileConfig;
+        use crate::profile_set::ProfileSet;
+
+        const HELD: &str = "Vosh could not read your shared catalog at launch, so it will not \
+                            build a new one over it. Fix catalog.toml or loadouts.toml and \
+                            restart Vosh.";
+
+        /// Save `name`'s file with one alias, the way a profile in per
+        /// profile mode holds its own items.
+        fn write_alias(set: &ProfileSet, name: &str, alias: &str) {
+            let mut config = ProfileConfig::default();
+            config
+                .aliases
+                .push(vosh_alias::Alias::new(alias, "kick %1"));
+            config.save(&set.profile_path(name)).unwrap();
+        }
+
+        /// A catalog with your shared alias and a loadout per character,
+        /// and profile files that hold no items, as loadout mode keeps
+        /// them.
+        fn loadout_mode(set: &ProfileSet, dir: &std::path::Path) {
+            for entry in set.list() {
+                ProfileConfig::default()
+                    .save(&set.profile_path(&entry.name))
+                    .unwrap();
+            }
+            let mut catalog = GlobalCatalog::default();
+            catalog
+                .aliases
+                .push(vosh_alias::Alias::new("kk", "kick %1"));
+            save_global_catalog(dir, &catalog).unwrap();
+            let loadouts = LoadoutSet {
+                loadouts: vec![Loadout::empty("default")],
+                active: vec!["default".into()],
+                dormant: false,
+            };
+            save_loadout_set(dir, &loadouts).unwrap();
+        }
+
+        async fn refused(state: &super::super::SharedState, dir: &std::path::Path) -> String {
+            let analyze = super::super::analyze_migration(state, dir)
+                .await
+                .unwrap_err();
+            let apply = super::super::apply_migration(state, dir, &[], || {})
+                .await
+                .unwrap_err();
+            assert_eq!(analyze, apply);
+            apply
+        }
+
+        #[tokio::test]
+        async fn a_catalog_that_does_not_read_is_held_and_never_replaced() {
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            loadout_mode(&set, dir.path());
+            std::fs::write(catalog_path(dir.path()), UNREADABLE).unwrap();
+            let loadouts = read(&loadouts_path(dir.path()));
+
+            // Launch tells you and runs on the profile files alone.
+            let state = launch_state(dir.path()).await;
+            assert_eq!(
+                load_path_b_at_launch(dir.path()).unwrap_err(),
+                [crate::loadout_store::UNREAD_CATALOG_NOTICE]
+            );
+
+            // The wizard would build the catalog from profile files that
+            // hold none of your shared items.
+            assert_eq!(refused(&state, dir.path()).await, HELD);
+            persist(&state, dir.path()).await;
+            assert!(save_global_catalog(dir.path(), &GlobalCatalog::default()).is_err());
+            assert!(save_loadout_set(dir.path(), &LoadoutSet::default()).is_err());
+
+            assert_eq!(read(&catalog_path(dir.path())), UNREADABLE);
+            assert_eq!(read(&loadouts_path(dir.path())), loadouts);
+            // The profile files stay where they are.
+            assert!(set.active_path().exists());
+            assert!(!dir.path().join("profiles").join("legacy").exists());
+        }
+
+        #[tokio::test]
+        async fn a_loadouts_file_that_does_not_read_holds_the_catalog_too() {
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            loadout_mode(&set, dir.path());
+            std::fs::write(loadouts_path(dir.path()), UNREADABLE).unwrap();
+            let catalog = read(&catalog_path(dir.path()));
+
+            let state = launch_state(dir.path()).await;
+            assert_eq!(
+                load_path_b_at_launch(dir.path()).unwrap_err(),
+                [crate::loadout_store::UNREAD_LOADOUTS_NOTICE]
+            );
+            assert_eq!(refused(&state, dir.path()).await, HELD);
+            assert!(save_global_catalog(dir.path(), &GlobalCatalog::default()).is_err());
+            assert_eq!(read(&catalog_path(dir.path())), catalog);
+            assert_eq!(read(&loadouts_path(dir.path())), UNREADABLE);
+        }
+
+        #[tokio::test]
+        async fn the_wizard_never_builds_over_a_catalog_you_already_use() {
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            loadout_mode(&set, dir.path());
+            let catalog = read(&catalog_path(dir.path()));
+            let state = launch_state(dir.path()).await;
+            assert!(load_path_b_at_launch(dir.path()).is_ok());
+
+            assert_eq!(
+                refused(&state, dir.path()).await,
+                "You already have a shared catalog, so Vosh will not build another one over it."
+            );
+            assert_eq!(read(&catalog_path(dir.path())), catalog);
+            assert!(set.active_path().exists());
+        }
+
+        #[tokio::test]
+        async fn the_wizard_never_saves_over_a_loadouts_file_it_did_not_read() {
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_alias(&set, "Healer", "hh");
+            save_loadout_set(dir.path(), &LoadoutSet::default()).unwrap();
+            let loadouts = read(&loadouts_path(dir.path()));
+            let state = launch_state(dir.path()).await;
+
+            assert_eq!(
+                refused(&state, dir.path()).await,
+                "Vosh found loadouts.toml from an earlier shared catalog and will not save over \
+                 it. Move the file out of the Vosh folder to build a new catalog."
+            );
+            assert!(!catalog_path(dir.path()).exists());
+            assert_eq!(read(&loadouts_path(dir.path())), loadouts);
+        }
+
+        #[tokio::test]
+        async fn the_wizard_builds_a_catalog_once() {
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_alias(&set, "Healer", "hh");
+            let state = launch_state(dir.path()).await;
+
+            let plan = super::super::analyze_migration(&state, dir.path())
+                .await
+                .unwrap();
+            assert_eq!(plan.auto_resolved.aliases.len(), 1);
+            let mut written = false;
+            super::super::apply_migration(&state, dir.path(), &[], || written = true)
+                .await
+                .unwrap();
+            assert!(written);
+            let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+            assert_eq!(catalog.aliases[0].name, "hh");
+            assert!(!set.profile_path("Healer").exists());
+
+            // A second run in the same session would read the moved
+            // files as empty and write that over the catalog.
+            let before = read(&catalog_path(dir.path()));
+            refused(&state, dir.path()).await;
+            assert_eq!(read(&catalog_path(dir.path())), before);
+        }
     }
 }
