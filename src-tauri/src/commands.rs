@@ -3199,27 +3199,37 @@ pub(crate) async fn presets_install(
     state: State<'_, SharedState>,
     triggers: Vec<Trigger>,
 ) -> Result<usize, String> {
-    let mut installed = 0usize;
-    {
+    let installed = {
         let mut p = state.profile.lock().await;
-        for mut t in triggers {
-            // The startup re-install overwrites same-named presets so
-            // pattern/template updates land, but the group is the user's
-            // organization: carry it over so putting a preset into a group
-            // survives relaunch.
-            if t.group.is_none() {
-                if let Some(existing) = p.triggers.get(&t.name) {
-                    t.group.clone_from(&existing.group);
-                }
-            }
-            p.triggers.set(t).map_err(|e| e.to_string())?;
-            installed += 1;
-        }
-    }
+        install_preset_triggers(&mut p, triggers)?
+    };
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
     if installed > 0 {
         broadcast_list_changes(&app, ListChanges::TRIGGERS);
+    }
+    Ok(installed)
+}
+
+/// The body of [`presets_install`] over the live profile `p`, so a test
+/// can run the preset install launch runs. Returns the number installed.
+pub(crate) fn install_preset_triggers(
+    p: &mut Profile,
+    triggers: Vec<Trigger>,
+) -> Result<usize, String> {
+    let mut installed = 0usize;
+    for mut t in triggers {
+        // The startup re-install overwrites same-named presets so
+        // pattern/template updates land, but the group is the user's
+        // organization: carry it over so putting a preset into a group
+        // survives relaunch.
+        if t.group.is_none() {
+            if let Some(existing) = p.triggers.get(&t.name) {
+                t.group.clone_from(&existing.group);
+            }
+        }
+        p.triggers.set(t).map_err(|e| e.to_string())?;
+        installed += 1;
     }
     Ok(installed)
 }
