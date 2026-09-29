@@ -5,6 +5,7 @@ import {
   isOwnThemeEcho,
   normalizeTerminalLineHeight,
   normalizeUiConfig,
+  normalizeVitalsDensity,
   primeUiConfigThemePrefs,
   seedDarkTheme,
   TERMINAL_LINE_HEIGHTS,
@@ -167,5 +168,30 @@ describe('own theme echoes', () => {
     const events = sent.mock.calls.map(([event]) => event);
     expect(events).not.toContain('vosh://theme-prefs-changed');
     expect(events).not.toContain('vosh://theme-changed');
+  });
+});
+
+describe('vitals density', () => {
+  it('reads rows for a config saved before it existed', () => {
+    expect(normalizeUiConfig(raw()).vitals_density).toBe('rows');
+  });
+
+  it('keeps one line', () => {
+    expect(normalizeUiConfig(raw({ vitals_density: 'line' })).vitals_density).toBe('line');
+  });
+
+  it('coerces anything else to rows', () => {
+    expect(normalizeVitalsDensity('grid')).toBe('rows');
+    expect(normalizeVitalsDensity(undefined)).toBe('rows');
+    expect(normalizeVitalsDensity('rows')).toBe('rows');
+  });
+
+  it('tells every window when it changes', async () => {
+    const sent = vi.mocked(emit);
+    const base = normalizeUiConfig(raw());
+    await broadcastUiConfigChanges(base);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, vitals_density: 'line' });
+    expect(sent).toHaveBeenCalledWith('vosh://vitals-density-changed', 'line');
   });
 });

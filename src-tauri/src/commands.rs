@@ -2352,6 +2352,7 @@ pub(crate) struct UiConfigPayload {
     pub prompt_template_enabled: bool,
     pub prompt_template: String,
     pub vitals: crate::profile_config::VitalsConfig,
+    pub vitals_density: String,
     pub moons_position: String,
     pub chip_style: String,
 }
@@ -2385,6 +2386,7 @@ impl UiConfigPayload {
             prompt_template_enabled: ui.prompt_template_enabled,
             prompt_template: ui.prompt_template.clone(),
             vitals: ui.vitals.clone(),
+            vitals_density: ui.vitals_density.clone(),
             moons_position: ui.moons_position.clone(),
             chip_style: ui.chip_style.clone(),
         }
@@ -2422,6 +2424,7 @@ impl UiConfigPayload {
             prompt_template_enabled,
             prompt_template,
             vitals,
+            vitals_density,
             moons_position,
             chip_style,
         } = self;
@@ -2486,6 +2489,7 @@ impl UiConfigPayload {
         };
         ui.prompt_template_enabled = prompt_template_enabled;
         ui.prompt_template = prompt_template;
+        ui.vitals_density = crate::profile_config::coerce_vitals_density(vitals_density);
         // Normalize vitals glyphs + width. Empty glyph strings would
         // render zero-width bars; collapse to the default in that case
         // so the user cannot accidentally hide the bar via a typo.
@@ -3349,6 +3353,28 @@ mod tests {
             Some("tokyo-night".into()),
         ));
         assert_eq!(ui.light_theme, "vellum");
+    }
+
+    #[test]
+    fn vitals_density_round_trips() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.vitals_density, "rows");
+        for id in ["rows", "line"] {
+            ui.vitals_density = id.into();
+            assert_eq!(through_payload(&ui).vitals_density, id);
+            assert_eq!(through_toml(&ui).vitals_density, id);
+        }
+        // An unknown density saves as rows.
+        ui.vitals_density = "grid".into();
+        assert_eq!(through_payload(&ui).vitals_density, "rows");
+    }
+
+    #[test]
+    fn a_profile_without_the_vitals_density_loads_rows() {
+        let ui = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.vitals_density, "rows");
     }
 
     #[test]
