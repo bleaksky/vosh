@@ -2,14 +2,18 @@
 // stream that may contain ESC [ ... m sequences into a list of styled
 // chunks suitable for rendering as React spans. Covers the codes MUDs
 // actually use: bold, underline, the basic 8/16 fg+bg palette, the
-// 256-color extension, and reset.
+// 256-color extension, and reset, plus the dim, italic, and strike
+// styles a custom prompt template can set.
 
 export interface AnsiStyle {
   fg?: string;
   bg?: string;
   bold?: boolean;
+  dim?: boolean;
+  italic?: boolean;
   underline?: boolean;
   inverse?: boolean;
+  strike?: boolean;
 }
 
 export interface AnsiChunk {
@@ -77,6 +81,16 @@ function applyCodes(prev: AnsiStyle, codes: number[]): AnsiStyle {
       i += 1;
       continue;
     }
+    if (code === 2) {
+      next.dim = true;
+      i += 1;
+      continue;
+    }
+    if (code === 3) {
+      next.italic = true;
+      i += 1;
+      continue;
+    }
     if (code === 4) {
       next.underline = true;
       i += 1;
@@ -87,8 +101,20 @@ function applyCodes(prev: AnsiStyle, codes: number[]): AnsiStyle {
       i += 1;
       continue;
     }
+    if (code === 9) {
+      next.strike = true;
+      i += 1;
+      continue;
+    }
+    // 22 is normal intensity, which ends bold and dim alike.
     if (code === 22) {
       next.bold = false;
+      next.dim = false;
+      i += 1;
+      continue;
+    }
+    if (code === 23) {
+      next.italic = false;
       i += 1;
       continue;
     }
@@ -99,6 +125,11 @@ function applyCodes(prev: AnsiStyle, codes: number[]): AnsiStyle {
     }
     if (code === 27) {
       next.inverse = false;
+      i += 1;
+      continue;
+    }
+    if (code === 29) {
+      next.strike = false;
       i += 1;
       continue;
     }
@@ -211,6 +242,9 @@ export function styleToCss(style: AnsiStyle): React.CSSProperties {
     if (style.bg) css.background = style.bg;
   }
   if (style.bold) css.fontWeight = 'bold';
-  if (style.underline) css.textDecoration = 'underline';
+  if (style.dim) css.opacity = 0.6;
+  if (style.italic) css.fontStyle = 'italic';
+  const lines = [style.underline && 'underline', style.strike && 'line-through'].filter(Boolean);
+  if (lines.length > 0) css.textDecoration = lines.join(' ');
   return css;
 }
