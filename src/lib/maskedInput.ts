@@ -45,6 +45,32 @@ export interface SubmitContext {
  *  break, stays out of history, and goes to the server as typed, past
  *  aliases, variables, and `#` commands. Every other line echoes in your
  *  echo color, unless a quick key echoes it, and joins history. */
+/** Whether Keep last command leaves the line you just sent selected in
+ *  the input. Never for a line from the masked field. */
+export function keepsLastCommand(enabled: boolean, composed: string, masked: boolean): boolean {
+  return enabled && composed.length > 0 && !masked;
+}
+
+/** The local echo for a macro's command, or null for none. `enabled` is
+ *  the Echo macros setting. A macro pressed at the masked field echoes
+ *  nothing, and a quick key leaves its echo to the backend. */
+export function macroEcho(
+  command: string,
+  context: SubmitContext & { enabled: boolean },
+): string | null {
+  if (!context.enabled || context.masked || context.quickKey) return null;
+  return `${colorizeEcho(command, context.echoColor)}\r\n`;
+}
+
+/** The draft the input row keeps when it masks or unmasks. A flip either
+ *  way empties it. Unmasking must not show a half typed password in the
+ *  plain row, where Enter would echo it and put it in history. Masking
+ *  must not put a leftover command, like the account name Keep last
+ *  command kept, in front of the password. */
+export function draftAfterMaskChange(wasMasked: boolean, masked: boolean, draft: string): string {
+  return wasMasked === masked ? draft : '';
+}
+
 export function planSubmit(line: string, context: SubmitContext): SubmitPlan {
   if (context.masked) {
     return { echo: '\r\n', remember: false, local: false, masked: true };

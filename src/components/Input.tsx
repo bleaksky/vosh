@@ -26,7 +26,7 @@ import {
   type QuickKey,
 } from '../lib/session';
 import { canonicalKeyFromEvent } from '../lib/macroKeys';
-import { colorizeEcho, planSubmit } from '../lib/maskedInput';
+import { draftAfterMaskChange, keepsLastCommand, macroEcho, planSubmit } from '../lib/maskedInput';
 import { recentNames } from '../lib/recentNames';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
@@ -114,6 +114,11 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   const [cursorStyle, setCursorStyle] = useState<InputCursorStyle>('block');
   const [history, setHistory] = useState<string[]>([]);
   const [passwordMode, setPasswordMode] = useState(false);
+  // The mask state the key and submit handlers read. The input-mode event
+  // sets it at once, while the state above waits for a render, so an Enter
+  // pressed in the frame after the server takes echo is still treated as
+  // a password.
+  const passwordModeRef = useRef(false);
   // When the user starts arrow-key navigation with non-empty input, we
   // remember that prefix so Up and Down cycle only matching history entries.
   // Null means no active prefix search; cycle the full history.
@@ -234,7 +239,14 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     let unsub: (() => void) | undefined;
     let cancelled = false;
     onInputMode((payload) => {
+      const wasMasked = passwordModeRef.current;
+      passwordModeRef.current = payload.password;
       setPasswordMode(payload.password);
+      if (wasMasked !== payload.password) {
+        setValue((draft) => draftAfterMaskChange(wasMasked, payload.password, draft));
+        setSearchPrefix(null);
+        setHistoryIndex(null);
+      }
     }).then((fn) => {
       if (cancelled) fn();
       else unsub = fn;
@@ -625,7 +637,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   // gives it a bare line break for an echo, keeps it out of history, and
   // routes it through the masked send, which skips the input pipeline.
   const submitLine = async (line: string) => {
-    const masked = passwordMode;
+    const masked = passwordModeRef.current;
     const firstWord = line.split(/\s+/)[0] ?? '';
     const plan = planSubmit(line, {
       masked,
@@ -682,7 +694,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
   const pasteCancelRef = useRef<boolean>(false);
   const [pasteBurst, setPasteBurst] = useState<{ sent: number; total: number } | null>(null);
   const handlePaste = async (event: ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (passwordMode) return;
+    if (passwordModeRef.current) return;
     const text = event.clipboardData.getData('text');
     if (!text.includes('\n') && !text.includes('\r')) return;
     event.preventDefault();
@@ -763,15 +775,14 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
         // quick-key skip) so under lag the keybind visibly registered
         // before the world responds. The checkbox in Settings turns
         // this off for players whose stacked macros get too noisy.
-        if (echoMacrosRef.current && !passwordMode) {
-          const firstWord = command.split(/\s+/)[0] ?? '';
-          const isQuickKey = quickKeysRef.current.some(
-            (q) => q.name === firstWord && q.verb.length > 0,
-          );
-          if (!isQuickKey) {
-            onLocalEcho?.(`${colorizeEcho(command, echoColorRef.current)}\r\n`);
-          }
-        }
+        const firstWord = command.split(/\s+/)[0] ?? '';
+        const echo = macroEcho(command, {
+          enabled: echoMacrosRef.current,
+          masked: passwordModeRef.current,
+          quickKey: quickKeysRef.current.some((q) => q.name === firstWord && q.verb.length > 0),
+          echoColor: echoColorRef.current,
+        });
+        if (echo !== null) onLocalEcho?.(echo);
         try {
           await sendInput(command);
         } catch (e) {
@@ -898,12 +909,12 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       // Shift+Enter composes another line in the multi-line prompt
       // instead of submitting. Password mode is single-line, so a
       // Shift+Enter there still submits like a plain Enter.
-      if (event.shiftKey && !passwordMode) {
+      if (event.shiftKey && !passwordModeRef.current) {
         return;
       }
       event.preventDefault();
       const composed = value;
-      const keepLast = keepLastRef.current && composed.length > 0 && !passwordMode;
+      const keepLast = keepsLastCommand(keepLastRef.current, composed, passwordModeRef.current);
       if (keepLast) {
         // Restore the composed value and select it after React commits
         // so the user can press Enter to resend. setSelectionRange

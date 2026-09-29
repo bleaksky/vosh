@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { planSubmit, type SubmitContext } from './maskedInput';
+import {
+  draftAfterMaskChange,
+  keepsLastCommand,
+  macroEcho,
+  planSubmit,
+  type SubmitContext,
+} from './maskedInput';
 
 // Made up values only. None of these is anyone's password.
 const SECRET = 'Tr0ub4dor&3';
@@ -56,5 +62,55 @@ describe('a line submitted from the command row', () => {
 
   it('runs #nativesurface in the frontend', () => {
     expect(planSubmit('#nativesurface off', typed()).local).toBe(true);
+  });
+});
+
+describe('Keep last command', () => {
+  it('never leaves a line from the masked field selected in the input', () => {
+    expect(keepsLastCommand(true, SECRET, true)).toBe(false);
+  });
+
+  it('keeps a typed command selected when the setting is on', () => {
+    expect(keepsLastCommand(true, 'look', false)).toBe(true);
+    expect(keepsLastCommand(false, 'look', false)).toBe(false);
+    expect(keepsLastCommand(true, '', false)).toBe(false);
+  });
+});
+
+describe('a macro pressed at a password prompt', () => {
+  const macro = (patch: Partial<SubmitContext & { enabled: boolean }> = {}) => ({
+    ...typed(),
+    enabled: true,
+    ...patch,
+  });
+
+  it('echoes nothing while the field is masked', () => {
+    expect(macroEcho('stand', macro({ masked: true }))).toBeNull();
+  });
+
+  it('echoes like a typed command otherwise', () => {
+    expect(macroEcho('stand', macro())).toBe('stand\r\n');
+    expect(macroEcho('stand', macro({ enabled: false }))).toBeNull();
+    expect(macroEcho('gg', macro({ quickKey: true }))).toBeNull();
+  });
+});
+
+describe('the draft when the input row masks or unmasks', () => {
+  it('drops what you typed at the password prompt when the server hands echo back', () => {
+    // A server that gives up on the prompt sends WONT ECHO while you type.
+    // The half typed password must not show in the unmasked row, where
+    // Enter would echo it and put it in history.
+    expect(draftAfterMaskChange(true, false, SECRET)).toBe('');
+  });
+
+  it('opens the password prompt empty', () => {
+    // With Keep last command on, the account name you just sent stays in
+    // the row. It must not end up in front of the password.
+    expect(draftAfterMaskChange(false, true, 'wanderer')).toBe('');
+  });
+
+  it('keeps the draft when nothing changes, as on a disconnect outside a prompt', () => {
+    expect(draftAfterMaskChange(false, false, 'look')).toBe('look');
+    expect(draftAfterMaskChange(true, true, 'Tr0')).toBe('Tr0');
   });
 });
