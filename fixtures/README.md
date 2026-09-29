@@ -10,6 +10,7 @@ fixtures/
   ansi/      ANSI escape sequence captures, including 256 color and truecolor.
   gmcp/      GMCP message captures.
   mccp/      MCCP compressed stream captures.
+  pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.
 ```
 
 ## Capturing From Aabahran

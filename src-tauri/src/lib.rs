@@ -471,6 +471,8 @@ pub fn run() {
             open_settings_window,
             dock_layout_get,
             dock_layout_set,
+            commands::pane_layout_get,
+            commands::pane_layout_set,
             fonts_list,
             macros_list,
             macros_set,

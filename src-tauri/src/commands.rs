@@ -67,7 +67,9 @@ fn broadcast<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload:
 use crate::map_state::SharedMap;
 use crate::plugins::{PluginRecord, SharedPluginManager};
 use crate::profile::{Macro, Profile, Timer};
-use crate::profile_config::{strip_global_fields, DockEntryPersist, GlobalConfig, ProfileConfig};
+use crate::profile_config::{
+    strip_global_fields, DockEntryPersist, GlobalConfig, PaneLayoutPersist, ProfileConfig,
+};
 use crate::script_state;
 use crate::script_state::SharedTimers;
 use crate::session::{self, OutputPayload, SessionHandle, TargetPayload};
@@ -1344,6 +1346,40 @@ pub(crate) async fn dock_layout_set(
     if let Err(e) = app.emit("vosh://dock-layout-changed", &entries) {
         warn!(error = %e, "failed to broadcast dock-layout-changed");
     }
+    Ok(())
+}
+
+/// Read the active profile's pane layout. A profile that has never
+/// saved one gets a tree migrated from its dock layout (or the
+/// default), with nothing written to disk until the first edit.
+#[tauri::command]
+pub(crate) async fn pane_layout_get(
+    state: State<'_, SharedState>,
+) -> Result<PaneLayoutPersist, String> {
+    let p = state.profile.lock().await;
+    Ok(p.ui.pane_layout())
+}
+
+/// Replace the active profile's pane layout and broadcast the
+/// sanitized tree as `vosh://pane-layout-changed` to every window.
+/// Splitter drags land here several times a second even after the
+/// frontend debounce, so the disk write goes through the debounced
+/// `mark_profile_dirty` rather than rotating a backup per drag step.
+/// A profile switch or quit flushes it right away.
+#[tauri::command]
+pub(crate) async fn pane_layout_set(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    layout: PaneLayoutPersist,
+) -> Result<(), String> {
+    let mut layout = layout;
+    layout.sanitize();
+    {
+        let mut p = state.profile.lock().await;
+        p.ui.panes = Some(layout.clone());
+    }
+    mark_profile_dirty(&app);
+    broadcast(&app, "vosh://pane-layout-changed", &layout);
     Ok(())
 }
 

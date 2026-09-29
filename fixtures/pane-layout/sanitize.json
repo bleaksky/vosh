@@ -1,0 +1,368 @@
+{
+  "cases": [
+    {
+      "name": "the default layout passes through",
+      "input": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            { "id": "map", "pane": "map", "weight": 0.6 },
+            { "id": "affects", "pane": "affects", "weight": 0.4 }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            { "id": "map", "pane": "map", "weight": 0.6 },
+            { "id": "affects", "pane": "affects", "weight": 0.4 }
+          ]
+        }
+      }
+    },
+    {
+      "name": "missing fields take the defaults",
+      "input": {},
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            { "id": "map", "pane": "map", "weight": 0.6 },
+            { "id": "affects", "pane": "affects", "weight": 0.4 }
+          ]
+        }
+      }
+    },
+    {
+      "name": "unknown and repeat panes drop and a one child split collapses",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "children": [
+            { "id": "a", "pane": "map", "weight": 2 },
+            { "id": "b", "pane": "bogus" },
+            {
+              "id": "c",
+              "split": "row",
+              "children": [
+                { "id": "d", "pane": "MAP" },
+                { "id": "e", "pane": "group" }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            { "id": "a", "pane": "map", "weight": 0.6667 },
+            { "id": "e", "pane": "group", "weight": 0.3333 }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a split inside a split of the same direction merges",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "children": [
+            {
+              "id": "x",
+              "split": "column",
+              "weight": 0.5,
+              "children": [
+                { "id": "map", "pane": "map", "weight": 1 },
+                { "id": "chat", "pane": "chat", "weight": 3 }
+              ]
+            },
+            { "id": "imm", "pane": "imm", "weight": 0.5 }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            { "id": "map", "pane": "map", "weight": 0.125 },
+            { "id": "chat", "pane": "chat", "weight": 0.375 },
+            { "id": "imm", "pane": "imm", "weight": 0.5 }
+          ]
+        }
+      }
+    },
+    {
+      "name": "blank and clashing ids get fresh ones and bad weights reset",
+      "input": {
+        "root": {
+          "id": "",
+          "split": "COLUMN",
+          "weight": 5,
+          "children": [
+            { "id": "", "pane": "map", "weight": 0 },
+            { "id": "dup", "pane": "affects", "weight": -3 },
+            { "id": "dup", "pane": "group", "weight": 1 },
+            { "id": "  ", "pane": " Chat ", "weight": 1 }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            { "id": "map", "pane": "map", "weight": 0.25 },
+            { "id": "dup", "pane": "affects", "weight": 0.25 },
+            { "id": "group", "pane": "group", "weight": 0.25 },
+            { "id": "chat", "pane": "chat", "weight": 0.25 }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a fresh id never takes an id a later node owns",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "children": [
+            { "id": "", "pane": "map" },
+            { "id": "map", "pane": "affects" }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            { "id": "map-2", "pane": "map", "weight": 0.5 },
+            { "id": "map", "pane": "affects", "weight": 0.5 }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a lone split under the root becomes the root",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "children": [
+            {
+              "id": "r",
+              "split": "row",
+              "weight": 0.3,
+              "children": [
+                { "id": "map", "pane": "map", "weight": 1 },
+                { "id": "group", "pane": "group", "weight": 1 }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "row",
+          "weight": 1,
+          "children": [
+            { "id": "map", "pane": "map", "weight": 0.5 },
+            { "id": "group", "pane": "group", "weight": 0.5 }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a leaf at the root is wrapped in a column and keeps its props",
+      "input": {
+        "root": { "id": "solo", "pane": "chat", "props": { "channel": "tell" } }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            { "id": "solo", "pane": "chat", "weight": 1, "props": { "channel": "tell" } }
+          ]
+        }
+      }
+    },
+    {
+      "name": "splits nested past depth three flatten into their parent",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "children": [
+            {
+              "id": "r1",
+              "split": "row",
+              "children": [
+                { "id": "map", "pane": "map" },
+                {
+                  "id": "c2",
+                  "split": "column",
+                  "children": [
+                    { "id": "affects", "pane": "affects" },
+                    {
+                      "id": "r3",
+                      "split": "row",
+                      "children": [
+                        { "id": "group", "pane": "group" },
+                        {
+                          "id": "c4",
+                          "split": "column",
+                          "children": [
+                            { "id": "chat", "pane": "chat" },
+                            { "id": "imm", "pane": "imm" }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "row",
+          "weight": 1,
+          "children": [
+            { "id": "map", "pane": "map", "weight": 0.5 },
+            {
+              "id": "c2",
+              "split": "column",
+              "weight": 0.5,
+              "children": [
+                { "id": "affects", "pane": "affects", "weight": 0.5 },
+                {
+                  "id": "r3",
+                  "split": "row",
+                  "weight": 0.5,
+                  "children": [
+                    { "id": "group", "pane": "group", "weight": 0.5 },
+                    { "id": "chat", "pane": "chat", "weight": 0.25 },
+                    { "id": "imm", "pane": "imm", "weight": 0.25 }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an empty tree stays empty and a wide panel clamps",
+      "input": {
+        "version": 7,
+        "panel_open": false,
+        "panel_width": 5000,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "children": [{ "id": "x", "pane": "nope" }]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": false,
+        "panel_width": 800,
+        "root": { "id": "root", "split": "column", "weight": 1 }
+      }
+    },
+    {
+      "name": "a narrow panel clamps and missing ids fill in",
+      "input": {
+        "panel_width": 10,
+        "root": {
+          "split": "row",
+          "children": [{ "pane": "group" }, { "pane": "chat", "weight": 3 }]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "panel_width": 200,
+        "root": {
+          "id": "root",
+          "split": "row",
+          "weight": 1,
+          "children": [
+            { "id": "group", "pane": "group", "weight": 0.25 },
+            { "id": "chat", "pane": "chat", "weight": 0.75 }
+          ]
+        }
+      }
+    },
+    {
+      "name": "thirds round to four places",
+      "input": {
+        "root": {
+          "id": "root",
+          "split": "column",
+          "children": [
+            { "id": "map", "pane": "map" },
+            { "id": "affects", "pane": "affects" },
+            { "id": "group", "pane": "group" }
+          ]
+        }
+      },
+      "expected": {
+        "version": 1,
+        "panel_open": true,
+        "root": {
+          "id": "root",
+          "split": "column",
+          "weight": 1,
+          "children": [
+            { "id": "map", "pane": "map", "weight": 0.3333 },
+            { "id": "affects", "pane": "affects", "weight": 0.3333 },
+            { "id": "group", "pane": "group", "weight": 0.3333 }
+          ]
+        }
+      }
+    }
+  ]
+}
