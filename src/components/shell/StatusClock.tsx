@@ -37,6 +37,8 @@ export interface ClockMoons {
   moons: ClockMoon[];
   /** Eclipse, Triad, or Near alignment, or null for a quiet sky. */
   alignment: string | null;
+  /** Draw the moons as ink on a light theme. */
+  onLight?: boolean;
 }
 
 interface Props {
@@ -85,7 +87,13 @@ function Moons({ style, moons }: { style: ChipStyle; moons: ClockMoons }) {
       <span className={style === 'caption_value' ? undefined : 'shell-sr'}>Moons</span>
       <span className="shell-status-moons">
         {moons.moons.map((moon) => (
-          <MoonPhaseIcon key={moon.name} phase={moon.phase} color={moon.color} label={moon.label} />
+          <MoonPhaseIcon
+            key={moon.name}
+            phase={moon.phase}
+            color={moon.color}
+            label={moon.label}
+            onLight={moons.onLight === true}
+          />
         ))}
       </span>
       {moons.alignment && <span className="shell-status-alignment">{moons.alignment}</span>}

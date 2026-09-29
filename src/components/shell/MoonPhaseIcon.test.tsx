@@ -39,3 +39,46 @@ describe('MoonPhaseIcon', () => {
     expect(draw(0)).toContain('<circle');
   });
 });
+
+describe('MoonPhaseIcon on a light theme', () => {
+  function ink(phase: number | null): string {
+    return renderToStaticMarkup(
+      <MoonPhaseIcon phase={phase} color="#3b3632" label="Lysenties" onLight />,
+    );
+  }
+
+  it('fills the dark part and leaves the lit part as paper', () => {
+    const svg = ink(2);
+    const shape = moonPhaseShape(2);
+    // The mask keeps the disc and cuts the lit part out of it.
+    expect(svg).toMatch(/<mask id="(moon-[\w-]+)">/);
+    const id = /<mask id="(moon-[\w-]+)">/.exec(svg)?.[1];
+    expect(svg).toContain(`<path d="${shape?.litPath}" fill="black"`);
+    expect(svg).toContain(`fill="#3b3632" mask="url(#${id})"`);
+    // The whole limb carries a full outline, with no faint fill.
+    expect(svg).toMatch(/fill="none" stroke="#3b3632" stroke-width="1.25"/);
+    expect(svg).not.toContain('fill-opacity');
+  });
+
+  it('draws new as a solid disc and full as an open ring', () => {
+    // New lights nothing, so the mask cuts nothing and the disc fills.
+    const fresh = ink(0);
+    expect(fresh).toContain('<mask');
+    expect(fresh).not.toContain('fill="black"');
+    // Full lights the whole disc, so the mask cuts all of it away.
+    const full = ink(4);
+    expect(full).toContain(`<path d="${moonPhaseShape(4)?.litPath}" fill="black"`);
+  });
+
+  it('keeps each mask id to itself', () => {
+    const two = renderToStaticMarkup(
+      <>
+        <MoonPhaseIcon phase={2} color="#000" label="a" onLight />
+        <MoonPhaseIcon phase={6} color="#000" label="b" onLight />
+      </>,
+    );
+    const ids = [...two.matchAll(/<mask id="([^"]+)">/g)].map((m) => m[1]);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+  });
+});

@@ -23,5 +23,6 @@ export function statusMoons(
       label: moonTitle(moon),
     })),
     alignment: moonAlignment(moons),
+    onLight: tokens.appearance === 'light',
   };
 }
