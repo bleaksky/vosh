@@ -529,3 +529,79 @@
 .terminal-area-find-inset {
   padding-top: 56px;
 }
+
+/* Toasts, bottom right of the terminal column. Each is a floating card
+   with a 16 status mark, then the message and an optional detail. */
+.ov-toasts {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: calc(100% - 32px);
+  pointer-events: none;
+}
+
+.ov-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 420px;
+  min-height: 36px;
+  margin: 0;
+  padding: 8px 14px 8px 12px;
+  border: 0;
+  border-radius: var(--r-float);
+  outline: none;
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  color: var(--text);
+  text-align: left;
+  cursor: default;
+  pointer-events: auto;
+}
+
+.ov-toast-check {
+  display: block;
+  flex: none;
+  color: var(--success);
+}
+
+.ov-toast-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 0 4px;
+  border-radius: 4px;
+  background: var(--accent);
+}
+
+.ov-toast.is-error .ov-toast-dot {
+  background: var(--danger);
+}
+
+.ov-toast-msg {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ov-toast-meta {
+  flex: none;
+  max-width: 220px;
+  margin-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tertiary);
+}
