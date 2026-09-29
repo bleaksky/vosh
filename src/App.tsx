@@ -87,6 +87,7 @@ import {
 import { getImmState, subscribeImmState } from './lib/immStore';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { openSettingsTab, openSettingsWindow } from './lib/settingsLink';
+import { showAfterThemePaint } from './lib/reveal';
 import { getNativeScroll, startNativeScroll, subscribeNativeScroll } from './lib/nativeScroll';
 import {
   addPane,
@@ -813,7 +814,7 @@ function App() {
   useEffect(() => {
     // Tauri creates the main window with visible=false so the user
     // doesn't see a default-styled white flash. Reveal once theme and
-    // font have applied.
+    // font have applied and a frame with the theme has gone out.
     let revealed = false;
     const reveal = () => {
       if (revealed) return;
@@ -875,7 +876,7 @@ function App() {
         }
       })
       .catch(() => void applyAndBroadcastTheme('system'))
-      .finally(reveal);
+      .finally(() => showAfterThemePaint(reveal));
     return onUnmount;
   }, []);
 
