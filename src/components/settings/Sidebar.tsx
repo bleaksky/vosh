@@ -7,6 +7,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import { SETTINGS_FIND_EVENT } from '../../lib/appMenu';
 import { shortcutKey, shortcutKeys } from '../../lib/palette';
 import {
   SETTINGS_GROUPS,
@@ -77,6 +79,26 @@ export function Sidebar({ group, onNavigate, pathB, mac }: Props) {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [mac]);
+
+  // Find in the macOS menu bar, chosen while Settings is in front,
+  // searches settings the same way.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    listen(SETTINGS_FIND_EVENT, () => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => setActive(0), [query]);
 
