@@ -68,7 +68,7 @@ export function LoadoutsTab({ onError }: Props) {
         <div className="loadouts-empty">
           <div className="loadouts-empty-title">Path B is not active.</div>
           <div className="loadouts-empty-body">
-            run the migration preview from Settings &middot; Import to convert your per-profile
+            run the migration preview from Import… under Automation to convert your per-profile
             files into a shared catalog + loadouts. once Path B is active, loadouts appear here.
           </div>
         </div>
