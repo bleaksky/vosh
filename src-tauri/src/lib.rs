@@ -248,10 +248,8 @@ pub fn run() {
                 // profile file. Loadouts still apply on top to gate
                 // catalog groups by the active enabled_groups set.
                 if loadout_store::path_b_mode_active(&path) {
-                    let catalog_load = loadout_store::load_global_catalog(&path);
-                    let set_load = loadout_store::load_loadout_set(&path);
-                    match (catalog_load, set_load) {
-                        (Ok(mut catalog), Ok(set)) => {
+                    match loadout_store::load_path_b_at_launch(&path) {
+                        Ok((mut catalog, set)) => {
                             let profile = state.profile.clone();
                             // The catalog owns which presets are on, with
                             // the preset triggers. An older catalog takes
@@ -355,8 +353,13 @@ pub fn run() {
                             crate::input::PATH_B_ACTIVE
                                 .store(true, std::sync::atomic::Ordering::Release);
                         }
-                        (Err(e), _) | (_, Err(e)) => {
-                            error!(error = %e, "Path B files present but failed to load; falling back to per-profile state");
+                        // A file that does not read keeps the session on
+                        // the profile files alone. Both files are held so
+                        // no save writes a catalog without your shared
+                        // items, and the notices tell you so.
+                        Err(notices) => {
+                            error!("Path B files present but failed to load; falling back to per-profile state");
+                            state.add_launch_notices(notices);
                         }
                     }
                 }
