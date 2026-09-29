@@ -214,23 +214,47 @@ const PANE_TITLES: Record<PaneType, string> = {
   imm: 'Show staff queues',
 };
 
+// Each id is a Settings deep link (src/lib/settingsNav.ts) and, as
+// `settings-<id>`, a palette Recent id, so the old tab ids stay. The
+// vitals row is gone because Settings no longer has vitals settings.
+// Its id still resolves, to Layout.
 const SETTINGS_TABS: { id: string; title: string; keywords: string }[] = [
   {
     id: 'themes',
     title: 'Open theme settings',
-    keywords: 'catalog editor terminal palette colors',
+    keywords: 'appearance catalog editor terminal palette colors',
   },
-  { id: 'typography', title: 'Open typography settings', keywords: 'font face size' },
-  { id: 'vitals', title: 'Open vitals settings', keywords: 'hp mana moves readout' },
-  { id: 'tick', title: 'Open tick settings', keywords: 'timer moons' },
-  { id: 'panels', title: 'Open panel settings', keywords: 'panes layout tracked affects' },
-  { id: 'general', title: 'Open general settings', keywords: 'input prompt updates' },
-  { id: 'profiles', title: 'Open profile settings', keywords: 'characters hosts' },
-  { id: 'triggers', title: 'Open trigger settings', keywords: 'patterns actions' },
-  { id: 'aliases', title: 'Open alias settings', keywords: 'command shortcuts' },
-  { id: 'macros', title: 'Open macro settings', keywords: 'key bindings' },
-  { id: 'timers', title: 'Open timer settings', keywords: 'recurring commands interval' },
-  { id: 'import', title: 'Open import settings', keywords: 'tintin another client' },
+  {
+    id: 'typography',
+    title: 'Open terminal text settings',
+    keywords: 'appearance font face size typography',
+  },
+  { id: 'tick', title: 'Open tick settings', keywords: 'automation timer warn' },
+  { id: 'panels', title: 'Open panel layout settings', keywords: 'characters panes layout' },
+  { id: 'general', title: 'Open general settings', keywords: 'updates scope logs' },
+  {
+    id: 'input',
+    title: 'Open input settings',
+    keywords: 'command line caret cursor prompt spell check paste history',
+  },
+  {
+    id: 'profiles',
+    title: 'Open character settings',
+    keywords: 'profiles characters hosts login tracked affects',
+  },
+  { id: 'triggers', title: 'Open trigger settings', keywords: 'automation patterns actions' },
+  { id: 'aliases', title: 'Open alias settings', keywords: 'automation command shortcuts' },
+  { id: 'macros', title: 'Open macro settings', keywords: 'automation key bindings' },
+  {
+    id: 'timers',
+    title: 'Open timer settings',
+    keywords: 'automation recurring commands interval',
+  },
+  {
+    id: 'import',
+    title: 'Import from another client…',
+    keywords: 'automation tintin mushclient mudlet gmud cmud zmud',
+  },
   { id: 'logs', title: 'Open session logs', keywords: 'history search' },
 ];
 
