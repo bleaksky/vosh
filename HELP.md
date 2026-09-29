@@ -300,6 +300,7 @@ Slash commands drive Vosh from the input bar without opening settings. Vosh hand
 - Drive Lua with `#script load <name>`, `#script reload`, `#scripts`, and `#lua <code>`.
 - Snapshot with `#profile save`, `#profile load`, and `#profile reset`.
 - Import TinTin++ files with `#import-tintin <path>`.
+- Clear old passwords out of your session log with `#logs forget-passwords`, then `#logs forget-passwords now`.
 - Work targets with `#target <args>`, or bare `tar`, `tarn`, `tarp`, and `tarclear` with no `#` at all.
 - Switch renderers with `#nativesurface on|off|default`, applied on restart.
 
@@ -589,7 +590,9 @@ Example. The pattern `dragon|wyvern` finds lines containing either word.
 
 The `copy` button on a session row copies that whole session to your clipboard as plain text. There is no file download yet. The store is `logs.sqlite` in the app data folder and it fills on every connection, so logging needs no setup.
 
-The log keeps what the game sent and each line you sent, marked `> `. Lines you type at a password prompt are not saved. Each one shows as `> (hidden)` in its place. Older versions of Vosh saved those lines in full, so a session you logged before updating can still show your password after a `> `. To clear it, quit Vosh and delete `logs.sqlite` and its `-wal` and `-shm` files from the app data folder. That removes every saved session. If you copied or shared one of those sessions, change your password in the game.
+The log keeps what the game sent and each line you sent, marked `> `. Lines you type at a password prompt are not saved. Each one shows as `> (hidden)` in its place. Older versions of Vosh saved those lines in full, so a session you logged before updating can still show your password after a `> `. The game also shows two kinds of password as you type them, the one you set for a new character and any you give a command like `password <old> <new>`, and the log saves those in full in every version.
+
+Type `#logs forget-passwords` to count the lines that hold a password. Vosh says how many it found and in how many sessions, and it never shows the lines themselves. Type `#logs forget-passwords now` to blank them. Each one then reads `> (hidden)`, and Vosh rewrites `logs.sqlite` so the old text is gone from the disk too. On a large log this takes a few seconds, and new game text waits until it finishes. When a copy of your log from before Vosh took its name still sits in the old app data folder, the command names that file and leaves it alone. If you copied or shared one of those sessions, change your password in the game.
 
 ### 7.5 Check for updates
 
@@ -681,6 +684,7 @@ This is every slash command Vosh understands today.
 - `#lua <code>` evaluates Lua inline.
 - `#profile save`, `#profile load`, `#profile reset` manage the profile snapshot. In loadout mode all three become notices.
 - `#import-tintin <path>` imports TinTin++ aliases and variables.
+- `#logs forget-passwords` counts the lines in your session log where you sent a password, and `#logs forget-passwords now` blanks them.
 - `#record <name>` starts recording, `#record` shows status, `#record cancel` discards, `#endrec` saves the recording as an alias.
 - `#qkey <name> <verb>` configures a quick key, `#qkey clear <name>` clears, `#qkeys` lists.
 - `#target <args>` mirrors `tar`, with `#target clear|next|prev`, `#tarn`, `#tarp`, `#tarclear` as slash forms.

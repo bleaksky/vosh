@@ -43,12 +43,18 @@ describe('the help on password prompts', () => {
 
   it('says a session from an older version can still hold a password, and how to clear it', () => {
     // Earlier builds wrote every sent line to logs.sqlite in full, and
-    // nothing removes those rows, so the help must not read as if none
-    // exist.
+    // the game shows some passwords as you type them, so the help must
+    // not read as if none exist. #logs forget-passwords clears them
+    // without deleting every saved session.
     const older =
-      'Older versions of Vosh saved those lines in full, so a session you logged before updating can still show your password after a `> `. To clear it, quit Vosh and delete `logs.sqlite` and its `-wal` and `-shm` files from the app data folder. That removes every saved session. If you copied or shared one of those sessions, change your password in the game.';
-    expect(body('characters-and-data.search-logs')).toContain(older);
-    expect(helpMd).toContain(older);
+      'Older versions of Vosh saved those lines in full, so a session you logged before updating can still show your password after a `> `. The game also shows two kinds of password as you type them, the one you set for a new character and any you give a command like `password <old> <new>`, and the log saves those in full in every version.';
+    const changeIt =
+      'If you copied or shared one of those sessions, change your password in the game.';
+    for (const text of [body('characters-and-data.search-logs'), helpMd]) {
+      expect(text).toContain(older);
+      expect(text).toContain(changeIt);
+      expect(text).not.toContain('That removes every saved session.');
+    }
   });
 
   it('says the masked field keeps the password out of the log and the pipeline', () => {
@@ -118,6 +124,39 @@ describe('the tick timer help', () => {
 
   it('reads the same in HELP.md', () => {
     const { number, title, body: text } = tickTopic();
+    expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
+  });
+});
+
+describe('the help on forgetting passwords in the session log', () => {
+  const logsParagraph =
+    'Type `#logs forget-passwords` to count the lines that hold a password. Vosh says how many it found and in how many sessions, and it never shows the lines themselves. Type `#logs forget-passwords now` to blank them. Each one then reads `> (hidden)`, and Vosh rewrites `logs.sqlite` so the old text is gone from the disk too. On a large log this takes a few seconds, and new game text waits until it finishes. When a copy of your log from before Vosh took its name still sits in the old app data folder, the command names that file and leaves it alone.';
+  const referenceBullet =
+    '- `#logs forget-passwords` counts the lines in your session log where you sent a password, and `#logs forget-passwords now` blanks them.';
+  const howToBullet =
+    '- Clear old passwords out of your session log with `#logs forget-passwords`, then `#logs forget-passwords now`.';
+
+  /** The topic with `id`, which must exist. */
+  function topic(id: string) {
+    const found = HELP_TOPICS.find((t) => t.id === id);
+    if (!found) throw new Error(`no help topic ${id}`);
+    return found;
+  }
+
+  it('says how to count and blank them in the session logs topic', () => {
+    expect(body('characters-and-data.search-logs')).toContain(logsParagraph);
+    expect(helpMd).toContain(logsParagraph);
+  });
+
+  it('lists the command with every slash command', () => {
+    const { number, title, body: text } = topic('reference.slash-commands');
+    expect(text).toContain(referenceBullet);
+    expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
+  });
+
+  it('lists the command where slash commands are taught', () => {
+    const { number, title, body: text } = topic('automate.slash-commands');
+    expect(text).toContain(howToBullet);
     expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
   });
 });
