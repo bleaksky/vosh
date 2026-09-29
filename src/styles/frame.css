@@ -385,6 +385,46 @@
   color: var(--warn);
 }
 
+/* The tick and the game time share one item, 8 apart inside it. Each
+   reading is a caption or a 12 px icon in tertiary, 6 before its value
+   in text. The warn tone takes the whole tick reading. */
+.shell-status-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shell-status-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shell-status-part > .shell-status-value {
+  margin-left: 0;
+}
+
+.shell-status-part.is-warn > .shell-status-value {
+  color: inherit;
+}
+
+.shell-status-part > svg {
+  flex: none;
+}
+
+/* Words a screen reader hears and the line does not show. */
+.shell-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* ── Title band menus ──────────────────────────────────────────────── */
 
 /* SPEC 7 menus on the SPEC 3 floating ground: padding 6, rows 30 tall
