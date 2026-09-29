@@ -54,7 +54,7 @@ import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
 import { CommandPalette } from './components/CommandPalette';
 import { disconnectSession } from './lib/session';
-import { isMacPlatform, type PaletteDeps } from './lib/palette';
+import { isMacPlatform, shortcutKey, type PaletteDeps } from './lib/palette';
 import {
   addPane,
   allPanes,
@@ -596,7 +596,8 @@ function App() {
   //   Mod+/        help
   //   Mod+Shift+L  show or hide the panel
   // The help modal carries its own search, so Mod+F and Mod+K stand
-  // down while it is open.
+  // down while it is open. Keys match through shortcutKey, so a
+  // Cyrillic or Greek layout still reaches them by the physical key.
   const shortcutState = useRef({ helpOpen, findOpen, paletteOpen, live: connection.live });
   const connectRef = useRef(connection.connect);
   useEffect(() => {
@@ -608,7 +609,7 @@ function App() {
     const onKey = (e: globalThis.KeyboardEvent) => {
       const primary = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       if (!primary || e.altKey) return;
-      const key = e.key.toLowerCase();
+      const key = shortcutKey(e);
       const {
         helpOpen: inHelp,
         findOpen: finding,
