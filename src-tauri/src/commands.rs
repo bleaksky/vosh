@@ -1991,9 +1991,11 @@ pub(crate) async fn scrollback_load(
     let sb = state.scrollback.lock().await;
     let bytes = sb.dump();
     // The native grid is fed only live output, so the persisted scrollback
-    // would be missing there. The live pane asks us to seed it once.
+    // would be missing there. The live pane asks us to seed it, and only
+    // the first ask per process lands. A reloaded page asks again while
+    // the grid still holds everything.
     #[cfg(native_surface)]
-    if feed_native && !bytes.is_empty() {
+    if feed_native && crate::term_grid::claim_seed() && !bytes.is_empty() {
         crate::term_grid::feed_bytes(&bytes);
         crate::native_surface::request_redraw();
     }
