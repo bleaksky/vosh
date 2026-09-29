@@ -34,7 +34,7 @@ pub(crate) fn bump_panes_generation() {
 }
 
 /// Read [`PANES_GENERATION`]. Call with the profile lock held.
-fn panes_generation() -> u64 {
+pub(crate) fn panes_generation() -> u64 {
     PANES_GENERATION.load(std::sync::atomic::Ordering::Acquire)
 }
 
@@ -187,7 +187,7 @@ pub(crate) type SharedState = Arc<AppState>;
 
 /// The error a profile command returns before startup has loaded the
 /// profile set.
-const PROFILES_NOT_LOADED: &str = "Vosh has not loaded your profiles yet.";
+pub(crate) const PROFILES_NOT_LOADED: &str = "Vosh has not loaded your profiles yet.";
 
 /// Snapshot the live profile and write it to the active profile's file
 /// under `<app_data_dir>/profiles/<active>.toml`. Failures are logged
