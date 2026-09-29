@@ -726,7 +726,7 @@ fn process_fired_line(
         Some(layer) => layer.keep_across(p, |p| input::run_line(p, line)),
         None => input::run_line(p, line),
     };
-    effects.note(line, ran.replaced);
+    effects.note_ran(line, &ran);
     if ran.replaced {
         crate::commands::bump_panes_generation();
     }
@@ -1768,9 +1768,20 @@ mod tests {
             LineEffects {
                 replaced: true,
                 dirty: false,
+                tick_changed: false,
             }
         );
         assert!(p.aliases.get("greet").is_none());
+    }
+
+    #[test]
+    fn a_tick_command_from_a_timer_notes_the_tick_change() {
+        let mut p = Profile::default();
+        let run = super::run_fired_locked(&mut p, "#tick warn at 10", None);
+        assert!(run.effects.tick_changed);
+        assert_eq!(p.tick.config.warn_at_secs, Some(10));
+        let run = super::run_fired_locked(&mut p, "#tick", None);
+        assert!(!run.effects.tick_changed);
     }
 
     #[test]

@@ -131,14 +131,23 @@ pub(crate) struct Ran {
     /// A `#profile reset`, or a `#profile load` that read its file,
     /// replaced the live profile.
     pub(crate) replaced: bool,
+    /// The line changed the tick settings, like `#tick warn at 10`.
+    pub(crate) tick_changed: bool,
 }
 
 /// Run `line` through the input pipeline: what to send, what to echo,
-/// and whether it replaced the live profile, for [`LineEffects::note`].
+/// whether it replaced the live profile, and whether it changed the
+/// tick settings, for [`LineEffects::note_ran`].
 pub(crate) fn run_line(profile: &mut Profile, line: &str) -> Ran {
     let mut replaced = false;
+    let tick_before = profile.tick.config.clone();
     let result = process_line(profile, line, &mut replaced);
-    Ran { result, replaced }
+    let tick_changed = profile.tick.config != tick_before;
+    Ran {
+        result,
+        replaced,
+        tick_changed,
+    }
 }
 
 /// What a run of input lines asks of the saved profile. Every path that
@@ -154,9 +163,23 @@ pub(crate) struct LineEffects {
     /// A durable change came after the last replace, or with none: a
     /// slash command, or Lua that changed durable state.
     pub(crate) dirty: bool,
+    /// A `#tick` command changed the tick settings. The status line and
+    /// the Settings Tick card show them, so every window hears the new
+    /// settings once the lines have run.
+    pub(crate) tick_changed: bool,
 }
 
 impl LineEffects {
+    /// Note one line [`run_line`] ran: [`Self::note`] with whether it
+    /// replaced the live profile, and whether it changed the tick
+    /// settings.
+    pub(crate) fn note_ran(&mut self, line: &str, ran: &Ran) {
+        self.note(line, ran.replaced);
+        if ran.tick_changed {
+            self.tick_changed = true;
+        }
+    }
+
     /// Note one line that ran through [`run_line`], with whether it
     /// replaced the live profile. The line alone cannot say: a `#profile
     /// load` whose file does not read leaves the profile as it was, and
@@ -1711,7 +1734,7 @@ mod tests {
         let mut effects = LineEffects::default();
         for line in lines {
             let ran = run_line(&mut p, line);
-            effects.note(line, ran.replaced);
+            effects.note_ran(line, &ran);
         }
         effects
     }
@@ -1719,12 +1742,67 @@ mod tests {
     const DIRTY: LineEffects = LineEffects {
         replaced: false,
         dirty: true,
+        tick_changed: false,
     };
 
     const REPLACED: LineEffects = LineEffects {
         replaced: true,
         dirty: false,
+        tick_changed: false,
     };
+
+    /// Whether `line` changed the tick settings of `p`.
+    fn changes_tick(p: &mut Profile, line: &str) -> bool {
+        run_line(p, line).tick_changed
+    }
+
+    #[test]
+    fn a_tick_command_that_changes_a_setting_says_so() {
+        let mut p = Profile::default();
+        for line in [
+            "#tick warn at 10",
+            "#tick warn at 5",
+            "#tick warn message duck",
+            "#tick warn color red",
+            "#tick warn off",
+            "#tick interval 40",
+            "#tick on {^The sun}",
+            "#tick off",
+            "#tick fire score",
+            "#tick nofire",
+            "#tick sound off",
+            "#tick disable",
+            "#tick enable",
+        ] {
+            assert!(changes_tick(&mut p, line), "{line}");
+        }
+    }
+
+    #[test]
+    fn a_line_that_leaves_the_tick_settings_alone_says_nothing() {
+        let mut p = Profile::default();
+        let _ = run_line(&mut p, "#tick warn at 10");
+        for line in [
+            "look",
+            "#tick",
+            "#tick warn",
+            "#tick reset",
+            "#tick warn at 10",
+            "#tick warn at nonsense",
+            "#tick interval 0",
+            "#alias greet wave",
+        ] {
+            assert!(!changes_tick(&mut p, line), "{line}");
+        }
+    }
+
+    #[test]
+    fn the_effects_remember_a_tick_change_across_the_run() {
+        let effects = effects_of(&["#tick warn at 10", "look"]);
+        assert!(effects.tick_changed);
+        assert!(effects.dirty);
+        assert!(!effects_of(&["#tick", "look"]).tick_changed);
+    }
 
     #[test]
     fn slash_commands_mark_the_profile_dirty() {
@@ -1751,6 +1829,7 @@ mod tests {
             LineEffects {
                 replaced: true,
                 dirty: true,
+                tick_changed: false,
             }
         );
     }
