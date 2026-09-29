@@ -1,6 +1,22 @@
 // Settings for the shared CodeMirror editor (src/components/CodeEditor.tsx)
 // that do not need the DOM, so tests can check them.
 
+import { HighlightStyle } from '@codemirror/language';
+import { tags as t } from '@lezer/highlight';
+
+/** Syntax colors for the code editor, drawn from the theme tokens, so
+ *  they keep their contrast on every theme, light or dark. CodeMirror's
+ *  own default palette is made for a white page, and its dark purple,
+ *  green, and red nearly vanish on a dark one. Names keep the text
+ *  color. */
+export const codeHighlightStyle = HighlightStyle.define([
+  { tag: t.keyword, color: 'var(--accent)' },
+  { tag: [t.string, t.special(t.string), t.regexp, t.escape], color: 'var(--success)' },
+  { tag: [t.number, t.bool, t.atom, t.null], color: 'var(--warn)' },
+  { tag: t.comment, color: 'var(--tertiary)', fontStyle: 'italic' },
+  { tag: t.invalid, color: 'var(--danger-text)' },
+]);
+
 /** How a code editor names itself to a screen reader. */
 export interface CodeEditorLabel {
   /** A name to read when no visible label names the editor. */
