@@ -44,7 +44,12 @@ import {
   subscribeSplitDividerChanged,
   type StatePayload,
 } from './lib/session';
-import { applyAndBroadcastTheme, getCurrentThemeId } from './lib/theme';
+import {
+  applyAndBroadcastTheme,
+  applyThemePrefs,
+  getCurrentThemeId,
+  subscribeThemePrefs,
+} from './lib/theme';
 import { loadFontStack } from './lib/fontLoader';
 import { defaultEnabledIds, PRESETS, presetTriggers } from './lib/presets';
 import { customToAppTheme, findTheme, setCustomThemes, themeTokens } from './lib/themes';
@@ -795,7 +800,9 @@ function App() {
         // the picked theme can actually be a custom entry.
         setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
         setBaseAnsi(cfg.terminal_base_ansi);
-        void applyAndBroadcastTheme(cfg.theme);
+        // This window owns following the OS appearance, so its flips
+        // reach the Terminal and every other window.
+        applyThemePrefs(cfg, { broadcast: true, broadcastFlips: true });
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
@@ -862,7 +869,7 @@ function App() {
           if (cancelled) return;
           setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
           setBaseAnsi(cfg.terminal_base_ansi);
-          void applyAndBroadcastTheme(cfg.theme);
+          applyThemePrefs(cfg, { broadcast: true });
           setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
           setFontSize(cfg.font_size || 14);
           setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
@@ -1043,6 +1050,24 @@ function App() {
     let cancelled = false;
     listen<boolean>('vosh://theme-terminal-colors-changed', (event) => {
       setThemeTerminalColors(Boolean(event.payload));
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Settings saved, or the palette picked, new theme fields. Keep this
+    // window's copy current so the OS listener and the next palette pick
+    // start from them. The sender already broadcast the resolved theme.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    subscribeThemePrefs((prefs) => {
+      applyThemePrefs(prefs);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;

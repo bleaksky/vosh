@@ -2,6 +2,11 @@
 // derived chrome token vars (lib/chrome) plus `data-theme` and
 // `data-appearance` attributes, and broadcasts a window event so the
 // Terminal can refresh its xterm palette.
+//
+// The active theme comes from four saved fields. While
+// follow_system_appearance is off it is `theme`. While it is on it is
+// `dark_theme` or `light_theme`, whichever matches the OS appearance,
+// and a prefers-color-scheme listener swaps them when the OS flips.
 
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -17,27 +22,155 @@ import {
 } from './themes';
 
 const SYNC_EVENT = 'vosh://theme-changed';
+/** Carries the four theme fields after a save or a palette pick, so a
+ *  window that keeps its own copy (Settings, the palette) stays current. */
+export const THEME_PREFS_EVENT = 'vosh://theme-prefs-changed';
+const DARK_QUERY = '(prefers-color-scheme: dark)';
 
 let cleanupContrastListener: (() => void) | null = null;
+let cleanupSchemeListener: (() => void) | null = null;
 let currentThemeId: string = DEFAULT_THEME_ID;
-let windowAppearance: Appearance | null = null;
+let windowAppearance: Appearance | 'system' | null = null;
+let themePrefs: ThemePrefs | null = null;
+let followingSystem = false;
+let broadcastFlips = false;
+
+/** The saved fields that decide which theme Vosh shows. UiConfig
+ *  carries all four. */
+export interface ThemePrefs {
+  theme: string;
+  follow_system_appearance: boolean;
+  light_theme: string;
+  dark_theme: string;
+}
+
+/** Just the four theme fields, so a whole UiConfig can be passed in. */
+export function themePrefsOf(ui: ThemePrefs): ThemePrefs {
+  return {
+    theme: ui.theme,
+    follow_system_appearance: ui.follow_system_appearance,
+    light_theme: ui.light_theme,
+    dark_theme: ui.dark_theme,
+  };
+}
+
+/** The theme id to show. Pure. `theme` while follow is off, else the
+ *  pair entry that matches the OS, falling back to `theme` when that
+ *  entry is blank. */
+export function resolveActiveTheme(ui: ThemePrefs, systemDark: boolean): string {
+  if (!ui.follow_system_appearance) return ui.theme;
+  const id = systemDark ? ui.dark_theme : ui.light_theme;
+  return id.length > 0 ? id : ui.theme;
+}
+
+/** Whether a theme reads as light or dark, from its derived chrome. */
+export function themeAppearance(id: string): Appearance {
+  return themeTokens(findTheme(id)).appearance;
+}
+
+/** The fields after you pick a theme in the gallery or the palette.
+ *  While follow is off the pick becomes `theme`. While it is on the pick
+ *  fills the light or dark slot that matches its own appearance, and
+ *  `theme` keeps the manual pick for when follow goes off again. The
+ *  caller shows resolveActiveTheme of the result, which is the pick
+ *  only when it matches the OS appearance. */
+export function pickTheme<T extends ThemePrefs>(ui: T, id: string): T {
+  if (!ui.follow_system_appearance) return { ...ui, theme: id };
+  return themeAppearance(id) === 'light' ? { ...ui, light_theme: id } : { ...ui, dark_theme: id };
+}
+
+/** Whether the OS asks for dark. False outside a browser. */
+export function systemPrefersDark(): boolean {
+  try {
+    return typeof window !== 'undefined' && window.matchMedia(DARK_QUERY).matches;
+  } catch {
+    return false;
+  }
+}
+
+/** The theme id the saved fields resolve to right now. */
+export function activeThemeFor(ui: ThemePrefs): string {
+  return resolveActiveTheme(ui, systemPrefersDark());
+}
 
 // Match the native window appearance to the theme: on macOS the window
 // rim and the inactive traffic lights, elsewhere the title bar where
 // the system draws one. It runs in whichever window applies the theme,
 // so the main and Settings windows each follow. Outside Tauri, or when
 // the call fails, the window keeps the system appearance.
+//
+// While following the system the window follows the OS instead. On
+// macOS the call sets the appearance for the whole app, and a forced
+// appearance also pins prefers-color-scheme in every webview, so the
+// listener below would never hear the OS flip.
 function syncWindowAppearance(appearance: Appearance) {
-  if (appearance === windowAppearance) return;
-  windowAppearance = appearance;
+  const want = followingSystem ? 'system' : appearance;
+  if (want === windowAppearance) return;
+  windowAppearance = want;
   const retry = () => {
     windowAppearance = null;
   };
   try {
-    getCurrentWindow().setTheme(appearance).catch(retry);
+    getCurrentWindow()
+      .setTheme(want === 'system' ? null : want)
+      .catch(retry);
   } catch {
     retry();
   }
+}
+
+// Swap the pair when the OS appearance flips. Installed while follow is
+// on, removed when it goes off.
+function followSystemScheme(on: boolean) {
+  followingSystem = on;
+  if (!on) {
+    cleanupSchemeListener?.();
+    cleanupSchemeListener = null;
+    return;
+  }
+  if (cleanupSchemeListener) return;
+  let mq: MediaQueryList;
+  try {
+    mq = window.matchMedia(DARK_QUERY);
+  } catch {
+    return;
+  }
+  const update = () => {
+    if (!themePrefs?.follow_system_appearance) return;
+    const id = resolveActiveTheme(themePrefs, mq.matches);
+    if (id === currentThemeId) return;
+    if (broadcastFlips) void applyAndBroadcastTheme(id);
+    else applyTheme(id);
+  };
+  mq.addEventListener('change', update);
+  cleanupSchemeListener = () => mq.removeEventListener('change', update);
+}
+
+export interface ThemePrefsOptions {
+  /** Send the resolved id to every window now. */
+  broadcast?: boolean;
+  /** Send the resolved id to every window each time the OS flips. The
+   *  main window owns this, so the Terminal repaints its palette. The
+   *  setting sticks until a later call passes it again. */
+  broadcastFlips?: boolean;
+}
+
+/** Remember the theme fields, show the theme they resolve to, and follow
+ *  the OS while follow is on. Returns the id it applied. */
+export function applyThemePrefs(prefs: ThemePrefs, options: ThemePrefsOptions = {}): string {
+  themePrefs = themePrefsOf(prefs);
+  if (options.broadcastFlips !== undefined) broadcastFlips = options.broadcastFlips;
+  followSystemScheme(themePrefs.follow_system_appearance);
+  const id = resolveActiveTheme(themePrefs, systemPrefersDark());
+  if (options.broadcast) void applyAndBroadcastTheme(id);
+  else applyTheme(id);
+  return id;
+}
+
+/** The theme fields this window last applied, or null before the
+ *  first applyThemePrefs. */
+export function getThemePrefs(): ThemePrefs | null {
+  return themePrefs;
 }
 
 function applyToRoot(theme: AppTheme) {
@@ -139,4 +272,33 @@ export async function subscribeThemeChanges(
 
 export function getCurrentThemeId(): string {
   return currentThemeId;
+}
+
+/** Tell every window the theme fields changed. */
+export async function broadcastThemePrefs(prefs: ThemePrefs): Promise<void> {
+  try {
+    await emit(THEME_PREFS_EVENT, themePrefsOf(prefs));
+  } catch {
+    // Tauri unavailable; the local copy is already current.
+  }
+}
+
+function isThemePrefs(value: unknown): value is ThemePrefs {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.theme === 'string' &&
+    typeof v.follow_system_appearance === 'boolean' &&
+    typeof v.light_theme === 'string' &&
+    typeof v.dark_theme === 'string'
+  );
+}
+
+/** Hear the theme fields another window saved. */
+export async function subscribeThemePrefs(
+  callback: (prefs: ThemePrefs) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(THEME_PREFS_EVENT, (event) => {
+    if (isThemePrefs(event.payload)) callback(themePrefsOf(event.payload));
+  });
 }

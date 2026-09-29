@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { sanitizeLayout, type PaneLayout } from './paneLayout';
+import { resolveActiveTheme, systemPrefersDark, THEME_PREFS_EVENT, themePrefsOf } from './theme';
 import { BUILTIN_THEMES, customToAppTheme, DEFAULT_THEME_ID, themeTokens } from './themes';
 
 /** Resolve the tri-state tint setting: an explicit user choice wins;
@@ -1141,7 +1142,21 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     prev?.custom_themes,
     deepEqual,
   );
-  await emitChanged('vosh://theme-changed', config.theme, prev?.theme);
+  // The four theme fields go out whole so Settings and the palette keep
+  // current copies. theme-changed carries the id they resolve to, which
+  // is `theme` unless follow is on.
+  await emitChanged(
+    THEME_PREFS_EVENT,
+    themePrefsOf(config),
+    prev ? themePrefsOf(prev) : undefined,
+    deepEqual,
+  );
+  const systemDark = systemPrefersDark();
+  await emitChanged(
+    'vosh://theme-changed',
+    resolveActiveTheme(config, systemDark),
+    prev ? resolveActiveTheme(prev, systemDark) : undefined,
+  );
   await emitChanged(
     'vosh://font-changed',
     { family: config.font_family, size: config.font_size },
