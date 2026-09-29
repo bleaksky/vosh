@@ -2502,23 +2502,52 @@ pub(crate) async fn tracked_affects_set(
 /// of the UI config. The main window's palette picks a theme while the
 /// Settings window may hold its own full snapshot, so a whole config
 /// write from one would overwrite the other's newer fields. The caller
-/// applies and broadcasts the theme itself.
+/// applies and broadcasts the theme itself. While follow system
+/// appearance is on, a pick fills the light or dark slot instead, so the
+/// caller also sends the pair.
 #[tauri::command]
 pub(crate) async fn ui_set_theme(
     app: AppHandle,
     state: State<'_, SharedState>,
     theme: String,
+    light_theme: Option<String>,
+    dark_theme: Option<String>,
 ) -> Result<(), String> {
     {
         let mut p = state.profile.lock().await;
-        if p.ui.theme == theme {
+        if !apply_theme_pick(&mut p.ui, theme, light_theme, dark_theme) {
             return Ok(());
         }
-        p.ui.theme = theme;
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
     Ok(())
+}
+
+/// Write a theme pick onto the live UI config. A missing or blank pair
+/// entry leaves that slot alone. Returns whether anything changed, so an
+/// unchanged pick skips the save.
+fn apply_theme_pick(
+    ui: &mut crate::profile_config::UiConfig,
+    theme: String,
+    light_theme: Option<String>,
+    dark_theme: Option<String>,
+) -> bool {
+    let mut changed = false;
+    let mut set = |slot: &mut String, value: String| {
+        if !value.is_empty() && *slot != value {
+            *slot = value;
+            changed = true;
+        }
+    };
+    set(&mut ui.theme, theme);
+    if let Some(v) = light_theme {
+        set(&mut ui.light_theme, v);
+    }
+    if let Some(v) = dark_theme {
+        set(&mut ui.dark_theme, v);
+    }
+    changed
 }
 
 /// Bulk-install a set of preset triggers. Each trigger should already
@@ -3185,6 +3214,34 @@ mod tests {
         }
         ui.terminal_line_height = "roomy".into();
         assert_eq!(through_payload(&ui).terminal_line_height, "default");
+    }
+
+    #[test]
+    fn a_theme_pick_writes_only_what_it_names() {
+        let mut ui = UiConfig::default();
+        assert!(super::apply_theme_pick(&mut ui, "nord".into(), None, None));
+        assert_eq!(ui.theme, "nord");
+        assert_eq!(ui.light_theme, "vellum");
+        assert_eq!(ui.dark_theme, "");
+
+        // A pick while following the system fills the dark slot.
+        assert!(super::apply_theme_pick(
+            &mut ui,
+            "nord".into(),
+            Some("vellum".into()),
+            Some("tokyo-night".into()),
+        ));
+        assert_eq!(ui.theme, "nord");
+        assert_eq!(ui.dark_theme, "tokyo-night");
+
+        // The same pick again changes nothing, and a blank slot is left alone.
+        assert!(!super::apply_theme_pick(
+            &mut ui,
+            "nord".into(),
+            Some(String::new()),
+            Some("tokyo-night".into()),
+        ));
+        assert_eq!(ui.light_theme, "vellum");
     }
 
     #[test]

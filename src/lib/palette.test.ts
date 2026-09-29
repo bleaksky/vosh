@@ -1,6 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
 import {
   buildPaletteEntries,
+  chooseTheme,
   initialSelection,
   paletteSections,
   shortcutKey,
@@ -13,6 +15,9 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) 
 vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => {})),
+}));
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: () => ({ setTheme: () => Promise.resolve() }),
 }));
 
 describe('shortcutKeys', () => {
@@ -168,5 +173,85 @@ describe('initialSelection', () => {
     const onlyDisconnect = flat(paletteSections(entries, 'disconnect', []));
     expect(initialSelection(onlyDisconnect, 'disconnect')).toBe(0);
     expect(initialSelection([], 'nothing matches')).toBe(-1);
+  });
+});
+
+describe('chooseTheme', () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockClear();
+    // A dark OS.
+    vi.stubGlobal('window', {
+      matchMedia: (query: string) => ({
+        matches: query.includes('dark'),
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    });
+    vi.stubGlobal('document', {
+      documentElement: { setAttribute: () => {}, style: { setProperty: () => {} } },
+    });
+  });
+
+  afterEach(async () => {
+    const { applyThemePrefs } = await import('./theme');
+    applyThemePrefs({
+      theme: 'obsidian-ember',
+      follow_system_appearance: false,
+      light_theme: 'vellum',
+      dark_theme: 'obsidian-ember',
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('sets the manual pick while follow is off', async () => {
+    const { applyThemePrefs, getCurrentThemeId, getThemePrefs } = await import('./theme');
+    applyThemePrefs({
+      theme: 'nord',
+      follow_system_appearance: false,
+      light_theme: 'vellum',
+      dark_theme: 'nord',
+    });
+    await chooseTheme('gruvbox');
+    expect(getCurrentThemeId()).toBe('gruvbox');
+    expect(getThemePrefs()?.theme).toBe('gruvbox');
+    expect(invoke).toHaveBeenCalledWith('ui_set_theme', {
+      theme: 'gruvbox',
+      lightTheme: 'vellum',
+      darkTheme: 'nord',
+    });
+  });
+
+  it('fills the slot that matches the pick while follow is on', async () => {
+    const { applyThemePrefs, getCurrentThemeId, getThemePrefs } = await import('./theme');
+    applyThemePrefs({
+      theme: 'nord',
+      follow_system_appearance: true,
+      light_theme: 'vellum',
+      dark_theme: 'tokyo-night',
+    });
+    await chooseTheme('rose-pine');
+    expect(getCurrentThemeId()).toBe('rose-pine');
+    expect(getThemePrefs()).toMatchObject({ theme: 'nord', dark_theme: 'rose-pine' });
+
+    // A light pick fills the light slot and stays hidden on a dark OS.
+    const { customToAppTheme, setCustomThemes } = await import('./themes');
+    setCustomThemes([
+      customToAppTheme({
+        id: 'paper',
+        label: 'Paper',
+        description: '',
+        xterm: { background: '#ffffff', foreground: '#222222' },
+        chrome: {},
+      }),
+    ]);
+    await chooseTheme('paper');
+    setCustomThemes([]);
+    expect(getThemePrefs()).toMatchObject({ light_theme: 'paper', dark_theme: 'rose-pine' });
+    expect(getCurrentThemeId()).toBe('rose-pine');
+    expect(invoke).toHaveBeenLastCalledWith('ui_set_theme', {
+      theme: 'nord',
+      lightTheme: 'paper',
+      darkTheme: 'rose-pine',
+    });
   });
 });
