@@ -5,7 +5,7 @@
 // applies and saves the results.
 
 import type { Appearance } from './chrome';
-import { ANSI_SLOTS, CANONICAL_ANSI_16 } from './baseAnsi';
+import { ANSI_SLOTS, CANONICAL_ANSI_16, type AnsiSlot } from './baseAnsi';
 import { DEFAULT_LIGHT_THEME_ID, type CustomTheme, type SystemFontEntry } from './session';
 import type { ThemePrefs } from './theme';
 import { themeIdFromLabel, uniqueThemeId } from './themeImport';
@@ -157,6 +157,74 @@ export function removeCustomTheme<T extends ThemeFields>(ui: T, id: string): T {
     dark_theme: ui.dark_theme === id ? DEFAULT_THEME_ID : ui.dark_theme,
   };
 }
+
+/** The visible names of the 16 ANSI slots. */
+export const ANSI_SLOT_LABELS: Readonly<Record<AnsiSlot, string>> = {
+  black: 'Black',
+  red: 'Red',
+  green: 'Green',
+  yellow: 'Yellow',
+  blue: 'Blue',
+  magenta: 'Magenta',
+  cyan: 'Cyan',
+  white: 'White',
+  brightBlack: 'Bright black',
+  brightRed: 'Bright red',
+  brightGreen: 'Bright green',
+  brightYellow: 'Bright yellow',
+  brightBlue: 'Bright blue',
+  brightMagenta: 'Bright magenta',
+  brightCyan: 'Bright cyan',
+  brightWhite: 'Bright white',
+};
+
+/** A group of slots the custom theme editor shows. Chrome slots pin a
+ *  window token the theme would otherwise derive. Terminal slots are
+ *  the theme's own palette. */
+export interface ThemeSlotGroup {
+  heading: string;
+  source: 'chrome' | 'xterm';
+  slots: readonly { key: string; label: string }[];
+}
+
+const ansiSlots = (keys: readonly AnsiSlot[]) =>
+  keys.map((key) => ({ key, label: ANSI_SLOT_LABELS[key] }));
+
+/** The custom theme editor's groups, in the order it shows them. */
+export const THEME_SLOT_GROUPS: readonly ThemeSlotGroup[] = [
+  {
+    heading: 'Accent and status',
+    source: 'chrome',
+    slots: [
+      { key: 'accent', label: 'Accent' },
+      { key: 'danger', label: 'Danger' },
+      { key: 'warn', label: 'Warning' },
+      { key: 'success', label: 'Success' },
+    ],
+  },
+  {
+    heading: 'Terminal',
+    source: 'xterm',
+    slots: [
+      { key: 'background', label: 'Background' },
+      { key: 'foreground', label: 'Text' },
+      { key: 'cursor', label: 'Cursor' },
+      { key: 'cursorAccent', label: 'Text under the cursor' },
+      { key: 'selectionBackground', label: 'Selection' },
+      { key: 'selectionForeground', label: 'Selected text' },
+    ],
+  },
+  {
+    heading: 'Normal colors',
+    source: 'xterm',
+    slots: ansiSlots(ANSI_SLOTS.slice(0, 8)),
+  },
+  {
+    heading: 'Bright colors',
+    source: 'xterm',
+    slots: ansiSlots(ANSI_SLOTS.slice(8)),
+  },
+];
 
 // ── Colors ───────────────────────────────────────────────────────────
 

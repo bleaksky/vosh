@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ANSI_SLOT_LABELS,
   basePalette,
   BUNDLED_FONTS,
   colorInputValue,
@@ -11,9 +12,11 @@ import {
   primaryFontFamily,
   removeCustomTheme,
   sizeChoices,
+  THEME_SLOT_GROUPS,
   withBaseColor,
 } from './appearanceSettings';
-import { CANONICAL_ANSI_16 } from './baseAnsi';
+import { ANSI_SLOTS, CANONICAL_ANSI_16 } from './baseAnsi';
+import { CHROME_COLOR_KEYS } from './chrome';
 import type { CustomTheme } from './session';
 import { galleryThemes } from './themeThumb';
 import { BUILTIN_THEMES, customToAppTheme, findTheme } from './themes';
@@ -249,5 +252,26 @@ describe('basePalette', () => {
     expect(next[15]).toBe('#eeeeee');
     expect(next[14]).toBe('#111111');
     expect(saved[15]).toBe('#111111');
+  });
+});
+
+describe('THEME_SLOT_GROUPS', () => {
+  it('covers every palette slot once and only chrome tokens a theme can pin', () => {
+    const xterm = THEME_SLOT_GROUPS.filter((g) => g.source === 'xterm').flatMap((g) =>
+      g.slots.map((s) => s.key),
+    );
+    expect(new Set(xterm).size).toBe(xterm.length);
+    expect(Object.keys(findTheme('nord').xterm).sort()).toEqual([...xterm].sort());
+    const chrome = THEME_SLOT_GROUPS.filter((g) => g.source === 'chrome').flatMap((g) =>
+      g.slots.map((s) => s.key),
+    );
+    for (const key of chrome) expect(CHROME_COLOR_KEYS).toContain(key);
+  });
+
+  it('names the ANSI slots in sentence case', () => {
+    expect(ANSI_SLOTS.map((s) => ANSI_SLOT_LABELS[s]).slice(7, 9)).toEqual([
+      'White',
+      'Bright black',
+    ]);
   });
 });

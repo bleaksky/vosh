@@ -30,11 +30,11 @@ import { WindowControls } from './components/settings/WindowControls';
 import { ChevronRightIcon } from './components/settings/ui';
 import type { SettingsPageProps } from './components/settings/pageTypes';
 import { GeneralGroup } from './components/settings/groups/GeneralGroup';
-import { AppearanceGroup } from './components/settings/groups/AppearanceGroup';
 import { LayoutGroup } from './components/settings/groups/LayoutGroup';
 import { InputGroup } from './components/settings/groups/InputGroup';
 import { AutomationGroup } from './components/settings/groups/AutomationGroup';
 import { CharactersPage } from './components/settings/pages/CharactersPage';
+import { AppearancePage } from './components/settings/pages/AppearancePage';
 
 // The Settings window (the approved Settings boards). A 200 px sidebar
 // with search and the six group nav, and a content column with the
@@ -56,7 +56,7 @@ interface GroupPage {
 
 const PAGES: Record<SettingsGroup, GroupPage> = {
   general: { Page: GeneralGroup },
-  appearance: { Page: AppearanceGroup },
+  appearance: { Page: AppearancePage },
   layout: { Page: LayoutGroup },
   input: { Page: InputGroup },
   automation: { Page: AutomationGroup },
