@@ -2245,95 +2245,87 @@ pub(crate) struct UiConfigPayload {
     pub chip_style: String,
 }
 
-#[tauri::command]
-pub(crate) async fn ui_get_config(
-    state: State<'_, SharedState>,
-) -> Result<UiConfigPayload, String> {
-    let p = state.profile.lock().await;
-    Ok(UiConfigPayload {
-        theme: p.ui.theme.clone(),
-        auto_update: p.ui.auto_update,
-        font_family: p.ui.font_family.clone(),
-        font_size: p.ui.font_size,
-        tracked_affects: p.ui.tracked_affects.clone(),
-        enabled_presets: p.ui.enabled_presets.clone(),
-        keep_last_command: p.ui.keep_last_command,
-        theme_terminal_colors: p.ui.theme_terminal_colors,
-        bright_bold: p.ui.bright_bold,
-        terminal_base_ansi: p.ui.terminal_base_ansi.clone(),
-        custom_themes: p.ui.custom_themes.clone(),
-        split_divider_color: p.ui.split_divider_color.clone(),
-        input_echo_color: p.ui.input_echo_color.clone(),
-        echo_macros: p.ui.echo_macros,
-        side_panels_fill_height: p.ui.side_panels_fill_height,
-        paste_line_delay_ms: p.ui.paste_line_delay_ms,
-        spellcheck_prompt: p.ui.spellcheck_prompt,
-        input_cursor_style: p.ui.input_cursor_style.clone(),
-        prompt_template_enabled: p.ui.prompt_template_enabled,
-        prompt_template: p.ui.prompt_template.clone(),
-        vitals: p.ui.vitals.clone(),
-        moons_position: p.ui.moons_position.clone(),
-        chip_style: p.ui.chip_style.clone(),
-    })
-}
+impl UiConfigPayload {
+    /// The snapshot `ui_get_config` hands the frontend.
+    pub(crate) fn from_ui(ui: &crate::profile_config::UiConfig) -> Self {
+        Self {
+            theme: ui.theme.clone(),
+            auto_update: ui.auto_update,
+            font_family: ui.font_family.clone(),
+            font_size: ui.font_size,
+            tracked_affects: ui.tracked_affects.clone(),
+            enabled_presets: ui.enabled_presets.clone(),
+            keep_last_command: ui.keep_last_command,
+            theme_terminal_colors: ui.theme_terminal_colors,
+            bright_bold: ui.bright_bold,
+            terminal_base_ansi: ui.terminal_base_ansi.clone(),
+            custom_themes: ui.custom_themes.clone(),
+            split_divider_color: ui.split_divider_color.clone(),
+            input_echo_color: ui.input_echo_color.clone(),
+            echo_macros: ui.echo_macros,
+            side_panels_fill_height: ui.side_panels_fill_height,
+            paste_line_delay_ms: ui.paste_line_delay_ms,
+            spellcheck_prompt: ui.spellcheck_prompt,
+            input_cursor_style: ui.input_cursor_style.clone(),
+            prompt_template_enabled: ui.prompt_template_enabled,
+            prompt_template: ui.prompt_template.clone(),
+            vitals: ui.vitals.clone(),
+            moons_position: ui.moons_position.clone(),
+            chip_style: ui.chip_style.clone(),
+        }
+    }
 
-#[tauri::command]
-pub(crate) async fn ui_set_config(
-    app: AppHandle,
-    state: State<'_, SharedState>,
-    config: UiConfigPayload,
-) -> Result<(), String> {
-    // Destructure the single IPC payload into the locals the
-    // validation block below consumes. Get and set now share one
-    // snake_case shape (`UiConfigPayload`); `dock_layout` stays out of
-    // it because it is managed separately via dock_layout_get/set.
-    let UiConfigPayload {
-        theme,
-        auto_update,
-        font_family,
-        font_size,
-        tracked_affects,
-        enabled_presets,
-        keep_last_command,
-        theme_terminal_colors,
-        bright_bold,
-        terminal_base_ansi,
-        custom_themes,
-        split_divider_color,
-        input_echo_color,
-        echo_macros,
-        side_panels_fill_height,
-        paste_line_delay_ms,
-        spellcheck_prompt,
-        input_cursor_style,
-        prompt_template_enabled,
-        prompt_template,
-        vitals,
-        moons_position,
-        chip_style,
-    } = config;
-    {
-        let mut p = state.profile.lock().await;
-        p.ui.theme = theme;
-        p.ui.auto_update = auto_update;
-        p.ui.font_family = font_family;
-        p.ui.font_size = font_size.clamp(6, 64);
-        p.ui.tracked_affects = crate::profile_config::normalize_tracked_affects(tracked_affects);
-        p.ui.enabled_presets = enabled_presets
+    /// Write every field onto the live UI config, normalizing as it
+    /// goes. `ui_set_config` calls this, and each Settings tab saves the
+    /// whole snapshot, so a field left out here would reset on the next
+    /// save from any tab. `dock_layout` stays out on purpose because it
+    /// travels through `dock_layout_get` and `dock_layout_set`.
+    pub(crate) fn apply_to(self, ui: &mut crate::profile_config::UiConfig) {
+        let UiConfigPayload {
+            theme,
+            auto_update,
+            font_family,
+            font_size,
+            tracked_affects,
+            enabled_presets,
+            keep_last_command,
+            theme_terminal_colors,
+            bright_bold,
+            terminal_base_ansi,
+            custom_themes,
+            split_divider_color,
+            input_echo_color,
+            echo_macros,
+            side_panels_fill_height,
+            paste_line_delay_ms,
+            spellcheck_prompt,
+            input_cursor_style,
+            prompt_template_enabled,
+            prompt_template,
+            vitals,
+            moons_position,
+            chip_style,
+        } = self;
+        ui.theme = theme;
+        ui.auto_update = auto_update;
+        ui.font_family = font_family;
+        ui.font_size = font_size.clamp(6, 64);
+        ui.tracked_affects = crate::profile_config::normalize_tracked_affects(tracked_affects);
+        ui.enabled_presets = enabled_presets
             .into_iter()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        p.ui.enabled_presets.sort();
-        p.ui.enabled_presets.dedup();
-        p.ui.keep_last_command = keep_last_command;
-        p.ui.theme_terminal_colors = theme_terminal_colors;
-        p.ui.bright_bold = bright_bold;
-        p.ui.terminal_base_ansi = terminal_base_ansi;
-        p.ui.custom_themes = custom_themes;
+        ui.enabled_presets.sort();
+        ui.enabled_presets.dedup();
+        ui.keep_last_command = keep_last_command;
+        ui.theme_terminal_colors = theme_terminal_colors;
+        ui.bright_bold = bright_bold;
+        ui.terminal_base_ansi = terminal_base_ansi;
+        ui.custom_themes = custom_themes;
         // Empty strings get normalized to None so the picker can clear
         // back to the theme default by submitting "".
-        p.ui.split_divider_color = split_divider_color.and_then(|s| {
+        ui.split_divider_color = split_divider_color.and_then(|s| {
             let trimmed = s.trim();
             if trimmed.is_empty() {
                 None
@@ -2341,7 +2333,7 @@ pub(crate) async fn ui_set_config(
                 Some(trimmed.to_string())
             }
         });
-        p.ui.input_echo_color = input_echo_color.and_then(|s| {
+        ui.input_echo_color = input_echo_color.and_then(|s| {
             let trimmed = s.trim();
             if trimmed.is_empty() {
                 None
@@ -2349,22 +2341,22 @@ pub(crate) async fn ui_set_config(
                 Some(trimmed.to_string())
             }
         });
-        p.ui.echo_macros = echo_macros;
-        p.ui.side_panels_fill_height = side_panels_fill_height;
+        ui.echo_macros = echo_macros;
+        ui.side_panels_fill_height = side_panels_fill_height;
         // Clamp to a sane range so a malformed input cannot freeze the
         // paste indicator (0–10s per line is plenty).
-        p.ui.paste_line_delay_ms = paste_line_delay_ms.min(10_000);
-        p.ui.spellcheck_prompt = spellcheck_prompt;
+        ui.paste_line_delay_ms = paste_line_delay_ms.min(10_000);
+        ui.spellcheck_prompt = spellcheck_prompt;
         // Coerce an unknown caret shape (hand-edited profile.toml, or a
         // value from a newer build) back to the default so the input
         // row always paints something.
-        p.ui.input_cursor_style = match input_cursor_style.as_str() {
+        ui.input_cursor_style = match input_cursor_style.as_str() {
             "block_outline" | "half_block" | "underline" | "underline_thick" | "pipe"
             | "pipe_thick" => input_cursor_style,
             _ => "block".to_string(),
         };
-        p.ui.prompt_template_enabled = prompt_template_enabled;
-        p.ui.prompt_template = prompt_template;
+        ui.prompt_template_enabled = prompt_template_enabled;
+        ui.prompt_template = prompt_template;
         // Normalize vitals glyphs + width. Empty glyph strings would
         // render zero-width bars; collapse to the default in that case
         // so the user cannot accidentally hide the bar via a typo.
@@ -2402,21 +2394,41 @@ pub(crate) async fn ui_set_config(
         if v.bar_layout != "plain" && v.bar_layout != "with_history" {
             v.bar_layout = "plain".to_string();
         }
-        p.ui.vitals = v;
+        ui.vitals = v;
         // Coerce an unknown moons_position value back to "right-edge"
         // so a hand-edited profile.toml typo cannot leave the status
         // bar rendering moons in an unrecognized slot.
-        p.ui.moons_position = match moons_position.as_str() {
+        ui.moons_position = match moons_position.as_str() {
             "before-time" | "after-time" | "right-edge" => moons_position,
             _ => "right-edge".to_string(),
         };
         // Same coercion for chip_style — an unknown variant from a
         // hand-edited profile.toml falls back to the default rather
         // than letting the frontend render a chip with no style.
-        p.ui.chip_style = match chip_style.as_str() {
+        ui.chip_style = match chip_style.as_str() {
             "value_only" | "caption_value" | "icon_value" => chip_style,
             _ => "value_only".to_string(),
         };
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn ui_get_config(
+    state: State<'_, SharedState>,
+) -> Result<UiConfigPayload, String> {
+    let p = state.profile.lock().await;
+    Ok(UiConfigPayload::from_ui(&p.ui))
+}
+
+#[tauri::command]
+pub(crate) async fn ui_set_config(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    config: UiConfigPayload,
+) -> Result<(), String> {
+    {
+        let mut p = state.profile.lock().await;
+        config.apply_to(&mut p.ui);
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
