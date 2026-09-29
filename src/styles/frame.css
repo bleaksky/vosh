@@ -424,6 +424,23 @@
   flex: none;
 }
 
+/* The moons in the sky after the time, 14 px each and 4 apart, in
+   their own colors. The sky's one word follows in the warn tone. */
+.shell-status-moons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.shell-status-moons > svg {
+  flex: none;
+  display: block;
+}
+
+.shell-status-alignment {
+  color: var(--warn);
+}
+
 /* Words a screen reader hears and the line does not show. */
 .shell-sr {
   position: absolute;

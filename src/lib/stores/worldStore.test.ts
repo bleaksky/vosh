@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { moonLabel, moonPhaseWord, parseMoons, parseWorldTime } from './worldStore';
+import {
+  moonAlignment,
+  moonLabel,
+  moonPhaseWord,
+  moonTitle,
+  parseMoons,
+  parseWorldTime,
+} from './worldStore';
 
 describe('parseWorldTime', () => {
   it('reads the Aabahran payload, which has no minute', () => {
@@ -71,6 +78,24 @@ describe('moon labels', () => {
       'waning',
     ]);
     expect(moonPhaseWord(null)).toBeNull();
+  });
+
+  it('titles a moon with the server wording, else the phase word', () => {
+    const moon = { name: 'Lysenties', active: true, phase: 2, phase_name: 'half-lit and growing' };
+    expect(moonTitle(moon)).toBe('Lysenties, half-lit and growing');
+    expect(moonTitle({ ...moon, phase_name: null })).toBe('Lysenties, waxing');
+    expect(moonTitle({ ...moon, phase: null, phase_name: null })).toBe('Lysenties');
+  });
+
+  it('names one sky event, eclipse over triad over near alignment', () => {
+    const sky = { moons: [], eclipse: false, triad: false, near_alignment: false };
+    expect(moonAlignment(null)).toBeNull();
+    expect(moonAlignment(sky)).toBeNull();
+    expect(moonAlignment({ ...sky, near_alignment: true })).toBe('Near alignment');
+    expect(moonAlignment({ ...sky, triad: true, near_alignment: true })).toBe('Triad');
+    expect(moonAlignment({ ...sky, eclipse: true, triad: true, near_alignment: true })).toBe(
+      'Eclipse',
+    );
   });
 
   it('labels the first moon in the sky, else the first listed', () => {

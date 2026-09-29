@@ -1,10 +1,11 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { ChipStyle } from '../../lib/session';
 import { MoonIcon, StopwatchIcon, SunIcon } from './icons';
+import { MoonPhaseIcon } from './MoonPhaseIcon';
 
-// The tick and the game time as one status line item, drawn from plain
-// values so a test can render it without the stores. StatusLine reads
-// the stores and the theme and hands them in.
+// The tick, the game time, and the moons as one status line item,
+// drawn from plain values so a test can render it without the stores.
+// StatusLine reads the stores and the theme and hands them in.
 
 export interface ClockTick {
   /** Whole seconds since the last tick. */
@@ -22,16 +23,34 @@ export interface ClockTime {
   daytime: boolean | null;
 }
 
+export interface ClockMoon {
+  name: string;
+  phase: number | null;
+  /** The moon's color from the theme. */
+  color: string;
+  /** Like "Lysenties, half-lit and growing". */
+  label: string;
+}
+
+export interface ClockMoons {
+  /** The moons in the sky, in the order the server lists them. */
+  moons: ClockMoon[];
+  /** Eclipse, Triad, or Near alignment, or null for a quiet sky. */
+  alignment: string | null;
+}
+
 interface Props {
   style: ChipStyle;
   tick: ClockTick | null;
   time: ClockTime | null;
+  moons?: ClockMoons | null;
 }
 
-/** The tick and the game time as one item, tick first, 8 px apart.
- *  Renders nothing while neither is known. */
-export function StatusClock({ style, tick, time }: Props) {
-  if (!tick && !time) return null;
+/** The tick, the game time, and the moons as one item, in that order,
+ *  8 px apart. Renders nothing while none of them is known. */
+export function StatusClock({ style, tick, time, moons = null }: Props) {
+  const sky = moons && moons.moons.length > 0 ? moons : null;
+  if (!tick && !time && !sky) return null;
   return (
     <span className="shell-status-clock">
       {tick && (
@@ -52,6 +71,24 @@ export function StatusClock({ style, tick, time }: Props) {
           valueStyle={time.tint ? { color: time.tint } : undefined}
         />
       )}
+      {sky && <Moons style={style} moons={sky} />}
+    </span>
+  );
+}
+
+/** The moons at 14 px, 4 px apart, after their caption in the Caption
+ *  style, then the sky's one word in the warn tone. The icons stand in
+ *  for values, so Value and Icon look the same. */
+function Moons({ style, moons }: { style: ChipStyle; moons: ClockMoons }) {
+  return (
+    <span className="shell-status-part">
+      <span className={style === 'caption_value' ? undefined : 'shell-sr'}>Moons</span>
+      <span className="shell-status-moons">
+        {moons.moons.map((moon) => (
+          <MoonPhaseIcon key={moon.name} phase={moon.phase} color={moon.color} label={moon.label} />
+        ))}
+      </span>
+      {moons.alignment && <span className="shell-status-alignment">{moons.alignment}</span>}
     </span>
   );
 }
