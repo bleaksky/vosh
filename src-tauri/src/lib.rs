@@ -332,10 +332,22 @@ pub fn run() {
                 }
                 match open_log_store(&path) {
                     Ok(store) => {
+                        // Searches read through a second connection so
+                        // they never wait on, or hold up, the session
+                        // loop's appends. Without it they share the
+                        // writer.
+                        let reader = match open_log_store(&path) {
+                            Ok(reader) => Some(reader),
+                            Err(e) => {
+                                tracing::warn!(error = %e, "log reader failed to open; searches share the writer");
+                                None
+                            }
+                        };
                         let logs = state.logs.clone();
+                        let log_reader = state.log_reader.clone();
                         tauri::async_runtime::block_on(async move {
-                            let mut guard = logs.lock().await;
-                            *guard = Some(store);
+                            *logs.lock().await = Some(store);
+                            *log_reader.lock().await = reader;
                         });
                     }
                     Err(e) => {

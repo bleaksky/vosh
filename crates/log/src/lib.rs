@@ -790,4 +790,37 @@ mod tests {
             Err(LogError::Regex(_))
         ));
     }
+
+    #[test]
+    fn a_second_connection_reads_while_the_first_writes() {
+        // The app searches through a second connection so a long scan
+        // never holds up the session loop's appends.
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("vosh-log-{}-{nanos}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("logs.sqlite");
+        let mut writer = LogStore::open(&path).unwrap();
+        let reader = LogStore::open(&path).unwrap();
+        let id = writer.start_session("h", 1, 0).unwrap();
+        writer.append(id, 1, "first line", None).unwrap();
+
+        // Hold a read open on the reader while the writer appends.
+        let mut stmt = reader.conn.prepare("SELECT text FROM log_lines").unwrap();
+        let mut rows = stmt.query([]).unwrap();
+        assert!(rows.next().unwrap().is_some());
+        writer.append(id, 2, "second line", None).unwrap();
+        drop(rows);
+        drop(stmt);
+
+        let page = reader
+            .search_page("line", &SearchOptions::default(), true)
+            .unwrap();
+        assert_eq!(page.total, Some(2));
+        drop(reader);
+        drop(writer);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
