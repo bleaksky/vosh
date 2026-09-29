@@ -1,0 +1,372 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import fixture from '../../fixtures/pane-layout/sanitize.json';
+import {
+  addPane,
+  allPanes,
+  closePane,
+  defaultLayout,
+  findNode,
+  isLeaf,
+  replacePane,
+  sanitize,
+  sanitizeLayout,
+  setWeights,
+  splitPane,
+  type PaneLayout,
+  type PaneNode,
+  type PaneSplit,
+} from './paneLayout';
+
+const tauri = vi.hoisted(() => ({
+  invoke: vi.fn(),
+  handlers: new Map<string, (event: { payload: unknown }) => void>(),
+}));
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: tauri.invoke }));
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn((name: string, handler: (event: { payload: unknown }) => void) => {
+    tauri.handlers.set(name, handler);
+    return Promise.resolve(() => tauri.handlers.delete(name));
+  }),
+}));
+
+// The shape serde writes: empty props, empty children and a null
+// width are left out.
+function wire(layout: PaneLayout): unknown {
+  const node = (n: PaneNode): unknown =>
+    isLeaf(n)
+      ? {
+          id: n.id,
+          pane: n.pane,
+          weight: n.weight,
+          ...(Object.keys(n.props).length > 0 ? { props: n.props } : {}),
+        }
+      : {
+          id: n.id,
+          split: n.split,
+          weight: n.weight,
+          ...(n.children.length > 0 ? { children: n.children.map(node) } : {}),
+        };
+  return {
+    version: layout.version,
+    panel_open: layout.panel_open,
+    ...(layout.panel_width !== null ? { panel_width: layout.panel_width } : {}),
+    root: node(layout.root),
+  };
+}
+
+// Compact shape for asserting a tree: pane type and weight per leaf,
+// split direction per split.
+function shape(node: PaneNode): unknown {
+  return isLeaf(node)
+    ? [node.pane, node.weight]
+    : { [node.split]: node.children.map((c) => shape(c)) };
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === 'object') {
+    Object.values(value).forEach(deepFreeze);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+const root = (): PaneSplit => deepFreeze(defaultLayout().root);
+
+describe('sanitize', () => {
+  // The same cases run against PaneLayoutPersist::sanitize in Rust.
+  for (const c of fixture.cases) {
+    it(c.name, () => {
+      const once = sanitizeLayout(c.input);
+      expect(wire(once)).toEqual(c.expected);
+      expect(sanitizeLayout(once)).toEqual(once);
+    });
+  }
+
+  it('accepts anything and always returns a split root', () => {
+    for (const junk of [null, 42, 'map', [], { pane: 7 }, { children: 'no' }]) {
+      const tree = sanitize(junk);
+      expect(isLeaf(tree)).toBe(false);
+      expect(tree.children).toEqual([]);
+    }
+  });
+
+  it('sorts props by key so a round trip through Rust compares equal', () => {
+    const tree = sanitize({ pane: 'chat', props: { b: '2', a: '1', skip: 3 } });
+    const chat = tree.children[0];
+    expect(isLeaf(chat) && Object.keys(chat.props)).toEqual(['a', 'b']);
+  });
+});
+
+describe('splitPane', () => {
+  it('splits right into a row that halves the old share', () => {
+    const next = splitPane(root(), 'affects', 'row', 'group');
+    expect(shape(next)).toEqual({
+      column: [
+        ['map', 0.6],
+        {
+          row: [
+            ['affects', 0.5],
+            ['group', 0.5],
+          ],
+        },
+      ],
+    });
+    expect(findNode(next, 'group')).not.toBeNull();
+    expect(findNode(next, 'split')).not.toBeNull();
+  });
+
+  it('adds a sibling when the parent already runs that way', () => {
+    const next = splitPane(root(), 'affects', 'column', 'chat');
+    expect(shape(next)).toEqual({
+      column: [
+        ['map', 0.6],
+        ['affects', 0.2],
+        ['chat', 0.2],
+      ],
+    });
+  });
+
+  it('moves a pane already shown elsewhere', () => {
+    const three = addPane(root(), 'group');
+    const next = splitPane(three, 'affects', 'row', 'group');
+    expect(allPanes(next)).toEqual(['map', 'affects', 'group']);
+    expect(shape(next)).toEqual({
+      column: [
+        ['map', 0.6],
+        {
+          row: [
+            ['affects', 0.5],
+            ['group', 0.5],
+          ],
+        },
+      ],
+    });
+  });
+
+  it('leaves the tree alone for the root, an unknown id, or the same pane', () => {
+    const tree = root();
+    expect(splitPane(tree, 'root', 'row', 'group')).toBe(tree);
+    expect(splitPane(tree, 'nope', 'row', 'group')).toBe(tree);
+    expect(splitPane(tree, 'map', 'row', 'map')).toBe(tree);
+  });
+});
+
+describe('closePane', () => {
+  it('gives the space to the siblings', () => {
+    expect(shape(closePane(root(), 'affects'))).toEqual({ column: [['map', 1]] });
+  });
+
+  it('collapses a split left with one child', () => {
+    const split = splitPane(root(), 'affects', 'row', 'group');
+    const next = closePane(split, 'group');
+    expect(next).toEqual(root());
+  });
+
+  it('empties the panel when the last pane or the root closes', () => {
+    const one = closePane(root(), 'affects');
+    const none = closePane(one, 'map');
+    expect(none).toEqual({ id: 'root', split: 'column', weight: 1, children: [] });
+    expect(closePane(root(), 'root').children).toEqual([]);
+  });
+
+  it('leaves the tree alone for an unknown id', () => {
+    const tree = root();
+    expect(closePane(tree, 'nope')).toBe(tree);
+  });
+});
+
+describe('replacePane', () => {
+  it('keeps the id and share and resets props', () => {
+    const withProps = sanitize({
+      id: 'root',
+      split: 'column',
+      children: [
+        { id: 'map', pane: 'map', weight: 0.6 },
+        { id: 'talk', pane: 'chat', weight: 0.4, props: { channel: 'tell' } },
+      ],
+    });
+    const next = replacePane(withProps, 'talk', 'group');
+    expect(findNode(next, 'talk')).toEqual({ id: 'talk', pane: 'group', weight: 0.4, props: {} });
+  });
+
+  it('moves a pane already shown elsewhere', () => {
+    const next = replacePane(root(), 'affects', 'map');
+    expect(allPanes(next)).toEqual(['map']);
+    expect(next.children[0].id).toBe('affects');
+  });
+
+  it('leaves the tree alone for a split, an unknown id, or the same pane', () => {
+    const tree = root();
+    expect(replacePane(tree, 'root', 'chat')).toBe(tree);
+    expect(replacePane(tree, 'nope', 'chat')).toBe(tree);
+    expect(replacePane(tree, 'map', 'map')).toBe(tree);
+  });
+});
+
+describe('setWeights', () => {
+  it('normalizes pixel sizes into shares', () => {
+    expect(shape(setWeights(root(), 'root', [300, 100]))).toEqual({
+      column: [
+        ['map', 0.75],
+        ['affects', 0.25],
+      ],
+    });
+  });
+
+  it('ignores a length mismatch, a bad weight, or a leaf', () => {
+    const tree = root();
+    expect(setWeights(tree, 'root', [1])).toBe(tree);
+    expect(setWeights(tree, 'root', [1, 0])).toBe(tree);
+    expect(setWeights(tree, 'root', [1, Number.NaN])).toBe(tree);
+    expect(setWeights(tree, 'map', [])).toBe(tree);
+  });
+});
+
+describe('addPane', () => {
+  it('appends to the root column with an even share', () => {
+    expect(shape(addPane(root(), 'group'))).toEqual({
+      column: [
+        ['map', 0.4],
+        ['affects', 0.2667],
+        ['group', 0.3333],
+      ],
+    });
+  });
+
+  it('fills an empty panel', () => {
+    const empty = closePane(root(), 'root');
+    expect(shape(addPane(empty, 'chat'))).toEqual({ column: [['chat', 1]] });
+  });
+
+  it('nests a row root under a new column and keeps the root id', () => {
+    const row = sanitize({
+      id: 'root',
+      split: 'row',
+      children: [{ pane: 'map' }, { pane: 'group' }],
+    });
+    const next = addPane(row, 'affects');
+    expect(next.id).toBe('root');
+    expect(shape(next)).toEqual({
+      column: [
+        {
+          row: [
+            ['map', 0.5],
+            ['group', 0.5],
+          ],
+        },
+        ['affects', 0.5],
+      ],
+    });
+  });
+
+  it('leaves the tree alone when the pane is already shown', () => {
+    const tree = root();
+    expect(addPane(tree, 'map')).toBe(tree);
+  });
+});
+
+describe('tree operations', () => {
+  it('never mutate their input and keep untouched ids', () => {
+    // root() is deep frozen, so any write inside an operation throws.
+    let tree = root();
+    tree = deepFreeze(splitPane(tree, 'affects', 'row', 'group'));
+    tree = deepFreeze(addPane(tree, 'chat'));
+    tree = deepFreeze(setWeights(tree, 'root', [2, 1, 1]));
+    tree = deepFreeze(replacePane(tree, 'chat', 'imm'));
+    tree = deepFreeze(closePane(tree, 'group'));
+    expect(findNode(tree, 'map')).not.toBeNull();
+    expect(findNode(tree, 'affects')).not.toBeNull();
+    expect(allPanes(tree)).toEqual(['map', 'affects', 'imm']);
+  });
+});
+
+describe('persistence', () => {
+  const layoutWith = (...panes: string[]): PaneLayout =>
+    sanitizeLayout({
+      root: { id: 'root', split: 'column', children: panes.map((pane) => ({ pane })) },
+    });
+
+  const flushMicrotasks = async () => {
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+  };
+
+  const emit = (name: string, payload: unknown) => tauri.handlers.get(name)?.({ payload });
+
+  // Fresh module state per test, since the sync state is module level.
+  const load = async () => {
+    vi.resetModules();
+    return import('./paneLayout');
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    tauri.invoke.mockReset();
+    tauri.handlers.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('coalesces a drag into one write after 250 ms', async () => {
+    const mod = await load();
+    tauri.invoke.mockResolvedValue(undefined);
+    mod.setPaneLayout(layoutWith('map'));
+    mod.setPaneLayout(layoutWith('map', 'chat'));
+    vi.advanceTimersByTime(249);
+    expect(tauri.invoke).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(tauri.invoke).toHaveBeenCalledTimes(1);
+    expect(tauri.invoke).toHaveBeenCalledWith('pane_layout_set', {
+      layout: layoutWith('map', 'chat'),
+    });
+  });
+
+  it('holds back an echo while a write is out and skips it once it matches', async () => {
+    const mod = await load();
+    const seen: PaneLayout[] = [];
+    await mod.subscribePaneLayout((l) => seen.push(l));
+    let finishWrite = () => {};
+    tauri.invoke.mockImplementation((cmd: string) =>
+      cmd === 'pane_layout_set'
+        ? new Promise<void>((resolve) => {
+            finishWrite = () => resolve();
+          })
+        : Promise.resolve(layoutWith('map', 'chat')),
+    );
+    mod.setPaneLayout(layoutWith('map', 'chat'));
+    vi.advanceTimersByTime(250);
+    emit('vosh://pane-layout-changed', layoutWith('map', 'chat'));
+    expect(seen).toEqual([]);
+    finishWrite();
+    await flushMicrotasks();
+    // The settle fetch returned what this window wrote, so nothing new.
+    expect(tauri.invoke).toHaveBeenCalledWith('pane_layout_get');
+    expect(seen).toEqual([]);
+  });
+
+  it('delivers a change from elsewhere when nothing is pending', async () => {
+    const mod = await load();
+    const seen: PaneLayout[] = [];
+    await mod.subscribePaneLayout((l) => seen.push(l));
+    emit('vosh://pane-layout-changed', layoutWith('group'));
+    expect(seen).toEqual([layoutWith('group')]);
+  });
+
+  it('drops a pending write on a profile switch and loads the new profile', async () => {
+    const mod = await load();
+    const seen: PaneLayout[] = [];
+    await mod.subscribePaneLayout((l) => seen.push(l));
+    tauri.invoke.mockResolvedValue(layoutWith('group', 'chat'));
+    mod.setPaneLayout(layoutWith('map'));
+    // The backend sends the new profile's tree, then the switch.
+    emit('vosh://pane-layout-changed', layoutWith('group', 'chat'));
+    expect(seen).toEqual([]);
+    emit('vosh://profile-switched', 'alt');
+    await flushMicrotasks();
+    expect(seen).toEqual([layoutWith('group', 'chat')]);
+    vi.advanceTimersByTime(1000);
+    expect(tauri.invoke).not.toHaveBeenCalledWith('pane_layout_set', expect.anything());
+  });
+});
