@@ -712,8 +712,8 @@ async fn fire_due_profile_timers(
 /// Run `line` through the input pipeline for a path other than typed
 /// input, and note what it asks of the saved profile the way the typed
 /// path does. Call with the profile lock held. A `#profile reset`, or a
-/// `#profile load` that reads its file, swaps the live panes, so the
-/// pane generation moves in the same step. The profile file it reads
+/// `#profile load` that reads its file, swaps the live UI config and
+/// panes, so their generations move in the same step. The profile file it reads
 /// holds none of the shared settings, so `shared` goes back over the
 /// result as it does for typed input.
 fn process_fired_line(
@@ -728,7 +728,7 @@ fn process_fired_line(
     };
     effects.note_ran(line, &ran);
     if ran.replaced {
-        crate::commands::bump_panes_generation();
+        crate::commands::note_ui_config_replaced();
     }
     ran.result
 }
@@ -1772,6 +1772,15 @@ mod tests {
             }
         );
         assert!(p.aliases.get("greet").is_none());
+    }
+
+    #[test]
+    fn a_reset_from_a_timer_turns_away_a_config_save_read_before_it() {
+        let mut p = Profile::default();
+        let mut effects = LineEffects::default();
+        let before = crate::commands::ui_config_generation();
+        let _ = super::process_fired_line(&mut p, "#profile reset", &mut effects, None);
+        assert!(crate::commands::ui_config_generation() > before);
     }
 
     #[test]

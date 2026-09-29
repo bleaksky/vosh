@@ -22,6 +22,11 @@ import type { DetailProps, DirtyReport, KindSpec } from './types';
 
 const TRIGGER_NOUN = { one: 'trigger', many: 'triggers' };
 
+/** The list of presets that are on went to a profile that Vosh has
+ *  since replaced, by a switch, a load, a reset, or an import. */
+const PRESETS_TURNED_AWAY =
+  'Vosh loaded another profile before your presets saved. Check them and save again.';
+
 interface PresetsEditorProps {
   config: UiConfig;
   setConfig: SetUiConfig;
@@ -65,7 +70,7 @@ export function PresetsEditor({
         if (install.length > 0) await presetsInstall(install);
         const enabled_presets = storedPresetIds(draftValues(draft));
         const next = { ...configRef.current, enabled_presets };
-        await setUiConfig(next);
+        if (!(await setUiConfig(next))) throw new Error(PRESETS_TURNED_AWAY);
         configRef.current = next;
         setConfig((prev) => (prev ? { ...prev, enabled_presets } : prev));
       },

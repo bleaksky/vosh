@@ -34,7 +34,9 @@ interface AutoSave {
 // quits, through pendingWrites.
 const autoSave = createDebouncedWrite<AutoSave>(async (job) => {
   try {
-    await setUiConfig(job.cfg);
+    // The backend turns a save away when it replaced the config after
+    // this copy was read, and the window reads the new one instead.
+    if (!(await setUiConfig(job.cfg))) return;
     applyThemePrefs(job.cfg);
     job.saved();
   } catch (e) {
@@ -79,8 +81,9 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
   );
   // A save still waiting on the debounce holds the previous profile's
   // snapshot. Drop it when the backend replaces the whole config, on a
-  // profile switch, #profile load, #profile reset, or an import, so it
-  // cannot land on the new profile once SettingsApp has read it again.
+  // profile switch, #profile load, #profile reset, or an import. The
+  // backend would turn it away anyway, as it does a save built on the
+  // old copy in the moment before SettingsApp has read the new one.
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;

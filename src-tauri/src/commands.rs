@@ -20,18 +20,41 @@ use crate::log_state::{SharedLogStore, SharedScrollback};
 /// Debounce generation for `mark_profile_dirty`: each mark bumps it, and
 /// the delayed persist only fires if no newer mark arrived while waiting.
 static PROFILE_DIRTY_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-/// Counts the times the live profile's UI config has been replaced
-/// wholesale (a profile switch). It moves under the profile lock in the
-/// same step that swaps the config, so a pane tree and the generation
-/// read with it always belong together. A pane layout write carries the
-/// generation of the tree it was edited from, and `pane_layout_set`
-/// refuses one from before a swap so it cannot land on the new profile.
+/// Counts the times the live profile's panes have been replaced: a
+/// wholesale replace of the UI config, or a pane reset. It moves under
+/// the profile lock in the same step that swaps them, so a pane tree
+/// and the generation read with it always belong together. A pane
+/// layout write carries the generation of the tree it was edited from,
+/// and `pane_layout_set` refuses one from before a swap so it cannot
+/// land on the new profile.
 static PANES_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Advance [`PANES_GENERATION`]. Call with the profile lock held, in the
-/// step that replaces the live UI config.
+/// step that replaces the live panes.
 pub(crate) fn bump_panes_generation() {
     PANES_GENERATION.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+}
+
+/// Counts the times the live profile's whole UI config has been
+/// replaced: a profile switch, an import, `#profile load` and `reset`.
+/// It moves under the profile lock in the same step that swaps the
+/// config. `ui_get_config` hands it out with the config, and a whole
+/// config save carries back the one it was read at, so `ui_set_config`
+/// refuses a copy from before a replace rather than write the old
+/// profile's values over the new one.
+static UI_CONFIG_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Note that the live UI config was replaced wholesale, panes included.
+/// Advances [`UI_CONFIG_GENERATION`] and [`PANES_GENERATION`]. Call with
+/// the profile lock held, in the step that swaps the config.
+pub(crate) fn note_ui_config_replaced() {
+    bump_panes_generation();
+    UI_CONFIG_GENERATION.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+}
+
+/// Read [`UI_CONFIG_GENERATION`]. Call with the profile lock held.
+pub(crate) fn ui_config_generation() -> u64 {
+    UI_CONFIG_GENERATION.load(std::sync::atomic::Ordering::Acquire)
 }
 
 /// Read [`PANES_GENERATION`]. Call with the profile lock held.
@@ -686,7 +709,7 @@ pub(crate) async fn session_send_input(
         // profile. A load that failed leaves it for the saves to write.
         effects.note_ran(&line, &ran);
         if ran.replaced {
-            bump_panes_generation();
+            note_ui_config_replaced();
         }
         let result = ran.result;
         let after_name = profile.target.name.clone();
@@ -1919,7 +1942,7 @@ pub(crate) async fn profile_import(
     let applied = {
         let mut p = state.profile.lock().await;
         let applied = snapshot.apply_to(&mut p);
-        bump_panes_generation();
+        note_ui_config_replaced();
         applied
     };
     let shared: SharedState = state.inner().clone();
@@ -2400,8 +2423,9 @@ async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), Stri
             lay_catalog_over(&mut p, catalog, loadouts.as_ref());
         }
         // Under the same lock as the swap, so a pane layout write edited
-        // from the old profile's tree is refused from here on.
-        bump_panes_generation();
+        // from the old profile's tree, or a whole config save read from
+        // the old profile, is refused from here on.
+        note_ui_config_replaced();
     }
     Ok(())
 }
@@ -2791,6 +2815,11 @@ pub(crate) struct UiConfigPayload {
     pub moons_position: String,
     pub chip_style: String,
     pub tick_count: String,
+    /// The [`UI_CONFIG_GENERATION`] this copy was read at. Never reaches
+    /// disk. A save without one (a config that never came from the
+    /// backend) applies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation: Option<u64>,
 }
 
 impl UiConfigPayload {
@@ -2829,6 +2858,7 @@ impl UiConfigPayload {
             moons_position: ui.moons_position.clone(),
             chip_style: ui.chip_style.clone(),
             tick_count: ui.tick_count.clone(),
+            generation: None,
         }
     }
 
@@ -2871,6 +2901,7 @@ impl UiConfigPayload {
             moons_position,
             chip_style,
             tick_count,
+            generation: _,
         } = self;
         ui.theme = theme;
         ui.follow_system_appearance = follow_system_appearance;
@@ -2993,27 +3024,50 @@ impl UiConfigPayload {
     }
 }
 
+/// The live UI config and the [`UI_CONFIG_GENERATION`] it was read at.
 #[tauri::command]
 pub(crate) async fn ui_get_config(
     state: State<'_, SharedState>,
 ) -> Result<UiConfigPayload, String> {
     let p = state.profile.lock().await;
-    Ok(UiConfigPayload::from_ui(&p.ui))
+    let mut payload = UiConfigPayload::from_ui(&p.ui);
+    payload.generation = Some(ui_config_generation());
+    Ok(payload)
 }
 
+/// Save the whole UI config. A copy read before the live config was last
+/// replaced is refused and returns false, and the caller reads the
+/// config again.
 #[tauri::command]
 pub(crate) async fn ui_set_config(
     app: AppHandle,
     state: State<'_, SharedState>,
     config: UiConfigPayload,
-) -> Result<(), String> {
-    {
+) -> Result<bool, String> {
+    let applied = {
         let mut p = state.profile.lock().await;
-        config.apply_to(&mut p.ui);
+        apply_ui_config(&mut p.ui, config, ui_config_generation())
+    };
+    if !applied {
+        return Ok(false);
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    Ok(())
+    Ok(true)
+}
+
+/// Write a whole config save onto `ui`, unless it was read at a
+/// generation other than `current`. Returns whether it applied.
+fn apply_ui_config(
+    ui: &mut crate::profile_config::UiConfig,
+    config: UiConfigPayload,
+    current: u64,
+) -> bool {
+    if config.generation.is_some_and(|g| g != current) {
+        return false;
+    }
+    config.apply_to(ui);
+    true
 }
 
 /// Replace a profile's tracked affects without touching the rest of
@@ -3940,6 +3994,70 @@ mod tests {
         ProfileConfig::from_toml(&config.to_toml().unwrap())
             .unwrap()
             .ui
+    }
+
+    /// A whole config save read at `generation`, holding `ui`.
+    fn save_of(ui: &UiConfig, generation: Option<u64>) -> UiConfigPayload {
+        let mut payload = UiConfigPayload::from_ui(ui);
+        payload.generation = generation;
+        payload
+    }
+
+    #[test]
+    fn a_save_read_before_a_replace_leaves_the_new_profile_alone() {
+        // The loaded profile counts up with the value alone.
+        let mut live = UiConfig {
+            tick_count: "up".into(),
+            chip_style: "value_only".into(),
+            ..UiConfig::default()
+        };
+        // Settings read the old profile at generation 3, and you moved
+        // the font size after #profile load took it to 4.
+        let old = UiConfig {
+            tick_count: "down".into(),
+            chip_style: "icon_value".into(),
+            font_size: 16,
+            ..UiConfig::default()
+        };
+        assert!(!super::apply_ui_config(
+            &mut live,
+            save_of(&old, Some(3)),
+            4
+        ));
+        assert_eq!(live.tick_count, "up");
+        assert_eq!(live.chip_style, "value_only");
+        assert_eq!(live.font_size, UiConfig::default().font_size);
+    }
+
+    #[test]
+    fn a_save_read_since_the_last_replace_applies() {
+        let mut live = UiConfig::default();
+        let edited = UiConfig {
+            font_size: 16,
+            tick_count: "up".into(),
+            ..UiConfig::default()
+        };
+        assert!(super::apply_ui_config(
+            &mut live,
+            save_of(&edited, Some(4)),
+            4
+        ));
+        assert_eq!(live.font_size, 16);
+        assert_eq!(live.tick_count, "up");
+        // A config that never came from the backend carries none.
+        let mut live = UiConfig::default();
+        assert!(super::apply_ui_config(&mut live, save_of(&edited, None), 4));
+        assert_eq!(live.font_size, 16);
+    }
+
+    #[test]
+    fn the_generation_travels_with_the_config_but_stays_optional() {
+        let json = serde_json::to_value(save_of(&UiConfig::default(), Some(7))).unwrap();
+        assert_eq!(json["generation"], serde_json::json!(7));
+        let json = serde_json::to_value(save_of(&UiConfig::default(), None)).unwrap();
+        assert!(json.get("generation").is_none());
+        let back: UiConfigPayload = serde_json::from_value(json).unwrap();
+        assert_eq!(back.generation, None);
     }
 
     #[test]
