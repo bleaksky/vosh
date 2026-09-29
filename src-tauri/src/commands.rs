@@ -1996,6 +1996,9 @@ async fn change_scope_locked(
     Ok(gained)
 }
 
+/// Replace a profile's description and login claim. The claim follows
+/// the login toggle's rules, and the result names every profile that
+/// lost a character to it. See [`crate::profile_set::ProfileSet::set_metadata`].
 #[tauri::command]
 pub(crate) async fn profile_set_metadata(
     app: AppHandle,
@@ -2003,17 +2006,17 @@ pub(crate) async fn profile_set_metadata(
     name: String,
     description: Option<String>,
     auto_match: Option<crate::profile_set::AutoMatch>,
-) -> Result<(), String> {
-    {
+) -> Result<crate::profile_set::LoginClaim, String> {
+    let claim = {
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
             return Err(PROFILES_NOT_LOADED.into());
         };
         set.set_metadata(&name, description, auto_match)
-            .map_err(|e| e.to_string())?;
-    }
+            .map_err(|e| e.to_string())?
+    };
     broadcast(&app, "vosh://profiles-changed", &name);
-    Ok(())
+    Ok(claim)
 }
 
 /// Given a connect target, find the first profile whose `auto_match`
