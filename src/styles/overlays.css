@@ -302,3 +302,82 @@
   line-height: 18px;
   color: var(--tertiary);
 }
+
+/* Menus (SPEC 7): the terminal right-click menu. 6 of inner padding,
+   30 tall rows at radius 8 with the text 12 in, shortcut hints on the
+   right in the tertiary tone, and separators inset 12 with 6 above and
+   below. The ov-menu classes suit any other floating menu too. */
+.ov-menu {
+  position: fixed;
+  z-index: 1000;
+  width: 232px;
+  padding: 6px;
+  border-radius: var(--r-float);
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  box-sizing: border-box;
+  outline: none;
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+.ov-menu-group {
+  display: block;
+}
+
+.ov-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-row);
+  outline: none;
+  background: transparent;
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  color: var(--text);
+  text-align: left;
+  cursor: default;
+}
+
+.ov-menu-item.is-active {
+  background: var(--ov-hl);
+}
+
+.ov-menu-item.is-danger {
+  color: var(--danger);
+}
+
+.ov-menu-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ov-menu-keys {
+  flex: none;
+  margin: 0 0 0 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+.ov-menu-sep {
+  height: 1px;
+  margin: 6px 12px;
+  background: var(--divider);
+}
