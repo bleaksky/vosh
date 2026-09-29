@@ -28,7 +28,6 @@ import { canonicalKeyFromEvent } from '../lib/macroKeys';
 import { recentNames } from '../lib/recentNames';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { LineChip } from './LineChip';
 import { nativeSurfaceEnabled } from './Terminal';
 
 export interface InputHandle {
@@ -960,7 +959,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       }`}
     >
       <span className="prompt" aria-hidden="true">
-        &#10095;
+        &#8250;
       </span>
       {lineCount > 1 && (
         <div className="input-gutter" aria-hidden="true" ref={gutterRef}>
@@ -1039,7 +1038,6 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
           }}
         />
       )}
-      <LineChip />
       {!passwordMode && <div className="input-caret-mirror" aria-hidden="true" ref={mirrorRef} />}
       {!passwordMode && caretPos && (
         <span
