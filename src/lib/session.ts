@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { sanitizeLayout, type PaneLayout } from './paneLayout';
-import { DEFAULT_THEME_ID } from './themes';
+import { BUILTIN_THEMES, customToAppTheme, DEFAULT_THEME_ID, themeTokens } from './themes';
 
 /** Resolve the tri-state tint setting: an explicit user choice wins;
  *  unset is on for every theme. The chrome derives its status colors
@@ -651,11 +651,48 @@ export function normalizeInputCursorStyle(value: unknown): InputCursorStyle {
     : 'block';
 }
 
+/** Terminal row spacing. Each id maps to the multiple of the glyph
+ *  height that xterm takes as `lineHeight`, and the native grid follows
+ *  through the cell size xterm reports. */
+export const TERMINAL_LINE_HEIGHTS = {
+  compact: 1.1,
+  default: 1.2,
+  loose: 1.35,
+} as const;
+
+export type TerminalLineHeight = keyof typeof TERMINAL_LINE_HEIGHTS;
+
+/** Coerce an unknown line height id back to the default. */
+export function normalizeTerminalLineHeight(value: unknown): TerminalLineHeight {
+  return value === 'compact' || value === 'loose' ? value : 'default';
+}
+
+/** The light theme a profile starts with. */
+export const DEFAULT_LIGHT_THEME_ID = 'vellum';
+
+/** The dark theme a profile that never saved one starts with: its
+ *  current theme when that theme is dark, else Obsidian Ember. */
+export function seedDarkTheme(theme: string, customThemes: CustomTheme[]): string {
+  const custom = customThemes.find((t) => t.id === theme);
+  const found = custom ? customToAppTheme(custom) : BUILTIN_THEMES.find((t) => t.id === theme);
+  return found && themeTokens(found).appearance === 'dark' ? theme : DEFAULT_THEME_ID;
+}
+
 export interface UiConfig {
+  /** The theme you picked. Vosh shows it while follow_system_appearance
+   *  is off. */
   theme: ThemeChoice;
+  /** Show light_theme or dark_theme to match the OS appearance. */
+  follow_system_appearance: boolean;
+  /** The theme shown while following the system and the OS is light. */
+  light_theme: string;
+  /** The theme shown while following the system and the OS is dark. */
+  dark_theme: string;
   auto_update: boolean;
   font_family: string;
   font_size: number;
+  /** Terminal row spacing, one of TERMINAL_LINE_HEIGHTS. */
+  terminal_line_height: TerminalLineHeight;
   tracked_affects: TrackedAffect[];
   enabled_presets: string[];
   keep_last_command: boolean;
@@ -855,37 +892,63 @@ export function getUiConfig(): Promise<UiConfig> {
   return uiConfigInFlight;
 }
 
+/** The raw shape `ui_get_config` returns, before normalizeUiConfig
+ *  fills gaps and coerces unknown values. */
+export interface RawUiConfig {
+  theme: string;
+  follow_system_appearance?: boolean;
+  light_theme?: string;
+  dark_theme?: string;
+  auto_update: boolean;
+  font_family: string;
+  font_size: number;
+  terminal_line_height?: string;
+  tracked_affects: unknown[];
+  enabled_presets: string[];
+  keep_last_command?: boolean;
+  theme_terminal_colors?: boolean;
+  bright_bold?: boolean;
+  terminal_base_ansi?: unknown;
+  custom_themes?: CustomTheme[];
+  split_divider_color?: string | null;
+  input_echo_color?: string | null;
+  echo_macros?: boolean;
+  side_panels_fill_height?: boolean;
+  paste_line_delay_ms?: number;
+  spellcheck_prompt?: boolean;
+  input_cursor_style?: string;
+  prompt_template_enabled?: boolean;
+  prompt_template?: string;
+  vitals?: Partial<VitalsConfig>;
+  moons_position?: string;
+  chip_style?: string;
+}
+
 async function fetchUiConfig(): Promise<UiConfig> {
-  const cfg = await invoke<{
-    theme: string;
-    auto_update: boolean;
-    font_family: string;
-    font_size: number;
-    tracked_affects: unknown[];
-    enabled_presets: string[];
-    keep_last_command?: boolean;
-    theme_terminal_colors?: boolean;
-    bright_bold?: boolean;
-    terminal_base_ansi?: unknown;
-    custom_themes?: CustomTheme[];
-    split_divider_color?: string | null;
-    input_echo_color?: string | null;
-    echo_macros?: boolean;
-    side_panels_fill_height?: boolean;
-    paste_line_delay_ms?: number;
-    spellcheck_prompt?: boolean;
-    input_cursor_style?: string;
-    prompt_template_enabled?: boolean;
-    prompt_template?: string;
-    vitals?: Partial<VitalsConfig>;
-    moons_position?: string;
-    chip_style?: string;
-  }>('ui_get_config');
+  return normalizeUiConfig(await invoke<RawUiConfig>('ui_get_config'));
+}
+
+/** Fill gaps and coerce unknown values in a raw config so every window
+ *  reads the same shape. */
+export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
+  const theme =
+    typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : DEFAULT_THEME_ID;
+  const customThemes = Array.isArray(cfg.custom_themes) ? cfg.custom_themes : [];
   return {
-    theme: typeof cfg.theme === 'string' && cfg.theme.length > 0 ? cfg.theme : DEFAULT_THEME_ID,
+    theme,
+    follow_system_appearance: cfg.follow_system_appearance === true,
+    light_theme:
+      typeof cfg.light_theme === 'string' && cfg.light_theme.length > 0
+        ? cfg.light_theme
+        : DEFAULT_LIGHT_THEME_ID,
+    dark_theme:
+      typeof cfg.dark_theme === 'string' && cfg.dark_theme.length > 0
+        ? cfg.dark_theme
+        : seedDarkTheme(theme, customThemes),
     auto_update: cfg.auto_update,
     font_family: cfg.font_family,
     font_size: cfg.font_size,
+    terminal_line_height: normalizeTerminalLineHeight(cfg.terminal_line_height),
     tracked_affects: Array.isArray(cfg.tracked_affects)
       ? normalizeTrackedAffects(cfg.tracked_affects)
       : [],
@@ -900,7 +963,7 @@ async function fetchUiConfig(): Promise<UiConfig> {
       cfg.terminal_base_ansi.every((c) => typeof c === 'string' && c.length > 0)
         ? (cfg.terminal_base_ansi as string[])
         : null,
-    custom_themes: Array.isArray(cfg.custom_themes) ? cfg.custom_themes : [],
+    custom_themes: customThemes,
     split_divider_color:
       typeof cfg.split_divider_color === 'string' && cfg.split_divider_color.length > 0
         ? cfg.split_divider_color
@@ -1178,9 +1241,13 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
   await invoke('ui_set_config', {
     config: {
       theme: config.theme,
+      follow_system_appearance: config.follow_system_appearance,
+      light_theme: config.light_theme,
+      dark_theme: config.dark_theme,
       auto_update: config.auto_update,
       font_family: config.font_family,
       font_size: config.font_size,
+      terminal_line_height: config.terminal_line_height,
       // Wire format intentionally drops `label: null` to the omitted
       // form so the backend's `Option<String>` deserializes cleanly.
       tracked_affects: config.tracked_affects.map((t) => ({

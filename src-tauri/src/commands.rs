@@ -2221,9 +2221,13 @@ pub(crate) struct ScrollbackLoad {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct UiConfigPayload {
     pub theme: String,
+    pub follow_system_appearance: bool,
+    pub light_theme: String,
+    pub dark_theme: String,
     pub auto_update: bool,
     pub font_family: String,
     pub font_size: u32,
+    pub terminal_line_height: String,
     pub tracked_affects: Vec<crate::profile_config::TrackedAffect>,
     pub enabled_presets: Vec<String>,
     pub keep_last_command: bool,
@@ -2250,9 +2254,13 @@ impl UiConfigPayload {
     pub(crate) fn from_ui(ui: &crate::profile_config::UiConfig) -> Self {
         Self {
             theme: ui.theme.clone(),
+            follow_system_appearance: ui.follow_system_appearance,
+            light_theme: ui.light_theme.clone(),
+            dark_theme: ui.dark_theme.clone(),
             auto_update: ui.auto_update,
             font_family: ui.font_family.clone(),
             font_size: ui.font_size,
+            terminal_line_height: ui.terminal_line_height.clone(),
             tracked_affects: ui.tracked_affects.clone(),
             enabled_presets: ui.enabled_presets.clone(),
             keep_last_command: ui.keep_last_command,
@@ -2283,9 +2291,13 @@ impl UiConfigPayload {
     pub(crate) fn apply_to(self, ui: &mut crate::profile_config::UiConfig) {
         let UiConfigPayload {
             theme,
+            follow_system_appearance,
+            light_theme,
+            dark_theme,
             auto_update,
             font_family,
             font_size,
+            terminal_line_height,
             tracked_affects,
             enabled_presets,
             keep_last_command,
@@ -2307,9 +2319,19 @@ impl UiConfigPayload {
             chip_style,
         } = self;
         ui.theme = theme;
+        ui.follow_system_appearance = follow_system_appearance;
+        // An empty light theme falls back to Vellum. An empty dark theme
+        // stays empty, which the frontend reads as the current theme.
+        ui.light_theme = match light_theme.trim() {
+            "" => "vellum".to_string(),
+            id => id.to_string(),
+        };
+        ui.dark_theme = dark_theme.trim().to_string();
         ui.auto_update = auto_update;
         ui.font_family = font_family;
         ui.font_size = font_size.clamp(6, 64);
+        ui.terminal_line_height =
+            crate::profile_config::coerce_terminal_line_height(terminal_line_height);
         ui.tracked_affects = crate::profile_config::normalize_tracked_affects(tracked_affects);
         ui.enabled_presets = enabled_presets
             .into_iter()
@@ -3092,7 +3114,90 @@ pub(crate) async fn updater_install_and_relaunch(app: AppHandle) -> Result<(), S
 
 #[cfg(test)]
 mod tests {
-    use super::ScrollbackLoad;
+    use super::{ScrollbackLoad, UiConfigPayload};
+    use crate::profile_config::{ProfileConfig, UiConfig};
+
+    /// Send `ui` the way Settings does: out through `ui_get_config`,
+    /// across the JSON bridge, and back through `ui_set_config` onto a
+    /// fresh config.
+    fn through_payload(ui: &UiConfig) -> UiConfig {
+        let json = serde_json::to_string(&UiConfigPayload::from_ui(ui)).unwrap();
+        let payload: UiConfigPayload = serde_json::from_str(&json).unwrap();
+        let mut out = UiConfig::default();
+        payload.apply_to(&mut out);
+        out
+    }
+
+    /// Save `ui` to a profile file and read it back.
+    fn through_toml(ui: &UiConfig) -> UiConfig {
+        let config = ProfileConfig {
+            ui: ui.clone(),
+            ..ProfileConfig::default()
+        };
+        ProfileConfig::from_toml(&config.to_toml().unwrap())
+            .unwrap()
+            .ui
+    }
+
+    #[test]
+    fn follow_system_appearance_round_trips() {
+        let ui = UiConfig {
+            follow_system_appearance: true,
+            ..UiConfig::default()
+        };
+        assert!(through_payload(&ui).follow_system_appearance);
+        assert!(through_toml(&ui).follow_system_appearance);
+        assert!(!through_payload(&UiConfig::default()).follow_system_appearance);
+    }
+
+    #[test]
+    fn light_theme_round_trips() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.light_theme, "vellum");
+        ui.light_theme = "classic-vivid".into();
+        assert_eq!(through_payload(&ui).light_theme, "classic-vivid");
+        assert_eq!(through_toml(&ui).light_theme, "classic-vivid");
+        // A blank pick saves as the default light theme.
+        ui.light_theme = "  ".into();
+        assert_eq!(through_payload(&ui).light_theme, "vellum");
+    }
+
+    #[test]
+    fn dark_theme_round_trips() {
+        let mut ui = UiConfig::default();
+        // Unset until the first save, so the frontend can seed it from
+        // the current theme.
+        assert_eq!(ui.dark_theme, "");
+        assert_eq!(through_payload(&ui).dark_theme, "");
+        ui.dark_theme = "nord".into();
+        assert_eq!(through_payload(&ui).dark_theme, "nord");
+        assert_eq!(through_toml(&ui).dark_theme, "nord");
+    }
+
+    #[test]
+    fn terminal_line_height_round_trips() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.terminal_line_height, "default");
+        for id in ["compact", "default", "loose"] {
+            ui.terminal_line_height = id.into();
+            assert_eq!(through_payload(&ui).terminal_line_height, id);
+            assert_eq!(through_toml(&ui).terminal_line_height, id);
+        }
+        ui.terminal_line_height = "roomy".into();
+        assert_eq!(through_payload(&ui).terminal_line_height, "default");
+    }
+
+    #[test]
+    fn a_profile_without_the_appearance_fields_loads_the_defaults() {
+        let ui = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.theme, "nord");
+        assert!(!ui.follow_system_appearance);
+        assert_eq!(ui.light_theme, "vellum");
+        assert_eq!(ui.dark_theme, "");
+        assert_eq!(ui.terminal_line_height, "default");
+    }
 
     #[test]
     fn auto_switch_line_names_the_profile_in_a_sentence() {

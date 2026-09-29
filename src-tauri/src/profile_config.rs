@@ -135,6 +135,19 @@ pub(crate) struct UiConfig {
     /// theme if the id no longer resolves.
     #[serde(default = "default_theme")]
     pub theme: String,
+    /// Show `light_theme` or `dark_theme` to match the OS appearance.
+    /// Off by default, and `theme` stays the pick while it is off. Part
+    /// of the `theme` scope category.
+    #[serde(default)]
+    pub follow_system_appearance: bool,
+    /// The theme shown while following the system and the OS is light.
+    #[serde(default = "default_light_theme")]
+    pub light_theme: String,
+    /// The theme shown while following the system and the OS is dark.
+    /// Empty until the first save. The frontend reads empty as the
+    /// current theme when that theme is dark, else Obsidian Ember.
+    #[serde(default)]
+    pub dark_theme: String,
     /// Opt in to background update checks. Off by default.
     #[serde(default)]
     pub auto_update: bool,
@@ -145,6 +158,11 @@ pub(crate) struct UiConfig {
     /// Terminal font size in pixels.
     #[serde(default = "default_font_size")]
     pub font_size: u32,
+    /// Terminal row spacing: `compact`, `default`, or `loose` (1.1,
+    /// 1.2, and 1.35 times the glyph height). Part of the `font` scope
+    /// category. Unknown values coerce back to `default` on save.
+    #[serde(default = "default_terminal_line_height")]
+    pub terminal_line_height: String,
     /// Affect names rendered as pills in the status bar. Present affects
     /// show their remaining duration; absent ones render as a struck-out
     /// red-bordered pill so the player notices the gap at a glance.
@@ -1065,9 +1083,13 @@ impl Default for UiConfig {
     fn default() -> Self {
         Self {
             theme: default_theme(),
+            follow_system_appearance: false,
+            light_theme: default_light_theme(),
+            dark_theme: String::new(),
             auto_update: false,
             font_family: default_font_family(),
             font_size: default_font_size(),
+            terminal_line_height: default_terminal_line_height(),
             tracked_affects: Vec::new(),
             enabled_presets: Vec::new(),
             dock_layout: Vec::new(),
@@ -1095,6 +1117,27 @@ impl Default for UiConfig {
 
 fn default_theme() -> String {
     "obsidian-ember".to_string()
+}
+
+fn default_light_theme() -> String {
+    "vellum".to_string()
+}
+
+/// The line height ids the terminal knows. Anything else saves as the
+/// default.
+pub(crate) const TERMINAL_LINE_HEIGHTS: [&str; 3] = ["compact", "default", "loose"];
+
+fn default_terminal_line_height() -> String {
+    "default".to_string()
+}
+
+/// Keep a known line height id and turn anything else into `default`.
+pub(crate) fn coerce_terminal_line_height(value: String) -> String {
+    if TERMINAL_LINE_HEIGHTS.contains(&value.as_str()) {
+        value
+    } else {
+        default_terminal_line_height()
+    }
 }
 
 fn default_font_family() -> String {
