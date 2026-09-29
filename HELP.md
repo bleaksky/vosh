@@ -431,17 +431,16 @@ The header sums the board as `N overdue`, `N nearing`, or `clear`. A count flash
 
 ### 5.1 Configure the tick timer
 
-The tick timer counts down to the next tick and renders a chip at the right edge of the input row. Configure it in the `tick & chips` tab in Settings, and changes apply live.
+The tick timer counts up the seconds since the last tick and shows them in the status line under the input row, with the game time and the moons beside them. Configure it in Settings under Automation, then Timers, where `Tick` sits at the top of the list, and click `Save` to apply your changes.
 
-- In the `timer` row, tick `enabled`. Add `sound on fire` to play a sound when the tick lands.
-- Set `interval` in seconds, anywhere from 1 to 3600.
-- Put a command in `auto-fire` to send it on every tick. Leave it blank for none.
-- Give `reset on` a regex.Give `reset on` a regex. Every line that matches resets the countdown, so the MUD's own tick message keeps the timer accurate.
-- Enable `warn` and set how many seconds of lead you want, 5 by default. Fill `warn text` and `color` to restyle the warning. The color takes an ANSI name, `#rrggbb` hex, or a 256 palette index, and blank keeps the defaults.
-- Pick a chip style under `input row chip`. `value only` is just the number, `caption + value` adds labels, and `icon + value` swaps them for compact icons.
-- Position the moons in the `status strip` section. `right edge`, `before the clock`, and `after the clock` place the Aabahran moon phases.
+- Turn on `Enabled`. `Play a sound` under `Advanced` plays a sound when the tick lands.
+- Set `Every` in seconds, anywhere from 1 to 3600.
+- Put a command in `Send each tick` to send it on every tick. Leave it blank for none.
+- Give `Reset on` a regex. Every line that matches restarts the count, so the MUD's own tick message keeps the timer accurate.
+- Turn on `Warn before it fires` and set `Warn at` to how many seconds of lead you want, 5 by default. In those last seconds the tick turns the warn color on a soft warn ground. Fill `Warning text` and `Warning color` to restyle the warning line the terminal prints. The color takes an ANSI name, `#rrggbb` hex, or a 256 palette index, and blank keeps the defaults.
+- Pick how the status line shows the tick, the time, and the moons in Settings under Layout, then Status line, in the Tick and time row. `Value` shows each value alone, like `14s` and `8:42`. `Caption` puts Tick, Time, and Moons before them. `Icon` puts a stopwatch before the tick and a sun or a moon before the time.
 
-The ember vitals layout repeats the countdown in its pane head.
+The game time takes a tint from your theme for the part of the day. Each moon in the sky shows as a small icon of its phase in its own color. Lysenties is bright white, Nercuros bright cyan, and Dyphrities red, the colors the game gives their names. Hover a moon to read its name and phase, like `Nercuros, nearly full and still growing`. During an eclipse, the triad, or a near alignment, one word in the warn color follows the moons. A dormant moon stays hidden, and the moons leave the line while you are not connected.
 
 ### 5.2 Track a target with quick keys
 
