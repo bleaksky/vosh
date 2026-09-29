@@ -6,9 +6,17 @@
 // applied over it, macros and timers go item by item, presets install
 // and remove triggers, and loadouts set the active list.
 
-import { draftChanges, saveDraftOnto, type Draft } from './automationDraft';
+import { draftChanges, saveDraftOnto, type Draft, type SavedWrite } from './automationDraft';
 import { defaultEnabledIds, PRESETS } from './presets';
-import { exportAliases, importAliases, type TickConfig } from './session';
+import {
+  deleteMacro,
+  exportAliases,
+  importAliases,
+  setMacro,
+  timersDelete,
+  timersSet,
+  type TickConfig,
+} from './session';
 
 const quote = (name: string) => `“${name}”`;
 
@@ -144,10 +152,10 @@ export function validateMacros(list: readonly MacroRecord[]): string | null {
 }
 
 export interface MacroSavePlan {
-  /** Keys to unbind first. */
-  remove: string[];
-  /** Bindings to set after that. */
-  set: MacroRecord[];
+  /** Keys to unbind first, each with the draft items that held it. */
+  remove: { key: string; uids: string[] }[];
+  /** Bindings to set after that, each with its draft item. */
+  set: { uid: string; macro: MacroRecord }[];
 }
 
 /** The macros_delete and macros_set calls that make the store match
@@ -155,13 +163,49 @@ export interface MacroSavePlan {
  *  runs first, so a key another macro takes over ends up bound. */
 export function macroSavePlan(draft: Draft<MacroRecord>): MacroSavePlan {
   const { added, removed, changed } = draftChanges(draft);
-  const remove: string[] = removed.map((item) => item.value.key);
-  const set: MacroRecord[] = added.map((item) => item.value);
-  for (const { before, after } of changed) {
-    if (before.key !== after.key) remove.push(before.key);
-    set.push(after);
+  const remove = new Map<string, string[]>();
+  const unbind = (key: string, uid: string) => remove.set(key, [...(remove.get(key) ?? []), uid]);
+  for (const item of removed) unbind(item.value.key, item.uid);
+  const set = added.map((item) => ({ uid: item.uid, macro: item.value }));
+  for (const { uid, before, after } of changed) {
+    if (before.key !== after.key) unbind(before.key, uid);
+    set.push({ uid, macro: after });
   }
-  return { remove: [...new Set(remove)], set };
+  return { remove: [...remove].map(([key, uids]) => ({ key, uids })), set };
+}
+
+/** The two calls Macros saves through, one binding at a time. */
+export interface MacroStoreApi {
+  deleteMacro: (key: string) => Promise<unknown>;
+  setMacro: (
+    key: string,
+    command: string,
+    group: string | null,
+    enabled: boolean,
+  ) => Promise<unknown>;
+}
+
+const MACRO_STORE: MacroStoreApi = { deleteMacro, setMacro };
+
+/** Save the Macros draft one call per binding, the way the old Macros
+ *  tab saved rows. Each call the store takes goes to `written` as it
+ *  lands, so a Save that stops partway can mark those items saved and
+ *  the next Save sends only the rest. An unbound old key leaves its
+ *  item as new until the new key binds. */
+export async function saveMacroDraft(
+  draft: Draft<MacroRecord>,
+  written: (write: SavedWrite<MacroRecord>) => void,
+  api: MacroStoreApi = MACRO_STORE,
+): Promise<void> {
+  const plan = macroSavePlan(draft);
+  for (const { key, uids } of plan.remove) {
+    await api.deleteMacro(key);
+    for (const uid of uids) written({ uid, stored: null });
+  }
+  for (const { uid, macro } of plan.set) {
+    await api.setMacro(macro.key, macro.command, macro.group ?? null, macro.enabled);
+    written({ uid, stored: macro });
+  }
 }
 
 // ── Timers ──────────────────────────────────────────────────────────
@@ -203,9 +247,11 @@ export function validateTimers(list: readonly TimerRecord[]): string | null {
 }
 
 export interface TimerSavePlan {
-  remove: number[];
-  /** Timers to create (id null) or update. */
-  set: TimerRecord[];
+  /** Timers to delete, each with its draft item. */
+  remove: { uid: string; id: number }[];
+  /** Timers to create (id null) or update, each with its draft item
+   *  and the item's value as the draft holds it. */
+  set: { uid: string; timer: TimerRecord; value: TimerRecord }[];
 }
 
 /** A timer's identity across a reload. A new timer has no id until it
@@ -221,12 +267,71 @@ export function timerKey(timer: TimerRecord): string {
  *  and sending that id would overwrite the original. */
 export function timerSavePlan(draft: Draft<TimerRecord>): TimerSavePlan {
   const { added, removed, changed } = draftChanges(draft);
-  const remove = removed.map((item) => item.value.id).filter((id): id is number => id !== null);
+  const remove = removed.flatMap((item) =>
+    item.value.id === null ? [] : [{ uid: item.uid, id: item.value.id }],
+  );
   const set = [
-    ...changed.map((c) => ({ ...c.after, id: c.before.id })),
-    ...added.map((item) => ({ ...item.value, id: null })),
+    ...changed.map((c) => ({ uid: c.uid, timer: { ...c.after, id: c.before.id }, value: c.after })),
+    ...added.map((item) => ({
+      uid: item.uid,
+      timer: { ...item.value, id: null },
+      value: item.value,
+    })),
   ];
   return { remove, set };
+}
+
+/** The two calls Timers saves through, one timer at a time. */
+export interface TimerStoreApi {
+  timersDelete: (id: number) => Promise<unknown>;
+  /** Returns every timer the store holds after the write. */
+  timersSet: (
+    id: number | null,
+    name: string,
+    intervalSecs: number,
+    command: string,
+    enabled: boolean,
+  ) => Promise<unknown[]>;
+}
+
+const TIMER_STORE: TimerStoreApi = { timersDelete, timersSet };
+
+/** Save the Timers draft one call per timer, the way the old Timers tab
+ *  saved cards. Each call the store takes goes to `written` as it lands,
+ *  so a Save that stops partway can mark those timers saved and the
+ *  next Save does not create them again. A new timer is marked with the
+ *  id the store gave it, found as the last timer holding the same name,
+ *  interval, and command, since the store adds new timers at the end. */
+export async function saveTimerDraft(
+  draft: Draft<TimerRecord>,
+  written: (write: SavedWrite<TimerRecord>) => void,
+  api: TimerStoreApi = TIMER_STORE,
+): Promise<void> {
+  const plan = timerSavePlan(draft);
+  for (const { uid, id } of plan.remove) {
+    await api.timersDelete(id);
+    written({ uid, stored: null });
+  }
+  for (const { uid, timer, value } of plan.set) {
+    const sent = { ...timer, name: timer.name.trim(), command: timer.command.trim() };
+    const list = await api.timersSet(
+      sent.id,
+      sent.name,
+      sent.interval_secs,
+      sent.command,
+      sent.enabled,
+    );
+    // The store creates a timer for a null id, and also for an id it no
+    // longer holds, so look the id up either way.
+    const timers = list.map(normalizeTimer);
+    let stored: TimerRecord = sent;
+    if (sent.id === null || !timers.some((t) => t.id === sent.id)) {
+      const key = timerKey(sent);
+      const made = [...timers].reverse().find((t) => t.id !== null && timerKey(t) === key);
+      if (made) stored = { ...sent, id: made.id };
+    }
+    written({ uid, stored, sent: value });
+  }
 }
 
 /** An interval as the list shows it: `30 s`, `5 min`, `2 h`. */

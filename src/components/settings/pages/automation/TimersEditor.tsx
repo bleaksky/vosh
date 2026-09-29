@@ -15,9 +15,9 @@ import {
   normalizeTick,
   normalizeTimer,
   parseJsonList,
+  saveTimerDraft,
   timerKey,
   timerLabel,
-  timerSavePlan,
   validateTimers,
   type TimerRecord,
 } from '../../../../lib/automationRecords';
@@ -27,9 +27,7 @@ import {
   subscribeTimersChanged,
   tickGetConfig,
   tickSetConfig,
-  timersDelete,
   timersList,
-  timersSet,
   type TickConfig,
 } from '../../../../lib/session';
 import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
@@ -46,13 +44,7 @@ const TIMERS_SPEC: KindSpec<TimerRecord> = {
   emptyList: 'You have no timers yet.',
   load: async () => (await timersList()).map(normalizeTimer),
   // One call per timer, the way the old Timers tab saved cards.
-  save: async (draft) => {
-    const plan = timerSavePlan(draft);
-    for (const id of plan.remove) await timersDelete(id);
-    for (const t of plan.set) {
-      await timersSet(t.id, t.name.trim(), t.interval_secs, t.command.trim(), t.enabled);
-    }
-  },
+  save: (draft, written) => saveTimerDraft(draft, written),
   validate: validateTimers,
   entry: (t) => ({
     name: timerLabel(t),

@@ -8,8 +8,11 @@ import {
   draftChangeCount,
   draftChanges,
   draftValues,
+  findDraftItem,
   isDraftDirty,
   listChangedNote,
+  markAllWritten,
+  markWritten,
   mergeDraftChanges,
   removeDraftItem,
   replaceDraftValues,
@@ -237,6 +240,58 @@ describe('saving over the store as it is now', () => {
       items[1],
       { ...items[2], enabled: false },
     ]);
+  });
+});
+
+describe('marking what a failed Save wrote', () => {
+  it('moves an added, a changed, and a removed item into the saved items', () => {
+    let draft = createDraft(items);
+    const [a, , c] = draft.items;
+    draft = updateDraftItem(draft, a.uid, (v) => ({ ...v, enabled: false }));
+    draft = removeDraftItem(draft, c.uid);
+    draft = addDraftItem(draft, { name: 'Wake', enabled: true });
+    const added = draft.items[draft.items.length - 1];
+    expect(draftChangeCount(draft)).toBe(3);
+
+    const marked = markAllWritten(draft, [
+      { uid: a.uid, stored: draftValues(draft)[0] },
+      { uid: c.uid, stored: null },
+      { uid: added.uid, stored: added.value },
+    ]);
+    expect(isDraftDirty(marked)).toBe(false);
+    expect(marked.items).toBe(draft.items);
+  });
+
+  it('keeps the changes the store has not taken', () => {
+    let draft = createDraft(items);
+    draft = addDraftItem(draft, { name: 'Wake', enabled: true });
+    draft = addDraftItem(draft, { name: 'Rest', enabled: true });
+    const [wake, rest] = draft.items.slice(-2);
+    const marked = markWritten(draft, { uid: wake.uid, stored: wake.value });
+    expect(draftChanges(marked).added.map((item) => item.uid)).toEqual([rest.uid]);
+    // Discard now keeps Wake, which the store holds.
+    expect(draftValues(discardDraft(marked)).map((v) => v.name)).toContain('Wake');
+  });
+
+  it('gives an unchanged item what the store kept, and leaves a newer edit alone', () => {
+    let draft = addDraftItem(createDraft(items), { name: 'Wake', enabled: true });
+    const wake = draft.items[draft.items.length - 1];
+    const stored = { ...wake.value, group: 'mine' };
+    const marked = markWritten(draft, { uid: wake.uid, stored, sent: wake.value });
+    expect(findDraftItem(marked, wake.uid)?.value).toEqual(stored);
+    expect(isDraftDirty(marked)).toBe(false);
+
+    // You turned it off while the Save ran. Your edit stays unsaved.
+    draft = updateDraftItem(draft, wake.uid, (v) => ({ ...v, enabled: false }));
+    const kept = markWritten(draft, { uid: wake.uid, stored, sent: wake.value });
+    expect(findDraftItem(kept, wake.uid)?.value.enabled).toBe(false);
+    expect(draftChangeCount(kept)).toBe(1);
+  });
+
+  it('ignores a write for an item the draft no longer knows', () => {
+    const draft = createDraft(items);
+    expect(markWritten(draft, { uid: 'gone', stored: items[0] })).toBe(draft);
+    expect(markWritten(draft, { uid: 'gone', stored: null })).toBe(draft);
   });
 });
 

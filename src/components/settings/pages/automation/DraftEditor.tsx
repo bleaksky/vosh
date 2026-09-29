@@ -10,6 +10,7 @@ import {
   findDraftItem,
   isDraftDirty,
   listChangedNote,
+  markAllWritten,
   nextDraftUid,
   removeDraftItem,
   replaceDraftValues,
@@ -17,6 +18,7 @@ import {
   storeChangeAction,
   updateDraftItem,
   type Draft,
+  type SavedWrite,
 } from '../../../../lib/automationDraft';
 import {
   buildSections,
@@ -391,14 +393,25 @@ export function DraftEditor<T>({
     onError(null);
     setBusy(true);
     savingRef.current = true;
+    // Each item the store took, for a Save that fails before the list
+    // loads again.
+    const writes: SavedWrite<T>[] = [];
+    let reloaded = false;
     try {
       await saveListThenPinned({
-        list: isDraftDirty(d) ? () => spec.save(d) : null,
+        list: isDraftDirty(d) ? () => spec.save(d, (write) => writes.push(write)) : null,
         pinned: pinned?.dirty ? () => pinned.save() : null,
-        reload: () => load(selectedKey()),
+        reload: async () => {
+          await load(selectedKey());
+          reloaded = true;
+        },
       });
       setJustSaved(true);
     } catch (e) {
+      // Keep your unsaved changes, and mark what the store took as saved
+      // so the next Save sends only the rest and makes nothing twice.
+      const current = draftRef.current;
+      if (!reloaded && current && writes.length > 0) setDraft(markAllWritten(current, writes));
       onError(automationSaveError(e));
     } finally {
       savingRef.current = false;
