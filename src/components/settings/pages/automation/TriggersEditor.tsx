@@ -313,7 +313,7 @@ function TriggerAdvanced({
       </Row>
       <CodeRow
         label="Lua script"
-        description="Runs on each match. captures holds what the pattern caught."
+        description="Runs on each match. The captures table holds what the pattern caught."
         value={effectOf(t.actions, 'script')}
         readOnly={locked}
         onChange={(body) => setActions((a) => withEffect(a, 'script', body))}
