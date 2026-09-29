@@ -68,7 +68,7 @@ export function ChatPane() {
       />
       <div
         ref={scrollRef}
-        className="pane-body pane-chat-scroll"
+        className={`pane-body pane-chat-scroll${visible.length === 0 ? ' is-empty' : ''}`}
         onScroll={(e) => {
           const el = e.currentTarget;
           stickyRef.current = el.scrollHeight - (el.scrollTop + el.clientHeight) < STICKY_PX;
