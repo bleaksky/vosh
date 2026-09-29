@@ -30,6 +30,26 @@ describe('the help on values the game hides', () => {
   });
 });
 
+describe('the help on password prompts', () => {
+  const kept =
+    'Lines you type at a password prompt are not saved. Each one shows as `> (hidden)` in its place.';
+
+  it('says the session log keeps no line typed at a password prompt', () => {
+    const text = body('characters-and-data.search-logs');
+    expect(text).toContain('The log keeps what the game sent and each line you sent, marked `> `.');
+    expect(text).toContain(kept);
+    expect(helpMd).toContain(kept);
+  });
+
+  it('says the masked field keeps the password out of the log and the pipeline', () => {
+    const text = body('get-connected.connect');
+    const masked =
+      'Nothing you type shows on screen, echoes to the terminal, lands in command history, or reaches the session log. Vosh sends it exactly as typed, with no aliases, variables, or `#` commands applied.';
+    expect(text).toContain(masked);
+    expect(helpMd).toContain(masked);
+  });
+});
+
 describe('the help on loadouts', () => {
   // The shared catalog wizard keeps each profile file in place with every
   // setting but its items, puts a copy in profiles/legacy, and builds the
