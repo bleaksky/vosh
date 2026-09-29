@@ -2114,7 +2114,7 @@ fn hand_out_shared_with(
 
 /// Put each file in `files` back to the text it held, or take away a file
 /// that did not exist before. Leaves a file that already holds its text.
-fn put_back(files: &[(PathBuf, Option<String>)]) {
+pub(crate) fn put_back(files: &[(PathBuf, Option<String>)]) {
     for (path, before) in files.iter().rev() {
         let restored = match before {
             Some(text) => {

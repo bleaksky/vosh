@@ -3297,10 +3297,11 @@ pub(crate) struct ConflictResolution {
 /// every other setting, and asks for a relaunch so the startup hook
 /// picks up Path B mode. The previously-active profile name (from the
 /// index) becomes the sole initial active loadout so the user's first
-/// post-restart session keeps the same authoring set live. Refused
-/// while a profile file did not read at launch, or while catalog.toml or
-/// loadouts.toml is on disk, see
-/// [`crate::loadout_store::migration_refusal`].
+/// post-restart session keeps the same authoring set live. A write that
+/// fails puts back every file the run changed, so you stay in per
+/// profile mode and can run it again. Refused while a profile file did
+/// not read at launch, or while catalog.toml or loadouts.toml is on
+/// disk, see [`crate::loadout_store::migration_refusal`].
 #[tauri::command]
 pub(crate) async fn migration_apply(
     app: AppHandle,
@@ -3333,9 +3334,10 @@ pub(crate) async fn migration_apply(
 }
 
 /// [`migration_apply`] over the app data folder `app_data`, so a test
-/// can run it over a folder of its own. `written` runs once catalog.toml
-/// and loadouts.toml are on disk, before the items leave the profile
-/// files.
+/// can run it over a folder of its own. `written` runs once catalog.toml,
+/// loadouts.toml, and every profile file are on disk. A write that fails
+/// puts back every file the run changed and skips `written`, unless
+/// catalog.toml stays on disk.
 async fn apply_migration(
     state: &SharedState,
     app_data: &std::path::Path,
@@ -3456,16 +3458,70 @@ async fn apply_migration(
         })?;
     }
 
-    crate::loadout_store::save_global_catalog(app_data, &catalog).map_err(|e| e.to_string())?;
-    crate::loadout_store::save_loadout_set(app_data, &loadout_set).map_err(|e| e.to_string())?;
-    written();
-
-    for (file, text) in &kept {
-        crate::profile_config::write_with_backup(&file.path, text).map_err(|e| {
+    // Then the catalog, the loadouts, and each profile file without its
+    // items. A write that fails puts back every file this run changed,
+    // so Vosh stays in per profile mode and the wizard can run again. The
+    // copies in legacy stay.
+    let mut touched = Vec::new();
+    if let Err((what, e)) =
+        write_shared_catalog(app_data, &catalog, &loadout_set, &kept, &mut touched)
+    {
+        crate::profile_config::put_back(&touched);
+        let restored = touched.iter().all(|(path, before)| match before {
+            Some(text) => std::fs::read_to_string(path).ok().as_deref() == Some(text.as_str()),
+            None => !path.exists(),
+        });
+        // A catalog left on disk starts loadout mode at the next launch,
+        // so the live profile must not save until then.
+        if crate::loadout_store::path_b_mode_active(app_data) {
+            written();
+        }
+        return Err(if restored {
             format!(
-                "Vosh built the shared catalog but could not take the items out of {} ({e}). A \
-                 full copy of the file waits in profiles/legacy.",
-                file.path.file_name().unwrap_or_default().to_string_lossy()
+                "Vosh could not save {what} ({e}), so it put back every file it changed. Your \
+                 profiles work as before, and you can try again."
+            )
+        } else {
+            format!(
+                "Vosh could not save {what} ({e}) and could not put back every file it changed. \
+                 A full copy of each profile file waits in profiles/legacy. Quit Vosh and open \
+                 it again."
+            )
+        });
+    }
+    written();
+    Ok(())
+}
+
+/// Save what the shared catalog wizard built, catalog.toml, then
+/// loadouts.toml, then each profile file in `kept` with its new text.
+/// Notes in `touched` each file it is about to write with what the file
+/// held before, None for a file that was not there, so a failure can put
+/// them back. On a failure, returns the file that did not save, as words
+/// for you, and the error.
+fn write_shared_catalog(
+    app_data: &std::path::Path,
+    catalog: &crate::loadout::GlobalCatalog,
+    loadouts: &crate::loadout::LoadoutSet,
+    kept: &[(&MigrationFile, String)],
+    touched: &mut Vec<(std::path::PathBuf, Option<String>)>,
+) -> Result<(), (String, String)> {
+    // The wizard refuses to run while either file is on disk.
+    touched.push((crate::loadout_store::catalog_path(app_data), None));
+    crate::loadout_store::save_global_catalog(app_data, catalog)
+        .map_err(|e| ("catalog.toml".to_string(), e.to_string()))?;
+    touched.push((crate::loadout_store::loadouts_path(app_data), None));
+    crate::loadout_store::save_loadout_set(app_data, loadouts)
+        .map_err(|e| ("loadouts.toml".to_string(), e.to_string()))?;
+    for (file, text) in kept {
+        touched.push((file.path.clone(), file.text.clone()));
+        crate::profile_config::write_with_backup(&file.path, text).map_err(|e| {
+            (
+                format!(
+                    "the {} profile file",
+                    crate::profile_set::display_name(&file.name)
+                ),
+                e.to_string(),
             )
         })?;
     }
@@ -5386,6 +5442,89 @@ mod tests {
                     assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
                 }
             }
+        }
+
+        #[tokio::test]
+        async fn a_wizard_that_cannot_finish_puts_every_file_back() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let mut set = james_like_set(dir.path());
+            set.create("Bard").unwrap();
+            set.create("Rich").unwrap();
+            // Test-Prompt never saved a file, and every other character
+            // holds its own items and settings.
+            for (n, name) in [DEFAULT_PROFILE_NAME, "Healer", "Bard", "Rich"]
+                .iter()
+                .enumerate()
+            {
+                character(name, n as u32 + 1, &[])
+                    .save(&set.profile_path(name))
+                    .unwrap();
+            }
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            // Each file as launch left it, with its custom themes moved to
+            // global.toml.
+            let files: Vec<(std::path::PathBuf, Option<String>)> = set
+                .list()
+                .iter()
+                .map(|entry| {
+                    let path = set.profile_path(&entry.name);
+                    let text = path.exists().then(|| read(&path));
+                    (path, text)
+                })
+                .collect();
+
+            // Something stops the rewrite of the Bard file, after the
+            // catalog and the files before it saved, the way a full disk
+            // or a lock on the file would.
+            let blocked = set.profile_path("Bard").with_extension("toml.tmp");
+            std::fs::create_dir(&blocked).unwrap();
+            let mut written = false;
+            let err = super::super::apply_migration(&state, dir.path(), &[], || written = true)
+                .await
+                .unwrap_err();
+            assert!(
+                err.starts_with("Vosh could not save the Bard profile file ("),
+                "{err}"
+            );
+            assert!(
+                err.ends_with(
+                    "), so it put back every file it changed. Your profiles work as before, \
+                     and you can try again."
+                ),
+                "{err}"
+            );
+
+            // Nothing changed, so Vosh stays in per profile mode and its
+            // saves go on.
+            assert!(!written);
+            assert!(!catalog_path(dir.path()).exists());
+            assert!(!loadouts_path(dir.path()).exists());
+            for (path, text) in &files {
+                match text {
+                    Some(text) => assert_eq!(&read(path), text, "{}", path.display()),
+                    None => assert!(!path.exists(), "{}", path.display()),
+                }
+            }
+            let state = relaunch_as(dir.path(), "Bard").await;
+            assert!(state.global_catalog.lock().await.is_none());
+            {
+                let p = state.profile.lock().await;
+                assert_eq!(items_on(&p).len(), 6);
+                let kept = ProfileConfig::from_profile(&p);
+                assert_eq!(kept.profile_vars.get("target").unwrap(), "orc 3");
+            }
+
+            // Once the file saves again, the wizard runs.
+            std::fs::remove_dir(&blocked).unwrap();
+            super::super::apply_migration(&state, dir.path(), &[], || written = true)
+                .await
+                .unwrap();
+            assert!(written);
+            assert!(catalog_path(dir.path()).exists());
+            let bard = ProfileConfig::load(&set.profile_path("Bard")).unwrap();
+            assert!(bard.aliases.is_empty());
+            assert_eq!(bard.profile_vars.get("target").unwrap(), "orc 3");
         }
     }
 }
