@@ -1298,6 +1298,10 @@ export interface ProfileAutoMatch {
    *  backend on load and promoted to a one-element list, so older
    *  profiles keep working without manual migration. */
   characters?: string[];
+  /** The login toggle. False keeps the world and the names but stops
+   *  the profile from matching at connect or login. The backend leaves
+   *  it out while it is on, so absent means on. */
+  enabled?: boolean;
 }
 
 export interface ProfileEntry {
