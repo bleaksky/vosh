@@ -2860,6 +2860,19 @@ name = "haste"
     }
 
     #[test]
+    fn a_profile_saved_after_the_game_disconnects_keeps_the_tick_on() {
+        let t0 = tokio::time::Instant::now();
+        let mut profile = synced_profile(t0);
+        profile.tick.end_session();
+        // The exit flush, or any save while you are not connected.
+        let saved = ProfileConfig::from_profile(&profile);
+        assert!(saved.tick.enabled);
+        let toml = saved.to_toml().expect("serializes");
+        let back = ProfileConfig::from_toml(&toml).expect("parses");
+        assert!(back.tick.enabled);
+    }
+
+    #[test]
     fn profile_reset_keeps_the_running_tick() {
         let t0 = tokio::time::Instant::now();
         let mut profile = synced_profile(t0);
