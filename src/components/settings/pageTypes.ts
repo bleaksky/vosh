@@ -6,6 +6,11 @@ import type { SettingsTarget } from '../../lib/settingsNav';
  *  copy of the config. */
 export type SetUiConfig = (updater: (prev: UiConfig | null) => UiConfig | null) => void;
 
+/** Asked before the frame leaves a page for another group. Return true
+ *  to hold the navigation, and call `proceed` later to go on, after
+ *  the page asks about unsaved changes. Return false to let it go. */
+export type LeaveGuard = (proceed: () => void) => boolean;
+
 /** What the frame hands every group page. */
 export interface SettingsPageProps {
   /** Where the page should land, from the nav, a deep link, or a
@@ -25,4 +30,8 @@ export interface SettingsPageProps {
   pathB: boolean;
   /** Go somewhere else in Settings, the way the nav and search do. */
   navigate: (target: SettingsTarget) => void;
+  /** Register the guard the frame asks before it leaves this page, or
+   *  clear it with null. A page with a save bar uses it to ask about
+   *  unsaved changes. Clear it when the page unmounts. */
+  setLeaveGuard: (guard: LeaveGuard | null) => void;
 }

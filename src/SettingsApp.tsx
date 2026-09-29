@@ -28,7 +28,7 @@ import { revealSettingsAnchor } from './components/settings/revealAnchor';
 import { Sidebar } from './components/settings/Sidebar';
 import { WindowControls } from './components/settings/WindowControls';
 import { ChevronRightIcon } from './components/settings/ui';
-import type { SettingsPageProps } from './components/settings/pageTypes';
+import type { LeaveGuard, SettingsPageProps } from './components/settings/pageTypes';
 import { GeneralGroup } from './components/settings/groups/GeneralGroup';
 import { LayoutGroup } from './components/settings/groups/LayoutGroup';
 import { InputGroup } from './components/settings/groups/InputGroup';
@@ -97,10 +97,26 @@ export function SettingsApp() {
   const [error, setError] = useState<string | null>(null);
   const [pathB, setPathB] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
+  const groupRef = useRef(nav.target.group);
+  const leaveGuardRef = useRef<LeaveGuard | null>(null);
+  const setLeaveGuard = useCallback((guard: LeaveGuard | null) => {
+    leaveGuardRef.current = guard;
+  }, []);
 
+  useEffect(() => {
+    groupRef.current = nav.target.group;
+  }, [nav]);
+
+  // A page with unsaved changes can hold a move to another group until
+  // you answer its question. A move inside the group is the page's own.
   const go = useCallback((target: SettingsTarget) => {
-    setError(null);
-    setNav((prev) => ({ target, seq: prev.seq + 1 }));
+    const move = () => {
+      setError(null);
+      setNav((prev) => ({ target, seq: prev.seq + 1 }));
+    };
+    const guard = leaveGuardRef.current;
+    if (guard && target.group !== groupRef.current && guard(move)) return;
+    move();
   }, []);
 
   // A deep link for a window that is already open. The main window
@@ -306,6 +322,7 @@ export function SettingsApp() {
             onError={setError}
             pathB={pathB}
             navigate={go}
+            setLeaveGuard={setLeaveGuard}
           />
         </div>
       </main>
