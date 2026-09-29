@@ -25,6 +25,12 @@ pub(crate) fn apply(vars: &mut VariableStore, msg: &Message) {
         return;
     };
     for (key, value) in map {
+        // Aabahran adds `"hidden":true` to Char.Vitals under lamented
+        // tears and leaves it out otherwise. It is not a vital, and a
+        // variable bound from it would never clear.
+        if msg.package == "Char.Vitals" && key == HIDDEN_FLAG {
+            continue;
+        }
         let var_name = format!("{prefix}{key}");
         let value_str = stringify(value);
         vars.set(Scope::Session, var_name, value_str);
@@ -36,7 +42,11 @@ pub(crate) fn apply(vars: &mut VariableStore, msg: &Message) {
 /// combat and an empty object once the target is gone. Map the field
 /// names into clean variable names (`target_name`, `target_hp`,
 /// `target_condition`) and clear them when the payload is empty so
-/// triggers can detect "lost target".
+/// triggers can detect "lost target". A fight packet without `hp_pct`
+/// or `condition` clears that one, since the game withholds it (under
+/// lamented tears, blind, against mirror image, or with the target in
+/// another room) and the last reading no longer holds. The `tank`
+/// object and the `hidden` flag bind nothing.
 fn apply_char_combat(vars: &mut VariableStore, data: &Value) {
     let Some(obj) = data.as_object() else {
         return;
@@ -54,17 +64,21 @@ fn apply_char_combat(vars: &mut VariableStore, data: &Value) {
     if let Some(name) = obj.get("target").and_then(Value::as_str) {
         vars.set(Scope::Session, "target_name".to_string(), name.to_string());
     }
-    if let Some(hp) = obj.get("hp_pct") {
-        vars.set(Scope::Session, "target_hp".to_string(), stringify(hp));
-    }
-    if let Some(condition) = obj.get("condition").and_then(Value::as_str) {
-        vars.set(
-            Scope::Session,
-            "target_condition".to_string(),
-            condition.to_string(),
-        );
-    }
+    let hp = obj.get("hp_pct").map(stringify).unwrap_or_default();
+    vars.set(Scope::Session, "target_hp".to_string(), hp);
+    let condition = obj
+        .get("condition")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    vars.set(
+        Scope::Session,
+        "target_condition".to_string(),
+        condition.to_string(),
+    );
 }
+
+/// The flag Aabahran adds to a package whose values the game hides.
+const HIDDEN_FLAG: &str = "hidden";
 
 fn stringify(value: &Value) -> String {
     match value {
@@ -189,5 +203,61 @@ mod tests {
         assert_eq!(v.get("target_name"), Some(""));
         assert_eq!(v.get("target_hp"), Some(""));
         assert_eq!(v.get("target_condition"), Some(""));
+    }
+
+    /// An Aabahran packet from fixtures/gmcp/aabahran.
+    fn packet(text: &str) -> Message {
+        vosh_gmcp::parse(text.as_bytes()).expect("fixture parses")
+    }
+
+    const VITALS: &str = include_str!("../../fixtures/gmcp/aabahran/char-vitals.gmcp");
+    const VITALS_HIDDEN: &str =
+        include_str!("../../fixtures/gmcp/aabahran/char-vitals-hidden.gmcp");
+    const COMBAT: &str = include_str!("../../fixtures/gmcp/aabahran/char-combat.gmcp");
+    const COMBAT_HIDDEN: &str =
+        include_str!("../../fixtures/gmcp/aabahran/char-combat-hidden.gmcp");
+    const COMBAT_TANK: &str = include_str!("../../fixtures/gmcp/aabahran/char-combat-tank.gmcp");
+    const COMBAT_TANK_HIDDEN: &str =
+        include_str!("../../fixtures/gmcp/aabahran/char-combat-tank-hidden.gmcp");
+
+    #[test]
+    fn char_combat_withheld_health_clears_the_last_reading() {
+        // Lamented tears, blindness, mirror image, or a target in
+        // another room withhold the health. The last numbers must not
+        // stand in for it.
+        let mut v = VariableStore::new();
+        apply(&mut v, &packet(COMBAT));
+        assert_eq!(v.get("target_hp"), Some("54"));
+        assert_eq!(v.get("target_condition"), Some("quite a few wounds"));
+        apply(&mut v, &packet(COMBAT_HIDDEN));
+        assert_eq!(v.get("target_name"), Some("a Blackwatch guard"));
+        assert_eq!(v.get("target_hp"), Some(""));
+        assert_eq!(v.get("target_condition"), Some(""));
+        assert_eq!(v.get("target_hidden"), None);
+    }
+
+    #[test]
+    fn char_combat_with_a_tank_binds_the_target_as_before() {
+        let mut v = VariableStore::new();
+        apply(&mut v, &packet(COMBAT_TANK));
+        assert_eq!(v.get("target_name"), Some("a Blackwatch guard"));
+        assert_eq!(v.get("target_hp"), Some("54"));
+        apply(&mut v, &packet(COMBAT_TANK_HIDDEN));
+        assert_eq!(v.get("target_name"), Some("a Blackwatch guard"));
+        assert_eq!(v.get("target_hp"), Some(""));
+    }
+
+    #[test]
+    fn char_vitals_hidden_flag_binds_no_variable() {
+        // The flag rides only the hidden packets, so a bound variable
+        // would read true long after the game shows your vitals again.
+        let mut v = VariableStore::new();
+        apply(&mut v, &packet(VITALS_HIDDEN));
+        assert_eq!(v.get("hp"), Some("0"));
+        assert_eq!(v.get("maxhp"), Some("0"));
+        assert_eq!(v.get("hidden"), None);
+        apply(&mut v, &packet(VITALS));
+        assert_eq!(v.get("hp"), Some("850"));
+        assert_eq!(v.get("hidden"), None);
     }
 }
