@@ -57,6 +57,7 @@ import {
 import { loadFontStack } from './lib/fontLoader';
 import { PRESETS, presetTriggers } from './lib/presets';
 import { presetLaunchPlan } from './lib/automationRecords';
+import { listenForQuitFlush } from './lib/pendingWrites';
 import { customToAppTheme, findTheme, setCustomThemes, themeTokens } from './lib/themes';
 import { parseHex, toRgba } from './lib/color';
 import { setBaseAnsi } from './lib/baseAnsi';
@@ -344,6 +345,24 @@ function App() {
     back: number;
     max: number;
   } | null>(null);
+
+  // On quit the backend asks each window for the writes it holds back,
+  // like a pane layout waiting out a splitter drag, before it writes
+  // the profile and exits.
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    listenForQuitFlush()
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      .catch((e: unknown) => console.error('[main] quit listener failed', e));
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   // Reset the history-pane scroll-depth indicator whenever the split
   // closes. The history Terminal unmounts and the next mount will fire

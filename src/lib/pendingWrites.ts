@@ -1,8 +1,12 @@
+import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+
 // Writes a window holds back for a moment, and the one place that sends
 // them all at once. Settings saves a change after a short pause, the
 // pane layout waits out a splitter drag, and a number or color field
-// saves when you leave it. Closing the Settings window sends every one
-// of them first, so the last change you made reaches the disk.
+// saves when you leave it. Closing the Settings window, or quitting
+// Vosh, sends every one of them first, so the last change you made
+// reaches the disk.
 
 /** Sends what one writer holds now. */
 export type Flush = () => Promise<void> | void;
@@ -16,7 +20,9 @@ export interface PendingWrites {
   flushAll: (timeoutMs?: number) => Promise<boolean>;
 }
 
-/** How long a window waits on its own writes before it gives up. */
+/** How long a window waits on its own writes before it gives up. On
+ *  quit the backend waits a little longer on the window, see
+ *  exit_flush.rs. */
 export const FLUSH_TIMEOUT_MS = 800;
 
 export function createPendingWrites(): PendingWrites {
@@ -185,4 +191,39 @@ export async function runCloseRequest(steps: {
     return;
   }
   await steps.close();
+}
+
+// ── Quit ────────────────────────────────────────────────────────────
+
+/** The event the backend sends each window when you quit, with a round
+ *  number, and the command a window answers with once it has sent what
+ *  it held. */
+export const FLUSH_REQUEST_EVENT = 'vosh://flush-pending-writes';
+const FLUSH_DONE_COMMAND = 'pending_writes_flushed';
+
+/** Answers each quit round once. The backend sends the request to every
+ *  window, and a window can hear the same round more than once. */
+export function createFlushResponder(respond: () => Promise<void>): (round: unknown) => boolean {
+  let last: unknown = undefined;
+  return (round) => {
+    if (round === last) return false;
+    last = round;
+    void respond();
+    return true;
+  };
+}
+
+/** Send what this window holds when the backend asks on quit, then tell
+ *  the backend, which waits a short time for every window before it
+ *  writes the profile and exits. */
+export function listenForQuitFlush(options: { commitFocus?: boolean } = {}): Promise<UnlistenFn> {
+  const answer = createFlushResponder(async () => {
+    await sendPendingWrites({ commitFocus: options.commitFocus === true });
+    await invoke(FLUSH_DONE_COMMAND).catch((e: unknown) =>
+      console.error('[writes] telling the backend failed', e),
+    );
+  });
+  return listen<unknown>(FLUSH_REQUEST_EVENT, (event) => {
+    answer(event.payload);
+  });
 }

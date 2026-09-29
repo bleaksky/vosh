@@ -3266,7 +3266,8 @@ pub(crate) async fn migration_apply(
 #[tauri::command]
 pub(crate) async fn app_quit(app: AppHandle) -> Result<(), String> {
     // No explicit persist here: `app.exit` raises `RunEvent::ExitRequested`,
-    // whose handler flushes the profile exactly once (with a timeout).
+    // whose handler asks the windows for their pending writes and then
+    // flushes the profile exactly once (with a timeout), see exit_flush.rs.
     app.exit(0);
     Ok(())
 }
