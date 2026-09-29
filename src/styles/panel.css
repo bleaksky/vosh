@@ -453,7 +453,8 @@
   }
 }
 
-/* A short pane gives up the people rows first, down to the room row. */
+/* The rows give way only once the drawing is at its floor. MapPane then
+   drops people rows whole, from the bottom, and the room row stays. */
 .pane-map-rows {
   flex: 0 1 auto;
   min-height: var(--row);
