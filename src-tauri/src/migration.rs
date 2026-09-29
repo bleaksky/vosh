@@ -272,6 +272,13 @@ trait CatalogItem: Clone + Serialize {
     fn preset(&self) -> Option<&str> {
         None
     }
+    /// How this copy ranks among the copies of its key in `config`. The
+    /// wizard keeps the last copy of the highest rank. An alias or a
+    /// trigger store keeps the last copy of a name, so every copy ranks
+    /// the same.
+    fn rank_in(&self, _config: &ProfileConfig) -> u8 {
+        0
+    }
     fn payload(self) -> ItemPayload;
 }
 
@@ -345,6 +352,17 @@ impl CatalogItem for Macro {
     fn groups_off(config: &ProfileConfig) -> &[String] {
         &config.disabled_macro_groups
     }
+    /// A profile keeps every copy of a key, and the input bar fires the
+    /// last one that is on and whose group is on. Next comes the last one
+    /// that is on, which fires once you turn its group on, then the last.
+    fn rank_in(&self, config: &ProfileConfig) -> u8 {
+        let group_on = folder_of(self).map_or(true, |g| !Self::groups_off(config).contains(&g));
+        match (self.enabled, group_on) {
+            (true, true) => 2,
+            (true, false) => 1,
+            (false, _) => 0,
+        }
+    }
     fn payload(self) -> ItemPayload {
         ItemPayload::Macro { item: self }
     }
@@ -372,8 +390,10 @@ enum Role {
     Folder(String),
 }
 
-/// The items of one kind in `configs`, one entry per name. A store keeps
-/// the last copy of a name, so a later copy in one file wins.
+/// The items of one kind in `configs`, one entry per name. Of the copies
+/// of a name in one file, the last one of the highest rank wins, see
+/// [`CatalogItem::rank_in`]. A store keeps the last copy of a name, and
+/// the input bar fires the last macro of a key that is on.
 fn keyed_entries<T: CatalogItem>(
     profiles: &[(String, ProfileConfig)],
     items: impl Fn(&ProfileConfig) -> &[T],
@@ -382,7 +402,12 @@ fn keyed_entries<T: CatalogItem>(
     for (n, (_, config)) in profiles.iter().enumerate() {
         let mut last: BTreeMap<&str, &T> = BTreeMap::new();
         for item in items(config) {
-            last.insert(item.key(), item);
+            let outranked = last
+                .get(item.key())
+                .is_some_and(|kept| kept.rank_in(config) > item.rank_in(config));
+            if !outranked {
+                last.insert(item.key(), item);
+            }
         }
         for (key, item) in last {
             by_key
@@ -1125,6 +1150,46 @@ mod tests {
         }
         let dd = plan.conflicts.iter().find(|c| c.name == "dd").unwrap();
         assert_eq!(variants_on(dd), [("Healer", false), ("Bard", false)]);
+    }
+
+    fn macro_in(key: &str, command: &str, group: Option<&str>, enabled: bool) -> Macro {
+        Macro {
+            key: key.into(),
+            command: command.into(),
+            group: group.map(String::from),
+            enabled,
+        }
+    }
+
+    #[test]
+    fn a_key_bound_twice_keeps_the_copy_the_input_bar_fires() {
+        // The input bar fires the last copy of a key that is on and whose
+        // group is on. The wizard used to keep the last copy, whatever
+        // its state, so F1 went quiet and F2 cast the wrong spell.
+        let mut cfg = profile_with(
+            vec![],
+            vec![],
+            vec![
+                macro_in("f1", "cast heal", None, true),
+                macro_in("f1", "cast armor", None, false),
+                macro_in("f2", "cast bless", Some("combat"), true),
+                macro_in("f2", "cast curse", Some("loot"), true),
+                macro_in("f3", "flee", None, false),
+                macro_in("f3", "recall", None, false),
+            ],
+        );
+        cfg.disabled_macro_groups = vec!["loot".into()];
+        let plan = analyze_profiles(&[("Healer".into(), cfg)]);
+        let command = |key: &str| {
+            let found = plan.auto_resolved.macros.iter().find(|m| m.key == key);
+            let found = found.unwrap_or_else(|| panic!("no macro {key}"));
+            (found.command.as_str(), found.enabled, found.group.clone())
+        };
+        assert_eq!(command("f1"), ("cast heal", true, None));
+        assert_eq!(command("f2"), ("cast bless", true, Some("combat".into())));
+        // No copy fires, so the last one stays, off.
+        assert_eq!(command("f3"), ("recall", false, None));
+        assert_eq!(plan.auto_resolved.macros.len(), 3);
     }
 
     fn trigger_named<'a>(plan: &'a MigrationPlan, name: &str) -> &'a Trigger {

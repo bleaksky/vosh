@@ -2,7 +2,8 @@
 //! generator builds hundreds of profile sets, each with two to four
 //! profiles that hold aliases, triggers, and macros in groups, items
 //! several profiles share alike or in conflict, a second copy of a name
-//! further on in a file, triggers in orders and at priorities of each
+//! further on in a file, a key bound twice in one file, where the input
+//! bar fires the last copy that is on, triggers in orders and at priorities of each
 //! profile's own, groups off for one kind and on for another under one
 //! name, presets on and off, preset triggers a file lacks, a profile that
 //! never saved a file, and settings that are not automation. For each set
@@ -183,14 +184,21 @@ fn on_rows(p: &Profile) -> Vec<String> {
             rows.push(alias_row(a));
         }
     }
+    // The input bar fires the last copy of a key that is on and whose
+    // group is on, as `rebuild` in src/components/Input.tsx builds its
+    // map.
+    let mut fired: BTreeMap<&str, &Macro> = BTreeMap::new();
     for m in &p.macros {
         let group_on = m
             .group
             .as_deref()
             .is_none_or(|g| g.is_empty() || !p.disabled_macro_groups.contains(g));
         if m.enabled && group_on {
-            rows.push(macro_row(m));
+            fired.insert(&m.key, m);
         }
+    }
+    for m in fired.values() {
+        rows.push(macro_row(m));
     }
     rows.sort();
     for t in p.triggers.list() {
@@ -439,6 +447,14 @@ fn generate(seed: u64) -> Set {
                 group: item_group(&mut rng, usual[&format!("macro {key}")].as_ref()),
                 enabled: rng.chance(85),
             });
+        }
+        // Now and then a file binds a key twice, in the same folder, and
+        // the input bar fires the last copy that is on.
+        if !config.macros.is_empty() && rng.chance(25) {
+            let mut again = rng.pick(&config.macros);
+            again.command.push_str(" again");
+            again.enabled = rng.chance(50);
+            config.macros.push(again);
         }
         // The presets this character has on, and their triggers as its
         // file holds them. A file saved before a preset came out lacks
