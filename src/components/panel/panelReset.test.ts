@@ -147,5 +147,6 @@ describe('Reset panel layout in the palette', () => {
     const found = paletteSections(all, 'reset panel', []).flatMap((s) => s.rows);
     expect(found.map((r) => r.id)).toEqual(['panel-reset']);
     expect(initialSelection(found)).toBe(-1);
+    expect(initialSelection(found, 'reset panel')).toBe(0);
   });
 });

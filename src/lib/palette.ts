@@ -495,8 +495,12 @@ export function paletteSections(
   return out;
 }
 
-/** The row the palette opens on: the first one that is not
- *  destructive, or none (-1) when every row is. */
-export function initialSelection(rows: PaletteEntry[]): number {
+/** The row the palette selects. With an empty query it is the first
+ *  row that is not destructive, or none (-1) when every row is, so
+ *  Cmd+K then Enter can never disconnect or reset anything. Once you
+ *  type, the best match is selected even when it is destructive,
+ *  because you asked for it by name. */
+export function initialSelection(rows: PaletteEntry[], query = ''): number {
+  if (query.trim().length > 0) return rows.length > 0 ? 0 : -1;
   return rows.findIndex((e) => !e.destructive);
 }

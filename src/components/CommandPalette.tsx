@@ -112,12 +112,12 @@ export function CommandPalette({ deps, onClose }: Props) {
   }, [level, baseEntries, aliasEntries, query, recent]);
 
   const rows = useMemo(() => sections.flatMap((s) => s.rows), [sections]);
-  const [selected, setSelected] = useState(() => initialSelection(rows));
+  const [selected, setSelected] = useState(() => initialSelection(rows, query));
 
   useEffect(() => {
     // A submenu opens on its checked row (the current theme).
     const checked = level && query.length === 0 ? rows.findIndex((e) => e.checked) : -1;
-    setSelected(checked >= 0 ? checked : initialSelection(rows));
+    setSelected(checked >= 0 ? checked : initialSelection(rows, query));
     // Reset only when the list itself changes shape, not on every
     // render of the same rows.
     // eslint-disable-next-line react-hooks/exhaustive-deps

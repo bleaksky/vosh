@@ -162,4 +162,11 @@ describe('initialSelection', () => {
     expect(onlyDisconnect.map((r) => r.id)).toEqual(['disconnect']);
     expect(initialSelection(onlyDisconnect)).toBe(-1);
   });
+
+  it('selects a destructive row you typed for', () => {
+    const entries = buildPaletteEntries(deps());
+    const onlyDisconnect = flat(paletteSections(entries, 'disconnect', []));
+    expect(initialSelection(onlyDisconnect, 'disconnect')).toBe(0);
+    expect(initialSelection([], 'nothing matches')).toBe(-1);
+  });
 });
