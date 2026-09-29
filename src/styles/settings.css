@@ -1501,10 +1501,456 @@
   display: none;
 }
 
+/* ── Automation ────────────────────────────────────────────────────── */
+
+/* The page fills the content column: the kind row, then the list and
+   detail over the save bar pinned at the bottom. Geometry follows
+   SettingsAutomation: the kind row at y 48, list 240 wide and detail
+   376 at 880 (it takes the rest of the width), 16 apart from y 92,
+   save bar 48 high at the bottom. */
+.st-auto {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .st-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex: none;
   margin: 8px 0 16px;
+}
+
+.st-auto-body {
+  display: flex;
+  gap: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.st-auto-scrollbody {
+  display: block;
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+
+.st-auto-list {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: 240px;
+  min-height: 0;
+}
+
+.st-auto-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+
+.st-auto-sections > .st-auto-rowwrap:first-child {
+  margin-top: 8px;
+}
+
+/* Group headings as typed: 12/600 tertiary. The first sits 12 below
+   the filter, the rest 8 below the divider block. */
+.st-auto-heading {
+  height: 28px;
+  margin: 0;
+  padding: 8px 10px 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+}
+
+.st-auto-heading.is-first {
+  height: 32px;
+  padding-top: 12px;
+}
+
+.st-auto-divider {
+  height: 16px;
+  padding: 7.5px 8px;
+}
+
+.st-auto-divider::before {
+  content: '';
+  display: block;
+  height: 1px;
+  background: var(--divider);
+}
+
+.st-auto-rowwrap {
+  height: 38px;
+  padding: 1px 0;
+}
+
+.st-auto-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  margin: 0;
+  padding: 1px 11px 0 10px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  text-align: left;
+}
+
+.st-auto-row:hover {
+  background: var(--hover);
+}
+
+.st-auto-row[aria-current='true'] {
+  background: var(--selrow);
+  color: var(--text);
+  box-shadow: var(--st-selrow-ring);
+}
+
+/* The list scrolls, so the ring sits inside the row. */
+.st-auto-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.st-auto-row-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.st-auto-row-untitled {
+  color: var(--tertiary);
+}
+
+.st-auto-row-meta {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tertiary);
+}
+
+/* On is a filled success dot, off a hollow tertiary ring. */
+.st-auto-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-radius: 4px;
+  background: var(--success);
+}
+
+.st-auto-dot.is-off {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.25px var(--tertiary);
+}
+
+/* MUD text in the list and cards: alias names, macro keys, commands. */
+.st-auto-mono {
+  font-family: var(--font-mud);
+}
+
+.st-auto-empty {
+  margin: 0;
+  padding: 12px 10px;
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.st-auto-footer {
+  margin-top: 12px;
+}
+
+/* A quiet button with no ring in the secondary color, like Edit all
+   as JSON…. */
+.st-button.st-auto-quiet {
+  padding: 0 10px;
+  box-shadow: none;
+  color: var(--secondary);
+  font-weight: 400;
+}
+
+.st-button.st-auto-quiet:hover {
+  color: var(--text);
+}
+
+/* Detail column. The card takes the width the list leaves, 376 at the
+   board's 880, and the column scrolls when Advanced opens. */
+.st-auto-detail {
+  flex: 1 1 376px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+
+.st-auto-detail > .st-auto-empty {
+  padding: 12px 16px;
+}
+
+.st-auto-detail-actions {
+  display: flex;
+  margin-top: 12px;
+}
+
+/* Fields in the detail card end at the card's right padding and give
+   up width before a label wraps, so the card holds at the window's
+   minimum size. */
+.st-auto-card .st-row-control {
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.st-auto-card .st-row-control:has(> .st-field, > .st-field-wrap, > .st-select) {
+  flex: 0 1 240px;
+  min-width: 96px;
+}
+
+.st-auto-card
+  .st-row:has(> .st-row-control > .st-field, > .st-row-control > .st-select)
+  .st-row-label {
+  white-space: nowrap;
+}
+
+/* The detail column scrolls, so rings on full width rows sit inside. */
+.st-auto-card .st-disclosure:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Advanced rows follow the disclosure inside the card, each with the
+   inset hairline. */
+.st-auto-advanced > .st-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: var(--sep);
+}
+
+.st-auto-advanced > .st-row:last-child {
+  border-bottom-left-radius: var(--r-card);
+  border-bottom-right-radius: var(--r-card);
+}
+
+.st-auto-cardnote {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.st-auto-value {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.st-auto-unit {
+  flex: none;
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* A row that stacks its label over a block: Lua, patterns, a pasted
+   file. */
+.st-row.st-auto-coderow,
+.st-row.st-auto-block {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.st-auto-iconbutton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0 -4px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tertiary);
+}
+
+.st-auto-iconbutton:hover {
+  color: var(--text);
+}
+
+.st-auto-iconbutton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.st-auto-patterns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-auto-pattern {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.st-auto-pattern .st-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.st-auto-pattern-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 17.5px;
+}
+
+.st-auto-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The Lua and JSON editors, drawn as settings fields. */
+.st-app .st-code .cm-editor {
+  border: 0;
+  border-radius: var(--r-row);
+  background: var(--st-fill);
+  box-shadow: var(--st-fill-ring);
+  color: var(--text);
+  font-family: var(--font-mud);
+  font-size: 13px;
+}
+
+.st-app .st-code .cm-editor.cm-focused {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.st-app .st-code .cm-gutters {
+  border-right: 1px solid var(--sep);
+  background: transparent;
+  color: var(--tertiary);
+}
+
+.st-app .st-code .cm-content {
+  padding: 5px 4px;
+}
+
+.st-auto-json {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  padding-bottom: 12px;
+}
+
+.st-auto-json-editor {
+  margin-top: 8px;
+}
+
+.st-auto-json-note {
+  flex: none;
+  margin: 8px 0 0;
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.st-auto-json-note.is-bad {
+  color: var(--danger-text);
+}
+
+/* Import from another client. */
+.st-auto-paste {
+  width: 100%;
+  height: 132px;
+  padding: 6px 10px;
+  resize: vertical;
+}
+
+.st-auto-importlist {
+  margin: 0;
+  padding: 0 16px 12px 32px;
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Save bar, pinned under the list and detail. */
+.st-savebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: none;
+  height: 48px;
+  border-top: 1px solid var(--sep);
+  background: var(--bg);
+}
+
+.st-savebar-side,
+.st-savebar-actions {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.st-savebar-side {
+  gap: 16px;
+}
+
+.st-savebar-actions {
+  flex: none;
+  gap: 8px;
+}
+
+.st-savebar-status {
+  color: var(--tertiary);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
 }

@@ -175,6 +175,13 @@ export function timerSavePlan(draft: Draft<TimerRecord>): TimerSavePlan {
   return { remove, set };
 }
 
+/** An interval as the list shows it: `30 s`, `5 min`, `2 h`. */
+export function formatInterval(secs: number): string {
+  if (secs >= 3600 && secs % 3600 === 0) return `${secs / 3600} h`;
+  if (secs >= 60 && secs % 60 === 0) return `${secs / 60} min`;
+  return `${secs} s`;
+}
+
 /** A timer's list name: its name, else its command. */
 export function timerLabel(timer: TimerRecord): string {
   const name = timer.name.trim();
@@ -264,6 +271,24 @@ export function loadoutToggles(
 /** The active list loadouts_set_active takes. */
 export function activeLoadouts(toggles: readonly LoadoutToggle[]): string[] {
   return toggles.filter((t) => t.active).map((t) => t.name);
+}
+
+// ── JSON ────────────────────────────────────────────────────────────
+
+/** Read a JSON list and normalize each entry, or null when the text is
+ *  not a JSON list. */
+export function parseJsonList<T>(text: string, normalize: (raw: unknown) => T): T[] | null {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed.map(normalize) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A list as the JSON view shows it. */
+export function jsonListText(values: readonly unknown[]): string {
+  return JSON.stringify(values, null, 2);
 }
 
 // ── Errors ──────────────────────────────────────────────────────────

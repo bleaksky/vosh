@@ -17,9 +17,9 @@ Register a page in `PAGES` in `SettingsApp.tsx`. A page that pins its own bar an
 
 A page that saves as you go takes `update` from `useSettingsAutoSave` in `legacy/`. `update(patch)` patches the config copy and saves the whole snapshot once typing settles. Pass `{ now: true }` for a discrete pick another window shows at once, like a theme or a toggle.
 
-A page built on its board lives in `pages/`. `pages/CharactersPage.tsx` is the Characters board, with its parts in `pages/characters/`. `pages/AppearancePage.tsx` is the Appearance board. Its parts sit in `pages/appearance/`. The split divider and sent command color rows are self contained, so either can move to another group by rendering it there with `config` and `update`.
+A page built on its board lives in `pages/`. `pages/CharactersPage.tsx` is the Characters board, with its parts in `pages/characters/`. `pages/AppearancePage.tsx` is the Appearance board. Its parts sit in `pages/appearance/`. The split divider and sent command color rows are self contained, so either can move to another group by rendering it there with `config` and `update`. `pages/AutomationPage.tsx` is the Automation board, described under Automation below.
 
-The placeholder for Automation still shows the old editors under the board's headings. Replace the whole component with its board. General, Layout, and Input have no board yet. Their old editors sit in `legacy/` and render inside `LegacyIsland`, which marks them `data-interim`. The old Appearance and Characters placeholders, `groups/AppearanceGroup.tsx` and `groups/CharactersGroup.tsx`, no longer render.
+General, Layout, and Input have no board yet. Their old editors sit in `legacy/` and render inside `LegacyIsland`, which marks them `data-interim`. The old Appearance, Automation, and Characters placeholders, `groups/AppearanceGroup.tsx`, `groups/AutomationGroup.tsx`, and `groups/CharactersGroup.tsx`, no longer render.
 
 ## Deep links and search
 
@@ -28,6 +28,12 @@ A deep link is a string like `automation:macros` or `characters:Erelei#tracked`.
 What a section means depends on the group. In Automation it is the kind. In Characters it is the profile name, and no section means the active profile. Everywhere else it is a section `id` the frame scrolls to.
 
 Search finds rows. `src/lib/settingsSearch.ts` lists every row with its label and target. When a page adds a row, add it there too, and give the element the same anchor, `anchor` on `Row` or `Disclosure` and `id` on `Section`. The frame scrolls to it and flashes a row (`revealAnchor.ts`). When the anchor sits inside a closed `Disclosure`, open it when `target.anchor` names it.
+
+## Automation
+
+`pages/AutomationPage.tsx` holds the kind switcher, `Import…`, and the discard question. Each kind is an editor in `pages/automation/` built on `DraftEditor`, which draws the list, the detail card, and the save bar over a draft from `src/lib/automationDraft.ts`. A kind is a `KindSpec` (`pages/automation/types.ts`): how it loads, saves through the kind's existing API, validates, lists, and draws its detail card. Timers pins the Tick above its list with a draft of its own. The pure logic, with tests, sits in `src/lib/automationDraft.ts`, `automationList.ts`, `automationTriggers.ts`, and `automationRecords.ts`.
+
+The page draws the anchors `tick` (the Tick row), `import` (the import section), and `json` (`Edit all as JSON…` and the JSON view). A target with the `import` or `json` anchor opens that view, and `tick` selects the Tick.
 
 # Primitives
 

@@ -12,12 +12,15 @@ import {
   automationSaveError,
   blankTimer,
   enabledPresetIds,
+  formatInterval,
+  jsonListText,
   loadoutToggles,
   macroSavePlan,
   normalizeAlias,
   normalizeMacro,
   normalizeTick,
   normalizeTimer,
+  parseJsonList,
   presetSavePlan,
   presetToggles,
   PRESETS_OFF_MARKER,
@@ -134,6 +137,13 @@ describe('timers', () => {
     ]);
   });
 
+  it('shows intervals in the largest whole unit', () => {
+    expect(formatInterval(45)).toBe('45 s');
+    expect(formatInterval(90)).toBe('90 s');
+    expect(formatInterval(300)).toBe('5 min');
+    expect(formatInterval(7200)).toBe('2 h');
+  });
+
   it('names a timer by its name or its first command line', () => {
     expect(timerLabel(timers[0])).toBe('Hydrate');
     expect(timerLabel(timers[1])).toBe('save');
@@ -209,6 +219,18 @@ describe('loadouts', () => {
       { name: 'crafter', active: true },
     ]);
     expect(activeLoadouts(toggles)).toEqual(['crafter']);
+  });
+});
+
+describe('JSON view', () => {
+  it('round trips a list through its text', () => {
+    const list = [normalizeMacro({ key: 'F1', command: 'kick', group: 'combat' })];
+    expect(parseJsonList(jsonListText(list), normalizeMacro)).toEqual(list);
+  });
+
+  it('reads anything but a list as null', () => {
+    expect(parseJsonList('{"key":"F1"}', normalizeMacro)).toBeNull();
+    expect(parseJsonList('[{"key":', normalizeMacro)).toBeNull();
   });
 });
 
