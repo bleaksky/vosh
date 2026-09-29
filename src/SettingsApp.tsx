@@ -28,6 +28,7 @@ import {
 import { SETTINGS_GOTO_EVENT, SETTINGS_PENDING_KEY } from './lib/settingsLink';
 import { revealSettingsAnchor } from './components/settings/revealAnchor';
 import { Sidebar } from './components/settings/Sidebar';
+import { useSettingsClose } from './components/settings/useSettingsClose';
 import { WindowControls } from './components/settings/WindowControls';
 import { ChevronRightIcon } from './components/settings/ui';
 import type { LeaveGuard, SettingsPageProps } from './components/settings/pageTypes';
@@ -110,6 +111,10 @@ export function SettingsApp() {
   useEffect(() => {
     groupRef.current = nav.target.group;
   }, [nav]);
+
+  // Closing the window, and quitting, send every write still waiting,
+  // the field you are typing in included.
+  useSettingsClose();
 
   // A page with unsaved changes can hold a move to another group until
   // you answer its question. A move inside the group is the page's own.

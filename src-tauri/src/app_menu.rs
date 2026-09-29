@@ -452,6 +452,9 @@ mod mac {
             Route::CloseWindow => {
                 if is_front(app, "settings") {
                     if let Some(settings) = app.get_webview_window("settings") {
+                        // A close request, the same as the close button.
+                        // The page's close handler (useSettingsClose)
+                        // sends the edits it holds back, then closes.
                         let _ = settings.close();
                     }
                 } else if is_front(app, "main") {
