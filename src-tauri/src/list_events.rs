@@ -81,7 +81,7 @@ impl ListChanges {
 
 /// Send one event to every window for each list that changed. Call it
 /// after the profile lock is released.
-pub(crate) fn broadcast_list_changes(app: &AppHandle, changes: ListChanges) {
+pub(crate) fn broadcast_list_changes<R: tauri::Runtime>(app: &AppHandle<R>, changes: ListChanges) {
     for event in changes.events() {
         crate::commands::broadcast(app, event, &"");
     }

@@ -136,7 +136,7 @@ struct ProfileChanged {
     name: String,
 }
 
-pub(crate) fn broadcast_profile_changed(app: &AppHandle, name: &str) {
+pub(crate) fn broadcast_profile_changed<R: tauri::Runtime>(app: &AppHandle<R>, name: &str) {
     broadcast(
         app,
         PROFILE_CHANGED_EVENT,
@@ -500,7 +500,10 @@ pub(crate) async fn session_identity(state: &SharedState) -> Option<SessionIdent
     })
 }
 
-pub(crate) async fn broadcast_session_identity(app: &AppHandle, state: &SharedState) {
+pub(crate) async fn broadcast_session_identity<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+) {
     let identity = session_identity(state).await;
     broadcast(app, SESSION_IDENTITY_EVENT, &identity);
 }
