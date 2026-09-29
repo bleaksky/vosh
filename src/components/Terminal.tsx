@@ -167,6 +167,8 @@ export interface TerminalHandle {
   onSelectionChange: (cb: () => void) => () => void;
   /** Current selected text, or empty string when no selection. */
   getSelection: () => string;
+  /** Select the whole buffer, scrollback included. */
+  selectAll: () => void;
 }
 
 interface Props {
@@ -984,6 +986,7 @@ export function Terminal({
       clearSelection: () => term.clearSelection(),
       hasSelection: () => term.hasSelection(),
       getSelection: () => term.getSelection(),
+      selectAll: () => term.selectAll(),
       onSelectionChange: (cb) => {
         const disposable = term.onSelectionChange(cb);
         return () => disposable.dispose();
