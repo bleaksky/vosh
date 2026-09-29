@@ -2042,6 +2042,12 @@ export interface MigrationPlan {
   };
   conflicts: MigrationConflict[];
   loadouts: MigrationLoadoutPreview[];
+  /** The enabled preset list every character shares in loadout mode. */
+  shared_presets: string[];
+  /** Each source profile's own enabled preset list, in the order of
+   *  source_profiles. A profile that never saved a file holds the
+   *  defaults, the empty list. */
+  profile_presets: string[][];
 }
 
 /** Preview the shared catalog. `library` holds the id of every preset in

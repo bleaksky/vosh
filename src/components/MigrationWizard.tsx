@@ -8,6 +8,7 @@ import {
   type MigrationPlan,
 } from '../lib/session';
 import { PRESETS } from '../lib/presets';
+import { presetChanges } from '../lib/wizardPresets';
 
 /** The id of every preset in the library this build installs from. */
 const LIBRARY = PRESETS.map((p) => p.id);
@@ -22,6 +23,8 @@ interface Props {
 // apply step which copies the per-profile files into profiles/legacy/,
 // writes catalog.toml + loadouts.toml, and takes the aliases, triggers,
 // and macros out of each profile file, which keeps every other setting.
+// Every character then shares one preset list, and the preview says who
+// gains or loses a preset by it.
 // The runtime stays in legacy mode until the user relaunches Vosh: the
 // wizard switches to a
 // "Migration complete" state with a [quit Vosh] button. Path B mode
@@ -119,9 +122,10 @@ export function MigrationWizard({ onClose }: Props) {
             <div className="migration-wizard-status migration-wizard-applied">
               <div className="migration-wizard-applied-title">migration complete.</div>
               <div className="migration-wizard-applied-body">
-                Vosh saved the shared catalog and a loadout for each profile. Each profile kept
-                every other setting, and a full copy of each old profile file waits in
-                profiles/legacy. Quit Vosh below, then open it again to use the catalog.
+                Vosh saved the shared catalog and a loadout for each profile. Every character now
+                shares one list of presets that are on. Each profile kept its other settings, and a
+                full copy of each old profile file waits in profiles/legacy. Quit Vosh below, then
+                open it again to use the catalog.
               </div>
             </div>
           )}
@@ -152,9 +156,9 @@ export function MigrationWizard({ onClose }: Props) {
           ) : (
             <>
               <span className="migration-wizard-hint">
-                Applying moves your aliases, triggers, and macros into one shared catalog. Every
-                other setting stays with its profile, and Vosh copies each profile file to
-                profiles/legacy first.
+                Applying moves your aliases, triggers, and macros into one shared catalog, and every
+                character then shares one list of presets that are on. Every other setting stays
+                with its profile, and Vosh copies each profile file to profiles/legacy first.
               </span>
               <button
                 type="button"
@@ -303,7 +307,53 @@ export function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
           profile keeps on the items it has on now, at launch and when you switch.
         </div>
       </Section>
+
+      <SharedPresets plan={plan} />
     </>
+  );
+}
+
+/** Who gains and who loses which preset once every character shares one
+ *  preset list. */
+function SharedPresets({ plan }: { plan: MigrationPlan }) {
+  const changes = presetChanges(plan);
+  const tags = (names: string[]) =>
+    names.map((name) => (
+      <span key={name} className="migration-group-tag">
+        {name}
+      </span>
+    ));
+  return (
+    <Section title="shared presets">
+      {changes.length === 0 ? (
+        <Empty>Every character has the same presets on as now.</Empty>
+      ) : (
+        <ul className="migration-loadout-list">
+          {changes.map((c) => (
+            <li key={c.profile} className="migration-loadout migration-preset-change">
+              <span className="migration-loadout-name">{c.profile}</span>
+              {c.gains.length > 0 && (
+                <>
+                  <span className="migration-preset-verb">gains</span>
+                  {tags(c.gains)}
+                </>
+              )}
+              {c.loses.length > 0 && (
+                <>
+                  <span className="migration-preset-verb">loses</span>
+                  {tags(c.loses)}
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="migration-hint">
+        Loadout mode keeps one list of presets that are on, and every character shares it. The list
+        holds every preset that any profile file has on now. A profile that never saved a file has
+        every preset on.
+      </div>
+    </Section>
   );
 }
 
