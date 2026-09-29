@@ -16,11 +16,14 @@ import {
 import { useEscape } from '../../../../lib/escapeStack';
 import {
   copyName,
+  keepsProfileName,
   movedSentence,
   newProfileClaim,
   newProfileName,
   profileDisplayName,
   profileWorldName,
+  takenProfileName,
+  takenSentence,
 } from '../../../../lib/characterProfiles';
 import {
   profileCreate,
@@ -90,6 +93,15 @@ export function ProfileList({
 
   const fail = (e: unknown) => onError(String(e));
 
+  /** Keep the field open with a sentence when another profile has the
+   *  name in any case. The backend refuses it too, since the disk
+   *  ignores case and the file would belong to that profile. */
+  const refuseTaken = (typed: string, renaming?: string): boolean => {
+    const taken = takenProfileName(names, typed, renaming);
+    if (taken) onError(takenSentence(taken));
+    return taken !== null;
+  };
+
   const run = async (action: () => Promise<void>) => {
     try {
       await action();
@@ -131,6 +143,7 @@ export function ProfileList({
       setEditing(null);
       return true;
     }
+    if (refuseTaken(name)) return false;
     try {
       const active = list.profiles.find((p) => p.name === list.active);
       const claim = newProfileClaim(identity, active);
@@ -156,10 +169,11 @@ export function ProfileList({
 
   const renameProfile = async (from: string, raw: string): Promise<boolean> => {
     const name = raw.trim();
-    if (name.length === 0 || name === from) {
+    if (name.length === 0 || keepsProfileName(from, name)) {
       setEditing(null);
       return true;
     }
+    if (refuseTaken(name, from)) return false;
     try {
       await profileRename(from, name);
       setEditing(null);
@@ -180,6 +194,7 @@ export function ProfileList({
       setEditing(null);
       return true;
     }
+    if (refuseTaken(name)) return false;
     try {
       await profileDuplicate(from, name);
       setEditing(null);
@@ -250,7 +265,7 @@ export function ProfileList({
               >
                 {renaming ? (
                   <NameField
-                    initial={name}
+                    initial={display}
                     label={`New name for ${display}`}
                     commitOnBlur
                     onCommit={(value) => renameProfile(name, value)}

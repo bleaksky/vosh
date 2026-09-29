@@ -175,6 +175,33 @@ export function newProfileName(identity: SessionIdentity | null, names: readonly
   return character;
 }
 
+/** The profile that already has `typed` as its name in any case, else
+ *  null. Profile files live on disks that ignore case, so `Default`
+ *  belongs to `default` and `HEALER` to `Healer`. A rename passes the
+ *  profile's own name as `renaming`, which may change its own case. */
+export function takenProfileName(
+  names: readonly string[],
+  typed: string,
+  renaming?: string,
+): string | null {
+  const want = typed.trim().toLowerCase();
+  if (want.length === 0) return null;
+  return names.find((n) => n !== renaming && n.toLowerCase() === want) ?? null;
+}
+
+/** The sentence for a name another profile has, the same one the
+ *  backend sends. */
+export function takenSentence(name: string): string {
+  return `You already have a profile named ${profileDisplayName(name)}.`;
+}
+
+/** Whether a typed rename leaves the profile as it reads now: its own
+ *  name, or `Default` for the reserved profile. */
+export function keepsProfileName(name: string, typed: string): boolean {
+  const clean = typed.trim();
+  return clean === name || clean === profileDisplayName(name);
+}
+
 /** A free name for a copy of `source`: `Erelei copy`, then `Erelei
  *  copy 2` and on. */
 export function copyName(source: string, names: readonly string[]): string {

@@ -4,6 +4,7 @@ import {
   findProfileName,
   formatCharacterNames,
   hasWorld,
+  keepsProfileName,
   loginCharacter,
   loginLabel,
   movedSentence,
@@ -14,6 +15,8 @@ import {
   parsePort,
   profileDisplayName,
   profileWorldName,
+  takenProfileName,
+  takenSentence,
   worldKey,
   worldOptions,
   worldSources,
@@ -70,6 +73,29 @@ describe('profile names', () => {
     expect(copyName('Healer', NAMES)).toBe('Healer copy');
     expect(copyName('default', NAMES)).toBe('Default copy');
     expect(copyName('Healer', [...NAMES, 'Healer copy', 'healer copy 2'])).toBe('Healer copy 3');
+  });
+
+  it('treats a name another profile has in any case as taken', () => {
+    // Characters shows default as Default, and the disk keeps
+    // Default.toml and default.toml as one file.
+    expect(takenProfileName(NAMES, 'Default')).toBe('default');
+    expect(takenProfileName(NAMES, ' HEALER ')).toBe('Healer');
+    expect(takenProfileName(NAMES, 'test-prompt', 'Healer')).toBe('Test-Prompt');
+    expect(takenProfileName(NAMES, 'Default', 'Healer')).toBe('default');
+    expect(takenProfileName(NAMES, 'Vanek')).toBeNull();
+    expect(takenProfileName(NAMES, '  ')).toBeNull();
+    // A profile may change the case of its own name.
+    expect(takenProfileName(NAMES, 'healer', 'Healer')).toBeNull();
+    expect(takenSentence('default')).toBe('You already have a profile named Default.');
+    expect(takenSentence('Healer')).toBe('You already have a profile named Healer.');
+  });
+
+  it('knows a rename that keeps the name as it reads', () => {
+    expect(keepsProfileName('default', 'Default')).toBe(true);
+    expect(keepsProfileName('default', ' default ')).toBe(true);
+    expect(keepsProfileName('Healer', 'Healer')).toBe(true);
+    expect(keepsProfileName('Healer', 'healer')).toBe(false);
+    expect(keepsProfileName('default', 'Main')).toBe(false);
   });
 });
 
