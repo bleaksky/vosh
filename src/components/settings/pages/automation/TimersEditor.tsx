@@ -22,14 +22,13 @@ import {
   type TimerRecord,
 } from '../../../../lib/automationRecords';
 import {
-  subscribeProfileSwitched,
-  subscribeTickConfigChanged,
   subscribeTimersChanged,
   tickGetConfig,
   tickSetConfig,
   timersList,
   type TickConfig,
 } from '../../../../lib/session';
+import { followTickDraft } from '../../../../lib/tickDraft';
 import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
 import { DraftEditor, type PinnedPart } from './DraftEditor';
 import { NumberField } from './fields';
@@ -90,7 +89,6 @@ export function TimersEditor({ json, onJson, onDirty, onError, tickSeq }: Timers
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    let unsubSwitch: (() => void) | undefined;
     const reload = () =>
       loadTick()
         .then((next) => {
@@ -100,16 +98,18 @@ export function TimersEditor({ json, onJson, onDirty, onError, tickSeq }: Timers
           if (!cancelled) onError(automationSaveError(e));
         });
     void reload();
-    // The tick lives in the profile, so a switch loads the new one.
-    void subscribeProfileSwitched(() => void reload()).then((fn) => {
-      if (cancelled) fn();
-      else unsubSwitch = fn;
-    });
-    // Follow a change from elsewhere while the tick is clean.
-    void subscribeTickConfigChanged((cfg) => {
-      const current = tickRef.current;
-      if (cancelled || (current && isDraftDirty(current))) return;
-      putTick(createDraft([normalizeTick(cfg)]));
+    // The tick lives in the profile, so a switch, a load, a reset, or an
+    // import reads the new one. A change from elsewhere lands while the
+    // tick is clean.
+    void followTickDraft({
+      reload: () => void reload(),
+      adopt: (cfg) => {
+        if (!cancelled) putTick(createDraft([normalizeTick(cfg)]));
+      },
+      isDirty: () => {
+        const current = tickRef.current;
+        return current !== null && isDraftDirty(current);
+      },
     }).then((fn) => {
       if (cancelled) fn();
       else unsub = fn;
@@ -117,7 +117,6 @@ export function TimersEditor({ json, onJson, onDirty, onError, tickSeq }: Timers
     return () => {
       cancelled = true;
       unsub?.();
-      unsubSwitch?.();
     };
   }, [onError]);
 
