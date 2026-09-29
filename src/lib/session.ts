@@ -1670,11 +1670,16 @@ export async function profileSwitch(name: string): Promise<void> {
   return invoke('profile_switch', { name });
 }
 
+/** Replace a profile's description and login claim. The claim follows
+ *  the login toggle's rules. A claim with no character is turned off, a
+ *  claim that is on takes its characters from every other profile on the
+ *  same world, and a claim sent back unchanged stays as saved, toggle
+ *  included. */
 export async function profileSetMetadata(
   name: string,
   description: string | null,
   autoMatch: ProfileAutoMatch | null,
-): Promise<void> {
+): Promise<LoginClaim> {
   return invoke('profile_set_metadata', {
     name,
     description,

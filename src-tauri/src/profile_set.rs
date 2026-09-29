@@ -190,6 +190,24 @@ impl AutoMatch {
             .any(|c| c.trim().to_ascii_lowercase() == wanted)
     }
 
+    /// Whether `other` names the same world and the same characters in
+    /// the same order, ignoring case. The toggle is not compared.
+    fn same_claim(&self, other: &AutoMatch) -> bool {
+        let same_host = match (self.host.as_deref(), other.host.as_deref()) {
+            (Some(a), Some(b)) => a.trim().eq_ignore_ascii_case(b.trim()),
+            (None, None) => true,
+            _ => false,
+        };
+        same_host
+            && self.port == other.port
+            && self.characters.len() == other.characters.len()
+            && self
+                .characters
+                .iter()
+                .zip(&other.characters)
+                .all(|(a, b)| a.trim().eq_ignore_ascii_case(b.trim()))
+    }
+
     /// Whether this entry sits on the world at `host` and `port`. Hosts
     /// match without case, and a port pinned on only one side still
     /// matches, since either could log in there.
@@ -552,6 +570,7 @@ impl ProfileSet {
         let Some(idx) = self.index.profiles.iter().position(|p| p.name == name) else {
             return Err(ProfileSetError::NotFound(name.to_string()));
         };
+        let before = self.index.profiles.clone();
         let mut released_from = Vec::new();
         if on {
             if character.is_empty() {
@@ -564,21 +583,7 @@ impl ProfileSet {
             let Some((host, port)) = world else {
                 return Err(ProfileSetError::NoWorld(display_name(name)));
             };
-            for (i, other) in self.index.profiles.iter_mut().enumerate() {
-                let Some(am) = other.auto_match.as_mut() else {
-                    continue;
-                };
-                if i == idx || !am.on_world(&host, port) || !am.names(character) {
-                    continue;
-                }
-                let wanted = character.to_ascii_lowercase();
-                am.characters
-                    .retain(|c| c.trim().to_ascii_lowercase() != wanted);
-                if am.characters.is_empty() {
-                    am.enabled = false;
-                }
-                released_from.push(other.name.clone());
-            }
+            self.release_character(idx, &host, port, character, &mut released_from);
             let am = self.index.profiles[idx]
                 .auto_match
                 .as_mut()
@@ -590,11 +595,58 @@ impl ProfileSet {
         } else if let Some(am) = self.index.profiles[idx].auto_match.as_mut() {
             am.enabled = false;
         }
-        self.save_index()?;
+        self.save_profiles_or_restore(before)?;
         Ok(LoginClaim {
             entry: self.index.profiles[idx].clone(),
             released_from,
         })
+    }
+
+    /// Take `character` from every profile but the one at `keep` whose
+    /// claim sits on the world at `host` and `port`, because a character
+    /// belongs to one profile per world. A profile left with no
+    /// characters has its toggle turned off so it does not become the
+    /// host wide fallback. Adds each profile it took the character from
+    /// to `released_from` once. Writes nothing, so the caller saves the
+    /// index.
+    fn release_character(
+        &mut self,
+        keep: usize,
+        host: &str,
+        port: Option<u16>,
+        character: &str,
+        released_from: &mut Vec<String>,
+    ) {
+        let wanted = character.trim().to_ascii_lowercase();
+        for (i, other) in self.index.profiles.iter_mut().enumerate() {
+            let Some(am) = other.auto_match.as_mut() else {
+                continue;
+            };
+            if i == keep || !am.on_world(host, port) || !am.names(character) {
+                continue;
+            }
+            am.characters
+                .retain(|c| c.trim().to_ascii_lowercase() != wanted);
+            if am.characters.is_empty() {
+                am.enabled = false;
+            }
+            if !released_from.contains(&other.name) {
+                released_from.push(other.name.clone());
+            }
+        }
+    }
+
+    /// Save the index after a change to its entries. When the save
+    /// fails, put `before` back so memory keeps matching the file.
+    fn save_profiles_or_restore(
+        &mut self,
+        before: Vec<ProfileEntry>,
+    ) -> Result<(), ProfileSetError> {
+        let saved = self.save_index();
+        if saved.is_err() {
+            self.index.profiles = before;
+        }
+        saved
     }
 
     /// Point `name` at a world, editing only the host and port of its
@@ -754,22 +806,60 @@ impl ProfileSet {
         Ok(())
     }
 
-    /// Update an entry's metadata (description, auto-match). Used by
-    /// Stage 2's Settings UI; Stage 1 just exposes the plumbing.
-    #[allow(dead_code)]
+    /// Replace an entry's description and login claim. The claim follows
+    /// the rules the login toggle follows, so no caller can bring back a
+    /// double claim or a host wide fallback.
+    ///
+    /// - A claim that names the same world and characters as the saved
+    ///   one, with its toggle on, stays as saved. A description edit
+    ///   sends the claim back unchanged, and the old Profiles tab sends
+    ///   no toggle at all, which reads as on, so this keeps it from
+    ///   turning a toggle back on or taking a character from the
+    ///   profile that wins the login.
+    /// - A claim with no characters has its toggle turned off.
+    /// - A claim with its toggle on takes each of its characters from
+    ///   every other profile on the same world, as [`Self::set_login`]
+    ///   does, and names them in `released_from`.
+    /// - A claim with no world, port or character goes away.
+    ///
+    /// Writes the index once and never switches.
     pub(crate) fn set_metadata(
         &mut self,
         name: &str,
         description: Option<String>,
         auto_match: Option<AutoMatch>,
-    ) -> Result<(), ProfileSetError> {
-        let Some(entry) = self.index.profiles.iter_mut().find(|p| p.name == name) else {
+    ) -> Result<LoginClaim, ProfileSetError> {
+        let Some(idx) = self.index.profiles.iter().position(|p| p.name == name) else {
             return Err(ProfileSetError::NotFound(name.to_string()));
         };
+        let before = self.index.profiles.clone();
+        let stored = before[idx].auto_match.clone();
+        let mut released_from = Vec::new();
+        let claim = match auto_match.map(AutoMatch::cleaned) {
+            None => None,
+            Some(am) if am.host.is_none() && am.port.is_none() && am.characters.is_empty() => None,
+            Some(am) if am.enabled && stored.as_ref().is_some_and(|s| s.same_claim(&am)) => stored,
+            Some(mut am) => {
+                if am.characters.is_empty() {
+                    am.enabled = false;
+                }
+                if let (true, Some(host)) = (am.enabled, am.host.clone()) {
+                    for character in &am.characters {
+                        self.release_character(idx, &host, am.port, character, &mut released_from);
+                    }
+                }
+                Some(am)
+            }
+        };
+        let entry = &mut self.index.profiles[idx];
         entry.description = description;
-        entry.auto_match = auto_match;
-        self.save_index()?;
-        Ok(())
+        entry.auto_match = claim;
+        let entry = entry.clone();
+        self.save_profiles_or_restore(before)?;
+        Ok(LoginClaim {
+            entry,
+            released_from,
+        })
     }
 }
 
@@ -1061,27 +1151,51 @@ characters = ["Erelei", "Vanek"]
         }
     }
 
+    /// Write `name`'s description and claim as they stand, the way an
+    /// index saved before the login rules holds them, so a test can set
+    /// up a double claim or a host wide fallback.
+    pub(crate) fn put_claim(
+        set: &mut ProfileSet,
+        name: &str,
+        description: Option<&str>,
+        auto_match: AutoMatch,
+    ) {
+        let entry = set
+            .index
+            .profiles
+            .iter_mut()
+            .find(|p| p.name == name)
+            .unwrap();
+        entry.description = description.map(ToString::to_string);
+        entry.auto_match = Some(auto_match);
+        set.save_index().unwrap();
+    }
+
     /// James's index: default and Test-Prompt both claim Erelei on the
     /// same world, and Healer claims Caelaor.
     pub(crate) fn james_like_set(dir: &std::path::Path) -> ProfileSet {
         let mut set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
         let world = "play.theforsakenlands.com";
-        set.set_metadata(
+        put_claim(
+            &mut set,
             DEFAULT_PROFILE_NAME,
-            Some("Immortal".into()),
-            Some(claim(world, Some(1848), &["Erelei"])),
-        )
-        .unwrap();
+            Some("Immortal"),
+            claim(world, Some(1848), &["Erelei"]),
+        );
         set.create("Healer").unwrap();
-        set.set_metadata("Healer", None, Some(claim(world, Some(1848), &["Caelaor"])))
-            .unwrap();
+        put_claim(
+            &mut set,
+            "Healer",
+            None,
+            claim(world, Some(1848), &["Caelaor"]),
+        );
         set.create("Test-Prompt").unwrap();
-        set.set_metadata(
+        put_claim(
+            &mut set,
             "Test-Prompt",
             None,
-            Some(claim(world, Some(1848), &["Erelei"])),
-        )
-        .unwrap();
+            claim(world, Some(1848), &["Erelei"]),
+        );
         set
     }
 
@@ -1111,21 +1225,21 @@ characters = ["Erelei", "Vanek"]
     fn login_on_checks_a_portless_claim_at_its_known_world_port() {
         let dir = tempdir().unwrap();
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
-        set.set_metadata(
+        put_claim(
+            &mut set,
             DEFAULT_PROFILE_NAME,
             None,
-            Some(claim("play.theforsakenlands.com", None, &["Vanek"])),
-        )
-        .unwrap();
+            claim("play.theforsakenlands.com", None, &["Vanek"]),
+        );
         assert!(set.login_on(DEFAULT_PROFILE_NAME));
         // A profile pinned to the real port outscores it at login.
         set.create("Pinned").unwrap();
-        set.set_metadata(
+        put_claim(
+            &mut set,
             "Pinned",
             None,
-            Some(claim("play.theforsakenlands.com", Some(1848), &["Vanek"])),
-        )
-        .unwrap();
+            claim("play.theforsakenlands.com", Some(1848), &["Vanek"]),
+        );
         assert!(!set.login_on(DEFAULT_PROFILE_NAME));
         assert!(set.login_on("Pinned"));
     }
@@ -1188,25 +1302,23 @@ characters = ["Erelei", "Vanek"]
         let dir = tempdir().unwrap();
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         let world = "play.theforsakenlands.com";
-        set.set_metadata(
+        put_claim(
+            &mut set,
             DEFAULT_PROFILE_NAME,
             None,
-            Some(claim(world, Some(1848), &["Erelei", "Akletus"])),
-        )
-        .unwrap();
+            claim(world, Some(1848), &["Erelei", "Akletus"]),
+        );
         set.create("Elsewhere").unwrap();
-        set.set_metadata(
+        put_claim(
+            &mut set,
             "Elsewhere",
             None,
-            Some(claim("mud.example.org", None, &["Erelei"])),
-        )
-        .unwrap();
+            claim("mud.example.org", None, &["Erelei"]),
+        );
         set.create("Portless").unwrap();
-        set.set_metadata("Portless", None, Some(claim(world, None, &["Erelei"])))
-            .unwrap();
+        put_claim(&mut set, "Portless", None, claim(world, None, &["Erelei"]));
         set.create("New").unwrap();
-        set.set_metadata("New", None, Some(claim(world, Some(1848), &[])))
-            .unwrap();
+        put_claim(&mut set, "New", None, claim(world, Some(1848), &[]));
 
         let claim = set.set_login("New", "Erelei", true).unwrap();
         assert_eq!(
@@ -1401,16 +1513,128 @@ characters = ["Erelei", "Vanek"]
             Some("Test-Prompt".into())
         );
 
-        // A host wide fallback loads for Vanek but does not claim him.
+        // A host wide fallback from an older index loads for Vanek but
+        // does not claim him.
         set.create("Fallback").unwrap();
-        set.set_metadata("Fallback", None, Some(claim(world, None, &[])))
-            .unwrap();
+        put_claim(&mut set, "Fallback", None, claim(world, None, &[]));
         assert_eq!(
             set.resolve_match(world, 1848, Some("Vanek")),
             Some("Fallback".into())
         );
         assert_eq!(set.claimed_by(world, 1848, "Vanek"), None);
         assert_eq!(set.claimed_by("mud.example.org", 4000, "Erelei"), None);
+    }
+
+    #[test]
+    fn metadata_takes_a_new_character_from_every_other_profile_on_the_world() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        let world = "play.theforsakenlands.com";
+        // The old Profiles tab sends a claim with no toggle, which reads
+        // as on.
+        let result = set
+            .set_metadata(
+                "Healer",
+                Some("Both".into()),
+                Some(claim(world, Some(1848), &["Caelaor", "erelei"])),
+            )
+            .unwrap();
+        assert_eq!(
+            result.released_from,
+            vec![DEFAULT_PROFILE_NAME.to_string(), "Test-Prompt".to_string()]
+        );
+        assert!(result.entry.auto_match.as_ref().unwrap().enabled);
+        assert_eq!(characters_of(&set, "Healer"), vec!["Caelaor", "erelei"]);
+        assert_eq!(
+            set.get("Healer").unwrap().description.as_deref(),
+            Some("Both")
+        );
+        // default and Test-Prompt lost their only character, so their
+        // toggles went off and neither is a host wide fallback.
+        for name in [DEFAULT_PROFILE_NAME, "Test-Prompt"] {
+            assert!(characters_of(&set, name).is_empty(), "{name}");
+            assert!(!enabled(&set, name), "{name}");
+        }
+        assert_eq!(
+            set.resolve_match(world, 1848, Some("Erelei")),
+            Some("Healer".into())
+        );
+        assert_eq!(set.resolve_match(world, 1848, Some("Vanek")), None);
+        let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        assert!(!enabled(&reloaded, DEFAULT_PROFILE_NAME));
+        assert!(reloaded.login_on("Healer"));
+    }
+
+    #[test]
+    fn metadata_turns_off_a_claim_with_no_character() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        let world = "play.theforsakenlands.com";
+        set.create("Blank").unwrap();
+        set.set_metadata("Blank", None, Some(claim(world, None, &[])))
+            .unwrap();
+        let am = set.get("Blank").unwrap().auto_match.clone().unwrap();
+        assert_eq!(am.host.as_deref(), Some(world));
+        assert!(!am.enabled);
+        // No fallback appeared for logins nobody claims.
+        assert_eq!(set.resolve_match(world, 1848, None), None);
+        assert_eq!(set.resolve_match(world, 1848, Some("Vanek")), None);
+
+        // Clearing a character list turns the toggle off and keeps the
+        // world.
+        set.set_metadata("Healer", None, Some(claim(world, Some(1848), &[" "])))
+            .unwrap();
+        assert!(!enabled(&set, "Healer"));
+        assert_eq!(set.resolve_match(world, 1848, Some("Caelaor")), None);
+
+        // A claim with nothing in it goes away.
+        let empty = AutoMatch {
+            host: Some("  ".into()),
+            ..AutoMatch::default()
+        };
+        set.set_metadata("Blank", None, Some(empty)).unwrap();
+        assert!(set.get("Blank").unwrap().auto_match.is_none());
+    }
+
+    #[test]
+    fn metadata_keeps_an_unchanged_claim_as_it_is() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        let world = "play.theforsakenlands.com";
+        set.set_login("Healer", "Caelaor", false).unwrap();
+
+        // A description edit sends the same claim back with no toggle.
+        // It neither turns Healer back on nor takes Erelei from default
+        // for Test-Prompt.
+        set.set_metadata(
+            "Healer",
+            Some("Resting".into()),
+            Some(claim(world, Some(1848), &["Caelaor"])),
+        )
+        .unwrap();
+        assert!(!enabled(&set, "Healer"));
+        assert_eq!(
+            set.get("Healer").unwrap().description.as_deref(),
+            Some("Resting")
+        );
+        let result = set
+            .set_metadata(
+                "Test-Prompt",
+                Some("Prompt tests".into()),
+                Some(claim(world, Some(1848), &["Erelei"])),
+            )
+            .unwrap();
+        assert!(result.released_from.is_empty());
+        assert_eq!(characters_of(&set, DEFAULT_PROFILE_NAME), vec!["Erelei"]);
+        assert!(set.login_on(DEFAULT_PROFILE_NAME));
+
+        // An explicit off still turns a claim off.
+        let mut off = claim(world, Some(1848), &["Erelei"]);
+        off.enabled = false;
+        set.set_metadata(DEFAULT_PROFILE_NAME, None, Some(off))
+            .unwrap();
+        assert!(!enabled(&set, DEFAULT_PROFILE_NAME));
+        assert_eq!(characters_of(&set, "Test-Prompt"), vec!["Erelei"]);
     }
 
     fn read_profile(set: &ProfileSet, name: &str) -> String {
@@ -1542,7 +1766,7 @@ characters = ["Erelei", "Vanek"]
             if name != DEFAULT_PROFILE_NAME {
                 set.create(name).unwrap();
             }
-            set.set_metadata(name, None, Some(am)).unwrap();
+            put_claim(&mut set, name, None, am);
         }
         set
     }
