@@ -11,6 +11,7 @@ import '@fontsource/rajdhani/600.css';
 import '@fontsource/rajdhani/700.css';
 import '@fontsource-variable/roboto-slab';
 import './styles.css';
+import './styles/index.css';
 
 // Tag the document with the host OS so CSS can apply per-platform
 // tweaks. The two known cases that matter today:
