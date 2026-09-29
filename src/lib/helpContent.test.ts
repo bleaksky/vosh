@@ -92,17 +92,22 @@ describe('the help on loadouts', () => {
     expect(text).toContain('or while an earlier run waits to finish at the next launch');
   });
 
-  it('says what the legacy copies are and what copying one back loses', () => {
+  it('says what the legacy copies are and when you may copy one back', () => {
     // The help used to say only the copies held your items, which is
-    // false in loadout mode, and copying them back threw away every
-    // change since the move.
+    // false in loadout mode, and then that a copy back dropped every
+    // change since the move. With the catalog in place it spreads the
+    // old items to every character instead.
     const text = body('characters-and-data.loadouts');
     const truth = [
       'After the move, `catalog.toml` holds your aliases, triggers, and macros, with every one you add or change later.',
       'Each file in `profiles/legacy/` is a backup of its profile as it was before the move.',
-      'Copying a backup over its file in `profiles/` brings back that profile as it was then, every setting included, and drops every change you made since, to the profile and to your shared items.',
+      'Never copy a backup back while `catalog.toml` sits in the app data folder.',
+      'Vosh would lay the old aliases, triggers, and macros of the backup over the catalog, turn on for that character items that only other characters had, and at the next save put the old versions in the catalog for every character.',
       'To keep your items, leave `catalog.toml` where it is and change them in Automation settings.',
-      'To build a new catalog from the backups anyway, quit Vosh, move `catalog.toml` and `loadouts.toml` out of the app data folder, copy the files in `profiles/legacy/` back over the ones in `profiles/`, and move `profiles/legacy/` out too.',
+      'To build a new catalog from the backups, quit Vosh first, since Vosh saves `catalog.toml` again as it quits.',
+      'Then move `catalog.toml` and `loadouts.toml` out of the app data folder, copy the files in `profiles/legacy/` back over the ones in `profiles/`, and move `profiles/legacy/` out too.',
+      'Each profile comes back as it was before the move, every setting included, and loses every change you made to its settings since.',
+      'Your items as they are now stay in the `catalog.toml` you moved out.',
     ];
     for (const sentence of truth) {
       expect(text).toContain(sentence);
@@ -110,6 +115,12 @@ describe('the help on loadouts', () => {
     }
     expect(text).not.toMatch(/only the copies hold/);
     expect(helpMd).not.toMatch(/only the copies hold/);
+    // A backup copied back beside the catalog does not drop the items you
+    // added since. It lays its old items over the catalog for everyone.
+    for (const doc of [text, helpMd]) {
+      expect(doc).not.toContain('to the profile and to your shared items');
+      expect(doc).not.toContain('Copying a backup over its file in `profiles/` brings back');
+    }
   });
 
   it('says what the folders become in the shared catalog', () => {

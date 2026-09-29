@@ -368,7 +368,8 @@ pub(crate) fn load_path_b_at_launch(
 /// so that refusal says to put it back to keep them. It says what a
 /// backup copied back brings back and drops for a new catalog, since one
 /// built from the files without their items would leave every character
-/// with nothing.
+/// with nothing. It says never to do both, since launch lays the items of
+/// a profile file over the catalog, and the next save shares them.
 pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
     if journal_path(app_data).exists() {
         return Some(
@@ -405,7 +406,8 @@ pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
              the backups instead, quit Vosh, copy each backup over its file in the profiles \
              folder, and move the legacy folder out of the profiles folder. A backup brings back \
              every setting of its profile as it was before the move and drops every change you \
-             made since.",
+             made since. Never do both, since a backup copied back beside catalog.toml lays its \
+             old items over the catalog for every character.",
         );
     }
     None
