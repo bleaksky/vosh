@@ -199,9 +199,9 @@ function TimerDetail({ value: t, update, fresh }: DetailProps<TimerRecord>) {
           value={t.interval_secs}
           min={1}
           max={86400}
+          unit="seconds"
           onChange={(interval_secs) => set({ interval_secs })}
         />
-        <span className="st-auto-unit">seconds</span>
       </Row>
       <Row label="Command">
         <FieldArea
@@ -242,9 +242,9 @@ function TickCard({
           value={v.interval_secs}
           min={1}
           max={3600}
+          unit="seconds"
           onChange={(interval_secs) => set({ interval_secs })}
         />
-        <span className="st-auto-unit">seconds</span>
       </Row>
       <Row label="Send each tick">
         <Field
@@ -276,9 +276,9 @@ function TickCard({
           min={1}
           max={300}
           disabled={!warnOn}
+          unit="seconds left"
           onChange={(warn_at_secs) => set({ warn_at_secs })}
         />
-        <span className="st-auto-unit">seconds left</span>
       </Row>
       <Row label="Warning text">
         <Field
