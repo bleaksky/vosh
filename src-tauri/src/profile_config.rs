@@ -1435,6 +1435,17 @@ impl ProfileConfig {
         warnings
     }
 
+    /// Take out the aliases, triggers, and macros, which the shared
+    /// catalog holds in loadout mode. A profile file that kept a copy
+    /// would lay it over the catalog at the next launch, bringing back an
+    /// item you deleted or an older version of one you changed. The group
+    /// checkbox lists stay, since the profile file is where they persist.
+    pub(crate) fn clear_catalog_items(&mut self) {
+        self.aliases.clear();
+        self.triggers.clear();
+        self.macros.clear();
+    }
+
     pub(crate) fn save(&self, path: &Path) -> Result<(), ConfigError> {
         let toml_str = toml::to_string_pretty(self)?;
         write_with_backup(path, &toml_str)?;
