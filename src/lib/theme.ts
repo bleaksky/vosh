@@ -54,6 +54,9 @@ let followingSystem = false;
 let broadcastFlips = false;
 /** What this window last painted on the root. */
 let lastPaint: ThemePaintSide | null = null;
+/** The theme id applyTheme was last asked for. A catalog refresh that
+ *  answers after a later pick leaves the later pick on screen. */
+let lastChoice: string | null = null;
 
 /** The saved fields that decide which theme Vosh shows. UiConfig
  *  carries all four. */
@@ -207,13 +210,17 @@ export function themePaintSide(theme: AppTheme): ThemePaintSide {
   return { id: theme.id, appearance: tokens.appearance, vars };
 }
 
-function applyToRoot(theme: AppTheme) {
+// Paint a theme. `standsFor` is the theme id the paint shows: the
+// theme's own id, or an id the catalog does not have, once the catalog
+// confirms the fallback is all there is. Null marks a fallback that is
+// still waiting on the catalog, which the cache skips.
+function applyToRoot(theme: AppTheme, standsFor: string | null = theme.id) {
   const side = themePaintSide(theme);
   paintRoot(document.documentElement, side);
   syncWindowAppearance(side.appearance);
   currentThemeId = theme.id;
   lastPaint = side;
-  rememberPaint(side);
+  if (standsFor !== null) rememberPaint(side, standsFor);
 }
 
 // The legacy `system` choice tracks the OS contrast preference: the
@@ -236,16 +243,18 @@ function shownId(choice: string): string {
   }
 }
 
-// Leave the paint for the next window to open, when it is the theme the
-// saved fields resolve to. A theme id broadcast ahead of its fields, a
-// custom theme this window has not loaded yet, and a paint before the
+// Leave the paint for the next window to open, when it shows the theme
+// the saved fields resolve to. A theme id broadcast ahead of its fields,
+// a custom theme this window has not loaded yet, and a paint before the
 // fields arrive each show something else for a moment, and caching that
-// would open the next window on it.
-function rememberPaint(shown: ThemePaintSide) {
+// would open the next window on it. A saved id the catalog does not
+// have shows the fallback for good, and the fallback is what gets
+// cached.
+function rememberPaint(shown: ThemePaintSide, standsFor: string) {
   const prefs = themePrefs;
   if (!prefs) return;
   const systemDark = systemPrefersDark();
-  if (shown.id !== shownId(resolveActiveTheme(prefs, systemDark))) return;
+  if (standsFor !== shownId(resolveActiveTheme(prefs, systemDark))) return;
   const other = (dark: boolean) =>
     themePaintSide(findTheme(shownId(resolveActiveTheme(prefs, dark))));
   const paint: ThemePaint = prefs.follow_system_appearance
@@ -284,6 +293,7 @@ export function paintMatchesBoot(): boolean {
 }
 
 export function applyTheme(choice: string) {
+  lastChoice = choice;
   if (cleanupContrastListener) {
     cleanupContrastListener();
     cleanupContrastListener = null;
@@ -302,14 +312,15 @@ export function applyTheme(choice: string) {
 
   const found = findTheme(choice);
   if (found.id === choice || !choice) {
-    applyToRoot(found);
+    // A blank choice shows the first theme, and that is all it shows.
+    applyToRoot(found, choice);
     return;
   }
   // Requested theme wasn't found in the live registry — likely a
   // freshly-saved custom theme this window hasn't synced yet.
   // Re-fetch the catalog from the backend, register, retry. Falls
   // back to the matched-but-defaulted result if the refresh fails.
-  applyToRoot(found);
+  applyToRoot(found, null);
   void refreshAndReapply(choice);
 }
 
@@ -319,10 +330,12 @@ async function refreshAndReapply(choice: string): Promise<void> {
     const { getUiConfig } = await import('./session');
     const cfg = await getUiConfig();
     setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
-    const refreshed = findTheme(choice);
-    if (refreshed.id === choice) {
-      applyToRoot(refreshed);
-    }
+    // A pick made while the catalog loaded is on screen now. Keep it.
+    if (lastChoice !== choice) return;
+    // The catalog is current, so the theme it finds for the id is the
+    // one the id shows: the theme itself, or the fallback for an id
+    // that is gone.
+    applyToRoot(findTheme(choice), choice);
   } catch {
     // Backend unavailable or config malformed; keep the fallback.
   }

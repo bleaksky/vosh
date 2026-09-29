@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pickTheme, resolveActiveTheme, themeAppearance, type ThemePrefs } from './theme';
 
-const { setTheme, emit, invoke } = vi.hoisted(() => ({
+const { setTheme, emit, invoke, getUiConfig } = vi.hoisted(() => ({
   setTheme: vi.fn((_theme?: string | null) => Promise.resolve()),
   emit: vi.fn((_event: string, _payload?: unknown) => Promise.resolve()),
   invoke: vi.fn((_cmd: string, _args?: unknown) => Promise.resolve()),
+  // What a window fetches when it applies a theme id it does not know.
+  getUiConfig: vi.fn(() => Promise.resolve({ custom_themes: [] as unknown[] })),
 }));
 
 vi.mock('@tauri-apps/api/window', () => ({
@@ -15,6 +17,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit,
   listen: vi.fn(() => Promise.resolve(() => {})),
 }));
+vi.mock('./session', () => ({ getUiConfig }));
 
 const prefs = (patch: Partial<ThemePrefs> = {}): ThemePrefs => ({
   theme: 'nord',
@@ -164,12 +167,16 @@ describe('the paint cache', () => {
   let dark = true;
   let listeners: Array<() => void> = [];
   let stored: Record<string, string> = {};
+  let rootAttrs: Record<string, string> = {};
 
   beforeEach(() => {
     vi.resetModules();
+    getUiConfig.mockReset();
+    getUiConfig.mockImplementation(() => Promise.resolve({ custom_themes: [] }));
     dark = true;
     listeners = [];
     stored = {};
+    rootAttrs = {};
     vi.stubGlobal('window', {
       matchMedia: (query: string) => ({
         get matches() {
@@ -189,7 +196,9 @@ describe('the paint cache', () => {
     });
     vi.stubGlobal('document', {
       documentElement: {
-        setAttribute: () => {},
+        setAttribute: (name: string, value: string) => {
+          rootAttrs[name] = value;
+        },
         style: { setProperty: () => {} },
       },
     });
@@ -336,5 +345,89 @@ describe('the paint cache', () => {
     expect(theme.paintMatchesBoot()).toBe(true);
     theme.applyThemePrefs(prefs({ theme: 'nord' }));
     expect(theme.paintMatchesBoot()).toBe(false);
+  });
+
+  // A profile can name a theme this build does not have: a hand edited
+  // or imported profile.toml, a custom theme deleted elsewhere, or a
+  // theme from a newer build. The window shows the first built in theme
+  // instead, and once the catalog confirms the id is gone, that is the
+  // theme the next window has to open on.
+  const manualId = async () => {
+    const paint = await cached();
+    return paint?.follow === false ? paint.manual.id : null;
+  };
+
+  const gone = {
+    id: 'gone',
+    label: 'Gone',
+    description: '',
+    xterm: { background: '#fdfcf8', foreground: '#222222' },
+    chrome: {},
+  };
+
+  it('leaves the theme on screen once the saved theme turns out to be gone', async () => {
+    const theme = await import('./theme');
+    const { findTheme, themeTokens } = await import('./themes');
+    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    invoke.mockClear();
+    theme.applyThemePrefs(prefs({ theme: 'missing' }));
+    expect(rootAttrs['data-theme']).toBe('obsidian-ember');
+    await vi.waitFor(async () => expect(await manualId()).toBe('obsidian-ember'));
+    expect(backdrops()).toEqual([
+      { background: themeTokens(findTheme('obsidian-ember')).bg, appearance: 'dark' },
+    ]);
+
+    // The next window opens on it, and its first frame already holds
+    // the theme it shows.
+    vi.resetModules();
+    const { prepaintTheme } = await import('./themePaint');
+    expect(prepaintTheme()?.id).toBe('obsidian-ember');
+    const next = await import('./theme');
+    next.applyThemePrefs(prefs({ theme: 'missing' }));
+    expect(next.paintMatchesBoot()).toBe(true);
+  });
+
+  it('leaves the default theme for a blank theme field', async () => {
+    const theme = await import('./theme');
+    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    theme.applyThemePrefs(prefs({ theme: '' }));
+    expect(rootAttrs['data-theme']).toBe('obsidian-ember');
+    expect(await manualId()).toBe('obsidian-ember');
+  });
+
+  it('waits while a theme it does not know may still be loading', async () => {
+    let answer: (cfg: { custom_themes: unknown[] }) => void = () => {};
+    getUiConfig.mockImplementation(
+      () => new Promise<{ custom_themes: unknown[] }>((resolve) => (answer = resolve)),
+    );
+    const theme = await import('./theme');
+    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    invoke.mockClear();
+    theme.applyThemePrefs(prefs({ theme: 'gone' }));
+    expect(rootAttrs['data-theme']).toBe('obsidian-ember');
+    expect(await manualId()).toBe('vellum');
+    expect(backdrops()).toEqual([]);
+
+    // Another window had saved it, and the catalog brings it in.
+    await vi.waitFor(() => expect(getUiConfig).toHaveBeenCalled());
+    answer({ custom_themes: [gone] });
+    await vi.waitFor(async () => expect(await manualId()).toBe('gone'));
+    expect(rootAttrs['data-theme']).toBe('gone');
+  });
+
+  it('keeps a later pick over a slow catalog answer', async () => {
+    let answer: (cfg: { custom_themes: unknown[] }) => void = () => {};
+    getUiConfig.mockImplementation(
+      () => new Promise<{ custom_themes: unknown[] }>((resolve) => (answer = resolve)),
+    );
+    const theme = await import('./theme');
+    theme.applyThemePrefs(prefs({ theme: 'gone' }));
+    theme.applyThemePrefs(prefs({ theme: 'nord' }));
+    await vi.waitFor(() => expect(getUiConfig).toHaveBeenCalled());
+    answer({ custom_themes: [gone] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(rootAttrs['data-theme']).toBe('nord');
+    expect(theme.getCurrentThemeId()).toBe('nord');
+    expect(await manualId()).toBe('nord');
   });
 });
