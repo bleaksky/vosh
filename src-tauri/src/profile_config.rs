@@ -733,6 +733,18 @@ impl PaneLayoutPersist {
         }
     }
 
+    /// This panel with the stock map over affects tree, keeping whether
+    /// the panel shows and how wide it is. What Reset to default puts
+    /// back.
+    pub(crate) fn with_default_tree(&self) -> Self {
+        Self {
+            version: PANE_LAYOUT_VERSION,
+            panel_open: self.panel_open,
+            panel_width: self.panel_width,
+            root: default_pane_root(),
+        }
+    }
+
     /// Seed a profile's tree from the old zone layout the first time
     /// the profile opens in the one-window build. Mirrors
     /// `panelLayoutFromDock` in src/lib/panels.ts: unknown ids and bad
@@ -1912,6 +1924,14 @@ name = "haste"
         let mut again = layout.clone();
         again.sanitize();
         assert_eq!(again, layout);
+    }
+
+    #[test]
+    fn with_default_tree_keeps_the_panel_and_replaces_the_tree() {
+        let reset = custom_layout().with_default_tree();
+        assert_eq!(reset.root, PaneLayoutPersist::default_layout().root);
+        assert_eq!(reset.panel_open, custom_layout().panel_open);
+        assert_eq!(reset.panel_width, custom_layout().panel_width);
     }
 
     #[test]

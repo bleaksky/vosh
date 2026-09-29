@@ -17,8 +17,9 @@ use tauri::{AppHandle, State};
 use tracing::warn;
 
 use crate::commands::{
-    broadcast, panes_generation, SharedState, MIGRATION_RELAUNCH_PENDING, PERSIST_LOCK,
-    PROFILES_NOT_LOADED,
+    broadcast, bump_panes_generation, pane_layout_envelope, panes_generation, persist_profile,
+    PaneLayoutEnvelope, SharedState, AUTO_PERSIST_SUPPRESSED, MIGRATION_RELAUNCH_PENDING,
+    PERSIST_LOCK, PROFILES_NOT_LOADED,
 };
 use crate::profile_config::{
     GlobalConfig, PaneLayoutPersist, ProfileConfig, TrackedAffect, UiConfig,
@@ -251,6 +252,84 @@ pub(crate) async fn profile_detail(
     })
 }
 
+/// An inactive profile's pane tree as it will show once live. Ok(None)
+/// when `name` is the live profile.
+pub(crate) async fn inactive_pane_layout(
+    state: &SharedState,
+    name: &str,
+) -> Result<Option<PaneLayoutPersist>, String> {
+    let guard = state.profile_set.lock().await;
+    let set = guard.as_ref().ok_or(PROFILES_NOT_LOADED)?;
+    if set.get(name).is_none() {
+        return Err(not_found(name));
+    }
+    if set.active_name() == name {
+        return Ok(None);
+    }
+    Ok(Some(stored_ui(set, name)?.pane_layout()))
+}
+
+/// Put a profile's panes back to the stock map over affects tree,
+/// keeping whether its panel shows and how wide it is. The active
+/// profile when `profile` is absent.
+///
+/// The live path bumps the pane generation under the profile lock, so
+/// a splitter drag still in flight is refused rather than undoing the
+/// reset, persists at once (unless `#profile reset` or `load` left the
+/// profile diverged from disk), and broadcasts
+/// `vosh://pane-layout-changed`. An inactive profile has its file
+/// rewritten and only `vosh://profile-changed` goes out.
+#[tauri::command]
+pub(crate) async fn pane_layout_reset(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    profile: Option<String>,
+) -> Result<PaneLayoutEnvelope, String> {
+    let shared: SharedState = state.inner().clone();
+    if let Some(name) = profile.as_deref() {
+        if let Some(layout) = reset_inactive_panes(&shared, name).await? {
+            broadcast_profile_changed(&app, name);
+            return Ok(PaneLayoutEnvelope {
+                layout,
+                generation: None,
+            });
+        }
+    }
+    let envelope = reset_live_panes(&shared).await;
+    if !AUTO_PERSIST_SUPPRESSED.load(Ordering::Acquire) {
+        persist_profile(&app, &shared).await;
+    }
+    broadcast(&app, "vosh://pane-layout-changed", &envelope);
+    if let Some(active) = active_name(&shared).await {
+        broadcast_profile_changed(&app, &active);
+    }
+    Ok(envelope)
+}
+
+/// Reset an inactive profile's saved tree. Ok(None) when `name` is live.
+async fn reset_inactive_panes(
+    state: &SharedState,
+    name: &str,
+) -> Result<Option<PaneLayoutPersist>, String> {
+    edit_inactive_profile(state, name, |set, config| {
+        let mut ui = config.ui.clone();
+        apply_global_dock(set, &mut ui);
+        let layout = ui.pane_layout().with_default_tree();
+        config.ui.panes = Some(layout.clone());
+        layout
+    })
+    .await
+}
+
+/// Reset the live profile's tree and hand back its new envelope.
+async fn reset_live_panes(state: &SharedState) -> PaneLayoutEnvelope {
+    let mut p = state.profile.lock().await;
+    let layout = p.ui.pane_layout().with_default_tree();
+    p.ui.panes = Some(layout);
+    bump_panes_generation();
+    pane_layout_envelope(&p)
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -397,6 +476,86 @@ mod tests {
         let err = rewrite_inactive(&set, "Healer", true, set_affects(&["Fly"])).unwrap_err();
         assert_eq!(err, MIGRATION_PENDING);
         assert!(!set.profile_path("Healer").exists());
+    }
+
+    /// Group beside chat in a 360 px panel that is hidden.
+    fn arranged() -> PaneLayoutPersist {
+        let mut layout = PaneLayoutPersist::default_layout();
+        layout.panel_open = false;
+        layout.panel_width = Some(360);
+        layout.root.split = Some("row".into());
+        for (child, pane) in layout.root.children.iter_mut().zip(["group", "chat"]) {
+            child.id = pane.into();
+            child.pane = Some(pane.into());
+        }
+        layout.sanitize();
+        layout
+    }
+
+    #[tokio::test]
+    async fn pane_reads_follow_the_named_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = james_like_state(dir.path()).await;
+        let mut config = ProfileConfig::default();
+        config.ui.panes = Some(arranged());
+        write_profile(dir.path(), "Healer", &config);
+
+        assert_eq!(
+            inactive_pane_layout(&state, "Healer").await.unwrap(),
+            Some(arranged())
+        );
+        assert_eq!(
+            inactive_pane_layout(&state, DEFAULT_PROFILE_NAME)
+                .await
+                .unwrap(),
+            None
+        );
+        assert!(inactive_pane_layout(&state, "Nobody").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn resetting_an_inactive_profile_rewrites_only_its_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = james_like_state(dir.path()).await;
+        state.profile.lock().await.ui.panes = Some(arranged());
+        let mut config = ProfileConfig::default();
+        config.ui.panes = Some(arranged());
+        config.ui.tracked_affects = vec![affect("Haste")];
+        write_profile(dir.path(), "Healer", &config);
+
+        let reset = reset_inactive_panes(&state, "Healer")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(reset, arranged().with_default_tree());
+        assert!(!reset.panel_open);
+        assert_eq!(reset.panel_width, Some(360));
+
+        let detail = profile_detail(&state, "Healer").await.unwrap();
+        assert_eq!(detail.panes, reset);
+        assert_eq!(names(&detail.tracked_affects), ["Haste"]);
+        // The live profile keeps its own arrangement.
+        assert_eq!(state.profile.lock().await.ui.panes, Some(arranged()));
+    }
+
+    #[tokio::test]
+    async fn resetting_the_live_profile_moves_the_generation() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = james_like_state(dir.path()).await;
+        state.profile.lock().await.ui.panes = Some(arranged());
+        let before = panes_generation();
+
+        let envelope = reset_live_panes(&state).await;
+        assert_eq!(envelope.layout, arranged().with_default_tree());
+        assert!(envelope.generation.unwrap() > before);
+        assert_eq!(
+            state.profile.lock().await.ui.panes,
+            Some(arranged().with_default_tree())
+        );
+        assert!(reset_inactive_panes(&state, DEFAULT_PROFILE_NAME)
+            .await
+            .unwrap()
+            .is_none());
     }
 
     #[tokio::test]
