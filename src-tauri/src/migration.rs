@@ -7,9 +7,11 @@
 //! For each (alias / trigger / macro) name that appears in two or
 //! more source profiles:
 //!
-//!   - If every variant is byte-equivalent, the item is
-//!     **auto-resolved** — a single catalog entry collapses every
-//!     copy. No user input needed.
+//!   - If every variant is the same apart from its group and whether
+//!     it is on, which the catalog group carries (see below), the item
+//!     is **auto-resolved** — a single catalog entry collapses every
+//!     copy. No user input needed. So are the copies of a preset
+//!     trigger, since a launch installs the library version.
 //!   - If the variants differ, the item is a **conflict**. The
 //!     plan retains every variant alongside its source profile so
 //!     the migration wizard can show the user "default has `kk =
@@ -134,10 +136,9 @@ pub(crate) struct MigrationPlan {
 /// Walk every source profile, bucket items by (kind, name), classify
 /// each bucket as auto-resolved or conflicted, and emit the plan.
 ///
-/// `profiles` is an ordered list so determinism is preserved: when
-/// every variant agrees, the FIRST profile in the iteration order
-/// becomes the canonical source (i.e. the auto-resolved entry
-/// inherits its group prefix).
+/// `profiles` is an ordered list so determinism is preserved: group
+/// names list profiles in this order, and when every variant agrees,
+/// the copy of the FIRST profile in it becomes the catalog entry.
 pub(crate) fn analyze_profiles(profiles: &[(String, ProfileConfig)]) -> MigrationPlan {
     let mut plan = MigrationPlan {
         source_profiles: profiles.iter().map(|(name, _)| name.clone()).collect(),
