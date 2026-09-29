@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
+import { SESSION_MENU_EVENT, type SessionMenuMode } from '../../lib/appMenu';
 import { isMacPlatform, shortcutLabel } from '../../lib/palette';
 import type { PaneSplit, PaneType } from '../../lib/paneLayout';
 import { PANE_LABELS, paneTypesToAdd } from '../panel/paneTypes';
@@ -46,14 +47,33 @@ export function TitleBand({
 }: Props) {
   const mac = isMacPlatform();
   const [menu, setMenu] = useState<'session' | 'add' | null>(null);
+  // The mode the session popover opens in. The menu bar's Edit
+  // connection and New connection open it straight on their form, and
+  // the key remounts it so a second request starts fresh.
+  const [session, setSession] = useState<{ mode: SessionMenuMode; key: number }>({
+    mode: 'menu',
+    key: 0,
+  });
   const sessionRef = useRef<HTMLButtonElement | null>(null);
   const addRef = useRef<HTMLButtonElement | null>(null);
   const closeMenu = () => {
     setMenu(null);
     onMenuClosed();
   };
-  const toggleMenu = (which: 'session' | 'add') =>
+  const toggleMenu = (which: 'session' | 'add') => {
+    if (which === 'session') setSession((s) => ({ mode: 'menu', key: s.key + 1 }));
     setMenu((current) => (current === which ? null : which));
+  };
+  useEffect(() => {
+    const onRequest = (e: Event) => {
+      const mode = (e as CustomEvent<unknown>).detail;
+      if (mode !== 'menu' && mode !== 'edit' && mode !== 'new') return;
+      setSession((s) => ({ mode, key: s.key + 1 }));
+      setMenu('session');
+    };
+    window.addEventListener(SESSION_MENU_EVENT, onRequest);
+    return () => window.removeEventListener(SESSION_MENU_EVENT, onRequest);
+  }, []);
   // Hiding the panel takes Add a pane with it, so its menu closes too
   // instead of coming back the next time the panel shows.
   useEffect(() => {
@@ -110,7 +130,13 @@ export function TitleBand({
         {!mac && <WindowControls />}
       </div>
       {menu === 'session' && (
-        <SessionMenu connection={connection} anchor={sessionRef.current} onClose={closeMenu} />
+        <SessionMenu
+          key={session.key}
+          connection={connection}
+          anchor={sessionRef.current}
+          initialMode={session.mode}
+          onClose={closeMenu}
+        />
       )}
       {menu === 'add' && panelOpen && (
         <ShellMenu

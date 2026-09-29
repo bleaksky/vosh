@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import APP_SHORTCUTS from '../../lib/appShortcuts.json';
+import type { SessionMenuMode } from '../../lib/appMenu';
 import { shortcutLabel } from '../../lib/palette';
 import {
   parseTarget,
@@ -17,16 +18,20 @@ import { ShellMenu, ShellMenuItem, ShellMenuSeparator } from './ShellMenu';
 
 const MENU_WIDTH = 272;
 
-type Mode = 'menu' | 'edit' | 'new';
+type Mode = SessionMenuMode;
 
 interface Props {
   connection: Connection;
   anchor: HTMLElement | null;
+  /** Where the popover opens. The macOS menu bar's Edit connection and
+   *  New connection open it on their form, and Cancel there closes it
+   *  instead of stepping back to a list you never saw. */
+  initialMode?: Mode;
   onClose: () => void;
 }
 
-export function SessionMenu({ connection, anchor, onClose }: Props) {
-  const [mode, setMode] = useState<Mode>('menu');
+export function SessionMenu({ connection, anchor, initialMode = 'menu', onClose }: Props) {
+  const [mode, setMode] = useState<Mode>(initialMode);
   const { live, target } = connection;
 
   const run = (action: () => Promise<void> | void) => {
@@ -47,7 +52,7 @@ export function SessionMenu({ connection, anchor, onClose }: Props) {
         <ConnectionForm
           mode={mode}
           initial={mode === 'edit' ? target : null}
-          onCancel={() => setMode('menu')}
+          onCancel={() => (initialMode === 'menu' ? setMode('menu') : onClose())}
           onSubmit={(next) => {
             if (mode === 'edit') {
               connection.saveTarget(next);
