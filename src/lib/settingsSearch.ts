@@ -211,6 +211,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'chip style caption icon value clock sun moon moons phase',
     target: at('layout', 'status', 'tick-time'),
   },
+  {
+    label: 'Tick counts',
+    description:
+      'Up shows the seconds since the last tick and Down the seconds left until the next. Down waits at 0 when the game is late, and Down past 0 keeps counting below zero until the tick lands.',
+    keywords: 'tick count countdown count down up direction reverse late negative minus below zero',
+    target: at('layout', 'status', 'tick-counts'),
+  },
 
   // Input, from the approved board.
   {

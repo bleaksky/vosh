@@ -119,6 +119,15 @@ describe('searchSettingsRows', () => {
     expect(labels('moons')).toContain('Tick and time');
   });
 
+  it('finds which way the tick counts under Layout', () => {
+    const [row] = searchSettingsRows('tick count', mac);
+    expect(row.label).toBe('Tick counts');
+    expect(settingsRowKey(row)).toBe('layout:status#tick-counts');
+    expect(labels('countdown')).toEqual(['Tick counts']);
+    expect(labels('below zero')).toEqual(['Tick counts']);
+    expect(labels('tick')).toEqual(expect.arrayContaining(['Tick and time', 'Tick counts']));
+  });
+
   it('hides GPU rendering on macOS', () => {
     expect(labels('gpu')).toEqual([]);
     expect(labels('gpu', { pathB: false, mac: false })).toEqual(['GPU rendering']);
