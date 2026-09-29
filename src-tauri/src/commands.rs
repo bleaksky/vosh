@@ -2026,21 +2026,7 @@ pub(crate) async fn ui_set_config(
         p.ui.auto_update = auto_update;
         p.ui.font_family = font_family;
         p.ui.font_size = font_size.clamp(6, 64);
-        // Trim each entry's name + label; drop rows whose name is
-        // empty after trimming (no point tracking "" — it'll never
-        // match a real affect). An empty label is normalized back to
-        // None so the affects bar falls through to the name.
-        p.ui.tracked_affects = tracked_affects
-            .into_iter()
-            .map(|t| crate::profile_config::TrackedAffect {
-                name: t.name.trim().to_string(),
-                label: t
-                    .label
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty()),
-            })
-            .filter(|t| !t.name.is_empty())
-            .collect();
+        p.ui.tracked_affects = crate::profile_config::normalize_tracked_affects(tracked_affects);
         p.ui.enabled_presets = enabled_presets
             .into_iter()
             .map(|s| s.trim().to_string())
@@ -2143,6 +2129,28 @@ pub(crate) async fn ui_set_config(
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
     Ok(())
+}
+
+/// Replace the active profile's tracked affects without touching the
+/// rest of the UI config, so an editor outside Settings cannot write a
+/// stale snapshot over other fields. Persists, then broadcasts the
+/// normalized list as `vosh://tracked-affects-changed` to every window
+/// and returns it.
+#[tauri::command]
+pub(crate) async fn tracked_affects_set(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    list: Vec<crate::profile_config::TrackedAffect>,
+) -> Result<Vec<crate::profile_config::TrackedAffect>, String> {
+    let list = crate::profile_config::normalize_tracked_affects(list);
+    {
+        let mut p = state.profile.lock().await;
+        p.ui.tracked_affects.clone_from(&list);
+    }
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    broadcast(&app, "vosh://tracked-affects-changed", &list);
+    Ok(list)
 }
 
 /// Bulk-install a set of preset triggers. Each trigger should already

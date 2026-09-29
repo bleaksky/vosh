@@ -107,6 +107,23 @@ where
         .collect())
 }
 
+/// Trim each entry's name and label and drop rows whose name is empty
+/// after trimming (no point tracking "", it never matches a real
+/// affect). An empty label goes back to None so the pane falls
+/// through to the name.
+pub(crate) fn normalize_tracked_affects(list: Vec<TrackedAffect>) -> Vec<TrackedAffect> {
+    list.into_iter()
+        .map(|t| TrackedAffect {
+            name: t.name.trim().to_string(),
+            label: t
+                .label
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+        })
+        .filter(|t| !t.name.is_empty())
+        .collect()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct UiConfig {
     /// Active theme id. Matches a built-in theme (`kanso-zen`,
@@ -1716,6 +1733,37 @@ name = "haste"
         );
         assert_eq!(parsed.ui.tracked_affects[1].name, "haste");
         assert!(parsed.ui.tracked_affects[1].label.is_none());
+    }
+
+    #[test]
+    fn normalize_tracked_affects_trims_and_drops_blank_rows() {
+        let raw = vec![
+            TrackedAffect {
+                name: "  sanctuary ".into(),
+                label: Some(" Sanc ".into()),
+            },
+            TrackedAffect {
+                name: "   ".into(),
+                label: Some("ghost".into()),
+            },
+            TrackedAffect {
+                name: "haste".into(),
+                label: Some("  ".into()),
+            },
+        ];
+        assert_eq!(
+            normalize_tracked_affects(raw),
+            vec![
+                TrackedAffect {
+                    name: "sanctuary".into(),
+                    label: Some("Sanc".into()),
+                },
+                TrackedAffect {
+                    name: "haste".into(),
+                    label: None,
+                },
+            ]
+        );
     }
 
     #[test]
