@@ -450,18 +450,17 @@ async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
     // Writing a per-profile file lets these persist per-loadout the
     // same way legacy mode does. The catalog stays authoritative for
     // aliases / triggers / macros, so we blank those out of the
-    // per-profile snapshot before saving — otherwise switching to an
-    // older loadout would resurrect that loadout's stale alias copy and
-    // override fresher catalog edits. The catalog owns the enabled
-    // presets too. The file keeps a copy of the shared list, which the
-    // next load replaces with the catalog's.
+    // per-profile snapshot before saving — otherwise a launch as an
+    // older profile would lay its stale copy over the catalog, bringing
+    // back a deleted item or overriding fresher catalog edits. The
+    // catalog owns the enabled presets too. The file keeps a copy of the
+    // shared list, which the next load replaces with the catalog's.
     if let Some(p) = per_profile_path {
         let mut per_profile_snapshot = {
             let live = state.profile.lock().await;
             ProfileConfig::from_profile(&live)
         };
-        per_profile_snapshot.aliases.clear();
-        per_profile_snapshot.triggers.clear();
+        per_profile_snapshot.clear_catalog_items();
         // The disabled-group lists STAY: they are where the Settings
         // group checkboxes persist in Path B mode. Clearing them here
         // (as this used to) meant group toggles could not survive a
@@ -4627,6 +4626,62 @@ mod tests {
                 .unwrap_err();
             assert_eq!(analyze, apply);
             apply
+        }
+
+        /// Quit and open Vosh again as `name`, the way lib.rs launches,
+        /// with the shared catalog and loadouts when they are on disk.
+        async fn relaunch_as(dir: &std::path::Path, name: &str) -> super::super::SharedState {
+            ProfileSet::load_or_migrate(dir.to_path_buf())
+                .unwrap()
+                .switch(name)
+                .unwrap();
+            let state = launch_state(dir).await;
+            crate::launch::load_loadout_mode(&state, dir).await;
+            state
+        }
+
+        fn macro_on(key: &str, command: &str) -> crate::profile::Macro {
+            crate::profile::Macro {
+                key: key.into(),
+                command: command.into(),
+                group: None,
+                enabled: true,
+            }
+        }
+
+        fn macro_keys(macros: &[crate::profile::Macro]) -> Vec<&str> {
+            macros.iter().map(|m| m.key.as_str()).collect()
+        }
+
+        #[tokio::test]
+        async fn a_loadout_save_leaves_the_macros_to_the_catalog() {
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            loadout_mode(&set, dir.path());
+            let state = relaunch_as(dir.path(), crate::profile_set::DEFAULT_PROFILE_NAME).await;
+            assert!(state.global_catalog.lock().await.is_some());
+            state
+                .profile
+                .lock()
+                .await
+                .macros
+                .push(macro_on("f1", "look"));
+            persist(&state, dir.path()).await;
+            let saved = crate::loadout_store::load_global_catalog(dir.path()).unwrap();
+            assert_eq!(macro_keys(&saved.macros), ["f1"]);
+            assert!(ProfileConfig::load(&set.active_path())
+                .unwrap()
+                .macros
+                .is_empty());
+
+            // You delete the macro while you play Healer.
+            let state = relaunch_as(dir.path(), "Healer").await;
+            state.profile.lock().await.macros.clear();
+            persist(&state, dir.path()).await;
+
+            // Back on Default, the macro stays deleted.
+            let state = relaunch_as(dir.path(), crate::profile_set::DEFAULT_PROFILE_NAME).await;
+            assert!(state.profile.lock().await.macros.is_empty());
         }
 
         #[tokio::test]
