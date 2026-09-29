@@ -553,7 +553,7 @@ Click `deactivate all` to park the catalog dormant. Dormant disables every group
 
 When no active loadout declares any enabled groups, the loadouts impose nothing and your durable checkbox state from the automation tabs stands.
 
-Activation is the only edit the `loadouts` tab makes. Author or reshape loadouts by editing `loadouts.toml` in the app data folder while Vosh is closed. The migration wizard runs once. It will not build a new catalog while `catalog.toml` or `loadouts.toml` sits in the app data folder, while `profiles/legacy/` holds the copies from an earlier run, or while an earlier run waits to finish at the next launch.
+Activation is the only edit the `loadouts` tab makes. Author or reshape loadouts by editing `loadouts.toml` in the app data folder while Vosh is closed. The migration wizard runs once. It will not build a new catalog while `catalog.toml` or `loadouts.toml` sits in the app data folder, while `profiles/legacy/` holds the copies from an earlier run, or while an earlier run waits to finish at the next launch. To build a new catalog, quit Vosh, move `catalog.toml` and `loadouts.toml` out of the app data folder, copy the files in `profiles/legacy/` back over the ones in `profiles/`, since only the copies hold your aliases, triggers, and macros, and move `profiles/legacy/` out too. Then open Vosh again and run the wizard.
 
 ### 7.3 Import a TinTin++ file
 
