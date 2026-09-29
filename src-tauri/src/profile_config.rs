@@ -1419,7 +1419,8 @@ impl ProfileConfig {
 
         // Tick: take the persisted settings and keep the running count.
         // A switch mid session would otherwise drop the last tick and
-        // freeze the status line until the game's next tick.
+        // freeze the status line until the game's next tick. A running
+        // tick stays on (see `TickRuntime::adopt`).
         let reset_regex = crate::tick::compile_reset_pattern(self.tick.reset_pattern.as_deref())
             .unwrap_or_else(|e| {
                 warnings.push(format!("tick reset pattern rejected: {e}"));
@@ -2815,15 +2816,49 @@ name = "haste"
     }
 
     #[test]
-    fn a_profile_switch_that_turns_the_tick_off_stops_it() {
+    fn a_switch_to_a_profile_saved_with_the_tick_off_keeps_the_running_tick() {
+        // Earlier builds saved the tick off whenever the game had
+        // disconnected, so many files say off that you never turned off.
         let t0 = tokio::time::Instant::now();
         let mut profile = synced_profile(t0);
+        let next_fire = profile.tick.next_fire();
+        let mut incoming = ProfileConfig::default();
+        incoming.tick.enabled = false;
+        incoming.tick.auto_fire = Some("score".into());
+        let _ = incoming.apply_to(&mut profile);
+        assert!(profile.tick.config.enabled);
+        assert_eq!(profile.tick.next_fire(), next_fire);
+        assert!(profile.tick.synced);
+        assert_eq!(profile.tick.config.auto_fire.as_deref(), Some("score"));
+        let step = profile
+            .tick
+            .on_game_tick(t0 + secs(33))
+            .expect("the next tick");
+        assert!(step.payload.fired);
+        // Saved again, the profile now keeps the tick on.
+        assert!(ProfileConfig::from_profile(&profile).tick.enabled);
+    }
+
+    #[test]
+    fn a_profile_saved_with_the_tick_off_loads_it_off_between_sessions() {
+        let mut profile = Profile::default();
         let mut incoming = ProfileConfig::default();
         incoming.tick.enabled = false;
         let _ = incoming.apply_to(&mut profile);
         assert!(!profile.tick.config.enabled);
         assert_eq!(profile.tick.next_fire(), None);
-        assert!(!profile.tick.synced);
+    }
+
+    #[test]
+    fn a_tick_you_turned_off_stays_off_across_a_switch_to_one_saved_off() {
+        let t0 = tokio::time::Instant::now();
+        let mut profile = synced_profile(t0);
+        profile.tick.disable();
+        let mut off = ProfileConfig::default();
+        off.tick.enabled = false;
+        let _ = off.apply_to(&mut profile);
+        assert!(!profile.tick.config.enabled);
+        assert_eq!(profile.tick.next_fire(), None);
         assert!(profile.tick.on_game_tick(t0 + secs(20)).is_none());
     }
 
@@ -2831,9 +2866,8 @@ name = "haste"
     fn a_profile_switch_that_turns_the_tick_on_arms_it() {
         let t0 = tokio::time::Instant::now();
         let mut profile = synced_profile(t0);
-        let mut off = ProfileConfig::default();
-        off.tick.enabled = false;
-        let _ = off.apply_to(&mut profile);
+        // You turned the tick off with #tick disable or in Settings.
+        profile.tick.disable();
         assert_eq!(profile.tick.next_fire(), None);
 
         let before = tokio::time::Instant::now();
