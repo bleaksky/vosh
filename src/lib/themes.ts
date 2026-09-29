@@ -508,11 +508,85 @@ const highContrast: AppTheme = {
   },
 };
 
+// ── Vellum ──────────────────────────────────────────────────────────
+// Vosh's own warm light theme, built by the same rule as the dark
+// ones: a paper ground, ink foreground, and ANSI slots dark enough to
+// read as text on the paper. The ink blue cursor becomes the accent.
+const vellum: AppTheme = {
+  id: 'vellum',
+  label: 'Vellum',
+  description: 'Warm paper light theme. Ink text, muted ANSI, ink blue accent.',
+  xterm: {
+    background: '#f7f4ee',
+    foreground: '#2a2622',
+    cursor: '#3f6690',
+    cursorAccent: '#f7f4ee',
+    // The accent at 45 percent over the paper. The terminal paints the
+    // selection at 40 percent of this, which lands on the canvas value
+    // of the accent at 18 percent.
+    selectionBackground: '#a4b4c4',
+    selectionForeground: '#2a2622',
+    black: '#2a2622',
+    red: '#a8453a',
+    green: '#4f7a3a',
+    yellow: '#94661a',
+    blue: '#3f6690',
+    magenta: '#7a4f8a',
+    cyan: '#357a78',
+    white: '#7c766e',
+    brightBlack: '#6b645c',
+    brightRed: '#c2574a',
+    brightGreen: '#5f9146',
+    brightYellow: '#b88226',
+    brightBlue: '#4d7cb0',
+    brightMagenta: '#9163a6',
+    brightCyan: '#3f9592',
+    brightWhite: '#3b3632',
+  },
+};
+
+// ── Rosé Pine ───────────────────────────────────────────────────────
+// The main Rosé Pine variant as its own terminal ports ship it. The
+// cursor is a neutral highlight, so the chrome takes iris as its
+// accent.
+const rosePine: AppTheme = {
+  id: 'rose-pine',
+  label: 'Rosé Pine',
+  description: 'Muted rose, gold, and iris on a deep violet base.',
+  xterm: {
+    background: '#191724',
+    foreground: '#e0def4',
+    cursor: '#524f67',
+    cursorAccent: '#e0def4',
+    selectionBackground: '#403d52',
+    selectionForeground: '#e0def4',
+    black: '#26233a',
+    red: '#eb6f92',
+    green: '#31748f',
+    yellow: '#f6c177',
+    blue: '#9ccfd8',
+    magenta: '#c4a7e7',
+    cyan: '#ebbcba',
+    white: '#e0def4',
+    brightBlack: '#6e6a86',
+    brightRed: '#eb6f92',
+    brightGreen: '#31748f',
+    brightYellow: '#f6c177',
+    brightBlue: '#9ccfd8',
+    brightMagenta: '#c4a7e7',
+    brightCyan: '#ebbcba',
+    brightWhite: '#e0def4',
+  },
+  chrome: { accent: '#c4a7e7' },
+};
+
 export const BUILTIN_THEMES: AppTheme[] = [
   obsidianEmber,
+  vellum,
   kansoZen,
   tokyoNight,
   nord,
+  rosePine,
   gruvbox,
   catppuccin,
   dracula,

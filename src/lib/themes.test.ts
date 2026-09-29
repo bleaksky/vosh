@@ -90,9 +90,35 @@ const EMBER: CanvasSheet = {
   },
 };
 
+const VELLUM: CanvasSheet = {
+  id: 'vellum',
+  appearance: 'light',
+  tokens: {
+    bg: '#f7f4ee',
+    panel: '#f0ede7',
+    sep: '#dad8d2',
+    divider: '#dfdcd7',
+    selrow: '#ffffff',
+    hover: '#e6e4de',
+    inputband: '#eeebe6',
+    text: '#2a2622',
+    secondary: '#5c5853',
+    tertiary: '#898681',
+    title: '#7c7a77',
+    raised: '#ffffff',
+    accent: '#3f6690',
+    onAccent: '#ffffff',
+    danger: '#a8453a',
+    warn: '#94661a',
+    success: '#4f7a3a',
+    selection: 'rgba(63, 102, 144, 0.18)',
+  },
+};
+
 const SHEETS: CanvasSheet[] = [
   NORD,
   EMBER,
+  VELLUM,
   { ...EMBER, tokens: { ...EMBER.tokens, title: '#8e8e8e' } },
 ];
 
