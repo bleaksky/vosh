@@ -157,3 +157,135 @@ describe('applyThemePrefs', () => {
     expect(theme.getThemePrefs()).toEqual(prefs({ follow_system_appearance: true }));
   });
 });
+
+describe('the paint cache', () => {
+  let dark = true;
+  let listeners: Array<() => void> = [];
+  let stored: Record<string, string> = {};
+
+  beforeEach(() => {
+    vi.resetModules();
+    dark = true;
+    listeners = [];
+    stored = {};
+    vi.stubGlobal('window', {
+      matchMedia: (query: string) => ({
+        get matches() {
+          return query.includes('dark') ? dark : false;
+        },
+        addEventListener: (_type: string, fn: () => void) => listeners.push(fn),
+        removeEventListener: (_type: string, fn: () => void) => {
+          listeners = listeners.filter((l) => l !== fn);
+        },
+      }),
+      localStorage: {
+        getItem: (key: string) => stored[key] ?? null,
+        setItem: (key: string, value: string) => {
+          stored[key] = value;
+        },
+      },
+    });
+    vi.stubGlobal('document', {
+      documentElement: {
+        setAttribute: () => {},
+        style: { setProperty: () => {} },
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const cached = async () => {
+    const { pageStorage, readThemePaint } = await import('./themePaint');
+    return readThemePaint(pageStorage());
+  };
+
+  const flip = (toDark: boolean) => {
+    dark = toDark;
+    for (const l of listeners) l();
+  };
+
+  it('leaves the manual pick, tokens and terminal ground included', async () => {
+    const theme = await import('./theme');
+    const { findTheme, themeTokens } = await import('./themes');
+    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    const paint = await cached();
+    expect(paint?.follow).toBe(false);
+    if (paint?.follow !== false) return;
+    const vellum = findTheme('vellum');
+    expect(paint.manual.id).toBe('vellum');
+    expect(paint.manual.appearance).toBe('light');
+    expect(paint.manual.vars['--bg']).toBe(themeTokens(vellum).bg);
+    expect(paint.manual.vars['--text']).toBe(themeTokens(vellum).text);
+    expect(paint.manual.vars['--xterm-bg']).toBe(vellum.xterm.background);
+    expect(paint.manual).toEqual(theme.themePaintSide(vellum));
+  });
+
+  it('leaves both sides while the theme follows the system', async () => {
+    const theme = await import('./theme');
+    const { findTheme } = await import('./themes');
+    theme.applyThemePrefs(prefs({ follow_system_appearance: true }));
+    let paint = await cached();
+    expect(paint).toEqual({
+      v: 1,
+      follow: true,
+      light: theme.themePaintSide(findTheme('vellum')),
+      dark: theme.themePaintSide(findTheme('tokyo-night')),
+    });
+    // An OS flip repaints and leaves the same pair.
+    flip(false);
+    paint = await cached();
+    expect(paint?.follow && paint.light.id).toBe('vellum');
+    expect(paint?.follow && paint.dark.id).toBe('tokyo-night');
+  });
+
+  it('skips a theme id that runs ahead of the fields that go with it', async () => {
+    const theme = await import('./theme');
+    theme.applyThemePrefs(prefs({ theme: 'nord' }));
+    theme.applyTheme('gruvbox');
+    const paint = await cached();
+    expect(paint?.follow === false && paint.manual.id).toBe('nord');
+  });
+
+  it('leaves nothing before the window knows the fields', async () => {
+    const theme = await import('./theme');
+    theme.applyTheme('vellum');
+    expect(await cached()).toBeNull();
+  });
+
+  it('holds a custom theme by its colors', async () => {
+    const theme = await import('./theme');
+    const { customToAppTheme, setCustomThemes } = await import('./themes');
+    setCustomThemes([
+      customToAppTheme({
+        id: 'paper',
+        label: 'Paper',
+        description: '',
+        xterm: { background: '#fdfcf8', foreground: '#222222' },
+        chrome: {},
+      }),
+    ]);
+    theme.applyThemePrefs(prefs({ theme: 'paper' }));
+    const paint = await cached();
+    expect(paint?.follow === false && paint.manual.vars['--xterm-bg']).toBe('#fdfcf8');
+    expect(paint?.follow === false && paint.manual.appearance).toBe('light');
+  });
+
+  it('says whether the startup paint already shows the active theme', async () => {
+    const first = await import('./theme');
+    first.applyThemePrefs(prefs({ theme: 'vellum' }));
+
+    // The next window starts from that cache.
+    vi.resetModules();
+    const { prepaintTheme } = await import('./themePaint');
+    const theme = await import('./theme');
+    expect(prepaintTheme()?.id).toBe('vellum');
+    expect(theme.paintMatchesBoot()).toBe(false);
+    theme.applyThemePrefs(prefs({ theme: 'vellum' }));
+    expect(theme.paintMatchesBoot()).toBe(true);
+    theme.applyThemePrefs(prefs({ theme: 'nord' }));
+    expect(theme.paintMatchesBoot()).toBe(false);
+  });
+});

@@ -1,7 +1,9 @@
 // Theme runtime. Applies the active theme to the document root via the
 // derived chrome token vars (lib/chrome) plus `data-theme` and
 // `data-appearance` attributes, and broadcasts a window event so the
-// Terminal can refresh its xterm palette.
+// Terminal can refresh its xterm palette. Each paint of the theme the
+// saved fields resolve to also lands in the paint cache (lib/themePaint),
+// so the next window to open paints it before React renders.
 //
 // The active theme comes from four saved fields. While
 // follow_system_appearance is off it is `theme`. While it is on it is
@@ -12,6 +14,16 @@ import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { tokensToCssVars, type Appearance } from './chrome';
 import { parseHex, toRgba } from './color';
+import {
+  bootPaintSide,
+  osPrefersDark,
+  pageStorage,
+  paintRoot,
+  samePaintSide,
+  writeThemePaint,
+  type ThemePaint,
+  type ThemePaintSide,
+} from './themePaint';
 import {
   customToAppTheme,
   DEFAULT_THEME_ID,
@@ -34,6 +46,8 @@ let windowAppearance: Appearance | 'system' | null = null;
 let themePrefs: ThemePrefs | null = null;
 let followingSystem = false;
 let broadcastFlips = false;
+/** What this window last painted on the root. */
+let lastPaint: ThemePaintSide | null = null;
 
 /** The saved fields that decide which theme Vosh shows. UiConfig
  *  carries all four. */
@@ -81,11 +95,7 @@ export function pickTheme<T extends ThemePrefs>(ui: T, id: string): T {
 
 /** Whether the OS asks for dark. False outside a browser. */
 export function systemPrefersDark(): boolean {
-  try {
-    return typeof window !== 'undefined' && window.matchMedia(DARK_QUERY).matches;
-  } catch {
-    return false;
-  }
+  return osPrefersDark();
 }
 
 /** The theme id the saved fields resolve to right now. */
@@ -173,28 +183,82 @@ export function getThemePrefs(): ThemePrefs | null {
   return themePrefs;
 }
 
-function applyToRoot(theme: AppTheme) {
-  const root = document.documentElement;
+/** What a theme paints on the root: its attributes, its chrome tokens,
+ *  and two more values the page reads. Pure. */
+export function themePaintSide(theme: AppTheme): ThemePaintSide {
   const tokens = themeTokens(theme);
-  root.setAttribute('data-theme', theme.id);
-  root.setAttribute('data-appearance', tokens.appearance);
-  for (const [key, value] of Object.entries(tokensToCssVars(tokens))) {
-    root.style.setProperty(key, value);
-  }
+  const vars = tokensToCssVars(tokens);
   // The legacy --c-* names alias the tokens in styles/tokens.css. The
   // one exception is the soft accent: the map canvas reads it through
   // getComputedStyle, and a canvas fill cannot parse the color-mix()
   // alias in every webview, so it lands here as plain rgba.
   const accent = parseHex(tokens.accent);
-  if (accent) root.style.setProperty('--c-accent-soft', toRgba(accent, 0.13));
+  if (accent) vars['--c-accent-soft'] = toRgba(accent, 0.13);
   // Expose the xterm background as a CSS var so the split history
   // overlay can paint an opaque undercoat that matches the renderer's
   // own background — covers xterm's sub-frame render gap during scroll.
-  if (theme.xterm.background) {
-    root.style.setProperty('--xterm-bg', theme.xterm.background);
-  }
-  syncWindowAppearance(tokens.appearance);
+  if (theme.xterm.background) vars['--xterm-bg'] = theme.xterm.background;
+  return { id: theme.id, appearance: tokens.appearance, vars };
+}
+
+function applyToRoot(theme: AppTheme) {
+  const side = themePaintSide(theme);
+  paintRoot(document.documentElement, side);
+  syncWindowAppearance(side.appearance);
   currentThemeId = theme.id;
+  lastPaint = side;
+  rememberPaint(side);
+}
+
+// The legacy `system` choice tracks the OS contrast preference: the
+// high contrast theme when you asked for more contrast, else the
+// default theme.
+const LEGACY_SYSTEM = 'system';
+const CONTRAST_QUERY = '(prefers-contrast: more)';
+
+function contrastTheme(more: boolean): string {
+  return more ? 'high-contrast' : DEFAULT_THEME_ID;
+}
+
+/** The theme id a choice shows, with the legacy `system` resolved. */
+function shownId(choice: string): string {
+  if (choice !== LEGACY_SYSTEM) return choice;
+  try {
+    return contrastTheme(window.matchMedia(CONTRAST_QUERY).matches);
+  } catch {
+    return DEFAULT_THEME_ID;
+  }
+}
+
+// Leave the paint for the next window to open, when it is the theme the
+// saved fields resolve to. A theme id broadcast ahead of its fields, a
+// custom theme this window has not loaded yet, and a paint before the
+// fields arrive each show something else for a moment, and caching that
+// would open the next window on it.
+function rememberPaint(shown: ThemePaintSide) {
+  const prefs = themePrefs;
+  if (!prefs) return;
+  const systemDark = systemPrefersDark();
+  if (shown.id !== shownId(resolveActiveTheme(prefs, systemDark))) return;
+  const other = (dark: boolean) =>
+    themePaintSide(findTheme(shownId(resolveActiveTheme(prefs, dark))));
+  const paint: ThemePaint = prefs.follow_system_appearance
+    ? {
+        v: 1,
+        follow: true,
+        light: systemDark ? other(false) : shown,
+        dark: systemDark ? shown : other(true),
+      }
+    : { v: 1, follow: false, manual: shown };
+  writeThemePaint(paint, pageStorage());
+}
+
+/** Whether the root shows what the startup paint put there, so the
+ *  window's first frame already held the active theme and no repaint
+ *  is waiting. False when the startup paint found no cache. */
+export function paintMatchesBoot(): boolean {
+  const boot = bootPaintSide();
+  return boot !== null && lastPaint !== null && samePaintSide(boot, lastPaint);
 }
 
 export function applyTheme(choice: string) {
@@ -203,14 +267,10 @@ export function applyTheme(choice: string) {
     cleanupContrastListener = null;
   }
 
-  // The legacy `system` choice tracks the OS contrast preference. Map
-  // it to high-contrast when the user has asked for more contrast,
-  // otherwise the default theme.
-  if (choice === 'system') {
-    const mq = window.matchMedia('(prefers-contrast: more)');
+  if (choice === LEGACY_SYSTEM) {
+    const mq = window.matchMedia(CONTRAST_QUERY);
     const update = () => {
-      const target = mq.matches ? 'high-contrast' : DEFAULT_THEME_ID;
-      applyToRoot(findTheme(target));
+      applyToRoot(findTheme(contrastTheme(mq.matches)));
     };
     update();
     mq.addEventListener('change', update);

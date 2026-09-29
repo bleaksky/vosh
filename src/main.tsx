@@ -1,3 +1,6 @@
+// First, before any other module runs: paint the cached theme, so the
+// window never shows the dark stylesheet defaults under a light theme.
+import './prepaint';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { SettingsApp } from './SettingsApp';
