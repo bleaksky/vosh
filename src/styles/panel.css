@@ -640,17 +640,22 @@
 /* ── Vitals, pinned under the panes ──────────────────────────────── */
 
 /* 8 above, 28 per row, 11 below, and a 1 px line on top. The empty
-   state keeps the three row height so logging in moves nothing. */
+   state keeps the three row height so logging in moves nothing. The
+   Meter row in Settings changes the numbers, which VitalsFooter sets
+   as custom properties from vitalsGeometry (vitalsView.ts). Bar keeps
+   the 28 px pitch with a 4 px meter. None drops the meter and sets the
+   rows at the panes' 22 px pitch, 9 above and 13 below. The fallbacks
+   here are Line. */
 .panel-vitals {
   flex: none;
-  min-height: 104px;
-  padding: 8px 0 11px;
+  min-height: var(--vitals-min-height, 104px);
+  padding: var(--vitals-pad-top, 8px) 0 var(--vitals-pad-bottom, 11px);
   border-top: 1px solid var(--sep);
 }
 
 .panel-vitals-row {
-  height: 28px;
-  padding: 4px 12px 0 18px;
+  height: var(--vitals-row, 28px);
+  padding: var(--vitals-row-top, 4px) 12px 0 18px;
 }
 
 .panel-vitals-line {
@@ -680,16 +685,16 @@
 }
 
 .panel-vitals-meter {
-  height: 2px;
-  margin-top: 1px;
-  border-radius: 1px;
+  height: var(--vitals-meter, 2px);
+  margin-top: var(--vitals-meter-gap, 1px);
+  border-radius: var(--vitals-meter-radius, 1px);
   background: var(--divider);
   overflow: hidden;
 }
 
 .panel-vitals-fill {
-  height: 2px;
-  border-radius: 1px;
+  height: 100%;
+  border-radius: inherit;
   background: var(--tertiary);
 }
 
@@ -699,6 +704,16 @@
 
 .panel-vitals-row-low .panel-vitals-fill {
   background: var(--danger);
+}
+
+/* Warn before you run low: the middle third takes warn on the value
+   and the fill. */
+.panel-vitals-row-warn .panel-vitals-value {
+  color: var(--warn);
+}
+
+.panel-vitals-row-warn .panel-vitals-fill {
+  background: var(--warn);
 }
 
 .panel-vitals-row-combat .panel-vitals-label {
@@ -730,11 +745,8 @@
    the labels no longer fit they drop, stay for screen readers, and each
    value sits at the right end of its meter. vitalsLine.ts stacks the
    vitals in rows when even the values do not fit. The combat row and
-   the empty state keep their own rows. */
-.panel-vitals.is-one-line {
-  min-height: 48px;
-}
-
+   the empty state keep their own rows. The footer holds one row's
+   height, set with the rest of the geometry. */
 .panel-vitals-oneline {
   display: grid;
   grid-auto-flow: column;

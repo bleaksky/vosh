@@ -57,11 +57,6 @@ export function affectStateWord(state: string): string | null {
   return null;
 }
 
-/** A vitals value, `1020 / 1020`. */
-export function vitalValue(current: number, max: number): string {
-  return `${current} / ${max}`;
-}
-
 /** Exits in the Map pane's room row, `north east south`. */
 export function exitsLabel(exits: readonly string[]): string {
   return exits.join(' ');
