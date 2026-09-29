@@ -57,6 +57,47 @@ pub struct SearchOptions {
     pub max_results: usize,
     /// Optional `session_id` filter; None searches every session.
     pub session_id: Option<i64>,
+    /// Only lines older than this line id. The log view pages back
+    /// through a long result with the oldest line id it already holds.
+    #[serde(default)]
+    pub before_line_id: Option<i64>,
+    /// Leave out sessions to this machine (see [`is_local_host`]), like
+    /// a test server run next to the client.
+    #[serde(default)]
+    pub hide_local: bool,
+}
+
+/// One page of a search: the newest matches in scope, oldest first,
+/// and optionally how many lines in scope match in all.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SearchPage {
+    pub hits: Vec<SearchHit>,
+    /// Every matching line in scope, past the cap too. `None` when the
+    /// caller did not ask for it, which lets a capped search stop at
+    /// the cap instead of reading the whole log.
+    pub total: Option<u64>,
+}
+
+/// Hosts the log view leaves out: sessions to this machine.
+pub const LOCAL_HOSTS: [&str; 2] = ["127.0.0.1", "localhost"];
+
+/// True when `host` names this machine, ignoring case, spaces, and a
+/// trailing dot.
+pub fn is_local_host(host: &str) -> bool {
+    let clean = host.trim().trim_end_matches('.').to_ascii_lowercase();
+    LOCAL_HOSTS.contains(&clean.as_str())
+}
+
+/// The SQL test that keeps a session off this machine, for a query
+/// that joins `sessions` as `s`. Built from [`LOCAL_HOSTS`] so the two
+/// never drift, and folded the same way as [`is_local_host`].
+fn not_local_sql() -> String {
+    let list = LOCAL_HOSTS
+        .iter()
+        .map(|h| format!("'{h}'"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("rtrim(lower(trim(s.host)), '.') NOT IN ({list})")
 }
 
 /// One pending log line, owned so the session loop can collect a
@@ -221,23 +262,27 @@ impl LogStore {
     }
 
     /// List sessions newest first, capped at `limit` rows. A zero limit
-    /// returns all sessions.
-    pub fn list_sessions(&self, limit: usize) -> Result<Vec<SessionRow>> {
-        let sql = if limit == 0 {
+    /// returns all sessions. `hide_local` leaves out sessions to this
+    /// machine (see [`is_local_host`]).
+    pub fn list_sessions(&self, limit: usize, hide_local: bool) -> Result<Vec<SessionRow>> {
+        let filter = if hide_local {
+            format!("WHERE {}", not_local_sql())
+        } else {
+            String::new()
+        };
+        let cap = if limit == 0 {
+            String::new()
+        } else {
+            format!("LIMIT {limit}")
+        };
+        let sql = format!(
             "SELECT s.id, s.host, s.port, s.started_at_ms, s.ended_at_ms,
                     (SELECT COUNT(*) FROM log_lines l WHERE l.session_id = s.id)
              FROM sessions s
-             ORDER BY s.started_at_ms DESC"
-                .to_string()
-        } else {
-            format!(
-                "SELECT s.id, s.host, s.port, s.started_at_ms, s.ended_at_ms,
-                        (SELECT COUNT(*) FROM log_lines l WHERE l.session_id = s.id)
-                 FROM sessions s
-                 ORDER BY s.started_at_ms DESC
-                 LIMIT {limit}"
-            )
-        };
+             {filter}
+             ORDER BY s.started_at_ms DESC
+             {cap}"
+        );
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt
             .query_map([], |row| {
@@ -261,45 +306,80 @@ impl LogStore {
     /// table id-descending so the cap selects the newest matches;
     /// the gathered slice is reversed before return.
     pub fn search(&self, pattern: &str, options: &SearchOptions) -> Result<Vec<SearchHit>> {
+        Ok(self.search_page(pattern, options, false)?.hits)
+    }
+
+    /// [`Self::search`], plus the number of lines in scope that match
+    /// when `with_total` is set, counted past the cap. The scope is
+    /// every filter in `options`, so a page taken with
+    /// `before_line_id` counts only the lines older than it. Without
+    /// `with_total` the scan stops at the cap. An empty pattern matches
+    /// every line, so SQL takes the cap and counts the lines instead of
+    /// the regex reading each one.
+    pub fn search_page(
+        &self,
+        pattern: &str,
+        options: &SearchOptions,
+        with_total: bool,
+    ) -> Result<SearchPage> {
         let regex: Regex = RegexBuilder::new(pattern)
             .case_insensitive(!options.case_sensitive)
             .build()?;
+        let match_all = pattern.is_empty();
 
-        let (sql, params): (&str, Vec<Box<dyn rusqlite::ToSql>>) =
-            if let Some(sid) = options.session_id {
-                (
-                    "SELECT l.id, l.session_id, l.ts_ms, l.text, l.raw, s.host, s.port
-                     FROM log_lines l
-                     JOIN sessions s ON s.id = l.session_id
-                     WHERE l.session_id = ?1
-                     ORDER BY l.id DESC",
-                    vec![Box::new(sid)],
-                )
-            } else {
-                (
-                    "SELECT l.id, l.session_id, l.ts_ms, l.text, l.raw, s.host, s.port
-                     FROM log_lines l
-                     JOIN sessions s ON s.id = l.session_id
-                     ORDER BY l.id DESC",
-                    vec![],
-                )
-            };
-
-        let mut stmt = self.conn.prepare(sql)?;
+        let mut conditions: Vec<String> = Vec::new();
+        let mut params: Vec<i64> = Vec::new();
+        if let Some(sid) = options.session_id {
+            params.push(sid);
+            conditions.push(format!("l.session_id = ?{}", params.len()));
+        }
+        if let Some(before) = options.before_line_id {
+            params.push(before);
+            conditions.push(format!("l.id < ?{}", params.len()));
+        }
+        if options.hide_local {
+            conditions.push(not_local_sql());
+        }
+        let filter = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
         let cap = if options.max_results == 0 {
             usize::MAX
         } else {
             options.max_results
         };
+        let limit = if match_all && cap != usize::MAX {
+            format!("LIMIT {cap}")
+        } else {
+            String::new()
+        };
+        let sql = format!(
+            "SELECT l.id, l.session_id, l.ts_ms, l.text, l.raw, s.host, s.port
+             FROM log_lines l
+             JOIN sessions s ON s.id = l.session_id
+             {filter}
+             ORDER BY l.id DESC
+             {limit}"
+        );
+        // Keep reading past the cap only to count regex matches.
+        let count_rows = with_total && !match_all;
+
+        let mut stmt = self.conn.prepare(&sql)?;
         let mut hits = Vec::new();
-        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(AsRef::as_ref).collect();
-        let mut rows = stmt.query(rusqlite::params_from_iter(param_refs))?;
+        let mut matched: u64 = 0;
+        let mut rows = stmt.query(rusqlite::params_from_iter(params.iter()))?;
         while let Some(row) = rows.next()? {
-            if hits.len() >= cap {
+            if hits.len() >= cap && !count_rows {
                 break;
             }
             let text: String = row.get(3)?;
-            if regex.is_match(&text) {
+            if !match_all && !regex.is_match(&text) {
+                continue;
+            }
+            matched += 1;
+            if hits.len() < cap {
                 hits.push(SearchHit {
                     line_id: row.get(0)?,
                     session_id: row.get(1)?,
@@ -311,8 +391,26 @@ impl LogStore {
                 });
             }
         }
+        drop(rows);
         hits.reverse();
-        Ok(hits)
+
+        let total = if !with_total {
+            None
+        } else if match_all {
+            let count: i64 = self.conn.query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM log_lines l
+                     JOIN sessions s ON s.id = l.session_id
+                     {filter}"
+                ),
+                rusqlite::params_from_iter(params.iter()),
+                |r| r.get(0),
+            )?;
+            Some(u64::try_from(count).unwrap_or(0))
+        } else {
+            Some(matched)
+        };
+        Ok(SearchPage { hits, total })
     }
 
     /// Export a session's log as a single string. With `with_ansi=true`
@@ -434,7 +532,7 @@ mod tests {
         let a = s.start_session("a", 1, 100).unwrap();
         let b = s.start_session("b", 2, 200).unwrap();
         let c = s.start_session("c", 3, 150).unwrap();
-        let rows = s.list_sessions(0).unwrap();
+        let rows = s.list_sessions(0, false).unwrap();
         assert_eq!(rows.iter().map(|r| r.id).collect::<Vec<_>>(), vec![b, c, a]);
     }
 
@@ -461,6 +559,7 @@ mod tests {
             case_sensitive: true,
             max_results: 0,
             session_id: None,
+            ..SearchOptions::default()
         };
         let hits = s.search("foo", &opts).unwrap();
         assert_eq!(hits.len(), 1);
@@ -469,6 +568,7 @@ mod tests {
             case_sensitive: false,
             max_results: 2,
             session_id: None,
+            ..SearchOptions::default()
         };
         let hits = s.search("foo", &opts).unwrap();
         assert_eq!(hits.len(), 2);
@@ -510,6 +610,7 @@ mod tests {
             case_sensitive: false,
             max_results: 3,
             session_id: None,
+            ..SearchOptions::default()
         };
         let hits = s.search("match", &opts).unwrap();
         let texts: Vec<_> = hits.iter().map(|h| h.text.clone()).collect();
@@ -553,9 +654,140 @@ mod tests {
             case_sensitive: false,
             max_results: 0,
             session_id: Some(a),
+            ..SearchOptions::default()
         };
         let hits = s.search("foo", &opts).unwrap();
         assert_eq!(hits.len(), 1);
         assert!(hits[0].text.contains("from a"));
+    }
+
+    /// Five sessions: two to a MUD, one each to 127.0.0.1, localhost,
+    /// and `LocalHost.` Each line reads `<host> line <n>`.
+    fn store_with_local_sessions() -> (LogStore, i64, i64) {
+        let mut s = store();
+        let mud = s
+            .start_session("play.theforsakenlands.com", 1848, 100)
+            .unwrap();
+        let loopback = s.start_session("127.0.0.1", 4000, 200).unwrap();
+        let named = s.start_session("localhost", 4000, 300).unwrap();
+        let shouted = s.start_session(" LocalHost. ", 4000, 400).unwrap();
+        let later = s
+            .start_session("play.theforsakenlands.com", 1848, 500)
+            .unwrap();
+        for (sid, host) in [
+            (mud, "mud"),
+            (loopback, "loopback"),
+            (named, "named"),
+            (shouted, "shouted"),
+            (later, "later"),
+        ] {
+            for n in 0..3 {
+                s.append(sid, n, &format!("{host} line {n}"), None).unwrap();
+            }
+        }
+        (s, mud, later)
+    }
+
+    #[test]
+    fn local_hosts_are_this_machine() {
+        assert!(is_local_host("127.0.0.1"));
+        assert!(is_local_host("localhost"));
+        assert!(is_local_host(" LocalHost. "));
+        assert!(!is_local_host("play.theforsakenlands.com"));
+        assert!(!is_local_host("localhost.example.org"));
+        assert!(!is_local_host("127.0.0.2"));
+    }
+
+    #[test]
+    fn list_sessions_can_hide_local_sessions() {
+        let (s, mud, later) = store_with_local_sessions();
+        assert_eq!(s.list_sessions(0, false).unwrap().len(), 5);
+        let rows = s.list_sessions(0, true).unwrap();
+        assert_eq!(
+            rows.iter().map(|r| r.id).collect::<Vec<_>>(),
+            vec![later, mud]
+        );
+        assert!(rows.iter().all(|r| r.line_count == 3));
+        let capped = s.list_sessions(1, true).unwrap();
+        assert_eq!(capped.iter().map(|r| r.id).collect::<Vec<_>>(), vec![later]);
+    }
+
+    #[test]
+    fn search_can_hide_local_sessions() {
+        let (s, _, _) = store_with_local_sessions();
+        let every = s.search("line", &SearchOptions::default()).unwrap();
+        assert_eq!(every.len(), 15);
+        let opts = SearchOptions {
+            hide_local: true,
+            ..SearchOptions::default()
+        };
+        let page = s.search_page("line", &opts, true).unwrap();
+        assert_eq!(page.total, Some(6));
+        assert!(page.hits.iter().all(|h| !is_local_host(&h.host)));
+        // An empty pattern counts through SQL and hides them the same way.
+        let page = s.search_page("", &opts, true).unwrap();
+        assert_eq!(page.total, Some(6));
+        assert_eq!(page.hits.len(), 6);
+    }
+
+    #[test]
+    fn search_page_counts_every_match_past_the_cap() {
+        let mut s = store();
+        let id = s.start_session("h", 1, 0).unwrap();
+        for n in 0..10 {
+            s.append(id, n, &format!("match {n}"), None).unwrap();
+            s.append(id, n, &format!("other {n}"), None).unwrap();
+        }
+        let opts = SearchOptions {
+            max_results: 3,
+            ..SearchOptions::default()
+        };
+        let page = s.search_page("match", &opts, true).unwrap();
+        assert_eq!(page.total, Some(10));
+        let texts: Vec<_> = page.hits.iter().map(|h| h.text.as_str()).collect();
+        assert_eq!(texts, vec!["match 7", "match 8", "match 9"]);
+        // Without the total the page is the same and carries no count.
+        let quick = s.search_page("match", &opts, false).unwrap();
+        assert_eq!(quick.total, None);
+        assert_eq!(quick.hits.len(), 3);
+        // An empty pattern takes every line, newest three, all twenty.
+        let all = s.search_page("", &opts, true).unwrap();
+        assert_eq!(all.total, Some(20));
+        let texts: Vec<_> = all.hits.iter().map(|h| h.text.as_str()).collect();
+        assert_eq!(texts, vec!["other 8", "match 9", "other 9"]);
+    }
+
+    #[test]
+    fn search_page_pages_back_before_a_line() {
+        let mut s = store();
+        let id = s.start_session("h", 1, 0).unwrap();
+        for n in 0..7 {
+            s.append(id, n, &format!("match {n}"), None).unwrap();
+        }
+        let mut opts = SearchOptions {
+            max_results: 3,
+            ..SearchOptions::default()
+        };
+        let first = s.search_page("match", &opts, true).unwrap();
+        assert_eq!(first.total, Some(7));
+        opts.before_line_id = Some(first.hits[0].line_id);
+        let second = s.search_page("match", &opts, true).unwrap();
+        let texts: Vec<_> = second.hits.iter().map(|h| h.text.as_str()).collect();
+        assert_eq!(texts, vec!["match 1", "match 2", "match 3"]);
+        // The total covers the lines older than the cursor.
+        assert_eq!(second.total, Some(4));
+        opts.before_line_id = Some(second.hits[0].line_id);
+        let last = s.search_page("match", &opts, false).unwrap();
+        let texts: Vec<_> = last.hits.iter().map(|h| h.text.as_str()).collect();
+        assert_eq!(texts, vec!["match 0"]);
+    }
+
+    #[test]
+    fn search_page_reports_a_bad_pattern() {
+        let s = store();
+        assert!(matches!(
+            s.search_page("(", &SearchOptions::default(), true),
+            Err(LogError::Regex(_))
+        ));
     }
 }

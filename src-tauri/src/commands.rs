@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::Mutex;
 use tracing::warn;
-use vosh_log::{SearchHit, SearchOptions, SessionRow};
+use vosh_log::{SearchHit, SearchOptions, SearchPage, SessionRow};
 use vosh_trigger::Trigger;
 
 use crate::input;
@@ -2187,12 +2187,15 @@ pub(crate) async fn map_set_avoid(
 pub(crate) async fn logs_list_sessions(
     state: State<'_, SharedState>,
     limit: usize,
+    hide_local: Option<bool>,
 ) -> Result<Vec<SessionRow>, String> {
     let guard = state.logs.lock().await;
     let Some(store) = guard.as_ref() else {
         return Ok(Vec::new());
     };
-    store.list_sessions(limit).map_err(|e| e.to_string())
+    store
+        .list_sessions(limit, hide_local.unwrap_or(false))
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2211,8 +2214,45 @@ pub(crate) async fn logs_search(
         case_sensitive,
         max_results,
         session_id,
+        ..SearchOptions::default()
     };
     store.search(&pattern, &opts).map_err(|e| e.to_string())
+}
+
+/// One page of the Settings log view: the newest `max_results` matches
+/// older than `before_line_id`, oldest first, and with `with_total` the
+/// number of lines in that scope that match. The view leaves out
+/// sessions to this machine with `hide_local`. A pattern the regex
+/// engine cannot read comes back as an error starting `regex:`.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn logs_search_page(
+    state: State<'_, SharedState>,
+    pattern: String,
+    case_sensitive: bool,
+    max_results: usize,
+    session_id: Option<i64>,
+    before_line_id: Option<i64>,
+    hide_local: bool,
+    with_total: bool,
+) -> Result<SearchPage, String> {
+    let guard = state.logs.lock().await;
+    let Some(store) = guard.as_ref() else {
+        return Ok(SearchPage {
+            hits: Vec::new(),
+            total: with_total.then_some(0),
+        });
+    };
+    let opts = SearchOptions {
+        case_sensitive,
+        max_results,
+        session_id,
+        before_line_id,
+        hide_local,
+    };
+    store
+        .search_page(&pattern, &opts, with_total)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

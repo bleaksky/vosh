@@ -588,8 +588,38 @@ export interface LogSearchHit {
   raw: number[] | null;
 }
 
-export async function listLogSessions(limit: number): Promise<LogSession[]> {
-  return invoke('logs_list_sessions', { limit });
+/** Saved sessions, newest first. A zero limit lists every one.
+ *  `hideLocal` leaves out sessions to 127.0.0.1 and localhost. */
+export async function listLogSessions(
+  limit: number,
+  options: { hideLocal?: boolean } = {},
+): Promise<LogSession[]> {
+  return invoke('logs_list_sessions', { limit, hideLocal: options.hideLocal ?? false });
+}
+
+/** One page of a log search, oldest first. */
+export interface LogSearchPage {
+  hits: LogSearchHit[];
+  /** Every line in scope that matches, when the search asked for it. */
+  total: number | null;
+}
+
+/** The newest `maxResults` lines older than `beforeLineId` that match
+ *  `pattern`, a regular expression. An empty pattern matches every
+ *  line. `withTotal` also counts every match in that scope, which
+ *  reads the whole log. */
+export async function searchLogPage(
+  pattern: string,
+  options: {
+    caseSensitive: boolean;
+    maxResults: number;
+    sessionId: number | null;
+    beforeLineId: number | null;
+    hideLocal: boolean;
+    withTotal: boolean;
+  },
+): Promise<LogSearchPage> {
+  return invoke('logs_search_page', { pattern, ...options });
 }
 
 export async function searchLogs(
