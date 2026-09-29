@@ -2076,7 +2076,7 @@ pub(crate) async fn profiles_list(
 /// that file, when `source` is the live profile. Call with
 /// [`PERSIST_LOCK`] held across this and the copy, so the copy reads
 /// what the flush wrote and no persist rewrites the source mid copy.
-async fn flush_before_copy(app: &AppHandle, shared: &SharedState, source: &str) {
+async fn flush_before_copy(shared: &SharedState, app_data: Option<&std::path::Path>, source: &str) {
     let copying_live = shared
         .profile_set
         .lock()
@@ -2087,7 +2087,7 @@ async fn flush_before_copy(app: &AppHandle, shared: &SharedState, source: &str) 
     // `#profile reset` or `load` it is deliberately diverged, and the
     // copy takes the file as it stands.
     if copying_live && !AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
-        persist_profile_locked(app, shared).await;
+        persist_state(shared, app_data).await;
     }
 }
 
@@ -2104,22 +2104,60 @@ pub(crate) async fn profile_create(
     copy_from: Option<String>,
     auto_match: Option<crate::profile_set::AutoMatch>,
 ) -> Result<crate::profile_set::ProfileEntry, String> {
-    let shared: SharedState = state.inner().clone();
-    let _persist_guard = PERSIST_LOCK.lock().await;
-    if let Some(source) = copy_from.as_deref() {
-        flush_before_copy(&app, &shared, source).await;
-    }
-    let entry = {
-        let mut guard = state.profile_set.lock().await;
-        let Some(set) = guard.as_mut() else {
-            return Err(PROFILES_NOT_LOADED.into());
-        };
-        set.create_from(&name, copy_from.as_deref(), auto_match)
-            .map_err(|e| e.to_string())?
-    };
+    let app_data = app.path().app_data_dir().ok();
+    let entry = create_profile(
+        state.inner(),
+        app_data.as_deref(),
+        &name,
+        copy_from.as_deref(),
+        auto_match,
+        &MIGRATION_RELAUNCH_PENDING,
+    )
+    .await?;
     broadcast(&app, "vosh://profiles-changed", &entry.name);
     Ok(entry)
 }
+
+/// The body of [`profile_create`] over the app data folder `app_data`,
+/// with `relaunch_pending` in place of [`MIGRATION_RELAUNCH_PENDING`], so
+/// a test can run it after the wizard.
+async fn create_profile(
+    state: &SharedState,
+    app_data: Option<&std::path::Path>,
+    name: &str,
+    copy_from: Option<&str>,
+    auto_match: Option<crate::profile_set::AutoMatch>,
+    relaunch_pending: &std::sync::atomic::AtomicBool,
+) -> Result<crate::profile_set::ProfileEntry, String> {
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    if let Some(source) = copy_from {
+        // Read under the lock, which the wizard holds until it sets the
+        // flag.
+        if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(COPY_MIGRATION_PENDING.into());
+        }
+        flush_before_copy(state, app_data, source).await;
+    }
+    let mut guard = state.profile_set.lock().await;
+    let Some(set) = guard.as_mut() else {
+        return Err(PROFILES_NOT_LOADED.into());
+    };
+    set.create_from(name, copy_from, auto_match)
+        .map_err(|e| e.to_string())
+}
+
+/// Why a profile cannot be renamed between `migration_apply` and the
+/// relaunch that finishes it, or while launch could not finish a wizard
+/// run. The next launch writes each profile file the run names under the
+/// name it had, and the renamed file would keep what the move took out.
+const RENAME_MIGRATION_PENDING: &str =
+    "Quit Vosh and open it again to finish the move to loadouts, then rename the profile.";
+
+/// Why a profile cannot be copied in the same window. The copy would take
+/// a file the next launch has yet to finish, or the live profile a copy of
+/// it saves first, which still holds the items the move took out.
+const COPY_MIGRATION_PENDING: &str =
+    "Quit Vosh and open it again to finish the move to loadouts, then copy the profile.";
 
 #[tauri::command]
 pub(crate) async fn profile_delete(
@@ -2146,16 +2184,29 @@ pub(crate) async fn profile_rename(
     old: String,
     new: String,
 ) -> Result<(), String> {
-    {
-        let _persist_guard = PERSIST_LOCK.lock().await;
-        let mut guard = state.profile_set.lock().await;
-        let Some(set) = guard.as_mut() else {
-            return Err(PROFILES_NOT_LOADED.into());
-        };
-        set.rename(&old, &new).map_err(|e| e.to_string())?;
-    }
+    rename_profile(state.inner(), &old, &new, &MIGRATION_RELAUNCH_PENDING).await?;
     broadcast(&app, "vosh://profiles-changed", &new);
     Ok(())
+}
+
+/// The body of [`profile_rename`], with `relaunch_pending` in place of
+/// [`MIGRATION_RELAUNCH_PENDING`], so a test can run it after the wizard.
+async fn rename_profile(
+    state: &SharedState,
+    old: &str,
+    new: &str,
+    relaunch_pending: &std::sync::atomic::AtomicBool,
+) -> Result<(), String> {
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    // Read under the lock, which the wizard holds until it sets the flag.
+    if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
+        return Err(RENAME_MIGRATION_PENDING.into());
+    }
+    let mut guard = state.profile_set.lock().await;
+    let Some(set) = guard.as_mut() else {
+        return Err(PROFILES_NOT_LOADED.into());
+    };
+    set.rename(old, new).map_err(|e| e.to_string())
 }
 
 /// Copy `source` under a new name without its login claim. Duplicating
@@ -2168,17 +2219,40 @@ pub(crate) async fn profile_duplicate(
     source: String,
     new: String,
 ) -> Result<(), String> {
-    {
-        let _persist_guard = PERSIST_LOCK.lock().await;
-        flush_before_copy(&app, state.inner(), &source).await;
-        let mut guard = state.profile_set.lock().await;
-        let Some(set) = guard.as_mut() else {
-            return Err(PROFILES_NOT_LOADED.into());
-        };
-        set.duplicate(&source, &new).map_err(|e| e.to_string())?;
-    }
+    let app_data = app.path().app_data_dir().ok();
+    duplicate_profile(
+        state.inner(),
+        app_data.as_deref(),
+        &source,
+        &new,
+        &MIGRATION_RELAUNCH_PENDING,
+    )
+    .await?;
     broadcast(&app, "vosh://profiles-changed", &new);
     Ok(())
+}
+
+/// The body of [`profile_duplicate`] over the app data folder `app_data`,
+/// with `relaunch_pending` in place of [`MIGRATION_RELAUNCH_PENDING`], so
+/// a test can run it after the wizard.
+async fn duplicate_profile(
+    state: &SharedState,
+    app_data: Option<&std::path::Path>,
+    source: &str,
+    new: &str,
+    relaunch_pending: &std::sync::atomic::AtomicBool,
+) -> Result<(), String> {
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    // Read under the lock, which the wizard holds until it sets the flag.
+    if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
+        return Err(COPY_MIGRATION_PENDING.into());
+    }
+    flush_before_copy(state, app_data, source).await;
+    let mut guard = state.profile_set.lock().await;
+    let Some(set) = guard.as_mut() else {
+        return Err(PROFILES_NOT_LOADED.into());
+    };
+    set.duplicate(source, new).map_err(|e| e.to_string())
 }
 
 /// Read the per-category scope map. Frontend uses this to render
@@ -6773,6 +6847,98 @@ mod tests {
             assert_eq!(items_on(&*state.profile.lock().await), ["alias hh"]);
         }
 
+        /// Try to rename Healer, copy it, and make a profile from it while
+        /// `pending` holds, and check that each is refused and that the
+        /// profile files and the index stay as they were.
+        async fn renames_and_copies_are_refused(
+            state: &super::super::SharedState,
+            dir: &std::path::Path,
+            pending: &std::sync::atomic::AtomicBool,
+        ) {
+            let set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
+            let files: Vec<(std::path::PathBuf, Option<String>)> = set
+                .list()
+                .iter()
+                .map(|entry| {
+                    let path = set.profile_path(&entry.name);
+                    let text = path.exists().then(|| read(&path));
+                    (path, text)
+                })
+                .collect();
+            let index = read(&dir.join("profiles.toml"));
+
+            let rename = super::super::rename_profile(state, "Healer", "Cleric", pending)
+                .await
+                .unwrap_err();
+            assert_eq!(
+                rename,
+                "Quit Vosh and open it again to finish the move to loadouts, then rename the \
+                 profile."
+            );
+            let copy = "Quit Vosh and open it again to finish the move to loadouts, then copy \
+                        the profile.";
+            let duplicate =
+                super::super::duplicate_profile(state, Some(dir), "Healer", "Cleric", pending)
+                    .await
+                    .unwrap_err();
+            assert_eq!(duplicate, copy);
+            let create = super::super::create_profile(
+                state,
+                Some(dir),
+                "Cleric",
+                Some("Healer"),
+                None,
+                pending,
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(create, copy);
+
+            assert_eq!(read(&dir.join("profiles.toml")), index);
+            assert!(!set.profile_path("Cleric").exists());
+            for (path, text) in &files {
+                match text {
+                    Some(text) => assert_eq!(&read(path), text, "{}", path.display()),
+                    None => assert!(!path.exists(), "{}", path.display()),
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn renames_and_copies_wait_for_the_relaunch_after_the_wizard() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            use std::sync::atomic::{AtomicBool, Ordering};
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
+            write_alias(&set, "Healer", "hh");
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            let pending = AtomicBool::new(false);
+            super::super::apply_migration(&state, dir.path(), &[], || {
+                pending.store(true, Ordering::Release);
+            })
+            .await
+            .unwrap();
+
+            renames_and_copies_are_refused(&state, dir.path(), &pending).await;
+            // A new profile that copies nothing only joins the index.
+            super::super::create_profile(&state, Some(dir.path()), "Bard", None, None, &pending)
+                .await
+                .unwrap();
+
+            // Once Vosh opens again, the rename and the copy run.
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            let pending = AtomicBool::new(false);
+            super::super::duplicate_profile(&state, Some(dir.path()), "Healer", "Cleric", &pending)
+                .await
+                .unwrap();
+            super::super::rename_profile(&state, "Cleric", "Priest", &pending)
+                .await
+                .unwrap();
+            let state = relaunch_as(dir.path(), "Priest").await;
+            assert_eq!(items_on(&*state.profile.lock().await), ["alias hh"]);
+        }
+
         #[tokio::test]
         async fn a_wizard_run_that_stops_partway_finishes_at_the_next_launch() {
             use crate::profile_set::DEFAULT_PROFILE_NAME;
@@ -6919,6 +7085,9 @@ mod tests {
             )
             .await
             .is_err());
+            // A rename would move the Healer file away from the name the
+            // journal writes it under, and a copy would take its items.
+            renames_and_copies_are_refused(&state, dir.path(), &pending).await;
             assert!(journal_path(dir.path()).exists());
 
             // Once the file takes writes again, the next launch finishes
