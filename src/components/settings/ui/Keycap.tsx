@@ -7,5 +7,8 @@ import { cx } from './cx';
  *  from shortcutKeys in src/lib/palette.ts so macOS reads ⌘ and the
  *  other systems read Ctrl. */
 export function Keycap({ children, className }: { children: ReactNode; className?: string }) {
-  return <kbd className={cx('st-keycap', className)}>{children}</kbd>;
+  // One glyph, like ⇧ or ⌘, sits in a square 20 wide even when it is
+  // wider than the padding leaves room for. A word like Ctrl grows.
+  const glyph = typeof children === 'string' && [...children].length === 1;
+  return <kbd className={cx('st-keycap', glyph && 'st-keycap-glyph', className)}>{children}</kbd>;
 }

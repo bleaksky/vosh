@@ -971,6 +971,11 @@
   font-weight: 400;
 }
 
+.st-keycap-glyph {
+  width: 20px;
+  padding: 0;
+}
+
 .st-chip {
   display: inline-flex;
   align-items: center;
