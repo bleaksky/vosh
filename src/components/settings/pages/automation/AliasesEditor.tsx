@@ -12,7 +12,7 @@ import {
   type AliasRecord,
 } from '../../../../lib/automationRecords';
 import { withGroup } from '../../../../lib/automationTriggers';
-import { subscribeAliasGroupsChanged } from '../../../../lib/session';
+import { subscribeAliasesChanged } from '../../../../lib/session';
 import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
 import { CodeRow, GroupField } from './fields';
 import { DraftEditor } from './DraftEditor';
@@ -41,7 +41,7 @@ const ALIASES_SPEC: KindSpec<AliasRecord> = {
     toText: jsonListText,
     fromText: (text) => parseJsonList(text, normalizeAlias),
   },
-  subscribe: (onChange) => subscribeAliasGroupsChanged(() => onChange()),
+  subscribe: subscribeAliasesChanged,
   renderDetail: (props) => <AliasDetail {...props} />,
   monoName: true,
   monoMeta: true,

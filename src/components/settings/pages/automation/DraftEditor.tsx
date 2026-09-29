@@ -9,9 +9,11 @@ import {
   draftValues,
   findDraftItem,
   isDraftDirty,
+  listChangedNote,
   nextDraftUid,
   removeDraftItem,
   replaceDraftValues,
+  storeChangeAction,
   updateDraftItem,
   type Draft,
 } from '../../../../lib/automationDraft';
@@ -66,7 +68,8 @@ const JSON_PARSE_MS = 150;
 /** One kind's list, detail card, and save bar over a draft. The draft
  *  loads when the editor mounts. Save validates, writes it through the
  *  kind's API, and loads it again, so the page shows what the store
- *  kept. Discard puts the last load back. */
+ *  kept. Discard puts the last load back, or the list as the store holds
+ *  it now when it changed elsewhere while you edited. */
 export function DraftEditor<T>({
   spec,
   json,
@@ -92,6 +95,11 @@ export function DraftEditor<T>({
   const pinnedUid = pinned?.uid ?? null;
   const pinnedUidRef = useRef<string | null>(pinnedUid);
   const jsonTimer = useRef<number | undefined>(undefined);
+  /** A save is writing. Store changes wait for the load that ends it. */
+  const savingRef = useRef(false);
+  /** The store changed while the draft held unsaved edits, so the last
+   *  load no longer matches it. */
+  const staleRef = useRef(false);
 
   const setDraft = useCallback((next: Draft<T> | null) => {
     draftRef.current = next;
@@ -119,6 +127,7 @@ export function DraftEditor<T>({
     async (keepKey: string | null) => {
       const values = await spec.load();
       const next = createDraft(values);
+      staleRef.current = false;
       setDraft(next);
       if (spec.json) setJsonText(spec.json.toText(values));
       setJsonBad(false);
@@ -148,8 +157,9 @@ export function DraftEditor<T>({
     };
   }, [spec, onError, setDraft]);
 
-  // Another window changed the store. Follow it while the draft is
-  // clean. With unsaved changes, keep them, and Save writes over it.
+  // The store changed outside the page, like #trigger in the main
+  // window or a script. Follow it while the draft is clean. With unsaved
+  // changes, keep them and say so. Save applies them over the new list.
   useEffect(() => {
     if (!spec.subscribe) return;
     let cancelled = false;
@@ -157,8 +167,14 @@ export function DraftEditor<T>({
     void spec
       .subscribe(() => {
         const d = draftRef.current;
-        if (cancelled || !d || isDraftDirty(d)) return;
-        void load(selectedKey()).catch(() => {});
+        if (cancelled || !d) return;
+        const action = storeChangeAction({ dirty: isDraftDirty(d), saving: savingRef.current });
+        if (action === 'reload') {
+          void load(selectedKey()).catch(() => {});
+        } else if (action === 'warn') {
+          staleRef.current = true;
+          onError(listChangedNote(spec.noun));
+        }
       })
       .then((fn) => {
         if (cancelled) fn();
@@ -169,7 +185,7 @@ export function DraftEditor<T>({
       cancelled = true;
       unsub?.();
     };
-  }, [spec, load, selectedKey]);
+  }, [spec, load, selectedKey, onError]);
 
   // A profile switch. A kind that lives in the profile loads the new
   // profile's list and says so when that drops unsaved changes. A kind
@@ -245,6 +261,16 @@ export function DraftEditor<T>({
   }, [pinnedSeq, pinnedUid]);
 
   const count = draft ? draftChangeCount(draft) : 0;
+
+  // The list went clean while it was behind the store, after Discard or
+  // after you undid your edits. Catch up with the store now.
+  useEffect(() => {
+    if (count > 0 || !staleRef.current) return;
+    staleRef.current = false;
+    onError(null);
+    void load(selectedKey()).catch((e) => onError(automationSaveError(e)));
+  }, [count, load, selectedKey, onError]);
+
   const pinnedDirty = pinned?.dirty ?? false;
   const dirty = count > 0 || pinnedDirty;
   const title = dirty
@@ -338,6 +364,7 @@ export function DraftEditor<T>({
     }
     onError(null);
     setBusy(true);
+    savingRef.current = true;
     try {
       if (isDraftDirty(d)) await spec.save(d);
       if (pinned?.dirty) await pinned.save();
@@ -346,6 +373,7 @@ export function DraftEditor<T>({
     } catch (e) {
       onError(automationSaveError(e));
     } finally {
+      savingRef.current = false;
       setBusy(false);
     }
   };

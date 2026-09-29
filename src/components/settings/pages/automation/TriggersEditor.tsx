@@ -27,7 +27,7 @@ import {
   type TriggerStyle,
 } from '../../../../lib/automationTriggers';
 import {
-  subscribeTriggerGroupsChanged,
+  subscribeTriggersChanged,
   type HighlightStyle,
   type NamedColor,
   type TriggerAction,
@@ -82,7 +82,7 @@ const TRIGGERS_SPEC: KindSpec<TriggerRecord> = {
     toText: jsonListText,
     fromText: (text) => parseJsonList(text, normalizeTrigger),
   },
-  subscribe: (onChange) => subscribeTriggerGroupsChanged(() => onChange()),
+  subscribe: subscribeTriggersChanged,
   renderDetail: (props) => <TriggerDetail {...props} />,
 };
 

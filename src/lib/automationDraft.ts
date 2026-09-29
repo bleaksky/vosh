@@ -238,6 +238,18 @@ export function isDraftDirty<T>(draft: Draft<T>): boolean {
   return draftChangeCount(draft) > 0;
 }
 
+/** What the page does when the store changes outside it: follow the
+ *  store while the draft is clean, keep your unsaved edits and say the
+ *  list changed while it is dirty, and wait out its own save, which
+ *  loads the list again when it ends. */
+export function storeChangeAction(state: {
+  dirty: boolean;
+  saving: boolean;
+}): 'reload' | 'warn' | 'ignore' {
+  if (state.saving) return 'ignore';
+  return state.dirty ? 'warn' : 'reload';
+}
+
 /** The singular and plural name of what a kind holds. */
 export interface KindNoun {
   one: string;
@@ -260,4 +272,10 @@ export function discardTitle(phrases: readonly string[]): string {
       ? parts[0]
       : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
   return `Discard changes to ${joined}?`;
+}
+
+/** The note the page shows when the store changed while you had unsaved
+ *  edits. Save applies your edits over the new list, so both survive. */
+export function listChangedNote(noun: KindNoun): string {
+  return `Your ${noun.many} changed outside Settings while you edited them. Save keeps those changes and adds yours.`;
 }
