@@ -430,4 +430,48 @@ describe('the paint cache', () => {
     expect(theme.getCurrentThemeId()).toBe('nord');
     expect(await manualId()).toBe('nord');
   });
+
+  // Editing a custom theme saves it without a repaint unless it is the
+  // theme on screen. While the theme follows the system, the side that
+  // is not on screen still has to reach the cache, for a launch after
+  // the OS flips while Vosh is closed.
+  const night = (background: string) => ({
+    id: 'night',
+    label: 'Night',
+    description: '',
+    xterm: { background, foreground: '#dddddd' },
+    chrome: {},
+  });
+
+  it('caches the new colors of the custom theme on the side not on screen', async () => {
+    const theme = await import('./theme');
+    const { customToAppTheme, setCustomThemes } = await import('./themes');
+    setCustomThemes([customToAppTheme(night('#101010'))]);
+    dark = false;
+    theme.applyThemePrefs(prefs({ follow_system_appearance: true, dark_theme: 'night' }));
+    invoke.mockClear();
+
+    setCustomThemes([customToAppTheme(night('#302010'))]);
+    const paint = await cached();
+    expect(paint?.follow === true && paint.dark.vars['--xterm-bg']).toBe('#302010');
+    expect(paint?.follow === true && paint.light.id).toBe('vellum');
+    // The theme on screen did not change, so neither did the backdrop.
+    expect(backdrops()).toEqual([]);
+  });
+
+  it('caches the custom theme on screen once the window repaints it', async () => {
+    const theme = await import('./theme');
+    const { customToAppTheme, setCustomThemes } = await import('./themes');
+    setCustomThemes([customToAppTheme(night('#101010'))]);
+    theme.applyThemePrefs(prefs({ theme: 'night' }));
+
+    // Until the repaint the cache holds what the window shows.
+    setCustomThemes([customToAppTheme(night('#302010'))]);
+    let paint = await cached();
+    expect(paint?.follow === false && paint.manual.vars['--xterm-bg']).toBe('#101010');
+
+    theme.applyTheme('night');
+    paint = await cached();
+    expect(paint?.follow === false && paint.manual.vars['--xterm-bg']).toBe('#302010');
+  });
 });
