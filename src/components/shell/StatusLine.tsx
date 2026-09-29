@@ -1,11 +1,21 @@
 import { useMemo } from 'react';
+import type { VitalsOptions } from '../../lib/session';
 import { useChipStyle } from '../../lib/stores/chipStyleStore';
+import { useCombat } from '../../lib/stores/combatStore';
 import { useTarget } from '../../lib/stores/targetStore';
 import { useTick } from '../../lib/stores/tickStore';
-import { useVitals, type VitalKey } from '../../lib/stores/vitalsStore';
+import { useVitalsOptions } from '../../lib/stores/vitalsOptionsStore';
+import { useVitals, type Vitals, type VitalKey } from '../../lib/stores/vitalsStore';
 import { useWorld } from '../../lib/stores/worldStore';
 import { themeTokens } from '../../lib/themes';
 import { useActiveTheme } from '../../lib/useActiveTheme';
+import {
+  formatVital,
+  targetHealthPercent,
+  vitalTone,
+  type CombatHealth,
+  type VitalTone,
+} from '../../lib/vitalsView';
 import { daylightTint, isDaytime } from './daylight';
 import { formatGameTime } from './gameTime';
 import { StatusClock } from './StatusClock';
@@ -14,7 +24,10 @@ import { statusMoons } from './statusMoons';
 // The quiet line under the input band (SPEC 10 G4): your target, then
 // the tick, the game time, and the moons together, 20 px apart in the
 // UI face with tabular numbers. With the panel hidden, the vitals it
-// pins lead the line so you never lose them.
+// pins lead the line so you never lose them. They follow Values and
+// Warn before you run low from Settings, Layout, Vitals, and never draw
+// a meter (VitalsOptions.dc.html). While you fight the target you set,
+// its health follows its name in the warn tone.
 //
 // The tick, the game time, and the moons share one item, the way the
 // old input row chip kept the tick and the time, 8 px apart inside it.
@@ -41,28 +54,72 @@ interface Props {
 export function StatusLine({ connected, showVitals }: Props) {
   const target = useTarget();
   const vitals = useVitals();
+  const combat = useCombat();
+  const options = useVitalsOptions();
 
   return (
     <div className="shell-statusline" role="group" aria-label="Status">
       {!connected && <span>Not connected</span>}
+      <StatusVitals
+        showVitals={showVitals}
+        vitals={vitals}
+        target={target.name}
+        combat={combat}
+        options={options}
+      />
+      <ClockItem connected={connected} />
+    </div>
+  );
+}
+
+export interface StatusVitalsProps {
+  /** The panel is hidden, so the line carries your vitals. */
+  showVitals: boolean;
+  vitals: Vitals | null;
+  /** The target you set, or null. */
+  target: string | null;
+  /** The Char.Combat opponent, or null out of a fight. */
+  combat: CombatHealth | null;
+  options: VitalsOptions;
+}
+
+/** Your vitals and your target, drawn from plain values so a test can
+ *  render every case. The target's health shows only with the panel
+ *  hidden, since the panel's combat row carries it otherwise. */
+export function StatusVitals({ showVitals, vitals, target, combat, options }: StatusVitalsProps) {
+  const targetPct = showVitals ? targetHealthPercent(target, combat) : null;
+  return (
+    <>
       {showVitals &&
         vitals &&
         VITAL_ROWS.map(({ key, label, max }) => (
           <span key={key}>
             {label}
-            <span className={`shell-status-value${vitals.low[key] ? ' is-low' : ''}`}>
-              {vitals[key]} / {vitals[max]}
+            <span
+              className={toneClass(
+                vitalTone(vitals[key], vitals[max], vitals.low[key], options.warn_thirds),
+              )}
+            >
+              {formatVital(options.values, vitals[key], vitals[max])}
             </span>
           </span>
         ))}
-      {target.name && (
+      {target && (
         <span>
-          Target<span className="shell-status-value">{target.name}</span>
+          Target<span className="shell-status-value">{target}</span>
+          {targetPct !== null && (
+            <span className="shell-status-value is-warn">{`${targetPct}%`}</span>
+          )}
         </span>
       )}
-      <ClockItem connected={connected} />
-    </div>
+    </>
   );
+}
+
+function toneClass(tone: VitalTone): string {
+  if (tone === 'danger') return 'shell-status-value is-low';
+  if (tone === 'warn') return 'shell-status-value is-warn';
+  return 'shell-status-value';
 }
 
 /** Reads the tick, the game time, the moons, and the theme for
