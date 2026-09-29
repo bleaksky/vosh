@@ -10,10 +10,11 @@
 //! events that carry the active profile's panes and tracked affects to
 //! the main window.
 
+use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tracing::warn;
 
 use crate::commands::{
@@ -374,6 +375,91 @@ pub(crate) async fn profile_set_world(
     Ok(entry)
 }
 
+/// A profile's settings as TOML, the way `#profile save` writes them:
+/// the live profile for the active name, the saved file (or defaults)
+/// for any other. Holds [`PERSIST_LOCK`] like [`profile_detail`], so a
+/// switch cannot land between deciding which one to read and reading it.
+pub(crate) async fn profile_toml(state: &SharedState, name: &str) -> Result<String, String> {
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    let stored = {
+        let guard = state.profile_set.lock().await;
+        let set = guard.as_ref().ok_or(PROFILES_NOT_LOADED)?;
+        if set.get(name).is_none() {
+            return Err(not_found(name));
+        }
+        if set.active_name() == name {
+            None
+        } else {
+            Some(load_profile_file(set, name)?)
+        }
+    };
+    let config = match stored {
+        Some(config) => config,
+        None => ProfileConfig::from_profile(&*state.profile.lock().await),
+    };
+    config.to_toml().map_err(|e| {
+        warn!(error = %e, profile = name, "profile export failed");
+        format!("Vosh could not export the {} profile.", display_name(name))
+    })
+}
+
+/// Where an export of `name` lands in `dir`: `Erelei profile.toml`,
+/// or `Erelei profile (2).toml` and on when that file is there, so an
+/// export never replaces a file you already have.
+pub(crate) fn export_path(dir: &Path, name: &str) -> PathBuf {
+    let stem = format!("{} profile", display_name(name));
+    let first = dir.join(format!("{stem}.toml"));
+    if !first.exists() {
+        return first;
+    }
+    let mut n = 2u32;
+    loop {
+        let path = dir.join(format!("{stem} ({n}).toml"));
+        if !path.exists() {
+            return path;
+        }
+        n += 1;
+    }
+}
+
+/// Where an export went, for the sentence Settings shows.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ProfileExport {
+    pub path: String,
+    pub file_name: String,
+}
+
+/// Save a profile's settings as a TOML file in your Downloads folder,
+/// active or not, and say where it went. Settings has no save panel,
+/// so the file takes a name that never replaces another.
+#[tauri::command]
+pub(crate) async fn profile_export_file(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    name: String,
+) -> Result<ProfileExport, String> {
+    let toml = profile_toml(state.inner(), &name).await?;
+    let dir = app
+        .path()
+        .download_dir()
+        .map_err(|_| "Vosh could not find your Downloads folder.".to_string())?;
+    let path = export_path(&dir, &name);
+    std::fs::write(&path, toml).map_err(|e| {
+        warn!(error = %e, path = %path.display(), "profile export write failed");
+        format!(
+            "Vosh could not save the {} profile in your Downloads folder.",
+            display_name(&name)
+        )
+    })?;
+    Ok(ProfileExport {
+        file_name: path
+            .file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        path: path.display().to_string(),
+    })
+}
+
 /// Who is logged in, for the Characters group.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct SessionIdentity {
@@ -655,6 +741,54 @@ mod tests {
             .await
             .unwrap()
             .is_none());
+    }
+
+    #[tokio::test]
+    async fn export_reads_the_live_profile_or_the_named_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = james_like_state(dir.path()).await;
+        let mut config = ProfileConfig::default();
+        config.profile_vars.insert("target".into(), "orc".into());
+        config.ui.tracked_affects = vec![affect("Haste")];
+        write_profile(dir.path(), "Healer", &config);
+
+        let healer = profile_toml(&state, "Healer").await.unwrap();
+        let back = ProfileConfig::from_toml(&healer).unwrap();
+        assert_eq!(
+            back.profile_vars.get("target").map(String::as_str),
+            Some("orc")
+        );
+        assert_eq!(names(&back.ui.tracked_affects), ["Haste"]);
+
+        let live = profile_toml(&state, DEFAULT_PROFILE_NAME).await.unwrap();
+        let back = ProfileConfig::from_toml(&live).unwrap();
+        assert_eq!(names(&back.ui.tracked_affects), ["Sanctuary"]);
+
+        // Test-Prompt never saved a file, so it exports the defaults.
+        let blank = profile_toml(&state, "Test-Prompt").await.unwrap();
+        let back = ProfileConfig::from_toml(&blank).unwrap();
+        assert!(back.ui.tracked_affects.is_empty());
+
+        assert!(profile_toml(&state, "Nobody").await.is_err());
+    }
+
+    #[test]
+    fn an_export_never_replaces_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = export_path(dir.path(), DEFAULT_PROFILE_NAME);
+        assert_eq!(first, dir.path().join("Default profile.toml"));
+        std::fs::write(&first, "x").unwrap();
+        let second = export_path(dir.path(), DEFAULT_PROFILE_NAME);
+        assert_eq!(second, dir.path().join("Default profile (2).toml"));
+        std::fs::write(&second, "x").unwrap();
+        assert_eq!(
+            export_path(dir.path(), DEFAULT_PROFILE_NAME),
+            dir.path().join("Default profile (3).toml")
+        );
+        assert_eq!(
+            export_path(dir.path(), "Healer"),
+            dir.path().join("Healer profile.toml")
+        );
     }
 
     #[tokio::test]

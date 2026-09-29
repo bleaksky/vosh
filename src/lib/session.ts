@@ -1576,6 +1576,19 @@ export async function profileCreate(
   });
 }
 
+/** Where profileExportFile saved a profile. */
+export interface ProfileExport {
+  path: string;
+  /** Like `Erelei profile.toml`. */
+  file_name: string;
+}
+
+/** Save a profile's settings, active or not, as a TOML file in your
+ *  Downloads folder. The name never replaces a file already there. */
+export async function profileExportFile(name: string): Promise<ProfileExport> {
+  return invoke('profile_export_file', { name });
+}
+
 /** Who is logged in. */
 export interface SessionIdentity {
   host: string;
