@@ -180,6 +180,27 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('layout', 'vitals', 'density'),
   },
   {
+    label: 'Values',
+    description: 'Current drops the maximum. Percent matches the Group pane.',
+    keywords: 'vitals numbers current max maximum percent percentage health mana moves',
+    target: at('layout', 'vitals', 'values'),
+  },
+  {
+    label: 'Meter',
+    description: 'Bar is easier to read in a fight. None keeps only the numbers.',
+    // Not `line`, which would pull Meter into a search for One line
+    // through the `one` in None.
+    keywords: 'vitals bar gauge thick thin health mana moves',
+    target: at('layout', 'vitals', 'meter'),
+  },
+  {
+    label: 'Warn before you run low',
+    description:
+      "Vitals turn yellow under two thirds and red under one third, like your group's health.",
+    keywords: 'vitals low warning danger thirds yellow red color health mana moves',
+    target: at('layout', 'vitals', 'warn-low'),
+  },
+  {
     label: 'Divider color',
     keywords: 'split terminal scrollback divider line',
     target: at('layout', 'split', 'divider-color'),
