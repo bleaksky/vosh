@@ -185,6 +185,10 @@ impl Default for AppState {
 
 pub(crate) type SharedState = Arc<AppState>;
 
+/// The error a profile command returns before startup has loaded the
+/// profile set.
+const PROFILES_NOT_LOADED: &str = "Vosh has not loaded your profiles yet.";
+
 /// Snapshot the live profile and write it to the active profile's file
 /// under `<app_data_dir>/profiles/<active>.toml`. Failures are logged
 /// but not surfaced — callers don't want a UI toggle to fail because
@@ -1631,7 +1635,7 @@ pub(crate) async fn profiles_list(
 ) -> Result<ProfilesListPayload, String> {
     let guard = state.profile_set.lock().await;
     let Some(set) = guard.as_ref() else {
-        return Err("profile set not initialized".into());
+        return Err(PROFILES_NOT_LOADED.into());
     };
     Ok(ProfilesListPayload {
         active: set.active_name().to_string(),
@@ -1648,7 +1652,7 @@ pub(crate) async fn profile_create(
     {
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
-            return Err("profile set not initialized".into());
+            return Err(PROFILES_NOT_LOADED.into());
         };
         set.create(&name).map_err(|e| e.to_string())?;
     }
@@ -1666,7 +1670,7 @@ pub(crate) async fn profile_delete(
         let _persist_guard = PERSIST_LOCK.lock().await;
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
-            return Err("profile set not initialized".into());
+            return Err(PROFILES_NOT_LOADED.into());
         };
         set.delete(&name).map_err(|e| e.to_string())?;
     }
@@ -1685,7 +1689,7 @@ pub(crate) async fn profile_rename(
         let _persist_guard = PERSIST_LOCK.lock().await;
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
-            return Err("profile set not initialized".into());
+            return Err(PROFILES_NOT_LOADED.into());
         };
         set.rename(&old, &new).map_err(|e| e.to_string())?;
     }
@@ -1704,7 +1708,7 @@ pub(crate) async fn profile_duplicate(
         let _persist_guard = PERSIST_LOCK.lock().await;
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
-            return Err("profile set not initialized".into());
+            return Err(PROFILES_NOT_LOADED.into());
         };
         set.duplicate(&source, &new).map_err(|e| e.to_string())?;
     }
@@ -1720,7 +1724,7 @@ pub(crate) async fn profile_get_scope(
 ) -> Result<crate::profile_set::ScopeConfig, String> {
     let guard = state.profile_set.lock().await;
     let Some(set) = guard.as_ref() else {
-        return Err("profile set not initialized".into());
+        return Err(PROFILES_NOT_LOADED.into());
     };
     Ok(*set.scope())
 }
@@ -1738,7 +1742,7 @@ pub(crate) async fn profile_set_scope(
     {
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
-            return Err("profile set not initialized".into());
+            return Err(PROFILES_NOT_LOADED.into());
         };
         set.set_scope(scope).map_err(|e| e.to_string())?;
     }
@@ -1759,7 +1763,7 @@ pub(crate) async fn profile_set_metadata(
     {
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
-            return Err("profile set not initialized".into());
+            return Err(PROFILES_NOT_LOADED.into());
         };
         set.set_metadata(&name, description, auto_match)
             .map_err(|e| e.to_string())?;
@@ -1854,7 +1858,7 @@ pub(crate) async fn apply_profile_switch(
     let (new_path, global_path) = {
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
-            return Err("profile set not initialized".into());
+            return Err(PROFILES_NOT_LOADED.into());
         };
         set.switch(name).map_err(|e| e.to_string())?;
         (set.active_path(), set.global_path())
@@ -1977,13 +1981,20 @@ pub(crate) async fn handle_char_known_for_auto_switch(
         warn!(error = %e, "auto profile switch failed");
         return;
     }
-    // Yellow announce line on the terminal mirrors the [vosh] system-
-    // message style used by tick warnings.
-    let line = format!("\r\n\x1b[33m[vosh] auto-switched profile to {new_name}\x1b[0m\r\n");
+    let line = auto_switch_line(&new_name);
     let _ = app.emit(
         "session://output",
         OutputPayload::from_bytes(line.as_bytes()),
     );
+}
+
+/// The terminal line that says a login switched the profile, in the
+/// yellow that tick warnings use.
+fn auto_switch_line(profile: &str) -> String {
+    format!(
+        "\r\n\x1b[33mVosh switched to the {} profile.\x1b[0m\r\n",
+        crate::profile_set::display_name(profile)
+    )
 }
 
 #[tauri::command]
@@ -2570,7 +2581,7 @@ pub(crate) async fn migration_analyze(
 ) -> Result<crate::migration::MigrationPlan, String> {
     let guard = state.profile_set.lock().await;
     let Some(set) = guard.as_ref() else {
-        return Err("profile set not initialized".into());
+        return Err(PROFILES_NOT_LOADED.into());
     };
     let mut sources: Vec<(String, ProfileConfig)> = Vec::with_capacity(set.list().len());
     for entry in set.list() {
@@ -2625,7 +2636,7 @@ pub(crate) async fn migration_apply(
     let sources = {
         let guard = state.profile_set.lock().await;
         let Some(set) = guard.as_ref() else {
-            return Err("profile set not initialized".into());
+            return Err(PROFILES_NOT_LOADED.into());
         };
         let mut sources = Vec::with_capacity(set.list().len());
         for entry in set.list() {
@@ -2983,6 +2994,18 @@ pub(crate) async fn updater_install_and_relaunch(app: AppHandle) -> Result<(), S
 #[cfg(test)]
 mod tests {
     use super::ScrollbackLoad;
+
+    #[test]
+    fn auto_switch_line_names_the_profile_in_a_sentence() {
+        assert_eq!(
+            super::auto_switch_line("Erelei"),
+            "\r\n\x1b[33mVosh switched to the Erelei profile.\x1b[0m\r\n"
+        );
+        assert_eq!(
+            super::auto_switch_line("default"),
+            "\r\n\x1b[33mVosh switched to the Default profile.\x1b[0m\r\n"
+        );
+    }
 
     #[test]
     fn scrollback_load_names_the_fields_the_page_reads() {
