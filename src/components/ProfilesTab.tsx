@@ -28,7 +28,6 @@ interface Props {
 // (host + port + optional character) for the connect-time auto-pick.
 export function ProfilesTab({ onError }: Props) {
   const [data, setData] = useState<ProfilesList | null>(null);
-  const [scope, setScope] = useState<ScopeConfig | null>(null);
   const [createDraft, setCreateDraft] = useState('');
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
@@ -45,9 +44,7 @@ export function ProfilesTab({ onError }: Props) {
 
   const reload = async () => {
     try {
-      const [list, scopeCfg] = await Promise.all([profilesList(), profileGetScope()]);
-      setData(list);
-      setScope(scopeCfg);
+      setData(await profilesList());
     } catch (e) {
       onError(String(e));
     }
@@ -162,18 +159,6 @@ export function ProfilesTab({ onError }: Props) {
     }
   };
 
-  const handleScopeChange = async (field: keyof ScopeConfig, next: ProfileScope) => {
-    if (!scope) return;
-    const updated = { ...scope, [field]: next };
-    setScope(updated);
-    try {
-      await profileSetScope(updated);
-      onError(null);
-    } catch (e) {
-      onError(String(e));
-    }
-  };
-
   return (
     <div className="profiles-tab">
       <div className="settings-tab-head">
@@ -188,42 +173,7 @@ export function ProfilesTab({ onError }: Props) {
         connect.
       </div>
 
-      {scope && (
-        <div className="settings-sect settings-sect-first">
-          <span className="settings-section-label">scope</span>
-          <span className="settings-fhelp" style={{ gridColumn: 'auto' }}>
-            global = the same value applies across every profile. profile = the value moves with the
-            active profile. font covers font-family + font-size as one toggle.
-          </span>
-          <ScopeRow
-            label="theme"
-            value={scope.theme}
-            onChange={(v) => void handleScopeChange('theme', v)}
-          />
-          <ScopeRow
-            label="font"
-            value={scope.font}
-            onChange={(v) => void handleScopeChange('font', v)}
-          />
-          <ScopeRow
-            label="dock layout"
-            value={scope.dock_layout}
-            onChange={(v) => void handleScopeChange('dock_layout', v)}
-          />
-          <ScopeRow
-            label="keep last command"
-            value={scope.keep_last_command}
-            onChange={(v) => void handleScopeChange('keep_last_command', v)}
-          />
-          <ScopeRow
-            label="auto check updates"
-            value={scope.auto_update}
-            onChange={(v) => void handleScopeChange('auto_update', v)}
-          />
-        </div>
-      )}
-
-      <div className="settings-sect">
+      <div className="settings-sect settings-sect-first">
         <span className="settings-section-label">catalog</span>
         <div className="profiles-create-row">
           <input
@@ -510,6 +460,79 @@ function ProfileRow({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The scope rows that used to open the Profiles tab, now drawn under
+ *  General. Each category is global (one value for every profile) or
+ *  moves with the active profile. The dock layout row is gone because
+ *  the pane tree replaced the dock. Its scope field stays in the
+ *  index so an older build still reads it. */
+export function ProfileScopeEditor({ onError }: Props) {
+  const [scope, setScope] = useState<ScopeConfig | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    const reload = () =>
+      profileGetScope()
+        .then((next) => {
+          if (!cancelled) setScope(next);
+        })
+        .catch((e) => onError(String(e)));
+    void reload();
+    subscribeProfilesChanged(() => {
+      if (!cancelled) void reload();
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, [onError]);
+
+  if (!scope) return <div className="settings-loading">loading…</div>;
+
+  const handleScopeChange = async (field: keyof ScopeConfig, next: ProfileScope) => {
+    const updated = { ...scope, [field]: next };
+    setScope(updated);
+    try {
+      await profileSetScope(updated);
+      onError(null);
+    } catch (e) {
+      onError(String(e));
+    }
+  };
+
+  return (
+    <div className="settings-sect settings-sect-first">
+      <span className="settings-fhelp" style={{ gridColumn: 'auto' }}>
+        global = the same value applies across every profile. profile = the value moves with the
+        active profile. font covers font-family + font-size as one toggle.
+      </span>
+      <ScopeRow
+        label="theme"
+        value={scope.theme}
+        onChange={(v) => void handleScopeChange('theme', v)}
+      />
+      <ScopeRow
+        label="font"
+        value={scope.font}
+        onChange={(v) => void handleScopeChange('font', v)}
+      />
+      <ScopeRow
+        label="keep last command"
+        value={scope.keep_last_command}
+        onChange={(v) => void handleScopeChange('keep_last_command', v)}
+      />
+      <ScopeRow
+        label="auto check updates"
+        value={scope.auto_update}
+        onChange={(v) => void handleScopeChange('auto_update', v)}
+      />
     </div>
   );
 }
