@@ -85,6 +85,50 @@ export const MAP_COLORS = {
   pathLine: 'rgba(196,168,114,0.7)',
 };
 
+/// The plain One Window map (SPEC 10 G7) takes every color from the
+/// chrome tokens, read at draw time so the drawing follows the theme.
+/// Fallbacks are the approved Nord board's, for a paint before the
+/// theme lands.
+export const PLAIN_COLORS = {
+  /// Rooms and the lines between them.
+  get room(): string {
+    return readCssVar('--secondary', '#c0c7d3');
+  },
+  /// Your room and its ring.
+  get accent(): string {
+    return readCssVar('--accent', '#88c0d0');
+  },
+  /// Place labels.
+  get label(): string {
+    return readCssVar('--tertiary', '#7b8294');
+  },
+  /// The UI font stack the labels use.
+  get font(): string {
+    return readCssVar('--font-ui', 'system-ui, sans-serif');
+  },
+};
+
+// Every custom property a map style reads. A change to any of them
+// means the canvas needs a fresh paint.
+const THEME_VARS = [
+  '--panel',
+  '--secondary',
+  '--accent',
+  '--tertiary',
+  '--font-ui',
+  '--c-surface',
+  '--c-accent',
+  '--c-accent-soft',
+  '--c-text-faint',
+];
+
+/** One string that changes whenever a color the map paints with does. */
+export function mapThemeSignature(): string {
+  if (typeof document === 'undefined') return '';
+  const style = getComputedStyle(document.documentElement);
+  return THEME_VARS.map((name) => style.getPropertyValue(name).trim()).join('|');
+}
+
 // Aabahran's GMCP Map.Tiles sector codes are characters: 0..9, a, b, c.
 // Map them to our sector index.
 const SERVER_CODE_TO_SECTOR: Record<string, number> = {
