@@ -6008,6 +6008,46 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn a_shared_item_one_character_had_off_stays_off_for_it() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            // Test-Prompt began as a copy of Default, auto loot and all,
+            // and you turned its loot group off.
+            let mut autoloot = send_trigger("autoloot", "^You killed", "get all corpse");
+            autoloot.group = Some("loot".into());
+            let mut default = ProfileConfig::default();
+            default.triggers.push(autoloot.clone());
+            default
+                .save(&set.profile_path(DEFAULT_PROFILE_NAME))
+                .unwrap();
+            let mut copy = ProfileConfig::default();
+            copy.triggers.push(autoloot);
+            copy.disabled_trigger_groups = vec!["loot".into()];
+            copy.save(&set.profile_path("Test-Prompt")).unwrap();
+            let names = [DEFAULT_PROFILE_NAME, "Test-Prompt"];
+            let mut before = Vec::new();
+            for name in names {
+                before.push(items_on(
+                    &*relaunch_as(dir.path(), name).await.profile.lock().await,
+                ));
+            }
+            assert_eq!(before[0], ["trigger autoloot"]);
+            assert!(before[1].is_empty());
+
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+
+            // The trigger used to land in one group on for both.
+            for (n, name) in names.iter().enumerate() {
+                let state = relaunch_as(dir.path(), name).await;
+                assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+            }
+        }
+
+        #[tokio::test]
         async fn a_wizard_that_cannot_finish_puts_every_file_back() {
             use crate::profile_set::DEFAULT_PROFILE_NAME;
             let dir = tempfile::tempdir().unwrap();
