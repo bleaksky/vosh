@@ -41,6 +41,18 @@ export interface SubmitContext {
   echoColor: string | null;
 }
 
+/** Whether a key press or a submitted line belongs to the masked field.
+ *  `rendered` is the mask the input row last rendered with, the one that
+ *  goes with the draft a key handler holds. `latest` is the mask from the
+ *  newest input-mode event, which can arrive a render before the row
+ *  catches up. Either one masks. Right after the server takes echo, a
+ *  line typed in the plain row is already a password. Right after it
+ *  hands echo back, or the link drops, the draft is still the password
+ *  typed in the masked field. */
+export function isMasked(rendered: boolean, latest: boolean): boolean {
+  return rendered || latest;
+}
+
 /** Plan a submitted line. A line from the masked field echoes only a line
  *  break, stays out of history, and goes to the server as typed, past
  *  aliases, variables, and `#` commands. Every other line echoes in your
