@@ -9,6 +9,7 @@ import { startTargetStore } from './targetStore';
 import { startTickStore } from './tickStore';
 import { startTrackedAffectsStore } from './trackedAffectsStore';
 import { startVitalsDensityStore } from './vitalsDensityStore';
+import { startVitalsOptionsStore } from './vitalsOptionsStore';
 import { startVitalsStore } from './vitalsStore';
 import { startWorldStore } from './worldStore';
 
@@ -23,6 +24,7 @@ export function startStores(): void {
   startImmStore();
   startVitalsStore();
   startVitalsDensityStore();
+  startVitalsOptionsStore();
   startAffectsStore();
   startTrackedAffectsStore();
   startCombatStore();
