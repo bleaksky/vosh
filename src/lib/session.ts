@@ -3,10 +3,11 @@ import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { DEFAULT_THEME_ID } from './themes';
 
 /** Resolve the tri-state tint setting: an explicit user choice wins;
- *  unset follows the active theme — Obsidian Ember ships its pastel
- *  ANSI on by default, every other theme keeps canonical ANSI. */
-export function resolveThemeTerminalColors(theme: string, stored: boolean | null): boolean {
-  return stored ?? theme === 'obsidian-ember';
+ *  unset is on for every theme. The chrome derives its status colors
+ *  from the theme's ANSI slots, so output painted in the same slots
+ *  keeps the MUD's red and the chrome's red in agreement. */
+export function resolveThemeTerminalColors(_theme: string, stored: boolean | null): boolean {
+  return stored ?? true;
 }
 
 /// Cross-window broadcast for tracked-affect changes. The settings
@@ -647,9 +648,9 @@ export interface UiConfig {
   tracked_affects: TrackedAffect[];
   enabled_presets: string[];
   keep_last_command: boolean;
-  /** Tri-state: true / false are explicit user choices; null follows
-   *  the active theme (on for obsidian-ember, off otherwise). Resolve
-   *  with resolveThemeTerminalColors before use. */
+  /** Tri-state: true / false are explicit user choices; null means
+   *  the default, which is on. Resolve with resolveThemeTerminalColors
+   *  before use. */
   theme_terminal_colors: boolean | null;
   bright_bold: boolean;
   /** Custom base terminal palette: 16 CSS colors in ANSI 0-15 order,
