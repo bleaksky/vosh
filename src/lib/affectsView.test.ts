@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { affectsView, isTrackedRow, type AffectInput, type AffectRow } from './affectsView';
+import {
+  affectsPaneRows,
+  affectsView,
+  isTrackedRow,
+  type AffectInput,
+  type AffectRow,
+} from './affectsView';
 import { HARMFUL_AFFECTS } from './harmfulAffects';
 
 const aff = (name: string, duration: number | null): AffectInput => ({ name, duration });
@@ -176,6 +182,23 @@ describe('affectsView', () => {
   it('splits tracked rows from the rest', () => {
     const rows = affectsView([aff('armor', 3), aff('haste', 4)], track('haste', 'fly'));
     expect(rows.map(isTrackedRow)).toEqual([true, true, false]);
+  });
+});
+
+describe('affectsPaneRows', () => {
+  it('draws nothing before the first list or while the game hides your affects', () => {
+    expect(affectsPaneRows(null, track('sanctuary'), false)).toEqual([]);
+    // Lamented tears sends an empty list with the hidden flag. No
+    // tracked affect reads missing then.
+    expect(affectsPaneRows([], track('sanctuary', 'haste'), true)).toEqual([]);
+  });
+
+  it('draws the checklist once the game shows your affects again', () => {
+    const rows = affectsPaneRows([aff('haste', 4)], track('sanctuary', 'haste'), false);
+    expect(rows.map((r) => [r.key, r.state])).toEqual([
+      ['sanctuary', 'missing'],
+      ['haste', 'present'],
+    ]);
   });
 });
 

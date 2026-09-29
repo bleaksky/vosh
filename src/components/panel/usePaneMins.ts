@@ -1,7 +1,7 @@
 import { useMemo, useSyncExternalStore } from 'react';
-import { affectsView } from '../../lib/affectsView';
+import { affectsPaneRows } from '../../lib/affectsView';
 import { getGroupState, subscribeGroupState } from '../../lib/groupStore';
-import { useAffects } from '../../lib/stores/affectsStore';
+import { useAffects, useAffectsHidden } from '../../lib/stores/affectsStore';
 import { useTrackedAffects } from '../../lib/stores/trackedAffectsStore';
 import { affectsMinH, groupMinH, type PaneMins } from './paneGeometry';
 
@@ -23,10 +23,11 @@ function memberCount(): number {
 export function usePaneMins(): PaneMins {
   const current = useAffects();
   const tracked = useTrackedAffects();
+  const hidden = useAffectsHidden();
   const members = useSyncExternalStore(subscribeMembers, memberCount);
   const affects = useMemo(
-    () => affectsMinH(current === null ? [] : affectsView(current, tracked)),
-    [current, tracked],
+    () => affectsMinH(affectsPaneRows(current, tracked, hidden)),
+    [current, tracked, hidden],
   );
   const group = groupMinH(members);
   return useMemo(() => ({ affects, group }), [affects, group]);

@@ -1,6 +1,12 @@
 import { useMemo } from 'react';
-import { affectsView, isTrackedRow, type AffectRow } from '../../lib/affectsView';
-import { useAffects } from '../../lib/stores/affectsStore';
+import {
+  affectsPaneRows,
+  isTrackedRow,
+  type AffectInput,
+  type AffectRow,
+  type TrackedInput,
+} from '../../lib/affectsView';
+import { useAffects, useAffectsHidden } from '../../lib/stores/affectsStore';
 import { useTrackedAffects } from '../../lib/stores/trackedAffectsStore';
 import { PaneHeader, PaneMeta } from './PaneHeader';
 import { affectStateWord, ticksLabel } from './paneText';
@@ -9,20 +15,37 @@ import { affectStateWord, ticksLabel } from './paneText';
 // come first with a hollow danger ring, then the tracked ones you have
 // by ticks left, then everything else under Not tracked with harmful
 // affects on top. affectsView orders the rows.
+//
+// While the game hides your affects (Char.Affects with the hidden flag,
+// under lamented tears) the pane says so in place of the rows, and no
+// tracked affect reads missing.
 
 export function AffectsPane() {
   const current = useAffects();
   const tracked = useTrackedAffects();
-  const rows = useMemo(
-    () => (current === null ? [] : affectsView(current, tracked)),
-    [current, tracked],
-  );
+  const hidden = useAffectsHidden();
+  return <AffectsPaneView current={current} tracked={tracked} hidden={hidden} />;
+}
+
+export interface AffectsPaneViewProps {
+  /** Your affects, or null until the server sends the list. */
+  current: readonly AffectInput[] | null;
+  tracked: readonly TrackedInput[];
+  /** The game hides your affects. */
+  hidden: boolean;
+}
+
+/** The pane drawn from plain values, so each state renders in a test. */
+export function AffectsPaneView({ current, tracked, hidden }: AffectsPaneViewProps) {
+  const rows = useMemo(() => affectsPaneRows(current, tracked, hidden), [current, tracked, hidden]);
   const trackedRows = rows.filter(isTrackedRow);
   const otherRows = rows.filter((r) => !isTrackedRow(r));
   const missing = trackedRows.filter((r) => r.state === 'missing').length;
 
   let body: React.ReactNode;
-  if (current === null) {
+  if (hidden) {
+    body = <p className="pane-empty">The game hides your affects right now.</p>;
+  } else if (current === null) {
     body = <p className="pane-empty">Affects appear when you log in.</p>;
   } else if (rows.length === 0) {
     body = <p className="pane-empty">Nothing affects you right now.</p>;

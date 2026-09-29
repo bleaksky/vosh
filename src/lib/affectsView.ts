@@ -113,6 +113,19 @@ export function affectsView(
   return [...missing, ...present, ...others];
 }
 
+/** The rows the Affects pane draws. None before the first list since you
+ *  connected, and none while the game hides your affects (lamented
+ *  tears sends an empty list with the hidden flag), so no tracked
+ *  affect reads missing then. */
+export function affectsPaneRows(
+  current: readonly AffectInput[] | null,
+  tracked: readonly TrackedInput[],
+  hidden: boolean,
+): AffectRow[] {
+  if (current === null || hidden) return [];
+  return affectsView(current, tracked);
+}
+
 /** Coerce a duration into ticks: a whole number, -1 for any negative
  *  (permanent), null when unknown. */
 function ticksOf(duration: number | null | undefined): number | null {
