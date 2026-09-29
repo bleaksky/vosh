@@ -723,13 +723,14 @@
 }
 
 /* One line (Settings, Layout, Density). Health, Mana, and Moves sit
-   side by side on one 28 px row, 16 apart, each the status line form
-   (label, 6, value) with its meter under it. The columns share the row
-   equally, and one that needs more room for its value takes it. A
-   panel under about 360 pt drops the labels, which stay for screen
-   readers, and vitalsLine.ts stacks the vitals in rows when even the
-   values do not fit. The combat row and the empty state keep their
-   own rows. */
+   side by side on one 28 px row, 16 apart, each a small Rows row: the
+   label at the left, the value at the right, at least 6 apart, and the
+   meter under both (VitalsOptions.dc.html). The columns share the row
+   equally, and one that needs more room for its value takes it. When
+   the labels no longer fit they drop, stay for screen readers, and each
+   value sits at the right end of its meter. vitalsLine.ts stacks the
+   vitals in rows when even the values do not fit. The combat row and
+   the empty state keep their own rows. */
 .panel-vitals.is-one-line {
   min-height: 48px;
 }
@@ -746,8 +747,11 @@
 }
 
 .panel-vitals-item .panel-vitals-line {
-  justify-content: flex-start;
   gap: 6px;
+}
+
+.panel-vitals-item.is-bare .panel-vitals-line {
+  justify-content: flex-end;
 }
 
 .panel-vitals-item .panel-vitals-value {
