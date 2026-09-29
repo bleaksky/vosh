@@ -104,7 +104,7 @@ describe('splitPane', () => {
     const next = splitPane(root(), 'affects', 'row', 'group');
     expect(shape(next)).toEqual({
       column: [
-        ['map', 0.6],
+        ['map', 0.525],
         {
           row: [
             ['affects', 0.5],
@@ -121,9 +121,9 @@ describe('splitPane', () => {
     const next = splitPane(root(), 'affects', 'column', 'chat');
     expect(shape(next)).toEqual({
       column: [
-        ['map', 0.6],
-        ['affects', 0.2],
-        ['chat', 0.2],
+        ['map', 0.525],
+        ['affects', 0.2375],
+        ['chat', 0.2375],
       ],
     });
   });
@@ -134,7 +134,7 @@ describe('splitPane', () => {
     expect(allPanes(next)).toEqual(['map', 'affects', 'group']);
     expect(shape(next)).toEqual({
       column: [
-        ['map', 0.6],
+        ['map', 0.525],
         {
           row: [
             ['affects', 0.5],
@@ -228,8 +228,8 @@ describe('addPane', () => {
   it('appends to the root column with an even share', () => {
     expect(shape(addPane(root(), 'group'))).toEqual({
       column: [
-        ['map', 0.4],
-        ['affects', 0.2667],
+        ['map', 0.35],
+        ['affects', 0.3167],
         ['group', 0.3333],
       ],
     });
@@ -349,8 +349,8 @@ describe('layoutFromDock', () => {
     );
     expect(shape(layout.root)).toEqual({
       column: [
-        ['map', 0.6],
-        ['group', 0.4],
+        ['map', 0.525],
+        ['group', 0.475],
       ],
     });
   });

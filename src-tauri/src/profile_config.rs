@@ -647,12 +647,21 @@ fn default_pane_weight() -> f64 {
     1.0
 }
 
+/// The map's share of the stock layout, over affects. The approved
+/// boards give the Map pane 348 px and the Affects pane 315 px at
+/// 1280 by 800, which shows every Affects row the boards show.
+const DEFAULT_MAP_WEIGHT: f64 = 0.525;
+const DEFAULT_AFFECTS_WEIGHT: f64 = 0.475;
+
 /// Map above affects, the stock layout in the approved mockups.
 fn default_pane_root() -> PaneNode {
     PaneNode::split(
         "root",
         "column",
-        vec![PaneNode::leaf("map", 0.6), PaneNode::leaf("affects", 0.4)],
+        vec![
+            PaneNode::leaf("map", DEFAULT_MAP_WEIGHT),
+            PaneNode::leaf("affects", DEFAULT_AFFECTS_WEIGHT),
+        ],
     )
 }
 
@@ -837,7 +846,7 @@ fn count_as_f64(n: usize) -> f64 {
 }
 
 /// Weight for a pane migrated from the old dock. Over a single pane the
-/// map takes 0.6, as in the default layout. With two or more panes under
+/// map takes the default layout's share. With two or more panes under
 /// it the map drops to 0.45 and affects, the longest list, takes 0.3 so
 /// its rows still show, and the rest share what is left. Without a map
 /// the panes split evenly. `others` counts the panes that are not the
@@ -847,7 +856,11 @@ fn migrated_weight(id: &str, has_map: bool, has_affects: bool, others: usize) ->
         return 1.0;
     }
     if others == 1 {
-        return if id == "map" { 0.6 } else { 0.4 };
+        return if id == "map" {
+            DEFAULT_MAP_WEIGHT
+        } else {
+            DEFAULT_AFFECTS_WEIGHT
+        };
     }
     match id {
         "map" => 0.45,
@@ -1870,8 +1883,10 @@ name = "haste"
         assert_eq!(layout.panel_width, None);
         assert_eq!(layout.root.split.as_deref(), Some("column"));
         assert_eq!(leaf_panes(&layout.root), ["map", "affects"]);
-        assert!(close(layout.root.children[0].weight, 0.6));
-        assert!(close(layout.root.children[1].weight, 0.4));
+        // The boards' split, 348 px over 315 px of the 663 px the two
+        // panes share at 1280 by 800.
+        assert!(close(layout.root.children[0].weight, 0.525));
+        assert!(close(layout.root.children[1].weight, 0.475));
         // Already canonical, so a sanitize pass leaves it alone.
         let mut again = layout.clone();
         again.sanitize();
@@ -1950,8 +1965,8 @@ name = "haste"
             ("affects", "hidden", None),
         ]));
         assert_eq!(leaf_panes(&layout.root), ["map", "group"]);
-        assert!(close(layout.root.children[0].weight, 0.6));
-        assert!(close(layout.root.children[1].weight, 0.4));
+        assert!(close(layout.root.children[0].weight, 0.525));
+        assert!(close(layout.root.children[1].weight, 0.475));
     }
 
     #[test]

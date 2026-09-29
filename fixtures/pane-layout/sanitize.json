@@ -10,8 +10,8 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.6 },
-            { "id": "affects", "pane": "affects", "weight": 0.4 }
+            { "id": "map", "pane": "map", "weight": 0.525 },
+            { "id": "affects", "pane": "affects", "weight": 0.475 }
           ]
         }
       },
@@ -23,8 +23,8 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.6 },
-            { "id": "affects", "pane": "affects", "weight": 0.4 }
+            { "id": "map", "pane": "map", "weight": 0.525 },
+            { "id": "affects", "pane": "affects", "weight": 0.475 }
           ]
         }
       }
@@ -40,8 +40,8 @@
           "split": "column",
           "weight": 1,
           "children": [
-            { "id": "map", "pane": "map", "weight": 0.6 },
-            { "id": "affects", "pane": "affects", "weight": 0.4 }
+            { "id": "map", "pane": "map", "weight": 0.525 },
+            { "id": "affects", "pane": "affects", "weight": 0.475 }
           ]
         }
       }

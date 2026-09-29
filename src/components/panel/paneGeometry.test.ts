@@ -121,29 +121,31 @@ describe('allocate', () => {
 
 describe('layoutPanes', () => {
   it('stacks the default map over affects with a 1 px handle between', () => {
+    // The approved boards at 1280 by 800: the Map pane from y 32 to
+    // 380, the line, then the Affects pane down to the vitals at 696.
     const { leaves, handles } = layoutPanes(defaultLayout().root, 300, 664);
     expect(leaves.map((l) => l.leaf.pane)).toEqual(['map', 'affects']);
-    expect(leaves[0].rect).toEqual({ x: 0, y: 0, w: 300, h: 398 });
+    expect(leaves[0].rect).toEqual({ x: 0, y: 0, w: 300, h: 348 });
     expect(handles).toHaveLength(1);
     expect(handles[0]).toMatchObject({
       parentId: 'root',
       index: 0,
       dir: 'column',
-      rect: { x: 0, y: 398, w: 300, h: 1 },
-      sizes: [398, 265],
+      rect: { x: 0, y: 348, w: 300, h: 1 },
+      sizes: [348, 315],
     });
-    expect(leaves[1].rect).toEqual({ x: 0, y: 399, w: 300, h: 265 });
+    expect(leaves[1].rect).toEqual({ x: 0, y: 349, w: 300, h: 315 });
   });
 
   it('sets a split right pane beside its sibling inside the stack', () => {
     const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
     const { leaves, handles } = layoutPanes(tree, 440, 664);
     const byPane = Object.fromEntries(leaves.map((l) => [l.leaf.pane, l.rect]));
-    expect(byPane.map).toEqual({ x: 0, y: 0, w: 440, h: 398 });
-    expect(byPane.affects).toEqual({ x: 0, y: 399, w: 220, h: 265 });
-    expect(byPane.group).toEqual({ x: 221, y: 399, w: 219, h: 265 });
+    expect(byPane.map).toEqual({ x: 0, y: 0, w: 440, h: 348 });
+    expect(byPane.affects).toEqual({ x: 0, y: 349, w: 220, h: 315 });
+    expect(byPane.group).toEqual({ x: 221, y: 349, w: 219, h: 315 });
     const vertical = handles.find((h) => h.dir === 'row');
-    expect(vertical?.rect).toEqual({ x: 220, y: 399, w: 1, h: 265 });
+    expect(vertical?.rect).toEqual({ x: 220, y: 349, w: 1, h: 315 });
   });
 
   it('keeps a light pane at its minimum on a tall panel', () => {

@@ -80,14 +80,20 @@ export function defaultLayout(): PaneLayout {
   };
 }
 
+// The map's share of the stock layout, over affects. The approved
+// boards give the Map pane 348 px and the Affects pane 315 px at 1280
+// by 800, which shows every Affects row the boards show.
+const DEFAULT_MAP_WEIGHT = 0.525;
+const DEFAULT_AFFECTS_WEIGHT = 0.475;
+
 function defaultRoot(): PaneSplit {
   return {
     id: 'root',
     split: 'column',
     weight: 1,
     children: [
-      { id: 'map', pane: 'map', weight: 0.6, props: {} },
-      { id: 'affects', pane: 'affects', weight: 0.4, props: {} },
+      { id: 'map', pane: 'map', weight: DEFAULT_MAP_WEIGHT, props: {} },
+      { id: 'affects', pane: 'affects', weight: DEFAULT_AFFECTS_WEIGHT, props: {} },
     ],
   };
 }
@@ -466,13 +472,13 @@ function oldZoneRank(zone: string, align: string): number | null {
   return null;
 }
 
-// Over a single pane the map takes 0.6, as in the default layout. With
+// Over a single pane the map takes the default layout's share. With
 // two or more under it the map drops to 0.45 and affects, the longest
 // list, takes 0.3, and the rest share what is left. Without a map the
 // panes split evenly. `others` counts the panes that are not the map.
 function migratedWeight(pane: PaneType, hasMap: boolean, hasAffects: boolean, others: number) {
   if (!hasMap || others === 0) return 1;
-  if (others === 1) return pane === 'map' ? 0.6 : 0.4;
+  if (others === 1) return pane === 'map' ? DEFAULT_MAP_WEIGHT : DEFAULT_AFFECTS_WEIGHT;
   if (pane === 'map') return 0.45;
   if (pane === 'affects') return 0.3;
   return hasAffects ? 0.25 / (others - 1) : 0.55 / others;
