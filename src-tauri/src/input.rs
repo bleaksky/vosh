@@ -1107,6 +1107,12 @@ fn slash_profile(profile: &mut Profile, args: &str) -> InputResult {
     match cmd {
         "save" => match profile_path() {
             Some(path) => {
+                // Every profile file write holds the persist lock. This
+                // runs under the profile lock, which the persist takes
+                // after the persist lock, so it only tries.
+                let Ok(_persist_guard) = crate::commands::PERSIST_LOCK.try_lock() else {
+                    return error_echo("Vosh is saving this profile. Try again.".to_string());
+                };
                 let snapshot = ProfileConfig::from_profile(profile);
                 match snapshot.save(&path) {
                     Ok(()) => echo_one(format!("profile saved to {}", path.display())),
