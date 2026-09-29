@@ -53,6 +53,16 @@ pub(crate) static AUTO_PERSIST_SUPPRESSED: std::sync::atomic::AtomicBool =
 pub(crate) static MIGRATION_RELAUNCH_PENDING: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
+/// Serializes every write of a profile file: the active profile's
+/// persist, Settings edits to an inactive profile's file, a profile
+/// switch from its flush through loading the next file, and the
+/// rename, delete and copy of a profile file. `write_with_backup` uses
+/// a fixed .tmp name per target, so two writers on one file would break
+/// its atomic write, and a write racing a rename or a switch would land
+/// on a file the other side already moved or read. Take it before the
+/// profile set lock, never while holding it.
+pub(crate) static PERSIST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// Record that durable profile state changed (slash commands, Lua
 /// mutations) and persist shortly after the burst settles. Keeps disk
 /// writes off latency-sensitive paths while guaranteeing the change
@@ -183,11 +193,13 @@ pub(crate) type SharedState = Arc<AppState>;
 pub(crate) async fn persist_profile(app: &AppHandle, state: &SharedState) {
     // Serialize whole-persist runs. The debounced dirty-persist and the
     // exit-time flush can overlap each other or an inline command
-    // persist; write_with_backup uses a fixed .tmp name per target, so
-    // concurrent runs would break the atomic-write crash guarantee.
-    static PERSIST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    // persist, and Settings can write an inactive profile's file.
     let _persist_guard = PERSIST_LOCK.lock().await;
+    persist_profile_locked(app, state).await;
+}
 
+/// The body of [`persist_profile`]. Call with [`PERSIST_LOCK`] held.
+async fn persist_profile_locked(app: &AppHandle, state: &SharedState) {
     // Path B branch. When `state.global_catalog` is `Some`, the user is
     // post-migration: authored items live in catalog.toml and the live
     // Profile is the cache. Write the live aliases / triggers / macros
@@ -1651,6 +1663,7 @@ pub(crate) async fn profile_delete(
     name: String,
 ) -> Result<(), String> {
     {
+        let _persist_guard = PERSIST_LOCK.lock().await;
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
             return Err("profile set not initialized".into());
@@ -1669,6 +1682,7 @@ pub(crate) async fn profile_rename(
     new: String,
 ) -> Result<(), String> {
     {
+        let _persist_guard = PERSIST_LOCK.lock().await;
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
             return Err("profile set not initialized".into());
@@ -1687,6 +1701,7 @@ pub(crate) async fn profile_duplicate(
     new: String,
 ) -> Result<(), String> {
     {
+        let _persist_guard = PERSIST_LOCK.lock().await;
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
             return Err("profile set not initialized".into());
@@ -1820,13 +1835,19 @@ pub(crate) async fn apply_profile_switch(
     state: &SharedState,
     name: &str,
 ) -> Result<(), String> {
+    // Hold the persist lock from the flush through loading the next
+    // file, so a Settings write to the incoming profile's file lands
+    // either before the load reads it or after the switch made the
+    // profile live, never in between.
+    let persist_guard = PERSIST_LOCK.lock().await;
+
     // Step 1: snapshot + write the CURRENT active profile so user
     // changes since the last persist are not lost on switch. Skipped
     // after a #profile reset/load: the live profile is deliberately
     // diverged from disk and a passive switch (the GMCP Char.Status
     // auto-switch reaches here too) must not write it back.
     if !AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
-        persist_profile(app, state).await;
+        persist_profile_locked(app, state).await;
     }
 
     // Step 2: flip the active pointer in the index.
@@ -1870,6 +1891,7 @@ pub(crate) async fn apply_profile_switch(
         // from the old profile's tree is refused from here on.
         bump_panes_generation();
     }
+    drop(persist_guard);
 
     // Path B catalog re-overlay. The per-profile file in Path B mode
     // is written with blank aliases / triggers / macros (catalog is
