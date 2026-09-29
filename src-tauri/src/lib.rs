@@ -410,6 +410,7 @@ pub fn run() {
             native_surface_set_bounds,
             native_surface_scroll,
             native_surface_copy,
+            commands::native_surface_select_all,
             native_surface_set_theme,
             native_surface_set_font,
             native_surface_echo,
