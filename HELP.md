@@ -16,7 +16,7 @@ Connections start from the session chip in the top bar. While idle the chip read
 - Fill in the host and port. The form defaults to `play.theforsakenlands.com` and `1848`. Tick the `tls` checkbox when your server offers TLS.
 - Click `connect`. The dot shifts from connecting to connected.
 - Type your character name at the login prompt and press `Enter`.
-- When the server asks for a password, the input row swaps to a masked field with the placeholder `password`. Nothing you type shows on screen, echoes to the terminal, or lands in command history. Press `Enter` to submit. `Shift+Enter` submits here too instead of adding a line.
+- When the server asks for a password, the input row swaps to a masked field with the placeholder `password`. Nothing you type shows on screen, echoes to the terminal, lands in command history, or reaches the session log. Vosh sends it exactly as typed, with no aliases, variables, or `#` commands applied. Press `Enter` to submit. `Shift+Enter` submits here too instead of adding a line.
 
 While connected, the chip shows your character name in lowercase along with the host and port. If a saved profile matches the host and port you dialed, Vosh switches to that profile before connecting. A profile pinned to a character attaches right after login, when the server reports who you are.
 
@@ -584,6 +584,8 @@ Each hit shows its timestamp, the host and port when you search across sessions,
 Example. The pattern `dragon|wyvern` finds lines containing either word.
 
 The `copy` button on a session row copies that whole session to your clipboard as plain text. There is no file download yet. The store is `logs.sqlite` in the app data folder and it fills on every connection, so logging needs no setup.
+
+The log keeps what the game sent and each line you sent, marked `> `. Lines you type at a password prompt are not saved. Each one shows as `> (hidden)` in its place.
 
 ### 7.5 Check for updates
 
