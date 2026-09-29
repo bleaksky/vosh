@@ -2,35 +2,46 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 're
 import { invoke } from '@tauri-apps/api/core';
 import { nativeSurfaceEnabled, type TerminalHandle } from './Terminal';
 import { type InputHandle } from './Input';
-import { disconnectSession } from '../lib/session';
-import { toggleWellSplits, wellSplitsOpen } from '../lib/wellSplits';
+import { shortcutLabel } from '../lib/palette';
 
 interface Props {
   /** Pointer position in viewport coordinates. The menu opens with its
    *  top-left corner here, clamped so it never overflows the window. */
   x: number;
   y: number;
-  connected: boolean;
+  /** Unused since the session controls moved to the title band. Kept
+   *  so existing call sites still type check. */
+  connected?: boolean;
   termRef: RefObject<TerminalHandle | null>;
   inputRef: RefObject<InputHandle | null>;
   onOpenFind: () => void;
   onClose: () => void;
 }
 
+interface Item {
+  id: string;
+  label: string;
+  /** Shortcut spec for the trailing hint, like 'Mod+C'. */
+  keys?: string;
+  danger?: boolean;
+  run: () => void;
+}
+
 /** How close the menu may sit to the window edge after clamping. */
 const EDGE_MARGIN = 8;
 
-// Right-click context menu for the terminal area, from the Ember
-// Menus canvas: 232px floating surface, icon + label + mono shortcut
-// rows, hairline separators, destructive disconnect at the bottom.
-// Every action routes through the same paths the keyboard uses (the
-// native-surface copy command, the input row's insert, the find
-// toolbar) so the menu never grows a second implementation. Closes on
-// outside pointerdown, Escape, or any item click.
-export function TerminalMenu({ x, y, connected, termRef, inputRef, onOpenFind, onClose }: Props) {
+// Right-click menu for the terminal (SPEC 7 menus, Menus board): a
+// 232 wide floating surface with 6 of inner padding, 30 tall rows,
+// shortcut hints on the right in the platform's glyphs, and hairline
+// separators. Clear scrollback is the one destructive item and comes
+// last. Every action routes through the same path the keyboard uses
+// (the native copy command, the input row's insert, the find bar), so
+// the menu never grows a second implementation. It takes focus while
+// open so the arrow keys and Enter drive it, then hands focus back.
+export function TerminalMenu({ x, y, termRef, inputRef, onOpenFind, onClose }: Props) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState({ x, y });
-  const splitsOpen = wellSplitsOpen();
+  const [active, setActive] = useState(-1);
 
   // Clamp to the viewport once the menu has a measurable size. Re-runs
   // when a second right-click moves the anchor while the menu is open.
@@ -45,8 +56,18 @@ export function TerminalMenu({ x, y, connected, termRef, inputRef, onOpenFind, o
     });
   }, [x, y]);
 
-  // Outside-click + Escape close. Pointerdown so the close fires
-  // before any click handler inside an unrelated element.
+  useEffect(() => {
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    menuRef.current?.focus({ preventScroll: true });
+    return () => {
+      const current = document.activeElement;
+      if (!current || current === document.body) previous?.focus();
+    };
+  }, []);
+
+  // Outside press and Escape close. Pointerdown so the close fires
+  // before any click handler inside an unrelated element. Escape also
+  // closes when focus has drifted out of the menu.
   useEffect(() => {
     const onPointer = (e: PointerEvent) => {
       if (!menuRef.current) return;
@@ -63,13 +84,6 @@ export function TerminalMenu({ x, y, connected, termRef, inputRef, onOpenFind, o
       document.removeEventListener('keydown', onKey);
     };
   }, [onClose]);
-
-  // Every item closes the menu first, then runs — same order the
-  // palette uses, so an action that moves focus wins over the menu.
-  const pick = (run: () => void) => () => {
-    onClose();
-    run();
-  };
 
   const runCopy = () => {
     // Same fork as the Cmd+C path in Input.tsx: the native surface owns
@@ -93,91 +107,104 @@ export function TerminalMenu({ x, y, connected, termRef, inputRef, onOpenFind, o
       .catch(() => {});
   };
 
+  // Groups split by separators. Clear only reaches the xterm buffer.
+  // The native grid has no clear command, so the item hides where it
+  // would visibly do nothing.
+  const groups: Item[][] = [
+    [
+      { id: 'copy', label: 'Copy', keys: 'Mod+C', run: runCopy },
+      { id: 'paste', label: 'Paste', keys: 'Mod+V', run: runPaste },
+    ],
+    [{ id: 'find', label: 'Find in scrollback…', keys: 'Mod+F', run: onOpenFind }],
+  ];
+  if (!nativeSurfaceEnabled()) {
+    groups.push([
+      {
+        id: 'clear',
+        label: 'Clear scrollback',
+        danger: true,
+        run: () => termRef.current?.clear(),
+      },
+    ]);
+  }
+  const items = groups.flat();
+
+  // Every item closes the menu first, then runs, the same order the
+  // palette uses, so an action that moves focus wins over the menu.
+  const pick = (item: Item | undefined) => {
+    if (!item) return;
+    onClose();
+    item.run();
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActive((i) => (i + 1) % items.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActive((i) => (i <= 0 ? items.length - 1 : i - 1));
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      setActive(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      setActive(items.length - 1);
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      pick(items[active]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+    }
+  };
+
+  let index = -1;
   return (
     <div
       ref={menuRef}
-      className="terminal-menu"
+      className="ov-menu ov-terminal-menu"
       role="menu"
-      aria-label="terminal menu"
+      aria-label="Terminal"
+      tabIndex={-1}
       data-occludes-surface="true"
       style={{ left: pos.x, top: pos.y }}
+      onKeyDown={onKeyDown}
+      onPointerLeave={() => setActive(-1)}
+      // Keep the window's click-to-type handler from pulling focus to
+      // the command line when you press the menu's padding.
+      onMouseUp={(e) => e.stopPropagation()}
     >
-      <button type="button" role="menuitem" className="terminal-menu-item" onClick={pick(runCopy)}>
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <rect x="4.5" y="4.5" width="7.5" height="7.5" rx="1" />
-          <path d="M9.5 2.5H3.5a1 1 0 0 0-1 1v6" />
-        </svg>
-        <span className="terminal-menu-label">copy</span>
-        <span className="terminal-menu-shortcut">&#8984;C</span>
-      </button>
-      <button type="button" role="menuitem" className="terminal-menu-item" onClick={pick(runPaste)}>
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <rect x="2.5" y="2.8" width="9" height="9.7" rx="1" />
-          <rect x="5" y="1.3" width="4" height="2.6" rx="0.6" />
-        </svg>
-        <span className="terminal-menu-label">paste</span>
-        <span className="terminal-menu-shortcut">&#8984;V</span>
-      </button>
-      <div className="terminal-menu-sep" />
-      <button
-        type="button"
-        role="menuitem"
-        className="terminal-menu-item"
-        onClick={pick(toggleWellSplits)}
-      >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <rect x="1.5" y="2.5" width="11" height="9" rx="1" />
-          <path d="M7 2.5v9" />
-        </svg>
-        <span className="terminal-menu-label">{splitsOpen ? 'close splits' : 'open splits'}</span>
-      </button>
-      <div className="terminal-menu-sep" />
-      <button
-        type="button"
-        role="menuitem"
-        className="terminal-menu-item"
-        onClick={pick(onOpenFind)}
-      >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <circle cx="6.2" cy="6.2" r="3.7" />
-          <path d="M9 9l3.2 3.2" />
-        </svg>
-        <span className="terminal-menu-label">search scrollback</span>
-        <span className="terminal-menu-shortcut">&#8984;F</span>
-      </button>
-      {/* Clear only reaches the xterm buffer; the native grid has no
-          clear command, so the item hides where it would visibly no-op. */}
-      {!nativeSurfaceEnabled() && (
-        <button
-          type="button"
-          role="menuitem"
-          className="terminal-menu-item"
-          onClick={pick(() => termRef.current?.clear())}
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <circle cx="7" cy="7" r="5" />
-            <path d="M3.6 10.4 10.4 3.6" />
-          </svg>
-          <span className="terminal-menu-label">clear buffer</span>
-        </button>
-      )}
-      {connected && (
-        <>
-          <div className="terminal-menu-sep" />
-          <button
-            type="button"
-            role="menuitem"
-            className="terminal-menu-item terminal-menu-item-danger"
-            onClick={pick(() => void disconnectSession())}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M7 1.6v4.8" />
-              <path d="M4.2 3.6a4.6 4.6 0 1 0 5.6 0" />
-            </svg>
-            <span className="terminal-menu-label">disconnect</span>
-          </button>
-        </>
-      )}
+      {groups.map((group, g) => (
+        <div key={group[0].id} role="none" className="ov-menu-group">
+          {g > 0 && <div role="separator" className="ov-menu-sep" />}
+          {group.map((item) => {
+            index += 1;
+            const i = index;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                className={`ov-menu-item${i === active ? ' is-active' : ''}${
+                  item.danger ? ' is-danger' : ''
+                }`}
+                onPointerMove={() => {
+                  if (i !== active) setActive(i);
+                }}
+                onClick={() => pick(item)}
+              >
+                <span className="ov-menu-label">{item.label}</span>
+                {item.keys && <kbd className="ov-menu-keys">{shortcutLabel(item.keys)}</kbd>}
+              </button>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
