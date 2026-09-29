@@ -1,0 +1,225 @@
+/* The One Window panel (SPEC 9 and 10): split panes over pinned
+   vitals, and the floating pane menus. Values are the approved
+   mockups' (Main, PanelTabs, Combat, Session), colors are tokens only.
+   Dense rows are 22 px, pane headers 28 px, text starts at x 18, and
+   a row with a status marker puts the 8 px marker at x 18 and its
+   text at x 34. */
+
+/* ── Pane header ─────────────────────────────────────────────────── */
+
+.pane-header {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  height: var(--pane-header);
+  padding: 6px 40px 0 18px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.pane-label {
+  flex: none;
+  margin: 0;
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--tertiary);
+}
+
+.pane-header > .pane-label + * {
+  margin-left: 8px;
+}
+
+.pane-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--secondary);
+}
+
+.pane-meta-quiet {
+  color: var(--tertiary);
+}
+
+.pane-meta-danger {
+  color: var(--danger);
+}
+
+.pane-meta-warn {
+  color: var(--warn);
+}
+
+.pane-more {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--tertiary);
+  cursor: default;
+}
+
+.pane-more:hover {
+  background: var(--hover);
+}
+
+.pane-more[aria-expanded='true'] {
+  background: var(--selrow);
+  color: var(--secondary);
+}
+
+/* A light theme's selected fill is white, so it takes a ring. */
+:root[data-appearance='light'] .pane-more[aria-expanded='true'] {
+  box-shadow: 0 0 0 1px var(--sep);
+}
+
+.pane-more svg {
+  display: block;
+}
+
+/* The chat pane's channel filter, a select set as header meta. */
+.pane-select {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--secondary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 15px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.pane-select:hover {
+  color: var(--text);
+}
+
+.pane-select-chevron {
+  display: block;
+  flex: none;
+  margin-left: 4px;
+  color: var(--tertiary);
+}
+
+.pane-more:focus-visible,
+.pane-select:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ── Pane menus (SPEC 7 menu recipe) ─────────────────────────────── */
+
+.pane-menu {
+  --menu-hi: rgba(255, 255, 255, 0.08);
+  position: fixed;
+  z-index: 1000;
+  min-width: 232px;
+  max-width: 320px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border-radius: var(--r-float);
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+:root[data-appearance='light'] .pane-menu {
+  --menu-hi: rgba(0, 0, 0, 0.05);
+}
+
+.pane-menu-narrow,
+.pane-menu-sub {
+  min-width: 160px;
+}
+
+.pane-menu > li {
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+
+.pane-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  outline: none;
+  cursor: default;
+}
+
+.pane-menu-item:focus,
+.pane-menu-item[aria-expanded='true'] {
+  background: var(--menu-hi);
+}
+
+.pane-menu-item[aria-disabled='true'] {
+  color: var(--tertiary);
+}
+
+.pane-menu-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane-menu-chevron,
+.pane-menu-check {
+  display: block;
+  flex: none;
+  margin-left: 16px;
+  margin-right: -4px;
+}
+
+.pane-menu-chevron {
+  color: var(--tertiary);
+}
+
+.pane-menu-check {
+  color: var(--accent);
+}
+
+.pane-menu > .pane-menu-sep {
+  height: 1px;
+  margin: 6px 12px;
+  background: var(--divider);
+}
