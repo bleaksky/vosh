@@ -307,6 +307,19 @@ fn presets_on_in_any(lists: &[Vec<String>]) -> Vec<String> {
     on.into_iter().map(str::to_string).collect()
 }
 
+/// The enabled preset list a catalog takes the first time, from `lists`,
+/// the lists of the profile files that hold one. Every preset that any of
+/// them had on stays on. With no list at all it takes `live`, the live
+/// profile's list. Launch and the shared catalog wizard both use it, so a
+/// catalog starts from the same list either way.
+pub(crate) fn first_catalog_presets(lists: &[Vec<String>], live: &[String]) -> Vec<String> {
+    if lists.is_empty() {
+        live.to_vec()
+    } else {
+        presets_on_in_any(lists)
+    }
+}
+
 /// Make the catalog own the list of trigger presets that are on. The
 /// preset triggers live in the catalog, which every profile shares, so
 /// a list kept per profile let a launch as another character put back a
@@ -334,11 +347,7 @@ pub(crate) fn adopt_catalog_presets(
     let Some(lists) = lists.and_then(ProfilePresetLists::usable) else {
         return false;
     };
-    let adopted = if lists.is_empty() {
-        profile.ui.enabled_presets.clone()
-    } else {
-        presets_on_in_any(lists)
-    };
+    let adopted = first_catalog_presets(lists, &profile.ui.enabled_presets);
     profile.ui.enabled_presets.clone_from(&adopted);
     catalog.enabled_presets = Some(adopted);
     true
