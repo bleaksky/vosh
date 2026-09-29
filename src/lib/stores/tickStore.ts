@@ -10,17 +10,21 @@ import {
 } from '../session';
 import { createStore } from './store';
 
-// Seconds to the next tick for the status line. The backend tick timer
-// is the source. It resets on the World.Time hour change and on your
-// reset pattern, and the session loop reports it on session://tick
-// every 250 ms while it runs. useTickState counted up from its own
-// guess of the last hour change and warned five seconds out no matter
-// what you set. This store counts down from the backend's remaining
-// time and warns at the warn_at_secs you set in the tick config.
+// Seconds since the last tick for the status line. The backend tick
+// timer is the source. It resets on the World.Time hour change and on
+// your reset pattern, and the session loop reports it on session://tick
+// every 250 ms while it runs, as the time left in the interval. This
+// store counts up, the interval minus that time left, the way the old
+// input row chip read, and warns in the last warn_at_secs you set in
+// the tick config.
 
 /** Warn threshold when the tick config sets none. Matches the five
- *  seconds useTickState used. */
+ *  seconds the old chip used. */
 export const DEFAULT_TICK_WARN_SECS = 5;
+
+/** Interval when neither the report nor the config names one. The
+ *  backend default. */
+const DEFAULT_INTERVAL_MS = 30_000;
 
 /** The session loop reports four times a second. Longer than this
  *  without a report means the timer stopped (disabled with #tick, or
@@ -30,11 +34,11 @@ const STALE_MS = 1500;
 export interface TickState {
   /** The timer runs and the backend is reporting it. */
   active: boolean;
-  /** Whole seconds until the next tick. null while inactive. */
-  secsToTick: number | null;
-  /** Warn at or under this many seconds. */
+  /** Whole seconds since the last tick. null while inactive. */
+  secsSinceTick: number | null;
+  /** Warn in the last this many seconds before the tick. */
   warnAt: number;
-  /** Active and at or under the threshold. */
+  /** Active and inside the warn window. */
   warn: boolean;
 }
 
@@ -42,15 +46,25 @@ export function computeTick(payload: TickPayload | null, config: TickConfig | nu
   const warnAt =
     config?.warn_at_secs && config.warn_at_secs > 0 ? config.warn_at_secs : DEFAULT_TICK_WARN_SECS;
   const active = payload !== null && payload.enabled && config?.enabled !== false;
-  if (!active) return { active: false, secsToTick: null, warnAt, warn: false };
-  const secsToTick = Math.max(0, Math.ceil(payload.remaining_ms / 1000));
-  return { active, secsToTick, warnAt, warn: secsToTick <= warnAt };
+  if (!active) return { active: false, secsSinceTick: null, warnAt, warn: false };
+  const intervalMs =
+    payload.interval_ms > 0
+      ? payload.interval_ms
+      : config && config.interval_secs > 0
+        ? config.interval_secs * 1000
+        : DEFAULT_INTERVAL_MS;
+  const remainingMs = Math.min(Math.max(0, payload.remaining_ms), intervalMs);
+  const secsSinceTick = Math.floor((intervalMs - remainingMs) / 1000);
+  // The warn window is the time left, so it holds the same last
+  // seconds whatever the interval.
+  const warn = Math.ceil(remainingMs / 1000) <= warnAt;
+  return { active, secsSinceTick, warnAt, warn };
 }
 
 function sameTick(a: TickState, b: TickState): boolean {
   return (
     a.active === b.active &&
-    a.secsToTick === b.secsToTick &&
+    a.secsSinceTick === b.secsSinceTick &&
     a.warnAt === b.warnAt &&
     a.warn === b.warn
   );
