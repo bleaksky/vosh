@@ -18,8 +18,12 @@ interface Props {
 // row: a status dot plus the live host:port, with the host / port /
 // tls form and the connect or disconnect action in a dropdown. The
 // dropdown follows the loadouts menu pattern so the two read as one
-// family of top bar controls. The connect path itself, with the
-// profile auto-match, lives in lib/useConnection.
+// family of top bar controls.
+//
+// The main window now drives the session from its title band through
+// lib/useConnection, which also owns the `vosh:connect-request`
+// listener, so this chip no longer answers the palette. It keeps the
+// shared connect path for any window that still mounts it.
 export function Connect({ status, onError }: Props) {
   const [host, setHost] = useState(() => loadTarget().host);
   const [port, setPort] = useState(() => loadTarget().port);
@@ -48,17 +52,6 @@ export function Connect({ status, onError }: Props) {
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
-
-  // The palette's connect entry lands here so the chip stays the one
-  // owner of host / port / auto-match behavior.
-  useEffect(() => {
-    const onRequest = () => {
-      if (!isLive) void doConnect();
-    };
-    window.addEventListener('vosh:connect-request', onRequest);
-    return () => window.removeEventListener('vosh:connect-request', onRequest);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLive, host, port, tls]);
 
   const doConnect = async () => {
     try {

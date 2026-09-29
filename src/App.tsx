@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
@@ -10,31 +10,28 @@ import {
   type TerminalHandle,
 } from './components/Terminal';
 import { Input, type InputHandle } from './components/Input';
-import { type ConnectionStatus } from './components/Connect';
-import { TopBar } from './components/TopBar';
-import { StatusBar } from './components/StatusBar';
 import { Resizable } from './components/Resizable';
-import { AffectsBar } from './components/AffectsBar';
-import { MapPane } from './components/MapPane';
-import { ChatPane } from './components/ChatPane';
-import { GroupPane } from './components/GroupPane';
-import { ImmPane } from './components/ImmPane';
-import { startImmStore } from './lib/immStore';
-import { RoomStrip } from './components/RoomStrip';
-import { VitalsBar, CombatPane } from './components/VitalsBar';
 import { UpdateNotice } from './components/UpdateNotice';
 import { Toasts } from './components/Toasts';
 import { HelpView } from './components/HelpView';
 import { FindToolbar, type FindToolbarHandle } from './components/FindToolbar';
 import { TerminalMenu } from './components/TerminalMenu';
+import { ScrollDepth } from './components/ScrollDepth';
+import { AppShell } from './components/shell/AppShell';
+import { TitleBand } from './components/shell/TitleBand';
+import { StatusLine } from './components/shell/StatusLine';
+import { PanelHost } from './components/panel/PanelHost';
+import {
+  panelWidthOf,
+  setPanelWidth,
+  togglePanelOpen,
+  updatePanelLayout,
+  usePanelLayout,
+} from './components/panel/panelLayoutStore';
 import {
   broadcastUiConfigChanges,
-  dockLayoutGet,
-  dockLayoutSet,
   getUiConfig,
   setWindowSize,
-  subscribeVitalsConfigChanged,
-  DEFAULT_VITALS_CONFIG,
   listTriggers,
   resolveThemeTerminalColors,
   onState,
@@ -43,36 +40,29 @@ import {
   subscribeBrightBoldChanged,
   subscribeBaseAnsiChanged,
   subscribeCustomThemesChanged,
-  subscribeDockLayoutChanged,
   subscribeProfileSwitched,
-  subscribeSidePanelsFillHeightChanged,
   subscribeSplitDividerChanged,
   type StatePayload,
-  type VitalsConfig,
 } from './lib/session';
 import { applyAndBroadcastTheme } from './lib/theme';
 import { loadFontStack } from './lib/fontLoader';
 import { defaultEnabledIds, PRESETS, presetTriggers } from './lib/presets';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
 import { setBaseAnsi } from './lib/baseAnsi';
-import { startChatStore } from './lib/chatStore';
+import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
-import { startGroupStore } from './lib/groupStore';
 import { CommandPalette } from './components/CommandPalette';
-import { ChatWellPane, LogWellPane } from './components/WellPanes';
 import { disconnectSession } from './lib/session';
-import { subscribeWellSplits, wellSplitsOpen } from './lib/wellSplits';
 import type { PaletteDeps } from './lib/palette';
 import {
-  DEFAULT_PANEL_LAYOUT,
-  groupPanels,
-  PANELS,
-  panelLayoutFromDock,
-  panelLayoutToDock,
-  type PanelId,
-  type PanelLayout,
-  type Zone,
-} from './lib/panels';
+  addPane,
+  allPanes,
+  closePane,
+  isLeaf,
+  type PaneNode,
+  type PaneType,
+} from './lib/paneLayout';
+import { useConnection, type ConnectionStatus } from './lib/useConnection';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
@@ -89,6 +79,24 @@ function applySplitDividerColor(color: string | null): void {
   if (nativeSurfaceEnabled()) {
     void invoke('native_surface_set_divider_color', { color }).catch(() => {});
   }
+}
+
+// Open Settings, or focus it, on the tab it last showed.
+function openSettingsWindow(): void {
+  invoke('open_settings_window').catch((e) => {
+    console.error('[app] open_settings_window failed', e);
+  });
+}
+
+// The id of the leaf showing `pane`, or null when the panel does not
+// show it.
+function leafIdFor(node: PaneNode, pane: PaneType): string | null {
+  if (isLeaf(node)) return node.pane === pane ? node.id : null;
+  for (const child of node.children) {
+    const hit = leafIdFor(child, pane);
+    if (hit !== null) return hit;
+  }
+  return null;
 }
 
 // One-shot rename migration: when the project was renamed from
@@ -148,19 +156,14 @@ function App() {
     }
   });
   const [themeTerminalColors, setThemeTerminalColors] = useState(false);
-  // Panel layout. Each panel id maps to a placement: zone + (for
-  // left/right zones) vertical alignment. Seeded from the backend
-  // dock_layout on mount and kept in sync via the
-  // dock-layout-changed broadcast.
-  const [panelLayout, setPanelLayout] = useState<PanelLayout>(DEFAULT_PANEL_LAYOUT);
-  // When true, side panels (left/right zones) extend to the bottom
-  // edge of the window and the terminal input + status bar live in
-  // a column under the terminal area only. Loaded from UiConfig.
-  const [sidePanelsFillHeight, setSidePanelsFillHeight] = useState(false);
-  // Vitals config, held here only for the strip sizing that App
-  // applies when the vitals panel sits in a top or bottom zone.
-  // VitalsBar owns the config for everything it draws itself.
-  const [vitalsCfg, setVitalsCfg] = useState<VitalsConfig>(DEFAULT_VITALS_CONFIG);
+  // The panel's open state, width, and pane tree, per profile. The
+  // panel's layout store is the one copy in this window. The title
+  // band and the palette show, hide, and size the panel through it,
+  // and the panel edits the tree through it.
+  const panelLayout = usePanelLayout();
+  const panelOpen = panelLayout?.panel_open ?? true;
+  const panelWidth = panelWidthOf(panelLayout);
+  const shownPanes = useMemo(() => (panelLayout ? allPanes(panelLayout.root) : []), [panelLayout]);
   const termRef = useRef<TerminalHandle | null>(null);
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
@@ -174,6 +177,13 @@ function App() {
       void invoke('native_surface_echo', { text }).catch(() => {});
     }
   };
+  const handleError = (message: string) => {
+    setStatus({ kind: 'error', message });
+    writeLive(`\r\n\x1b[31m[${message}]\x1b[0m\r\n`);
+  };
+  // The session for the title band, the session menu, the palette, and
+  // Cmd+R. It also answers the `vosh:connect-request` event.
+  const connection = useConnection(status, handleError);
   // Report the bright-bold setting to the native surface (xterm has no
   // equivalent option, so this drives the GPU renderer only).
   const applyBrightBold = (on: boolean) => {
@@ -194,7 +204,7 @@ function App() {
   // live one and shows the same buffer scrolled back so you can read
   // earlier output while live combat keeps streaming below.
   const [splitOpen, setSplitOpen] = useState(false);
-  // In-client help modal. Opened from the top-bar [help] button;
+  // In-client help modal. Opened with Mod+/ or from the palette;
   // backdrop click, [close], and Esc all dismiss via setHelpOpen(false).
   const [helpOpen, setHelpOpen] = useState(false);
   // Scrollback find toolbar. Opens on Cmd+F (macOS) or Ctrl+F (other
@@ -213,11 +223,6 @@ function App() {
   // open; the value is the pointer's viewport position (the menu
   // clamps itself to the window edges).
   const [terminalMenu, setTerminalMenu] = useState<{ x: number; y: number } | null>(null);
-  // Well splits: session / chat / log panes inside the terminal well.
-  // Mirrors the module store so the palette and context menu can
-  // toggle it from outside React.
-  const [wellSplits, setWellSplitsState] = useState(() => wellSplitsOpen());
-  useEffect(() => subscribeWellSplits(setWellSplitsState), []);
   // History pane readiness: flips true once the history Terminal has
   // finished loading scrollback after its mount. We queue any pending
   // mirror search through pendingFindRef until the history is ready,
@@ -259,63 +264,6 @@ function App() {
     back: number;
     max: number;
   } | null>(null);
-
-  // Load persisted panel layout once on mount and re-apply when any
-  // other window broadcasts a change (Settings → Panels save).
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    dockLayoutGet()
-      .then((entries) => {
-        if (!cancelled) setPanelLayout(panelLayoutFromDock(entries));
-      })
-      .catch(() => {});
-    subscribeDockLayoutChanged((entries) => {
-      if (!cancelled) setPanelLayout(panelLayoutFromDock(entries));
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
-  // Persist a single panel's placement change and broadcast to other
-  // windows. The TopBar map/chat toggle buttons go through this so a
-  // quick hide/show stays synced with the Settings UI.
-  const setPanelZone = (id: PanelId, zone: Zone) => {
-    setPanelLayout((prev) => {
-      if (!PANELS[id].allowedZones.includes(zone)) return prev;
-      const next: PanelLayout = {
-        placements: { ...prev.placements, [id]: { ...prev.placements[id], zone } },
-        order: prev.order,
-      };
-      void dockLayoutSet(panelLayoutToDock(next)).catch(() => {});
-      return next;
-    });
-  };
-
-  // Map/chat topbar buttons toggle a panel between hidden and its
-  // last-visible zone. Preserves the user's last non-hidden choice
-  // via a session-scoped memory so repeated hides + unhides land
-  // where the panel was last visible.
-  const lastVisibleZoneRef = useRef<Partial<Record<PanelId, Zone>>>({});
-  const togglePanelVisibility = (id: PanelId) => {
-    const current = panelLayout.placements[id].zone;
-    if (current === 'hidden') {
-      // Fall back to homeZone (never 'hidden') so the topbar toggle
-      // actually shows the panel somewhere even when defaultZone is
-      // 'hidden' (e.g., chat is opt-in but lives at the bottom when
-      // visible).
-      const restore = lastVisibleZoneRef.current[id] ?? PANELS[id].homeZone;
-      setPanelZone(id, restore);
-    } else {
-      lastVisibleZoneRef.current[id] = current;
-      setPanelZone(id, 'hidden');
-    }
-  };
 
   // Reset the history-pane scroll-depth indicator whenever the split
   // closes. The history Terminal unmounts and the next mount will fire
@@ -423,20 +371,19 @@ function App() {
     };
   }, [historyReady]);
 
-  // Whenever the panel layout changes (e.g. chat toggled hidden), the
-  // terminal-area's available height shifts. FitAddon's own internal
-  // observers do not always pick up the change before xterm draws the
-  // next frame, which leaves a stripe of unused padding at the bottom
-  // of the terminal until something else (e.g. a scroll) kicks off a
-  // refit. Force a fit on every placements change, after layout has
-  // settled, so xterm rows match the available height immediately.
+  // Showing, hiding, or resizing the panel changes the terminal
+  // column's width. FitAddon's own internal observers do not always
+  // pick up the change before xterm draws the next frame, which leaves
+  // a stripe of unused space at the edge of the terminal until
+  // something else (e.g. a scroll) kicks off a refit. Force a fit
+  // after layout has settled, so xterm matches the column at once.
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       termRef.current?.fit();
       historyTermRef.current?.fit();
     });
     return () => cancelAnimationFrame(id);
-  }, [panelLayout, sidePanelsFillHeight]);
+  }, [panelOpen, panelWidth]);
 
   // Wheel listener attached in capture phase with passive:false so we
   // fire BEFORE the xterm canvas inside terminal-area sees the event.
@@ -540,7 +487,14 @@ function App() {
   const focusInputFromClick = (event: MouseEvent<Element>) => {
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
-    if (target.closest('button, input, textarea, select, a, [role="button"]')) return;
+    // Floating surfaces and the panel edge keep the focus they hold, so
+    // a press on a form's label or padding does not yank the caret out.
+    if (
+      target.closest(
+        'button, input, textarea, select, a, label, [role="button"], [role="menu"], [role="dialog"], [role="separator"]',
+      )
+    )
+      return;
     const selection = window.getSelection?.();
     if (selection && selection.toString().length > 0) return;
     inputRef.current?.focus();
@@ -577,6 +531,18 @@ function App() {
       document.removeEventListener('copy', onCopy);
     };
   }, []);
+
+  const closeFind = () => {
+    termRef.current?.clearSearch();
+    historyTermRef.current?.clearSearch();
+    if (nativeSurfaceEnabled()) {
+      void invoke('native_surface_find_clear').catch(() => {});
+    }
+    pendingFindRef.current = null;
+    setFindResults({ index: -1, count: 0 });
+    setFindOpen(false);
+    inputRef.current?.focus();
+  };
 
   // Cmd+F (macOS) / Ctrl+F (others) opens the scrollback find toolbar.
   // Attached at the capture phase so it fires before xterm's own
@@ -712,18 +678,15 @@ function App() {
     };
   }, []);
 
-  // Bootstrap the chat + group + imm buffers at app launch so any
-  // Comm.Channel / routed / Group.Info / Char.Worth / Imm.Queues
-  // pushes that arrive while the panes are closed (or have not yet
-  // been opened) still land in the stores and are visible on first
-  // open. Imm.Queues especially: the server sends the only guaranteed
-  // snapshot at login and has no heartbeat, so a lazily-started store
-  // would drop it and the panel would sit dark until the next queue
-  // change.
+  // Start every pane and status line store at launch so any package
+  // that arrives while a pane is closed (or has not yet been opened)
+  // still lands and shows on first open. Imm.Queues especially: the
+  // server sends the only guaranteed snapshot at login and has no
+  // heartbeat, so a lazily started store would drop it and the pane
+  // would sit dark until the next queue change. World.Moons and
+  // Room.Info are the same.
   useEffect(() => {
-    startChatStore();
-    startGroupStore();
-    startImmStore();
+    startStores();
   }, []);
 
   useEffect(() => {
@@ -754,7 +717,6 @@ function App() {
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
         applySplitDividerColor(cfg.split_divider_color);
-        setSidePanelsFillHeight(cfg.side_panels_fill_height);
 
         // Sweep orphan preset triggers — anything tagged with a
         // preset id that no longer exists in code (renamed or
@@ -801,10 +763,11 @@ function App() {
   // click, or Char.Status auto-swap after login), the backend has
   // already swapped the in-memory Profile but the frontend's React
   // state still mirrors the old profile's theme / font / vitals /
-  // panel layout / etc. Re-fetch the new UiConfig, apply locally, and
-  // broadcast the diff so every other window's per-field subscriber
-  // settles too. Dock layout sits in its own store and reloads
-  // explicitly because its event is not part of the UiConfig fan-out.
+  // etc. Re-fetch the new UiConfig, apply locally, and broadcast the
+  // diff so every other window's per-field subscriber settles too.
+  // The pane layout and the tracked affects are not part of the
+  // UiConfig fan-out. The backend sends each on its own event after
+  // the switch, and the panel's stores follow those.
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
@@ -821,11 +784,7 @@ function App() {
           setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
           applyBrightBold(cfg.bright_bold);
           applySplitDividerColor(cfg.split_divider_color);
-          setSidePanelsFillHeight(cfg.side_panels_fill_height);
           await broadcastUiConfigChanges(cfg);
-          const entries = await dockLayoutGet();
-          if (cancelled) return;
-          setPanelLayout(panelLayoutFromDock(entries));
         } catch (e) {
           console.error('[app] profile-switched refresh failed', e);
         }
@@ -898,41 +857,6 @@ function App() {
     let cancelled = false;
     subscribeSplitDividerChanged((color) => {
       applySplitDividerColor(color);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    subscribeSidePanelsFillHeightChanged((value) => {
-      setSidePanelsFillHeight(value);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    getUiConfig()
-      .then((cfg) => {
-        if (!cancelled) setVitalsCfg(cfg.vitals);
-      })
-      .catch(() => {});
-    subscribeVitalsConfigChanged((next) => {
-      if (!cancelled) setVitalsCfg(next);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -1169,188 +1093,7 @@ function App() {
     return true;
   };
 
-  const handleError = (message: string) => {
-    setStatus({ kind: 'error', message });
-    writeLive(`\r\n\x1b[31m[${message}]\x1b[0m\r\n`);
-  };
-
   const connected = status.kind === 'connected' || status.kind === 'connecting';
-
-  const grouped = groupPanels(panelLayout);
-  // Tick and mud time render once, in the LineChip mounted inside the
-  // input row. They no longer participate in panel placement.
-  const renderPanel = (id: PanelId) => {
-    switch (id) {
-      case 'map':
-        return <MapPane key="map" />;
-      case 'group':
-        return <GroupPane key="group" />;
-      case 'imm':
-        return <ImmPane key="imm" />;
-      case 'vitals': {
-        // Combat panel set to `hidden` = inline within the vitals bar
-        // (the legacy default). Any other zone routes combat through
-        // its standalone CombatPane in that zone, so suppress the
-        // inline chip to avoid double-rendering.
-        const combatZone = panelLayout.placements.combat.zone;
-        const hideCombat = combatZone !== 'hidden';
-        const bar = <VitalsBar key="vitals" hideCombat={hideCombat} />;
-        // In a top or bottom row the bar would otherwise stretch to
-        // the full window width, which flings the card columns apart.
-        // Wrap it so it sits at a natural width and can be placed
-        // left / center / right. The card layouts default to a
-        // rail-width block; the strip and inline layouts shrink to
-        // their content. strip_width, when set, caps it to an exact
-        // width. Side zones size the bar by their column width and
-        // the side-zone card recipe targets the bar as the substack's
-        // direct child, so they are left unwrapped.
-        const vitalsZone = panelLayout.placements.vitals.zone;
-        const horizontal = vitalsZone === 'top' || vitalsZone === 'bottom';
-        if (horizontal) {
-          const card =
-            vitalsCfg.layout === 'ember' ||
-            vitalsCfg.layout === 'gauges' ||
-            vitalsCfg.layout === 'pips';
-          const width = vitalsCfg.strip_width > 0 ? vitalsCfg.strip_width : card ? 360 : undefined;
-          const alignSelf =
-            vitalsCfg.strip_align === 'center'
-              ? 'center'
-              : vitalsCfg.strip_align === 'right'
-                ? 'flex-end'
-                : 'flex-start';
-          return (
-            <div
-              key="vitals"
-              className="vitals-host"
-              style={{ width, maxWidth: '100%', alignSelf }}
-            >
-              {bar}
-            </div>
-          );
-        }
-        return bar;
-      }
-      case 'combat': {
-        // Chip variant only when combat sits IMMEDIATELY ABOVE vitals
-        // — both must be in the bottom zone for them to read as one
-        // attached block. Anywhere else (including bottom-alone) the
-        // pane uses the full treatment with content vertically
-        // centered in its own surface.
-        const combatZone = panelLayout.placements.combat.zone;
-        const vitalsZone = panelLayout.placements.vitals.zone;
-        const chip = combatZone === 'bottom' && vitalsZone === 'bottom';
-        return <CombatPane key="combat" chip={chip} />;
-      }
-      case 'roomstrip': {
-        const placement = panelLayout.placements.roomstrip;
-        const inSideZone = placement.zone === 'left' || placement.zone === 'right';
-        if (!inSideZone) return <RoomStrip key="roomstrip" />;
-        // Side-zone layout: wrap content + drop the horizontal
-        // scrollbar so a packed room reads top-to-bottom instead of
-        // being clipped by the panel width. Wrap in a Resizable so
-        // the user can give it more height when they want every
-        // chip + name visible without scrolling at all.
-        const anchor: 'top' | 'bottom' = placement.align === 'top' ? 'top' : 'bottom';
-        return (
-          <Resizable
-            key="roomstrip"
-            storageKey="vosh.layout.roomstrip.height"
-            anchor={anchor}
-            defaultSize={140}
-            minSize={48}
-            maxSize={800}
-            reservePx={120}
-            handleLabel="resize roomstrip panel"
-          >
-            <RoomStrip variant="column" />
-          </Resizable>
-        );
-      }
-      case 'chat': {
-        // Wrap chat in Resizable so the user can grow / shrink it
-        // from whichever edge faces the sibling content. Anchor maps
-        // to the zone: bottom zone -> bottom anchor (handle on top),
-        // top zone -> top anchor (handle on bottom), side zones use
-        // align (top/bottom) the same way RoomStrip does.
-        const chatPlacement = panelLayout.placements.chat;
-        const chatAnchor: 'top' | 'bottom' =
-          chatPlacement.zone === 'top'
-            ? 'top'
-            : chatPlacement.zone === 'bottom'
-              ? 'bottom'
-              : chatPlacement.align === 'top'
-                ? 'top'
-                : 'bottom';
-        return (
-          <Resizable
-            key="chat"
-            storageKey="vosh.layout.chat.height"
-            anchor={chatAnchor}
-            defaultSize={160}
-            minSize={80}
-            maxSize={800}
-            reservePx={160}
-            handleLabel="resize chat panel"
-          >
-            <ChatPane onClose={() => setPanelZone('chat', 'hidden')} />
-          </Resizable>
-        );
-      }
-      case 'affects': {
-        // Side-zone placement gets the Ember pane treatment (pane
-        // head + per-affect duration rows); top/bottom keep the
-        // horizontal pill strip.
-        const zone = panelLayout.placements.affects.zone;
-        const rows = zone === 'left' || zone === 'right';
-        return <AffectsBar key="affects" variant={rows ? 'rows' : 'strip'} />;
-      }
-    }
-  };
-
-  // Side-zone composition. Three slots stacked vertically:
-  //   1. Top cluster   — non-fill panels with align=top (natural size,
-  //                      hugs the top edge).
-  //   2. Middle slot   — either fill panels (map) growing to absorb
-  //                      remaining height, or a plain spacer when no
-  //                      fill panel is in this zone.
-  //   3. Bottom cluster— non-fill panels with align=bottom (natural
-  //                      size, hugs the bottom edge).
-  //
-  // The middle slot is what guarantees the top cluster sticks to the
-  // top edge and the bottom cluster sticks to the bottom edge even
-  // without a fill panel.
-  const renderSideZoneInner = (top: PanelId[], bottom: PanelId[]) => {
-    const isFill = (id: PanelId) => Boolean(PANELS[id].fillsSideZone);
-    const fillIds = [...top, ...bottom].filter(isFill);
-    const fixedTop = top.filter((id) => !isFill(id));
-    const fixedBottom = bottom.filter((id) => !isFill(id));
-    const hasAny = fillIds.length > 0 || fixedTop.length > 0 || fixedBottom.length > 0;
-    if (!hasAny) return null;
-    return (
-      <div className="panel-zone-stack">
-        {fixedTop.length > 0 && (
-          <div className="panel-zone-substack panel-zone-substack-fixed">
-            {fixedTop.map(renderPanel)}
-          </div>
-        )}
-        {fillIds.length > 0 ? (
-          <div className="panel-zone-substack panel-zone-substack-grow">
-            {fillIds.map(renderPanel)}
-          </div>
-        ) : (
-          <div className="panel-zone-spacer" />
-        )}
-        {fixedBottom.length > 0 && (
-          <div className="panel-zone-substack panel-zone-substack-fixed">
-            {fixedBottom.map(renderPanel)}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const leftHasAny = grouped.leftTop.length > 0 || grouped.leftBottom.length > 0;
-  const rightHasAny = grouped.rightTop.length > 0 || grouped.rightBottom.length > 0;
 
   const inputElement = (
     <Input
@@ -1412,18 +1155,35 @@ function App() {
     />
   );
 
-  const bottomZoneElement = grouped.bottom.length > 0 && (
-    <div className="panel-zone panel-zone-bottom">{grouped.bottom.map(renderPanel)}</div>
-  );
+  // Show or hide one pane type from the palette. Showing opens the
+  // panel too, and a pane already there under a hidden panel just
+  // comes back with it.
+  const togglePane = (pane: PaneType) => {
+    updatePanelLayout((l) => {
+      const leaf = leafIdFor(l.root, pane);
+      if (leaf !== null && l.panel_open) return { ...l, root: closePane(l.root, leaf) };
+      return { ...l, panel_open: true, root: leaf !== null ? l.root : addPane(l.root, pane) };
+    });
+  };
+
+  // Add a pane from the title band, at the bottom of the panel.
+  const addPaneType = (pane: PaneType) => {
+    updatePanelLayout((l) => ({ ...l, panel_open: true, root: addPane(l.root, pane) }));
+  };
 
   // Everything the palette can reach, rebuilt fresh at each open so
   // labels track live state.
   const paletteDeps = (): PaletteDeps => ({
     connected,
-    paneVisible: (id) => panelLayout.placements[id].zone !== 'hidden',
-    togglePane: togglePanelVisibility,
+    host: status.kind === 'connected' || status.kind === 'connecting' ? status.host : null,
+    worldName: connection.world,
+    panelOpen,
+    togglePanel: togglePanelOpen,
+    paneVisible: (pane) => panelOpen && shownPanes.includes(pane),
+    togglePane,
     openHelp: () => setHelpOpen(true),
     openFind: () => setFindOpen(true),
+    openSettings: openSettingsWindow,
     openSettingsTab: (tab) => {
       // The settings window may not exist yet, so the target tab
       // travels twice: localStorage for a cold open, the event for a
@@ -1434,22 +1194,12 @@ function App() {
         // storage unavailable; the event path still covers a warm window
       }
       void emit('vosh://settings-goto-tab', tab);
-      invoke('open_settings_window').catch((e) => {
-        console.error('[palette] open_settings_window failed', e);
-      });
+      openSettingsWindow();
     },
-    connect: () => window.dispatchEvent(new CustomEvent('vosh:connect-request')),
+    connect: () => void connection.connect(),
     disconnect: () => void disconnectSession(),
     insertInput: (text) => inputRef.current?.insert(text),
   });
-
-  // The session pane chip labels itself with the host's registrable
-  // name when connected ("theforsakenlands"), else a neutral label.
-  const wellSessionName = (() => {
-    if (status.kind !== 'connected' && status.kind !== 'connecting') return 'session';
-    const parts = status.host.split('.');
-    return parts.length >= 2 ? parts[parts.length - 2] : status.host;
-  })();
 
   const terminalAreaElement = (
     <div
@@ -1470,201 +1220,143 @@ function App() {
           results={findResults}
           onFindNext={(query, opts) => submitFind(query, opts, 'next')}
           onFindPrevious={(query, opts) => submitFind(query, opts, 'previous')}
-          onClose={() => {
-            termRef.current?.clearSearch();
-            historyTermRef.current?.clearSearch();
-            if (nativeSurfaceEnabled()) {
-              void invoke('native_surface_find_clear').catch(() => {});
-            }
-            pendingFindRef.current = null;
-            setFindResults({ index: -1, count: 0 });
-            setFindOpen(false);
-            inputRef.current?.focus();
-          }}
+          onClose={closeFind}
         />
       )}
-      {/* Well wrapper stays mounted whether splits are open or not so
-          toggling never remounts the Terminal (a full xterm + native
-          surface teardown). Closed state just hides the side column. */}
-      <div className={`well-splits${wellSplits ? '' : ' is-closed'}`}>
-        <div className="well-splits-main">
-          {wellSplits && (
-            <div className="well-pane-chip-row">
-              <span className="well-pane-chip is-active">
-                <span className="well-pane-chip-num">1</span>
-                <span className="well-pane-chip-name">{wellSessionName}</span>
-              </span>
-            </div>
-          )}
-          <div className="well-splits-term">
-            {splitOpen && (
-              // History pane is a Resizable so the user can drag the
-              // divider between history and live to set the split ratio.
-              // anchor=top places the panel at the top with the drag
-              // handle on the bottom edge facing the live pane below.
-              // Lazy mount. A hidden Terminal cannot be measured by
-              // FitAddon (its container is display:none, bounding rect
-              // 0x0) so writes wrap at 1-3 columns and the scrollback
-              // arrives mangled. The initial scroll runs in
-              // onScrollbackLoaded — onReady fires before loadScrollback
-              // resolves, and a scrollPages call on an empty terminal
-              // is a no-op that the next write would override anyway.
-              <Resizable
-                storageKey="vosh.layout.splitHistoryHeight"
-                anchor="top"
-                defaultSize={240}
-                minSize={80}
-                maxSize={1200}
-                reservePx={120}
-                className={`terminal-pane terminal-pane-history${historyReady ? '' : ' terminal-pane-history-priming'}`}
-                handleLabel="resize scrollback split"
-                snapPx={() => termRef.current?.cellHeight() ?? 0}
-              >
-                <Terminal
-                  fontFamily={fontFamily}
-                  fontSize={fontSize}
-                  themeTerminalColors={themeTerminalColors}
-                  quiet
-                  onReady={(handle) => {
-                    historyTermRef.current = handle;
-                  }}
-                  onScrollbackLoaded={() => {
-                    // Position the history pane so its bottom row is the
-                    // line immediately above the live pane's full row
-                    // range. The live pane is `position: absolute` with
-                    // both top and bottom pinned (overlay model), so its
-                    // xterm renders the full terminal-area row count even
-                    // while the history overlay covers part of it. If
-                    // history's bottom landed inside live's row range the
-                    // same lines would render in both panes — opaque
-                    // overlay hides that visually, but the scroll-depth
-                    // indicator still makes more sense when the panes
-                    // describe disjoint buffer regions. Pre-split live
-                    // rows captured in the wheel handler because reading
-                    // the live pane's size here is racey.
-                    // Fast path: when the load callback fires, position and
-                    // reveal immediately. The frame-polled effect above also
-                    // positions / reveals / repaints, so this is idempotent and
-                    // a no-op when the callback never fires.
-                    const scrollBack = preSplitLiveRowsRef.current;
-                    if (scrollBack > 0) historyTermRef.current?.scrollLines(-scrollBack);
-                    setHistoryReady(true);
-                    // Optional split diagnostic, enabled via
-                    // localStorage.setItem('vosh.splitdebug', '1'). Snapshots
-                    // the history pane internals into the on-screen overlay.
-                    if (splitDebugEnabled) {
-                      const openN = (splitDebugCountRef.current += 1);
-                      const lines: string[] = [`open#${openN} scrollBack=${scrollBack}`];
-                      const snap = (tag: string) => {
-                        const d = historyTermRef.current?.debug();
-                        const line = `${tag} ${JSON.stringify(d)}`;
-                        // eslint-disable-next-line no-console
-                        console.log(`[vosh-split-debug] open#${openN} ${line}`);
-                        lines.push(line);
-                        setSplitDebug(lines.join('\n'));
-                      };
-                      snap('t0');
-                      window.setTimeout(() => snap('t250'), 250);
-                      window.setTimeout(() => snap('t600'), 600);
-                    }
-                  }}
-                  onScrollPosition={(back, max) => setHistoryScrollPos({ back, max })}
-                />
-                {historyScrollPos && historyScrollPos.max > 0 && (
-                  <div className="scrollback-indicator" aria-live="polite">
-                    ↑ {historyScrollPos.back} / {historyScrollPos.max}
-                  </div>
-                )}
-                {splitDebugEnabled && splitDebug && (
-                  <pre className="split-debug-overlay">{splitDebug}</pre>
-                )}
-              </Resizable>
-            )}
-            <div className="terminal-pane terminal-pane-live">
-              <Terminal
-                fontFamily={fontFamily}
-                fontSize={fontSize}
-                themeTerminalColors={themeTerminalColors}
-                onReady={(handle) => {
-                  termRef.current = handle;
-                }}
-                onResultsChanged={(event) =>
-                  setFindResults({ index: event.resultIndex, count: event.resultCount })
+      <ScrollDepth findOpen={findOpen} />
+      {/* The containing block for the scrollback split, where the well
+          splits wrapper was. It never changes, so opening the split or
+          toggling the panel never remounts the live Terminal. */}
+      <div className="terminal-well">
+        {splitOpen && (
+          // History pane is a Resizable so the user can drag the
+          // divider between history and live to set the split ratio.
+          // anchor=top places the panel at the top with the drag
+          // handle on the bottom edge facing the live pane below.
+          // Lazy mount. A hidden Terminal cannot be measured by
+          // FitAddon (its container is display:none, bounding rect
+          // 0x0) so writes wrap at 1-3 columns and the scrollback
+          // arrives mangled. The initial scroll runs in
+          // onScrollbackLoaded — onReady fires before loadScrollback
+          // resolves, and a scrollPages call on an empty terminal
+          // is a no-op that the next write would override anyway.
+          <Resizable
+            storageKey="vosh.layout.splitHistoryHeight"
+            anchor="top"
+            defaultSize={240}
+            minSize={80}
+            maxSize={1200}
+            reservePx={120}
+            className={`terminal-pane terminal-pane-history${historyReady ? '' : ' terminal-pane-history-priming'}`}
+            handleLabel="resize scrollback split"
+            snapPx={() => termRef.current?.cellHeight() ?? 0}
+          >
+            <Terminal
+              fontFamily={fontFamily}
+              fontSize={fontSize}
+              themeTerminalColors={themeTerminalColors}
+              quiet
+              onReady={(handle) => {
+                historyTermRef.current = handle;
+              }}
+              onScrollbackLoaded={() => {
+                // Position the history pane so its bottom row is the
+                // line immediately above the live pane's full row
+                // range. The live pane is `position: absolute` with
+                // both top and bottom pinned (overlay model), so its
+                // xterm renders the full terminal-area row count even
+                // while the history overlay covers part of it. If
+                // history's bottom landed inside live's row range the
+                // same lines would render in both panes — opaque
+                // overlay hides that visually, but the scroll-depth
+                // indicator still makes more sense when the panes
+                // describe disjoint buffer regions. Pre-split live
+                // rows captured in the wheel handler because reading
+                // the live pane's size here is racey.
+                // Fast path: when the load callback fires, position and
+                // reveal immediately. The frame-polled effect above also
+                // positions / reveals / repaints, so this is idempotent and
+                // a no-op when the callback never fires.
+                const scrollBack = preSplitLiveRowsRef.current;
+                if (scrollBack > 0) historyTermRef.current?.scrollLines(-scrollBack);
+                setHistoryReady(true);
+                // Optional split diagnostic, enabled via
+                // localStorage.setItem('vosh.splitdebug', '1'). Snapshots
+                // the history pane internals into the on-screen overlay.
+                if (splitDebugEnabled) {
+                  const openN = (splitDebugCountRef.current += 1);
+                  const lines: string[] = [`open#${openN} scrollBack=${scrollBack}`];
+                  const snap = (tag: string) => {
+                    const d = historyTermRef.current?.debug();
+                    const line = `${tag} ${JSON.stringify(d)}`;
+                    // eslint-disable-next-line no-console
+                    console.log(`[vosh-split-debug] open#${openN} ${line}`);
+                    lines.push(line);
+                    setSplitDebug(lines.join('\n'));
+                  };
+                  snap('t0');
+                  window.setTimeout(() => snap('t250'), 250);
+                  window.setTimeout(() => snap('t600'), 600);
                 }
-              />
-            </div>
-          </div>
-        </div>
-        {wellSplits && (
-          <>
-            <div className="well-splits-divider" />
-            <div className="well-splits-side">
-              <ChatWellPane />
-              <div className="well-splits-hdivider" />
-              <LogWellPane />
-            </div>
-          </>
+              }}
+              onScrollPosition={(back, max) => setHistoryScrollPos({ back, max })}
+            />
+            {historyScrollPos && historyScrollPos.max > 0 && (
+              <div className="scrollback-indicator" aria-live="polite">
+                ↑ {historyScrollPos.back} / {historyScrollPos.max}
+              </div>
+            )}
+            {splitDebugEnabled && splitDebug && (
+              <pre className="split-debug-overlay">{splitDebug}</pre>
+            )}
+          </Resizable>
         )}
+        <div className="terminal-pane terminal-pane-live">
+          <Terminal
+            fontFamily={fontFamily}
+            fontSize={fontSize}
+            themeTerminalColors={themeTerminalColors}
+            onReady={(handle) => {
+              termRef.current = handle;
+            }}
+            onResultsChanged={(event) =>
+              setFindResults({ index: event.resultIndex, count: event.resultCount })
+            }
+          />
+        </div>
       </div>
     </div>
   );
 
+  // The shell gives each slot a fixed grid cell under a fixed parent,
+  // and showing, hiding, or resizing the panel only rewrites the column
+  // template on the shell root. terminalAreaElement and inputElement
+  // therefore keep their parents for the life of the window, so the
+  // live Terminal and the Input never remount: no scrollback reload, no
+  // lost underlay pointer forwarding, and no dropped command history.
+  // The panel keeps its panes mounted while hidden, too.
   return (
-    <main
-      className={`app${sidePanelsFillHeight ? ' app-side-fill' : ''}`}
+    <AppShell
+      panelOpen={panelOpen}
+      panelWidth={panelWidth}
+      onPanelWidth={setPanelWidth}
       onMouseUp={handleAppMouseUp}
+      titleBand={
+        <TitleBand
+          connection={connection}
+          panelOpen={panelOpen}
+          onTogglePanel={togglePanelOpen}
+          onOpenPalette={() => setPaletteOpen(true)}
+          paneTree={panelLayout?.root ?? null}
+          onAddPane={addPaneType}
+          onMenuClosed={() => inputRef.current?.focus()}
+        />
+      }
+      terminal={terminalAreaElement}
+      input={inputElement}
+      statusLine={<StatusLine connected={connection.live} showVitals={!panelOpen} />}
+      panel={<PanelHost />}
     >
-      <TopBar
-        mapOpen={panelLayout.placements.map.zone !== 'hidden'}
-        onToggleMap={() => togglePanelVisibility('map')}
-        onOpenHelp={() => setHelpOpen(true)}
-        connectionStatus={status}
-        onConnectionError={handleError}
-      />
-      {grouped.top.length > 0 && (
-        <div className="panel-zone panel-zone-top">{grouped.top.map(renderPanel)}</div>
-      )}
-      <div className="main-row">
-        {leftHasAny && (
-          <Resizable
-            storageKey="vosh.layout.leftZoneWidth"
-            anchor="left"
-            defaultSize={360}
-            minSize={200}
-            maxSize={720}
-            className="panel-zone panel-zone-left"
-            handleLabel="resize left panel zone"
-          >
-            {renderSideZoneInner(grouped.leftTop, grouped.leftBottom)}
-          </Resizable>
-        )}
-        {sidePanelsFillHeight ? (
-          <div className="terminal-column">
-            {terminalAreaElement}
-            {bottomZoneElement}
-            {inputElement}
-            <StatusBar />
-          </div>
-        ) : (
-          terminalAreaElement
-        )}
-        {rightHasAny && (
-          <Resizable
-            storageKey="vosh.layout.rightZoneWidth"
-            anchor="right"
-            defaultSize={360}
-            minSize={200}
-            maxSize={720}
-            className="panel-zone panel-zone-right"
-            handleLabel="resize right panel zone"
-          >
-            {renderSideZoneInner(grouped.rightTop, grouped.rightBottom)}
-          </Resizable>
-        )}
-      </div>
-      {!sidePanelsFillHeight && bottomZoneElement}
-      {!sidePanelsFillHeight && inputElement}
-      {!sidePanelsFillHeight && <StatusBar />}
       <UpdateNotice />
       <Toasts />
       {terminalMenu && (
@@ -1680,7 +1372,7 @@ function App() {
       )}
       {paletteOpen && <CommandPalette deps={paletteDeps()} onClose={() => setPaletteOpen(false)} />}
       {helpOpen && <HelpView onClose={() => setHelpOpen(false)} />}
-    </main>
+    </AppShell>
   );
 }
 
