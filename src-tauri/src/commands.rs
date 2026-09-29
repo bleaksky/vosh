@@ -3207,28 +3207,34 @@ async fn analyze_migration(
     let Some(set) = guard.as_ref() else {
         return Err(PROFILES_NOT_LOADED.into());
     };
-    let sources = migration_sources(set)?;
+    let (sources, _) = migration_sources(set)?;
     Ok(crate::migration::analyze_profiles(&sources))
 }
 
+/// What [`migration_sources`] reads: each profile with what its file
+/// holds, and the enabled preset lists of the saved files.
+type MigrationSources = (Vec<(String, ProfileConfig)>, Vec<Vec<String>>);
+
 /// Every profile in index order with what its file holds, for the shared
-/// catalog wizard. A profile that never saved a file brings the defaults.
-/// A file that does not read stops the wizard, since the catalog would
-/// miss its items.
-fn migration_sources(
-    set: &crate::profile_set::ProfileSet,
-) -> Result<Vec<(String, ProfileConfig)>, String> {
+/// catalog wizard, and the enabled preset list of each profile that saved
+/// a file. A profile that never saved a file brings the defaults and no
+/// preset list, the way launch leaves it out. A file that does not read
+/// stops the wizard, since the catalog would miss its items.
+fn migration_sources(set: &crate::profile_set::ProfileSet) -> Result<MigrationSources, String> {
     let mut sources = Vec::with_capacity(set.list().len());
+    let mut preset_lists = Vec::new();
     for entry in set.list() {
         let path = set.profile_path(&entry.name);
         let cfg = if path.exists() {
-            ProfileConfig::load(&path).map_err(|e| e.to_string())?
+            let cfg = ProfileConfig::load(&path).map_err(|e| e.to_string())?;
+            preset_lists.push(cfg.ui.enabled_presets.clone());
+            cfg
         } else {
             ProfileConfig::default()
         };
         sources.push((entry.name.clone(), cfg));
     }
-    Ok(sources)
+    Ok((sources, preset_lists))
 }
 
 /// One conflict resolution from the wizard. Identifies a single
@@ -3301,16 +3307,26 @@ async fn apply_migration(
     // same set the user just previewed, but a few seconds may have
     // passed and we want the fresh snapshot rather than caching across
     // commands.
-    let (previously_active, sources) = {
+    let (previously_active, (sources, preset_lists)) = {
         let guard = state.profile_set.lock().await;
         let Some(set) = guard.as_ref() else {
             return Err(PROFILES_NOT_LOADED.into());
         };
         (set.active_name().to_string(), migration_sources(set)?)
     };
+    let live_presets = state.profile.lock().await.ui.enabled_presets.clone();
 
     let plan = crate::migration::analyze_profiles(&sources);
     let mut catalog = plan.auto_resolved;
+    // The catalog owns which presets are on. The profile files move to
+    // legacy below, so a catalog without a list would find none at the
+    // next launch and take the defaults, turning on presets every
+    // character had off. It takes the list here instead, by the rule
+    // launch uses.
+    catalog.enabled_presets = Some(crate::loadout_store::first_catalog_presets(
+        &preset_lists,
+        &live_presets,
+    ));
     for conflict in &plan.conflicts {
         let chosen_source = resolutions
             .iter()
@@ -4726,6 +4742,47 @@ mod tests {
             let before = read(&catalog_path(dir.path()));
             refused(&state, dir.path()).await;
             assert_eq!(read(&catalog_path(dir.path())), before);
+        }
+
+        /// Save `name`'s file with `list` as its enabled presets.
+        fn write_presets(set: &ProfileSet, name: &str, list: &[&str]) {
+            let mut config = ProfileConfig::default();
+            config.ui.enabled_presets = list.iter().map(|s| (*s).to_string()).collect();
+            config.save(&set.profile_path(name)).unwrap();
+        }
+
+        #[tokio::test]
+        async fn the_wizard_keeps_off_a_preset_every_character_had_off() {
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            // Both characters turned the potion labels off.
+            write_presets(
+                &set,
+                crate::profile_set::DEFAULT_PROFILE_NAME,
+                &["healing_basics"],
+            );
+            write_presets(&set, "Healer", &["healing_basics", "herb_labels"]);
+            let state = launch_state(dir.path()).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+
+            let on = vec!["healing_basics".to_string(), "herb_labels".to_string()];
+            let (mut catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+            assert_eq!(catalog.enabled_presets, Some(on.clone()));
+
+            // The first launch in loadout mode finds the profile files in
+            // legacy, so a catalog with no list would take the defaults
+            // and turn the potion labels back on.
+            let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+            let mut live = crate::profile::Profile::default();
+            let _notices = crate::profile_config::load_at_launch(&set, &mut live);
+            let lists = catalog
+                .enabled_presets
+                .is_none()
+                .then(|| crate::loadout_store::profile_preset_lists(&set));
+            crate::loadout_store::adopt_catalog_presets(&mut catalog, &mut live, lists.as_ref());
+            assert_eq!(live.ui.enabled_presets, on);
         }
     }
 }
