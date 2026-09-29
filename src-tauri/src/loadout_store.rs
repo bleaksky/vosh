@@ -77,6 +77,22 @@ pub(crate) fn loadouts_path(app_data: &Path) -> PathBuf {
     app_data.join(LOADOUTS_FILE)
 }
 
+/// The folder the shared catalog wizard copies each profile file into
+/// before it changes any.
+pub(crate) fn legacy_dir(app_data: &Path) -> PathBuf {
+    app_data.join("profiles").join("legacy")
+}
+
+/// True when the legacy folder holds a copy of a profile file.
+fn legacy_copies_present(app_data: &Path) -> bool {
+    std::fs::read_dir(legacy_dir(app_data)).is_ok_and(|entries| {
+        entries.filter_map(Result::ok).any(|entry| {
+            entry.path().extension().is_some_and(|ext| ext == "toml")
+                && entry.file_type().is_ok_and(|t| t.is_file())
+        })
+    })
+}
+
 /// True iff `catalog.toml` exists at the app data root. The wizard in
 /// Phase B3 is what writes that file the first time; until then this
 /// returns false and `AppState` stays on the legacy per-profile path.
@@ -179,7 +195,10 @@ pub(crate) fn load_path_b_at_launch(
 /// loadouts.toml, or None when it may. The wizard builds the catalog
 /// from the profile files, and in loadout mode those hold no aliases or
 /// triggers, so it only writes where neither file is on disk yet. A file
-/// Vosh could not read at launch stays refused even once it is gone.
+/// Vosh could not read at launch stays refused even once it is gone. It
+/// also refuses while profiles/legacy holds a copy from an earlier run,
+/// which may be the only copy of your items, since a run over files an
+/// earlier run took the items out of would copy those over it.
 pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
     let catalog = catalog_path(app_data);
     let loadouts = loadouts_path(app_data);
@@ -198,6 +217,13 @@ pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
         return Some(
             "Vosh found loadouts.toml from an earlier shared catalog and will not save over it. \
              Move the file out of the Vosh folder to build a new catalog.",
+        );
+    }
+    if legacy_copies_present(app_data) {
+        return Some(
+            "Vosh found copies of your profile files in profiles/legacy from an earlier shared \
+             catalog and will not save over them. Move the legacy folder out of the profiles \
+             folder to build a new catalog.",
         );
     }
     None
