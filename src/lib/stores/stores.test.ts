@@ -25,6 +25,11 @@ vi.mock('@tauri-apps/api/core', () => ({
   },
 }));
 
+// The tick sound is Web Audio, so the store tests only check when it
+// plays.
+const playTickSound = vi.hoisted(() => vi.fn());
+vi.mock('../tickSound', () => ({ playTickSound }));
+
 function fire(event: string, payload: unknown): void {
   for (const cb of handlers.get(event) ?? []) cb({ payload });
 }
@@ -59,6 +64,7 @@ beforeEach(() => {
   vi.resetModules();
   handlers.clear();
   commands.clear();
+  playTickSound.mockClear();
   vi.stubGlobal('window', globalThis);
   commands.set('ui_get_config', { tracked_affects: [{ name: 'sanctuary' }, 'haste'] });
   commands.set('target_get', { name: 'guard', room_idx: 2, quick_keys: [] });
@@ -266,6 +272,27 @@ describe('stores on the event bus', () => {
       sound: false,
     });
     expect(s.tick.getTick()).toMatchObject({ active: true, secsSinceTick: 12, warnAt: 8 });
+  });
+
+  it('play the tick sound once when the tick lands with the sound on', async () => {
+    await load();
+    const report = (fired: boolean, sound: boolean) =>
+      fire('session://tick', {
+        enabled: true,
+        interval_ms: 30_000,
+        remaining_ms: 30_000,
+        elapsed_ms: 0,
+        overdue: false,
+        synced: true,
+        fired,
+        sound,
+      });
+    report(false, true);
+    expect(playTickSound).not.toHaveBeenCalled();
+    report(true, false);
+    expect(playTickSound).not.toHaveBeenCalled();
+    report(true, true);
+    expect(playTickSound).toHaveBeenCalledTimes(1);
   });
 
   it('hide the tick at once when Settings turns it off', async () => {

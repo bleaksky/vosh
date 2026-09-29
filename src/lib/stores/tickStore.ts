@@ -9,6 +9,7 @@ import {
   type TickCount,
   type TickPayload,
 } from '../session';
+import { playTickSound } from '../tickSound';
 import { createStore } from './store';
 
 // The tick for the status line. The backend tick timer is the source.
@@ -167,6 +168,8 @@ export function startTickStore(): void {
   started = true;
   refetchConfig();
   void onTick((next) => {
+    // The report that lands the tick, once per tick.
+    if (next.fired && next.sound) playTickSound();
     payload = next;
     window.clearTimeout(staleTimer);
     staleTimer = window.setTimeout(() => {
