@@ -75,6 +75,8 @@ function deps(over: Partial<PaletteDeps> = {}): PaletteDeps {
     worldName: 'The Forsaken Lands',
     panelOpen: true,
     togglePanel: () => {},
+    splitOpen: false,
+    toggleSplit: () => {},
     paneVisible: (pane) => pane === 'map' || pane === 'affects',
     togglePane: () => {},
     openHelp: () => {},
@@ -90,9 +92,15 @@ function deps(over: Partial<PaletteDeps> = {}): PaletteDeps {
 const flat = (sections: ReturnType<typeof paletteSections>) => sections.flatMap((s) => s.rows);
 
 describe('paletteSections', () => {
-  it('lists View, Settings and Session with Disconnect as the last row', () => {
+  it('lists the approved View and Session rows with Disconnect last', () => {
     const sections = paletteSections(buildPaletteEntries(deps()), '', []);
-    expect(sections.map((s) => s.label)).toEqual(['View', 'Settings', 'Session']);
+    expect(sections.map((s) => s.label)).toEqual(['View', 'Session']);
+    expect(sections[0].rows.map((r) => r.title)).toEqual([
+      'Show panel',
+      'Split terminal',
+      'Choose theme',
+    ]);
+    expect(sections[0].rows[1].keys).toBe('Mod+\\');
     const rows = flat(sections);
     expect(rows[rows.length - 1].id).toBe('disconnect');
     expect(rows.filter((r) => r.destructive).map((r) => r.id)).toEqual(['disconnect']);
@@ -102,6 +110,8 @@ describe('paletteSections', () => {
     const rows = buildPaletteEntries(deps());
     const checked = rows.filter((r) => r.checked).map((r) => r.id);
     expect(checked).toEqual(['panel', 'pane-map', 'pane-affects']);
+    const split = buildPaletteEntries(deps({ splitOpen: true })).find((r) => r.id === 'split');
+    expect(split?.checked).toBe(true);
   });
 
   it('names the world on the connect row when you are offline', () => {
@@ -127,9 +137,10 @@ describe('paletteSections', () => {
   it('hides search only rows until you type, then ranks matches by section', () => {
     const entries = buildPaletteEntries(deps());
     expect(flat(paletteSections(entries, '', [])).some((r) => r.searchOnly)).toBe(false);
-    const sections = paletteSections(entries, 'theme', ['find']);
-    expect(sections.map((s) => s.label)).toEqual(['View', 'Settings']);
-    expect(sections[1].rows[0].id).toBe('settings-themes');
+    const sections = paletteSections(entries, 'settings', ['find']);
+    expect(sections.map((s) => s.label)).toEqual(['View']);
+    expect(sections[0].rows[0].id).toBe('settings');
+    expect(sections[0].rows.map((r) => r.id)).toContain('settings-themes');
   });
 });
 
