@@ -176,7 +176,7 @@ interface PlanViewProps {
   disabled: boolean;
 }
 
-function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
+export function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
   const autoResolvedTotal =
     plan.auto_resolved.aliases.length +
     plan.auto_resolved.triggers.length +
@@ -204,14 +204,20 @@ function PlanView({ plan, picks, onPick, disabled }: PlanViewProps) {
           <CountChip label="macros" count={plan.auto_resolved.macros.length} />
         </div>
         <div className="migration-hint">
-          items present in exactly one source profile, or identical across every source after group
-          retagging. these collapse into a single entry in the catalog with no user input needed.
+          Items only one profile has, and items each profile that has them holds with the same
+          content. Copies that differ only in their folder or in whether they are on become one
+          item, and each profile keeps it on or off as it had it. A trigger that differs between
+          profiles keeps each version, and the copies of a preset trigger become the library
+          version.
         </div>
       </Section>
 
       <Section title={`conflicts (${plan.conflicts.length})`}>
         {plan.conflicts.length === 0 ? (
-          <Empty>no conflicts — every named item is either unique or byte-identical.</Empty>
+          <Empty>
+            No conflicts. Every alias and macro is the same in each profile that has it, apart from
+            its folder and whether it is on.
+          </Empty>
         ) : (
           <ul className="migration-conflict-list">
             {plan.conflicts.map((c) => {
