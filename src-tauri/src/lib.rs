@@ -255,11 +255,25 @@ pub fn run() {
                             let profile = state.profile.clone();
                             // The catalog owns which presets are on, with
                             // the preset triggers. An older catalog takes
-                            // the active profile's list once, and saves it
-                            // so a launch as another character keeps it.
+                            // every preset any profile file had on, once,
+                            // and saves it so a launch as another
+                            // character keeps it. It waits while a profile
+                            // file does not read.
+                            let preset_lists = tauri::async_runtime::block_on(async {
+                                state
+                                    .profile_set
+                                    .lock()
+                                    .await
+                                    .as_ref()
+                                    .and_then(loadout_store::profile_preset_lists)
+                            });
                             let presets_moved = tauri::async_runtime::block_on(async {
                                 let mut p = profile.lock().await;
-                                loadout_store::adopt_catalog_presets(&mut catalog, &mut p)
+                                loadout_store::adopt_catalog_presets(
+                                    &mut catalog,
+                                    &mut p,
+                                    preset_lists.as_deref(),
+                                )
                             });
                             if presets_moved {
                                 match loadout_store::save_global_catalog(&path, &catalog) {

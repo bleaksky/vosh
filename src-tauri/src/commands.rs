@@ -377,6 +377,16 @@ pub(crate) async fn persist_state(state: &SharedState, app_data: Option<&std::pa
 /// `global.toml` write so theme / font / `dock_layout` edits land on
 /// the same path in both modes.
 async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
+    // A catalog that has not taken the enabled presets yet waits for a
+    // launch that reads every profile file (see
+    // `loadout_store::adopt_catalog_presets`), so a save leaves the list
+    // out rather than write the live profile's list alone.
+    let presets_waiting = state
+        .global_catalog
+        .lock()
+        .await
+        .as_ref()
+        .is_some_and(|c| c.enabled_presets.is_none());
     // Catalog. Pull aliases / triggers / macros directly from the live
     // Profile. The catalog is the authoritative source in Path B mode
     // so an overwrite here is correct — anything the user typed via
@@ -385,7 +395,10 @@ async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
         let p = state.profile.lock().await;
         // The enabled presets ride along, since the preset triggers they
         // name live in the catalog too.
-        let catalog = crate::loadout::GlobalCatalog::from_profile(&p);
+        let mut catalog = crate::loadout::GlobalCatalog::from_profile(&p);
+        if presets_waiting {
+            catalog.enabled_presets = None;
+        }
         let scope = state
             .profile_set
             .lock()
@@ -4476,5 +4489,33 @@ mod tests {
             state.profile.lock().await.ui.enabled_presets,
             vec!["healing_basics".to_string()]
         );
+    }
+
+    #[tokio::test]
+    async fn a_loadout_save_leaves_the_presets_to_a_catalog_still_waiting() {
+        use std::sync::Arc;
+        let dir = tempfile::tempdir().unwrap();
+        let state: super::SharedState = Arc::new(super::AppState::default());
+        *state.profile_set.lock().await = Some(james_like_set(dir.path()));
+        // A profile file did not read at launch, so the catalog took no
+        // list and the live profile kept its own.
+        *state.global_catalog.lock().await = Some(crate::loadout::GlobalCatalog::default());
+        state.profile.lock().await.ui.enabled_presets = vec!["healing_basics".into()];
+
+        persist(&state, dir.path()).await;
+        let saved = crate::loadout_store::load_global_catalog(dir.path()).unwrap();
+        assert_eq!(saved.enabled_presets, None);
+
+        // Once the catalog holds a list, the saves keep it current.
+        state
+            .global_catalog
+            .lock()
+            .await
+            .as_mut()
+            .unwrap()
+            .enabled_presets = Some(Vec::new());
+        persist(&state, dir.path()).await;
+        let saved = crate::loadout_store::load_global_catalog(dir.path()).unwrap();
+        assert_eq!(saved.enabled_presets, Some(vec!["healing_basics".into()]));
     }
 }
