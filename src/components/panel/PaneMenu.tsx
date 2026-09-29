@@ -6,6 +6,7 @@ import {
   closeHere,
   openSettingsTab,
   paneToSplitIn,
+  returnToCommandLine,
   showHereInstead,
   splitHere,
 } from './paneActions';
@@ -19,8 +20,7 @@ import { PANE_LABELS, offeredPaneTypes } from './paneTypes';
 
 interface Props {
   leaf: PaneLeaf;
-  /** The more button. The menu hangs 12 px under it and returns focus
-   *  to it on Escape. */
+  /** The more button. The menu hangs 12 px under it. */
   anchor: HTMLButtonElement;
   onClose: () => void;
 }
@@ -54,9 +54,11 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
   const pane = anchor.closest('section')?.getBoundingClientRect() ?? button;
   const at = { x: pane.left + INSET, y: button.bottom + DROP, flipY: button.top - DROP };
 
+  // Like the title band's menus, closing hands the caret back to the
+  // command line, unless you clicked somewhere else on purpose.
   const close = (reason: MenuCloseReason | 'select') => {
     onClose();
-    if (reason === 'escape') anchor.focus();
+    if (reason !== 'outside') returnToCommandLine();
   };
   const run = (action: () => void) => () => {
     close('select');

@@ -92,6 +92,12 @@ export function updateLeafProps(id: string, patch: Record<string, string>): void
   if (root) setPaneTree(setLeafProps(root, id, patch));
 }
 
+/** Hand the caret back to the command line, the way the title band's
+ *  menus do when they close. App listens for this event. */
+export function returnToCommandLine(): void {
+  window.dispatchEvent(new CustomEvent('vosh:focus-input'));
+}
+
 /** Open Settings on `tab`. The window may not exist yet, so the tab
  *  travels twice, the way the command palette sends it: through
  *  localStorage for a cold open and an event for a window already up. */
