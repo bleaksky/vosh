@@ -163,6 +163,23 @@ pub(crate) struct LoginClaim {
 }
 
 impl AutoMatch {
+    /// Trim the host and the names, and drop blank names and names
+    /// repeated in another case.
+    fn cleaned(mut self) -> Self {
+        self.host = self
+            .host
+            .map(|h| h.trim().to_string())
+            .filter(|h| !h.is_empty());
+        let mut seen = std::collections::HashSet::new();
+        self.characters = self
+            .characters
+            .into_iter()
+            .map(|c| c.trim().to_string())
+            .filter(|c| !c.is_empty() && seen.insert(c.to_ascii_lowercase()))
+            .collect();
+        self
+    }
+
     /// Whether this entry lists `character`, ignoring case.
     fn names(&self, character: &str) -> bool {
         let wanted = character.trim().to_ascii_lowercase();
@@ -544,19 +561,52 @@ impl ProfileSet {
 
     /// Create an empty entry. The per-profile file is created on the
     /// next save (so a brand-new profile inherits whatever defaults
-    /// `ProfileConfig::default()` produces on first persist).
+    /// `ProfileConfig::default()` produces on first persist). A test
+    /// shorthand for `create_from` with no source and no claim.
+    #[cfg(test)]
     pub(crate) fn create(&mut self, name: &str) -> Result<(), ProfileSetError> {
+        self.create_from(name, None, None).map(|_| ())
+    }
+
+    /// Create `name` with `auto_match` as its login claim. With
+    /// `copy_from` it starts as a copy of that profile's file and
+    /// description. The copy reads the file as it sits on disk, so the
+    /// caller persists the live profile first when copying it. The
+    /// claim takes nothing from other profiles, which is what
+    /// `set_login` is for. Does not switch.
+    pub(crate) fn create_from(
+        &mut self,
+        name: &str,
+        copy_from: Option<&str>,
+        auto_match: Option<AutoMatch>,
+    ) -> Result<ProfileEntry, ProfileSetError> {
         let name = sanitize_name(name)?;
+        let description = match copy_from {
+            Some(source) => {
+                let Some(source_entry) = self.get(source) else {
+                    return Err(ProfileSetError::NotFound(source.to_string()));
+                };
+                source_entry.description.clone()
+            }
+            None => None,
+        };
         if self.get(&name).is_some() {
             return Err(ProfileSetError::AlreadyExists(name));
         }
-        self.index.profiles.push(ProfileEntry {
+        if let Some(source) = copy_from {
+            let src_path = self.profile_path(source);
+            if src_path.exists() {
+                std::fs::copy(&src_path, self.profile_path(&name))?;
+            }
+        }
+        let entry = ProfileEntry {
             name,
-            description: None,
-            auto_match: None,
-        });
+            description,
+            auto_match: auto_match.map(AutoMatch::cleaned),
+        };
+        self.index.profiles.push(entry.clone());
         self.save_index()?;
-        Ok(())
+        Ok(entry)
     }
 
     /// Delete a non-active profile's entry + per-profile file.
@@ -600,31 +650,9 @@ impl ProfileSet {
 
     /// Copy an existing profile under a new name. Does not switch.
     pub(crate) fn duplicate(&mut self, source: &str, new: &str) -> Result<(), ProfileSetError> {
-        let new = sanitize_name(new)?;
-        if self.get(source).is_none() {
-            return Err(ProfileSetError::NotFound(source.to_string()));
-        }
-        if self.get(&new).is_some() {
-            return Err(ProfileSetError::AlreadyExists(new));
-        }
-        let src_path = self.profile_path(source);
-        let dst_path = self.profile_path(&new);
-        if src_path.exists() {
-            std::fs::copy(&src_path, &dst_path)?;
-        }
-        let source_entry = self
-            .get(source)
-            .expect("source presence checked above")
-            .clone();
-        self.index.profiles.push(ProfileEntry {
-            name: new,
-            description: source_entry.description.clone(),
-            // Auto-match deliberately NOT copied: the duplicate is
-            // usually a starting point for a NEW character/MUD pairing.
-            auto_match: None,
-        });
-        self.save_index()?;
-        Ok(())
+        // Auto-match deliberately NOT copied: the duplicate is usually
+        // a starting point for a NEW character/MUD pairing.
+        self.create_from(new, Some(source), None).map(|_| ())
     }
 
     /// Set the active profile. Caller is responsible for writing the
@@ -1227,6 +1255,59 @@ characters = ["Erelei", "Vanek"]
         let entry = set.set_world("Blank", Some("  ".into()), None).unwrap();
         assert!(entry.auto_match.is_none());
         assert!(set.set_world("Nobody", None, None).is_err());
+    }
+
+    #[test]
+    fn create_from_copies_the_source_and_takes_the_claim_as_given() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        std::fs::write(set.profile_path(DEFAULT_PROFILE_NAME), "marker = true\n").unwrap();
+
+        let mut seed = claim(
+            " play.theforsakenlands.com ",
+            Some(1848),
+            &[" Caelaor ", "caelaor", ""],
+        );
+        seed.enabled = true;
+        let entry = set
+            .create_from(" Caelaor ", Some(DEFAULT_PROFILE_NAME), Some(seed))
+            .unwrap();
+        assert_eq!(entry.name, "Caelaor");
+        assert_eq!(entry.description.as_deref(), Some("Immortal"));
+        let am = entry.auto_match.unwrap();
+        assert_eq!(am.host.as_deref(), Some("play.theforsakenlands.com"));
+        assert_eq!(am.characters, vec!["Caelaor"]);
+        assert_eq!(
+            std::fs::read_to_string(set.profile_path("Caelaor")).unwrap(),
+            "marker = true\n"
+        );
+        // Creating claims nothing away: Healer keeps Caelaor and still
+        // wins the tie in index order.
+        assert_eq!(characters_of(&set, "Healer"), vec!["Caelaor"]);
+        assert!(set.login_on("Healer"));
+        assert!(!set.login_on("Caelaor"));
+        assert_eq!(set.active_name(), DEFAULT_PROFILE_NAME);
+        let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        assert!(reloaded.get("Caelaor").is_some());
+    }
+
+    #[test]
+    fn create_from_without_a_source_starts_empty() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        let entry = set.create_from("Fresh", None, None).unwrap();
+        assert!(entry.description.is_none());
+        assert!(entry.auto_match.is_none());
+        assert!(!set.profile_path("Fresh").exists());
+        assert!(matches!(
+            set.create_from("Other", Some("Nobody"), None),
+            Err(ProfileSetError::NotFound(_))
+        ));
+        assert!(matches!(
+            set.create_from("Fresh", None, None),
+            Err(ProfileSetError::AlreadyExists(_))
+        ));
+        assert!(set.get("Other").is_none());
     }
 
     #[test]

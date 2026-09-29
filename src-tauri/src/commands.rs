@@ -1657,21 +1657,47 @@ pub(crate) async fn profiles_list(
     })
 }
 
+/// Create a profile with `auto_match` as its login claim, starting as a
+/// copy of `copy_from` when given. Returns the new entry and does not
+/// switch. The claim takes nothing from other profiles, so a caller
+/// that wants the character for itself follows with
+/// `profile_set_login`.
 #[tauri::command]
 pub(crate) async fn profile_create(
     app: AppHandle,
     state: State<'_, SharedState>,
     name: String,
-) -> Result<(), String> {
-    {
+    copy_from: Option<String>,
+    auto_match: Option<crate::profile_set::AutoMatch>,
+) -> Result<crate::profile_set::ProfileEntry, String> {
+    let shared: SharedState = state.inner().clone();
+    // Held across the flush and the copy, so the copy reads what the
+    // flush wrote and no persist rewrites the source mid copy.
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    if let Some(source) = copy_from.as_deref() {
+        let copying_live = shared
+            .profile_set
+            .lock()
+            .await
+            .as_ref()
+            .is_some_and(|set| set.active_name() == source);
+        // The live profile can run two seconds ahead of its file. After
+        // `#profile reset` or `load` it is deliberately diverged, and
+        // the copy takes the file as it stands.
+        if copying_live && !AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+            persist_profile_locked(&app, &shared).await;
+        }
+    }
+    let entry = {
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
             return Err(PROFILES_NOT_LOADED.into());
         };
-        set.create(&name).map_err(|e| e.to_string())?;
-    }
-    broadcast(&app, "vosh://profiles-changed", &name);
-    Ok(())
+        set.create_from(&name, copy_from.as_deref(), auto_match)
+            .map_err(|e| e.to_string())?
+    };
+    broadcast(&app, "vosh://profiles-changed", &entry.name);
+    Ok(entry)
 }
 
 #[tauri::command]
