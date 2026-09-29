@@ -633,6 +633,12 @@
   color: var(--text);
 }
 
+/* A press on the card's text focuses the card, so Enter there confirms.
+   The card is not a control and draws no ring. */
+.ov-confirm:focus {
+  outline: none;
+}
+
 .ov-confirm-title {
   margin: 0;
   font-size: 15px;
