@@ -9,6 +9,7 @@ import {
   profileSwitch,
   profilesList,
 } from './session';
+import { pushToast } from './toasts';
 
 // The session the title band shows and the session menu drives. Moved
 // out of the old top bar chip (Connect.tsx) so the connect logic lives
@@ -149,21 +150,40 @@ export function useSavedTarget(): [ConnectionTarget, (target: ConnectionTarget) 
   return [target, save];
 }
 
+/** The sentence a profile switch that failed at connect shows you. The
+ *  backend answers with a sentence that names the profile you are still
+ *  using, and it passes through. */
+export function profileSwitchErrorMessage(error: unknown): string {
+  const text = String(error instanceof Error ? error.message : error).trim();
+  return text || 'Vosh could not switch profiles, so you connect with the profile you were using.';
+}
+
 /** Switch to the profile that matches the host, then connect. Profiles
  *  pinned to a character soft skip here because the character is
  *  unknown until the MUD sends Char.Status after login, and the
- *  session's GMCP handler swaps to them then. */
+ *  session's GMCP handler swaps to them then. A switch that fails
+ *  leaves you on the profile you were using, says so in a toast, and
+ *  connects under that profile. */
 export async function connectTo(target: ConnectionTarget): Promise<void> {
+  let switchTo: string | null = null;
   try {
     const matchName = await profileResolveMatch(target.host, target.port, null);
     if (matchName) {
       const current = await profilesList();
-      if (matchName !== current.active) await profileSwitch(matchName);
+      if (matchName !== current.active) switchTo = matchName;
     }
   } catch (matchErr) {
     // Profile resolve is best effort. A profile system error never
     // blocks a connect.
     console.warn('[profile match]', matchErr);
+  }
+  if (switchTo) {
+    try {
+      await profileSwitch(switchTo);
+    } catch (switchErr) {
+      console.warn('[profile switch]', switchErr);
+      pushToast({ kind: 'error', message: profileSwitchErrorMessage(switchErr) });
+    }
   }
   await connectSession(target.host, target.port, target.tls);
 }

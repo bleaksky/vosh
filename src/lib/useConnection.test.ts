@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
+import { pushToast } from './toasts';
 import {
   CONNECTION_TARGET_EVENT,
+  connectTo,
   KNOWN_WORLDS,
   knownWorld,
   loadTarget,
   parseTarget,
+  profileSwitchErrorMessage,
   saveConnectionTarget,
   subscribeConnectionTarget,
   worldName,
@@ -16,6 +20,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => {})),
 }));
+vi.mock('./toasts', () => ({ pushToast: vi.fn() }));
 
 describe('the saved target', () => {
   const store = new Map<string, string>();
@@ -113,5 +118,61 @@ describe('parseTarget', () => {
     expect(parseTarget({ host: 'mud.example.org', port: 70000 })).toBeNull();
     expect(parseTarget({ host: 'mud.example.org', port: 23.5 })).toBeNull();
     expect(parseTarget(null)).toBeNull();
+  });
+});
+
+describe('connectTo', () => {
+  const HEALER_UNREADABLE =
+    'Vosh could not open the Healer profile because it could not read the profile file. You are still using the Default profile.';
+  const target = { host: 'play.theforsakenlands.com', port: 1848, tls: false };
+
+  /** A backend whose match for the target is Healer while Default is
+   *  live, and whose switch answers with `switched`. */
+  function backend(switched: () => Promise<unknown>) {
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === 'profile_resolve_match') return Promise.resolve('Healer');
+      if (cmd === 'profiles_list') return Promise.resolve({ active: 'default', profiles: [] });
+      if (cmd === 'profile_switch') return switched();
+      return Promise.resolve();
+    });
+  }
+
+  afterEach(() => {
+    vi.mocked(invoke).mockReset();
+    vi.mocked(pushToast).mockClear();
+  });
+
+  it('shows a switch that failed as a toast and connects under the live profile', async () => {
+    backend(() => Promise.reject(HEALER_UNREADABLE));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await connectTo(target);
+    warn.mockRestore();
+    expect(pushToast).toHaveBeenCalledWith({ kind: 'error', message: HEALER_UNREADABLE });
+    expect(invoke).toHaveBeenLastCalledWith('session_connect', target);
+  });
+
+  it('switches quietly when the switch works', async () => {
+    backend(() => Promise.resolve());
+    await connectTo(target);
+    expect(invoke).toHaveBeenCalledWith('profile_switch', { name: 'Healer' });
+    expect(pushToast).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenLastCalledWith('session_connect', target);
+  });
+});
+
+describe('profileSwitchErrorMessage', () => {
+  it('passes the backend sentence through', () => {
+    expect(profileSwitchErrorMessage(' Vosh cannot find a profile named Healer. ')).toBe(
+      'Vosh cannot find a profile named Healer.',
+    );
+    expect(profileSwitchErrorMessage(new Error('Vosh cannot find a profile named Healer.'))).toBe(
+      'Vosh cannot find a profile named Healer.',
+    );
+  });
+
+  it('says what happened when the backend gives no sentence', () => {
+    expect(profileSwitchErrorMessage('')).toBe(
+      'Vosh could not switch profiles, so you connect with the profile you were using.',
+    );
   });
 });
