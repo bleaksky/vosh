@@ -105,8 +105,28 @@ export function moonPhaseWord(phase: number | null): MoonPhaseWord | null {
   return null;
 }
 
-/** Short moon label for the status line, like "Lysenties waxing". Uses
- *  the first moon in the sky, else the first moon listed. */
+/** The words for a moon's icon, like "Lysenties, half-lit and
+ *  growing". The server's phase name, else the phase word, else the
+ *  name alone. */
+export function moonTitle(moon: Moon): string {
+  const phase = moon.phase_name ?? moonPhaseWord(moon.phase);
+  return phase ? `${moon.name}, ${phase}` : moon.name;
+}
+
+export type MoonAlignment = 'Eclipse' | 'Triad' | 'Near alignment';
+
+/** The one word the sky earns beside the moons. An eclipse over the
+ *  triad over a near alignment. Null when the sky is quiet. */
+export function moonAlignment(moons: Moons | null): MoonAlignment | null {
+  if (!moons) return null;
+  if (moons.eclipse) return 'Eclipse';
+  if (moons.triad) return 'Triad';
+  if (moons.near_alignment) return 'Near alignment';
+  return null;
+}
+
+/** Short moon label, like "Lysenties waxing". Uses the first moon in
+ *  the sky, else the first moon listed. */
 export function moonLabel(moons: Moons | null): string | null {
   if (!moons || moons.moons.length === 0) return null;
   const moon = moons.moons.find((m) => m.active) ?? moons.moons[0];

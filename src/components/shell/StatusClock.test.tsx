@@ -4,13 +4,32 @@ import type { ChipStyle } from '../../lib/session';
 import { BUILTIN_THEMES, themeTokens } from '../../lib/themes';
 import frameCss from '../../styles/frame.css?raw';
 import { daylightTint } from './daylight';
-import { StatusClock, type ClockTick, type ClockTime } from './StatusClock';
+import { StatusClock, type ClockMoons, type ClockTick, type ClockTime } from './StatusClock';
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const STYLES: ChipStyle[] = ['value_only', 'caption_value', 'icon_value'];
 
-function draw(style: ChipStyle, tick: ClockTick | null, time: ClockTime | null): string {
-  return renderToStaticMarkup(<StatusClock style={style} tick={tick} time={time} />);
+function draw(
+  style: ChipStyle,
+  tick: ClockTick | null,
+  time: ClockTime | null,
+  moons: ClockMoons | null = null,
+): string {
+  return renderToStaticMarkup(<StatusClock style={style} tick={tick} time={time} moons={moons} />);
+}
+
+const SKY: ClockMoons = {
+  moons: [
+    { name: 'Lysenties', phase: 2, color: '#eceff4', label: 'Lysenties, half-lit and growing' },
+    { name: 'Nercuros', phase: 5, color: '#8fbcbb', label: 'Nercuros, nearly full and fading' },
+    { name: 'Dyphrities', phase: 1, color: '#bf616a', label: 'Dyphrities, a thin crescent' },
+  ],
+  alignment: null,
+};
+
+/** The moon labels in the order they draw. */
+function moonLabels(html: string): string[] {
+  return [...html.matchAll(/<svg class="shell-moon"[^>]*aria-label="([^"]*)"/g)].map((m) => m[1]);
 }
 
 /** The class lists of the readings, tick first. */
@@ -74,5 +93,48 @@ describe('StatusClock', () => {
   it('keeps the tick plain outside the warn window', () => {
     const html = draw('icon_value', { secs: 3, warn: false }, null);
     expect(readings(html)).toEqual([['shell-status-part']]);
+  });
+
+  it('draws the moons after the tick and the time, in the order given', () => {
+    const html = draw(
+      'value_only',
+      { secs: 14, warn: false },
+      { text: '8:42', tint: null, daytime: true },
+      SKY,
+    );
+    expect(html.indexOf('14s')).toBeLessThan(html.indexOf('8:42'));
+    expect(html.indexOf('8:42')).toBeLessThan(html.indexOf('<svg class="shell-moon"'));
+    expect(moonLabels(html)).toEqual(SKY.moons.map((moon) => moon.label));
+    expect(html).toContain('<title>Nercuros, nearly full and fading</title>');
+    expect(html.match(/<svg class="shell-moon" width="14" height="14"/g)).toHaveLength(3);
+  });
+
+  it('shows the moons caption only in the Caption style and says it in all three', () => {
+    expect(draw('caption_value', null, null, SKY)).toContain('<span>Moons</span>');
+    for (const style of ['value_only', 'icon_value'] as const) {
+      const html = draw(style, null, null, SKY);
+      expect(html).toContain('<span class="shell-sr">Moons</span>');
+      expect(moonLabels(html)).toHaveLength(3);
+    }
+  });
+
+  it('draws nothing for an empty sky', () => {
+    expect(draw('value_only', null, null, { moons: [], alignment: 'Triad' })).toBe('');
+    const html = draw('value_only', { secs: 3, warn: false }, null, { moons: [], alignment: null });
+    expect(html).not.toContain('Moons');
+    expect(moonLabels(html)).toEqual([]);
+  });
+
+  it('puts the sky word after the moons in the warn tone', () => {
+    const html = draw('icon_value', null, null, { ...SKY, alignment: 'Triad' });
+    const word = html.indexOf('<span class="shell-status-alignment">Triad</span>');
+    expect(word).toBeGreaterThan(html.lastIndexOf('<svg class="shell-moon"'));
+    expect(rule('.shell-status-alignment')).toMatch(/color:\s*var\(--warn\)/);
+    expect(draw('icon_value', null, null, SKY)).not.toContain('shell-status-alignment');
+  });
+
+  it('spaces the moons 4 px apart inside the 8 px item', () => {
+    expect(rule('.shell-status-moons')).toMatch(/gap:\s*4px/);
+    expect(rule('.shell-status-clock')).toMatch(/gap:\s*8px/);
   });
 });
