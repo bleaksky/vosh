@@ -3409,7 +3409,8 @@ pub(crate) async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, S
 /// uses this for the preview pane only. The companion
 /// [`migration_apply`] command commits the plan once the user picks
 /// winners for any conflicts. Refused while a profile file did not read
-/// at launch, or while catalog.toml or loadouts.toml is on disk, see
+/// at launch, while catalog.toml or loadouts.toml is on disk, or while
+/// profiles/legacy holds copies from an earlier run, see
 /// [`crate::loadout_store::migration_refusal`].
 #[tauri::command]
 pub(crate) async fn migration_analyze(
@@ -3529,9 +3530,10 @@ pub(crate) struct ConflictResolution {
 /// that fails puts back every file the run changed, so you stay in per
 /// profile mode and can run it again. A run that stops partway, or
 /// cannot put every file back, finishes at the next launch from the
-/// journal it saved first. Refused while a profile file did
-/// not read at launch, or while catalog.toml or loadouts.toml is on
-/// disk, see [`crate::loadout_store::migration_refusal`].
+/// journal it saved first. Refused while a profile file did not read at
+/// launch, while catalog.toml or loadouts.toml is on disk, or while
+/// profiles/legacy holds copies from an earlier run, see
+/// [`crate::loadout_store::migration_refusal`].
 #[tauri::command]
 pub(crate) async fn migration_apply(
     app: AppHandle,
