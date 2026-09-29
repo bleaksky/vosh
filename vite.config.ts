@@ -10,10 +10,9 @@ const pkg: { version: string } = JSON.parse(
 export default defineConfig(async () => ({
   plugins: [
     react(),
-    // Dev-only diagnostics sink for the WKWebView blank-chrome wedge:
-    // the webview keeps running JS while painting nothing, so the page
-    // POSTs its state here and it lands in the tauri dev log where it
-    // can actually be read.
+    // Dev-only diagnostics sink. WKWebView gives a dev run no console,
+    // so a page or a scripted check can POST text here and it lands in
+    // the tauri dev log where it can actually be read.
     {
       name: 'vosh-dbg-sink',
       configureServer(server: {
