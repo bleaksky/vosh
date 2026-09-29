@@ -50,7 +50,7 @@
 //! [`analyze_profiles`] for the preview.
 #![allow(dead_code)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 use vosh_alias::Alias;
@@ -118,6 +118,11 @@ pub(crate) struct MigrationPlan {
     /// Names of source profiles the plan covered. Useful for the
     /// wizard summary header.
     pub source_profiles: Vec<String>,
+    /// Each catalog group of each kind with the profiles it is on for,
+    /// which the group checkbox lists of each profile file follow. See
+    /// [`profile_file_for_catalog`].
+    #[serde(skip)]
+    pub groups: CatalogGroups,
 }
 
 /// Walk every source profile, bucket items by (kind, name), classify
@@ -162,11 +167,12 @@ pub(crate) fn analyze_profiles(profiles: &[(String, ProfileConfig)]) -> Migratio
                 .push((profile_name.clone(), mac.clone()));
         }
     }
-    let groups = CatalogGroups {
+    let tags = CatalogTags {
         aliases: tag_buckets(&mut aliases_by_name, |a| &mut a.group),
         triggers: tag_buckets(&mut triggers_by_name, |t| &mut t.group),
         macros: tag_buckets(&mut macros_by_key, |m| &mut m.group),
     };
+    plan.groups = groups_on(profiles, &tags);
 
     // Classify each bucket.
     for (name, variants) in aliases_by_name {
@@ -223,7 +229,7 @@ pub(crate) fn analyze_profiles(profiles: &[(String, ProfileConfig)]) -> Migratio
 
     plan.loadouts = profiles
         .iter()
-        .map(|(name, cfg)| derive_loadout(name, cfg, &groups))
+        .map(|(name, _)| derive_loadout(name, &plan.groups))
         .collect();
 
     plan
@@ -231,10 +237,103 @@ pub(crate) fn analyze_profiles(profiles: &[(String, ProfileConfig)]) -> Migratio
 
 /// The catalog group each name of each kind lands in, by name (by key
 /// for macros).
-struct CatalogGroups {
+struct CatalogTags {
     aliases: BTreeMap<String, String>,
     triggers: BTreeMap<String, String>,
     macros: BTreeMap<String, String>,
+}
+
+/// Each catalog group of one kind, with the profiles it is on for.
+pub(crate) type GroupsOn = BTreeMap<String, BTreeSet<String>>;
+
+/// The catalog groups of each kind, with the profiles each is on for.
+/// Each kind stands alone, the way each kind keeps its own group
+/// checkbox list, so a group name one profile had on for aliases and off
+/// for triggers stays on for the aliases and off for the triggers.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct CatalogGroups {
+    pub(crate) aliases: GroupsOn,
+    pub(crate) triggers: GroupsOn,
+    pub(crate) macros: GroupsOn,
+}
+
+impl CatalogGroups {
+    /// Every group of any kind that is on for `profile`, once each, the
+    /// aliases first, then the triggers, then the macros.
+    fn on_for(&self, profile: &str) -> Vec<String> {
+        let mut on: Vec<String> = Vec::new();
+        for groups in [&self.aliases, &self.triggers, &self.macros] {
+            for (group, profiles) in groups {
+                if profiles.contains(profile) && !on.contains(group) {
+                    on.push(group.clone());
+                }
+            }
+        }
+        on
+    }
+}
+
+/// Which catalog groups of each kind each profile turns on: the group
+/// of every item of that kind the profile had in a group it had on for
+/// that kind. Every catalog group is named, on for no profile at worst.
+fn groups_on(profiles: &[(String, ProfileConfig)], tags: &CatalogTags) -> CatalogGroups {
+    fn kind<'a>(
+        tags: &BTreeMap<String, String>,
+        profiles: &'a [(String, ProfileConfig)],
+        items: impl Fn(&'a ProfileConfig) -> Vec<(&'a str, Option<&'a str>)>,
+        off: impl Fn(&'a ProfileConfig) -> &'a [String],
+    ) -> GroupsOn {
+        let mut groups: GroupsOn = tags
+            .values()
+            .map(|tag| (tag.clone(), BTreeSet::new()))
+            .collect();
+        for (profile, cfg) in profiles {
+            for (name, group) in items(cfg) {
+                if group.is_some_and(|g| !g.is_empty() && off(cfg).iter().any(|o| o == g)) {
+                    continue;
+                }
+                if let Some(on) = tags.get(name).and_then(|tag| groups.get_mut(tag)) {
+                    on.insert(profile.clone());
+                }
+            }
+        }
+        groups
+    }
+    CatalogGroups {
+        aliases: kind(
+            &tags.aliases,
+            profiles,
+            |cfg| {
+                cfg.aliases
+                    .iter()
+                    .map(|a| (a.name.as_str(), a.group.as_deref()))
+                    .collect()
+            },
+            |cfg| &cfg.disabled_alias_groups,
+        ),
+        triggers: kind(
+            &tags.triggers,
+            profiles,
+            |cfg| {
+                cfg.triggers
+                    .iter()
+                    .map(|t| (t.name.as_str(), t.group.as_deref()))
+                    .collect()
+            },
+            |cfg| &cfg.disabled_trigger_groups,
+        ),
+        macros: kind(
+            &tags.macros,
+            profiles,
+            |cfg| {
+                cfg.macros
+                    .iter()
+                    .map(|m| (m.key.as_str(), m.group.as_deref()))
+                    .collect()
+            },
+            |cfg| &cfg.disabled_macro_groups,
+        ),
+    }
 }
 
 /// Tag every variant in each bucket with the catalog group of its
@@ -335,91 +434,45 @@ fn strip_group_for_compare_trigger(t: &Trigger) -> Trigger {
     clone
 }
 
-/// Build a loadout for one source profile. `enabled_groups` collects
-/// the catalog group of every item this profile had, from `tags` (see
-/// [`tag_buckets`]), so day-one behavior matches today exactly. A group
-/// the profile had off in Settings stays out, since a loadout that
-/// lists a group turns it on. A loadout names groups for every kind at
-/// once, and items several profiles share land in one group, so a
-/// group that holds an item this profile had on stays in even when it
-/// also holds one this profile had off.
-fn derive_loadout(profile_name: &str, cfg: &ProfileConfig, tags: &CatalogGroups) -> Loadout {
-    let mut groups: Vec<String> = Vec::new();
-    let mut push = |group: Option<&str>, off: &[String], tag: Option<&String>| {
-        if group.is_some_and(|g| !g.is_empty() && off.iter().any(|o| o == g)) {
-            return;
-        }
-        let Some(tag) = tag else {
-            return;
-        };
-        if !groups.iter().any(|x| x == tag) {
-            groups.push(tag.clone());
-        }
-    };
-    for alias in &cfg.aliases {
-        push(
-            alias.group.as_deref(),
-            &cfg.disabled_alias_groups,
-            tags.aliases.get(&alias.name),
-        );
-    }
-    for trigger in &cfg.triggers {
-        push(
-            trigger.group.as_deref(),
-            &cfg.disabled_trigger_groups,
-            tags.triggers.get(&trigger.name),
-        );
-    }
-    for mac in &cfg.macros {
-        push(
-            mac.group.as_deref(),
-            &cfg.disabled_macro_groups,
-            tags.macros.get(&mac.key),
-        );
-    }
+/// Build a loadout for one source profile. `enabled_groups` names every
+/// catalog group of any kind that is on for the profile (see
+/// [`groups_on`]), so turning the loadout on turns on what the profile
+/// had on. A loadout names groups for every kind at once, so a group
+/// name on for one kind and off for another stays in.
+fn derive_loadout(profile_name: &str, groups: &CatalogGroups) -> Loadout {
     // The variables, tick, and connection stay in the profile file, which
     // loadout mode loads them from. No runtime code reads them from a
     // loadout, so a copy here would only go stale beside the file.
     let mut loadout = Loadout::empty(profile_name);
-    loadout.enabled_groups = groups;
+    loadout.enabled_groups = groups.on_for(profile_name);
     loadout
 }
 
-/// Make `config` the file its profile keeps in loadout mode, once
-/// `catalog` holds every item and `loadout` is the one derived for the
-/// profile. The aliases, triggers, and macros leave the file. Its group
-/// checkbox lists name every catalog group of each kind that `loadout`
-/// leaves off, in catalog names. That is what the loadout imposes while
-/// it is active and declares groups, and while no active loadout
-/// declares any, the lists keep the profile to what it had on. Without
-/// them a profile with no items of its own, or with every group off,
-/// would turn on every other character's items.
+/// Make `config` the file `profile` keeps in loadout mode, once the
+/// catalog holds every item. The aliases, triggers, and macros leave the
+/// file. Each group checkbox list names every catalog group of its kind
+/// that is off for the profile (see [`groups_on`]), built from that kind
+/// alone. While no active loadout declares any groups, the lists keep
+/// the profile to what it had on. Without them a profile with no items
+/// of its own, or with every group off, would turn on every other
+/// character's items.
 pub(crate) fn profile_file_for_catalog(
     config: &mut ProfileConfig,
-    catalog: &GlobalCatalog,
-    loadout: &Loadout,
+    profile: &str,
+    groups: &CatalogGroups,
 ) {
     config.clear_catalog_items();
-    config.disabled_alias_groups =
-        groups_left_off(catalog.aliases.iter().map(|a| a.group.as_deref()), loadout);
-    config.disabled_trigger_groups =
-        groups_left_off(catalog.triggers.iter().map(|t| t.group.as_deref()), loadout);
-    config.disabled_macro_groups =
-        groups_left_off(catalog.macros.iter().map(|m| m.group.as_deref()), loadout);
+    config.disabled_alias_groups = groups_left_off(&groups.aliases, profile);
+    config.disabled_trigger_groups = groups_left_off(&groups.triggers, profile);
+    config.disabled_macro_groups = groups_left_off(&groups.macros, profile);
 }
 
-/// Each named group in `groups` that `loadout` does not turn on, sorted,
-/// once each.
-fn groups_left_off<'a>(
-    groups: impl Iterator<Item = Option<&'a str>>,
-    loadout: &Loadout,
-) -> Vec<String> {
+/// Each group in `groups` that is off for `profile`, sorted.
+fn groups_left_off(groups: &GroupsOn, profile: &str) -> Vec<String> {
     groups
-        .flatten()
-        .filter(|g| !g.is_empty() && !loadout.enabled_groups.iter().any(|on| on == g))
-        .map(str::to_string)
-        .collect::<std::collections::BTreeSet<_>>()
-        .into_iter()
+        .iter()
+        .filter(|(_, on)| !on.contains(profile))
+        .map(|(group, _)| group.clone())
         .collect()
 }
 
@@ -645,10 +698,30 @@ mod tests {
         ]);
         let mut file = profile_with(vec![Alias::new("kk", "kick %1")], vec![], vec![]);
         file.disabled_alias_groups = vec!["combat".into()];
-        profile_file_for_catalog(&mut file, &plan.auto_resolved, &plan.loadouts[1]);
+        profile_file_for_catalog(&mut file, "bard", &plan.groups);
         assert!(file.aliases.is_empty());
         assert_eq!(file.disabled_alias_groups, ["default", "default.combat"]);
         assert!(file.disabled_trigger_groups.is_empty());
+    }
+
+    #[test]
+    fn each_kind_keeps_its_own_group_state_under_one_name() {
+        // The Healer had its loot alias on and its auto loot trigger off,
+        // both in a group named loot.
+        let mut loot_alias = Alias::new("loot", "get all corpse");
+        loot_alias.group = Some("loot".into());
+        let mut loot_trigger = trigger("autoloot", "^You killed", "get all corpse");
+        loot_trigger.group = Some("loot".into());
+        let mut cfg = profile_with(vec![loot_alias], vec![loot_trigger], vec![]);
+        cfg.disabled_trigger_groups = vec!["loot".into()];
+        let plan = analyze_profiles(&[("Healer".into(), cfg)]);
+
+        let mut file = ProfileConfig::default();
+        profile_file_for_catalog(&mut file, "Healer", &plan.groups);
+        // The trigger group stays off. It used to come on with the alias
+        // group of the same name, so the trigger looted every kill.
+        assert!(file.disabled_alias_groups.is_empty());
+        assert_eq!(file.disabled_trigger_groups, ["Healer.loot"]);
     }
 
     #[test]
