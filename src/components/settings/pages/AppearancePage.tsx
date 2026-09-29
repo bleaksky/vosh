@@ -13,8 +13,15 @@ import {
   type TerminalLineHeight,
   type UiConfig,
 } from '../../../lib/session';
+import type { Appearance } from '../../../lib/chrome';
 import type { SettingsTarget } from '../../../lib/settingsNav';
-import { activeThemeFor, applyThemePrefs, pickTheme, themePrefsOf } from '../../../lib/theme';
+import {
+  activeThemeFor,
+  applyThemePrefs,
+  pickTheme,
+  systemPrefersDark,
+  themePrefsOf,
+} from '../../../lib/theme';
 import { parseThemeFile, ThemeFileError } from '../../../lib/themeImport';
 import { galleryThemes } from '../../../lib/themeThumb';
 import { BUILTIN_THEMES, customToAppTheme, setCustomThemes } from '../../../lib/themes';
@@ -99,6 +106,14 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
 
   const themes = galleryThemes(BUILTIN_THEMES, config.custom_themes.map(customToAppTheme));
   const shown = activeThemeFor(config);
+  // While follow is on the arrow keys stay among the themes the OS
+  // shows now, so stepping through the gallery never fills the other
+  // slot and each step lands on the radio it checks.
+  const arrowAppearance: Appearance | undefined = config.follow_system_appearance
+    ? systemPrefersDark()
+      ? 'dark'
+      : 'light'
+    : undefined;
 
   // A pick follows pickTheme. While follow is off it becomes your theme.
   // While follow is on it fills the light or dark entry, and shows only
@@ -184,7 +199,12 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
           </p>
         )}
         <Card>
-          <ThemeGallery themes={themes} selected={shown} onPick={pick} />
+          <ThemeGallery
+            themes={themes}
+            selected={shown}
+            onPick={pick}
+            appearance={arrowAppearance}
+          />
           <Row
             anchor="follow-system"
             label="Follow system appearance"

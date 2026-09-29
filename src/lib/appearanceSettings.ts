@@ -119,6 +119,29 @@ export function pairChoices(
   return choices;
 }
 
+/** The theme an arrow key moves to in the gallery. `step` 1 is the
+ *  next theme in gallery order and -1 the one before, wrapping at both
+ *  ends. With `appearance` set only themes of that appearance count.
+ *  While follow system appearance is on the page passes the OS
+ *  appearance, so each step shows the theme it lands on and fills only
+ *  the slot the OS uses now, never the other one. Returns `from` when
+ *  no other theme qualifies. */
+export function stepGalleryTheme(
+  themes: readonly AppTheme[],
+  from: string,
+  step: 1 | -1,
+  appearance?: Appearance,
+): string {
+  const count = themes.length;
+  const found = themes.findIndex((t) => t.id === from);
+  const at = found >= 0 ? found : step > 0 ? -1 : count;
+  for (let i = 1; i <= count; i += 1) {
+    const theme = themes[(((at + step * i) % count) + count) % count];
+    if (appearance === undefined || themeTokens(theme).appearance === appearance) return theme.id;
+  }
+  return from;
+}
+
 // ── Custom themes ────────────────────────────────────────────────────
 
 type ThemeFields = ThemePrefs & { custom_themes: CustomTheme[] };
