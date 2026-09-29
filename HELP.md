@@ -539,14 +539,14 @@ Loadouts flip whole groups of aliases, triggers, and macros on and off from one 
 
 - Open Settings, pick `import` under `tools`, and find the `migrate between scopes` section. Click `preview migration`.
 - Review the plan. The wizard shows how your profiles would merge into a single shared catalog with one generated loadout per source profile. The preview writes nothing.
-- Apply the migration. Vosh writes the catalog and parks your old per profile files in `profiles/legacy/`. Loadout mode waits for the next launch, so click `quit Vosh` in the wizard and reopen the app. Every loadout starts off, so each profile keeps on the items it had on, at launch and when you switch.
+- Apply the migration. Vosh copies each profile file to `profiles/legacy/`, writes the catalog and the loadouts, and takes the aliases, triggers, and macros out of each profile file. Every other setting stays with its profile. Loadout mode waits for the next launch, so click `quit Vosh` in the wizard and reopen the app. Every loadout starts off, so each profile keeps on the items it had on, at launch and when you switch.
 - Reopen Settings and pick the `loadouts` tab, which now appears under `characters`. Check the boxes for the loadouts you want live. The runtime enables the union of their groups across every active loadout.
 
 Click `deactivate all` to park the catalog dormant. Dormant disables every grouped alias, trigger, and macro, and it survives restarts and profile switches. Items without a group always stay live.
 
 When no active loadout declares any enabled groups, the loadouts impose nothing and your durable checkbox state from the automation tabs stands.
 
-Activation is the only edit the `loadouts` tab makes. Author or reshape loadouts by editing `loadouts.toml` in the app data folder, or run the migration wizard again.
+Activation is the only edit the `loadouts` tab makes. Author or reshape loadouts by editing `loadouts.toml` in the app data folder while Vosh is closed. The migration wizard runs once, and it will not build a new catalog while `catalog.toml` or `loadouts.toml` sits in the app data folder.
 
 ### 7.3 Import a TinTin++ file
 
@@ -636,7 +636,8 @@ Vosh keeps all of its data in one app data folder named `com.aabahran.vosh`.
 Inside that folder.
 
 - `profiles.toml` indexes your profiles and names the active one.
-- `profiles/<name>.toml` holds each profile snapshot with connection defaults, aliases, variables, triggers, tick config, and macros.
+- `profiles/<name>.toml` holds each profile snapshot with connection defaults, aliases, variables, triggers, timers, tick config, and macros. In loadout mode the aliases, triggers, and macros live in `catalog.toml` instead, and the profile file keeps the rest.
+- `profiles/legacy/` holds a copy of each profile file as it was when the loadouts migration ran.
 - `global.toml` holds cross profile UI preferences.
 - `catalog.toml` and `loadouts.toml` appear once loadout mode is active.
 - `logs.sqlite` stores session logs, with `-wal` and `-shm` sidecars alongside.
