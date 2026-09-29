@@ -34,9 +34,11 @@ function startCopyToasts() {
 // card (radius 16, the SPEC 3 recipe) with a leading status mark: a
 // check in the success color, or a dot in danger for errors and in the
 // accent for info. The store owns the dismiss timers, and clicking a
-// toast dismisses it early. Mount it inside the positioned terminal
-// area. The stack floats over the terminal, so it carries
-// data-occludes-surface for the Windows and Linux on-top native path.
+// toast dismisses it early. It works inside the positioned terminal
+// area or as a direct child of the shell grid, where overlays.css pins
+// it to the terminal cell. The stack floats over the terminal, so it
+// carries data-occludes-surface for the Windows and Linux on-top
+// native path.
 export function Toasts() {
   const [toasts, setToasts] = useState<Toast[]>(getToasts);
 
