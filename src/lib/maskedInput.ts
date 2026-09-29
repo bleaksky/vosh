@@ -53,10 +53,6 @@ export function isMasked(rendered: boolean, latest: boolean): boolean {
   return rendered || latest;
 }
 
-/** Plan a submitted line. A line from the masked field echoes only a line
- *  break, stays out of history, and goes to the server as typed, past
- *  aliases, variables, and `#` commands. Every other line echoes in your
- *  echo color, unless a quick key echoes it, and joins history. */
 /** Whether Keep last command leaves the line you just sent selected in
  *  the input. Never for a line from the masked field. */
 export function keepsLastCommand(enabled: boolean, composed: string, masked: boolean): boolean {
@@ -83,6 +79,10 @@ export function draftAfterMaskChange(wasMasked: boolean, masked: boolean, draft:
   return wasMasked === masked ? draft : '';
 }
 
+/** Plan a submitted line. A line from the masked field echoes only a line
+ *  break, stays out of history, and goes to the server as typed, past
+ *  aliases, variables, and `#` commands. Every other line echoes in your
+ *  echo color, unless a quick key echoes it, and joins history. */
 export function planSubmit(line: string, context: SubmitContext): SubmitPlan {
   if (context.masked) {
     return { echo: '\r\n', remember: false, local: false, masked: true };
