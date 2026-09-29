@@ -353,6 +353,11 @@ export function automationSaveError(error: unknown): string {
   const text = String(error instanceof Error ? error.message : error).trim();
   const regex = /invalid regex `([^`]*)`/.exec(text);
   if (regex) return `Vosh could not read the pattern ${regex[1]}. Fix it and save again.`;
+  // tick_set_config adds the regex crate's own report, several lowercase
+  // lines with a caret under the fault. The field name says enough.
+  if (/^invalid reset pattern/i.test(text)) {
+    return 'Vosh could not read the Reset on pattern. Fix it and save again.';
+  }
   if (/^invalid json/i.test(text) || /expected .* at line \d+/i.test(text)) {
     return 'Vosh could not read that list. Check it and save again.';
   }

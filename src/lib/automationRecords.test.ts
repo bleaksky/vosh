@@ -329,4 +329,12 @@ describe('automationSaveError', () => {
     );
     expect(automationSaveError(new Error('Disk full.'))).toBe('Disk full.');
   });
+
+  it('names the Tick field when its Reset on pattern does not read', () => {
+    const raw =
+      'invalid reset pattern: regex parse error:\n    [bad\n    ^\nerror: unclosed character class';
+    expect(automationSaveError(raw)).toBe(
+      'Vosh could not read the Reset on pattern. Fix it and save again.',
+    );
+  });
 });
