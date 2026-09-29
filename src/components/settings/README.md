@@ -137,6 +137,11 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 
 A row whose content sits under its label line at full width, like the prompt template on Input, is a `div` with the `st-block` class holding a `Row` for the label line and the content after it. The `Row` drops its own padding there, and the block draws the hairline like any row.
 
+`LinkRow` is a row that goes somewhere else in Settings, like Layout's `Panes and tracked affects`, which opens Characters. It draws like a `Disclosure` without the open state.
+
+- `label`, `description`, and `anchor` as on `Row`.
+- `onClick` runs on press. Call the page's `navigate` there.
+
 `VisuallyHidden` holds text a screen reader reads and the page does not show, like a list row's On or Off.
 
 `useRowIds` returns the ids of the enclosing `Row` for a custom control.
