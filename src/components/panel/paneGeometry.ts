@@ -1,3 +1,4 @@
+import { isTrackedRow, type AffectRow } from '../../lib/affectsView';
 import {
   PANE_HEADER_PX,
   PANE_MIN_H,
@@ -6,6 +7,7 @@ import {
   type PaneLeaf,
   type PaneNode,
   type PaneSplit,
+  type PaneType,
   type SplitDir,
 } from '../../lib/paneLayout';
 
@@ -18,7 +20,9 @@ export { PANE_MIN_H };
 // and any scroll position. Pure so the rounding, the minimum sizes,
 // and the drag clamps are unit tested.
 //
-// Every pane type has a minimum height it can be read at. While the
+// Every pane type has a minimum height it can be read at. Affects and
+// Group raise theirs to hold the rows you most need, a harmful affect
+// or a member in danger, so those never fall below the fold. While the
 // panel has room for every minimum, panes share the space by weight
 // and none drops below its own. On a panel too short for that, every
 // pane keeps its header and one row, the heaviest panes then get
@@ -69,16 +73,59 @@ export const PANE_FLOOR_H = PANE_HEADER_PX + PANE_ROW_PX;
 /** Narrowest a side by side pane gets. */
 export const MIN_PANE_W = 120;
 
+/** Minimum heights that follow what a pane shows right now, in place
+ *  of its PANE_MIN_H entry. */
+export type PaneMins = Partial<Record<PaneType, number>>;
+
+/** The divider over the Not tracked rows with its 4 px above, then the
+ *  label with 10 px above and 4 px below. */
+const SUBLABEL_PX = 5 + 10 + 15 + 4;
+/** Most rows a list pane holds on to as its minimum, so a long list
+ *  never crowds every other pane out of the panel. */
+const LIST_MIN_ROWS = 12;
+/** Group members a Group pane holds on to as its minimum. */
+const GROUP_MIN_ROWS = 6;
+
+/** The Affects pane's minimum for the rows it shows: every tracked
+ *  affect you are missing, and while something harmful is on you,
+ *  every row down to the last harmful one under Not tracked. Never
+ *  under the stock minimum, and never over a dozen rows. */
+export function affectsMinH(rows: readonly AffectRow[]): number {
+  const tracked = rows.filter(isTrackedRow).length;
+  const missing = rows.filter((r) => r.state === 'missing').length;
+  const harmful = rows.filter((r) => r.state === 'harmful').length;
+  // With nothing tracked the harmful rows sit at the top, no label.
+  const need =
+    harmful > 0
+      ? (tracked + harmful) * PANE_ROW_PX + (tracked > 0 ? SUBLABEL_PX : 0)
+      : missing * PANE_ROW_PX;
+  const cap = PANE_HEADER_PX + LIST_MIN_ROWS * PANE_ROW_PX + SUBLABEL_PX;
+  return Math.min(cap, Math.max(PANE_MIN_H.affects, PANE_HEADER_PX + need));
+}
+
+/** The Group pane's minimum for `members` rows: every member up to
+ *  six, so the one in danger is never the row cut off. */
+export function groupMinH(members: number): number {
+  const rows = Math.min(GROUP_MIN_ROWS, Math.max(0, Math.floor(members)));
+  return Math.max(PANE_MIN_H.group, PANE_HEADER_PX + rows * PANE_ROW_PX);
+}
+
 /** The least room `node` needs along `dir`'s axis, height for a
  *  column and width for a row. With `floor`, the least it gets on a
- *  panel too short for every minimum instead. */
-export function minExtent(node: PaneNode, dir: SplitDir, floor = false): number {
+ *  panel too short for every minimum instead. `mins` overrides the
+ *  stock minimum height of a pane type. */
+export function minExtent(
+  node: PaneNode,
+  dir: SplitDir,
+  floor = false,
+  mins: PaneMins = {},
+): number {
   if (isLeaf(node)) {
     if (dir === 'row') return MIN_PANE_W;
-    const min = PANE_MIN_H[node.pane];
+    const min = mins[node.pane] ?? PANE_MIN_H[node.pane];
     return floor ? Math.min(PANE_FLOOR_H, min) : min;
   }
-  const parts = node.children.map((c) => minExtent(c, dir, floor));
+  const parts = node.children.map((c) => minExtent(c, dir, floor, mins));
   if (parts.length === 0) return 0;
   if (node.split !== dir) return Math.max(...parts);
   return parts.reduce((acc, p) => acc + p, 0) + HANDLE_PX * (parts.length - 1);
@@ -185,14 +232,20 @@ function shareAboveMins(
 }
 
 /** Lay the tree out in a `width` by `height` box, every pane at its
- *  minimum or more while the box holds them all. */
-export function layoutPanes(root: PaneSplit, width: number, height: number): PaneGeometry {
+ *  minimum or more while the box holds them all. `mins` overrides the
+ *  stock minimum height of a pane type. */
+export function layoutPanes(
+  root: PaneSplit,
+  width: number,
+  height: number,
+  mins: PaneMins = {},
+): PaneGeometry {
   const out: PaneGeometry = { leaves: [], handles: [] };
-  place(root, { x: 0, y: 0, w: Math.max(0, width), h: Math.max(0, height) }, out);
+  place(root, { x: 0, y: 0, w: Math.max(0, width), h: Math.max(0, height) }, out, mins);
   return out;
 }
 
-function place(node: PaneNode, rect: Rect, out: PaneGeometry): void {
+function place(node: PaneNode, rect: Rect, out: PaneGeometry, mins: PaneMins): void {
   if (isLeaf(node)) {
     out.leaves.push({ leaf: node, rect });
     return;
@@ -201,12 +254,12 @@ function place(node: PaneNode, rect: Rect, out: PaneGeometry): void {
   if (n === 0) return;
   const vertical = node.split === 'column';
   const axis = vertical ? rect.h : rect.w;
-  const mins = node.children.map((c) => minExtent(c, node.split));
+  const childMins = node.children.map((c) => minExtent(c, node.split, false, mins));
   const sizes = allocate(
     Math.max(0, axis - HANDLE_PX * (n - 1)),
     node.children.map((c) => c.weight),
-    mins,
-    node.children.map((c) => minExtent(c, node.split, true)),
+    childMins,
+    node.children.map((c) => minExtent(c, node.split, true, mins)),
   );
   let at = vertical ? rect.y : rect.x;
   node.children.forEach((child, i) => {
@@ -214,7 +267,7 @@ function place(node: PaneNode, rect: Rect, out: PaneGeometry): void {
     const box: Rect = vertical
       ? { x: rect.x, y: at, w: rect.w, h: size }
       : { x: at, y: rect.y, w: size, h: rect.h };
-    place(child, box, out);
+    place(child, box, out, mins);
     at += size;
     if (i < n - 1) {
       out.handles.push({
@@ -225,7 +278,7 @@ function place(node: PaneNode, rect: Rect, out: PaneGeometry): void {
           ? { x: rect.x, y: at, w: rect.w, h: HANDLE_PX }
           : { x: at, y: rect.y, w: HANDLE_PX, h: rect.h },
         sizes,
-        mins,
+        mins: childMins,
       });
       at += HANDLE_PX;
     }

@@ -9,6 +9,7 @@ import { PaneLeafContext } from './paneActions';
 import { PANE_MIN_H, dragSizes, layoutPanes, type HandleBox } from './paneGeometry';
 import { getPanelLayout, setPaneTree, usePanelLayout } from './panelLayoutStore';
 import { PANE_LABELS } from './paneTypes';
+import { usePaneMins } from './usePaneMins';
 import { VitalsFooter } from './VitalsFooter';
 
 // The right-hand panel (SPEC 9): the active profile's pane tree from
@@ -23,9 +24,10 @@ import { VitalsFooter } from './VitalsFooter';
 // moved with Show here instead keeps its state too.
 //
 // No pane drops below the height it reads at while the panel has room
-// (PANE_MIN_H). On a panel too short for every pane, the lightest ones
-// come up short and scroll inside their box, header and all for the
-// map, whose drawing has no list of its own to scroll.
+// (PANE_MIN_H, raised for Affects and Group to hold a harmful affect
+// and every member). On a panel too short for every pane, the lightest
+// ones come up short and scroll inside their box, header and all for
+// the map, whose drawing has no list of its own to scroll.
 
 // Arrow keys move a focused handle this far, Shift for bigger steps.
 const KEY_STEP = 8;
@@ -59,9 +61,10 @@ export function PanelHost() {
   }, []);
 
   const root = layout?.root ?? null;
+  const mins = usePaneMins();
   const geometry = useMemo(
-    () => (root ? layoutPanes(root, size.w, size.h) : null),
-    [root, size.w, size.h],
+    () => (root ? layoutPanes(root, size.w, size.h, mins) : null),
+    [root, size.w, size.h, mins],
   );
   // Type order, not tree order, so no edit ever reorders the DOM.
   const leaves = geometry
