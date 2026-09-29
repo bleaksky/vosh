@@ -31,6 +31,7 @@ export function TrackedAffects({ tracked, onEdit }: Props) {
   const listRef = useRef<HTMLUListElement | null>(null);
   const addRef = useRef<HTMLButtonElement | null>(null);
   const wasAdding = useRef(false);
+  const refocus = useRef(false);
 
   useEffect(() => {
     if (focusAt === null) return;
@@ -40,11 +41,18 @@ export function TrackedAffects({ tracked, onEdit }: Props) {
     setFocusAt(null);
   }, [focusAt, tracked]);
 
-  // Closing the field hands focus back to Add affect.
+  // Esc hands focus back to Add affect. Leaving the field leaves focus
+  // on whatever you clicked or tabbed to.
   useEffect(() => {
-    if (wasAdding.current && !adding) addRef.current?.focus();
+    if (wasAdding.current && !adding && refocus.current) addRef.current?.focus();
+    refocus.current = false;
     wasAdding.current = adding;
   }, [adding]);
+
+  const closeField = (returnFocus: boolean) => {
+    refocus.current = returnFocus;
+    setAdding(false);
+  };
 
   return (
     <Section id="tracked" title="Tracked affects" card={false}>
@@ -80,7 +88,7 @@ export function TrackedAffects({ tracked, onEdit }: Props) {
               <AddAffectField
                 tracked={tracked}
                 onAdd={(name) => onEdit((list) => addTrackedAffect(list, name))}
-                onClose={() => setAdding(false)}
+                onClose={closeField}
               />
             ) : (
               <ChipButton
@@ -101,7 +109,9 @@ export function TrackedAffects({ tracked, onEdit }: Props) {
 interface AddAffectFieldProps {
   tracked: TrackedAffect[];
   onAdd: (name: string) => void;
-  onClose: () => void;
+  /** `returnFocus` is true for Esc pressed in the field. Leaving the
+   *  field empty closes it with focus left where you moved it. */
+  onClose: (returnFocus: boolean) => void;
 }
 
 /** The field Add affect turns into: a combobox over the affects on you
@@ -119,7 +129,7 @@ function AddAffectField({ tracked, onAdd, onClose }: AddAffectFieldProps) {
   useEffect(() => inputRef.current?.focus(), []);
   useEffect(() => setActive(-1), [query]);
 
-  useEscape(true, onClose);
+  useEscape(true, () => onClose(document.activeElement === inputRef.current));
 
   const add = (name: string) => {
     if (name.trim().length === 0) return;
@@ -159,7 +169,7 @@ function AddAffectField({ tracked, onAdd, onClose }: AddAffectFieldProps) {
           }
         }}
         onBlur={() => {
-          if (query.trim().length === 0) onClose();
+          if (query.trim().length === 0) onClose(false);
         }}
       />
       <ul
