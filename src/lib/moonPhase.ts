@@ -5,21 +5,32 @@
 //
 // The disc sits at 8,8 with a 6.25 radius, the circle the One Window
 // icons share. The lit part runs along the limb on the lit side and
-// back along the terminator, half an ellipse whose horizontal radius is
-// the disc radius times |cos(angle)|. A growing moon lights the right
-// side and a fading one the left, the way a northern sky shows it.
-// Before the half the terminator bows toward the light and leaves a
+// back along the terminator, half an ellipse. A growing moon lights the
+// right side and a fading one the left, the way a northern sky shows
+// it. Before the half the terminator bows toward the light and leaves a
 // crescent. After it, the terminator bows away and leaves a gibbous
 // moon.
 //
+// The crescent and nearly full phases are drawn for size, not to the
+// sky. The sky gives the terminator a horizontal radius of the disc
+// radius times |cos(angle)|, which leaves a thin crescent 1.83 units
+// wide, under two pixels at 14 px and too thin to read as lit. These
+// phases draw it at MOON_DRAWN_TERMINATOR of the radius instead. That
+// lights a 3.75 unit sliver at 1 and 7 and leaves one as dark at 3 and
+// 5, about twice the true width, the way icon sets draw moon phases so
+// each one reads at a glance. New, half, and full keep their true
+// shape. litFraction still gives the true share of the disc the sky
+// lights, and terminatorRx the radius the icon draws.
+//
 // The outline around the disc is faint on the dark limb and takes the
-// full color on the lit limb. A thin crescent is under two units wide,
-// about one pixel at 14 px, and the lit limb beside it is what lets it
-// read as lit rather than as the outline.
+// full color on the lit limb.
 
 export const MOON_PHASE_COUNT = 8;
 export const MOON_CENTER = 8;
 export const MOON_RADIUS = 6.25;
+/** The terminator's horizontal radius at the crescent and nearly full
+ *  phases, as a share of the disc radius. The sky gives 0.71 there. */
+export const MOON_DRAWN_TERMINATOR = 0.4;
 
 /** The unlit disc, the moon color at this opacity. */
 export const MOON_UNLIT_OPACITY = 0.22;
@@ -31,11 +42,14 @@ export type MoonLitSide = 'left' | 'right';
 
 export interface MoonPhaseShape {
   phase: number;
-  /** Share of the disc that is lit, 0 at new and 1 at full. */
+  /** Share of the disc the sky lights, 0 at new and 1 at full. The
+   *  drawn crescents light more than this and the nearly full phases
+   *  less. */
   litFraction: number;
   /** The side the light comes from. Null at new and full. */
   side: MoonLitSide | null;
-  /** Horizontal radius of the terminator ellipse. */
+  /** Horizontal radius of the terminator ellipse the icon draws. 0 at
+   *  the half phases and the disc radius at new and full. */
   terminatorRx: number;
   /** SVG path data for the lit part, to fill. Null at new. */
   litPath: string | null;
@@ -60,7 +74,8 @@ export function moonPhaseShape(phase: number | null): MoonPhaseShape | null {
   const cos = Math.cos(angle);
   // cos(pi / 2) is not quite zero in floating point.
   const halfLit = Math.abs(cos) < 1e-9;
-  const terminatorRx = halfLit ? 0 : MOON_RADIUS * Math.abs(cos);
+  const newOrFull = Math.abs(cos) > 1 - 1e-9;
+  const terminatorRx = halfLit ? 0 : newOrFull ? MOON_RADIUS : MOON_RADIUS * MOON_DRAWN_TERMINATOR;
   const litFraction = phase === 0 ? 0 : phase === 4 ? 1 : (1 - cos) / 2;
   const r = num(MOON_RADIUS);
   const c = num(MOON_CENTER);
