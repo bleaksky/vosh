@@ -112,6 +112,9 @@ windows-sys = { version = "0.59", features = [
 
 [dev-dependencies]
 tempfile = "3"
+# The mock runtime lets a test open windows and count what each event
+# reaches. The feature adds no new crate.
+tauri = { version = "2", features = ["test"] }
 
 # The menu bar test parses every accelerator with the parser Tauri uses,
 # because Tauri drops one that fails without a word. Tauri already

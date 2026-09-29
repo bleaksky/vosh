@@ -3758,10 +3758,22 @@ pub(crate) async fn migration_apply(
     // user re-opens Vosh and the Path B startup hook picks the new
     // catalog up. Path B mode is durable on disk either way. The main
     // window hears the event and says that nothing saves until then, in
-    // the terminal and in a toast that stays up. Sent to each window, as
-    // the settings window runs the wizard and the main window listens.
-    broadcast(&app, "vosh://migration-applied", &());
+    // the terminal and in a toast that stays up.
+    announce_migration_applied(&app);
     Ok(())
+}
+
+/// What every window hears once the wizard wrote its files.
+const MIGRATION_APPLIED_EVENT: &str = "vosh://migration-applied";
+
+/// Tell every window once that the wizard wrote its files. The settings
+/// window runs the wizard and the main window listens. One emit reaches
+/// every window, where one per window, as [`broadcast`] sends, reached
+/// each listener once per open window and put the notice up twice.
+fn announce_migration_applied<R: tauri::Runtime>(app: &AppHandle<R>) {
+    if let Err(e) = app.emit(MIGRATION_APPLIED_EVENT, ()) {
+        warn!(error = %e, "the wizard could not announce its files");
+    }
 }
 
 /// [`migration_apply`] over the app data folder `app_data`, so a test
@@ -4342,6 +4354,31 @@ mod tests {
     use crate::profile_config::{ProfileConfig, UiConfig};
     use crate::profile_set::tests::james_like_set;
     use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
+
+    #[test]
+    fn every_window_hears_once_that_the_move_is_done() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use tauri::Listener;
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        // The wizard runs in the settings window, so the main window is
+        // open too.
+        for label in ["main", "settings"] {
+            tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::default())
+                .build()
+                .unwrap();
+        }
+        let heard = std::sync::Arc::new(AtomicUsize::new(0));
+        let count = heard.clone();
+        app.listen_any(super::MIGRATION_APPLIED_EVENT, move |_| {
+            count.fetch_add(1, Ordering::SeqCst);
+        });
+        super::announce_migration_applied(app.handle());
+        // Each emit reaches every window, so one per window put the
+        // notice in the terminal and a toast up once per open window.
+        assert_eq!(heard.load(Ordering::SeqCst), 1);
+    }
 
     /// Send `ui` the way Settings does: out through `ui_get_config`,
     /// across the JSON bridge, and back through `ui_set_config` onto a
