@@ -24,6 +24,7 @@ use crate::line_accumulator::{ChunkOp, LineAccumulator};
 use crate::list_events::{broadcast_list_changes, ListChanges, ListRevisions};
 use crate::map_state::{self, SharedMap};
 use crate::profile::Profile;
+use crate::profile_config::SharedLayer;
 use crate::script_state::{self, ApplyResult, PendingTimer, SharedTimers};
 use crate::tick::{TickPayload, TickRuntime};
 
@@ -664,11 +665,12 @@ async fn handle_tick(
     }
 
     if let Some(command) = auto_fire {
+        let shared = crate::commands::shared_layer_for_lines(app, [command.as_str()]).await;
         let mut effects = input::LineEffects::default();
         let (result, lists) = {
             let mut p = profile.lock().await;
             let before = ListRevisions::of(&p);
-            let result = process_fired_line(&mut p, &command, &mut effects);
+            let result = process_fired_line(&mut p, &command, &mut effects, shared.as_ref());
             (result, ListChanges::since(before, &p))
         };
         broadcast_list_changes(app, lists);
@@ -748,16 +750,23 @@ async fn fire_due_profile_timers(
 /// input, and note what it asks of the saved profile the way the typed
 /// path does. Call with the profile lock held. A `#profile reset` or
 /// `#profile load` swaps the live panes, so the pane generation moves in
-/// the same step.
+/// the same step. The profile file it reads holds none of the shared
+/// settings, so `shared` goes back over the result as it does for typed
+/// input.
 fn process_fired_line(
     p: &mut Profile,
     line: &str,
     effects: &mut input::LineEffects,
+    shared: Option<&SharedLayer>,
 ) -> input::InputResult {
-    let result = input::process(p, line);
-    if effects.note_line(line) {
-        crate::commands::bump_panes_generation();
+    if !effects.note_line(line) {
+        return input::process(p, line);
     }
+    let result = match shared {
+        Some(layer) => layer.keep_across(p, |p| input::process(p, line)),
+        None => input::process(p, line),
+    };
+    crate::commands::bump_panes_generation();
     result
 }
 
@@ -772,10 +781,10 @@ struct FiredRun {
 /// The part of [`run_fired_command`] that runs under the profile lock:
 /// the input pipeline, then the Lua bodies of any script aliases it
 /// queued.
-fn run_fired_locked(p: &mut Profile, command: &str) -> FiredRun {
+fn run_fired_locked(p: &mut Profile, command: &str, shared: Option<&SharedLayer>) -> FiredRun {
     let lists_before = ListRevisions::of(p);
     let mut effects = input::LineEffects::default();
-    let result = process_fired_line(p, command, &mut effects);
+    let result = process_fired_line(p, command, &mut effects, shared);
     let mut echoes = result.echo;
     let mut bytes = result.bytes;
     // Evaluate any Lua bodies queued by script-bodied aliases and
@@ -818,6 +827,7 @@ async fn run_fired_command(
     profile: &Arc<Mutex<Profile>>,
     command: &str,
 ) -> std::io::Result<()> {
+    let shared = crate::commands::shared_layer_for_lines(app, [command]).await;
     let FiredRun {
         echoes,
         bytes,
@@ -825,7 +835,7 @@ async fn run_fired_command(
         effects,
     } = {
         let mut p = profile.lock().await;
-        run_fired_locked(&mut p, command)
+        run_fired_locked(&mut p, command, shared.as_ref())
     };
     broadcast_list_changes(app, lists);
     crate::commands::settle_line_effects(app, effects).await;
@@ -1403,12 +1413,15 @@ async fn apply_script_result(
     if !apply.inputs.is_empty() {
         let mut input_bytes = Vec::new();
         let mut input_echoes: Vec<String> = Vec::new();
+        let shared =
+            crate::commands::shared_layer_for_lines(app, apply.inputs.iter().map(String::as_str))
+                .await;
         let mut effects = input::LineEffects::default();
         let lists = {
             let mut p = profile.lock().await;
             let before = ListRevisions::of(&p);
             for line in apply.inputs {
-                let result = process_fired_line(&mut p, &line, &mut effects);
+                let result = process_fired_line(&mut p, &line, &mut effects, shared.as_ref());
                 input_bytes.extend(result.bytes);
                 input_echoes.extend(result.echo);
             }
@@ -1777,17 +1790,17 @@ mod tests {
     #[test]
     fn a_timer_command_that_edits_the_profile_marks_it_dirty() {
         let mut p = Profile::default();
-        let run = super::run_fired_locked(&mut p, "#alias greet wave");
+        let run = super::run_fired_locked(&mut p, "#alias greet wave", None);
         assert!(run.effects.dirty);
         assert!(run.lists.aliases);
         assert!(p.aliases.get("greet").is_some());
 
-        let run = super::run_fired_locked(&mut p, "#trigger flee {^You flee} send look");
+        let run = super::run_fired_locked(&mut p, "#trigger flee {^You flee} send look", None);
         assert!(run.effects.dirty);
         assert!(run.lists.triggers);
 
         // A plain command leaves the saved profile alone.
-        let run = super::run_fired_locked(&mut p, "greet");
+        let run = super::run_fired_locked(&mut p, "greet", None);
         assert_eq!(run.effects, LineEffects::default());
         assert_eq!(run.bytes, b"wave\r\n");
     }
@@ -1796,13 +1809,13 @@ mod tests {
     fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
         let mut p = Profile::default();
         let mut effects = LineEffects::default();
-        let _ = super::process_fired_line(&mut p, "#alias greet wave", &mut effects);
+        let _ = super::process_fired_line(&mut p, "#alias greet wave", &mut effects, None);
         assert!(effects.dirty);
         assert!(p.aliases.get("greet").is_some());
 
         // A reset from a timer or a script keeps the blanked profile off
         // the disk, as it does when you type it.
-        let _ = super::process_fired_line(&mut p, "#profile reset", &mut effects);
+        let _ = super::process_fired_line(&mut p, "#profile reset", &mut effects, None);
         assert_eq!(
             effects,
             LineEffects {
@@ -1811,6 +1824,30 @@ mod tests {
             }
         );
         assert!(p.aliases.get("greet").is_none());
+    }
+
+    #[test]
+    fn a_timer_reset_keeps_the_shared_settings() {
+        // No global.toml yet, so the live shared values are the ones to
+        // keep, as they are for a reset you type.
+        let dir = tempfile::tempdir().unwrap();
+        let layer = crate::profile_config::SharedLayer::read(
+            &dir.path().join("global.toml"),
+            crate::profile_set::ScopeConfig::default(),
+        );
+        let mut p = Profile::default();
+        p.ui.theme = "night-ink".into();
+        p.ui.font_family = "Iosevka".into();
+        p.ui.keep_last_command = true;
+        let _ = super::run_fired_locked(&mut p, "#alias greet wave", None);
+
+        let run = super::run_fired_locked(&mut p, "#profile reset", Some(&layer));
+
+        assert!(run.effects.replaced);
+        assert!(p.aliases.get("greet").is_none());
+        assert_eq!(p.ui.theme, "night-ink");
+        assert_eq!(p.ui.font_family, "Iosevka");
+        assert!(p.ui.keep_last_command);
     }
 
     #[test]
