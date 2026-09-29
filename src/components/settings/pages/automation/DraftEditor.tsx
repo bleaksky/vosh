@@ -101,6 +101,10 @@ export function DraftEditor<T>({
   /** The store changed while the draft held unsaved edits, so the last
    *  load no longer matches it. */
   const staleRef = useRef(false);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  /** Goes up after each delete, so focus moves once the list redraws. */
+  const [deleteSeq, setDeleteSeq] = useState(0);
+  const afterDeleteRef = useRef<string | null>(null);
 
   const setDraft = useCallback((next: Draft<T> | null) => {
     draftRef.current = next;
@@ -319,9 +323,30 @@ export function DraftEditor<T>({
     const d = draftRef.current;
     if (!d) return;
     const rows = order.filter((u) => !pinned || u !== pinned.uid);
-    setSelected(neighborUid(rows, uid));
+    // With no row left beside it, the pinned block takes the selection.
+    const next = neighborUid(rows, uid) ?? pinned?.uid ?? null;
+    setSelected(next);
     setDraft(removeDraftItem(d, uid));
+    afterDeleteRef.current = next;
+    setDeleteSeq((n) => n + 1);
   };
+
+  // Delete removes the card that held focus, the button included. Put
+  // focus on the row that took the deleted one's place, else the row
+  // that is selected, else the filter, so it never drops to the page.
+  useEffect(() => {
+    if (deleteSeq === 0) return;
+    const body = bodyRef.current;
+    if (!body) return;
+    const uid = afterDeleteRef.current;
+    const row =
+      (uid !== null
+        ? body.querySelector<HTMLElement>(`.st-auto-row[data-uid="${CSS.escape(uid)}"]`)
+        : null) ?? body.querySelector<HTMLElement>('.st-auto-row[aria-current]');
+    const target = row ?? body.querySelector<HTMLElement>('.st-auto-filter input');
+    target?.focus();
+    row?.scrollIntoView({ block: 'nearest' });
+  }, [deleteSeq]);
 
   // JSON edits reach the draft after a short pause. Take the text
   // still waiting now, or say it does not read.
@@ -431,7 +456,7 @@ export function DraftEditor<T>({
 
   return (
     <>
-      <div className="st-auto-body">
+      <div ref={bodyRef} className="st-auto-body">
         {jsonOpen ? (
           <JsonPanel
             noun={spec.noun}
