@@ -3,10 +3,10 @@
 
 /** How the map draws. `squares` is the default, as it was before the
  *  One Window redesign: your room held at the center, doors in their
- *  state colors, the floors above and below, and the terrain. `plain`
- *  is the redesign's drawing. It stays in code, but the menu no longer
- *  offers it and a stored one is ignored. */
-export type MapStyle = 'plain' | 'squares' | 'glyphs' | 'tileset';
+ *  state colors, the floors above and below, and the terrain. The
+ *  redesign drew a `plain` style for a while. That drawing is gone,
+ *  and a stored one is ignored. */
+export type MapStyle = 'squares' | 'glyphs' | 'tileset';
 
 /** The styles the map's menu offers, in its order. */
 export const MAP_STYLE_CHOICES: readonly MapStyle[] = ['squares', 'glyphs', 'tileset'];

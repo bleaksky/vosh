@@ -142,11 +142,9 @@ body {
   font-size: var(--app-font-size);
 }
 
-.room-strip,
 .chat-pane-body,
 .imm-body,
-.group-worth,
-.combat-pane {
+.group-worth {
   font-family: var(--font-mono);
   font-size: 12px;
 }
@@ -154,11 +152,6 @@ body {
 .vitals-bar,
 .vitals-row-template {
   font-family: var(--font-mono);
-}
-
-.affects-bar {
-  font-family: var(--font-mono);
-  font-size: 11px;
 }
 
 .find-toolbar input {
@@ -241,9 +234,8 @@ body {
   border-radius: 0;
 }
 
-/* Shared inverted-video brand block (tmux session-label convention).
-   Used by both TopBar and StatusBar so the eye reads them as the
-   same frame. */
+/* Inverted-video brand block (tmux session-label convention) in the
+   TopBar. */
 
 .brand-block {
   display: inline-flex;
@@ -299,8 +291,7 @@ body {
    does not scale with the user's terminal font. The terminal output is
    driven by xterm's own font options, so it keeps the configured MUD
    font regardless of this rule. */
-.topbar,
-.statusbar {
+.topbar {
   font-family: var(--font-chrome);
   font-size: 12px;
 }
@@ -515,176 +506,6 @@ body {
 .topbar-btn-close:hover {
   background: var(--c-danger);
   color: var(--c-surface-deep);
-}
-
-/* Room strip — thin row between Connect and the terminal showing
-   area · room · #vnum · terrain · [exits] · here chips · items.
-   Ported verbatim from main. Stays at fixed flex slot so xterm
-   does not reflow when room data first arrives. */
-
-/* Wrapper around .room-strip + .room-strip-fade. The fade overlay
-   must live OUTSIDE the scrollable strip so it stays glued to the
-   visible right edge instead of scrolling with the content. */
-.room-strip-wrap {
-  position: relative;
-  flex: 0 0 auto;
-}
-
-/* When placed in a left/right zone the wrapper fills the Resizable
-   container (which sets the height). The inner .room-strip-column
-   handles wrapping + vertical scroll inside that height. */
-.room-strip-wrap-column {
-  flex: 1 1 auto;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.room-strip {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: thin;
-  gap: 6px;
-  padding: 4px 14px;
-  background: var(--c-surface);
-  border-bottom: 1px solid var(--c-border);
-  min-height: 28px;
-  color: var(--c-text-muted);
-  white-space: nowrap;
-}
-
-/* Column variant. Drops the horizontal scrollbar in favor of wrap +
-   vertical scroll, fills the parent so the Resizable wrapper's
-   height is authoritative. Bullets and chips wrap naturally onto
-   multiple lines instead of running off the right edge. */
-.room-strip-column {
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  overflow-x: visible;
-  overflow-y: auto;
-  white-space: normal;
-  align-items: flex-start;
-  align-content: flex-start;
-  min-height: 0;
-  padding: 8px 14px;
-  line-height: 1.5;
-}
-
-/* Right-edge fade. Sits in the wrapper, absolutely positioned over
-   the right side of the visible panel. The gradient runs from
-   transparent on the left to the surface color on the right, so any
-   content beneath fades smoothly into the panel background instead
-   of crashing into the border or scrollbar mid-letter. */
-.room-strip-fade {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 28px;
-  pointer-events: none;
-  background: linear-gradient(to right, transparent 0, var(--c-surface) 100%);
-}
-
-/* `padding-right` on an overflow:auto flex container is a no-op in
-   most browsers — content scrolls all the way to the right edge and
-   the padding gets eaten. The .room-strip-end-pad span is a real
-   flex child rendered in RoomStrip.tsx; it reserves the gap so the
-   last items/chars never crash into the panel edge or scrollbar. */
-.room-strip-end-pad {
-  flex: 0 0 24px;
-  align-self: stretch;
-}
-
-/* In the column variant the fade overlay + end-pad both exist for
-   the horizontal-scroll case only. Hide them so they do not steal
-   space or paint over wrapped content. */
-.room-strip-wrap-column .room-strip-fade,
-.room-strip-column .room-strip-end-pad {
-  display: none;
-}
-
-.room-strip::-webkit-scrollbar {
-  height: 4px;
-}
-.room-strip::-webkit-scrollbar-thumb {
-  background: var(--c-border-strong);
-  border-radius: 2px;
-}
-
-.room-strip.is-empty {
-  /* Reserved slot so the terminal does not reflow when the first
-     Room.Info push lands. */
-}
-
-.room-strip-area {
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.room-strip-name {
-  color: var(--c-text-strong);
-  font-weight: 600;
-}
-
-.room-strip-vnum {
-  color: var(--c-text-faint);
-  margin-left: 2px;
-}
-
-.room-strip-bullet {
-  color: var(--c-text-dim);
-  user-select: none;
-}
-
-.room-strip-terrain {
-  font-style: italic;
-}
-
-.room-strip-exits {
-  color: var(--c-text-muted);
-  letter-spacing: 0.06em;
-}
-
-.room-strip-list-label {
-  color: var(--c-text-faint);
-  text-transform: lowercase;
-}
-
-.room-strip-list {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  flex-wrap: nowrap;
-}
-
-.room-strip-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.room-strip-list-sep {
-  color: var(--c-text-dim);
-  margin-right: 2px;
-}
-
-.room-strip-count {
-  color: var(--c-text-faint);
-  font-variant-numeric: tabular-nums;
-  margin-right: 3px;
-}
-
-.room-strip-chip.is-target {
-  font-weight: 700;
-}
-
-.room-strip-chip-mark {
-  color: var(--c-accent);
-  margin-right: 2px;
 }
 
 /* Session chip — the connect control, living in the top bar. A status
@@ -1015,9 +836,6 @@ body {
 /* Card identity tints. Consumed only by the card recipe above, so
    these are inert everywhere outside a side zone. Hues follow the
    chat-channel pastels in chatColors.ts. */
-.map-pane {
-  --zone-card-tint: #97dde8;
-}
 .chat-pane {
   --zone-card-tint: #cba6dd;
 }
@@ -1025,20 +843,11 @@ body {
 .group-pane-pinned {
   --zone-card-tint: #8fdaa8;
 }
-.room-strip-wrap-column {
-  --zone-card-tint: #9bbdf0;
-}
 .vitals-bar {
   --zone-card-tint: #ecc985;
 }
-.combat-pane {
-  --zone-card-tint: #ea8f80;
-}
 .imm-pane {
   --zone-card-tint: var(--c-accent);
-}
-.affects-rows {
-  --zone-card-tint: #b8e0a0;
 }
 /* Inner vertical handles (chat, roomstrip) keep their 8px strip
    inside the wrapper, so a seam with a drag handle reads one step
@@ -1048,13 +857,6 @@ body {
    those selectors is exactly the kind of machinery under suspicion
    for the blank-chrome compositing wedge, and the visual win was
    marginal. */
-/* RoomStrip fills its card with an inner element that paints its own
-   surface and bottom hairline — both fight the card recipe, so they
-   go quiet inside the wrap. */
-.room-strip-wrap-column .room-strip {
-  background: transparent;
-  border-bottom: none;
-}
 .panel-zone-stack {
   display: flex;
   flex-direction: column;
@@ -1272,58 +1074,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   touch-action: none;
 }
 
-/* Affects bar — thin row above the input row that lists every
-   active Char.Affects pill. Hides itself entirely when there are no
-   active affects so layout does not reserve a slot. */
-.affects-bar {
-  flex: 0 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 14px;
-  background: var(--c-surface);
-  border-top: 1px solid var(--c-border);
-  position: relative;
-  z-index: 1;
-}
-
-/* Combat pane — standalone panel that hosts the CombatChip when
-   the user has placed combat in its own zone. Mirrors the affects-
-   bar shell so it sits cleanly in any of the four edge zones.
-   Collapses to zero height when out of combat (CombatPane returns
-   null), so the panel slot does not eat space when idle. */
-.combat-pane {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  padding: 4px 14px;
-  background: var(--c-surface);
-  border-top: 1px solid var(--c-border);
-  position: relative;
-  z-index: 1;
-  /* Standalone pane reserves vertical breathing room so the chip
-     reads as visually centered in its surface rather than glued to
-     the top edge. The chip variant (.combat-pane-chip) opts out of
-     this since it is meant to sit flush against vitals. */
-  min-height: 36px;
-}
-
-/* Chip variant — applied when combat is placed in the bottom zone.
-   Drops the own border-top + bottom padding so combat reads as a
-   chip flush against whatever sits below (typically the vitals bar
-   when both are in the bottom zone). */
-.combat-pane.combat-pane-chip {
-  border-top: none;
-  padding-top: 6px;
-  padding-bottom: 0;
-  /* Chip variant intentionally sizes to content — sitting flush
-     against the adjacent vitals bar is the goal. Override the
-     standalone min-height so the chip does not eat extra vertical
-     space when adjacent. */
-  min-height: 0;
-}
-
 /* Vitals — three stacked rows (hp / mn / mv) plus an optional
    tick row. Whole bar is one grid so columns line up across rows
    without per-row sizing drift. Each row: label · bar · % ·
@@ -1376,35 +1126,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   display: block;
   white-space: pre-wrap;
   padding: 4px 14px;
-}
-
-/* Per-line flex row for templates that contain bar tokens. The
-   default `.vitals-row-template` is `display: block; white-space:
-   pre-wrap`, which wraps mid-line at the bar's right edge when the
-   line outgrows the panel and strands trailing tokens on their own
-   line. The bar-aware flex variant treats each newline as a row
-   break and lets the bar cell absorb the remainder of the line. */
-.vitals-row-template-line {
-  display: flex;
-  align-items: baseline;
-  padding: 0 14px;
-  min-width: 0;
-}
-
-.vitals-template-cell {
-  flex: 0 0 auto;
-  /* `pre` preserves the spaces the user typed between tokens (e.g.
-     three spaces between `HP` and `%bar_hp` should stay three
-     spaces). Without this, the leading whitespace would collapse. */
-  white-space: pre;
-}
-
-.vitals-template-bar-cell {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  overflow: hidden;
 }
 
 /* Unknown template token (e.g. user typed `%xpz` instead of `%xp`,
@@ -1464,7 +1185,7 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 
 /* Each column owns its vital color. The class sets the theme's
    semantic token per vital, a user override lands on the same
-   property from inline style (VitalsBar.tsx), and the low state
+   property from inline style (VitalsSettings.tsx), and the low state
    wins over both because the inline value is dropped while low. */
 .vitals-ledger-cell {
   display: flex;
@@ -1571,48 +1292,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   }
 }
 
-/* Combat row under the columns. The name wraps rather than ellipses
-   (the user wants to read the full target). Percent and filament
-   take the drain-red ramp shared with the combat chip, applied
-   inline from VitalsBar.tsx. */
-.vitals-ledger-combat {
-  margin: -2px 14px 0;
-  padding: 9px 0 12px;
-  border-top: 1px solid var(--c-border);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.vitals-ledger-combat-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.vitals-ledger-combat-icon {
-  display: flex;
-  flex: 0 0 auto;
-  color: var(--c-danger);
-}
-.vitals-ledger-combat-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-family: var(--font-chrome);
-  font-size: 11px;
-  line-height: 14px;
-  font-weight: 500;
-  color: var(--c-text-strong);
-  white-space: normal;
-  word-break: break-word;
-}
-.vitals-ledger-combat-pct {
-  flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 14px;
-  font-variant-numeric: tabular-nums;
-}
-
 /* Wrapper App puts around the vitals bar when it sits in a top or
    bottom strip and the user capped its width. A flex column so the
    bar inside fills the capped width; align-self (set inline) places
@@ -1660,10 +1339,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   --vital-color: var(--c-warn);
 }
 .vitals-gauge.is-low {
-  --vital-color: var(--c-danger);
-}
-.vitals-gauge-combat {
-  margin-top: 2px;
   --vital-color: var(--c-danger);
 }
 
@@ -1720,28 +1395,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   border-radius: 3px;
   margin-right: -5px;
 }
-.vitals-gauge-pct {
-  color: var(--vital-color);
-}
-
-.vitals-gauge-name {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-}
-.vitals-gauge-name-text {
-  min-width: 0;
-  font-family: var(--font-chrome);
-  font-size: 11px;
-  line-height: 14px;
-  font-weight: 500;
-  color: var(--c-text-strong);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
 @media (prefers-reduced-motion: reduce) {
   .vitals-gauge.is-low .vitals-gauge-fill {
@@ -1776,15 +1429,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 }
 .vitals-pip-row.is-low {
   --vital-color: var(--c-danger);
-}
-.vitals-pip-combat {
-  --vital-color: var(--c-danger);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 2px;
-  padding-top: 8px;
-  border-top: 1px solid var(--c-border);
 }
 
 .vitals-pip-label {
@@ -1848,28 +1492,16 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   font-variant-numeric: tabular-nums;
   color: var(--c-text-faint);
 }
-.vitals-pip-row.is-low .vitals-pip-value,
-.vitals-pip-pct {
+.vitals-pip-row.is-low .vitals-pip-value {
   color: var(--vital-color);
-}
-.vitals-pip-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-family: var(--font-chrome);
-  font-size: 11px;
-  line-height: 14px;
-  font-weight: 500;
-  color: var(--c-text-strong);
-  white-space: normal;
-  word-break: break-word;
 }
 
 /* Strip layout. No card. One segment per vital on the status bar,
    the two letter label beside the value with a 2px drain line under
-   it, hairlines between segments, then combat and the tick. Mounted
-   from StatusBar.tsx; the panel zone renders nothing meanwhile. The
-   negative margin pulls the first hairline flush with the bar's
-   left inset so the segments read as part of the bar, not a chip. */
+   it, hairlines between segments, then combat and the tick. The
+   Settings preview renders it. The negative margin pulls the first
+   hairline flush with the bar's left inset so the segments read as
+   part of the bar, not a chip. */
 .vitals-strip {
   display: flex;
   align-items: center;
@@ -1897,9 +1529,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   --vital-color: var(--c-warn);
 }
 .vitals-strip-seg.is-low {
-  --vital-color: var(--c-danger);
-}
-.vitals-strip-combat {
   --vital-color: var(--c-danger);
 }
 
@@ -1946,38 +1575,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   display: block;
   height: 100%;
   background: var(--vital-color);
-}
-
-/* Name line of the combat segment. The name is bounded and ellipses;
-   the percent is a sibling so a long name never swallows it. */
-.vitals-strip-line {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  min-width: 0;
-}
-.vitals-strip-name {
-  font-family: var(--font-chrome);
-  font-size: 11px;
-  line-height: 12px;
-  font-weight: 500;
-  color: var(--c-text-strong);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 220px;
-}
-.vitals-strip-pct {
-  flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 12px;
-  font-variant-numeric: tabular-nums;
-  color: var(--vital-color);
-}
-.vitals-strip-combat .vitals-ledger-combat-icon,
-.vitals-pip-combat .vitals-ledger-combat-icon {
-  color: var(--vital-color);
 }
 
 /* Inline (single-row) layout. Packs all vitals onto one row in the
@@ -2273,26 +1870,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   animation: vitals-badge-danger-pulse 900ms ease-in-out infinite;
 }
 
-/* Tail cluster at the end of the inline row, separated from vitals
-   by ` - ` like the tintin layout. Hosts the tick countdown and the
-   MUD time chip. */
-.vitals-inline-tail {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  white-space: nowrap;
-  margin-left: 4px;
-}
-
-.vitals-inline-tail-sep {
-  color: var(--c-text-dim);
-}
-
-.vitals-inline-tick,
-.vitals-inline-time {
-  padding: 0;
-}
-
 .vitals-label {
   color: var(--c-text-faint);
   text-transform: lowercase;
@@ -2423,40 +2000,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   color: var(--c-text-dim);
 }
 
-/* Low HP vignette — soft red glow pinned to the window edges that
-   pulses when hp drops below 30%. Pure CSS — the only thing that
-   changes per frame is --lhv-danger (0..1) written by the React
-   side from the current hp percent. */
-.low-hp-vignette {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9000;
-}
-
-/* Pulse layer. Fades in as hp drops below 30 (the React side writes
-   --lhv-danger 0..1) and pulses on a 1.2s rhythm via a brightness
-   filter so the periphery breathes red without thrashing the
-   compositor with opacity animation. */
-.lhv-pulse {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(ellipse at center, transparent 50%, rgba(217, 48, 48, 0.45) 100%);
-  opacity: var(--lhv-danger, 0);
-  animation: lhv-danger-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes lhv-danger-pulse {
-  0%,
-  100% {
-    filter: brightness(1);
-  }
-  50% {
-    filter: brightness(0.65);
-  }
-}
-
 .vitals-percent {
   font-weight: 700;
   min-width: 36px;
@@ -2488,131 +2031,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   color: var(--c-danger);
 }
 
-.vitals-tick-value {
-  font-weight: 700;
-  color: var(--c-text);
-}
-
-.vitals-tick-value.is-warn {
-  color: var(--c-warn);
-  animation: vosh-tick-pulse 700ms ease-in-out infinite;
-}
-
-.affect-pill {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 1px 8px;
-  background: var(--c-surface-emphasis);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
-  color: var(--c-text);
-  white-space: nowrap;
-}
-
-.affect-pill-name {
-  color: var(--c-text);
-}
-
-.affect-pill-duration {
-  font-variant-numeric: tabular-nums;
-  /* color set inline by colorForDuration */
-}
-
-/* Absent (tracked but not currently active). Dim styling so the user
-   knows at a glance which buffs are missing. */
-.affect-pill-absent {
-  opacity: 0.5;
-  border-style: dashed;
-}
-
-.affect-pill-absent .affect-pill-duration {
-  color: var(--c-text-dim);
-}
-
-/* Rows variant — Ember sidebar pane for side-zone placement. Pane
-   head (caps "affects" + mono active count) over one row per tracked
-   affect: mono name, 30px duration mini-bar, mono countdown. Fill
-   width comes from durationFraction (a full bar = a day or more
-   left); fill and countdown carry the urgency ladder color inline. */
-.affects-rows {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 12px;
-  background: var(--c-surface);
-  border-top: 1px solid var(--c-border);
-}
-
-/* The imm board draws its own bottom border; drop the pane's top one
-   so they do not double the seam (same fix as .group-pane-pinned). */
-.imm-pane + .affects-rows {
-  border-top: none;
-}
-
-.affects-rows-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 11px 14px 7px;
-}
-
-.affects-rows-count {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--c-text-dim);
-  font-variant-numeric: tabular-nums;
-}
-
-.affect-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 14px;
-}
-
-.affect-row-name {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--c-text-muted);
-  flex: 1 1 auto;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.affect-row-bar {
-  flex: 0 0 auto;
-  width: 30px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--c-surface-emphasis);
-  overflow: hidden;
-}
-
-.affect-row-fill {
-  display: block;
-  height: 100%;
-  /* width + color inline from durationFraction / colorForDuration */
-}
-
-.affect-row-time {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--c-text-dim);
-  width: 28px;
-  flex: 0 0 auto;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Absent — tracked but not currently up: dim name, empty bar, and
-   the em-dash countdown keeps the base dim color. */
-.affect-row-absent .affect-row-name {
-  color: var(--c-text-dim);
-}
-
 /* Input row — Input.tsx owns the .input-row class. position+z-index
    guarantee the input row paints above the terminal even when xterm's
    canvas is one frame behind a container shrink (that lag was what
@@ -2637,70 +2055,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
      row's slot to main-row when xterm hasn't refit yet, which paints
      the input ON TOP of the terminal output. */
   flex: 0 0 auto;
-}
-
-/* LineChip — single tick + mud time chip riding on the input row's
-   top border. Centered horizontally; transformed up by half its
-   height so its vertical midline sits exactly on the border. Borrows
-   the old centered statusbar tick + time chip styling so the chrome
-   reads as familiar visual language. The bordered pill covers the
-   portion of the input-row border it overlaps; the rest of the
-   border continues on either side as the line shown in the design
-   mockup. */
-/* Ember: the tick + mud-time readout sits quietly at the right edge
-   of the input row — dim mono values with no pill and no border
-   interruption, matching the mockup's right-side hint slot. The warn
-   state carries the only color. */
-.line-chip {
-  flex: 0 0 auto;
-  color: var(--c-text-dim);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.line-chip-block {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.line-chip-caption {
-  color: var(--c-text-faint);
-  text-transform: lowercase;
-  letter-spacing: 0.04em;
-  font-weight: 400;
-}
-
-.line-chip-icon {
-  color: var(--c-text-faint);
-  font-weight: 400;
-}
-
-.line-chip-value {
-  color: var(--c-text-faint);
-}
-
-.line-chip-time {
-  color: var(--c-text-faint);
-}
-
-.line-chip-sep {
-  color: var(--c-text-dim);
-  font-weight: 400;
-}
-
-/* Warn pulse on the tick value within ~warn_at seconds of the next
-   fire. Same keyframes the standalone tick value used. */
-.line-chip-value.is-warn {
-  color: var(--c-warn);
-  animation: vosh-tick-pulse 700ms ease-in-out infinite;
 }
 
 .input-row .prompt {
@@ -3017,276 +2371,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   }
 }
 
-/* StatusBar — tmux-style single-row bottom band */
-
-.statusbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 26px;
-  flex: 0 0 auto;
-  padding: 2px 16px;
-  background: var(--c-surface);
-  color: var(--c-text-muted);
-  user-select: none;
-  position: relative;
-  z-index: 1;
-  gap: 16px;
-}
-
-/* AffectsBar nested in the statusbar strips its standalone wrapper
-   styling (padding, border-top, background) so it runs inline with
-   the rest of the bar. */
-.statusbar-left .affects-bar,
-.statusbar-right .affects-bar {
-  padding: 0;
-  background: transparent;
-  border-top: none;
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.statusbar-left,
-.statusbar-center,
-.statusbar-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.statusbar-center {
-  flex: 1 1 auto;
-  justify-content: center;
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* Always-on tick + MUD time chip. Bordered + accent-tinted so it
-   reads as the primary status indicator on the bar, distinct from
-   the muted target / quickkey content on the left and the moons /
-   wall-clock on the right. */
-.statusbar-timechip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 1px 10px;
-  border: 1px solid var(--c-border-strong);
-  border-radius: 3px;
-  background: var(--c-surface-deep);
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-}
-
-.statusbar-timechip-block {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.statusbar-timechip-label {
-  color: var(--c-text-faint);
-  text-transform: lowercase;
-  letter-spacing: 0.04em;
-  font-weight: 400;
-}
-
-.statusbar-timechip-value {
-  color: var(--c-text);
-}
-
-/* Warn pulse on the tick value within ~5s of the next tick. Same
-   keyframes the standalone tick value uses (vosh-tick-pulse). */
-.statusbar-timechip-value.is-warn {
-  color: var(--c-warn);
-  animation: vosh-tick-pulse 700ms ease-in-out infinite;
-}
-
-.statusbar-timechip-time {
-  color: var(--c-accent);
-}
-
-.statusbar-timechip-sep {
-  color: var(--c-text-dim);
-  font-weight: 400;
-}
-
-.statusbar-bar {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.statusbar-bar-label {
-  color: var(--c-text-faint);
-  text-transform: lowercase;
-  letter-spacing: 0.04em;
-}
-
-.statusbar-bar-percent {
-  font-weight: 600;
-  min-width: 32px;
-  text-align: right;
-}
-
-.statusbar-bar-track {
-  position: relative;
-  display: inline-block;
-  height: 14px;
-  width: 110px;
-  background: var(--c-surface-emphasis);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.statusbar-bar-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  /* width + background set inline by VitalBar via colorForPct */
-}
-
-.statusbar-bar-text {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  pointer-events: none;
-}
-
-/* Bright copy sits behind and shows through wherever the fill bar
-   does not cover. */
-.statusbar-bar-text-light {
-  color: var(--c-text-strong);
-}
-
-/* Dark copy paints on top, clipped via inline clip-path to only the
-   portion of the bar the fill actually covers. */
-.statusbar-bar-text-dark {
-  /* color + clip-path set inline by VitalBar */
-}
-
-.statusbar-seg {
-  white-space: nowrap;
-}
-
-.statusbar-tone-muted {
-  color: var(--c-text-muted);
-}
-
-.statusbar-tone-warn {
-  color: var(--c-warn);
-}
-
-.statusbar-tone-ok {
-  color: var(--c-success);
-}
-
-.statusbar-tone-err {
-  color: var(--c-danger);
-}
-
-.statusbar-clock {
-  color: var(--c-text-faint);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-  padding: 0 4px;
-}
-
-/* MUD in-game time chip (replaces wall-clock when World.Time is being
-   pushed). Slightly accent-tinted so the user can tell at a glance
-   that it is showing in-game time rather than local time. */
-.statusbar-clock-mud {
-  color: var(--c-accent);
-}
-
-/* Moon group sits immediately left of the wall clock. Aabahran has
-   multiple moons; each renders as a geometric phase glyph, bumped
-   font-size so the small circle is clearly legible. Active moons
-   read in accent color; inactive dim out. Alignment events (eclipse
-   / triad / near) get a pill badge. */
-.statusbar-moons {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  line-height: 1;
-}
-
-.statusbar-moon {
-  display: inline-flex;
-  align-items: center;
-  color: var(--c-text-dim);
-  line-height: 1;
-  position: relative;
-  cursor: default;
-}
-
-.statusbar-moon svg {
-  display: block;
-}
-
-.statusbar-moon.is-active {
-  color: var(--c-warn);
-  filter: drop-shadow(0 0 3px rgba(229, 192, 87, 0.5));
-}
-
-/* CSS-driven tooltip — WKWebView's native title tooltip is flaky in
-   Tauri. Show our own pill above the glyph immediately on hover.
-   Anchored from the right edge of the moon glyph (not centered) so
-   the tooltip extends leftward into the window; centering let long
-   text overflow the .app overflow:hidden boundary on the right. */
-.statusbar-moon[data-tooltip]:hover::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: calc(100% + 6px);
-  right: 0;
-  padding: 5px 10px;
-  background: var(--c-surface-emphasis);
-  color: var(--c-text);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 6px;
-  box-shadow: var(--float);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 100;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-}
-
-.statusbar-moon-badge {
-  margin-left: 4px;
-  padding: 0 6px;
-  border-radius: 999px;
-  font-size: 0.8em;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: lowercase;
-}
-
-.statusbar-moon-badge.is-eclipse {
-  background: rgba(228, 104, 118, 0.18);
-  color: #e46876;
-}
-
-.statusbar-moon-badge.is-triad {
-  background: rgba(147, 138, 169, 0.2);
-  color: #d2a8ff;
-}
-
-.statusbar-moon-badge.is-near {
-  background: rgba(230, 195, 132, 0.16);
-  color: #e6c384;
-}
-
 /* Embedded-panel attachment on a preview chip — "[vitals] + tick".
    The "+ tick" sits to the right of the host chip label and visually
    weights lighter so the host stays primary. */
@@ -3314,251 +2398,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 .panels-preview-statusbar-label {
   color: var(--c-text-faint);
   letter-spacing: 0.04em;
-}
-
-@keyframes vosh-tick-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.55;
-  }
-}
-
-/* Per-tick vital deltas. Rendered to the right of the value bar.
-   Up arrow + green for regen, down arrow + red for loss. */
-.statusbar-bar-delta {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  padding: 0 2px;
-}
-
-.statusbar-bar-delta-up {
-  color: var(--c-success);
-}
-
-.statusbar-bar-delta-down {
-  color: var(--c-danger);
-}
-
-/* Combat chip. A compact vertical block (swords+name / bar+pct /
-   condition) so long target names and long condition phrases never
-   get clipped — each piece takes its own row and the chip grows
-   downward as needed. Lives to the right of the stacked vitals or
-   above the inline / template prompt. */
-.vitals-combat {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 0;
-  /* Bound the width so a very long target name wraps rather than
-     pushing the chip past the panel edge. Two lines of name at this
-     width is plenty for any MUD mob. */
-  max-width: 320px;
-}
-
-/* One-line combat layout — swords + name + hp bar (with the
-   percent embedded inside it). Replaces the older 3-row stack so
-   combat takes a single line in the chip, with the optional
-   condition sitting on its own line below. */
-.vitals-combat-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-/* Combat hp bar now reuses the vital bar styles (TrackBar, SolidBar,
-   RampedBar) — no own visual rules needed. The drain-red palette
-   lives in JS (combatDrainRed in VitalsBar.tsx) and is applied as
-   the `color` prop, so whatever bar style the user picked for
-   vitals also renders the combat target with drain-red fill. */
-
-.vitals-combat-head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-}
-
-.vitals-combat-swords {
-  color: var(--c-danger);
-  flex: 0 0 auto;
-}
-
-.vitals-combat-name {
-  color: var(--c-text-strong);
-  font-weight: 600;
-  /* Allow the name to wrap onto a second line if needed instead of
-     ellipsing — the user wants to read the full target. */
-  white-space: normal;
-  word-break: break-word;
-  line-height: 1.2;
-}
-
-.vitals-combat-bar-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.vitals-combat-unknown {
-  color: var(--c-text-faint);
-  font-style: italic;
-}
-
-.vitals-combat-condition {
-  color: var(--c-text-muted);
-  font-style: italic;
-  /* Multi-word conditions like "has quite a few wounds and bruises"
-     wrap inside the chip's max-width instead of being clipped. */
-  white-space: normal;
-  word-break: break-word;
-  line-height: 1.2;
-}
-
-/* HP percent label after the combat track-bar. Colored by hp tier
-   (green / yellow / red) so the bar AND number both convey urgency. */
-.vitals-combat-pct {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Combat chip in the inline / template vitals layouts. Sits as a
-   row ABOVE the single inline/template line so the eye reads
-   "what I'm fighting" first, then "my vitals" second. */
-.vitals-row-combat-top {
-  display: flex;
-  align-items: center;
-  padding: 2px 14px 0;
-}
-
-/* Stacked-layout container. Wraps the hp/mn/mv rows on the left
-   and the optional combat chip on the right, with the combat chip
-   vertically centered against the middle row (mana). When no
-   combat is in progress, the wrap collapses to just the rows. */
-.vitals-stacked-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.vitals-stacked-rows {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  row-gap: 1px;
-}
-
-.vitals-stacked-combat {
-  flex: 0 0 auto;
-  padding-right: 14px;
-}
-
-/* Target name segment. Sits on the left after vitals; only shown
-   when a target is set. Accent value makes the active target read
-   at a glance against the muted vitals row. */
-.statusbar-target {
-  display: inline-flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  min-width: 0;
-}
-
-.statusbar-target-label {
-  color: var(--c-text-dim);
-  font-family: var(--font-label);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  flex: 0 0 auto;
-}
-
-.statusbar-target-value {
-  color: var(--c-accent);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-  /* Stay whole. Earlier attempts capped this with max-width plus
-     text-overflow:ellipsis and the value got truncated to "C..."
-     whenever the statusbar lived inside a narrow column (side
-     panels filling the window height). With wrapping on the parent
-     the target keeps its full name on one row and quick keys flow
-     to the next row when they do not fit. */
-  flex: 0 0 auto;
-}
-
-/* Quick-key bindings rendered next to the tar value. Each entry is
-   "name verb", separated by middle dots. Wraps to as many rows as
-   needed so a long binding list (combat builds with a dozen quick
-   keys) never gets clipped. */
-.statusbar-qkeys {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.25rem 0.6rem;
-  font-variant-numeric: tabular-nums;
-  min-width: 0;
-}
-
-.statusbar-qkey {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.25rem;
-}
-
-.statusbar-qkey-sep {
-  color: var(--c-text-dim);
-  margin-right: 0.15rem;
-}
-
-.statusbar-qkey-name {
-  color: var(--c-text-dim);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: lowercase;
-}
-
-.statusbar-qkey-verb {
-  color: var(--c-text-faint);
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-/* Room name + compact exit initials. Centered between the vitals/
-   target block and the right-side tick + clock. */
-.statusbar-room {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  max-width: 100%;
-  overflow: hidden;
-}
-
-.statusbar-room-name {
-  color: var(--c-text);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.statusbar-room-exits {
-  color: var(--c-text-faint);
-  letter-spacing: 0.08em;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Settings window. Shares .app + TopBar chrome with the main window.
@@ -7136,18 +5975,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   display: flex;
 }
 
-.map-pane {
-  flex: 1 1 auto;
-  min-width: 0;
-  /* min-height: 0 lets the map shrink when the chat pane opens and
-     squeezes the right column. Without it, the map refuses to give
-     up space and the pinned group below it gets clipped. */
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--c-surface);
-}
-
 /* Right column hosts map + optional pinned group panel stacked
    vertically. The horizontal Resizable wrapper sets the column
    width; this inner flex column splits the height. */
@@ -7177,14 +6004,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
    if the chat row below has its own z-index stack. */
 .group-pinned-resizable .resizable-handle {
   z-index: 3;
-}
-
-.map-pane-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  position: relative;
-  overflow: hidden;
-  display: flex;
 }
 
 /* ServerMapView internals, lifted from the pre-T0 styles so the
@@ -8593,106 +7412,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   overflow: hidden;
 }
 
-.well-pane {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.well-pane-chat {
-  flex: 1 1 55%;
-}
-
-.well-pane-log {
-  flex: 1 1 45%;
-}
-
-.well-pane-chip-row {
-  flex: 0 0 auto;
-  display: flex;
-  padding: 10px 12px 6px;
-}
-
-.well-pane-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--c-surface-pane);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 4px;
-  padding: 2px 7px;
-}
-
-.well-pane-chip-num {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--c-text-dim);
-}
-
-.well-pane-chip.is-active .well-pane-chip-num {
-  color: var(--c-accent);
-}
-
-.well-pane-chip-name {
-  font-family: var(--font-label);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--c-text-dim);
-}
-
-.well-pane-chip.is-active .well-pane-chip-name {
-  color: var(--c-text-muted);
-}
-
-.well-log-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 16px 14px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--c-text-dim);
-}
-
-.well-chat-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 16px 14px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.well-chat-line {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.well-chat-ts {
-  flex: 0 0 auto;
-  font-size: 10px;
-  color: var(--c-text-dim);
-}
-
-.statusbar-panes {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--c-text-dim);
-}
-
-.statusbar-panes .is-active {
-  color: var(--c-accent);
-}
-
 /* Always-mounted well wrapper. Closed state collapses to a plain
    column so the terminal keeps its pre-splits geometry exactly. */
 .well-splits.is-closed {
@@ -8986,13 +7705,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   flex: 1 1 auto;
   font-size: 11px;
   color: var(--c-text-dim);
-}
-
-/* Moons at the true right edge: extra separation from the clock so
-   the edge placement reads distinct from after-the-clock. */
-.statusbar-moons-edge {
-  display: inline-flex;
-  margin-left: 10px;
 }
 
 /* Font size stepper. Chips flank the number field so the size can be

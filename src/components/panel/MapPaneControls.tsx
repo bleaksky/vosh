@@ -10,7 +10,6 @@ import { CheckIcon } from './paneIcons';
 // At rest the pane shows only the drawing, as in the approved boards.
 
 const MAP_STYLE_LABELS: Record<MapStyle, string> = {
-  plain: 'Plain',
   squares: 'Squares',
   glyphs: 'Glyphs',
   tileset: 'Tileset',

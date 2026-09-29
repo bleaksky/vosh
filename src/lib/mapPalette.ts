@@ -85,48 +85,9 @@ export const MAP_COLORS = {
   pathLine: 'rgba(196,168,114,0.7)',
 };
 
-/// The plain One Window map (SPEC 10 G7) takes every color from the
-/// chrome tokens, read at draw time so the drawing follows the theme.
-export interface PlainColors {
-  /// The panel ground the drawing sits on.
-  ground: string;
-  /// Rooms and the lines between them.
-  room: string;
-  /// Your room and its ring.
-  accent: string;
-  /// Place labels.
-  label: string;
-  /// The UI font stack the labels use.
-  font: string;
-}
-
-/// Every plain drawing color from one computed style, so a draw asks
-/// the style system once. Fallbacks are the approved Nord board's, for
-/// a paint before the theme lands.
-export function plainColors(style: CSSStyleDeclaration): PlainColors {
-  const read = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
-  return {
-    ground: read('--panel', read('--c-surface', '#090e13')),
-    room: read('--secondary', '#c0c7d3'),
-    accent: read('--accent', '#88c0d0'),
-    label: read('--tertiary', '#7b8294'),
-    font: read('--font-ui', 'system-ui, sans-serif'),
-  };
-}
-
 // Every custom property a map style reads. A change to any of them
 // means the canvas needs a fresh paint.
-const THEME_VARS = [
-  '--panel',
-  '--secondary',
-  '--accent',
-  '--tertiary',
-  '--font-ui',
-  '--c-surface',
-  '--c-accent',
-  '--c-accent-soft',
-  '--c-text-faint',
-];
+const THEME_VARS = ['--c-surface', '--c-accent', '--c-accent-soft', '--c-text-faint'];
 
 /** One string that changes whenever a color the map paints with does. */
 export function mapThemeSignature(): string {
@@ -157,29 +118,6 @@ export function sectorForCode(code: string | undefined): SectorTheme {
   if (!code) return SECTORS[0];
   const idx = SERVER_CODE_TO_SECTOR[code];
   return SECTORS[idx ?? 0];
-}
-
-// Best-effort mapping from a Room.Info terrain string to a sector index.
-// Names roughly match what ROM 2.4 derivatives report.
-export function sectorForTerrain(terrain: string | undefined): SectorTheme {
-  if (!terrain) return SECTORS[0];
-  const t = terrain.toLowerCase();
-  if (t.includes('inside') || t.includes('road') || t.includes('indoor')) return SECTORS[0];
-  if (t.includes('city') || t.includes('street')) return SECTORS[1];
-  if (t.includes('field') || t.includes('grass') || t.includes('pasture')) return SECTORS[2];
-  if (t.includes('forest') || t.includes('wood')) return SECTORS[3];
-  if (t.includes('hill')) return SECTORS[4];
-  if (t.includes('mountain')) return SECTORS[5];
-  if (t.includes('underwater')) return SECTORS[7];
-  if (t.includes('water')) return t.includes('noswim') ? SECTORS[7] : SECTORS[6];
-  if (t.includes('swamp') || t.includes('marsh') || t.includes('bog')) return SECTORS[8];
-  if (t.includes('air')) return SECTORS[9];
-  if (t.includes('desert') || t.includes('sand')) return SECTORS[10];
-  if (t.includes('lava') || t.includes('volcano') || t.includes('inferno')) return SECTORS[11];
-  if (t.includes('ice') || t.includes('arctic') || t.includes('tundra') || t.includes('snow')) {
-    return SECTORS[12];
-  }
-  return SECTORS[0];
 }
 
 // Convert a hex string like "#aabbcc" to an rgba() string at the given alpha.
