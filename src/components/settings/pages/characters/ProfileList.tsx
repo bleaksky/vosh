@@ -67,6 +67,12 @@ type Editing =
   | { kind: 'rename'; name: string }
   | { kind: 'duplicate'; name: string };
 
+/** Where focus goes once a field or the delete dialog closes: a row,
+ *  once the list shows it, or New profile. `always` moves it even from
+ *  a control, for the dialog, which hands focus back to the row it
+ *  deletes. */
+type FocusTarget = { row: string; always?: boolean } | 'new';
+
 interface OpenMenu {
   name: string;
   at: MenuPlacement;
@@ -88,8 +94,33 @@ export function ProfileList({
   const [editing, setEditing] = useState<Editing | null>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
+  const newRef = useRef<HTMLButtonElement | null>(null);
   const names = list.profiles.map((p) => p.name);
+
+  // A field or the dialog that held focus is gone, so focus would sit on
+  // the page. Hand it to the row the action left you on, once the list
+  // shows that row, or to New profile. Focus you moved to a control
+  // meanwhile stays where you put it.
+  useEffect(() => {
+    if (!focusTarget) return;
+    const current = document.activeElement;
+    const lost = !current || current === document.body;
+    if (!lost && !(focusTarget !== 'new' && focusTarget.always)) {
+      setFocusTarget(null);
+      return;
+    }
+    const target =
+      focusTarget === 'new'
+        ? newRef.current
+        : Array.from(
+            listRef.current?.querySelectorAll<HTMLButtonElement>('.st-profile-select') ?? [],
+          ).find((b) => b.dataset.profile === focusTarget.row);
+    if (!target) return;
+    target.focus();
+    setFocusTarget(null);
+  }, [focusTarget, list, editing]);
 
   const fail = (e: unknown) => onError(String(e));
 
@@ -137,10 +168,18 @@ export function ProfileList({
     action();
   };
 
-  const createProfile = async (raw: string): Promise<boolean> => {
+  // Each field hands `hasFocus`, true while it still holds focus, so a
+  // field you close with Return or Esc passes focus on, and one you
+  // leave keeps focus where you moved it.
+  const closeField = (hasFocus: boolean, target: FocusTarget) => {
+    setEditing(null);
+    if (hasFocus) setFocusTarget(target);
+  };
+
+  const createProfile = async (raw: string, hasFocus: () => boolean): Promise<boolean> => {
     const name = raw.trim();
     if (name.length === 0) {
-      setEditing(null);
+      closeField(hasFocus(), 'new');
       return true;
     }
     if (refuseTaken(name)) return false;
@@ -148,7 +187,7 @@ export function ProfileList({
       const active = list.profiles.find((p) => p.name === list.active);
       const claim = newProfileClaim(identity, active);
       const entry = await profileCreate(name, list.active, claim);
-      setEditing(null);
+      closeField(hasFocus(), { row: entry.name });
       onShow(entry.name);
       const character = claim?.characters?.[0];
       let sentence: string | null = null;
@@ -167,16 +206,20 @@ export function ProfileList({
     }
   };
 
-  const renameProfile = async (from: string, raw: string): Promise<boolean> => {
+  const renameProfile = async (
+    from: string,
+    raw: string,
+    hasFocus: () => boolean,
+  ): Promise<boolean> => {
     const name = raw.trim();
     if (name.length === 0 || keepsProfileName(from, name)) {
-      setEditing(null);
+      closeField(hasFocus(), { row: from });
       return true;
     }
     if (refuseTaken(name, from)) return false;
     try {
       await profileRename(from, name);
-      setEditing(null);
+      closeField(hasFocus(), { row: name });
       if (selected === from) onShow(name);
       onError(null);
       return true;
@@ -188,16 +231,20 @@ export function ProfileList({
     }
   };
 
-  const duplicateProfile = async (from: string, raw: string): Promise<boolean> => {
+  const duplicateProfile = async (
+    from: string,
+    raw: string,
+    hasFocus: () => boolean,
+  ): Promise<boolean> => {
     const name = raw.trim();
     if (name.length === 0) {
-      setEditing(null);
+      closeField(hasFocus(), { row: from });
       return true;
     }
     if (refuseTaken(name)) return false;
     try {
       await profileDuplicate(from, name);
-      setEditing(null);
+      closeField(hasFocus(), { row: name });
       onShow(name);
       onError(null);
       return true;
@@ -218,7 +265,11 @@ export function ProfileList({
   const deleteProfile = (name: string) => {
     setDeleting(null);
     // Show the profile in use instead of one about to go.
-    if (selected === name) onSelect(list.active);
+    const shown = selected === name || !selected ? list.active : selected;
+    if (shown !== selected) onSelect(shown);
+    // The dialog hands focus back to the more button of the row that
+    // is going, so focus moves on to the row you see.
+    setFocusTarget({ row: shown, always: true });
     void run(async () => {
       await profileDelete(name);
       onStatus(null);
@@ -268,14 +319,15 @@ export function ProfileList({
                     initial={display}
                     label={`New name for ${display}`}
                     commitOnBlur
-                    onCommit={(value) => renameProfile(name, value)}
-                    onCancel={() => setEditing(null)}
+                    onCommit={(value, hasFocus) => renameProfile(name, value, hasFocus)}
+                    onCancel={(hasFocus) => closeField(hasFocus, { row: name })}
                   />
                 ) : (
                   <>
                     <button
                       type="button"
                       className="st-profile-select"
+                      data-profile={name}
                       aria-current={selected === name ? 'true' : undefined}
                       onClick={() => onSelect(name)}
                       onKeyDown={onRowKey}
@@ -309,8 +361,8 @@ export function ProfileList({
                   <NameField
                     initial={copyName(name, names)}
                     label={`Name for the copy of ${display}`}
-                    onCommit={(value) => duplicateProfile(name, value)}
-                    onCancel={() => setEditing(null)}
+                    onCommit={(value, hasFocus) => duplicateProfile(name, value, hasFocus)}
+                    onCancel={(hasFocus) => closeField(hasFocus, { row: name })}
                   />
                 </li>
               )}
@@ -323,13 +375,14 @@ export function ProfileList({
               initial={newProfileName(identity, names)}
               label="New profile name"
               onCommit={createProfile}
-              onCancel={() => setEditing(null)}
+              onCancel={(hasFocus) => closeField(hasFocus, 'new')}
             />
           </li>
         )}
       </ul>
 
       <Button
+        ref={newRef}
         className="st-chars-new"
         icon={<PlusIcon />}
         data-st-anchor="new-profile"
@@ -391,9 +444,12 @@ interface NameFieldProps {
   /** Leaving the field saves, the way a rename in Finder does. A new
    *  name waits for Return instead. */
   commitOnBlur?: boolean;
-  /** Resolves true when the field can close. */
-  onCommit: (value: string) => Promise<boolean>;
-  onCancel: () => void;
+  /** Resolves true when the field can close. `hasFocus` reads true
+   *  while the field still holds focus, as after Return. */
+  onCommit: (value: string, hasFocus: () => boolean) => Promise<boolean>;
+  /** `hasFocus` is true for Esc pressed in the field, and false when
+   *  leaving it empty closed it. */
+  onCancel: (hasFocus: boolean) => void;
 }
 
 /** A profile name typed in place of a row. Return saves, Esc cancels,
@@ -406,6 +462,8 @@ function NameField({ initial, label, commitOnBlur = false, onCommit, onCancel }:
   // after Return sees the save already under way.
   const done = useRef(false);
   const saving = useRef(false);
+  const focused = useRef(false);
+  const hasFocus = () => focused.current;
 
   useEffect(() => {
     ref.current?.focus();
@@ -415,7 +473,7 @@ function NameField({ initial, label, commitOnBlur = false, onCommit, onCancel }:
   const cancel = () => {
     if (done.current || saving.current) return;
     done.current = true;
-    onCancel();
+    onCancel(focused.current);
   };
 
   useEscape(true, cancel);
@@ -423,7 +481,7 @@ function NameField({ initial, label, commitOnBlur = false, onCommit, onCancel }:
   const commit = () => {
     if (done.current || saving.current) return;
     saving.current = true;
-    void onCommit(value).then((closed) => {
+    void onCommit(value, hasFocus).then((closed) => {
       saving.current = false;
       if (closed) done.current = true;
     });
@@ -444,7 +502,11 @@ function NameField({ initial, label, commitOnBlur = false, onCommit, onCancel }:
             commit();
           }
         }}
+        onFocus={() => {
+          focused.current = true;
+        }}
         onBlur={() => {
+          focused.current = false;
           if (value.trim().length === 0) cancel();
           else if (commitOnBlur) commit();
         }}
