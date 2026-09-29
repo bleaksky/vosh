@@ -259,14 +259,18 @@ pub fn run() {
                             // and saves it so a launch as another
                             // character keeps it. It waits while a profile
                             // file does not read.
-                            let preset_lists = tauri::async_runtime::block_on(async {
-                                state
-                                    .profile_set
-                                    .lock()
-                                    .await
-                                    .as_ref()
-                                    .and_then(loadout_store::profile_preset_lists)
-                            });
+                            let preset_lists = if catalog.enabled_presets.is_none() {
+                                tauri::async_runtime::block_on(async {
+                                    state
+                                        .profile_set
+                                        .lock()
+                                        .await
+                                        .as_ref()
+                                        .and_then(loadout_store::profile_preset_lists)
+                                })
+                            } else {
+                                None
+                            };
                             let presets_moved = tauri::async_runtime::block_on(async {
                                 let mut p = profile.lock().await;
                                 loadout_store::adopt_catalog_presets(
