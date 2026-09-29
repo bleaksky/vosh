@@ -82,3 +82,49 @@ export function CloseIcon() {
     </Glyph>
   );
 }
+
+// Status line glyphs for the tick and the game time, drawn at 12 px.
+// Like the chevron, the stroke keeps its 1.25 px weight at that size.
+
+interface SmallIconProps {
+  /** Rendered size in px. The status line draws them at 12. */
+  size?: 12 | 16;
+}
+
+const keepStroke = (size: 12 | 16) =>
+  size === 12 ? ({ vectorEffect: 'non-scaling-stroke' } as const) : {};
+
+/** The tick. A stopwatch with its crown, side button, and one hand. */
+export function StopwatchIcon({ size = 12 }: SmallIconProps) {
+  return (
+    <Glyph size={size}>
+      <circle cx="8" cy="9" r="5.25" {...keepStroke(size)} />
+      <path d="M6.25 1.75h3.5M8 1.75v2M8 9V6.25M11.75 5.25L13 4" {...keepStroke(size)} />
+    </Glyph>
+  );
+}
+
+/** Game time while the sun is up. A disc and eight short rays. */
+export function SunIcon({ size = 12 }: SmallIconProps) {
+  return (
+    <Glyph size={size}>
+      <circle cx="8" cy="8" r="2.75" {...keepStroke(size)} />
+      <path
+        d="M8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1.05 1.05M11.35 11.35l1.05 1.05M3.6 12.4l1.05-1.05M11.35 4.65l1.05-1.05"
+        {...keepStroke(size)}
+      />
+    </Glyph>
+  );
+}
+
+/** Game time after dark. A crescent on the 6.25 circle. */
+export function MoonIcon({ size = 12 }: SmallIconProps) {
+  return (
+    <Glyph size={size}>
+      <path
+        d="M14.25 8.55A6.25 6.25 0 1 1 7.45 1.75a4.86 4.86 0 0 0 6.8 6.8z"
+        {...keepStroke(size)}
+      />
+    </Glyph>
+  );
+}
