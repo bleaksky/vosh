@@ -3619,9 +3619,9 @@ async fn apply_migration(
     // on a switch. Only the aliases, triggers, and macros leave it, as
     // the catalog holds them now. A file that kept them would lay its
     // copies, with their old group names, over the catalog at launch.
-    // Its group checkbox lists name the catalog groups its loadout
-    // leaves off, see `migration::profile_file_for_catalog`, and a
-    // profile that never saved a file gets one when it has lists to
+    // Its group checkbox lists name the catalog groups of each kind that
+    // are off for the profile, see `migration::profile_file_for_catalog`,
+    // and a profile that never saved a file gets one when it has lists to
     // keep. The file keeps its own enabled preset list, which loadout
     // mode replaces with the catalog's at every load. Everything is built
     // before the first write, so a file that does not serialize changes
@@ -3632,9 +3632,7 @@ async fn apply_migration(
             Some(text) => ProfileConfig::from_toml(text).map_err(|e| e.to_string())?,
             None => ProfileConfig::default(),
         };
-        let own = crate::loadout::Loadout::empty(file.name.as_str());
-        let loadout = loadout_set.get(&file.name).unwrap_or(&own);
-        crate::migration::profile_file_for_catalog(&mut config, &catalog, loadout);
+        crate::migration::profile_file_for_catalog(&mut config, &file.name, &plan.groups);
         let lists = !config.disabled_alias_groups.is_empty()
             || !config.disabled_trigger_groups.is_empty()
             || !config.disabled_macro_groups.is_empty();
@@ -5958,6 +5956,55 @@ mod tests {
                     assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
                 }
             }
+        }
+
+        /// A trigger that sends `command` on lines matching `pattern`.
+        fn send_trigger(name: &str, pattern: &str, command: &str) -> vosh_trigger::Trigger {
+            vosh_trigger::Trigger {
+                name: name.into(),
+                patterns: vec![vosh_trigger::TriggerPattern {
+                    pattern: pattern.into(),
+                    enabled: true,
+                }],
+                priority: 0,
+                enabled: true,
+                actions: vec![vosh_trigger::TriggerAction::Send {
+                    template: command.into(),
+                }],
+                preset: None,
+                group: None,
+                target: vosh_trigger::TriggerTarget::Line,
+            }
+        }
+
+        #[tokio::test]
+        async fn a_trigger_group_you_had_off_stays_off_beside_its_aliases() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            // The Healer loots by hand with its loot alias and keeps the
+            // auto loot trigger off. Both sit in a group named loot.
+            let mut healer = ProfileConfig::default();
+            let mut alias = vosh_alias::Alias::new("loot", "get all corpse");
+            alias.group = Some("loot".into());
+            healer.aliases.push(alias);
+            let mut autoloot = send_trigger("autoloot", "^You killed", "get all corpse");
+            autoloot.group = Some("loot".into());
+            healer.triggers.push(autoloot);
+            healer.disabled_trigger_groups = vec!["loot".into()];
+            healer.save(&set.profile_path("Healer")).unwrap();
+            let before = items_on(&*relaunch_as(dir.path(), "Healer").await.profile.lock().await);
+            assert_eq!(before, ["alias loot"]);
+
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+
+            // The trigger used to come back on with the alias group of the
+            // same name, and looted every kill.
+            let state = relaunch_as(dir.path(), "Healer").await;
+            assert_eq!(items_on(&*state.profile.lock().await), before);
         }
 
         #[tokio::test]
