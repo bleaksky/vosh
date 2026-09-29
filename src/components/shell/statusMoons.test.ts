@@ -22,6 +22,14 @@ function sky(active: [boolean, boolean, boolean], flags: Partial<Moons> = {}): M
 }
 
 describe('statusMoons', () => {
+  it('draws the moons as ink on a light theme only', () => {
+    expect(statusMoons(sky([true, true, true]), nord.xterm, tokens)?.onLight).toBe(false);
+    const vellum = findTheme('vellum');
+    expect(statusMoons(sky([true, true, true]), vellum.xterm, themeTokens(vellum))?.onLight).toBe(
+      true,
+    );
+  });
+
   it('keeps only the moons in the sky, in the server order', () => {
     const out = statusMoons(sky([true, false, true]), nord.xterm, tokens);
     expect(out?.moons.map((moon) => moon.name)).toEqual(['Lysenties', 'Dyphrities']);
