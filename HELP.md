@@ -194,7 +194,7 @@ Give related aliases a shared group name to toggle them as a folder, either with
 
 Example. An alias named `kk` with the expansion `kick %1; backstab %1` turns `kk dragon` into `kick dragon` followed by `backstab dragon`.
 
-The input bar defines aliases too. `#alias gc get all corpse` sets one and echoes `alias gc set`, `#aliases` lists every alias, and `#unalias gc` removes one.
+The input bar defines aliases too. `#alias gc get all corpse` sets one and echoes `alias gc set`, `#aliases` lists every alias, and `#unalias gc` removes one. Setting an alias again, from the input bar or with `mud.alias` in Lua, keeps it in its group.
 
 ### 3.2 Create a trigger
 
