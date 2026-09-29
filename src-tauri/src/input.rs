@@ -47,11 +47,11 @@ slash commands:
   #group <name>                        show current state of a group
   #groups                              list every group and its state
   #tick                                show tick timer state
-  #tick interval <secs>                set the tick interval
-  #tick reset                          reset the timer now
-  #tick on {pattern}                   also reset on a regex match
+  #tick interval <secs>                set how long a tick should take
+  #tick reset                          restart the count now
+  #tick on {pattern}                   a line that matches is the tick
   #tick off                            clear the regex reset pattern
-  #tick fire <command>                 run a command on each fire
+  #tick fire <command>                 run a command on each tick
   #tick nofire                         clear the auto-fire command
   #tick sound on|off                   toggle the tick beep
   #tick disable                        stop the tick timer
