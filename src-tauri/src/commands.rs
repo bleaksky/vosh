@@ -3696,26 +3696,31 @@ async fn apply_migration_with(
     }
 
     // A full copy of each file first, so the files as they were wait in
-    // profiles/legacy before anything changes. A copy an earlier run
-    // left there moves to a backup beside it.
-    let legacy_dir = app_data.join("profiles").join("legacy");
+    // profiles/legacy before anything changes. The wizard refuses to run
+    // while profiles/legacy holds a copy from an earlier run, so no copy
+    // lands over another, see `loadout_store::migration_refusal`.
+    let legacy_dir = crate::loadout_store::legacy_dir(app_data);
+    let mut copies = Vec::new();
     for file in &sources.files {
         let Some(text) = &file.text else {
             continue;
         };
         let name = file.path.file_name().unwrap_or_default();
-        crate::profile_config::write_with_backup(&legacy_dir.join(name), text).map_err(|e| {
-            format!(
+        let copy = legacy_dir.join(name);
+        if let Err(e) = crate::profile_config::write_with_backup(&copy, text) {
+            take_out_copies(&copies);
+            return Err(format!(
                 "Vosh could not copy {} into profiles/legacy and changed nothing ({e}).",
                 name.to_string_lossy()
-            )
-        })?;
+            ));
+        }
+        copies.push(copy);
     }
 
     // Then the catalog, the loadouts, and each profile file without its
     // items. A write that fails puts back every file this run changed,
-    // so Vosh stays in per profile mode and the wizard can run again. The
-    // copies in legacy stay.
+    // so Vosh stays in per profile mode, and takes out the copies in
+    // legacy, so the wizard can run again.
     let mut touched = Vec::new();
     if let Err((what, e)) =
         write_shared_catalog(app_data, &catalog, &loadout_set, &kept, &mut touched)
@@ -3725,6 +3730,10 @@ async fn apply_migration_with(
             Some(text) => std::fs::read_to_string(path).ok().as_deref() == Some(text.as_str()),
             None => !path.exists(),
         });
+        // The copies stay while a file the run changed stays changed.
+        if restored {
+            take_out_copies(&copies);
+        }
         // A catalog left on disk starts loadout mode at the next launch,
         // so the live profile must not save until then.
         if crate::loadout_store::path_b_mode_active(app_data) {
@@ -3745,6 +3754,17 @@ async fn apply_migration_with(
     }
     written();
     Ok(())
+}
+
+/// Take out the copies in profiles/legacy a wizard run wrote, when the
+/// run changed nothing else in the end, so the wizard can run again. A
+/// copy that stays refuses the next run, which says to move it.
+fn take_out_copies(copies: &[std::path::PathBuf]) {
+    for copy in copies {
+        if let Err(e) = std::fs::remove_file(copy) {
+            warn!(error = %e, path = %copy.display(), "legacy copy could not be taken out");
+        }
+    }
 }
 
 /// Save what the shared catalog wizard built, catalog.toml, then
@@ -5503,6 +5523,41 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn the_wizard_never_writes_over_a_copy_an_earlier_run_left_in_legacy() {
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_alias(&set, "Healer", "hh");
+            let state = launch_state(dir.path()).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+            let legacy = crate::loadout_store::legacy_dir(dir.path()).join("Healer.toml");
+            let copy = read(&legacy);
+
+            // You move the catalog and the loadouts out to go back to per
+            // profile mode, with the profile files as the wizard left them.
+            let aside = tempfile::tempdir().unwrap();
+            for path in [catalog_path(dir.path()), loadouts_path(dir.path())] {
+                std::fs::rename(&path, aside.path().join(path.file_name().unwrap())).unwrap();
+            }
+            let state = launch_state(dir.path()).await;
+            let healer = read(&set.profile_path("Healer"));
+
+            // A second run would copy the files without their items over
+            // the only copy that still holds them.
+            assert_eq!(
+                refused(&state, dir.path()).await,
+                "Vosh found copies of your profile files in profiles/legacy from an earlier \
+                 shared catalog and will not save over them. Move the legacy folder out of the \
+                 profiles folder to build a new catalog."
+            );
+            assert_eq!(read(&legacy), copy);
+            assert_eq!(ProfileConfig::load(&legacy).unwrap().aliases[0].name, "hh");
+            assert_eq!(read(&set.profile_path("Healer")), healer);
+            assert!(!catalog_path(dir.path()).exists());
+        }
+
+        #[tokio::test]
         async fn the_wizard_never_rewrites_a_profile_file_it_held_at_launch() {
             let dir = tempfile::tempdir().unwrap();
             let set = james_like_set(dir.path());
@@ -6373,10 +6428,13 @@ mod tests {
             );
 
             // Nothing changed, so Vosh stays in per profile mode and its
-            // saves go on.
+            // saves go on. The copies in legacy are gone too, so they do
+            // not hold back the next run.
             assert!(!written);
             assert!(!catalog_path(dir.path()).exists());
             assert!(!loadouts_path(dir.path()).exists());
+            let legacy = crate::loadout_store::legacy_dir(dir.path());
+            assert_eq!(std::fs::read_dir(&legacy).unwrap().count(), 0);
             for (path, text) in &files {
                 match text {
                     Some(text) => assert_eq!(&read(path), text, "{}", path.display()),
