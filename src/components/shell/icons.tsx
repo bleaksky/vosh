@@ -93,15 +93,15 @@ export function CloseIcon() {
 }
 
 // Status line glyphs for the tick and the game time, drawn at 12 px.
-// Like the chevron, the stroke keeps its 1.25 px weight at that size.
+// Unlike the chevron, their strokes scale with the icon, 1.25 units on
+// the 16 unit grid or about 0.94 px at 12 px, as the approved drawing
+// has them. Held at 1.25 px, the open sun under the horizon fused with
+// the horizon and its hole shrank to one device pixel.
 
 interface SmallIconProps {
   /** Rendered size in px. The status line draws them at 12. */
   size?: 12 | 16;
 }
-
-const keepStroke = (size: 12 | 16) =>
-  size === 12 ? ({ vectorEffect: 'non-scaling-stroke' } as const) : {};
 
 interface TickRingIconProps extends SmallIconProps {
   /** Whole seconds since the last tick. */
@@ -118,9 +118,9 @@ export function TickRingIcon({ secs, interval, size = 12 }: TickRingIconProps) {
   const r = TICK_RING_RADIUS;
   return (
     <Glyph size={size}>
-      <circle cx={c} cy={c} r={r} strokeOpacity={TICK_RING_TRACK_OPACITY} {...keepStroke(size)} />
-      {arc.kind === 'whole' && <circle cx={c} cy={c} r={r} {...keepStroke(size)} />}
-      {arc.kind === 'part' && <path d={arc.path} {...keepStroke(size)} />}
+      <circle cx={c} cy={c} r={r} strokeOpacity={TICK_RING_TRACK_OPACITY} />
+      {arc.kind === 'whole' && <circle cx={c} cy={c} r={r} />}
+      {arc.kind === 'part' && <path d={arc.path} />}
     </Glyph>
   );
 }
@@ -141,8 +141,8 @@ export function SunPathIcon({ hour, daytime, size = 12 }: SunPathIconProps) {
   const dot = sunDot(hour, daytime);
   return (
     <Glyph size={size}>
-      <path d={SUN_ARC_PATH} strokeOpacity={SUN_TRACK_OPACITY} {...keepStroke(size)} />
-      <path d={SUN_HORIZON_PATH} {...keepStroke(size)} />
+      <path d={SUN_ARC_PATH} strokeOpacity={SUN_TRACK_OPACITY} />
+      <path d={SUN_HORIZON_PATH} />
       {dot.kind === 'up' && (
         <circle
           cx={round2(dot.x)}
@@ -152,9 +152,7 @@ export function SunPathIcon({ hour, daytime, size = 12 }: SunPathIconProps) {
           stroke="none"
         />
       )}
-      {dot.kind === 'down' && (
-        <circle cx={SUN_DOWN.x} cy={SUN_DOWN.y} r={SUN_DOWN.r} {...keepStroke(size)} />
-      )}
+      {dot.kind === 'down' && <circle cx={SUN_DOWN.x} cy={SUN_DOWN.y} r={SUN_DOWN.r} />}
     </Glyph>
   );
 }
