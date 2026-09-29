@@ -6336,3 +6336,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "wizard_roundtrip_tests.rs"]
+mod wizard_roundtrip_tests;
