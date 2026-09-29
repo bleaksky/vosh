@@ -96,7 +96,7 @@ pub(crate) fn schedule_profile_persist(app: &AppHandle) {
     });
 }
 
-fn broadcast<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: &S) {
+pub(crate) fn broadcast<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: &S) {
     for win in app.webview_windows().values() {
         if let Err(e) = win.emit(event, payload.clone()) {
             warn!(error = %e, window = %win.label(), event, "broadcast failed");
@@ -2355,25 +2355,44 @@ pub(crate) async fn ui_set_config(
     Ok(())
 }
 
-/// Replace the active profile's tracked affects without touching the
-/// rest of the UI config, so an editor outside Settings cannot write a
-/// stale snapshot over other fields. Persists, then broadcasts the
-/// normalized list as `vosh://tracked-affects-changed` to every window
-/// and returns it.
+/// Replace a profile's tracked affects without touching the rest of
+/// its UI config, so an editor outside Settings cannot write a stale
+/// snapshot over other fields. Returns the normalized list.
+///
+/// With no `profile`, or the active one, the live profile takes the
+/// list, persists, and broadcasts it as `vosh://tracked-affects-changed`
+/// to every window. An inactive `profile` has its file rewritten
+/// instead, and only `vosh://profile-changed` goes out, since the
+/// tracked affects event would hand another profile's list to the main
+/// window's store.
 #[tauri::command]
 pub(crate) async fn tracked_affects_set(
     app: AppHandle,
     state: State<'_, SharedState>,
     list: Vec<crate::profile_config::TrackedAffect>,
+    profile: Option<String>,
 ) -> Result<Vec<crate::profile_config::TrackedAffect>, String> {
     let list = crate::profile_config::normalize_tracked_affects(list);
+    let shared: SharedState = state.inner().clone();
+    if let Some(name) = profile.as_deref() {
+        let written = crate::characters::edit_inactive_profile(&shared, name, |_, config| {
+            config.ui.tracked_affects.clone_from(&list);
+        })
+        .await?;
+        if written.is_some() {
+            crate::characters::broadcast_profile_changed(&app, name);
+            return Ok(list);
+        }
+    }
     {
         let mut p = state.profile.lock().await;
         p.ui.tracked_affects.clone_from(&list);
     }
-    let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
     broadcast(&app, "vosh://tracked-affects-changed", &list);
+    if let Some(active) = crate::characters::active_name(&shared).await {
+        crate::characters::broadcast_profile_changed(&app, &active);
+    }
     Ok(list)
 }
 
