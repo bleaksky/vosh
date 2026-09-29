@@ -87,26 +87,32 @@ export const MAP_COLORS = {
 
 /// The plain One Window map (SPEC 10 G7) takes every color from the
 /// chrome tokens, read at draw time so the drawing follows the theme.
-/// Fallbacks are the approved Nord board's, for a paint before the
-/// theme lands.
-export const PLAIN_COLORS = {
+export interface PlainColors {
+  /// The panel ground the drawing sits on.
+  ground: string;
   /// Rooms and the lines between them.
-  get room(): string {
-    return readCssVar('--secondary', '#c0c7d3');
-  },
+  room: string;
   /// Your room and its ring.
-  get accent(): string {
-    return readCssVar('--accent', '#88c0d0');
-  },
+  accent: string;
   /// Place labels.
-  get label(): string {
-    return readCssVar('--tertiary', '#7b8294');
-  },
+  label: string;
   /// The UI font stack the labels use.
-  get font(): string {
-    return readCssVar('--font-ui', 'system-ui, sans-serif');
-  },
-};
+  font: string;
+}
+
+/// Every plain drawing color from one computed style, so a draw asks
+/// the style system once. Fallbacks are the approved Nord board's, for
+/// a paint before the theme lands.
+export function plainColors(style: CSSStyleDeclaration): PlainColors {
+  const read = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
+  return {
+    ground: read('--panel', read('--c-surface', '#090e13')),
+    room: read('--secondary', '#c0c7d3'),
+    accent: read('--accent', '#88c0d0'),
+    label: read('--tertiary', '#7b8294'),
+    font: read('--font-ui', 'system-ui, sans-serif'),
+  };
+}
 
 // Every custom property a map style reads. A change to any of them
 // means the canvas needs a fresh paint.
