@@ -12,6 +12,9 @@ import '@fontsource/rajdhani/700.css';
 import '@fontsource-variable/roboto-slab';
 import './styles.css';
 import './styles/index.css';
+// The One Window frame: the shell grid, title band, and status line.
+// After the token sheet so it reads the new tokens.
+import './styles/frame.css';
 
 // Tag the document with the host OS so CSS can apply per-platform
 // tweaks. The two known cases that matter today:
