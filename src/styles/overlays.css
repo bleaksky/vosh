@@ -687,3 +687,14 @@
 .ov-button.is-danger {
   color: var(--danger);
 }
+
+/* The shell mounts the toasts among its floating surfaces, a direct
+   child of its grid. An absolutely placed grid child takes its grid
+   area as the containing block, so pinning the stack to the terminal
+   cell keeps it 16 inside the terminal column's corner, clear of the
+   panel and above the input band as that band grows. Both lines are
+   explicit, since an auto end line would fall back to the whole grid. */
+.shell > .ov-toasts {
+  grid-column: 1 / 2;
+  grid-row: 2 / 3;
+}
