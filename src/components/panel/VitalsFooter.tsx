@@ -12,9 +12,10 @@ import { vitalsLineFit } from './vitalsLine';
 // top with its health in warn. Nothing pulses.
 //
 // The density comes from Settings, Layout. Rows gives each vital its
-// own row. One line sets Health, Mana, and Moves side by side, the
-// Focus board's status line form with a meter under each value, and
-// drops the labels only when they no longer fit beside the values,
+// own row. One line sets Health, Mana, and Moves side by side, each
+// with its label at the left, its value at the right, and its meter
+// under both, and drops the labels only when they no longer fit beside
+// the values,
 // under about 360 pt for four digit health. A panel too narrow for even
 // the values stacks them in rows (vitalsLine.ts).
 
@@ -171,7 +172,8 @@ function VitalRow({
 }
 
 /** One vital on the One line row. Without its visible label, the label
- *  still names the value for a screen reader. */
+ *  still names the value for a screen reader, and the value sits at the
+ *  right end of its meter. */
 function VitalItem({
   label,
   showLabel,
@@ -186,7 +188,9 @@ function VitalItem({
   low: boolean;
 }) {
   return (
-    <div className={`panel-vitals-item${low ? ' panel-vitals-row-low' : ''}`}>
+    <div
+      className={`panel-vitals-item${showLabel ? '' : ' is-bare'}${low ? ' panel-vitals-row-low' : ''}`}
+    >
       <div className="panel-vitals-line">
         <span className={showLabel ? 'panel-vitals-label' : 'panel-vitals-label-hidden'}>
           {label}
