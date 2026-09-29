@@ -1717,6 +1717,19 @@ pub(crate) async fn apply_profile_switch(
     // starts from the right place.
     apply_path_b_overlays(state).await;
 
+    // Hand every window the new profile's panes and tracked affects
+    // from here rather than leaving each window to re-fetch. The main
+    // window's broadcast after its re-fetch diffs against its own last
+    // snapshot, so it can skip a list that Settings changed meanwhile.
+    // These go out before profile-switched so the stores already hold
+    // the new values when windows react to the switch.
+    let (panes, tracked) = {
+        let p = state.profile.lock().await;
+        (p.ui.pane_layout(), p.ui.tracked_affects.clone())
+    };
+    broadcast(app, "vosh://pane-layout-changed", &panes);
+    broadcast(app, "vosh://tracked-affects-changed", &tracked);
+
     let _ = app.emit("vosh://profile-switched", name);
     Ok(())
 }
