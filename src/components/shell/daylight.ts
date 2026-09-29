@@ -3,11 +3,11 @@ import { parseHex, toHex } from '../../lib/color';
 import type { WorldTime } from '../../lib/stores/worldStore';
 import type { XtermPalette } from '../../lib/themes';
 
-// The game time's daylight tint and its sun or moon. The old input row
-// chip tinted the time with a fixed color per part of the day. The
-// status line keeps those parts of the day but takes each color from
-// an ANSI slot of your theme, lifted until it reads as words on the
-// status line ground, so a light theme keeps it readable too.
+// The game time's daylight tint and whether its sun is up. The old
+// input row chip tinted the time with a fixed color per part of the
+// day. The status line keeps those parts of the day but takes each
+// color from an ANSI slot of your theme, lifted until it reads as words
+// on the status line ground, so a light theme keeps it readable too.
 
 export type DaylightPhase =
   | 'late-night'
@@ -71,12 +71,13 @@ export function daylightTint(
   return toHex(liftToContrast(slot, bg, STATUS_TEXT_CONTRAST, dir));
 }
 
-/** First and last game hour of the day, as ROM derived servers keep
- *  it. The day begins at 5 and the night at 20. */
-const DAY_FIRST_HOUR = 5;
-const NIGHT_FIRST_HOUR = 20;
+/** The first game hour of the day, as ROM derived servers keep it. The
+ *  day begins at 5 and the night at 20. */
+export const DAY_FIRST_HOUR = 5;
+/** The first game hour of the night. */
+export const NIGHT_FIRST_HOUR = 20;
 
-/** Whether the sun is up, for the sun or the moon beside the time.
+/** Whether the sun is up, for the sun on its path beside the time.
  *  World.Time sunlight decides when the server sends it. Aabahran
  *  sends dark, rise, light, or set, and only dark is night. Otherwise
  *  the hour decides. Null while neither is known. */

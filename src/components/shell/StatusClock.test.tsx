@@ -53,7 +53,7 @@ describe('StatusClock', () => {
     const html = draw(
       'value_only',
       { secs: 14, warn: false, interval: 30 },
-      { text: '8:42', tint: '#ebcb8b', daytime: true },
+      { text: '8:42', tint: '#ebcb8b', daytime: true, hour: 8 },
     );
     expect(html.indexOf('14s')).toBeLessThan(html.indexOf('8:42'));
     expect(html).toContain('style="color:#ebcb8b"');
@@ -69,7 +69,7 @@ describe('StatusClock', () => {
           const html = draw(
             style,
             { secs: 27, warn: true, interval: 30 },
-            { text: '12:00', tint, daytime: true },
+            { text: '12:00', tint, daytime: true, hour: 12 },
           );
           const [tick, time] = readings(html);
           const where = `${theme.id} at ${hour} in ${style}`;
@@ -99,7 +99,7 @@ describe('StatusClock', () => {
     const html = draw(
       'value_only',
       { secs: 14, warn: false, interval: 30 },
-      { text: '8:42', tint: null, daytime: true },
+      { text: '8:42', tint: null, daytime: true, hour: 8 },
       SKY,
     );
     expect(html.indexOf('14s')).toBeLessThan(html.indexOf('8:42'));
@@ -144,7 +144,7 @@ describe('StatusClock', () => {
 
 describe('StatusClock Value and Caption styles', () => {
   const tick: ClockTick = { secs: 14, warn: false, interval: 30 };
-  const time: ClockTime = { text: '8:42', tint: '#ebcb8b', daytime: true };
+  const time: ClockTime = { text: '8:42', tint: '#ebcb8b', daytime: true, hour: 8 };
 
   it('shows each value alone in the Value style, with no icon', () => {
     expect(draw('value_only', tick, time)).toBe(
@@ -237,5 +237,89 @@ describe('StatusClock tick ring', () => {
     const html = draw('icon_value', { secs: 3, warn: false, interval: 30 }, null);
     expect(html).toContain('<span class="shell-sr">Tick</span>');
     expect(html).toContain('aria-hidden="true"');
+  });
+});
+
+const SUN_TRACK =
+  `<path d="M2.5 10.5A5.5 5.5 0 0 1 13.5 10.5" stroke-opacity="0.35"${KEEP}></path>` +
+  `<path d="M1.5 10.5h13"${KEEP}></path>`;
+const SUN_UP_TOP = '<circle cx="8" cy="5" r="1.75" fill="currentColor" stroke="none"></circle>';
+const SUN_DOWN = `<circle cx="8" cy="13.4" r="1.35"${KEEP}></circle>`;
+
+/** The time reading's glyph in the Icon style. */
+function sun(time: ClockTime): string | null {
+  return glyph(draw('icon_value', null, time), 0);
+}
+
+describe('StatusClock sun path', () => {
+  it('draws the horizon, the faint arc over it, and the sun at the top at midday', () => {
+    expect(sun({ text: '12:00', tint: null, daytime: true, hour: 12 })).toBe(
+      `${GLYPH_OPEN}${SUN_TRACK}${SUN_UP_TOP}</svg>`,
+    );
+  });
+
+  it('sets the sun on the arc for the game hour', () => {
+    expect(sun({ text: '5:00', tint: null, daytime: true, hour: 5 })).toContain(
+      '<circle cx="2.53" cy="9.93" r="1.75" fill="currentColor" stroke="none"></circle>',
+    );
+    expect(sun({ text: '19:00', tint: null, daytime: true, hour: 19 })).toContain(
+      '<circle cx="13.47" cy="9.93" r="1.75" fill="currentColor" stroke="none"></circle>',
+    );
+  });
+
+  it('drops the sun under the horizon as an open dot while it is down', () => {
+    expect(sun({ text: '20:00', tint: null, daytime: false, hour: 20 })).toBe(
+      `${GLYPH_OPEN}${SUN_TRACK}${SUN_DOWN}</svg>`,
+    );
+    expect(sun({ text: '12:00', tint: null, daytime: false, hour: 12 })).toBe(
+      `${GLYPH_OPEN}${SUN_TRACK}${SUN_DOWN}</svg>`,
+    );
+  });
+
+  it('puts the sun at the top while it is up and the hour is unknown', () => {
+    expect(sun({ text: '8:42', tint: null, daytime: true, hour: null })).toBe(
+      `${GLYPH_OPEN}${SUN_TRACK}${SUN_UP_TOP}</svg>`,
+    );
+  });
+
+  it('draws the horizon and the arc alone while neither is known', () => {
+    expect(sun({ text: '8:42', tint: null, daytime: null, hour: null })).toBe(
+      `${GLYPH_OPEN}${SUN_TRACK}</svg>`,
+    );
+  });
+
+  it('draws no sun with rays and no moon before the time', () => {
+    for (const daytime of [true, false, null]) {
+      const html = sun({ text: '8:42', tint: null, daytime, hour: 8 }) ?? '';
+      expect(html).not.toContain('M8 1.75v1.5');
+      expect(html).not.toContain('M14.25 8.55');
+    }
+  });
+
+  it('keeps the time tint on the value and the icon in the tertiary tone', () => {
+    const html = draw('icon_value', null, {
+      text: '12:00',
+      tint: '#ebcb8b',
+      daytime: true,
+      hour: 12,
+    });
+    expect(html).toMatch(/^<span class="shell-status-clock"><span class="shell-status-part"><svg /);
+    expect(html).toContain('<span class="shell-status-value" style="color:#ebcb8b">12:00</span>');
+    expect(html).toContain('<span class="shell-sr">Time</span>');
+  });
+
+  it('draws the tick ring, then the sun path, each before its value', () => {
+    const html = draw(
+      'icon_value',
+      { secs: 27, warn: true, interval: 30 },
+      { text: '19:00', tint: null, daytime: true, hour: 19 },
+    );
+    expect(html.match(/<svg /g)).toHaveLength(2);
+    expect(glyph(html, 0)).toContain(TICK_TRACK);
+    expect(glyph(html, 1)).toContain(SUN_TRACK);
+    expect(readings(html)).toEqual([['shell-status-part', 'is-warn'], ['shell-status-part']]);
+    expect(html.indexOf('27s')).toBeLessThan(html.lastIndexOf('<svg '));
+    expect(html.lastIndexOf('<svg ')).toBeLessThan(html.indexOf('19:00'));
+    expect(html.match(/aria-hidden="true"/g)).toHaveLength(2);
   });
 });

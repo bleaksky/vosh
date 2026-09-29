@@ -1,4 +1,12 @@
 import type { ReactNode } from 'react';
+import {
+  SUN_ARC_PATH,
+  SUN_DOWN,
+  SUN_HORIZON_PATH,
+  SUN_TRACK_OPACITY,
+  SUN_UP_RADIUS,
+  sunDot,
+} from './sunPath';
 import { TICK_RING_CENTER, TICK_RING_RADIUS, TICK_RING_TRACK_OPACITY, tickArc } from './tickRing';
 
 // The One Window icon set (SPEC 6): 16 unit strokes at 1.25, round caps
@@ -117,27 +125,36 @@ export function TickRingIcon({ secs, interval, size = 12 }: TickRingIconProps) {
   );
 }
 
-/** Game time while the sun is up. A disc and eight short rays. */
-export function SunIcon({ size = 12 }: SmallIconProps) {
-  return (
-    <Glyph size={size}>
-      <circle cx="8" cy="8" r="2.75" {...keepStroke(size)} />
-      <path
-        d="M8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1.05 1.05M11.35 11.35l1.05 1.05M3.6 12.4l1.05-1.05M11.35 4.65l1.05-1.05"
-        {...keepStroke(size)}
-      />
-    </Glyph>
-  );
+interface SunPathIconProps extends SmallIconProps {
+  /** The 0..23 game hour, null while unknown. */
+  hour: number | null;
+  /** Whether the sun is up, null while unknown. */
+  daytime: boolean | null;
 }
 
-/** Game time after dark. A crescent on the 6.25 circle. */
-export function MoonIcon({ size = 12 }: SmallIconProps) {
+/** Two decimals, enough for a 16 unit grid drawn at 12 px. */
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** The game time. A horizon with the sun's path over it, and the sun
+ *  on the path for the hour, or under the horizon after dark. */
+export function SunPathIcon({ hour, daytime, size = 12 }: SunPathIconProps) {
+  const dot = sunDot(hour, daytime);
   return (
     <Glyph size={size}>
-      <path
-        d="M14.25 8.55A6.25 6.25 0 1 1 7.45 1.75a4.86 4.86 0 0 0 6.8 6.8z"
-        {...keepStroke(size)}
-      />
+      <path d={SUN_ARC_PATH} strokeOpacity={SUN_TRACK_OPACITY} {...keepStroke(size)} />
+      <path d={SUN_HORIZON_PATH} {...keepStroke(size)} />
+      {dot.kind === 'up' && (
+        <circle
+          cx={round2(dot.x)}
+          cy={round2(dot.y)}
+          r={SUN_UP_RADIUS}
+          fill="currentColor"
+          stroke="none"
+        />
+      )}
+      {dot.kind === 'down' && (
+        <circle cx={SUN_DOWN.x} cy={SUN_DOWN.y} r={SUN_DOWN.r} {...keepStroke(size)} />
+      )}
     </Glyph>
   );
 }
