@@ -203,6 +203,14 @@ describe('StatusClock tick ring', () => {
     expect(ring(34, 30)).toBe(ring(30, 30));
   });
 
+  it('draws the whole circle, not an empty ring, in the last second of a long interval', () => {
+    const ring = (secs: number, interval: number) =>
+      glyph(draw('icon_value', { secs, warn: false, interval }, null), 0);
+    expect(ring(9999, 10000)).toBe(ring(10000, 10000));
+    expect(ring(9999, 10000)).not.toContain('<path');
+    expect(ring(1, 10000)).toBe(ring(0, 10000));
+  });
+
   it('draws the faint ring alone while the interval is unknown', () => {
     const empty = `${GLYPH_OPEN}${TICK_TRACK}</svg>`;
     expect(glyph(draw('icon_value', { secs: 14, warn: false, interval: null }, null), 0)).toBe(
