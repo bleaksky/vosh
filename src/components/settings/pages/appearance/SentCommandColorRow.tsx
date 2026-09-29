@@ -23,6 +23,7 @@ export function SentCommandColorRow({ config, update }: SentCommandColorRowProps
       <ColorField
         value={value}
         allowEmpty
+        hexOnly
         placeholder="Theme color"
         emptySwatch="var(--text)"
         pickerLabel="Choose the sent command color"

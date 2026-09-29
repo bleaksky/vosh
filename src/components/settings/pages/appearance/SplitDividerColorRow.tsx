@@ -23,6 +23,7 @@ export function SplitDividerColorRow({ config, update }: SplitDividerColorRowPro
       <ColorField
         value={value}
         allowEmpty
+        hexOnly
         placeholder="Theme color"
         emptySwatch="var(--sep)"
         pickerLabel="Choose the split divider color"

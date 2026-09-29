@@ -156,6 +156,9 @@ export function LayoutGroup({ config, setConfig, onError, navigate }: SettingsPa
               value={config.split_divider_color ?? ''}
               onChange={(color) => update({ split_divider_color: color || null })}
               allowEmpty
+              // The native divider reads only hex and rgb (parse_css_color
+              // in cell_render.rs), so the field saves #rrggbb.
+              hexOnly
               placeholder="Theme default"
               // The divider the terminal draws while no color is set:
               // the native grid's hairline on macOS, the tertiary tone

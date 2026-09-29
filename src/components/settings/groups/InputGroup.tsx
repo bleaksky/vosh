@@ -110,6 +110,8 @@ export function InputGroup({ target, navSeq, config, setConfig, onError }: Setti
             value={config.input_echo_color ?? ''}
             onChange={(color) => update({ input_echo_color: color || null })}
             allowEmpty
+            // The echo reads only #rrggbb (colorizeEcho in Input.tsx).
+            hexOnly
             placeholder="Theme default"
             emptySwatch={terminalText}
             pickerLabel="Choose a sent command color"

@@ -827,6 +827,12 @@
   outline-offset: 2px;
 }
 
+/* A hex only color field holding text it will not save: a danger ring
+   inside the fill, so the refused text reads as an error. */
+.st-color[data-invalid] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
 .st-color-swatch {
   position: relative;
   display: block;
