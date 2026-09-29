@@ -9,11 +9,35 @@ export function splitSpeaker(text: string): { speaker: string | null; text: stri
   return m ? { speaker: m[1], text: m[2] } : { speaker: null, text };
 }
 
-/** Arrival time as the Chat pane shows it, `8:41` on a 24 hour
- *  clock. */
-export function chatTime(ts: number): string {
-  const at = new Date(ts);
-  return `${at.getHours()}:${String(at.getMinutes()).padStart(2, '0')}`;
+const clocks = new Map<string, Intl.DateTimeFormat>();
+
+function clockFor(locale: string | undefined): Intl.DateTimeFormat {
+  const key = locale ?? '';
+  let clock = clocks.get(key);
+  if (!clock) {
+    clock = new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' });
+    // A 24 hour clock pads the hour, so just after midnight reads
+    // 00:55 and never like a duration.
+    const cycle = clock.resolvedOptions().hourCycle;
+    if (cycle === 'h23' || cycle === 'h24') {
+      clock = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
+    }
+    clocks.set(key, clock);
+  }
+  return clock;
+}
+
+/** Arrival time as the Chat pane shows it, on the wall clock in your
+ *  locale's 12 or 24 hour form: `8:41` or `08:41`. A 12 hour clock
+ *  drops AM and PM, as the approved boards do, since the messages
+ *  around it place it in the day. `locale` is for tests. */
+export function chatTime(ts: number, locale?: string): string {
+  return clockFor(locale)
+    .formatToParts(new Date(ts))
+    .filter((part) => part.type !== 'dayPeriod')
+    .map((part) => part.value)
+    .join('')
+    .trim();
 }
 
 /** The value an Affects row shows: `missing`, the ticks left, or

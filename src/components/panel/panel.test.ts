@@ -48,9 +48,23 @@ describe('splitSpeaker', () => {
 });
 
 describe('chatTime', () => {
-  it('reads hours without a leading zero and minutes with one', () => {
-    expect(chatTime(new Date(2026, 8, 28, 8, 5).getTime())).toBe('8:05');
-    expect(chatTime(new Date(2026, 8, 28, 20, 41).getTime())).toBe('20:41');
+  const at = (h: number, m: number) => new Date(2026, 8, 28, h, m).getTime();
+
+  it('follows a 12 hour locale without AM or PM', () => {
+    expect(chatTime(at(8, 5), 'en-US')).toBe('8:05');
+    expect(chatTime(at(20, 41), 'en-US')).toBe('8:41');
+    // Just after midnight reads as a clock, not a duration.
+    expect(chatTime(at(0, 55), 'en-US')).toBe('12:55');
+  });
+
+  it('follows a 24 hour locale', () => {
+    expect(chatTime(at(20, 41), 'en-GB')).toBe('20:41');
+    expect(chatTime(at(0, 55), 'en-GB')).toBe('00:55');
+    expect(chatTime(at(8, 5), 'de-DE')).toBe('08:05');
+  });
+
+  it('keeps the minutes at two digits in your own locale', () => {
+    expect(chatTime(at(8, 5))).toMatch(/^\d{1,2}[:.]05$/);
   });
 });
 
