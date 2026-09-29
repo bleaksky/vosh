@@ -610,11 +610,29 @@ export function themeTokens(theme: AppTheme): ChromeTokens {
 // dropdown, findTheme) see custom entries without changes.
 let CUSTOM_THEMES: AppTheme[] = [];
 
+const customThemeListeners = new Set<() => void>();
+
+/** Hear every setCustomThemes, after the new list is in place. Returns
+ *  the call that stops listening. */
+export function onCustomThemesChanged(listener: () => void): () => void {
+  customThemeListeners.add(listener);
+  return () => {
+    customThemeListeners.delete(listener);
+  };
+}
+
 /** Replace the registered custom themes. The settings save path
  *  calls this whenever the user-authored list changes; subsequent
  *  iterations of THEMES include the new entries. */
 export function setCustomThemes(themes: AppTheme[]): void {
   CUSTOM_THEMES = themes.slice();
+  for (const listener of customThemeListeners) {
+    try {
+      listener();
+    } catch {
+      // The new list is in place whatever a listener does with it.
+    }
+  }
 }
 
 // Slots of the hand-authored chrome palette custom themes carried

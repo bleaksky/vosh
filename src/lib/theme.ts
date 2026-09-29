@@ -29,6 +29,7 @@ import {
   customToAppTheme,
   DEFAULT_THEME_ID,
   findTheme,
+  onCustomThemesChanged,
   setCustomThemes,
   themeTokens,
   type AppTheme,
@@ -54,6 +55,9 @@ let followingSystem = false;
 let broadcastFlips = false;
 /** What this window last painted on the root. */
 let lastPaint: ThemePaintSide | null = null;
+/** The theme id lastPaint shows, or null for a fallback still waiting
+ *  on the catalog. */
+let lastStandsFor: string | null = null;
 /** The theme id applyTheme was last asked for. A catalog refresh that
  *  answers after a later pick leaves the later pick on screen. */
 let lastChoice: string | null = null;
@@ -220,6 +224,7 @@ function applyToRoot(theme: AppTheme, standsFor: string | null = theme.id) {
   syncWindowAppearance(side.appearance);
   currentThemeId = theme.id;
   lastPaint = side;
+  lastStandsFor = standsFor;
   if (standsFor !== null) rememberPaint(side, standsFor);
 }
 
@@ -252,9 +257,16 @@ function shownId(choice: string): string {
 // cached.
 function rememberPaint(shown: ThemePaintSide, standsFor: string) {
   const prefs = themePrefs;
-  if (!prefs) return;
+  if (prefs && cachePaint(prefs, shown, standsFor)) {
+    reportBackdrop(shown, prefs.follow_system_appearance);
+  }
+}
+
+// Write the cache for a paint of `standsFor`. Returns whether that is
+// the theme the fields resolve to, so the cache holds it.
+function cachePaint(prefs: ThemePrefs, shown: ThemePaintSide, standsFor: string): boolean {
   const systemDark = systemPrefersDark();
-  if (standsFor !== shownId(resolveActiveTheme(prefs, systemDark))) return;
+  if (standsFor !== shownId(resolveActiveTheme(prefs, systemDark))) return false;
   const other = (dark: boolean) =>
     themePaintSide(findTheme(shownId(resolveActiveTheme(prefs, dark))));
   const paint: ThemePaint = prefs.follow_system_appearance
@@ -266,8 +278,24 @@ function rememberPaint(shown: ThemePaintSide, standsFor: string) {
       }
     : { v: 1, follow: false, manual: shown };
   writeThemePaint(paint, pageStorage());
-  reportBackdrop(shown, prefs.follow_system_appearance);
+  return true;
 }
+
+// A custom theme edit saves without a repaint unless the theme is on
+// screen. While the theme follows the system, the side not on screen
+// can be that custom theme, and the cache has to pick up its new
+// colors for a launch after the OS flips while Vosh is closed. When the
+// theme on screen changed as well, the repaint that follows the edit
+// caches both sides, and until then the cache holds what is on screen.
+// The backdrop follows the theme on screen, which this leaves alone.
+onCustomThemesChanged(() => {
+  const prefs = themePrefs;
+  const shown = lastPaint;
+  const standsFor = lastStandsFor;
+  if (!prefs || !shown || standsFor === null) return;
+  if (!samePaintSide(themePaintSide(findTheme(standsFor)), shown)) return;
+  cachePaint(prefs, shown, standsFor);
+});
 
 // Tell the backend what a new window opens on: the theme's ground, and
 // the light or dark native appearance while the theme is your pick.
