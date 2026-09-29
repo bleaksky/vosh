@@ -3,7 +3,7 @@ import { affectsView, isTrackedRow, type AffectRow } from '../../lib/affectsView
 import { useAffects } from '../../lib/stores/affectsStore';
 import { useTrackedAffects } from '../../lib/stores/trackedAffectsStore';
 import { PaneHeader, PaneMeta } from './PaneHeader';
-import { ticksLabel } from './paneText';
+import { affectStateWord, ticksLabel } from './paneText';
 
 // The at a glance checklist (SPEC 9). Tracked affects you are missing
 // come first with a hollow danger ring, then the tracked ones you have
@@ -54,13 +54,21 @@ export function AffectsPane() {
 function AffectList({ rows }: { rows: AffectRow[] }) {
   return (
     <ul className="pane-rows">
-      {rows.map((row) => (
-        <li key={row.key} className={`pane-row pane-row-marked pane-affect-${row.state}`}>
-          <span className="pane-marker" aria-hidden="true" />
-          <span className="pane-row-name">{row.name}</span>
-          <span className="pane-row-value">{ticksLabel(row.state, row.ticks)}</span>
-        </li>
-      ))}
+      {rows.map((row) => {
+        // Expiring and harmful show only as the marker color, so a
+        // screen reader hears them as words after the name.
+        const word = affectStateWord(row.state);
+        return (
+          <li key={row.key} className={`pane-row pane-row-marked pane-affect-${row.state}`}>
+            <span className="pane-marker" aria-hidden="true" />
+            <span className="pane-row-name">
+              {row.name}
+              {word && <span className="pane-sr">, {word}</span>}
+            </span>
+            <span className="pane-row-value">{ticksLabel(row.state, row.ticks)}</span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

@@ -301,6 +301,19 @@
 
 /* ── Affects ─────────────────────────────────────────────────────── */
 
+/* Words for a screen reader that the row shows only as color. */
+.pane-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .pane-affect-missing .pane-marker {
   border: 1.25px solid var(--danger);
   background: transparent;
