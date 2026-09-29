@@ -1670,6 +1670,13 @@ export async function profileSwitch(name: string): Promise<void> {
   return invoke('profile_switch', { name });
 }
 
+/** The sentences launch kept for you, such as a profile file Vosh could
+ *  not read and will not save over. The first call takes them, and every
+ *  later call gets none. */
+export async function launchNoticesTake(): Promise<string[]> {
+  return invoke('launch_notices_take');
+}
+
 /** Replace a profile's description and login claim. The claim follows
  *  the login toggle's rules. A claim with no character is turned off, a
  *  claim that is on takes its characters from every other profile on the

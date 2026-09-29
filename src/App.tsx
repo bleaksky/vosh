@@ -63,6 +63,7 @@ import { parseHex, toRgba } from './lib/color';
 import { setBaseAnsi } from './lib/baseAnsi';
 import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
+import { showLaunchNotices } from './lib/launchNotices';
 import { CommandPalette } from './components/CommandPalette';
 import { disconnectSession } from './lib/session';
 import {
@@ -1659,6 +1660,9 @@ function App() {
             onReady={(handle) => {
               termRef.current = handle;
             }}
+            // After the restored scrollback, so what launch has to tell
+            // you lands below it instead of scrolling away above.
+            onScrollbackLoaded={() => void showLaunchNotices(writeLive)}
             onResultsChanged={(event) =>
               setFindResults({ index: event.resultIndex, count: event.resultCount })
             }
