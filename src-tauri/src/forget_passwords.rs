@@ -78,7 +78,8 @@ pub(crate) async fn forget(logs: &SharedLogStore, reader: &SharedLogStore, now: 
             if !done.wiped {
                 warn!(
                     lines = done.lines,
-                    "#logs forget-passwords blanked lines but could not rewrite the log file"
+                    resumed = done.resumed,
+                    "#logs forget-passwords could not rewrite the log file, the next run tries again"
                 );
             }
             Outcome::Blanked(done)
@@ -113,6 +114,7 @@ fn count(n: usize, one: &str, many: &str) -> String {
 pub(crate) fn messages(outcome: &Outcome, legacy_copy: Option<&Path>) -> Vec<String> {
     const NONE: &str =
         "Vosh found no lines where you sent a password. Your log has nothing to blank.";
+    const FINISH: &str = "Type #logs forget-passwords now again to finish.";
     let first = match outcome {
         Outcome::NoLog => {
             return vec!["Vosh has no session log open, so there is nothing to blank.".to_string()]
@@ -120,6 +122,12 @@ pub(crate) fn messages(outcome: &Outcome, legacy_copy: Option<&Path>) -> Vec<Str
         Outcome::ReadFailed => "Vosh could not read your session log. Nothing changed.".to_string(),
         Outcome::BlankFailed => {
             "Vosh could not blank the lines in your session log. Nothing changed.".to_string()
+        }
+        Outcome::Found(found) if found.count() == 0 && found.wipe_pending => {
+            "Vosh found no lines where you sent a password, but old copies of lines \
+             it blanked before are still in the log file. \
+             Type #logs forget-passwords now to clear them."
+                .to_string()
         }
         Outcome::Found(found) if found.count() == 0 => NONE.to_string(),
         Outcome::Found(found) => format!(
@@ -129,7 +137,16 @@ pub(crate) fn messages(outcome: &Outcome, legacy_copy: Option<&Path>) -> Vec<Str
             count(found.sessions(), "session", "sessions"),
             if found.count() == 1 { "it" } else { "them" },
         ),
-        Outcome::Blanked(done) if done.lines == 0 => NONE.to_string(),
+        Outcome::Blanked(done) if done.lines == 0 && !done.resumed => NONE.to_string(),
+        Outcome::Blanked(done) if done.lines == 0 && done.wiped => {
+            "Vosh cleared old copies of lines it blanked before from the disk. \
+             It found no other lines where you sent a password."
+                .to_string()
+        }
+        Outcome::Blanked(done) if done.lines == 0 => format!(
+            "Vosh still could not rewrite the log file to clear old copies of lines \
+             it blanked before. {FINISH}"
+        ),
         Outcome::Blanked(done) if done.wiped => format!(
             "Vosh blanked {}. Your log keeps the fact that you sent {}, never the text.",
             count(done.lines, "line", "lines"),
@@ -137,7 +154,7 @@ pub(crate) fn messages(outcome: &Outcome, legacy_copy: Option<&Path>) -> Vec<Str
         ),
         Outcome::Blanked(done) => format!(
             "Vosh blanked {}, but it could not rewrite the log file to clear \
-             old copies of {} text from the disk.",
+             old copies of {} text from the disk. {FINISH}",
             count(done.lines, "line", "lines"),
             if done.lines == 1 { "its" } else { "their" },
         ),
@@ -216,6 +233,7 @@ mod tests {
     fn the_preview_says_how_many_and_how_to_blank_them() {
         let found = PasswordLines {
             lines: vec![(3, 1), (9, 1), (40, 2), (41, 2), (77, 5)],
+            wipe_pending: false,
         };
         assert_eq!(
             messages(&Outcome::Found(found), None),
@@ -227,6 +245,7 @@ mod tests {
         );
         let one = PasswordLines {
             lines: vec![(3, 1)],
+            wipe_pending: false,
         };
         assert_eq!(
             messages(&Outcome::Found(one), None),
@@ -243,6 +262,7 @@ mod tests {
         let done = Forgotten {
             lines: 12,
             sessions: 9,
+            resumed: false,
             wiped: true,
         };
         assert_eq!(
@@ -255,6 +275,7 @@ mod tests {
         let one = Forgotten {
             lines: 1,
             sessions: 1,
+            resumed: false,
             wiped: true,
         };
         assert_eq!(
@@ -267,13 +288,90 @@ mod tests {
         let unwiped = Forgotten {
             lines: 2,
             sessions: 1,
+            resumed: false,
             wiped: false,
         };
         assert_eq!(
             messages(&Outcome::Blanked(unwiped), None),
             vec![
                 "Vosh blanked 2 lines, but it could not rewrite the log file to clear \
-                 old copies of their text from the disk."
+                 old copies of their text from the disk. \
+                 Type #logs forget-passwords now again to finish."
+                    .to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn a_wipe_left_unfinished_says_how_to_finish_it() {
+        // The preview finds nothing new but knows the file still holds
+        // old copies of lines an earlier run blanked.
+        let pending = PasswordLines {
+            lines: Vec::new(),
+            wipe_pending: true,
+        };
+        assert_eq!(
+            messages(&Outcome::Found(pending), None),
+            vec![
+                "Vosh found no lines where you sent a password, but old copies of lines \
+                 it blanked before are still in the log file. \
+                 Type #logs forget-passwords now to clear them."
+                    .to_string()
+            ]
+        );
+        // New lines to blank take the usual count, and the real run
+        // clears the old copies with them.
+        let both = PasswordLines {
+            lines: vec![(3, 1)],
+            wipe_pending: true,
+        };
+        assert_eq!(
+            messages(&Outcome::Found(both), None),
+            vec![
+                "Vosh found 1 line where you sent a password, across 1 session. \
+                 Type #logs forget-passwords now to blank it."
+                    .to_string()
+            ]
+        );
+
+        let finished = Forgotten {
+            lines: 0,
+            sessions: 0,
+            resumed: true,
+            wiped: true,
+        };
+        assert_eq!(
+            messages(&Outcome::Blanked(finished), None),
+            vec![
+                "Vosh cleared old copies of lines it blanked before from the disk. \
+                 It found no other lines where you sent a password."
+                    .to_string()
+            ]
+        );
+        let still = Forgotten {
+            lines: 0,
+            sessions: 0,
+            resumed: true,
+            wiped: false,
+        };
+        assert_eq!(
+            messages(&Outcome::Blanked(still), None),
+            vec![
+                "Vosh still could not rewrite the log file to clear old copies of lines \
+                 it blanked before. Type #logs forget-passwords now again to finish."
+                    .to_string()
+            ]
+        );
+        let more = Forgotten {
+            lines: 3,
+            sessions: 2,
+            resumed: true,
+            wiped: true,
+        };
+        assert_eq!(
+            messages(&Outcome::Blanked(more), None),
+            vec![
+                "Vosh blanked 3 lines. Your log keeps the fact that you sent them, never the text."
                     .to_string()
             ]
         );
@@ -315,6 +413,7 @@ mod tests {
         let copy = Path::new("/data/com.aabahran.mudclient/logs.sqlite");
         let found = PasswordLines {
             lines: vec![(3, 1)],
+            wipe_pending: false,
         };
         let lines = messages(&Outcome::Found(found), Some(copy));
         assert_eq!(lines.len(), 2);

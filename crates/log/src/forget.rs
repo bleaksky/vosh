@@ -76,6 +76,13 @@ use crate::{LogStore, Result};
 /// blanked line reads like one that was never saved.
 pub const HIDDEN_SENT_TEXT: &str = "> (hidden)";
 
+/// A table that says an earlier run blanked lines and has not yet cleared
+/// the old copies of their text from the file. The blanking transaction
+/// creates it, so it outlasts a quit, a full disk, or a busy checkpoint
+/// between the update and the rebuild. Only a finished rebuild drops it,
+/// and until then every blanking run rebuilds the file again.
+const WIPE_PENDING_TABLE: &str = "forget_passwords_wipe_pending";
+
 /// The line the game prints right above the main menu.
 const MAIN_MENU: &str = "Abandon hope, all ye who enter here...";
 /// The account menu's option line starts and ends with these.
@@ -123,6 +130,9 @@ const PASSWORD_COMMANDS: [(&str, usize); 5] = [
 pub struct PasswordLines {
     /// `(line id, session id)` for each line, oldest first.
     pub lines: Vec<(i64, i64)>,
+    /// An earlier run blanked lines but could not clear the old copies
+    /// of their text from the file. The next blanking run finishes it.
+    pub wipe_pending: bool,
 }
 
 impl PasswordLines {
@@ -148,8 +158,11 @@ pub struct Forgotten {
     pub lines: usize,
     /// Sessions those lines belong to.
     pub sessions: usize,
-    /// The file was rewritten and its write ahead log emptied, so no old
-    /// copy of the text is left on disk.
+    /// An earlier run left old copies of the lines it blanked in the
+    /// file, so this run rewrote the file for them too.
+    pub resumed: bool,
+    /// No old copy of a blanked line is left on disk. The file was
+    /// rewritten and its write ahead log emptied, or nothing was due.
     pub wiped: bool,
 }
 
@@ -545,7 +558,10 @@ impl PasswordFinder {
         }
         self.found.sort_unstable();
         self.found.dedup();
-        PasswordLines { lines: self.found }
+        PasswordLines {
+            lines: self.found,
+            wipe_pending: false,
+        }
     }
 }
 
@@ -572,7 +588,10 @@ impl LogStore {
             let sent = no_raw && text.starts_with("> ");
             finder.row(id, session_id, ts_ms, &text, sent);
         }
-        Ok(finder.finish())
+        drop(rows);
+        let mut found = finder.finish();
+        found.wipe_pending = self.wipe_pending()?;
+        Ok(found)
     }
 
     /// Replace the text of each line in `found` with [`HIDDEN_SENT_TEXT`]
@@ -588,6 +607,10 @@ impl LogStore {
     /// splits), and a last checkpoint truncates the log again. The
     /// rebuild takes time in proportion to the log, so the app runs this
     /// off the input path.
+    ///
+    /// When the rebuild cannot finish, the lines stay blanked and a
+    /// marker table stays behind. The next run then rebuilds the file
+    /// even with no new line to blank, and reports it as `resumed`.
     pub fn blank_password_lines(&mut self, found: &PasswordLines) -> Result<Forgotten> {
         let before: i64 = self
             .conn
@@ -608,6 +631,21 @@ impl LogStore {
     }
 
     fn blank_lines(&mut self, found: &PasswordLines) -> Result<Forgotten> {
+        let resumed = self.wipe_pending()?;
+        let (lines, sessions) = self.blank_rows(found)?;
+        let wiped = (lines == 0 && !resumed) || wipe(&self.conn);
+        Ok(Forgotten {
+            lines,
+            sessions,
+            resumed,
+            wiped,
+        })
+    }
+
+    /// The update itself, in one transaction that also leaves the marker
+    /// of a wipe due. Returns how many lines it blanked and in how many
+    /// sessions.
+    fn blank_rows(&mut self, found: &PasswordLines) -> Result<(usize, usize)> {
         let mut lines = 0;
         let mut sessions = BTreeSet::new();
         let tx = self
@@ -625,13 +663,24 @@ impl LogStore {
                 }
             }
         }
+        if lines > 0 {
+            tx.execute_batch(&format!(
+                "CREATE TABLE IF NOT EXISTS {WIPE_PENDING_TABLE} (id INTEGER PRIMARY KEY);"
+            ))?;
+        }
         tx.commit()?;
-        let wiped = lines == 0 || wipe(&self.conn);
-        Ok(Forgotten {
-            lines,
-            sessions: sessions.len(),
-            wiped,
-        })
+        Ok((lines, sessions.len()))
+    }
+
+    /// True when an earlier run blanked lines and could not clear the
+    /// old copies of their text from the file.
+    pub fn wipe_pending(&self) -> Result<bool> {
+        let pending = self.conn.query_row(
+            "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+            [WIPE_PENDING_TABLE],
+            |r| r.get(0),
+        )?;
+        Ok(pending)
     }
 
     /// [`Self::find_password_lines`], then [`Self::blank_password_lines`].
@@ -650,7 +699,8 @@ fn checkpoint(conn: &Connection) -> bool {
     .is_ok_and(|busy| busy == 0)
 }
 
-/// Clear old copies of changed rows out of the file. True when done.
+/// Clear old copies of changed rows out of the file, then drop the
+/// marker of a wipe due. True when no old copy is left.
 fn wipe(conn: &Connection) -> bool {
     // The first checkpoint lands the zeroed pages even if the rebuild
     // below cannot run, for lack of disk space say.
@@ -658,7 +708,18 @@ fn wipe(conn: &Connection) -> bool {
     let rebuilt = conn.execute_batch("VACUUM;").is_ok();
     // The rebuild writes the new file through the write ahead log, and
     // this checkpoint moves it in and truncates the log to nothing.
-    rebuilt && checkpoint(conn)
+    if !(rebuilt && checkpoint(conn)) {
+        return false;
+    }
+    // The file is clean now. A marker that fails to drop only means the
+    // next run rebuilds the file once more.
+    if conn
+        .execute_batch(&format!("DROP TABLE IF EXISTS {WIPE_PENDING_TABLE};"))
+        .is_ok()
+    {
+        checkpoint(conn);
+    }
+    true
 }
 
 #[cfg(test)]
@@ -1679,6 +1740,83 @@ mod tests {
         }
         // The rest of the log is still on disk.
         assert!(log.holds("line 1499."), "ordinary lines went missing");
+    }
+
+    const SECRETS: [&str; 4] = [SECRET_ACCOUNT, SECRET_IMM, SECRET_OLD, SECRET_NEW];
+
+    /// Indexes of the made up secrets still somewhere in the file.
+    fn secrets_left(log: &TempLog) -> Vec<usize> {
+        (0..SECRETS.len())
+            .filter(|&n| log.holds(SECRETS[n]))
+            .collect()
+    }
+
+    #[test]
+    fn a_wipe_that_could_not_finish_is_finished_by_the_next_run() {
+        let log = TempLog::new("unfinished");
+        let (mut store, _) = populated(&log);
+        // Another reader holds an old snapshot open, so the last
+        // checkpoint cannot empty the write ahead log. A full disk under
+        // the rebuild ends the same way.
+        let reader = Connection::open(log.path()).unwrap();
+        reader.execute_batch("BEGIN;").unwrap();
+        let _: i64 = reader
+            .query_row("SELECT count(*) FROM log_lines", [], |r| r.get(0))
+            .unwrap();
+        let done = store.forget_passwords().unwrap();
+        assert_eq!((done.lines, done.resumed, done.wiped), (6, false, false));
+
+        // The preview finds no line left to blank and says the wipe is due.
+        let found = store.find_password_lines().unwrap();
+        assert_eq!(found.count(), 0);
+        assert!(found.wipe_pending, "the preview forgot the unfinished wipe");
+
+        reader.execute_batch("COMMIT;").unwrap();
+        drop(reader);
+        let again = store.forget_passwords().unwrap();
+        assert_eq!((again.lines, again.resumed, again.wiped), (0, true, true));
+        assert_eq!(
+            secrets_left(&log),
+            Vec::<usize>::new(),
+            "made up secrets are still in the file"
+        );
+
+        // Nothing is due after that.
+        assert!(!store.find_password_lines().unwrap().wipe_pending);
+        let before = snapshot(&store);
+        let third = store.forget_passwords().unwrap();
+        assert_eq!((third.lines, third.resumed, third.wiped), (0, false, true));
+        assert!(
+            snapshot(&store) == before,
+            "a run with nothing due changed the log"
+        );
+    }
+
+    #[test]
+    fn a_wipe_cut_short_by_a_quit_is_finished_after_a_restart() {
+        let log = TempLog::new("cut-short");
+        let (mut store, _) = populated(&log);
+        let found = store.find_password_lines().unwrap();
+        // Vosh quits once the lines are blanked, before the rebuild ends.
+        assert_eq!(store.blank_rows(&found).unwrap(), (6, 2));
+        drop(store);
+        assert!(
+            !secrets_left(&log).is_empty(),
+            "the test means something only if old copies stay behind"
+        );
+
+        let mut store = LogStore::open(&log.path()).unwrap();
+        let found = store.find_password_lines().unwrap();
+        assert_eq!(found.count(), 0);
+        assert!(found.wipe_pending, "the preview forgot the unfinished wipe");
+        let done = store.blank_password_lines(&found).unwrap();
+        assert_eq!((done.lines, done.resumed, done.wiped), (0, true, true));
+        assert_eq!(
+            secrets_left(&log),
+            Vec::<usize>::new(),
+            "made up secrets are still in the file"
+        );
+        assert!(!store.wipe_pending().unwrap());
     }
 
     #[test]
