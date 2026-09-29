@@ -2038,10 +2038,21 @@ impl GlobalConfig {
 /// since the save that follows writes its live values into its own file.
 /// A profile that never saved a file gets one when it has values to take.
 /// Every file is read before any is written, so a file Vosh cannot read
-/// stops the move with nothing changed. Returns how many files it wrote,
-/// or a sentence naming the profile whose file stopped the move, so the
-/// caller keeps those categories shared.
+/// stops the move with nothing changed, and a file that does not save
+/// puts back every file written before it, so a failed save changes
+/// nothing either. Returns how many files it wrote, or a sentence naming
+/// the profile whose file stopped the move, so the caller keeps those
+/// categories shared.
 pub(crate) fn hand_out_shared(set: &ProfileSet, shared: &GlobalConfig) -> Result<usize, String> {
+    hand_out_shared_with(set, shared, |path, config| config.save(path))
+}
+
+/// [`hand_out_shared`] with the save given, so a test can make one fail.
+fn hand_out_shared_with(
+    set: &ProfileSet,
+    shared: &GlobalConfig,
+    mut save: impl FnMut(&Path, &ProfileConfig) -> Result<(), ConfigError>,
+) -> Result<usize, String> {
     let active = set.active_name();
     let mut changed = Vec::new();
     for entry in set.list() {
@@ -2050,30 +2061,64 @@ pub(crate) fn hand_out_shared(set: &ProfileSet, shared: &GlobalConfig) -> Result
         }
         let path = set.profile_path(&entry.name);
         let owner = crate::profile_set::display_name(&entry.name);
-        let mut config = if path.exists() {
-            ProfileConfig::load(&path).map_err(|e| {
-                tracing::warn!(error = %e, path = %path.display(), "profile file unreadable");
-                format!(
-                    "Vosh could not read the {owner} profile file, so these settings stay the same for every character."
-                )
-            })?
+        let unreadable = |e: &dyn std::fmt::Display| {
+            tracing::warn!(error = %e, path = %path.display(), "profile file unreadable");
+            format!(
+                "Vosh could not read the {owner} profile file, so these settings stay the same for every character."
+            )
+        };
+        // The text as it stands, so a failed save can put it back exactly.
+        let before = if path.exists() {
+            Some(std::fs::read_to_string(&path).map_err(|e| unreadable(&e))?)
         } else {
-            ProfileConfig::default()
+            None
+        };
+        let mut config = match &before {
+            Some(text) => ProfileConfig::from_toml(text).map_err(|e| unreadable(&e))?,
+            None => ProfileConfig::default(),
         };
         if shared.hand_out(&mut config.ui, &owner) {
-            changed.push((owner, path, config));
+            changed.push((owner, path, before, config));
         }
     }
     let written = changed.len();
-    for (owner, path, config) in changed {
-        config.save(&path).map_err(|e| {
+    let mut touched: Vec<(PathBuf, Option<String>)> = Vec::new();
+    for (owner, path, before, config) in changed {
+        let saved = save(&path, &config);
+        if let Err(e) = &saved {
             tracing::warn!(error = %e, path = %path.display(), "profile file kept the defaults");
-            format!(
+        }
+        // A save that fails may already have moved the file aside, so it
+        // goes back with the rest.
+        touched.push((path, before));
+        if saved.is_err() {
+            put_back(&touched);
+            return Err(format!(
                 "Vosh could not save the {owner} profile file, so these settings stay the same for every character."
-            )
-        })?;
+            ));
+        }
     }
     Ok(written)
+}
+
+/// Put each file in `files` back to the text it held, or take away a file
+/// that did not exist before. Leaves a file that already holds its text.
+fn put_back(files: &[(PathBuf, Option<String>)]) {
+    for (path, before) in files.iter().rev() {
+        let restored = match before {
+            Some(text) => {
+                if std::fs::read_to_string(path).ok().as_deref() == Some(text.as_str()) {
+                    continue;
+                }
+                write_with_backup(path, text)
+            }
+            None if path.exists() => std::fs::remove_file(path),
+            None => continue,
+        };
+        if let Err(e) = restored {
+            tracing::error!(error = %e, path = %path.display(), "profile file could not be put back");
+        }
+    }
 }
 
 /// Zero out the fields whose scope is `Global` on a
@@ -3523,5 +3568,80 @@ name = "haste"
         assert!(GlobalConfig::load_shared(&missing, &scope)
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn a_failed_hand_out_puts_back_every_file_it_wrote() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        for name in ["Healer", "Test-Prompt", "Bard"] {
+            set.create(name).unwrap();
+        }
+        // Healer and Test-Prompt saved while everything was shared, so
+        // they hold the defaults. Bard never saved.
+        let mut healer = ProfileConfig::default();
+        healer.ui.tracked_affects = vec![TrackedAffect {
+            name: "Fly".into(),
+            label: None,
+        }];
+        healer.save(&set.profile_path("Healer")).unwrap();
+        ProfileConfig::default()
+            .save(&set.profile_path("Test-Prompt"))
+            .unwrap();
+        let read = |name: &str| std::fs::read_to_string(set.profile_path(name)).unwrap();
+        let healer_before = read("Healer");
+        let prompt_before = read("Test-Prompt");
+        let shared = GlobalConfig::from_profile(&shared_profile(), &ScopeConfig::default());
+
+        // The second of the three saves fails after moving its file
+        // aside, the way a full disk fails `write_with_backup`.
+        let mut saves = 0;
+        let refused = hand_out_shared_with(&set, &shared, |path, config| {
+            saves += 1;
+            if saves == 2 {
+                std::fs::rename(path, path.with_extension("toml.bak.1"))?;
+                return Err(std::io::Error::other("disk full").into());
+            }
+            config.save(path)
+        });
+
+        assert_eq!(
+            refused.unwrap_err(),
+            "Vosh could not save the Test-Prompt profile file, so these settings stay the same for every character."
+        );
+        assert_eq!(saves, 2);
+        assert_eq!(read("Healer"), healer_before);
+        assert_eq!(read("Test-Prompt"), prompt_before);
+        assert!(!set.profile_path("Bard").exists());
+
+        // With every save working, all three take the shared settings.
+        assert_eq!(hand_out_shared(&set, &shared).unwrap(), 3);
+        let bard = ProfileConfig::load(&set.profile_path("Bard")).unwrap();
+        assert_eq!(bard.ui.theme, "night-ink");
+    }
+
+    #[test]
+    fn a_failed_hand_out_takes_away_a_file_it_made() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        // Bard never saved, so the hand out makes its file first.
+        set.create("Bard").unwrap();
+        set.create("Healer").unwrap();
+        ProfileConfig::default()
+            .save(&set.profile_path("Healer"))
+            .unwrap();
+        let shared = GlobalConfig::from_profile(&shared_profile(), &ScopeConfig::default());
+
+        let mut saves = 0;
+        let refused = hand_out_shared_with(&set, &shared, |path, config| {
+            saves += 1;
+            if saves == 2 {
+                return Err(std::io::Error::other("disk full").into());
+            }
+            config.save(path)
+        });
+
+        assert!(refused.is_err());
+        assert!(!set.profile_path("Bard").exists());
     }
 }
