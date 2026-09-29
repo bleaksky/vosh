@@ -724,20 +724,24 @@
 
 /* One line (Settings, Layout, Density). Health, Mana, and Moves sit
    side by side on one 28 px row, 16 apart, each the status line form
-   (label, 6, value) with its meter under it. A panel under about
-   360 pt drops the labels, which stay for screen readers. The combat
-   row and the empty state keep their own rows. */
+   (label, 6, value) with its meter under it. The columns share the row
+   equally, and one that needs more room for its value takes it. A
+   panel under about 360 pt drops the labels, which stay for screen
+   readers, and vitalsLine.ts stacks the vitals in rows when even the
+   values do not fit. The combat row and the empty state keep their
+   own rows. */
 .panel-vitals.is-one-line {
   min-height: 48px;
 }
 
 .panel-vitals-oneline {
-  display: flex;
-  gap: 16px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(max-content, 1fr);
+  column-gap: 16px;
 }
 
 .panel-vitals-item {
-  flex: 1 1 0;
   min-width: 0;
 }
 
