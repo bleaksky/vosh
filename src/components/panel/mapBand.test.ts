@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { MAP_BAND_MAX_ROWS, mapBandPeople, mapBandRows } from './mapBand';
 
 describe('mapBandRows', () => {
-  it('fills what the drawing leaves above its floor, up to four rows', () => {
+  it('fills what the drawing leaves above its floor, up to three rows', () => {
     // A tall pane: the drawing keeps the rest.
-    expect(mapBandRows(480, 96, 22)).toBe(MAP_BAND_MAX_ROWS);
+    expect(MAP_BAND_MAX_ROWS).toBe(3);
+    expect(mapBandRows(480, 96, 22)).toBe(3);
     // Room for two rows over the floor, with a pixel to spare.
     expect(mapBandRows(96 + 45, 96, 22)).toBe(2);
     expect(mapBandRows(96 + 44, 96, 22)).toBe(2);

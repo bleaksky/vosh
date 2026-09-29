@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { MapStyle } from '../ServerMapView';
+import { MAP_STYLE_CHOICES, type MapStyle } from '../../lib/mapStyle';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from './MenuSurface';
 import { returnToCommandLine } from './paneActions';
 import { CheckIcon } from './paneIcons';
@@ -15,8 +15,6 @@ const MAP_STYLE_LABELS: Record<MapStyle, string> = {
   glyphs: 'Glyphs',
   tileset: 'Tileset',
 };
-
-const STYLES: MapStyle[] = ['plain', 'squares', 'glyphs', 'tileset'];
 
 interface Props {
   style: MapStyle;
@@ -69,7 +67,7 @@ export function MapPaneControls(props: Props) {
           at={{ x: rect.left, y: rect.bottom + 8, flipX: rect.right, flipY: rect.top - 8 }}
           onClose={close}
         >
-          {STYLES.map((s) => (
+          {MAP_STYLE_CHOICES.map((s) => (
             <MenuItem
               key={s}
               onSelect={run(() => props.onStyle(s))}
