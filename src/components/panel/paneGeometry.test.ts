@@ -68,9 +68,10 @@ const BOARD_AFFECTS = rowsOf(
 );
 
 describe('affectsMinH', () => {
-  it('reaches down to the last harmful row', () => {
-    // Header, six tracked rows, the Not tracked label, then Poison.
-    expect(affectsMinH(BOARD_AFFECTS)).toBe(28 + 6 * 22 + 34 + 22);
+  it('reaches down to the last harmful row, then peeks at the next', () => {
+    // Header, six tracked rows, the Not tracked label, Poison, and half
+    // of the next row under the fade.
+    expect(affectsMinH(BOARD_AFFECTS)).toBe(28 + 6 * 22 + 34 + 22 + 11);
   });
 
   it('keeps the stock minimum when nothing harmful is on you', () => {
@@ -89,18 +90,19 @@ describe('affectsMinH', () => {
     expect(affectsMinH(many)).toBe(28 + 7 * 22);
   });
 
-  it('stops at a dozen rows and the label', () => {
+  it('stops at a dozen rows and the label, then peeks', () => {
     const long = rowsOf(...Array<AffectRowState>(20).fill('present'), 'harmful');
-    expect(affectsMinH(long)).toBe(28 + 12 * 22 + 34);
+    expect(affectsMinH(long)).toBe(28 + 12 * 22 + 34 + 11);
   });
 });
 
 describe('groupMinH', () => {
-  it('holds every member up to six', () => {
+  it('holds every member up to six, then peeks at the seventh', () => {
     expect(groupMinH(0)).toBe(PANE_MIN_H.group);
     expect(groupMinH(3)).toBe(PANE_MIN_H.group);
     expect(groupMinH(4)).toBe(28 + 4 * 22);
-    expect(groupMinH(12)).toBe(28 + 6 * 22);
+    expect(groupMinH(6)).toBe(28 + 6 * 22);
+    expect(groupMinH(12)).toBe(28 + 6 * 22 + 11);
   });
 });
 
@@ -259,10 +261,10 @@ describe('layoutPanes', () => {
     const mins = { affects: affectsMinH(BOARD_AFFECTS), group: groupMinH(4) };
     const { leaves, handles } = layoutPanes(tree, 300, 664, mins);
     const h = Object.fromEntries(leaves.map((l) => [l.leaf.pane, l.rect.h]));
-    expect(h.affects).toBe(216);
+    expect(h.affects).toBe(227);
     expect(h.group).toBeGreaterThanOrEqual(116);
     // A drag stops at the raised minimum as well.
-    expect(handles[2].mins).toEqual([180, 116, 120, 216]);
+    expect(handles[2].mins).toEqual([180, 116, 120, 227]);
   });
 
   it('lays out nothing for an empty root', () => {

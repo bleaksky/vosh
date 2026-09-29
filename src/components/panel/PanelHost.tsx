@@ -1,4 +1,12 @@
-import { useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent,
+  type RefObject,
+} from 'react';
 import { PANE_TYPES, setWeights, type PaneType } from '../../lib/paneLayout';
 import { AffectsPane } from './AffectsPane';
 import { ChatPane } from './ChatPane';
@@ -60,6 +68,8 @@ export function PanelHost() {
     return () => observer.disconnect();
   }, []);
 
+  useMoreBelow(areaRef);
+
   const root = layout?.root ?? null;
   const mins = usePaneMins();
   const geometry = useMemo(
@@ -104,6 +114,56 @@ export function PanelHost() {
       <VitalsFooter />
     </div>
   );
+}
+
+/** Mark every pane body that has rows below its bottom edge with
+ *  `data-more="below"`, which panel.css fades so you can tell the list
+ *  goes on. Scrolling to the end, a taller pane, or fewer rows clear
+ *  it. Pane bodies come and go with the tree, so this watches the
+ *  pane area for them. */
+function useMoreBelow(areaRef: RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    const area = areaRef.current;
+    if (!area) return;
+    const check = (body: HTMLElement) => {
+      const more = body.scrollHeight - body.scrollTop - body.clientHeight > 1;
+      if (more === (body.dataset.more === 'below')) return;
+      if (more) body.dataset.more = 'below';
+      else delete body.dataset.more;
+    };
+    // The body resizes with its pane, and its children with its rows.
+    const watched = new WeakSet<Element>();
+    const resize = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const body = entry.target.closest('.pane-body');
+        if (body instanceof HTMLElement) check(body);
+      }
+    });
+    const scan = () => {
+      for (const body of area.querySelectorAll<HTMLElement>('.pane-body')) {
+        for (const el of [body, ...Array.from(body.children)]) {
+          if (watched.has(el)) continue;
+          watched.add(el);
+          resize.observe(el);
+        }
+        check(body);
+      }
+    };
+    const mutations = new MutationObserver(scan);
+    mutations.observe(area, { childList: true, subtree: true });
+    // Scroll does not bubble, so listen on the way down.
+    const onScroll = (e: Event) => {
+      const t = e.target;
+      if (t instanceof HTMLElement && t.classList.contains('pane-body')) check(t);
+    };
+    area.addEventListener('scroll', onScroll, true);
+    scan();
+    return () => {
+      resize.disconnect();
+      mutations.disconnect();
+      area.removeEventListener('scroll', onScroll, true);
+    };
+  }, [areaRef]);
 }
 
 /** The line between two sibling panes. Drag it, or focus it and use

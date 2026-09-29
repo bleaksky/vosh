@@ -44,6 +44,14 @@
   overflow-y: auto;
 }
 
+/* Rows that run past the bottom edge fade out over its last 8 px, the
+   chat pane's recipe turned over, so you can tell the list goes on.
+   PanelHost sets the mark while rows sit below the edge. */
+.pane-body[data-more='below'] {
+  -webkit-mask-image: linear-gradient(to top, transparent 0, #000 8px);
+  mask-image: linear-gradient(to top, transparent 0, #000 8px);
+}
+
 /* The 1 px lines between panes, the resize handles. The hit area
    reaches 3 px past each side of the line. */
 .pane-handle {
@@ -540,6 +548,24 @@
 .pane-chat-scroll:not(.is-empty) {
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 8px);
   mask-image: linear-gradient(to bottom, transparent 0, #000 8px);
+}
+
+/* Scrolled up from the newest message, the log fades at both edges. */
+.pane-chat-scroll:not(.is-empty)[data-more='below'] {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 8px,
+    #000 calc(100% - 8px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 8px,
+    #000 calc(100% - 8px),
+    transparent 100%
+  );
 }
 
 .pane-chat-log {
