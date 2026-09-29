@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { AffectModifier } from '../affects';
 import { affectsSnapshotGet, onGmcpPackage, onState } from '../session';
-import { asNumber, asText, createStore } from './store';
+import { asNumber, asText, createStore, isHiddenFlag } from './store';
 
 // Your current affects from Char.Affects, one row per affect name.
 // Aabahran sends one entry per (affect, modifier) pair, resends the
@@ -9,6 +9,11 @@ import { asNumber, asText, createStore } from './store';
 // is ticks left and -1 means permanent. Lifted from AffectsBar, which
 // held this in component state and went empty on every remount until
 // the next tick.
+//
+// Under lamented tears the list comes empty with `"hidden": true`. The
+// store is then hidden until a list without the flag arrives, so the
+// Affects pane says the game hides them instead of marking every
+// tracked affect missing.
 
 export type AffectKind = 'spell' | 'song';
 
@@ -64,6 +69,21 @@ export function groupCurrentAffects(data: unknown): CurrentAffect[] {
   return [...byName.values()];
 }
 
+/** What the store keeps. `list` is null until the first Char.Affects
+ *  since you connected, so the pane can tell "no affects on you" from
+ *  "the server has not said yet". */
+interface AffectsState {
+  list: CurrentAffect[] | null;
+  /** The game hides your affects. The list is empty meanwhile. */
+  hidden: boolean;
+}
+
+/** One Char.Affects packet: its rows and whether the game hides
+ *  them. */
+export function parseAffectsPacket(data: unknown): { list: CurrentAffect[]; hidden: boolean } {
+  return { list: groupCurrentAffects(data), hidden: isHiddenFlag(data) };
+}
+
 function durationOf(value: unknown): number | null {
   const n = asNumber(value);
   if (n === null) return null;
@@ -77,9 +97,8 @@ function outlasts(next: number | null, prev: number | null): boolean {
   return next < 0 || next > prev;
 }
 
-// null until the first Char.Affects since you connected, so the pane
-// can tell "no affects on you" from "the server has not said yet".
-const store = createStore<CurrentAffect[] | null>(null);
+const EMPTY: AffectsState = { list: null, hidden: false };
+const store = createStore<AffectsState>(EMPTY);
 let started = false;
 // Bumped by every list and every disconnect. The snapshot applies only
 // when neither arrived after it was asked for, so it never replaces a
@@ -91,12 +110,12 @@ export function startAffectsStore(): void {
   started = true;
   const lists = onGmcpPackage<unknown>('Char.Affects', (data) => {
     generation += 1;
-    store.set(groupCurrentAffects(data));
+    store.set(parseAffectsPacket(data));
   });
   const states = onState((payload) => {
     if (payload.kind !== 'disconnected') return;
     generation += 1;
-    store.set(null);
+    store.set(EMPTY);
   });
   // A window that opens between ticks, Settings among them, reads the
   // last list the backend kept instead of waiting for the next one.
@@ -106,14 +125,19 @@ export function startAffectsStore(): void {
     .then(() => {
       const mine = generation;
       return affectsSnapshotGet().then((data) => {
-        if (mine === generation && data != null) store.set(groupCurrentAffects(data));
+        if (mine === generation && data != null) store.set(parseAffectsPacket(data));
       });
     })
     .catch(() => undefined);
 }
 
 export function getAffects(): CurrentAffect[] | null {
-  return store.get();
+  return store.get().list;
+}
+
+/** True while the game hides your affects. */
+export function getAffectsHidden(): boolean {
+  return store.get().hidden;
 }
 
 export function subscribeAffects(cb: () => void): () => void {
@@ -124,4 +148,9 @@ export function subscribeAffects(cb: () => void): () => void {
 /** Current affects, or null until the server has sent the list. */
 export function useAffects(): CurrentAffect[] | null {
   return useSyncExternalStore(subscribeAffects, getAffects);
+}
+
+/** True while the game hides your affects. */
+export function useAffectsHidden(): boolean {
+  return useSyncExternalStore(subscribeAffects, getAffectsHidden);
 }

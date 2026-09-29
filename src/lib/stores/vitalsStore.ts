@@ -1,13 +1,18 @@
 import { useSyncExternalStore } from 'react';
 import { onGmcpPackage, onPromptVars, onState, type PromptVarsPayload } from '../session';
 import { LEDGER_LOW_ENTER, LEDGER_LOW_EXIT } from '../vitalsLayouts';
-import { asNumber, createStore } from './store';
+import { asNumber, createStore, isHiddenFlag } from './store';
 
 // Your hp, mana and moves for the pinned vitals and the compact status
 // line. Char.Vitals is the base. Prompt vars that a trigger sets with
 // mud.set_prompt_var (hp, maxhp, mana, maxmana, move, maxmove) win
 // over it, so a prompt regex can drive the meters on a server without
 // GMCP. Lifted from the VitalsBar data effect.
+//
+// Under lamented tears Aabahran sends Char.Vitals as zeros with
+// `"hidden": true`. The snapshot is then hidden until a Char.Vitals
+// without the flag arrives. Prompt vars never fill it in meanwhile,
+// and nothing reads low.
 
 export interface VitalValues {
   hp: number;
@@ -25,6 +30,16 @@ export interface Vitals extends VitalValues {
    *  leaves only at LEDGER_LOW_EXIT, so regen across the line does not
    *  flicker. A vital with no max is never low. */
   low: Record<VitalKey, boolean>;
+  /** The game hides your vitals. The values are the zeros it sent,
+   *  every view shows `?` in their place, and nothing is low. */
+  hidden: boolean;
+}
+
+/** One Char.Vitals packet: its values and whether the game hides
+ *  them. */
+export interface VitalsPacket {
+  values: VitalValues;
+  hidden: boolean;
 }
 
 const KEYS: readonly (keyof VitalValues)[] = ['hp', 'maxhp', 'mana', 'maxmana', 'move', 'maxmove'];
@@ -47,6 +62,11 @@ export function parseVitals(data: unknown): VitalValues {
     move: asNumber(d.move) ?? 0,
     maxmove: asNumber(d.maxmove) ?? 0,
   };
+}
+
+/** Parse a Char.Vitals packet with its hidden flag. */
+export function parseVitalsPacket(data: unknown): VitalsPacket {
+  return { values: parseVitals(data), hidden: isHiddenFlag(data) };
 }
 
 /** Lay prompt vars over the GMCP values. Null when neither source has
@@ -81,17 +101,26 @@ export function nextLow(wasLow: boolean, current: number, max: number): boolean 
 }
 
 /** Build the next snapshot, reusing the previous object when nothing
- *  changed so a prompt that repeats the same numbers does not render. */
-export function nextVitals(prev: Vitals | null, values: VitalValues | null): Vitals | null {
+ *  changed so a prompt that repeats the same numbers does not render.
+ *  A hidden snapshot is never low, and the latch starts over once the
+ *  game shows your vitals again. */
+export function nextVitals(
+  prev: Vitals | null,
+  values: VitalValues | null,
+  hidden = false,
+): Vitals | null {
   if (values === null) return null;
   const was = prev?.low ?? NOT_LOW;
-  const low: Record<VitalKey, boolean> = {
-    hp: nextLow(was.hp, values.hp, values[MAX_OF.hp]),
-    mana: nextLow(was.mana, values.mana, values[MAX_OF.mana]),
-    move: nextLow(was.move, values.move, values[MAX_OF.move]),
-  };
+  const low: Record<VitalKey, boolean> = hidden
+    ? NOT_LOW
+    : {
+        hp: nextLow(was.hp, values.hp, values[MAX_OF.hp]),
+        mana: nextLow(was.mana, values.mana, values[MAX_OF.mana]),
+        move: nextLow(was.move, values.move, values[MAX_OF.move]),
+      };
   if (
     prev &&
+    prev.hidden === hidden &&
     KEYS.every((k) => prev[k] === values[k]) &&
     low.hp === prev.low.hp &&
     low.mana === prev.low.mana &&
@@ -99,23 +128,28 @@ export function nextVitals(prev: Vitals | null, values: VitalValues | null): Vit
   ) {
     return prev;
   }
-  return { ...values, low };
+  return { ...values, low, hidden };
 }
 
 const store = createStore<Vitals | null>(null);
-let gmcp: VitalValues | null = null;
+let gmcp: VitalsPacket | null = null;
 let promptVars: PromptVarsPayload = {};
 let started = false;
 
 function publish(): void {
-  store.set(nextVitals(store.get(), mergeVitals(gmcp, promptVars)));
+  // A hidden packet stands alone. Prompt vars never fill it in.
+  const next =
+    gmcp?.hidden === true
+      ? nextVitals(store.get(), gmcp.values, true)
+      : nextVitals(store.get(), mergeVitals(gmcp?.values ?? null, promptVars));
+  store.set(next);
 }
 
 export function startVitalsStore(): void {
   if (started) return;
   started = true;
   void onGmcpPackage<unknown>('Char.Vitals', (data) => {
-    gmcp = parseVitals(data);
+    gmcp = parseVitalsPacket(data);
     publish();
   });
   void onPromptVars((payload) => {

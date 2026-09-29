@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { mergeVitals, nextLow, nextVitals, parseVitals, type VitalValues } from './vitalsStore';
+import { aabahranPacket } from '../../test/aabahranGmcp';
+import {
+  mergeVitals,
+  nextLow,
+  nextVitals,
+  parseVitals,
+  parseVitalsPacket,
+  type VitalValues,
+} from './vitalsStore';
 
 const full: VitalValues = {
   hp: 1020,
@@ -21,6 +29,25 @@ describe('parseVitals', () => {
       maxmove: 0,
     });
     expect(parseVitals(null).maxhp).toBe(0);
+  });
+});
+
+describe('parseVitalsPacket', () => {
+  it('reads the Aabahran packet as shown', () => {
+    expect(parseVitalsPacket(aabahranPacket('char-vitals.gmcp').data)).toEqual({
+      values: { hp: 850, maxhp: 900, mana: 760, maxmana: 820, move: 250, maxmove: 250 },
+      hidden: false,
+    });
+  });
+
+  it('reads the lamented tears packet as hidden', () => {
+    expect(parseVitalsPacket(aabahranPacket('char-vitals-hidden.gmcp').data)).toEqual({
+      values: { hp: 0, maxhp: 0, mana: 0, maxmana: 0, move: 0, maxmove: 0 },
+      hidden: true,
+    });
+    // Only a true flag hides.
+    expect(parseVitalsPacket({ hp: 1, maxhp: 2, hidden: false }).hidden).toBe(false);
+    expect(parseVitalsPacket({ hp: 1, maxhp: 2, hidden: 'yes' }).hidden).toBe(false);
   });
 });
 
@@ -71,5 +98,29 @@ describe('low latch', () => {
     const first = nextVitals(null, full);
     expect(nextVitals(first, { ...full })).toBe(first);
     expect(nextVitals(first, null)).toBeNull();
+  });
+});
+
+describe('hidden vitals', () => {
+  const zeros: VitalValues = { hp: 0, maxhp: 0, mana: 0, maxmana: 0, move: 0, maxmove: 0 };
+  const notLow = { hp: false, mana: false, move: false };
+
+  it('never read low, even from a low latch', () => {
+    const hurt = nextVitals(null, { ...full, hp: 186 });
+    expect(hurt?.low.hp).toBe(true);
+    const hidden = nextVitals(hurt, zeros, true);
+    expect(hidden).toEqual({ ...zeros, low: notLow, hidden: true });
+    expect(nextVitals(hidden, { ...zeros }, true)).toBe(hidden);
+  });
+
+  it('show again on the next packet without the flag', () => {
+    const hidden = nextVitals(null, zeros, true);
+    expect(nextVitals(hidden, full)).toEqual({ ...full, low: notLow, hidden: false });
+  });
+
+  it('tell hidden zeros from shown zeros', () => {
+    const shown = nextVitals(null, zeros);
+    expect(shown?.hidden).toBe(false);
+    expect(nextVitals(shown, zeros, true)?.hidden).toBe(true);
   });
 });

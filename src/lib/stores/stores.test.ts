@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { aabahranPacket } from '../../test/aabahranGmcp';
 
 // Drives the stores through a fake Tauri event bus, so the channel
 // names, the disconnect handling and the start wiring are checked the
@@ -36,6 +37,11 @@ function fire(event: string, payload: unknown): void {
 
 const gmcp = (pkg: string, payload: unknown) =>
   fire(`session://gmcp/${pkg.replace(/\./g, '-')}`, payload);
+/** Send one packet from fixtures/gmcp/aabahran, as the backend emits it. */
+const packet = (name: string) => {
+  const p = aabahranPacket(name);
+  gmcp(p.package, p.data);
+};
 const disconnect = () => fire('session://state', { kind: 'disconnected', reason: null });
 
 // Let the listen and invoke promises settle.
@@ -57,6 +63,7 @@ async function load() {
     chipStyle: await import('./chipStyleStore'),
     tickCount: await import('./tickCountStore'),
     vitalsOptions: await import('./vitalsOptionsStore'),
+    group: await import('../groupStore'),
   };
 }
 
@@ -100,7 +107,13 @@ describe('stores on the event bus', () => {
 
     expect(s.vitals.getVitals()).toMatchObject({ hp: 186, low: { hp: true, move: false } });
     expect(s.affects.getAffects()?.map((a) => a.name)).toEqual(['haste']);
-    expect(s.combat.getCombat()).toEqual({ name: 'a guard', hp_pct: 12, condition: 'awful' });
+    expect(s.combat.getCombat()).toEqual({
+      name: 'a guard',
+      hp_pct: 12,
+      condition: 'awful',
+      hidden: false,
+      tank: null,
+    });
     expect(s.world.getWorld().time?.hour).toBe(8);
     expect(s.world.moonLabel(s.world.getWorld().moons)).toBe('Lysenties waxing');
     expect(s.room.getRoom().info?.exits).toEqual(['south']);
@@ -182,6 +195,107 @@ describe('stores on the event bus', () => {
     gmcp('Char.Vitals', { hp: 900, maxhp: 1000 });
     fire('session://prompt-vars', { hp: '150' });
     expect(s.vitals.getVitals()).toMatchObject({ hp: 150, maxhp: 1000, low: { hp: true } });
+  });
+
+  it('hide your vitals under lamented tears and never fill them from prompt vars', async () => {
+    const s = await load();
+    packet('char-vitals.gmcp');
+    fire('session://prompt-vars', { hp: '150', maxhp: '900' });
+    expect(s.vitals.getVitals()).toMatchObject({ hp: 150, hidden: false, low: { hp: true } });
+
+    packet('char-vitals-hidden.gmcp');
+    expect(s.vitals.getVitals()).toEqual({
+      hp: 0,
+      maxhp: 0,
+      mana: 0,
+      maxmana: 0,
+      move: 0,
+      maxmove: 0,
+      low: { hp: false, mana: false, move: false },
+      hidden: true,
+    });
+    // A prompt capture that lands while hidden changes nothing.
+    fire('session://prompt-vars', { hp: '850', maxhp: '900' });
+    expect(s.vitals.getVitals()?.hidden).toBe(true);
+    expect(s.vitals.getVitals()?.hp).toBe(0);
+
+    // The next packet without the flag shows them again.
+    packet('char-vitals.gmcp');
+    expect(s.vitals.getVitals()).toMatchObject({ hp: 850, maxhp: 900, hidden: false });
+
+    packet('char-vitals-hidden.gmcp');
+    disconnect();
+    expect(s.vitals.getVitals()).toBeNull();
+  });
+
+  it('hide your affects and your group apart from each other', async () => {
+    const s = await load();
+    packet('char-affects.gmcp');
+    packet('group-info.gmcp');
+    expect(s.affects.getAffectsHidden()).toBe(false);
+    expect(s.group.getGroupState().group.members).toHaveLength(2);
+
+    // Only Char.Affects hides. The roster stays.
+    packet('char-affects-hidden.gmcp');
+    expect(s.affects.getAffects()).toEqual([]);
+    expect(s.affects.getAffectsHidden()).toBe(true);
+    expect(s.group.getGroupState().group.members).toHaveLength(2);
+
+    // Group.Info hides on its own packet and drops the roster from
+    // before the song.
+    packet('group-info-hidden.gmcp');
+    expect(s.group.getGroupState().group).toEqual({ hidden: true });
+
+    packet('char-affects.gmcp');
+    expect(s.affects.getAffectsHidden()).toBe(false);
+    expect(s.affects.getAffects()?.map((a) => a.name)).toEqual([
+      'bless',
+      'armor',
+      'bagatelle of bravado',
+    ]);
+    expect(s.group.getGroupState().group).toEqual({ hidden: true });
+
+    packet('group-info-solo.gmcp');
+    expect(s.group.getGroupState().group).toEqual({});
+
+    packet('char-affects-hidden.gmcp');
+    packet('group-info-hidden.gmcp');
+    disconnect();
+    expect(s.affects.getAffects()).toBeNull();
+    expect(s.affects.getAffectsHidden()).toBe(false);
+    expect(s.group.getGroupState().group).toEqual({});
+  });
+
+  it('read a hidden affects list from the snapshot a new window asks for', async () => {
+    commands.set('affects_snapshot_get', aabahranPacket('char-affects-hidden.gmcp').data);
+    const s = await load();
+    expect(s.affects.getAffects()).toEqual([]);
+    expect(s.affects.getAffectsHidden()).toBe(true);
+  });
+
+  it('follow the opponent health the game withholds and the tank it names', async () => {
+    const s = await load();
+    const seen = vi.fn();
+    s.combat.subscribeCombat(seen);
+    packet('char-combat-tank.gmcp');
+    expect(s.combat.getCombat()).toMatchObject({
+      hp_pct: 54,
+      hidden: false,
+      tank: { name: 'Tester', hp_pct: 78 },
+    });
+    packet('char-combat-tank-hidden.gmcp');
+    expect(s.combat.getCombat()).toMatchObject({
+      hp_pct: null,
+      condition: null,
+      hidden: true,
+      tank: { name: 'Tester', hp_pct: null },
+    });
+    packet('char-combat-tank-hidden.gmcp');
+    packet('char-combat.gmcp');
+    expect(s.combat.getCombat()).toMatchObject({ hp_pct: 54, hidden: false, tank: null });
+    packet('char-combat-end.gmcp');
+    expect(s.combat.getCombat()).toBeNull();
+    expect(seen).toHaveBeenCalledTimes(4);
   });
 
   it('seed the tracked list and follow broadcasts and profile switches', async () => {
