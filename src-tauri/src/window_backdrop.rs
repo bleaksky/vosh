@@ -4,7 +4,8 @@
 //! theme. A frame the page has not painted yet shows the window's own
 //! background, so every theme paint in any window reports the theme's
 //! ground here (`window_backdrop_set`), and `open_settings_window`
-//! builds the window on it. The appearance pins the light or dark native
+//! builds the window on it. An open Settings window takes each new
+//! ground as it arrives. The appearance pins the light or dark native
 //! appearance while the theme is your pick, and is `None` while the
 //! theme follows the system, so the window follows the system too. A
 //! theme whose ground is not one solid color reports no ground, and the
@@ -12,7 +13,7 @@
 
 use std::sync::Mutex;
 
-use tauri::{window::Color, Manager, Runtime, Theme, WebviewWindowBuilder};
+use tauri::{window::Color, AppHandle, Manager, Runtime, Theme, WebviewWindowBuilder, Window};
 
 /// What a new window opens on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,6 +26,18 @@ pub(crate) struct Backdrop {
 }
 
 static BACKDROP: Mutex<Option<Backdrop>> = Mutex::new(None);
+
+/// Whether a window's own color carries the theme's ground. On macOS it
+/// is the `NSWindow` background, which shows through wherever the page
+/// has not painted, as in a live resize, and which an open window takes
+/// again on every theme change. Windows paints a transparent window with
+/// the color it was created with for as long as the window is open, so
+/// a theme change would leave that color behind, and Linux keeps the
+/// window clear. The Settings page draws its own rounded frame there
+/// over a transparent window, and an opaque window color would fill the
+/// corners outside it. On both, the page's startup paint covers the
+/// first frame, since the window stays hidden until the page shows it.
+const PAINTS_WINDOW: bool = cfg!(target_os = "macos");
 
 /// Read a `#rrggbb` or `#rgb` ground, or none, and an appearance of
 /// `light`, `dark`, or none. Anything else is `None`.
@@ -70,14 +83,18 @@ fn set(backdrop: Backdrop) {
 }
 
 impl Backdrop {
-    /// The window's own color, or `None` to keep it clear. Linux keeps
-    /// it clear. The Settings page draws its own rounded frame there over
-    /// a transparent window, and an opaque window color would fill the
-    /// corners outside it.
+    /// The window's own color, or `None` to keep it clear. See
+    /// [`PAINTS_WINDOW`].
     pub(crate) fn window_color(self) -> Option<Color> {
+        self.window_color_on(PAINTS_WINDOW)
+    }
+
+    fn window_color_on(self, paints_window: bool) -> Option<Color> {
+        if !paints_window {
+            return None;
+        }
         let (r, g, b) = self.rgb?;
-        let alpha = if cfg!(target_os = "linux") { 0 } else { 255 };
-        Some(Color(r, g, b, alpha))
+        Some(Color(r, g, b, 255))
     }
 
     /// Open a window on this backdrop.
@@ -91,24 +108,43 @@ impl Backdrop {
             None => builder,
         }
     }
+
+    /// Give an open window this backdrop's ground. Its appearance is the
+    /// page's to set, since the page follows the theme itself.
+    fn redress<R: Runtime>(self, window: &Window<R>) {
+        if PAINTS_WINDOW {
+            let _ = window.set_background_color(self.window_color());
+        }
+    }
+}
+
+/// Keep a reported backdrop for the next window.
+fn record(background: Option<&str>, appearance: Option<&str>) -> Result<Backdrop, String> {
+    let backdrop = parse(background, appearance)
+        .ok_or_else(|| format!("not a window backdrop: {background:?} {appearance:?}"))?;
+    set(backdrop);
+    Ok(backdrop)
 }
 
 /// A theme paint in a window reports the ground and appearance a new
-/// window should open on.
+/// window should open on. An open Settings window takes the ground now,
+/// so a theme change while it is open leaves no old color under it.
 #[tauri::command]
 pub(crate) fn window_backdrop_set(
+    app: AppHandle,
     background: Option<String>,
     appearance: Option<String>,
 ) -> Result<(), String> {
-    let backdrop = parse(background.as_deref(), appearance.as_deref())
-        .ok_or_else(|| format!("not a window backdrop: {background:?} {appearance:?}"))?;
-    set(backdrop);
+    let backdrop = record(background.as_deref(), appearance.as_deref())?;
+    if let Some(settings) = app.get_webview_window("settings") {
+        backdrop.redress(&settings.as_ref().window());
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{current, parse, window_backdrop_set, Backdrop};
+    use super::{current, parse, record, Backdrop, PAINTS_WINDOW};
     use tauri::{window::Color, Theme};
 
     #[test]
@@ -177,28 +213,39 @@ mod tests {
     }
 
     #[test]
-    fn paints_the_window_except_on_linux() {
+    fn paints_the_window_only_where_a_theme_change_repaints_it() {
         let backdrop = Backdrop {
             rgb: Some((0xf4, 0xef, 0xe4)),
             appearance: Some(Theme::Light),
         };
-        let alpha = if cfg!(target_os = "linux") { 0 } else { 255 };
+        // macOS: the NSWindow color, which an open window takes again
+        // on every theme change.
+        assert_eq!(
+            backdrop.window_color_on(true),
+            Some(Color(0xf4, 0xef, 0xe4, 255))
+        );
+        // Windows paints a transparent window with its creation color
+        // for as long as it is open, so a theme change would leave it
+        // behind. Linux keeps the window clear for the rounded Settings
+        // frame. Both keep the window clear.
+        assert_eq!(backdrop.window_color_on(false), None);
+        assert_eq!(PAINTS_WINDOW, cfg!(target_os = "macos"));
         assert_eq!(
             backdrop.window_color(),
-            Some(Color(0xf4, 0xef, 0xe4, alpha))
+            backdrop.window_color_on(PAINTS_WINDOW)
         );
         // No solid ground: the window keeps its own clear color.
         let clear = Backdrop {
             rgb: None,
             appearance: Some(Theme::Dark),
         };
-        assert_eq!(clear.window_color(), None);
+        assert_eq!(clear.window_color_on(true), None);
     }
 
     #[test]
     fn keeps_the_last_good_report() {
-        window_backdrop_set(Some("#102030".into()), Some("dark".into())).unwrap();
-        assert!(window_backdrop_set(Some("nope".into()), None).is_err());
+        record(Some("#102030"), Some("dark")).unwrap();
+        assert!(record(Some("nope"), None).is_err());
         assert_eq!(
             current(),
             Some(Backdrop {
@@ -206,7 +253,7 @@ mod tests {
                 appearance: Some(Theme::Dark),
             })
         );
-        window_backdrop_set(Some("#fdfcf8".into()), None).unwrap();
+        record(Some("#fdfcf8"), None).unwrap();
         assert_eq!(
             current(),
             Some(Backdrop {
@@ -217,7 +264,7 @@ mod tests {
         // A theme without a solid ground drops the old ground and pins
         // its own appearance, so a new window opens on neither the old
         // color nor the old appearance.
-        window_backdrop_set(None, Some("light".into())).unwrap();
+        record(None, Some("light")).unwrap();
         assert_eq!(
             current(),
             Some(Backdrop {
