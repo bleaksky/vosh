@@ -38,8 +38,10 @@ import {
   importTriggers,
   installUpdateAndRelaunch,
   listSystemFonts,
+  primeUiConfigBroadcast,
   setUiConfig,
   subscribeDockLayoutChanged,
+  subscribeProfileSwitched,
   type SystemFontEntry,
   type UiConfig,
 } from './lib/session';
@@ -336,6 +338,33 @@ export function SettingsApp() {
     return () => window.clearTimeout(fallback);
   }, []);
 
+  // A profile switch replaces the whole UI config in the backend. Every
+  // save from this window sends the full snapshot, so re-read it here or
+  // the next edit writes the old profile's tracked affects, vitals,
+  // custom themes, and prompt template over the new profile.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void subscribeProfileSwitched(() => {
+      getUiConfig()
+        .then((cfg) => {
+          if (cancelled) return;
+          setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
+          setConfig(cfg);
+          applyTheme(cfg.theme);
+          primeUiConfigBroadcast(cfg);
+        })
+        .catch((e) => setError(String(e)));
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+
   return (
     <main className="app settings-app">
       <TopBar
@@ -543,6 +572,24 @@ function useSettingsAutoSave(
       return next;
     });
   };
+  // A save still waiting on the debounce holds the previous profile's
+  // snapshot. Drop it on a profile switch so it cannot land on the new
+  // profile once SettingsApp has re-read the config.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void subscribeProfileSwitched(() => {
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unsub = fn;
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
   // Fade the "saved." indicator after 1.5s so it does not linger as
   // stale chrome long after the user actually saved.
   useEffect(() => {

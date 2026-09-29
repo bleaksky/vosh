@@ -1139,6 +1139,14 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   );
 }
 
+// Adopt `config` as this window's last-broadcast snapshot without
+// emitting anything. A window that re-reads its config after a profile
+// switch calls this, since every window already heard the new values,
+// so its next save diffs against the new profile rather than the old.
+export function primeUiConfigBroadcast(config: UiConfig): void {
+  lastSentConfig = config;
+}
+
 export async function setUiConfig(config: UiConfig): Promise<void> {
   // Single snake_case payload matching the Rust `UiConfigPayload` DTO,
   // the same shape `ui_get_config` returns. `dock_layout` is omitted on
