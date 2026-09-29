@@ -289,22 +289,29 @@ fn strip_group_for_compare_trigger(t: &Trigger) -> Trigger {
 /// Build a loadout for one source profile. `enabled_groups` collects
 /// every group that emerged from this profile's items per the
 /// retag rule, plus the bare profile-name group for any ungrouped
-/// items, so day-one behavior matches today exactly.
+/// items, so day-one behavior matches today exactly. A group the
+/// profile had off in Settings stays out, since a loadout that lists
+/// a group turns it on. A loadout names groups for every kind at
+/// once, so a group that one kind had on and another had off stays in.
 fn derive_loadout(profile_name: &str, cfg: &ProfileConfig) -> Loadout {
     let mut groups: Vec<String> = Vec::new();
-    let mut push = |g: String| {
+    let mut push = |group: Option<&str>, off: &[String]| {
+        if group.is_some_and(|g| !g.is_empty() && off.iter().any(|o| o == g)) {
+            return;
+        }
+        let g = retag_group(profile_name, group);
         if !groups.iter().any(|x| x == &g) {
             groups.push(g);
         }
     };
     for alias in &cfg.aliases {
-        push(retag_group(profile_name, alias.group.as_deref()));
+        push(alias.group.as_deref(), &cfg.disabled_alias_groups);
     }
     for trigger in &cfg.triggers {
-        push(retag_group(profile_name, trigger.group.as_deref()));
+        push(trigger.group.as_deref(), &cfg.disabled_trigger_groups);
     }
     for mac in &cfg.macros {
-        push(retag_group(profile_name, mac.group.as_deref()));
+        push(mac.group.as_deref(), &cfg.disabled_macro_groups);
     }
     let mut loadout = Loadout::empty(profile_name);
     loadout.enabled_groups = groups;
@@ -312,6 +319,44 @@ fn derive_loadout(profile_name: &str, cfg: &ProfileConfig) -> Loadout {
     loadout.tick = cfg.tick.clone();
     loadout.profile_vars = cfg.profile_vars.clone();
     loadout
+}
+
+/// Make `config` the file its profile keeps in loadout mode, once
+/// `catalog` holds every item and `loadout` is the one derived for the
+/// profile. The aliases, triggers, and macros leave the file. Its group
+/// checkbox lists name every catalog group of each kind that `loadout`
+/// leaves off, in catalog names. That is what the loadout imposes while
+/// it is active and declares groups, and while no active loadout
+/// declares any, the lists keep the profile to what it had on. Without
+/// them a profile with no items of its own, or with every group off,
+/// would turn on every other character's items.
+pub(crate) fn profile_file_for_catalog(
+    config: &mut ProfileConfig,
+    catalog: &GlobalCatalog,
+    loadout: &Loadout,
+) {
+    config.clear_catalog_items();
+    config.disabled_alias_groups =
+        groups_left_off(catalog.aliases.iter().map(|a| a.group.as_deref()), loadout);
+    config.disabled_trigger_groups =
+        groups_left_off(catalog.triggers.iter().map(|t| t.group.as_deref()), loadout);
+    config.disabled_macro_groups =
+        groups_left_off(catalog.macros.iter().map(|m| m.group.as_deref()), loadout);
+}
+
+/// Each named group in `groups` that `loadout` does not turn on, sorted,
+/// once each.
+fn groups_left_off<'a>(
+    groups: impl Iterator<Item = Option<&'a str>>,
+    loadout: &Loadout,
+) -> Vec<String> {
+    groups
+        .flatten()
+        .filter(|g| !g.is_empty() && !loadout.enabled_groups.iter().any(|on| on == g))
+        .map(str::to_string)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 #[cfg(test)]
@@ -480,6 +525,41 @@ mod tests {
         assert!(loadout
             .enabled_groups
             .contains(&"default.combat".to_string()));
+    }
+
+    #[test]
+    fn a_loadout_leaves_out_a_group_its_profile_had_off() {
+        let mut punch = Alias::new("punch", "punch %1");
+        punch.group = Some("combat".into());
+        let mut sanc = Alias::new("sanc", "cast sanctuary");
+        sanc.group = Some("buffs".into());
+        let mut flee = trigger("flee", "^You flee", "flee");
+        flee.group = Some("combat".into());
+        let mut cfg = profile_with(vec![punch, sanc], vec![flee], vec![]);
+        cfg.disabled_alias_groups = vec!["combat".into(), "buffs".into()];
+        let plan = analyze_profiles(&[("default".into(), cfg)]);
+        // Buffs was off in the only list that has it. The combat triggers
+        // were on, so combat stays in for them.
+        assert_eq!(plan.loadouts[0].enabled_groups, ["default.combat"]);
+    }
+
+    #[test]
+    fn a_profile_file_turns_off_every_catalog_group_its_loadout_leaves_off() {
+        let mut punch = Alias::new("punch", "punch %1");
+        punch.group = Some("combat".into());
+        let plan = analyze_profiles(&[
+            (
+                "default".into(),
+                profile_with(vec![Alias::new("kk", "kick %1"), punch], vec![], vec![]),
+            ),
+            ("bard".into(), profile_with(vec![], vec![], vec![])),
+        ]);
+        let mut file = profile_with(vec![Alias::new("kk", "kick %1")], vec![], vec![]);
+        file.disabled_alias_groups = vec!["combat".into()];
+        profile_file_for_catalog(&mut file, &plan.auto_resolved, &plan.loadouts[1]);
+        assert!(file.aliases.is_empty());
+        assert_eq!(file.disabled_alias_groups, ["default", "default.combat"]);
+        assert!(file.disabled_trigger_groups.is_empty());
     }
 
     #[test]

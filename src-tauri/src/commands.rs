@@ -3216,14 +3216,16 @@ struct MigrationSources {
     profiles: Vec<(String, ProfileConfig)>,
     /// The enabled preset list of each profile that saved a file.
     preset_lists: Vec<Vec<String>>,
-    /// Each profile file on disk, in index order, with the text Vosh read.
+    /// The file of every profile, in index order.
     files: Vec<MigrationFile>,
 }
 
-/// One profile file the wizard read.
+/// The file of one profile, as the wizard read it.
 struct MigrationFile {
+    name: String,
     path: std::path::PathBuf,
-    text: String,
+    /// What the file held, or None for a profile that never saved one.
+    text: Option<String>,
 }
 
 /// Every profile in index order with what its file holds, for the shared
@@ -3249,17 +3251,28 @@ fn migration_sources(set: &crate::profile_set::ProfileSet) -> Result<MigrationSo
                 crate::profile_set::display_name(&entry.name)
             ));
         }
-        let cfg = if path.exists() {
-            let text = std::fs::read_to_string(&path)
-                .map_err(|e| crate::profile_config::ConfigError::from(e).to_string())?;
-            let cfg = ProfileConfig::from_toml(&text).map_err(|e| e.to_string())?;
-            sources.preset_lists.push(cfg.ui.enabled_presets.clone());
-            sources.files.push(MigrationFile { path, text });
-            cfg
+        let text = if path.exists() {
+            Some(
+                std::fs::read_to_string(&path)
+                    .map_err(|e| crate::profile_config::ConfigError::from(e).to_string())?,
+            )
         } else {
-            ProfileConfig::default()
+            None
+        };
+        let cfg = match &text {
+            Some(text) => {
+                let cfg = ProfileConfig::from_toml(text).map_err(|e| e.to_string())?;
+                sources.preset_lists.push(cfg.ui.enabled_presets.clone());
+                cfg
+            }
+            None => ProfileConfig::default(),
         };
         sources.profiles.push((entry.name.clone(), cfg));
+        sources.files.push(MigrationFile {
+            name: entry.name.clone(),
+            path,
+            text,
+        });
     }
     Ok(sources)
 }
@@ -3402,15 +3415,28 @@ async fn apply_migration(
     // on a switch. Only the aliases, triggers, and macros leave it, as
     // the catalog holds them now. A file that kept them would lay its
     // copies, with their old group names, over the catalog at launch.
-    // The file keeps its own enabled preset list, which loadout mode
-    // replaces with the catalog's at every load. Everything is built
+    // Its group checkbox lists name the catalog groups its loadout
+    // leaves off, see `migration::profile_file_for_catalog`, and a
+    // profile that never saved a file gets one when it has lists to
+    // keep. The file keeps its own enabled preset list, which loadout
+    // mode replaces with the catalog's at every load. Everything is built
     // before the first write, so a file that does not serialize changes
     // nothing.
     let mut kept = Vec::with_capacity(sources.files.len());
     for file in &sources.files {
-        let mut config = ProfileConfig::from_toml(&file.text).map_err(|e| e.to_string())?;
-        config.clear_catalog_items();
-        kept.push(config.to_toml().map_err(|e| e.to_string())?);
+        let mut config = match &file.text {
+            Some(text) => ProfileConfig::from_toml(text).map_err(|e| e.to_string())?,
+            None => ProfileConfig::default(),
+        };
+        let own = crate::loadout::Loadout::empty(file.name.as_str());
+        let loadout = loadout_set.get(&file.name).unwrap_or(&own);
+        crate::migration::profile_file_for_catalog(&mut config, &catalog, loadout);
+        let lists = !config.disabled_alias_groups.is_empty()
+            || !config.disabled_trigger_groups.is_empty()
+            || !config.disabled_macro_groups.is_empty();
+        if file.text.is_some() || lists {
+            kept.push((file, config.to_toml().map_err(|e| e.to_string())?));
+        }
     }
 
     // A full copy of each file first, so the files as they were wait in
@@ -3418,22 +3444,23 @@ async fn apply_migration(
     // left there moves to a backup beside it.
     let legacy_dir = app_data.join("profiles").join("legacy");
     for file in &sources.files {
+        let Some(text) = &file.text else {
+            continue;
+        };
         let name = file.path.file_name().unwrap_or_default();
-        crate::profile_config::write_with_backup(&legacy_dir.join(name), &file.text).map_err(
-            |e| {
-                format!(
-                    "Vosh could not copy {} into profiles/legacy and changed nothing ({e}).",
-                    name.to_string_lossy()
-                )
-            },
-        )?;
+        crate::profile_config::write_with_backup(&legacy_dir.join(name), text).map_err(|e| {
+            format!(
+                "Vosh could not copy {} into profiles/legacy and changed nothing ({e}).",
+                name.to_string_lossy()
+            )
+        })?;
     }
 
     crate::loadout_store::save_global_catalog(app_data, &catalog).map_err(|e| e.to_string())?;
     crate::loadout_store::save_loadout_set(app_data, &loadout_set).map_err(|e| e.to_string())?;
     written();
 
-    for (file, text) in sources.files.iter().zip(&kept) {
+    for (file, text) in &kept {
         crate::profile_config::write_with_backup(&file.path, text).map_err(|e| {
             format!(
                 "Vosh built the shared catalog but could not take the items out of {} ({e}). A \
@@ -4834,8 +4861,11 @@ mod tests {
             assert!(ProfileConfig::load(&healer).unwrap().aliases.is_empty());
             let legacy = healer.parent().unwrap().join("legacy").join("Healer.toml");
             assert_eq!(ProfileConfig::load(&legacy).unwrap().aliases[0].name, "hh");
-            // A profile that never saved a file still has none.
-            assert!(!set.profile_path("Test-Prompt").exists());
+            // A profile that never saved a file gets one that keeps the
+            // Healer alias off for it, as it had no such alias.
+            let prompt = ProfileConfig::load(&set.profile_path("Test-Prompt")).unwrap();
+            assert_eq!(prompt.disabled_alias_groups, ["Healer"]);
+            assert!(!legacy.with_file_name("Test-Prompt.toml").exists());
 
             // A second run in the same session would read the profile
             // files, which hold no items now, and write that over the
@@ -5215,6 +5245,80 @@ mod tests {
                     item_rows(&catalog.aliases, &catalog.triggers, &catalog.macros),
                     "{name}"
                 );
+            }
+        }
+
+        #[tokio::test]
+        async fn each_loadout_keeps_off_the_groups_its_character_had_off() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let mut set = james_like_set(dir.path());
+            set.create("Bard").unwrap();
+            // Default has everything on.
+            character(DEFAULT_PROFILE_NAME, 1, &[])
+                .save(&set.profile_path(DEFAULT_PROFILE_NAME))
+                .unwrap();
+            // Healer turned its combat group off in every list.
+            let mut healer = character("Healer", 2, &[]);
+            healer.disabled_alias_groups = vec!["combat".into()];
+            healer.disabled_trigger_groups = vec!["combat".into()];
+            healer.disabled_macro_groups = vec!["combat".into()];
+            healer.save(&set.profile_path("Healer")).unwrap();
+            // The Bard has no aliases, triggers, or macros of its own, and
+            // Test-Prompt never saved a file.
+            let mut bard = ProfileConfig::default();
+            bard.profile_vars.insert("target".into(), "rat".into());
+            bard.save(&set.profile_path("Bard")).unwrap();
+
+            let names = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt", "Bard"];
+            let mut before = Vec::new();
+            for name in names {
+                let state = relaunch_as(dir.path(), name).await;
+                before.push(items_on(&*state.profile.lock().await));
+            }
+            assert_eq!(before[0].len(), 6);
+            assert_eq!(before[1].len(), 3);
+            assert!(before[2].is_empty());
+            assert!(before[3].is_empty());
+
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+            let (_, loadouts) = load_path_b_at_launch(dir.path()).unwrap();
+            let groups = |name: &str| loadouts.get(name).unwrap().enabled_groups.clone();
+            assert_eq!(groups("Healer"), ["Healer"]);
+            assert!(groups("Test-Prompt").is_empty());
+            assert!(groups("Bard").is_empty());
+            // The Settings group checkboxes of each file say the same.
+            let healer = ProfileConfig::load(&set.profile_path("Healer")).unwrap();
+            assert_eq!(
+                healer.disabled_alias_groups,
+                ["Healer.combat", "default", "default.combat"]
+            );
+            let bard = ProfileConfig::load(&set.profile_path("Bard")).unwrap();
+            assert_eq!(bard.profile_vars.get("target").unwrap(), "rat");
+            assert_eq!(
+                bard.disabled_trigger_groups,
+                ["Healer", "Healer.combat", "default", "default.combat"]
+            );
+
+            // With its own loadout on, and with that loadout on beside
+            // another character's, each character has on what it had.
+            for (n, name) in names.iter().enumerate() {
+                for other in ["", "Bard"] {
+                    let mut loadouts = crate::loadout_store::load_loadout_set(dir.path()).unwrap();
+                    loadouts.active = vec![(*name).to_string()];
+                    if !other.is_empty() && other != *name {
+                        loadouts.active.push(other.to_string());
+                    }
+                    save_loadout_set(dir.path(), &loadouts).unwrap();
+                    let state = relaunch_as(dir.path(), name).await;
+                    assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+                    persist(&state, dir.path()).await;
+                    let state = relaunch_as(dir.path(), name).await;
+                    assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+                }
             }
         }
     }
