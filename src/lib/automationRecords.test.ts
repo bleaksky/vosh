@@ -31,6 +31,7 @@ import {
   normalizeTick,
   normalizeTimer,
   parseJsonList,
+  presetLaunchPlan,
   presetSavePlan,
   presetToggles,
   PRESETS_OFF_MARKER,
@@ -472,6 +473,35 @@ describe('presets', () => {
     draft = updateDraftItem(draft, draft.items[1].uid, (t) => ({ ...t, enabled: false }));
     draft = updateDraftItem(draft, draft.items[0].uid, (t) => ({ ...t, enabled: true }));
     expect(isDraftDirty(draft)).toBe(false);
+  });
+
+  it('installs the presets that are on at launch, in library order', () => {
+    const pick = [PRESETS[2].id, PRESETS[0].id];
+    expect(presetLaunchPlan(pick, []).install).toEqual([PRESETS[0].id, PRESETS[2].id]);
+    expect(presetLaunchPlan([], []).install).toEqual(defaultEnabledIds());
+    expect(presetLaunchPlan([PRESETS_OFF_MARKER], []).install).toEqual([]);
+  });
+
+  it('takes out at launch a preset you turned off that another profile put back', () => {
+    // Loadout mode: the store holds the triggers every profile shares.
+    // You turned the first preset off, and a launch as another character
+    // installed it again from that character's list.
+    const off = PRESETS[0].id;
+    const on = PRESETS[1].id;
+    const installed = [off, off, on, null, undefined];
+    const plan = presetLaunchPlan([on], installed);
+    expect(plan.install).toEqual([on]);
+    expect(plan.remove).toEqual([off]);
+  });
+
+  it('takes out at launch a preset this build no longer has', () => {
+    const plan = presetLaunchPlan([], ['renamed_long_ago', ...defaultEnabledIds()]);
+    expect(plan.remove).toEqual(['renamed_long_ago']);
+  });
+
+  it('removes nothing at launch while the store matches the list', () => {
+    expect(presetLaunchPlan([], defaultEnabledIds()).remove).toEqual([]);
+    expect(presetLaunchPlan([PRESETS_OFF_MARKER], [null, undefined]).remove).toEqual([]);
   });
 });
 
