@@ -6,6 +6,7 @@ import {
   isOwnThemeEcho,
   normalizeChipStyle,
   normalizeTerminalLineHeight,
+  normalizeTickCount,
   normalizeUiConfig,
   normalizeVitalsDensity,
   normalizeVitalsMeter,
@@ -15,6 +16,7 @@ import {
   seedDarkTheme,
   setUiConfig,
   TERMINAL_LINE_HEIGHTS,
+  TICK_COUNTS,
   type CustomTheme,
   type RawUiConfig,
 } from './session';
@@ -273,6 +275,42 @@ describe('vitals options', () => {
       meter: 'none',
       warn_thirds: true,
     });
+  });
+});
+
+describe('tick count', () => {
+  it('reads unknown stored counts as counting up', () => {
+    expect(TICK_COUNTS).toEqual(['up', 'down', 'down_past_zero']);
+    for (const count of TICK_COUNTS) expect(normalizeTickCount(count)).toBe(count);
+    expect(normalizeTickCount('sideways')).toBe('up');
+    expect(normalizeTickCount(undefined)).toBe('up');
+    expect(normalizeTickCount(3)).toBe('up');
+    expect(normalizeUiConfig(raw()).tick_count).toBe('up');
+    expect(normalizeUiConfig(raw({ tick_count: 'bogus' })).tick_count).toBe('up');
+    expect(normalizeUiConfig(raw({ tick_count: 'down_past_zero' })).tick_count).toBe(
+      'down_past_zero',
+    );
+  });
+
+  it('saves with the rest of the config', async () => {
+    const sent = vi.mocked(invoke);
+    sent.mockClear();
+    await setUiConfig(normalizeUiConfig(raw({ tick_count: 'down' })));
+    const [command, args] = sent.mock.calls[0] as [string, { config: Record<string, unknown> }];
+    expect(command).toBe('ui_set_config');
+    expect(args.config.tick_count).toBe('down');
+  });
+
+  it('tells every window when a save changes it', async () => {
+    const sent = vi.mocked(emit);
+    const base = normalizeUiConfig(raw({ tick_count: 'up' }));
+    await broadcastUiConfigChanges(base);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, tick_count: 'down' });
+    expect(sent).toHaveBeenCalledWith('vosh://tick-count-changed', 'down');
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, tick_count: 'down' });
+    expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://tick-count-changed');
   });
 });
 

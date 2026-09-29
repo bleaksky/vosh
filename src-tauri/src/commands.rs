@@ -2690,6 +2690,7 @@ pub(crate) struct UiConfigPayload {
     pub vitals_warn_thirds: bool,
     pub moons_position: String,
     pub chip_style: String,
+    pub tick_count: String,
 }
 
 impl UiConfigPayload {
@@ -2727,6 +2728,7 @@ impl UiConfigPayload {
             vitals_warn_thirds: ui.vitals_warn_thirds,
             moons_position: ui.moons_position.clone(),
             chip_style: ui.chip_style.clone(),
+            tick_count: ui.tick_count.clone(),
         }
     }
 
@@ -2768,6 +2770,7 @@ impl UiConfigPayload {
             vitals_warn_thirds,
             moons_position,
             chip_style,
+            tick_count,
         } = self;
         ui.theme = theme;
         ui.follow_system_appearance = follow_system_appearance;
@@ -2886,6 +2889,7 @@ impl UiConfigPayload {
             "value_only" | "caption_value" | "icon_value" => chip_style,
             _ => "value_only".to_string(),
         };
+        ui.tick_count = crate::profile_config::coerce_tick_count(tick_count);
     }
 }
 
@@ -3960,6 +3964,46 @@ mod tests {
         ui.vitals_warn_thirds = true;
         assert!(through_payload(&ui).vitals_warn_thirds);
         assert!(through_toml(&ui).vitals_warn_thirds);
+    }
+
+    #[test]
+    fn tick_count_round_trips() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.tick_count, "up");
+        for id in ["up", "down", "down_past_zero"] {
+            ui.tick_count = id.into();
+            assert_eq!(through_payload(&ui).tick_count, id);
+            assert_eq!(through_toml(&ui).tick_count, id);
+        }
+        // An unknown direction saves as counting up.
+        ui.tick_count = "sideways".into();
+        assert_eq!(through_payload(&ui).tick_count, "up");
+    }
+
+    #[test]
+    fn a_profile_without_the_tick_count_counts_up() {
+        let ui = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.tick_count, "up");
+    }
+
+    #[test]
+    fn the_tick_count_stays_with_each_character() {
+        // Like the tick and time style, the count is not one of the
+        // settings you can keep the same for every character, so the
+        // shared file never holds it and each profile file does.
+        let ui = UiConfig {
+            tick_count: "down".into(),
+            ..UiConfig::default()
+        };
+        let toml = ProfileConfig {
+            ui,
+            ..ProfileConfig::default()
+        }
+        .to_toml()
+        .unwrap();
+        assert!(toml.contains("tick_count = \"down\""));
     }
 
     #[test]
