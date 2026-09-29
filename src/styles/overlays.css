@@ -48,3 +48,257 @@
 .ov-find ~ .ov-depth {
   top: 56px;
 }
+
+/* Row highlight and keycap ring for floating surfaces (SPEC 7). Only
+   these two differ by appearance. The recipe itself is in tokens.css. */
+:root,
+:root[data-appearance='dark'] {
+  --ov-hl: rgba(255, 255, 255, 0.08);
+  --ov-key-ring: rgba(255, 255, 255, 0.14);
+}
+
+:root[data-appearance='light'] {
+  --ov-hl: rgba(0, 0, 0, 0.05);
+  --ov-key-ring: rgba(0, 0, 0, 0.12);
+}
+
+/* Keycaps: 20 square, radius 4, a ring and no fill, the glyph in the
+   UI face. Spelled out keys (Ctrl, Shift) widen to fit. */
+.ov-keys {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  margin: 0 0 0 12px;
+  padding: 0;
+  font-family: inherit;
+}
+
+.ov-key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--ov-key-ring);
+  border-radius: var(--r-key);
+  background: none;
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 400;
+  color: var(--secondary);
+}
+
+.ov-key.is-wide {
+  padding: 0 4px;
+}
+
+/* Command palette (SPEC 7). 560 wide, centered on the window, top at
+   15% of the window height. The search row is 46 tall with the icon
+   at x 14 and the text at x 45. Rows sit in 36 slots with a 34
+   highlight inset 8, text at x 42, a check at x 18, and keycaps ending
+   20 inside the edge. */
+.ov-palette {
+  position: fixed;
+  top: 15vh;
+  left: max(16px, calc(50% - 280px));
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100vw - 32px));
+  border-radius: var(--r-float);
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  box-sizing: border-box;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+.ov-pal-search {
+  position: relative;
+  flex: none;
+  height: 46px;
+}
+
+.ov-pal-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 15px;
+  display: block;
+  color: var(--tertiary);
+}
+
+.ov-pal-search input {
+  position: absolute;
+  left: 45px;
+  right: 16px;
+  top: 0;
+  height: 46px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 400;
+  color: var(--text);
+  caret-color: var(--accent);
+}
+
+.ov-pal-search input::placeholder {
+  color: var(--tertiary);
+  opacity: 1;
+}
+
+/* Inset 1 each side so it stops at the inner ring. */
+.ov-pal-divider {
+  flex: none;
+  height: 1px;
+  margin: 0 1px;
+  background: var(--divider);
+}
+
+.ov-pal-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(77vh - 47px);
+  padding-bottom: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Caps header. The first sits 8.5 below the divider (block 27), later
+   ones 12 below the previous row slot (block 30). */
+.ov-pal-head {
+  position: relative;
+  height: 30px;
+  padding: 8.85px 0 0 42px;
+  box-sizing: border-box;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+.ov-pal-group:first-child .ov-pal-head {
+  height: 27px;
+  padding-top: 5.35px;
+}
+
+/* Context chip hanging from the header line, 20 in from the edge. */
+.ov-pal-chip {
+  position: absolute;
+  right: 20px;
+  bottom: 0.5px;
+  display: flex;
+  align-items: center;
+  max-width: 60%;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--sep);
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 400;
+  text-transform: none;
+  color: var(--tertiary);
+}
+
+.ov-pal-slot {
+  height: 36px;
+  padding: 1px 8px;
+  box-sizing: border-box;
+}
+
+.ov-pal-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 34px;
+  margin: 0;
+  padding: 0 12px 0 34px;
+  border: 0;
+  border-radius: var(--r-row);
+  outline: none;
+  background: transparent;
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  color: var(--text);
+  text-align: left;
+  cursor: default;
+}
+
+.ov-pal-row.is-selected {
+  background: var(--ov-hl);
+}
+
+.ov-pal-row.is-danger {
+  color: var(--danger);
+}
+
+.ov-pal-check {
+  position: absolute;
+  left: 10px;
+  top: 9px;
+  display: block;
+  color: var(--accent);
+}
+
+.ov-pal-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ov-pal-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 50%;
+  margin-left: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tertiary);
+}
+
+/* Alias commands go to the MUD, so they take the terminal face. */
+.ov-pal-meta.is-mono {
+  font-family: var(--font-mud);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.ov-pal-chevron {
+  display: block;
+  flex: none;
+  margin-left: 8px;
+  color: var(--tertiary);
+}
+
+.ov-pal-empty {
+  height: 36px;
+  padding: 9px 0 0 42px;
+  box-sizing: border-box;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--tertiary);
+}

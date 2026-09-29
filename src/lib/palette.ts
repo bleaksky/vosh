@@ -1,12 +1,13 @@
-import { exportAliases, sendInput } from './session';
-import { PANELS, type PanelId } from './panels';
-import { toggleWellSplits, wellSplitsOpen } from './wellSplits';
+import { exportAliases, getUiConfig, sendInput, setUiConfig } from './session';
+import { PANE_TYPES, type PaneType } from './paneLayout';
+import { applyAndBroadcastTheme, getCurrentThemeId } from './theme';
+import { THEMES } from './themes';
 
 // Command registry for the ⌘K palette. Commands are built fresh each
-// time the palette opens so labels reflect live state (connected,
-// splits open, pane visibility). Slash commands run through the same
-// backend input pipeline as typed text, so the palette never grows a
-// second command implementation.
+// time the palette opens so checks and labels reflect live state
+// (connected, panel open, which panes show). Slash commands run
+// through the same backend input pipeline as typed text, so the
+// palette never grows a second command implementation.
 
 // ── Shortcut labels ──────────────────────────────────────────────────
 // One helper turns a shortcut spec like 'Mod+Shift+L' into the glyphs
@@ -103,27 +104,64 @@ export function shortcutLabel(spec: string, mac: boolean = isMacPlatform()): str
 
 // ── Registry ─────────────────────────────────────────────────────────
 
-export type PaletteGroup = 'commands' | 'panes' | 'settings' | 'aliases';
+/** Home sections, in the order the palette lists them. Session goes
+ *  last so Disconnect is the final row. */
+export type PaletteSection = 'view' | 'settings' | 'aliases' | 'session';
+
+export const SECTION_ORDER: PaletteSection[] = ['view', 'settings', 'aliases', 'session'];
+
+export const SECTION_LABELS: Record<PaletteSection | 'recent', string> = {
+  recent: 'Recent',
+  view: 'View',
+  settings: 'Settings',
+  aliases: 'Aliases',
+  session: 'Session',
+};
 
 export interface PaletteEntry {
   id: string;
-  group: PaletteGroup;
+  section: PaletteSection;
   title: string;
-  /** Dim one-line description shown beside the title. */
-  hint?: string;
-  /** Display-only keyboard hint (the palette does not bind it). */
-  kbd?: string;
   /** Extra match terms beyond the title. */
   keywords?: string;
+  /** Shortcut spec for the keycaps, like 'Mod+F'. Display only. */
+  keys?: string;
+  /** Toggle state. An on toggle shows a check mark. */
+  checked?: boolean;
+  /** Trailing detail in the tertiary tone (the current theme, an
+   *  alias's command). */
+  meta?: string;
+  /** Set when `meta` is text that goes to the MUD, so it takes the
+   *  terminal face. */
+  metaMono?: boolean;
+  /** Drawn in the danger color, kept out of Recent, and never the row
+   *  the palette opens on. */
+  destructive?: boolean;
+  /** Listed only while you type. Recent can still surface it. */
+  searchOnly?: boolean;
+  /** A submenu. Picking the row opens this list in place, under the
+   *  `childLabel` header. */
+  children?: () => PaletteEntry[];
+  childLabel?: string;
   run: () => void | Promise<void>;
 }
 
 export interface PaletteDeps {
   connected: boolean;
-  paneVisible: (id: PanelId) => boolean;
-  togglePane: (id: PanelId) => void;
+  /** Host of the live session, shown as the Session header chip. */
+  host?: string | null;
+  /** Display name of the world the connect row targets. */
+  worldName?: string | null;
+  /** Panel visibility. The Show panel row appears when the shell
+   *  passes togglePanel. */
+  panelOpen?: boolean;
+  togglePanel?: () => void;
+  paneVisible: (pane: PaneType) => boolean;
+  togglePane: (pane: PaneType) => void;
   openHelp: () => void;
   openFind: () => void;
+  /** Open Settings on its last tab. Falls back to the General tab. */
+  openSettings?: () => void;
   openSettingsTab: (tab: string) => void;
   connect: () => void;
   disconnect: () => void;
@@ -132,102 +170,165 @@ export interface PaletteDeps {
   insertInput: (text: string) => void;
 }
 
-const SETTINGS_TABS: { id: string; hint: string }[] = [
-  { id: 'themes', hint: 'theme catalog, editor, terminal palette' },
-  { id: 'typography', hint: 'terminal face, size, system fonts' },
-  { id: 'vitals', hint: 'hp / mn / mv readout' },
-  { id: 'tick', hint: 'tick timer, input chip, moons' },
-  { id: 'panels', hint: 'pane placement and tracked affects' },
-  { id: 'general', hint: 'input, prompt, updates' },
-  { id: 'profiles', hint: 'characters and hosts' },
-  { id: 'triggers', hint: 'patterns and actions' },
-  { id: 'aliases', hint: 'command shortcuts' },
-  { id: 'macros', hint: 'key bindings' },
-  { id: 'timers', hint: 'recurring commands on an interval' },
-  { id: 'import', hint: 'bring settings from another client' },
-  { id: 'logs', hint: 'session history search' },
+const PANE_TITLES: Record<PaneType, string> = {
+  map: 'Show map',
+  affects: 'Show affects',
+  group: 'Show group',
+  chat: 'Show chat',
+  imm: 'Show staff queues',
+};
+
+const SETTINGS_TABS: { id: string; title: string; keywords: string }[] = [
+  {
+    id: 'themes',
+    title: 'Open theme settings',
+    keywords: 'catalog editor terminal palette colors',
+  },
+  { id: 'typography', title: 'Open typography settings', keywords: 'font face size' },
+  { id: 'vitals', title: 'Open vitals settings', keywords: 'hp mana moves readout' },
+  { id: 'tick', title: 'Open tick settings', keywords: 'timer moons' },
+  { id: 'panels', title: 'Open panel settings', keywords: 'panes layout tracked affects' },
+  { id: 'general', title: 'Open general settings', keywords: 'input prompt updates' },
+  { id: 'profiles', title: 'Open profile settings', keywords: 'characters hosts' },
+  { id: 'triggers', title: 'Open trigger settings', keywords: 'patterns actions' },
+  { id: 'aliases', title: 'Open alias settings', keywords: 'command shortcuts' },
+  { id: 'macros', title: 'Open macro settings', keywords: 'key bindings' },
+  { id: 'timers', title: 'Open timer settings', keywords: 'recurring commands interval' },
+  { id: 'import', title: 'Open import settings', keywords: 'tintin another client' },
+  { id: 'logs', title: 'Open session logs', keywords: 'history search' },
 ];
 
 export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
   const entries: PaletteEntry[] = [];
 
-  entries.push({
-    id: 'toggle-splits',
-    group: 'commands',
-    title: wellSplitsOpen() ? 'close splits' : 'open splits',
-    hint: 'session / chat / log panes in the well',
-    keywords: 'split tmux pane well',
-    run: () => toggleWellSplits(),
-  });
+  if (deps.togglePanel) {
+    const toggle = deps.togglePanel;
+    entries.push({
+      id: 'panel',
+      section: 'view',
+      title: 'Show panel',
+      keywords: 'hide sidebar',
+      keys: 'Mod+Shift+L',
+      checked: deps.panelOpen ?? false,
+      run: toggle,
+    });
+  }
+  for (const pane of PANE_TYPES) {
+    entries.push({
+      id: `pane-${pane}`,
+      section: 'view',
+      title: PANE_TITLES[pane],
+      keywords: 'pane panel hide',
+      checked: deps.paneVisible(pane),
+      searchOnly: true,
+      run: () => deps.togglePane(pane),
+    });
+  }
   entries.push({
     id: 'find',
-    group: 'commands',
-    title: 'search scrollback',
-    kbd: '⌘F',
+    section: 'view',
+    title: 'Find in scrollback…',
+    keywords: 'search',
+    keys: 'Mod+F',
     run: deps.openFind,
   });
+  const currentTheme = THEMES.find((t) => t.id === getCurrentThemeId());
   entries.push({
-    id: 'profile-save',
-    group: 'commands',
-    title: '#profile save',
-    hint: 'persist the live profile',
-    run: () => void sendInput('#profile save'),
+    id: 'theme',
+    section: 'view',
+    title: 'Choose theme',
+    keywords: 'colors appearance dark light',
+    ...(currentTheme ? { meta: currentTheme.label } : {}),
+    children: themeEntries,
+    childLabel: 'Themes',
+    run: () => {},
   });
   entries.push({
     id: 'help',
-    group: 'commands',
-    title: 'open help',
+    section: 'view',
+    title: 'Open help',
     keywords: 'docs manual',
+    keys: 'Mod+/',
     run: deps.openHelp,
   });
-  // The session entry goes last in its group. The palette opens with the
-  // first row selected, so leading with disconnect meant Cmd+K then Enter
-  // dropped the session.
-  entries.push(
-    deps.connected
-      ? {
-          id: 'disconnect',
-          group: 'commands',
-          title: 'disconnect',
-          hint: 'close the session',
-          run: deps.disconnect,
-        }
-      : {
-          id: 'connect',
-          group: 'commands',
-          title: 'connect',
-          hint: 'open the session',
-          run: deps.connect,
-        },
-  );
 
-  for (const meta of Object.values(PANELS)) {
-    entries.push({
-      id: `pane-${meta.id}`,
-      group: 'panes',
-      title: `${deps.paneVisible(meta.id) ? 'hide' : 'show'} ${meta.id} pane`,
-      hint: meta.description.toLowerCase(),
-      keywords: meta.label,
-      run: () => deps.togglePane(meta.id),
-    });
-  }
-
+  entries.push({
+    id: 'settings',
+    section: 'settings',
+    title: 'Open settings',
+    keywords: 'preferences options',
+    keys: 'Mod+,',
+    run: deps.openSettings ?? (() => deps.openSettingsTab('general')),
+  });
   for (const tab of SETTINGS_TABS) {
     entries.push({
       id: `settings-${tab.id}`,
-      group: 'settings',
-      title: tab.id,
-      hint: tab.hint,
-      keywords: 'settings preferences options',
+      section: 'settings',
+      title: tab.title,
+      keywords: `settings preferences ${tab.keywords}`,
+      searchOnly: true,
       run: () => deps.openSettingsTab(tab.id),
     });
   }
 
+  entries.push({
+    id: 'profile-save',
+    section: 'session',
+    title: 'Save profile',
+    keywords: '#profile',
+    run: () => void sendInput('#profile save'),
+  });
+  // Disconnect is the final row. The palette opens with its first safe
+  // row selected, so ⌘K then Enter can never drop the session.
+  entries.push(
+    deps.connected
+      ? {
+          id: 'disconnect',
+          section: 'session',
+          title: 'Disconnect',
+          keywords: 'quit close session',
+          destructive: true,
+          run: deps.disconnect,
+        }
+      : {
+          id: 'connect',
+          section: 'session',
+          title: deps.worldName ? `Connect to ${deps.worldName}` : 'Connect',
+          keywords: 'open session login',
+          keys: 'Mod+R',
+          run: deps.connect,
+        },
+  );
+
   return entries;
 }
 
+/** Every theme as a submenu row, the active one checked. Picking one
+ *  applies it in every window and saves it. */
+export function themeEntries(): PaletteEntry[] {
+  const current = getCurrentThemeId();
+  return THEMES.map((t) => ({
+    id: `theme-${t.id}`,
+    section: 'view' as const,
+    title: t.label,
+    keywords: t.description,
+    checked: t.id === current,
+    run: () => void chooseTheme(t.id),
+  }));
+}
+
+async function chooseTheme(id: string): Promise<void> {
+  await applyAndBroadcastTheme(id);
+  try {
+    const cfg = await getUiConfig();
+    if (cfg.theme !== id) await setUiConfig({ ...cfg, theme: id });
+  } catch (e) {
+    console.error('[palette] saving the theme failed', e);
+  }
+}
+
 /** Fetch the user's aliases as palette rows. Parameterless aliases
- *  run immediately; ones whose template references captures insert
+ *  run immediately. Ones whose template references captures insert
  *  the alias name into the input for the user to finish. */
 export async function buildAliasEntries(deps: PaletteDeps): Promise<PaletteEntry[]> {
   try {
@@ -244,9 +345,12 @@ export async function buildAliasEntries(deps: PaletteDeps): Promise<PaletteEntry
       const takesArgs = /%\d|\$\d/.test(template);
       rows.push({
         id: `alias-${name}`,
-        group: 'aliases',
+        section: 'aliases',
         title: name,
-        hint: template,
+        keywords: template,
+        ...(template ? { meta: template } : {}),
+        metaMono: true,
+        searchOnly: true,
         run: () => {
           if (takesArgs) deps.insertInput(`${name} `);
           else void sendInput(name);
@@ -260,14 +364,14 @@ export async function buildAliasEntries(deps: PaletteDeps): Promise<PaletteEntry
 }
 
 /** Rank entries for a query: title prefix beats title substring beats
- *  hint/keyword substring. Empty query keeps registry order. */
+ *  keyword substring. Empty query keeps registry order. */
 export function filterEntries(entries: PaletteEntry[], query: string): PaletteEntry[] {
   const q = query.trim().toLowerCase();
   if (q.length === 0) return entries;
   const scored: { score: number; entry: PaletteEntry }[] = [];
   for (const entry of entries) {
     const title = entry.title.toLowerCase();
-    const extra = `${entry.hint ?? ''} ${entry.keywords ?? ''}`.toLowerCase();
+    const extra = `${entry.keywords ?? ''} ${entry.meta ?? ''}`.toLowerCase();
     let score = -1;
     if (title.startsWith(q)) score = 0;
     else if (title.includes(q)) score = 1;
@@ -276,4 +380,70 @@ export function filterEntries(entries: PaletteEntry[], query: string): PaletteEn
   }
   scored.sort((a, b) => a.score - b.score);
   return scored.map((s) => s.entry);
+}
+
+// ── Recent ───────────────────────────────────────────────────────────
+// The last few commands you ran, newest first, kept in this window's
+// storage. Destructive commands never enter it, so a Recent row at the
+// top can never be Disconnect.
+
+const RECENT_KEY = 'vosh.palette.recent';
+const RECENT_KEEP = 8;
+export const RECENT_SHOWN = 3;
+
+export function readRecent(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function recordRecent(entry: PaletteEntry): void {
+  if (entry.destructive) return;
+  try {
+    const next = [entry.id, ...readRecent().filter((id) => id !== entry.id)].slice(0, RECENT_KEEP);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    // storage unavailable. Recent stays empty.
+  }
+}
+
+export interface PaletteSectionView {
+  key: PaletteSection | 'recent';
+  label: string;
+  rows: PaletteEntry[];
+}
+
+/** Lay out the palette. With no query: Recent, then each section's
+ *  everyday rows. With a query: every match, ranked, grouped under its
+ *  home section in the fixed order, and no Recent. */
+export function paletteSections(
+  entries: PaletteEntry[],
+  query: string,
+  recentIds: string[],
+): PaletteSectionView[] {
+  const out: PaletteSectionView[] = [];
+  const searching = query.trim().length > 0;
+  const pool = searching ? filterEntries(entries, query) : entries.filter((e) => !e.searchOnly);
+  if (!searching) {
+    const byId = new Map(entries.map((e) => [e.id, e]));
+    const recent = recentIds
+      .map((id) => byId.get(id))
+      .filter((e): e is PaletteEntry => !!e && !e.destructive && !e.children)
+      .slice(0, RECENT_SHOWN);
+    if (recent.length > 0) out.push({ key: 'recent', label: SECTION_LABELS.recent, rows: recent });
+  }
+  for (const section of SECTION_ORDER) {
+    const rows = pool.filter((e) => e.section === section);
+    if (rows.length > 0) out.push({ key: section, label: SECTION_LABELS[section], rows });
+  }
+  return out;
+}
+
+/** The row the palette opens on: the first one that is not
+ *  destructive, or none (-1) when every row is. */
+export function initialSelection(rows: PaletteEntry[]): number {
+  return rows.findIndex((e) => !e.destructive);
 }
