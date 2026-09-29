@@ -1,24 +1,57 @@
 //! What launch loads from the app data folder before any window opens:
 //! the profile set with the active profile, then the shared catalog and
-//! the loadouts when you use loadout mode. lib.rs runs these from its
-//! setup hook, and tests run them to relaunch over a folder of their own.
+//! the loadouts when you use loadout mode. lib.rs runs [`load`] from its
+//! setup hook, and tests run it to relaunch over a folder of their own.
 
 use std::path::Path;
 
 use tracing::{error, info};
 
 use crate::commands::SharedState;
+use crate::loadout_store::WizardRun;
 use crate::{loadout_store, profile_config, profile_set};
+
+/// What [`load`] found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Launch {
+    /// Loadout mode is live, so the caller flips the input layer over.
+    pub(crate) loadout_mode: bool,
+    /// A shared catalog wizard run is still not done, see
+    /// [`WizardRun::Unfinished`]. The caller holds every save and every
+    /// profile switch until the next launch finishes the run.
+    pub(crate) wizard_unfinished: bool,
+}
+
+/// Everything launch loads, in order. A shared catalog wizard run that
+/// stopped partway finishes first, so nothing loads a file it had yet to
+/// write. Then the profiles load, see [`load_profiles`], and loadout mode
+/// starts when catalog.toml is on disk, see [`load_loadout_mode`]. While
+/// the run stays unfinished, loadout mode waits, since a profile file may
+/// still hold its items under their old group names and would lay them
+/// over the catalog for every character. The session runs on the active
+/// profile file alone.
+pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
+    let run = loadout_store::finish_wizard_run(app_data);
+    state.add_launch_notices(run.notices());
+    load_profiles(state, app_data).await;
+    if run == WizardRun::Unfinished {
+        return Launch {
+            loadout_mode: false,
+            wizard_unfinished: true,
+        };
+    }
+    Launch {
+        loadout_mode: load_loadout_mode(state, app_data).await,
+        wizard_unfinished: false,
+    }
+}
 
 /// Load (or migrate from the legacy single-file layout) the named
 /// profile collection. Then load whichever profile the index marks as
 /// active into the live profile, and overlay the shared global.toml
 /// (theme, font, dock layout, keep last, auto update) so those UI prefs
-/// stay the same across every profile. A shared catalog wizard run that
-/// stopped partway finishes first, so nothing loads a file it had yet to
-/// write.
+/// stay the same across every profile.
 pub(crate) async fn load_profiles(state: &SharedState, app_data: &Path) {
-    state.add_launch_notices(loadout_store::finish_wizard_run(app_data));
     let set = match profile_set::ProfileSet::load_or_migrate(app_data.to_path_buf()) {
         Ok(set) => set,
         Err(e) => {
@@ -50,7 +83,7 @@ pub(crate) async fn load_profiles(state: &SharedState, app_data: &Path) {
     *state.profile_set.lock().await = Some(set);
 }
 
-/// Loadout mode startup, after [`load_profiles`]. When catalog.toml is
+/// Loadout mode startup, after [`load_profiles`], see [`load`]. When catalog.toml is
 /// present, start from the catalog (shared defaults) and overlay the
 /// triggers, aliases, and macros of the profile file ON TOP. Same-name
 /// entries from the profile file win, and new names are added. Before

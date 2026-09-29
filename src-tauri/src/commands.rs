@@ -70,6 +70,9 @@ pub(crate) static AUTO_PERSIST_SUPPRESSED: std::sync::atomic::AtomicBool =
 /// Set by `migration_apply` once catalog.toml / loadouts.toml are
 /// written: the session is in the post-migration window where the live
 /// Profile is still pre-migration state and must not be persisted.
+/// Launch sets it too when it could not finish a wizard run that stopped
+/// partway, since the next launch writes the run's journal again over
+/// anything the session saved (see `launch::load`).
 /// Deliberately in-process (not a disk sniff): catalog.toml existing
 /// while `state.global_catalog` is None also describes a corrupt
 /// catalog falling back to legacy mode at startup, and that session
@@ -348,6 +351,17 @@ async fn persist_profile_locked(app: &AppHandle, state: &SharedState) {
 /// held. A file Vosh could not read at launch is never written, see
 /// [`crate::profile_config::hold_unread`].
 pub(crate) async fn persist_state(state: &SharedState, app_data: Option<&std::path::Path>) {
+    persist_state_with(state, app_data, &MIGRATION_RELAUNCH_PENDING).await;
+}
+
+/// [`persist_state`] with `relaunch_pending` in place of
+/// [`MIGRATION_RELAUNCH_PENDING`], so a test can save while a relaunch
+/// is pending without touching the flag every other test reads.
+async fn persist_state_with(
+    state: &SharedState,
+    app_data: Option<&std::path::Path>,
+    relaunch_pending: &std::sync::atomic::AtomicBool,
+) {
     // Path B branch. When `state.global_catalog` is `Some`, the user is
     // post-migration: authored items live in catalog.toml and the live
     // Profile is the cache. Write the live aliases / triggers / macros
@@ -367,8 +381,9 @@ pub(crate) async fn persist_state(state: &SharedState, app_data: Option<&std::pa
     // back into the profile file the migration just took them out of —
     // with pre-retag group names that would overlay and corrupt the
     // catalog on relaunch. Persist nothing until the restart completes
-    // the migration.
-    if MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire) {
+    // the migration. The same holds after a launch that could not finish
+    // a wizard run that stopped partway.
+    if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
         tracing::debug!("persist skipped: post-migration window before relaunch");
         return;
     }
@@ -5397,13 +5412,23 @@ mod tests {
         /// Quit and open Vosh again as `name`, the way lib.rs launches,
         /// with the shared catalog and loadouts when they are on disk.
         async fn relaunch_as(dir: &std::path::Path, name: &str) -> super::super::SharedState {
+            relaunch(dir, name).await.0
+        }
+
+        /// [`relaunch_as`] with what the launch found.
+        async fn relaunch(
+            dir: &std::path::Path,
+            name: &str,
+        ) -> (super::super::SharedState, crate::launch::Launch) {
             ProfileSet::load_or_migrate(dir.to_path_buf())
                 .unwrap()
                 .switch(name)
                 .unwrap();
-            let state = launch_state(dir).await;
-            crate::launch::load_loadout_mode(&state, dir).await;
-            state
+            let state: super::super::SharedState =
+                std::sync::Arc::new(super::super::AppState::default());
+            let launched = crate::launch::load(&state, dir).await;
+            assert!(state.profile_set.lock().await.is_some());
+            (state, launched)
         }
 
         fn macro_on(key: &str, command: &str) -> crate::profile::Macro {
@@ -6493,6 +6518,97 @@ mod tests {
                 }
                 assert!(!journal.exists(), "stop {stop}");
             }
+        }
+
+        #[tokio::test]
+        async fn a_launch_that_cannot_finish_the_wizard_holds_every_save() {
+            use crate::loadout_store::{journal_path, WIZARD_UNFINISHED_NOTICE};
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            use std::sync::atomic::AtomicBool;
+            let names = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"];
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            let mut healer = character("Healer", 2, &[]);
+            healer.disabled_alias_groups = vec!["combat".into()];
+            character(DEFAULT_PROFILE_NAME, 1, &[])
+                .save(&set.profile_path(DEFAULT_PROFILE_NAME))
+                .unwrap();
+            healer.save(&set.profile_path("Healer")).unwrap();
+            character("Test-Prompt", 3, &[])
+                .save(&set.profile_path("Test-Prompt"))
+                .unwrap();
+            let mut before = Vec::new();
+            for name in names {
+                before.push(items_on(
+                    &*relaunch_as(dir.path(), name).await.profile.lock().await,
+                ));
+            }
+
+            // The run stops once catalog.toml, loadouts.toml, and the
+            // Default file are written.
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::WIZARD_WRITES_BEFORE_A_CRASH.set(Some(3));
+            let run = tokio::spawn({
+                let state = state.clone();
+                let dir = dir.path().to_path_buf();
+                async move { super::super::apply_migration(&state, &dir, &[], || {}).await }
+            })
+            .await;
+            super::super::WIZARD_WRITES_BEFORE_A_CRASH.set(None);
+            assert!(run.is_err());
+            let catalog = read(&catalog_path(dir.path()));
+
+            // At the next launch the Healer file takes no writes, so the
+            // run stays unfinished.
+            let blocked = set.profile_path("Healer").with_extension("toml.tmp");
+            std::fs::create_dir(&blocked).unwrap();
+            let healer_file = read(&set.profile_path("Healer"));
+            let (state, launched) = relaunch(dir.path(), "Healer").await;
+            assert!(launched.wizard_unfinished);
+            assert!(!launched.loadout_mode);
+            assert_eq!(state.take_launch_notices(), [WIZARD_UNFINISHED_NOTICE]);
+            // Loadout mode used to start over the Healer file, which still
+            // holds its items under their old groups, so the Healer got
+            // every other character's items too. The session runs on the
+            // Healer file alone.
+            assert!(state.global_catalog.lock().await.is_none());
+            assert_eq!(items_on(&*state.profile.lock().await), before[1]);
+
+            // lib.rs holds every save and every switch, since the next
+            // launch writes the journal again over what this one saved.
+            let pending = AtomicBool::new(launched.wizard_unfinished);
+            state
+                .profile
+                .lock()
+                .await
+                .vars
+                .set(vosh_vars::Scope::Profile, "target", "dragon");
+            {
+                let _persist_guard = super::super::PERSIST_LOCK.lock().await;
+                super::super::persist_state_with(&state, Some(dir.path()), &pending).await;
+            }
+            assert_eq!(read(&set.profile_path("Healer")), healer_file);
+            assert_eq!(read(&catalog_path(dir.path())), catalog);
+            assert!(super::super::switch_profile_with(
+                &state,
+                Some(dir.path()),
+                DEFAULT_PROFILE_NAME,
+                &pending
+            )
+            .await
+            .is_err());
+            assert!(journal_path(dir.path()).exists());
+
+            // Once the file takes writes again, the next launch finishes
+            // the run and each character has on what it had before.
+            std::fs::remove_dir(&blocked).unwrap();
+            for (n, name) in names.iter().enumerate() {
+                let (state, launched) = relaunch(dir.path(), name).await;
+                assert!(launched.loadout_mode, "{name}");
+                assert!(!launched.wizard_unfinished, "{name}");
+                assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+            }
+            assert!(!journal_path(dir.path()).exists());
         }
 
         #[tokio::test]

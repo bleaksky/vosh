@@ -155,20 +155,49 @@ pub(crate) const WIZARD_FINISHED_NOTICE: &str =
 /// What launch tells you when it could not finish a wizard run that
 /// stopped.
 pub(crate) const WIZARD_UNFINISHED_NOTICE: &str =
-    "Vosh could not finish the move to loadouts that stopped before it was done. A full copy of \
-     each profile file waits in profiles/legacy. Quit Vosh and open it again to try once more.";
+    "Vosh could not finish the move to loadouts that stopped before it was done, so it saves \
+     nothing until it does. A full copy of each profile file waits in profiles/legacy. Quit Vosh \
+     and open it again to try once more.";
+
+/// What launch found of a shared catalog wizard run, see
+/// [`finish_wizard_run`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WizardRun {
+    /// No run was left, or the one left had written every file and only
+    /// its journal was still there.
+    Done,
+    /// Launch wrote the files a run that stopped had not.
+    Finished,
+    /// The run is still not done. The journal did not read, a file did
+    /// not save, or the journal would not go. Launch then stays out of
+    /// loadout mode, since a profile file may still hold its items under
+    /// their old group names, and holds every save, since the next launch
+    /// writes the journal again over anything this session saved.
+    Unfinished,
+}
+
+impl WizardRun {
+    /// What launch tells you about the run.
+    pub(crate) fn notices(self) -> Vec<String> {
+        match self {
+            Self::Done => Vec::new(),
+            Self::Finished => vec![WIZARD_FINISHED_NOTICE.to_string()],
+            Self::Unfinished => vec![WIZARD_UNFINISHED_NOTICE.to_string()],
+        }
+    }
+}
 
 /// Finish at launch a shared catalog wizard run that stopped before it
 /// took its journal out: write every file the journal names that does
 /// not hold its text yet, then take the journal out. Runs before any
 /// file loads, so loadout mode never starts over profile files that
-/// still hold their items. A journal that does not read, or a file that
-/// does not save, leaves the journal for the next launch. Returns what
-/// launch tells you.
-pub(crate) fn finish_wizard_run(app_data: &Path) -> Vec<String> {
+/// still hold their items. A journal that does not read, a file that
+/// does not save, or a journal that will not go leaves the run
+/// unfinished, and the journal stays for the next launch.
+pub(crate) fn finish_wizard_run(app_data: &Path) -> WizardRun {
     let path = journal_path(app_data);
     if !path.exists() {
-        return Vec::new();
+        return WizardRun::Done;
     }
     let journal: WizardJournal = match std::fs::read_to_string(&path)
         .map_err(LoadoutStoreError::from)
@@ -177,7 +206,7 @@ pub(crate) fn finish_wizard_run(app_data: &Path) -> Vec<String> {
         Ok(journal) => journal,
         Err(e) => {
             tracing::error!(error = %e, path = %path.display(), "wizard journal unreadable");
-            return vec![WIZARD_UNFINISHED_NOTICE.to_string()];
+            return WizardRun::Unfinished;
         }
     };
     let mut finished = true;
@@ -195,17 +224,19 @@ pub(crate) fn finish_wizard_run(app_data: &Path) -> Vec<String> {
         }
     }
     if !finished {
-        return vec![WIZARD_UNFINISHED_NOTICE.to_string()];
+        return WizardRun::Unfinished;
     }
+    // A journal that stays would write its text again at the next launch,
+    // over whatever this session saved.
     if let Err(e) = drop_wizard_journal(app_data) {
         tracing::error!(error = %e, path = %path.display(), "wizard journal could not be taken out");
+        return WizardRun::Unfinished;
     }
     if !wrote {
-        // The run had written every file and only its journal was left.
-        return Vec::new();
+        return WizardRun::Done;
     }
     tracing::info!("finished a shared catalog wizard run that stopped");
-    vec![WIZARD_FINISHED_NOTICE.to_string()]
+    WizardRun::Finished
 }
 
 /// The folder the shared catalog wizard copies each profile file into
@@ -1253,13 +1284,13 @@ mod tests {
     fn a_journal_writes_each_file_it_names_once() {
         let dir = tempfile::tempdir().unwrap();
         let journal = journal(dir.path());
-        assert_eq!(finish_wizard_run(dir.path()), [WIZARD_FINISHED_NOTICE]);
+        assert_eq!(finish_wizard_run(dir.path()), WizardRun::Finished);
         for (path, text) in journal.files(dir.path()) {
             assert_eq!(fs::read_to_string(path).unwrap(), text);
         }
         assert!(!journal_path(dir.path()).exists());
         // Nothing is left to finish at the next launch.
-        assert!(finish_wizard_run(dir.path()).is_empty());
+        assert_eq!(finish_wizard_run(dir.path()), WizardRun::Done);
     }
 
     #[test]
@@ -1269,15 +1300,36 @@ mod tests {
         for (path, text) in journal.files(dir.path()) {
             write_with_backup(&path, text).unwrap();
         }
-        assert!(finish_wizard_run(dir.path()).is_empty());
+        assert_eq!(finish_wizard_run(dir.path()), WizardRun::Done);
+        assert!(WizardRun::Done.notices().is_empty());
         assert!(!journal_path(dir.path()).exists());
+    }
+
+    #[test]
+    fn a_journal_that_will_not_go_leaves_the_run_unfinished() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let journal = journal(dir.path());
+        for (path, text) in journal.files(dir.path()) {
+            write_with_backup(&path, text).unwrap();
+        }
+        // The folder takes no changes, so the journal cannot go. It would
+        // write its text again at the next launch, over what this session
+        // saved.
+        let mode = |m| fs::Permissions::from_mode(m);
+        fs::set_permissions(dir.path(), mode(0o555)).unwrap();
+        let run = finish_wizard_run(dir.path());
+        fs::set_permissions(dir.path(), mode(0o755)).unwrap();
+        assert_eq!(run, WizardRun::Unfinished);
+        assert!(journal_path(dir.path()).exists());
     }
 
     #[test]
     fn a_journal_that_does_not_read_stays_and_writes_nothing() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(journal_path(dir.path()), "catalog = = [\n").unwrap();
-        assert_eq!(finish_wizard_run(dir.path()), [WIZARD_UNFINISHED_NOTICE]);
+        assert_eq!(finish_wizard_run(dir.path()), WizardRun::Unfinished);
+        assert_eq!(WizardRun::Unfinished.notices(), [WIZARD_UNFINISHED_NOTICE]);
         assert!(journal_path(dir.path()).exists());
         assert!(!catalog_path(dir.path()).exists());
     }

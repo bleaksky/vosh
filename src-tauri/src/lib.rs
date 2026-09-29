@@ -199,12 +199,15 @@ pub fn run() {
                 // The profile set and the active profile, then the
                 // shared catalog and loadouts in loadout mode. See
                 // launch.rs.
-                let loadout_mode = tauri::async_runtime::block_on(async {
-                    launch::load_profiles(&state, &path).await;
-                    launch::load_loadout_mode(&state, &path).await
-                });
-                if loadout_mode {
+                let launched = tauri::async_runtime::block_on(launch::load(&state, &path));
+                if launched.loadout_mode {
                     crate::input::PATH_B_ACTIVE.store(true, std::sync::atomic::Ordering::Release);
+                }
+                if launched.wizard_unfinished {
+                    // The next launch writes the wizard journal again, over
+                    // anything this session would save.
+                    crate::commands::MIGRATION_RELAUNCH_PENDING
+                        .store(true, std::sync::atomic::Ordering::Release);
                 }
                 match open_log_store(&path) {
                     Ok(store) => {
