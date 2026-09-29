@@ -268,7 +268,22 @@ function startTilesCache(): void {
   });
 }
 
-export function ServerMapView() {
+// The canvas ground when the map sits in a panel pane: the panel's
+// own color, so the drawing has no box around it.
+function panelGround(): string {
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--panel').trim();
+  return v || MAP_COLORS.bg;
+}
+
+interface ServerMapViewProps {
+  /** Inside a One Window pane. The pane header replaces the map's own
+   *  header and controls, the canvas takes the panel's color, and the
+   *  empty state is `emptyText` in the page instead of canvas text. */
+  embedded?: boolean;
+  emptyText?: string;
+}
+
+export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -436,10 +451,13 @@ export function ServerMapView() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = MAP_COLORS.bg;
+    const ground = embedded ? panelGround() : MAP_COLORS.bg;
+    ctx.fillStyle = ground;
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
     if (!tiles) {
+      // A pane shows its empty state as page text instead.
+      if (embedded) return;
       ctx.fillStyle = '#6e7681';
       ctx.font = '12px monospace';
       ctx.fillText('waiting for Map.Tiles GMCP push', 10, 22);
@@ -534,9 +552,10 @@ export function ServerMapView() {
         centerC,
         tilesetImage,
         anchor,
+        ground,
       );
     } else if (style === 'squares') {
-      drawSquares(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC, anchor);
+      drawSquares(ctx, cssWidth, cssHeight, tiles, rows, cols, centerR, centerC, anchor, ground);
     }
     // Glyph mode: canvas paints just the background + terrain halo.
     // The actual character grid is rendered via <GlyphsOverlay /> in
@@ -625,31 +644,34 @@ export function ServerMapView() {
       {/* Quiet header per the Ember mockup: caps "map · <area>" and a
           single 12px sliders affordance. Every operable control lives
           in the collapsible row below, so the pane reads as a clean
-          canvas until the user asks for chrome. */}
-      <div className="map-subhead">
-        <span className="caps map-subhead-title">{area ? `map · ${area}` : 'map'}</span>
-        <button
-          type="button"
-          className="map-controls-toggle"
-          aria-label="map controls"
-          aria-expanded={controlsOpen}
-          title="map controls"
-          onClick={() => setControlsOpen((v) => !v)}
-        >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.2"
-            aria-hidden="true"
+          canvas until the user asks for chrome. A panel pane brings
+          its own header. */}
+      {!embedded && (
+        <div className="map-subhead">
+          <span className="caps map-subhead-title">{area ? `map · ${area}` : 'map'}</span>
+          <button
+            type="button"
+            className="map-controls-toggle"
+            aria-label="map controls"
+            aria-expanded={controlsOpen}
+            title="map controls"
+            onClick={() => setControlsOpen((v) => !v)}
           >
-            <path d="M1 3.5h10M1 8.5h10M8 1.5v4M4 6.5v4" />
-          </svg>
-        </button>
-      </div>
-      {controlsOpen && (
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              aria-hidden="true"
+            >
+              <path d="M1 3.5h10M1 8.5h10M8 1.5v4M4 6.5v4" />
+            </svg>
+          </button>
+        </div>
+      )}
+      {!embedded && controlsOpen && (
         <div className="map-controls-row">
           <div className="map-mode-toggle">
             <button
@@ -707,7 +729,7 @@ export function ServerMapView() {
           </span>
         </div>
       )}
-      {style === 'tileset' && (
+      {!embedded && style === 'tileset' && (
         <div className="tileset-bar">
           <input
             ref={fileInputRef}
@@ -740,6 +762,7 @@ export function ServerMapView() {
         {style === 'glyphs' && tilesSnap && (
           <GlyphsOverlay payload={tilesSnap.payload} payloadJson={tilesSnap.json} zoom={zoom} />
         )}
+        {embedded && !tiles && emptyText && <p className="pane-map-empty">{emptyText}</p>}
       </div>
     </div>
   );
@@ -794,6 +817,7 @@ function drawSquares(
   centerR: number,
   centerC: number,
   anchor: Anchor,
+  ground: string,
 ) {
   const { pitch, playerX, playerY } = anchor;
   const size = Math.max(8, Math.floor(pitch * 0.55));
@@ -915,7 +939,7 @@ function drawSquares(
       // drawn underneath don't bleed through the (less-than-fully-
       // opaque) sector fill. Without this, every distance-faded cell
       // shows a faint corridor stripe across it.
-      ctx.fillStyle = MAP_COLORS.bg;
+      ctx.fillStyle = ground;
       ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
 
       if (isCenter) {
@@ -1443,11 +1467,12 @@ function drawTileset(
   centerC: number,
   image: HTMLImageElement | null,
   anchor: Anchor,
+  ground: string,
 ) {
   if (!image) {
     // Fallback when no tileset is loaded — render with the standard
     // squares style and the line-based off-floor glyphs.
-    drawSquares(ctx, cssWidth, cssHeight, payload, rows, cols, centerR, centerC, anchor);
+    drawSquares(ctx, cssWidth, cssHeight, payload, rows, cols, centerR, centerC, anchor, ground);
     return;
   }
   const tileSize = image.naturalHeight;
