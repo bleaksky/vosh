@@ -159,6 +159,17 @@ describe('contrast floors', () => {
       expect(on('dangerText', panel), 'dangerText').toBeGreaterThanOrEqual(STATUS_TEXT_CONTRAST);
       expect(on('warn', panel), 'warn').toBeGreaterThanOrEqual(STATUS_CONTRAST);
       expect(on('success', panel), 'success').toBeGreaterThanOrEqual(STATUS_CONTRAST);
+      // Menus, the palette, and dialogs draw the same tiers on raised.
+      const raised = hex(t.raised);
+      expect(on('tertiary', raised), 'tertiary on raised').toBeGreaterThanOrEqual(
+        TERTIARY_CONTRAST,
+      );
+      expect(on('danger', raised), 'danger on raised').toBeGreaterThanOrEqual(STATUS_CONTRAST);
+      expect(on('dangerText', raised), 'dangerText on raised').toBeGreaterThanOrEqual(
+        STATUS_TEXT_CONTRAST,
+      );
+      expect(on('warn', raised), 'warn on raised').toBeGreaterThanOrEqual(STATUS_CONTRAST);
+      expect(on('success', raised), 'success on raised').toBeGreaterThanOrEqual(STATUS_CONTRAST);
       expect(on('title', bg), 'title').toBeGreaterThanOrEqual(3);
       expect(on('accent', bg), 'accent').toBeGreaterThanOrEqual(3);
       expect(on('onAccent', hex(t.accent)), 'onAccent').toBeGreaterThanOrEqual(ON_ACCENT_CONTRAST);
