@@ -193,6 +193,17 @@ impl TermGrid {
         ))
     }
 
+    /// Select every line the grid holds, scrollback included, from the
+    /// first cell of the oldest line to the last cell of the live screen.
+    pub(crate) fn select_all(&mut self) {
+        let grid = self.term.grid();
+        let start = Point::new(grid.topmost_line(), Column(0));
+        let end = Point::new(grid.bottommost_line(), grid.last_column());
+        let mut selection = Selection::new(SelectionType::Simple, start, Side::Left);
+        selection.update(end, Side::Right);
+        self.term.selection = Some(selection);
+    }
+
     /// Scroll the display by `delta` lines (positive scrolls up into
     /// scrollback, clamped to history).
     pub(crate) fn scroll(&mut self, delta: i32) {
@@ -519,6 +530,16 @@ pub(crate) fn clear_selection() {
     }
 }
 
+/// Select everything in the shared grid, scrollback included. Backs the
+/// terminal menu's Select all and Cmd+A on an empty command line.
+pub(crate) fn select_all() {
+    if let Ok(mut slot) = grid_slot().lock() {
+        if let Some(grid) = slot.as_mut() {
+            grid.select_all();
+        }
+    }
+}
+
 /// The selected text, or None when there is no selection.
 pub(crate) fn selection_text() -> Option<String> {
     grid_slot().lock().ok().and_then(|slot| {
@@ -763,6 +784,19 @@ mod tests {
         let slot = grid_slot().lock().unwrap();
         let g = slot.as_ref().expect("grid created on first feed");
         assert!(g.row_string(0).starts_with("shared"));
+    }
+
+    #[test]
+    fn select_all_spans_scrollback_and_the_live_screen() {
+        let mut g = TermGrid::new(10, 2);
+        g.feed(b"one\r\ntwo\r\nthree");
+        assert!(g.scrollback_len() > 0);
+        g.select_all();
+        let text = g.term.selection_to_string().expect("a selection");
+        assert_eq!(text.trim_end(), "one\ntwo\nthree");
+        let (start_line, start_col, end_line, _) = g.selection_bounds().expect("bounds");
+        assert_eq!((start_line, start_col), (-1, 0));
+        assert_eq!(end_line, 1);
     }
 
     #[test]

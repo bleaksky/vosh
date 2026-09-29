@@ -1126,6 +1126,18 @@ pub(crate) fn native_surface_copy() {
     crate::native_surface::request_copy();
 }
 
+/// Tier 3 native renderer: select everything in the grid, scrollback
+/// included, for the terminal menu's Select all and Cmd+A on an empty
+/// command line. Repaints; a no-op elsewhere.
+#[tauri::command]
+pub(crate) fn native_surface_select_all() {
+    #[cfg(native_surface)]
+    {
+        crate::term_grid::select_all();
+        crate::native_surface::request_redraw();
+    }
+}
+
 /// Parse a `#rrggbb` (or `rrggbb`) hex color.
 #[cfg(native_surface)]
 fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
