@@ -1736,6 +1736,25 @@ pub(crate) async fn profiles_list(
     })
 }
 
+/// Write the live profile to its file before a copy of `source` reads
+/// that file, when `source` is the live profile. Call with
+/// [`PERSIST_LOCK`] held across this and the copy, so the copy reads
+/// what the flush wrote and no persist rewrites the source mid copy.
+async fn flush_before_copy(app: &AppHandle, shared: &SharedState, source: &str) {
+    let copying_live = shared
+        .profile_set
+        .lock()
+        .await
+        .as_ref()
+        .is_some_and(|set| set.active_name() == source);
+    // The live profile can run two seconds ahead of its file. After
+    // `#profile reset` or `load` it is deliberately diverged, and the
+    // copy takes the file as it stands.
+    if copying_live && !AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
+        persist_profile_locked(app, shared).await;
+    }
+}
+
 /// Create a profile with `auto_match` as its login claim, starting as a
 /// copy of `copy_from` when given. Returns the new entry and does not
 /// switch. The claim takes nothing from other profiles, so a caller
@@ -1750,22 +1769,9 @@ pub(crate) async fn profile_create(
     auto_match: Option<crate::profile_set::AutoMatch>,
 ) -> Result<crate::profile_set::ProfileEntry, String> {
     let shared: SharedState = state.inner().clone();
-    // Held across the flush and the copy, so the copy reads what the
-    // flush wrote and no persist rewrites the source mid copy.
     let _persist_guard = PERSIST_LOCK.lock().await;
     if let Some(source) = copy_from.as_deref() {
-        let copying_live = shared
-            .profile_set
-            .lock()
-            .await
-            .as_ref()
-            .is_some_and(|set| set.active_name() == source);
-        // The live profile can run two seconds ahead of its file. After
-        // `#profile reset` or `load` it is deliberately diverged, and
-        // the copy takes the file as it stands.
-        if copying_live && !AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {
-            persist_profile_locked(&app, &shared).await;
-        }
+        flush_before_copy(&app, &shared, source).await;
     }
     let entry = {
         let mut guard = state.profile_set.lock().await;
@@ -1816,6 +1822,9 @@ pub(crate) async fn profile_rename(
     Ok(())
 }
 
+/// Copy `source` under a new name without its login claim. Duplicating
+/// the live profile writes it first, so the copy holds your latest
+/// changes.
 #[tauri::command]
 pub(crate) async fn profile_duplicate(
     app: AppHandle,
@@ -1825,6 +1834,7 @@ pub(crate) async fn profile_duplicate(
 ) -> Result<(), String> {
     {
         let _persist_guard = PERSIST_LOCK.lock().await;
+        flush_before_copy(&app, state.inner(), &source).await;
         let mut guard = state.profile_set.lock().await;
         let Some(set) = guard.as_mut() else {
             return Err(PROFILES_NOT_LOADED.into());
