@@ -645,7 +645,7 @@ Inside that folder.
 - `scripts/` holds Lua files for `#script load`.
 - `plugins/` holds plugin folders, each with a `manifest.toml`.
 
-Every TOML save is safe by design. Vosh renames the old file to `<file>.bak.<timestamp>` with a millisecond timestamp, writes a temp file, swaps it in atomically, and keeps the ten newest backups. To roll back a bad profile edit, copy the backup you want over the live file.
+Every TOML save is safe by design. Vosh writes the new text to a temp file, copies the old file to `<file>.bak.<timestamp>` with a millisecond timestamp, swaps the temp file in atomically, and keeps the ten newest backups. A save that fails leaves the old file in place. To roll back a bad profile edit, copy the backup you want over the live file.
 
 A leftover `profile.toml` at the root is the legacy single profile file. Vosh migrates it to `profiles/default.toml` on the first multi profile launch.
 

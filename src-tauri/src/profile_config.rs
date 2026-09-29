@@ -2286,18 +2286,18 @@ const BACKUP_RETENTION: usize = 10;
 ///
 /// Steps in order:
 ///   1. Ensure parent dir exists.
-///   2. Move the existing file (if any) to `<path>.bak.<unix-ms>` so
-///      a partial write below cannot lose the prior state.
-///   3. Write the new content to `<path>.tmp` and rename into place.
-///      The rename is atomic on every platform we ship.
-///   4. Prune backups: keep the `BACKUP_RETENTION` newest, delete
+///   2. Write the new content to `<path>.tmp`.
+///   3. Copy the existing file (if any) to `<path>.bak.<unix-ms>`.
+///   4. Rename the temp file over `path`. The rename is atomic on
+///      every platform we ship, so `path` holds either the old text or
+///      the new, never nothing.
+///   5. Prune backups: keep the `BACKUP_RETENTION` newest, delete
 ///      the rest.
 ///
 /// Errors during pruning are swallowed — they should not block the
-/// save from being reported as successful. A failure during step 2
-/// or 3 is fatal and the original file is left untouched (the backup
-/// either does not exist yet, or has already been renamed away
-/// successfully).
+/// save from being reported as successful. A failure during steps 2 to
+/// 4 is fatal, takes away the temp file, and leaves the original file
+/// in place, since nothing moves it before the rename.
 ///
 /// A file held by [`hold_unread`] is refused before any step, so no
 /// save writes the defaults over settings Vosh could not read.
@@ -2311,23 +2311,34 @@ pub(crate) fn write_with_backup(path: &Path, contents: &str) -> std::io::Result<
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    let tmp = tmp_path_for(path);
+    if let Err(e) = swap_in(path, &tmp, contents) {
+        // A temp file the write left behind goes, and the original stays.
+        if tmp.is_file() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+        return Err(e);
+    }
+    prune_backups(path, BACKUP_RETENTION);
+    Ok(())
+}
+
+/// Steps 2 to 4 of [`write_with_backup`]. Nothing here moves or changes
+/// `path` before the last step, the rename that swaps `tmp` in.
+fn swap_in(path: &Path, tmp: &Path, contents: &str) -> std::io::Result<()> {
+    std::fs::write(tmp, contents)?;
     if path.exists() {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_millis());
-        let backup_path = backup_path_for(path, now_ms);
-        // `rename` is atomic; if it fails (e.g. cross-device) fall
-        // back to a copy. Either way the original is preserved.
-        if std::fs::rename(path, &backup_path).is_err() {
-            std::fs::copy(path, &backup_path)?;
-            std::fs::remove_file(path)?;
+        let backup = backup_path_for(path, now_ms);
+        if let Err(e) = std::fs::copy(path, &backup) {
+            // A copy cut short is no backup.
+            let _ = std::fs::remove_file(&backup);
+            return Err(e);
         }
     }
-    let tmp = tmp_path_for(path);
-    std::fs::write(&tmp, contents)?;
-    std::fs::rename(&tmp, path)?;
-    prune_backups(path, BACKUP_RETENTION);
-    Ok(())
+    std::fs::rename(tmp, path)
 }
 
 fn tmp_path_for(path: &Path) -> PathBuf {
@@ -2443,6 +2454,30 @@ mod tests {
         let path = dir.path().join("nested/under/here/config.toml");
         write_with_backup(&path, "ok\n").unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "ok\n");
+    }
+
+    #[test]
+    fn a_save_that_fails_leaves_the_old_file_in_place() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Bard.toml");
+        write_with_backup(&path, "v1\n").unwrap();
+        // Something holds the name of the temp file, the way a full disk
+        // or a lock stops the write.
+        std::fs::create_dir(tmp_path_for(&path)).unwrap();
+        assert!(write_with_backup(&path, "v2\n").is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "v1\n");
+        assert!(tmp_path_for(&path).is_dir());
+
+        // Once the write can land, it does, and the old text waits in a
+        // backup.
+        std::fs::remove_dir(tmp_path_for(&path)).unwrap();
+        write_with_backup(&path, "v2\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "v2\n");
+        let backups = list_backups(&path);
+        assert_eq!(
+            std::fs::read_to_string(backups.last().unwrap()).unwrap(),
+            "v1\n"
+        );
     }
 
     #[test]
