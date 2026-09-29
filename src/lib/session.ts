@@ -808,14 +808,19 @@ export interface UiConfig {
    *  `after-time` dock the moons next to the centered tick + MUD
    *  time chip on the chosen side. */
   moons_position: MoonsPosition;
-  /** Rendering style for tick / mud time chips. Same style applies
-   *  in every host so the chip reads consistently whether it rides
-   *  in the statusbar, vitals, roomstrip, or affects bar. */
+  /** How the status line draws the tick and the game time. The value
+   *  alone, a caption before each value, or an icon before each. */
   chip_style: ChipStyle;
 }
 
 export type MoonsPosition = 'right-edge' | 'before-time' | 'after-time';
 export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
+
+/** Read a stored or broadcast chip style. Anything unknown is the
+ *  value alone, the default. */
+export function normalizeChipStyle(raw: unknown): ChipStyle {
+  return raw === 'caption_value' || raw === 'icon_value' ? raw : 'value_only';
+}
 
 /** `ember` (the default) draws a sidebar-pane block — caps header
  *  plus three thin fixed-color track bars; `stacked` is the
@@ -1049,10 +1054,7 @@ export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
       cfg.moons_position === 'before-time' || cfg.moons_position === 'after-time'
         ? cfg.moons_position
         : 'right-edge',
-    chip_style:
-      cfg.chip_style === 'caption_value' || cfg.chip_style === 'icon_value'
-        ? cfg.chip_style
-        : 'value_only',
+    chip_style: normalizeChipStyle(cfg.chip_style),
   };
 }
 
@@ -1402,6 +1404,16 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
   // custom theme id. `broadcastUiConfigChanges` preserves that
   // ordering.
   await broadcastUiConfigChanges(config);
+}
+
+/** Hear a new chip style saved from Settings. setUiConfig emits it to
+ *  every window, so the main window's status line follows at once. */
+export async function subscribeChipStyleChanged(
+  cb: (value: ChipStyle) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>('vosh://chip-style-changed', (event) => {
+    cb(normalizeChipStyle(event.payload));
+  });
 }
 
 export async function subscribeSidePanelsFillHeightChanged(

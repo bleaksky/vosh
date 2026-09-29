@@ -3,6 +3,7 @@ import { emit } from '@tauri-apps/api/event';
 import {
   broadcastUiConfigChanges,
   isOwnThemeEcho,
+  normalizeChipStyle,
   normalizeTerminalLineHeight,
   normalizeUiConfig,
   normalizeVitalsDensity,
@@ -193,5 +194,29 @@ describe('vitals density', () => {
     sent.mockClear();
     await broadcastUiConfigChanges({ ...base, vitals_density: 'line' });
     expect(sent).toHaveBeenCalledWith('vosh://vitals-density-changed', 'line');
+  });
+});
+
+describe('chip style', () => {
+  it('reads unknown stored styles as the value alone', () => {
+    expect(normalizeChipStyle('caption_value')).toBe('caption_value');
+    expect(normalizeChipStyle('icon_value')).toBe('icon_value');
+    expect(normalizeChipStyle('value_only')).toBe('value_only');
+    expect(normalizeChipStyle('emoji')).toBe('value_only');
+    expect(normalizeChipStyle(undefined)).toBe('value_only');
+    expect(normalizeUiConfig(raw({ chip_style: 'bogus' })).chip_style).toBe('value_only');
+    expect(normalizeUiConfig(raw({ chip_style: 'icon_value' })).chip_style).toBe('icon_value');
+  });
+
+  it('tells every window when a save changes it', async () => {
+    const sent = vi.mocked(emit);
+    const base = normalizeUiConfig(raw({ chip_style: 'value_only' }));
+    await broadcastUiConfigChanges(base);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, chip_style: 'icon_value' });
+    expect(sent).toHaveBeenCalledWith('vosh://chip-style-changed', 'icon_value');
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, chip_style: 'icon_value' });
+    expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://chip-style-changed');
   });
 });
