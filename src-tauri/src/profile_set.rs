@@ -49,6 +49,10 @@ pub(crate) enum ProfileSetError {
         "You cannot name a profile {0}. Use letters, numbers, spaces, hyphens, and underscores."
     )]
     InvalidName(String),
+    #[error("Vosh needs a character name to use this profile when you log in.")]
+    NoCharacter,
+    #[error("Choose a world for {0} first.")]
+    NoWorld(String),
 }
 
 /// Per-profile entry in the index. The full per-profile payload lives in
@@ -147,6 +151,38 @@ impl<'de> Deserialize<'de> for AutoMatch {
             characters,
             enabled: raw.enabled,
         })
+    }
+}
+
+/// What turning a login toggle on or off did: the profile as it now
+/// reads, and every profile the character was taken from.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct LoginClaim {
+    pub entry: ProfileEntry,
+    pub released_from: Vec<String>,
+}
+
+impl AutoMatch {
+    /// Whether this entry lists `character`, ignoring case.
+    fn names(&self, character: &str) -> bool {
+        let wanted = character.trim().to_ascii_lowercase();
+        self.characters
+            .iter()
+            .any(|c| c.trim().to_ascii_lowercase() == wanted)
+    }
+
+    /// Whether this entry sits on the world at `host` and `port`. Hosts
+    /// match without case, and a port pinned on only one side still
+    /// matches, since either could log in there.
+    fn on_world(&self, host: &str, port: Option<u16>) -> bool {
+        let Some(own) = self.host.as_deref() else {
+            return false;
+        };
+        own.trim().eq_ignore_ascii_case(host.trim())
+            && match (self.port, port) {
+                (Some(a), Some(b)) => a == b,
+                _ => true,
+            }
     }
 }
 
@@ -408,6 +444,71 @@ impl ProfileSet {
             .or_else(|| known_world(host).map(|w| w.port))
             .unwrap_or(0);
         self.resolve_match(host, port, Some(character)).as_deref() == Some(name)
+    }
+
+    /// Turn the login toggle for `name` on or off for `character`.
+    ///
+    /// On lists the character first if the profile does not list it
+    /// yet, turns the toggle on, and takes the character away from
+    /// every other profile on the same world, because a character
+    /// belongs to one profile per world. A profile left with no
+    /// characters has its toggle turned off so it does not become the
+    /// host wide fallback. Off keeps the world and every name and only
+    /// turns the toggle off. Either way the index is written once and
+    /// nothing switches, since the toggle applies at the next login.
+    pub(crate) fn set_login(
+        &mut self,
+        name: &str,
+        character: &str,
+        on: bool,
+    ) -> Result<LoginClaim, ProfileSetError> {
+        let character = character.trim();
+        let Some(idx) = self.index.profiles.iter().position(|p| p.name == name) else {
+            return Err(ProfileSetError::NotFound(name.to_string()));
+        };
+        let mut released_from = Vec::new();
+        if on {
+            if character.is_empty() {
+                return Err(ProfileSetError::NoCharacter);
+            }
+            let world = self.index.profiles[idx].auto_match.as_ref().and_then(|am| {
+                let host = am.host.as_deref()?.trim();
+                (!host.is_empty()).then(|| (host.to_string(), am.port))
+            });
+            let Some((host, port)) = world else {
+                return Err(ProfileSetError::NoWorld(display_name(name)));
+            };
+            for (i, other) in self.index.profiles.iter_mut().enumerate() {
+                let Some(am) = other.auto_match.as_mut() else {
+                    continue;
+                };
+                if i == idx || !am.on_world(&host, port) || !am.names(character) {
+                    continue;
+                }
+                let wanted = character.to_ascii_lowercase();
+                am.characters
+                    .retain(|c| c.trim().to_ascii_lowercase() != wanted);
+                if am.characters.is_empty() {
+                    am.enabled = false;
+                }
+                released_from.push(other.name.clone());
+            }
+            let am = self.index.profiles[idx]
+                .auto_match
+                .as_mut()
+                .expect("the world check found auto_match");
+            if !am.names(character) {
+                am.characters.insert(0, character.to_string());
+            }
+            am.enabled = true;
+        } else if let Some(am) = self.index.profiles[idx].auto_match.as_mut() {
+            am.enabled = false;
+        }
+        self.save_index()?;
+        Ok(LoginClaim {
+            entry: self.index.profiles[idx].clone(),
+            released_from,
+        })
     }
 
     /// Create an empty entry. The per-profile file is created on the
@@ -896,6 +997,147 @@ characters = ["Erelei", "Vanek"]
         .unwrap();
         assert!(!set.login_on(DEFAULT_PROFILE_NAME));
         assert!(set.login_on("Pinned"));
+    }
+
+    fn characters_of(set: &ProfileSet, name: &str) -> Vec<String> {
+        set.get(name)
+            .and_then(|e| e.auto_match.as_ref())
+            .map(|am| am.characters.clone())
+            .unwrap_or_default()
+    }
+
+    fn enabled(set: &ProfileSet, name: &str) -> bool {
+        set.get(name)
+            .and_then(|e| e.auto_match.as_ref())
+            .is_some_and(|am| am.enabled)
+    }
+
+    #[test]
+    fn turning_login_on_takes_erelei_from_every_other_profile_on_the_world() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        let claim = set.set_login("Test-Prompt", "erelei", true).unwrap();
+        assert_eq!(claim.released_from, vec![DEFAULT_PROFILE_NAME.to_string()]);
+        assert_eq!(characters_of(&set, "Test-Prompt"), vec!["Erelei"]);
+        assert!(claim.entry.auto_match.as_ref().unwrap().enabled);
+
+        // default kept its world but lost its only character, so its
+        // toggle went off rather than leaving a host wide fallback.
+        assert!(characters_of(&set, DEFAULT_PROFILE_NAME).is_empty());
+        assert!(!enabled(&set, DEFAULT_PROFILE_NAME));
+        let am = set.get(DEFAULT_PROFILE_NAME).unwrap().auto_match.clone();
+        assert_eq!(
+            am.unwrap().host.as_deref(),
+            Some("play.theforsakenlands.com")
+        );
+        assert_eq!(
+            set.resolve_match("play.theforsakenlands.com", 1848, None),
+            None
+        );
+
+        // Erelei now loads Test-Prompt, Caelaor still loads Healer, and
+        // nothing switched.
+        assert_eq!(
+            set.resolve_match("play.theforsakenlands.com", 1848, Some("Erelei")),
+            Some("Test-Prompt".into())
+        );
+        assert!(set.login_on("Test-Prompt"));
+        assert!(!set.login_on(DEFAULT_PROFILE_NAME));
+        assert!(set.login_on("Healer"));
+        assert_eq!(set.active_name(), DEFAULT_PROFILE_NAME);
+
+        // The index on disk took the whole change.
+        let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        assert!(reloaded.login_on("Test-Prompt"));
+        assert!(!enabled(&reloaded, DEFAULT_PROFILE_NAME));
+    }
+
+    #[test]
+    fn turning_login_on_keeps_other_characters_and_other_worlds() {
+        let dir = tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let world = "play.theforsakenlands.com";
+        set.set_metadata(
+            DEFAULT_PROFILE_NAME,
+            None,
+            Some(claim(world, Some(1848), &["Erelei", "Akletus"])),
+        )
+        .unwrap();
+        set.create("Elsewhere").unwrap();
+        set.set_metadata(
+            "Elsewhere",
+            None,
+            Some(claim("mud.example.org", None, &["Erelei"])),
+        )
+        .unwrap();
+        set.create("Portless").unwrap();
+        set.set_metadata("Portless", None, Some(claim(world, None, &["Erelei"])))
+            .unwrap();
+        set.create("New").unwrap();
+        set.set_metadata("New", None, Some(claim(world, Some(1848), &[])))
+            .unwrap();
+
+        let claim = set.set_login("New", "Erelei", true).unwrap();
+        assert_eq!(
+            claim.released_from,
+            vec![DEFAULT_PROFILE_NAME.to_string(), "Portless".to_string()]
+        );
+        // default keeps Akletus and its toggle.
+        assert_eq!(characters_of(&set, DEFAULT_PROFILE_NAME), vec!["Akletus"]);
+        assert!(enabled(&set, DEFAULT_PROFILE_NAME));
+        // Another world keeps its own Erelei.
+        assert_eq!(characters_of(&set, "Elsewhere"), vec!["Erelei"]);
+        assert_eq!(characters_of(&set, "New"), vec!["Erelei"]);
+    }
+
+    #[test]
+    fn turning_login_off_keeps_the_world_and_the_name() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        let claim = set.set_login("Healer", "Caelaor", false).unwrap();
+        assert!(claim.released_from.is_empty());
+        let am = claim.entry.auto_match.unwrap();
+        assert!(!am.enabled);
+        assert_eq!(am.characters, vec!["Caelaor"]);
+        assert_eq!(am.host.as_deref(), Some("play.theforsakenlands.com"));
+        assert_eq!(am.port, Some(1848));
+        assert!(!set.login_on("Healer"));
+        assert_eq!(
+            set.resolve_match("play.theforsakenlands.com", 1848, Some("Caelaor")),
+            None
+        );
+        // On again restores it without taking anything from anyone.
+        let claim = set.set_login("Healer", "Caelaor", true).unwrap();
+        assert!(claim.released_from.is_empty());
+        assert!(set.login_on("Healer"));
+    }
+
+    #[test]
+    fn turning_login_on_needs_a_character_and_a_world() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        set.create("Blank").unwrap();
+        assert!(matches!(
+            set.set_login("Blank", "Erelei", true),
+            Err(ProfileSetError::NoWorld(_))
+        ));
+        assert!(set.get("Blank").unwrap().auto_match.is_none());
+        assert!(matches!(
+            set.set_login("Healer", "  ", true),
+            Err(ProfileSetError::NoCharacter)
+        ));
+        assert!(matches!(
+            set.set_login("Nobody", "Erelei", true),
+            Err(ProfileSetError::NotFound(_))
+        ));
+        assert_eq!(
+            set.set_login("Blank", "Erelei", true)
+                .unwrap_err()
+                .to_string(),
+            "Choose a world for Blank first."
+        );
+        // Nothing was taken from default along the way.
+        assert!(set.login_on(DEFAULT_PROFILE_NAME));
     }
 
     #[test]

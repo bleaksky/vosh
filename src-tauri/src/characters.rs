@@ -25,7 +25,8 @@ use crate::profile_config::{
     GlobalConfig, PaneLayoutPersist, ProfileConfig, TrackedAffect, UiConfig,
 };
 use crate::profile_set::{
-    display_name, world_name, AutoMatch, ProfileEntry, ProfileSet, ProfileSetError, Scope,
+    display_name, world_name, AutoMatch, LoginClaim, ProfileEntry, ProfileSet, ProfileSetError,
+    Scope,
 };
 
 /// One profile as the Characters group shows it.
@@ -328,6 +329,28 @@ async fn reset_live_panes(state: &SharedState) -> PaneLayoutEnvelope {
     p.ui.panes = Some(layout);
     bump_panes_generation();
     pane_layout_envelope(&p)
+}
+
+/// Turn the login toggle for `name` on or off for `character`. On takes
+/// the character from every other profile on the same world and names
+/// them in `released_from`. Never switches the live profile, since the
+/// toggle applies at the next login. See [`ProfileSet::set_login`].
+#[tauri::command]
+pub(crate) async fn profile_set_login(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    name: String,
+    character: String,
+    on: bool,
+) -> Result<LoginClaim, String> {
+    let claim = {
+        let mut guard = state.profile_set.lock().await;
+        let set = guard.as_mut().ok_or(PROFILES_NOT_LOADED)?;
+        set.set_login(&name, &character, on)
+            .map_err(|e| e.to_string())?
+    };
+    broadcast(&app, "vosh://profiles-changed", &name);
+    Ok(claim)
 }
 
 #[cfg(test)]
