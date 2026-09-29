@@ -18,6 +18,7 @@ import {
   blankTimer,
   enabledPresetIds,
   formatInterval,
+  importErrorMessage,
   jsonListText,
   loadoutToggles,
   macroSavePlan,
@@ -335,6 +336,30 @@ describe('automationSaveError', () => {
       'invalid reset pattern: regex parse error:\n    [bad\n    ^\nerror: unclosed character class';
     expect(automationSaveError(raw)).toBe(
       'Vosh could not read the Reset on pattern. Fix it and save again.',
+    );
+  });
+});
+
+describe('importErrorMessage', () => {
+  it('turns import_apply errors into sentences', () => {
+    expect(importErrorMessage('could not detect import format', 'import')).toBe(
+      'Vosh could not tell which client made this file. Choose its format and import again.',
+    );
+    expect(importErrorMessage('unknown import format: tintin', 'import')).toBe(
+      'Vosh does not read that format. Choose one from the list and import again.',
+    );
+  });
+
+  it('keeps a sentence and replaces anything else', () => {
+    expect(importErrorMessage(new Error('Vosh is busy.'), 'import')).toBe('Vosh is busy.');
+    expect(importErrorMessage(new Error('NotReadableError: read failed'), 'read')).toBe(
+      'Vosh could not read that file. Choose it again or paste its contents.',
+    );
+    expect(importErrorMessage('Error: disk full.', 'import')).toBe(
+      'Vosh could not import that file.',
+    );
+    expect(importErrorMessage('ipc: channel closed', 'import')).toBe(
+      'Vosh could not import that file.',
     );
   });
 });
