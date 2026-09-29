@@ -201,6 +201,41 @@ pub(crate) struct AppState {
     /// `global_catalog`. The active subset drives which catalog groups
     /// the runtime gates on (see [`crate::loadout_store::apply_loadout_state`]).
     pub(crate) loadout_set: Arc<Mutex<Option<crate::loadout::LoadoutSet>>>,
+    /// Sentences launch has to tell you, such as a profile file Vosh
+    /// could not read and will not save over. Kept until the main window
+    /// takes them through `launch_notices_take`, since launch runs before
+    /// any window listens.
+    pub(crate) launch_notices: std::sync::Mutex<Vec<String>>,
+}
+
+impl AppState {
+    /// Keep `notices` for the main window to show.
+    pub(crate) fn add_launch_notices(&self, notices: Vec<String>) {
+        if notices.is_empty() {
+            return;
+        }
+        self.launch_notices
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .extend(notices);
+    }
+
+    /// Hand over the notices kept so far, once. A second call gets none.
+    pub(crate) fn take_launch_notices(&self) -> Vec<String> {
+        std::mem::take(
+            &mut *self
+                .launch_notices
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
+    }
+}
+
+/// What launch has to tell you, for the main window to show once in the
+/// terminal and as a toast.
+#[tauri::command]
+pub(crate) fn launch_notices_take(state: State<'_, SharedState>) -> Vec<String> {
+    state.take_launch_notices()
 }
 
 impl Default for AppState {
@@ -225,6 +260,7 @@ impl Default for AppState {
             last_affects: crate::affects_snapshot::AffectsSnapshot::default(),
             global_catalog: Arc::new(Mutex::new(None)),
             loadout_set: Arc::new(Mutex::new(None)),
+            launch_notices: std::sync::Mutex::new(Vec::new()),
         }
     }
 }
@@ -250,6 +286,15 @@ pub(crate) async fn persist_profile(app: &AppHandle, state: &SharedState) {
 
 /// The body of [`persist_profile`]. Call with [`PERSIST_LOCK`] held.
 async fn persist_profile_locked(app: &AppHandle, state: &SharedState) {
+    let app_data = app.path().app_data_dir().ok();
+    persist_state(state, app_data.as_deref()).await;
+}
+
+/// [`persist_profile_locked`] over the app data folder `app_data`, so a
+/// test can run it over a folder of its own. Call with [`PERSIST_LOCK`]
+/// held. A file Vosh could not read at launch is never written, see
+/// [`crate::profile_config::hold_unread`].
+pub(crate) async fn persist_state(state: &SharedState, app_data: Option<&std::path::Path>) {
     // Path B branch. When `state.global_catalog` is `Some`, the user is
     // post-migration: authored items live in catalog.toml and the live
     // Profile is the cache. Write the live aliases / triggers / macros
@@ -257,7 +302,9 @@ async fn persist_profile_locked(app: &AppHandle, state: &SharedState) {
     // below is skipped entirely (legacy profiles are in profiles/legacy/
     // and never reopened from a Path B session).
     if state.global_catalog.lock().await.is_some() {
-        persist_path_b(app, state).await;
+        if let Some(dir) = app_data {
+            persist_path_b(state, dir).await;
+        }
         return;
     }
 
@@ -287,7 +334,7 @@ async fn persist_profile_locked(app: &AppHandle, state: &SharedState) {
                 Some(*set.scope()),
             )
         } else {
-            let Ok(dir) = app.path().app_data_dir() else {
+            let Some(dir) = app_data else {
                 return;
             };
             (Some(dir.join("profile.toml")), None, None)
@@ -329,11 +376,7 @@ async fn persist_profile_locked(app: &AppHandle, state: &SharedState) {
 /// pipeline the per-profile branch uses. Falls through to the legacy
 /// `global.toml` write so theme / font / `dock_layout` edits land on
 /// the same path in both modes.
-async fn persist_path_b(app: &AppHandle, state: &SharedState) {
-    let Ok(dir) = app.path().app_data_dir() else {
-        return;
-    };
-
+async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
     // Catalog. Pull aliases / triggers / macros directly from the live
     // Profile. The catalog is the authoritative source in Path B mode
     // so an overwrite here is correct — anything the user typed via
@@ -363,11 +406,11 @@ async fn persist_path_b(app: &AppHandle, state: &SharedState) {
     // commands. Just persist whatever the runtime currently holds.
     let set_snapshot = state.loadout_set.lock().await.clone();
 
-    if let Err(e) = crate::loadout_store::save_global_catalog(&dir, &catalog) {
+    if let Err(e) = crate::loadout_store::save_global_catalog(dir, &catalog) {
         warn!(error = %e, "Path B catalog auto-save failed");
     }
     if let Some(set) = set_snapshot {
-        if let Err(e) = crate::loadout_store::save_loadout_set(&dir, &set) {
+        if let Err(e) = crate::loadout_store::save_loadout_set(dir, &set) {
             warn!(error = %e, "Path B loadout set auto-save failed");
         }
     }
@@ -1964,6 +2007,29 @@ pub(crate) async fn profile_set_scope(
 const SCOPE_MIGRATION_PENDING: &str =
     "Restart Vosh to finish the move to loadouts, then turn this off.";
 
+/// Why the shared categories cannot change while Vosh holds a file it
+/// could not read at launch. The live profile holds the defaults where
+/// that file's settings belong, and a change would hand those defaults
+/// to the other profiles or share them with every character.
+fn scope_refusal_for_unread(set: &crate::profile_set::ProfileSet) -> Option<String> {
+    use crate::profile_config::is_unread;
+    if is_unread(&set.global_path()) {
+        return Some(
+            "Vosh could not read global.toml, so it will not change which settings every \
+             character shares. Fix the file and restart Vosh."
+                .to_string(),
+        );
+    }
+    if is_unread(&set.active_path()) {
+        return Some(format!(
+            "Vosh could not read the {} profile file, so it will not change which settings \
+             every character shares. Fix the file or switch to another profile.",
+            crate::profile_set::display_name(set.active_name())
+        ));
+    }
+    None
+}
+
 /// The body of [`profile_set_scope`] up to its save. Call with
 /// [`PERSIST_LOCK`] held. Returns the live custom themes when turning the
 /// theme category global added to them.
@@ -1975,7 +2041,11 @@ async fn change_scope_locked(
     let migration_pending = MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
     let before = {
         let guard = state.profile_set.lock().await;
-        *guard.as_ref().ok_or(PROFILES_NOT_LOADED)?.scope()
+        let set = guard.as_ref().ok_or(PROFILES_NOT_LOADED)?;
+        if let Some(refusal) = scope_refusal_for_unread(set) {
+            return Err(refusal);
+        }
+        *set.scope()
     };
     // Every other profile file holds the defaults for a shared category,
     // and the save below drops the category from global.toml, so each
@@ -2156,7 +2226,16 @@ fn open_profile_for_switch(
             return Err(refused("global.toml, which holds your shared settings"));
         }
     };
+    let leaving = set.active_path();
     set.switch(name).map_err(|e| e.to_string())?;
+    // Both files read, and the live profile is about to hold what they
+    // say, so the saves may write them again. The file of the profile you
+    // left no longer stands behind the live profile, and every other write
+    // to it reads it first, so a file that did not read at launch is safe
+    // from here on.
+    for path in [&leaving, &path, &global_path] {
+        crate::profile_config::release_unread(path);
+    }
     Ok(SwitchFiles {
         per_profile,
         global,
@@ -3852,6 +3931,139 @@ mod tests {
         assert_eq!(live_affects(&state).await, ["Sanctuary"]);
         // Erelei belongs to the live profile, so nothing switches.
         assert_eq!(super::auto_switch_target(&state, "Erelei").await, None);
+    }
+
+    /// Launch over the profile set in `dir` the way lib.rs runs it, and
+    /// hand back the app state with the notices launch kept.
+    async fn launch_state(dir: &std::path::Path) -> super::SharedState {
+        let set = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
+        let state: super::SharedState = std::sync::Arc::new(super::AppState::default());
+        let notices = {
+            let mut p = state.profile.lock().await;
+            crate::profile_config::load_at_launch(&set, &mut p)
+        };
+        state.add_launch_notices(notices);
+        *state.profile_set.lock().await = Some(set);
+        state
+    }
+
+    /// The save a Settings edit, a slash command debounce, or quit runs.
+    async fn persist(state: &super::SharedState, dir: &std::path::Path) {
+        let _persist_guard = super::PERSIST_LOCK.lock().await;
+        super::persist_state(state, Some(dir)).await;
+    }
+
+    async fn change_scope(state: &super::SharedState) -> Result<(), String> {
+        let _persist_guard = super::PERSIST_LOCK.lock().await;
+        let scope = crate::profile_set::ScopeConfig {
+            theme: crate::profile_set::Scope::Profile,
+            ..crate::profile_set::ScopeConfig::default()
+        };
+        super::change_scope_locked(state, scope).await.map(|_| ())
+    }
+
+    fn read(path: &std::path::Path) -> String {
+        std::fs::read_to_string(path).unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_profile_file_that_did_not_read_at_launch_is_never_saved_over() {
+        let dir = tempfile::tempdir().unwrap();
+        let set = james_like_set(dir.path());
+        std::fs::write(set.active_path(), UNREADABLE).unwrap();
+
+        let state = launch_state(dir.path()).await;
+        assert_eq!(
+            state.take_launch_notices(),
+            [
+                "Vosh could not read the Default profile file, so it will not save over it. Fix \
+              the file or switch to another profile."
+            ]
+        );
+        // You tell once. A second take finds nothing.
+        assert!(state.take_launch_notices().is_empty());
+
+        // The app keeps running on the defaults, and an edit saves.
+        state.profile.lock().await.ui.tracked_affects = vec![affect("Haste")];
+        persist(&state, dir.path()).await;
+        assert_eq!(read(&set.active_path()), UNREADABLE);
+        // global.toml read, so the shared settings still save.
+        assert!(set.global_path().exists());
+
+        // Changing what every character shares would spread the defaults.
+        assert_eq!(
+            change_scope(&state).await.unwrap_err(),
+            "Vosh could not read the Default profile file, so it will not change which settings \
+             every character shares. Fix the file or switch to another profile."
+        );
+        assert_eq!(read(&set.active_path()), UNREADABLE);
+    }
+
+    #[tokio::test]
+    async fn a_switch_that_reads_its_files_lets_the_saves_resume() {
+        let dir = tempfile::tempdir().unwrap();
+        let set = james_like_set(dir.path());
+        std::fs::write(set.active_path(), UNREADABLE).unwrap();
+        let mut healer = ProfileConfig::default();
+        healer.ui.tracked_affects = vec![affect("Haste")];
+        healer.save(&set.profile_path("Healer")).unwrap();
+        let state = launch_state(dir.path()).await;
+
+        super::switch_live_profile(&state, "Healer").await.unwrap();
+        assert_eq!(live_affects(&state).await, ["Haste"]);
+        state.profile.lock().await.ui.tracked_affects = vec![affect("Fly")];
+        persist(&state, dir.path()).await;
+
+        let saved = ProfileConfig::load(&set.profile_path("Healer")).unwrap();
+        assert_eq!(saved.ui.tracked_affects[0].name, "Fly");
+        // The file that did not read was never written.
+        assert_eq!(read(&set.profile_path(DEFAULT_PROFILE_NAME)), UNREADABLE);
+    }
+
+    #[tokio::test]
+    async fn global_toml_that_did_not_read_at_launch_is_never_saved_over() {
+        let dir = tempfile::tempdir().unwrap();
+        let set = james_like_set(dir.path());
+        std::fs::write(set.global_path(), UNREADABLE).unwrap();
+
+        let state = launch_state(dir.path()).await;
+        assert_eq!(
+            state.take_launch_notices(),
+            [crate::profile_config::UNREAD_GLOBAL_NOTICE]
+        );
+        {
+            let mut p = state.profile.lock().await;
+            p.ui.theme = "nord".into();
+            p.ui.tracked_affects = vec![affect("Fly")];
+        }
+        persist(&state, dir.path()).await;
+
+        assert_eq!(read(&set.global_path()), UNREADABLE);
+        // The profile file read, so what it owns still saves.
+        let saved = ProfileConfig::load(&set.active_path()).unwrap();
+        assert_eq!(saved.ui.tracked_affects[0].name, "Fly");
+        assert_eq!(
+            change_scope(&state).await.unwrap_err(),
+            "Vosh could not read global.toml, so it will not change which settings every \
+             character shares. Fix the file and restart Vosh."
+        );
+        assert_eq!(read(&set.global_path()), UNREADABLE);
+    }
+
+    #[tokio::test]
+    async fn a_rename_keeps_the_file_that_did_not_read_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        set.switch("Healer").unwrap();
+        std::fs::write(set.active_path(), UNREADABLE).unwrap();
+        let state = launch_state(dir.path()).await;
+
+        {
+            let mut guard = state.profile_set.lock().await;
+            guard.as_mut().unwrap().rename("Healer", "Cleric").unwrap();
+        }
+        persist(&state, dir.path()).await;
+        assert_eq!(read(&set.profile_path("Cleric")), UNREADABLE);
     }
 
     /// A Tick block from Settings: off, every minute, with every option

@@ -757,6 +757,9 @@ impl ProfileSet {
         let new_path = self.profile_path(&new);
         if old_path.exists() {
             std::fs::rename(&old_path, &new_path)?;
+            // A file Vosh could not read at launch stays refused under
+            // its new name.
+            crate::profile_config::follow_unread(&old_path, &new_path);
         }
         if self.index.active == old {
             self.index.active.clone_from(&new);

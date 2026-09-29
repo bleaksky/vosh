@@ -117,7 +117,6 @@ use commands::{
 };
 use fonts::{fonts_list, handle_font_uri};
 use map_state::MapState;
-use profile_config::ProfileConfig;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -207,6 +206,8 @@ pub fn run() {
                         // Before any profile loads, move the custom
                         // themes older profile files still hold into
                         // global.toml, which owns the list from here on.
+                        // It writes only files it read, so a file that
+                        // does not read stays as it is.
                         match profile_config::migrate_custom_themes(&set) {
                             Ok(0) => {}
                             Ok(files) => {
@@ -216,44 +217,16 @@ pub fn run() {
                                 error!(error = %e, "failed to move custom themes into global.toml");
                             }
                         }
-                        let active_path = set.active_path();
-                        let global_path = set.global_path();
-                        if active_path.exists() {
-                            match ProfileConfig::load(&active_path) {
-                                Ok(snapshot) => {
-                                    let profile = state.profile.clone();
-                                    tauri::async_runtime::block_on(async move {
-                                        let mut p = profile.lock().await;
-                                        let warnings = snapshot.apply_to(&mut p);
-                                        for w in warnings {
-                                            info!(warning = %w, "profile apply warning");
-                                        }
-                                    });
-                                    info!(
-                                        path = %active_path.display(),
-                                        active = %set.active_name(),
-                                        "loaded profile",
-                                    );
-                                }
-                                Err(e) => {
-                                    error!(error = %e, "failed to load active profile at startup");
-                                }
-                            }
-                        }
-                        match profile_config::GlobalConfig::load_shared(&global_path, set.scope()) {
-                            Ok(Some(global)) => {
-                                let profile = state.profile.clone();
-                                tauri::async_runtime::block_on(async move {
-                                    let mut p = profile.lock().await;
-                                    global.apply_to(&mut p);
-                                });
-                                info!(path = %global_path.display(), "loaded global config");
-                            }
-                            Ok(None) => {}
-                            Err(e) => {
-                                error!(error = %e, "failed to load global.toml at startup");
-                            }
-                        }
+                        // A file that does not read keeps the defaults in
+                        // its place for this session, and no save writes
+                        // over it. The notices tell you so once the main
+                        // window shows.
+                        let profile = state.profile.clone();
+                        let notices = tauri::async_runtime::block_on(async {
+                            let mut p = profile.lock().await;
+                            profile_config::load_at_launch(&set, &mut p)
+                        });
+                        state.add_launch_notices(notices);
                         let profile_set = state.profile_set.clone();
                         tauri::async_runtime::block_on(async move {
                             let mut guard = profile_set.lock().await;
@@ -514,6 +487,7 @@ pub fn run() {
             migration_analyze,
             migration_apply,
             app_quit,
+            commands::launch_notices_take,
             exit_flush::pending_writes_flushed,
             loadouts_get_state,
             loadouts_set_active,

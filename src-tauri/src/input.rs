@@ -1162,6 +1162,13 @@ fn slash_profile(profile: &mut Profile, args: &str) -> InputResult {
                 let Ok(_persist_guard) = crate::commands::PERSIST_LOCK.try_lock() else {
                     return error_echo("Vosh is saving this profile. Try again.".to_string());
                 };
+                if crate::profile_config::is_unread(&path) {
+                    return error_echo(
+                        "Vosh could not read this profile file at launch, so it will not save \
+                         over it. Fix the file or switch to another profile."
+                            .to_string(),
+                    );
+                }
                 let snapshot = ProfileConfig::from_profile(profile);
                 match snapshot.save(&path) {
                     Ok(()) => echo_one(format!("profile saved to {}", path.display())),
@@ -1173,6 +1180,9 @@ fn slash_profile(profile: &mut Profile, args: &str) -> InputResult {
         "load" => match profile_path() {
             Some(path) => match ProfileConfig::load(&path) {
                 Ok(snapshot) => {
+                    // The file reads now and the live profile holds what it
+                    // says, so the saves may write it again.
+                    crate::profile_config::release_unread(&path);
                     let warnings = snapshot.apply_to(profile);
                     let mut lines = vec![format!("profile loaded from {}", path.display())];
                     for w in warnings {
