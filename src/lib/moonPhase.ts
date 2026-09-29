@@ -23,8 +23,9 @@
 // lights, and terminatorRx the radius the icon draws.
 //
 // The lit part is one solid shape, the limb and the terminator closed
-// into a single path, so the icon fills it whole with no stroke along
-// its edge.
+// into a single path. A dark theme fills it whole with no stroke along
+// its edge. A light theme cuts it out of the ink disc through a mask
+// and rings the whole limb (MoonPhaseIcon).
 
 export const MOON_PHASE_COUNT = 8;
 export const MOON_CENTER = 8;
