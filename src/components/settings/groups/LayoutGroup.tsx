@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import APP_SHORTCUTS from '../../../lib/appShortcuts.json';
 import { PANEL_WIDTH_MAX, PANEL_WIDTH_MIN } from '../../../lib/paneLayout';
 import { isMacPlatform, shortcutKeys, shortcutLabel } from '../../../lib/palette';
 import { profilePossessive } from '../../../lib/profileLabel';
@@ -39,8 +40,10 @@ import {
 // Characters, which the last Panel row opens. Vitals, Split terminal,
 // and Status line save with the rest of the config.
 
-const PANEL_KEYS = 'Mod+Shift+L';
-const SPLIT_KEYS = 'Mod+\\';
+// The keycaps read the shortcut table the menu bar and the palette
+// read, so every place shows the same keys.
+const PANEL_KEYS = APP_SHORTCUTS.panel;
+const SPLIT_KEYS = APP_SHORTCUTS.split;
 
 /** The live profile's name, or null until it loads. Follows a switch
  *  and a rename. */
