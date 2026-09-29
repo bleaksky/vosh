@@ -27,13 +27,22 @@ interface PresetsEditorProps {
   setConfig: SetUiConfig;
   onDirty: (report: DirtyReport | null) => void;
   onError: (message: string | null) => void;
+  /** Each profile keeps its own list. In loadout mode every profile
+   *  shares one, next to the preset triggers in the shared catalog. */
+  profileScoped: boolean;
 }
 
 /** The trigger presets, one toggle each under its category. Save
  *  installs the presets you turned on, removes the ones you turned off,
  *  and stores the list in enabled_presets, which launch reads to put
- *  them back. */
-export function PresetsEditor({ config, setConfig, onDirty, onError }: PresetsEditorProps) {
+ *  the ones that are on back and take the rest out. */
+export function PresetsEditor({
+  config,
+  setConfig,
+  onDirty,
+  onError,
+  profileScoped,
+}: PresetsEditorProps) {
   const configRef = useRef(config);
   useEffect(() => {
     configRef.current = config;
@@ -46,7 +55,8 @@ export function PresetsEditor({ config, setConfig, onDirty, onError }: PresetsEd
       emptyDetail: 'Choose a preset to see what it adds.',
       emptyList: 'Vosh has no presets.',
       // Read the stored list fresh, so a profile switch loads the new
-      // profile's presets.
+      // profile's presets. In loadout mode the list is shared, and a
+      // switch keeps it.
       load: async () => presetToggles((await getUiConfig()).enabled_presets),
       save: async (draft) => {
         const plan = presetSavePlan(draft);
@@ -82,7 +92,7 @@ export function PresetsEditor({ config, setConfig, onDirty, onError }: PresetsEd
       onJson={() => {}}
       onDirty={onDirty}
       onError={onError}
-      profileScoped
+      profileScoped={profileScoped}
     />
   );
 }

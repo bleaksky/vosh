@@ -412,6 +412,26 @@ export function presetSavePlan(draft: Draft<PresetToggle>): PresetSavePlan {
   };
 }
 
+/** What launch does with the preset triggers. `installed` names the
+ *  preset of every trigger the store holds, as the trigger's `preset`
+ *  tag. Every preset that is on installs again, so this build's
+ *  patterns replace older copies. Every preset the store holds that is
+ *  off, or that this build no longer has, comes out, so a preset you
+ *  turned off stays off even when its triggers came back from another
+ *  profile or an older build. */
+export function presetLaunchPlan(
+  stored: readonly string[],
+  installed: Iterable<string | null | undefined>,
+): PresetSavePlan {
+  const install = enabledPresetIds(stored);
+  const on = new Set(install);
+  const remove = new Set<string>();
+  for (const id of installed) {
+    if (id && !on.has(id)) remove.add(id);
+  }
+  return { install, remove: [...remove].sort() };
+}
+
 // ── Loadouts ────────────────────────────────────────────────────────
 
 export interface LoadoutToggle {

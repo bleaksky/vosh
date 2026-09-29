@@ -26,8 +26,9 @@ import { useCloseGuard } from './automation/useCloseGuard';
 // unsaved changes asks first.
 //
 // In loadout mode, triggers, aliases, and macros live in the shared
-// catalog, and the same API edits it. Nothing on this page names a
-// character, since those lists belong to every character.
+// catalog, and the same API edits it. So does the list of presets that
+// are on. Nothing on this page names a character, since those lists
+// belong to every character.
 
 const KINDS: readonly SegmentedOption<AutomationKind>[] = [
   { value: 'triggers', label: 'Triggers' },
@@ -213,6 +214,7 @@ export function AutomationPage({
             setConfig={setConfig}
             onDirty={onDirty}
             onError={onError}
+            profileScoped={!pathB}
           />
         ) : null;
         break;

@@ -55,7 +55,8 @@ import {
   subscribeThemePrefs,
 } from './lib/theme';
 import { loadFontStack } from './lib/fontLoader';
-import { defaultEnabledIds, PRESETS, presetTriggers } from './lib/presets';
+import { PRESETS, presetTriggers } from './lib/presets';
+import { presetLaunchPlan } from './lib/automationRecords';
 import { customToAppTheme, findTheme, setCustomThemes, themeTokens } from './lib/themes';
 import { parseHex, toRgba } from './lib/color';
 import { setBaseAnsi } from './lib/baseAnsi';
@@ -822,34 +823,30 @@ function App() {
         applyBrightBold(cfg.bright_bold);
         applySplitDividerColor(cfg.split_divider_color);
 
-        // Sweep orphan preset triggers — anything tagged with a
-        // preset id that no longer exists in code (renamed or
-        // removed). Triggers persist in profile.toml so without this
-        // they'd linger forever after a preset is dropped.
+        // Bring the preset triggers in line with the presets that are
+        // on. Take out every preset that is off, or that this build no
+        // longer has, and install every one that is on again, so this
+        // build's patterns replace older copies. In loadout mode the
+        // triggers and the list are shared by every profile, and
+        // without the removal a preset you turned off came back after a
+        // launch as another character.
+        let installed: (string | null | undefined)[] = [];
         try {
-          const validPresetIds = new Set(PRESETS.map((p) => p.id));
-          const allTriggers = await listTriggers();
-          const orphanIds = new Set<string>();
-          for (const t of allTriggers) {
-            if (t.preset && !validPresetIds.has(t.preset)) {
-              orphanIds.add(t.preset);
-            }
-          }
-          for (const id of orphanIds) {
-            await presetsRemove(id);
-          }
+          installed = (await listTriggers()).map((t) => t.preset);
         } catch (e) {
-          console.error('[presets] orphan sweep failed:', e);
+          console.error('[presets] listing triggers failed:', e);
         }
-
-        // Re-install enabled presets so pattern/template changes in
-        // the current build overwrite older versions persisted in
-        // profile.toml. Defaults to all default-enabled if the user
-        // hasn't customized their enabled list yet.
-        const enabled = new Set(
-          cfg.enabled_presets.length > 0 ? cfg.enabled_presets : defaultEnabledIds(),
+        const plan = presetLaunchPlan(cfg.enabled_presets, installed);
+        for (const id of plan.remove) {
+          try {
+            await presetsRemove(id);
+          } catch (e) {
+            console.error(`[presets] removing ${id} failed:`, e);
+          }
+        }
+        const toInstall = PRESETS.filter((p) => plan.install.includes(p.id)).flatMap(
+          presetTriggers,
         );
-        const toInstall = PRESETS.filter((p) => enabled.has(p.id)).flatMap(presetTriggers);
         if (toInstall.length > 0) {
           try {
             await presetsInstall(toInstall);
