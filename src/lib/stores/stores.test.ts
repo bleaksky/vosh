@@ -249,6 +249,45 @@ describe('stores on the event bus', () => {
     expect(s.tick.getTick().active).toBe(false);
   });
 
+  it('show the running tick when the profile at launch saved it off', async () => {
+    commands.set('tick_get_config', {
+      ...(commands.get('tick_get_config') as object),
+      enabled: false,
+    });
+    const s = await load();
+    fire('session://tick', {
+      enabled: true,
+      interval_ms: 30_000,
+      remaining_ms: 18_000,
+      elapsed_ms: 12_000,
+      overdue: false,
+      synced: false,
+      fired: false,
+      sound: false,
+    });
+    expect(s.tick.getTick()).toMatchObject({ active: true, secsSinceTick: 12, warnAt: 8 });
+  });
+
+  it('hide the tick at once when Settings turns it off', async () => {
+    const s = await load();
+    fire('session://tick', {
+      enabled: true,
+      interval_ms: 30_000,
+      remaining_ms: 18_000,
+      elapsed_ms: 12_000,
+      overdue: false,
+      synced: false,
+      fired: false,
+      sound: false,
+    });
+    expect(s.tick.getTick().active).toBe(true);
+    fire('vosh://tick-config-changed', {
+      ...(commands.get('tick_get_config') as object),
+      enabled: false,
+    });
+    expect(s.tick.getTick().active).toBe(false);
+  });
+
   it('follow the tick and time style Settings saves and each profile keeps', async () => {
     commands.set('ui_get_config', { tracked_affects: [], chip_style: 'caption_value' });
     const s = await load();
