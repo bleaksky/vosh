@@ -12,8 +12,8 @@ import '@fontsource/rajdhani/700.css';
 import '@fontsource-variable/roboto-slab';
 import './styles.css';
 import './styles/index.css';
-// The One Window frame: the shell grid, title band, and status line.
-// After the token sheet so it reads the new tokens.
+// The One Window frame: the shell grid, title band, input band, and
+// status line. After the token sheet so it reads the new tokens.
 import './styles/frame.css';
 
 // Tag the document with the host OS so CSS can apply per-platform
@@ -117,10 +117,11 @@ if (import.meta.env.DEV) {
         return `${Math.round(b.top * 100) / 100}+${Math.round(b.height * 100) / 100}`;
       };
       const bands = {
-        topbar: bandY('.topbar'),
+        band: bandY('.shell-band'),
         term: bandY('.terminal-area'),
         input: bandY('.input-row'),
-        status: bandY('.statusbar'),
+        status: bandY('.shell-statusline'),
+        panel: bandY('.shell-slot-panel'),
       };
       // Which child makes the input row tall, and what the prompt
       // control's computed metrics actually are.

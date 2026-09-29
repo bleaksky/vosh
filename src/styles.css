@@ -208,7 +208,9 @@ body {
 /* Rounded, single-surface Ghostty-style window. body is transparent so
    the corners outside the radius are clipped from the OS window; .app
    carries the only visible surface color, with a hairline outer border
-   reading as the window frame. */
+   reading as the window frame. The Settings window still wears this
+   frame. The main window's One Window frame (.app.shell) replaces the
+   border, radius, and top band per platform in styles/frame.css. */
 .app {
   display: flex;
   flex-direction: column;
@@ -1244,19 +1246,18 @@ body {
 /* Underlay (macOS). The native surface sits BELOW the webview and paints
    the terminal background across the whole window, so every ancestor of
    the terminal pane goes transparent and the grid shows through. The
-   chrome bands (top bar, zones, input row, status bar) paint their own
-   surfaces over it. The xterm copy stays mounted for sizing but is never
-   shown, and the DOM owns the cursor over the pane. */
-html[data-underlay] .app {
-  /* Keep the chrome tone in the breathing band above the top bar. */
-  background: linear-gradient(var(--c-surface), var(--c-surface)) top / 100% 6px no-repeat;
-}
-html[data-underlay] .main-row,
-html[data-underlay] .terminal-column,
+   list names each wrapper between the One Window shell root and the
+   sizer (AppShell, then App's terminal slot), and html, body, and #root
+   are transparent already. A wrapper added there with a background of
+   its own turns the terminal into a flat colored hole. The title band
+   and the status line carry no fill, so the same ground shows under
+   them. The input band and the panel paint their own surfaces over it.
+   The xterm copy stays mounted for sizing but is never shown, and the
+   DOM owns the cursor over the pane. */
+html[data-underlay] .app.shell,
+html[data-underlay] .shell-slot-term,
 html[data-underlay] .terminal-area,
-html[data-underlay] .well-splits,
-html[data-underlay] .well-splits-main,
-html[data-underlay] .well-splits-term,
+html[data-underlay] .terminal-well,
 html[data-underlay] .terminal-pane,
 html[data-underlay] .terminal-sizer,
 html[data-underlay] .terminal-host {
