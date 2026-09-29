@@ -320,7 +320,40 @@ describe('persistence', () => {
     expect(tauri.invoke).toHaveBeenCalledTimes(1);
     expect(tauri.invoke).toHaveBeenCalledWith('pane_layout_set', {
       layout: layoutWith('map', 'chat'),
+      generation: null,
     });
+  });
+
+  it('keeps a valid generation off the wire and drops a bad one', () => {
+    expect(sanitizeLayout({ generation: 7 }).generation).toBe(7);
+    expect('generation' in sanitizeLayout({ generation: -1 })).toBe(false);
+    expect('generation' in sanitizeLayout({ generation: '7' })).toBe(false);
+  });
+
+  it('sends the generation the edited tree came with', async () => {
+    const mod = await load();
+    tauri.invoke.mockResolvedValue(true);
+    mod.setPaneLayout({ ...layoutWith('map'), generation: 4 });
+    vi.advanceTimersByTime(250);
+    expect(tauri.invoke).toHaveBeenCalledWith('pane_layout_set', {
+      layout: { ...layoutWith('map'), generation: 4 },
+      generation: 4,
+    });
+  });
+
+  it('reloads the tree when the backend refuses a write from a swapped profile', async () => {
+    const mod = await load();
+    const seen: PaneLayout[] = [];
+    await mod.subscribePaneLayout((l) => seen.push(l));
+    const current = { ...layoutWith('group', 'chat'), generation: 5 };
+    tauri.invoke.mockImplementation((cmd: string) =>
+      Promise.resolve(cmd === 'pane_layout_set' ? false : current),
+    );
+    mod.setPaneLayout({ ...layoutWith('map'), generation: 4 });
+    vi.advanceTimersByTime(250);
+    await flushMicrotasks();
+    expect(tauri.invoke).toHaveBeenCalledWith('pane_layout_get');
+    expect(seen).toEqual([current]);
   });
 
   it('holds back an echo while a write is out and skips it once it matches', async () => {

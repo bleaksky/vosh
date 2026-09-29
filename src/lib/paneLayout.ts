@@ -46,6 +46,12 @@ export interface PaneLayout {
   /** Always a split. No children means the panel shows only the
    *  pinned vitals. */
   root: PaneSplit;
+  /** The backend's count of profile swaps when it handed out this
+   *  tree. Edits keep it, a write sends it back, and the backend
+   *  refuses a write made against a profile that has since been
+   *  swapped out. Never saved. Absent on a tree the backend did not
+   *  hand out. */
+  generation?: number;
 }
 
 export const PANE_LAYOUT_VERSION = 1;
@@ -274,11 +280,16 @@ export function sanitizeLayout(raw: unknown): PaneLayout {
     typeof o.panel_width === 'number' && Number.isFinite(o.panel_width)
       ? Math.min(PANEL_WIDTH_MAX, Math.max(PANEL_WIDTH_MIN, Math.round(o.panel_width)))
       : null;
+  const generation =
+    typeof o.generation === 'number' && Number.isSafeInteger(o.generation) && o.generation >= 0
+      ? { generation: o.generation }
+      : {};
   return {
     version: PANE_LAYOUT_VERSION,
     panel_open: typeof o.panel_open === 'boolean' ? o.panel_open : true,
     panel_width: width,
     root: o.root === undefined || o.root === null ? defaultRoot() : sanitize(o.root),
+    ...generation,
   };
 }
 
@@ -490,9 +501,10 @@ function onRemoteLayout(payload: unknown): void {
   deliver(sanitizeLayout(payload));
 }
 
-// A write still waiting on its debounce belongs to the profile that
-// just went away, and the backend saved that profile before it
-// switched. Drop the write so it cannot land on the new profile.
+// A write still waiting on its debounce was edited from the profile
+// that just went away. The backend saved that profile without it before
+// the switch, and now refuses it by its generation, so drop it here and
+// load the new profile's tree.
 function onProfileSwitched(): void {
   if (pendingTimer !== null) clearTimeout(pendingTimer);
   pendingTimer = null;
@@ -546,7 +558,16 @@ export async function flushPaneLayout(): Promise<void> {
   lastKnown = JSON.stringify(clean);
   inFlight += 1;
   try {
-    await invoke('pane_layout_set', { layout: clean });
+    const applied = await invoke<boolean>('pane_layout_set', {
+      layout: clean,
+      generation: clean.generation ?? null,
+    });
+    // Refused: the tree was edited from a profile that has been swapped
+    // out since. Read the current one.
+    if (applied === false) {
+      lastKnown = null;
+      missedRemote = true;
+    }
   } finally {
     inFlight -= 1;
     settle();
