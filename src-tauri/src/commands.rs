@@ -4024,6 +4024,10 @@ mod tests {
         healer.save(&set.profile_path("Healer")).unwrap();
         let state = launch_state(dir.path()).await;
 
+        // A switch saves the profile you leave first, and that save
+        // leaves the file that did not read alone.
+        persist(&state, dir.path()).await;
+        assert_eq!(read(&set.active_path()), UNREADABLE);
         super::switch_live_profile(&state, "Healer").await.unwrap();
         assert_eq!(live_affects(&state).await, ["Haste"]);
         state.profile.lock().await.ui.tracked_affects = vec![affect("Fly")];
