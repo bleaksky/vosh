@@ -475,6 +475,7 @@ pub fn run() {
             commands::pane_layout_get,
             commands::pane_layout_set,
             commands::tracked_affects_set,
+            commands::ui_set_theme,
             fonts_list,
             macros_list,
             macros_set,

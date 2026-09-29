@@ -2217,6 +2217,29 @@ pub(crate) async fn tracked_affects_set(
     Ok(list)
 }
 
+/// Replace the active profile's theme choice without touching the rest
+/// of the UI config. The main window's palette picks a theme while the
+/// Settings window may hold its own full snapshot, so a whole config
+/// write from one would overwrite the other's newer fields. The caller
+/// applies and broadcasts the theme itself.
+#[tauri::command]
+pub(crate) async fn ui_set_theme(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    theme: String,
+) -> Result<(), String> {
+    {
+        let mut p = state.profile.lock().await;
+        if p.ui.theme == theme {
+            return Ok(());
+        }
+        p.ui.theme = theme;
+    }
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    Ok(())
+}
+
 /// Bulk-install a set of preset triggers. Each trigger should already
 /// have its `preset` field set to the preset id; this command
 /// validates and inserts them so the engine starts matching

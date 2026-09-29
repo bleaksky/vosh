@@ -1147,6 +1147,19 @@ export function primeUiConfigBroadcast(config: UiConfig): void {
   lastSentConfig = config;
 }
 
+// Adopt a theme another window already applied and broadcast, and
+// nothing else, so this window's next save does not emit it again
+// while its own unsaved edits still diff as changes.
+export function primeUiConfigTheme(theme: string): void {
+  if (lastSentConfig) lastSentConfig = { ...lastSentConfig, theme };
+}
+
+/** Save the theme choice alone. A full setUiConfig from a window that
+ *  is not Settings would write its stale copy of every other field. */
+export async function setUiTheme(theme: string): Promise<void> {
+  await invoke('ui_set_theme', { theme });
+}
+
 export async function setUiConfig(config: UiConfig): Promise<void> {
   // Single snake_case payload matching the Rust `UiConfigPayload` DTO,
   // the same shape `ui_get_config` returns. `dock_layout` is omitted on

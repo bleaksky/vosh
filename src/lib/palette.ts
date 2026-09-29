@@ -1,4 +1,4 @@
-import { exportAliases, getUiConfig, sendInput, setUiConfig } from './session';
+import { exportAliases, sendInput, setUiTheme } from './session';
 import type { PaneType } from './paneLayout';
 import { applyAndBroadcastTheme, getCurrentThemeId } from './theme';
 import { THEMES } from './themes';
@@ -362,8 +362,7 @@ export function themeEntries(): PaletteEntry[] {
 async function chooseTheme(id: string): Promise<void> {
   await applyAndBroadcastTheme(id);
   try {
-    const cfg = await getUiConfig();
-    if (cfg.theme !== id) await setUiConfig({ ...cfg, theme: id });
+    await setUiTheme(id);
   } catch (e) {
     console.error('[palette] saving the theme failed', e);
   }
