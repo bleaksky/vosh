@@ -105,6 +105,7 @@ Scrollback opens in a split pane above the live terminal, so old output stays re
 
 - Scroll the mouse wheel up over the terminal. The first notch opens the scrollback split above the live pane, and further scrolling walks the history line by line.
 - Or press `PageUp` to open the split and page upward, then `PageDown` to page back down. A Mac keyboard produces these with `Fn+Up` and `Fn+Down`.
+- Or press `Cmd+\` on macOS or `Ctrl+\` elsewhere to open the split, and press it again to close it. The palette lists it as `Split terminal`.
 - Read the `↑ N / max` badge at the top right of the history pane to see your depth.
 - Drag the divider between the panes to resize the split. It snaps to whole terminal rows. The handle also answers the keyboard, arrow keys nudge it 16px and `Shift` with an arrow jumps 64px.
 - Return to live three ways. Scroll or page down until history reaches its bottom and the split closes itself. Press `Esc`. Or middle click the terminal.

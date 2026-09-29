@@ -595,15 +595,37 @@ function App() {
   //   Mod+,        settings
   //   Mod+/        help
   //   Mod+Shift+L  show or hide the panel
+  //   Mod+\        open or close the scrollback split
   // The help modal carries its own search, so Mod+F and Mod+K stand
   // down while it is open. Keys match through shortcutKey, so a
   // Cyrillic or Greek layout still reaches them by the physical key.
   const shortcutState = useRef({ helpOpen, findOpen, paletteOpen, live: connection.live });
   const connectRef = useRef(connection.connect);
+  const toggleSplitRef = useRef(() => {});
   useEffect(() => {
     shortcutState.current = { helpOpen, findOpen, paletteOpen, live: connection.live };
     connectRef.current = connection.connect;
+    toggleSplitRef.current = toggleSplit;
   });
+
+  // Open or close the scrollback split, the keyboard twin of a middle
+  // click. The native grid splits itself when it scrolls back, so it
+  // pages up into history or snaps back to the tail. xterm mounts the
+  // history pane above the live one.
+  const toggleSplit = () => {
+    if (nativeSurfaceEnabled()) {
+      void invoke('native_surface_scroll', { kind: 'toggle' }).catch(() => {});
+      return;
+    }
+    if (splitOpenRef.current) {
+      setSplitOpen(false);
+      termRef.current?.scrollToBottom();
+      return;
+    }
+    // Same pre-split row capture as the wheel and PageUp paths.
+    preSplitLiveRowsRef.current = termRef.current?.getSize().rows ?? 0;
+    setSplitOpen(true);
+  };
   useEffect(() => {
     const mac = isMacPlatform();
     const onKey = (e: globalThis.KeyboardEvent) => {
@@ -652,6 +674,9 @@ function App() {
       } else if (key === '/') {
         take();
         setHelpOpen(true);
+      } else if (key === '\\') {
+        take();
+        if (!e.repeat) toggleSplitRef.current();
       }
     };
     window.addEventListener('keydown', onKey, true);
