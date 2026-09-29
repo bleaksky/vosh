@@ -19,6 +19,25 @@ use crate::log_state::{SharedLogStore, SharedScrollback};
 /// Debounce generation for `mark_profile_dirty`: each mark bumps it, and
 /// the delayed persist only fires if no newer mark arrived while waiting.
 static PROFILE_DIRTY_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// Counts the times the live profile's UI config has been replaced
+/// wholesale (a profile switch). It moves under the profile lock in the
+/// same step that swaps the config, so a pane tree and the generation
+/// read with it always belong together. A pane layout write carries the
+/// generation of the tree it was edited from, and `pane_layout_set`
+/// refuses one from before a swap so it cannot land on the new profile.
+static PANES_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Advance [`PANES_GENERATION`]. Call with the profile lock held, in the
+/// step that replaces the live UI config.
+pub(crate) fn bump_panes_generation() {
+    PANES_GENERATION.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+}
+
+/// Read [`PANES_GENERATION`]. Call with the profile lock held.
+fn panes_generation() -> u64 {
+    PANES_GENERATION.load(std::sync::atomic::Ordering::Acquire)
+}
+
 /// Set by `#profile reset` / `#profile load`: the in-memory profile is
 /// deliberately diverged from disk, so the passive flushes (debounce,
 /// exit) must not write it. Cleared by the next durable change.
@@ -1412,15 +1431,34 @@ pub(crate) async fn dock_layout_set(
     Ok(())
 }
 
+/// A pane tree as the frontend receives it: the layout plus the
+/// [`PANES_GENERATION`] it was read at. The generation never reaches
+/// disk.
+#[derive(Clone, serde::Serialize)]
+pub(crate) struct PaneLayoutEnvelope {
+    #[serde(flatten)]
+    layout: PaneLayoutPersist,
+    generation: u64,
+}
+
+/// The active profile's pane layout and its generation. Call with the
+/// profile lock held.
+fn pane_layout_envelope(p: &Profile) -> PaneLayoutEnvelope {
+    PaneLayoutEnvelope {
+        layout: p.ui.pane_layout(),
+        generation: panes_generation(),
+    }
+}
+
 /// Read the active profile's pane layout. A profile that has never
 /// saved one gets a tree migrated from its dock layout (or the
 /// default), with nothing written to disk until the first edit.
 #[tauri::command]
 pub(crate) async fn pane_layout_get(
     state: State<'_, SharedState>,
-) -> Result<PaneLayoutPersist, String> {
+) -> Result<PaneLayoutEnvelope, String> {
     let p = state.profile.lock().await;
-    Ok(p.ui.pane_layout())
+    Ok(pane_layout_envelope(&p))
 }
 
 /// Replace the active profile's pane layout and broadcast the
@@ -1429,21 +1467,39 @@ pub(crate) async fn pane_layout_get(
 /// frontend debounce, so the disk write goes through the debounced
 /// `mark_profile_dirty` rather than rotating a backup per drag step.
 /// A profile switch or quit flushes it right away.
+///
+/// `generation` is the one the edited tree was read at. A write made
+/// against a profile that has since been swapped out is refused and
+/// returns false, and the caller reads the current tree again. An
+/// untagged write (a tree that never came from the backend) applies.
 #[tauri::command]
 pub(crate) async fn pane_layout_set(
     app: AppHandle,
     state: State<'_, SharedState>,
     layout: PaneLayoutPersist,
-) -> Result<(), String> {
+    generation: Option<u64>,
+) -> Result<bool, String> {
     let mut layout = layout;
     layout.sanitize();
-    {
+    let current = {
         let mut p = state.profile.lock().await;
+        let current = panes_generation();
+        if generation.is_some_and(|g| g != current) {
+            return Ok(false);
+        }
         p.ui.panes = Some(layout.clone());
-    }
+        current
+    };
     mark_profile_dirty(&app);
-    broadcast(&app, "vosh://pane-layout-changed", &layout);
-    Ok(())
+    broadcast(
+        &app,
+        "vosh://pane-layout-changed",
+        &PaneLayoutEnvelope {
+            layout,
+            generation: current,
+        },
+    );
+    Ok(true)
 }
 
 /// Open (or focus, if already open) the standalone settings window.
@@ -1770,6 +1826,9 @@ pub(crate) async fn apply_profile_switch(
         if let Some(g) = global {
             g.apply_to(&mut p);
         }
+        // Under the same lock as the swap, so a pane layout write edited
+        // from the old profile's tree is refused from here on.
+        bump_panes_generation();
     }
 
     // Path B catalog re-overlay. The per-profile file in Path B mode
@@ -1788,7 +1847,7 @@ pub(crate) async fn apply_profile_switch(
     // the new values when windows react to the switch.
     let (panes, tracked) = {
         let p = state.profile.lock().await;
-        (p.ui.pane_layout(), p.ui.tracked_affects.clone())
+        (pane_layout_envelope(&p), p.ui.tracked_affects.clone())
     };
     broadcast(app, "vosh://pane-layout-changed", &panes);
     broadcast(app, "vosh://tracked-affects-changed", &tracked);
