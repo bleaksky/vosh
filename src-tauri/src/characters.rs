@@ -353,6 +353,27 @@ pub(crate) async fn profile_set_login(
     Ok(claim)
 }
 
+/// Point `name` at a world. Edits only the host and port, so it cannot
+/// overwrite a description or characters the other window holds. See
+/// [`ProfileSet::set_world`].
+#[tauri::command]
+pub(crate) async fn profile_set_world(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    name: String,
+    host: Option<String>,
+    port: Option<u16>,
+) -> Result<ProfileEntry, String> {
+    let entry = {
+        let mut guard = state.profile_set.lock().await;
+        let set = guard.as_mut().ok_or(PROFILES_NOT_LOADED)?;
+        set.set_world(&name, host, port)
+            .map_err(|e| e.to_string())?
+    };
+    broadcast(&app, "vosh://profiles-changed", &name);
+    Ok(entry)
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;

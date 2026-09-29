@@ -511,6 +511,37 @@ impl ProfileSet {
         })
     }
 
+    /// Point `name` at a world, editing only the host and port of its
+    /// login claim, so the description and the characters another
+    /// window may hold stay as they are. A blank host clears it. A
+    /// profile that had no claim gets one with its toggle off, since a
+    /// world with no character must not become the fallback for every
+    /// login there. A claim left with no host, port or character goes
+    /// away.
+    pub(crate) fn set_world(
+        &mut self,
+        name: &str,
+        host: Option<String>,
+        port: Option<u16>,
+    ) -> Result<ProfileEntry, ProfileSetError> {
+        let Some(entry) = self.index.profiles.iter_mut().find(|p| p.name == name) else {
+            return Err(ProfileSetError::NotFound(name.to_string()));
+        };
+        let host = host.map(|h| h.trim().to_string()).filter(|h| !h.is_empty());
+        let am = entry.auto_match.get_or_insert_with(|| AutoMatch {
+            enabled: false,
+            ..AutoMatch::default()
+        });
+        am.host = host;
+        am.port = port;
+        if am.host.is_none() && am.port.is_none() && am.characters.is_empty() {
+            entry.auto_match = None;
+        }
+        let entry = entry.clone();
+        self.save_index()?;
+        Ok(entry)
+    }
+
     /// Create an empty entry. The per-profile file is created on the
     /// next save (so a brand-new profile inherits whatever defaults
     /// `ProfileConfig::default()` produces on first persist).
@@ -1138,6 +1169,64 @@ characters = ["Erelei", "Vanek"]
         );
         // Nothing was taken from default along the way.
         assert!(set.login_on(DEFAULT_PROFILE_NAME));
+    }
+
+    #[test]
+    fn set_world_edits_only_the_host_and_port() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        let entry = set
+            .set_world(
+                DEFAULT_PROFILE_NAME,
+                Some(" mud.example.org ".into()),
+                Some(4000),
+            )
+            .unwrap();
+        assert_eq!(entry.description.as_deref(), Some("Immortal"));
+        let am = entry.auto_match.unwrap();
+        assert_eq!(am.host.as_deref(), Some("mud.example.org"));
+        assert_eq!(am.port, Some(4000));
+        assert_eq!(am.characters, vec!["Erelei"]);
+        assert!(am.enabled);
+        // Erelei on the old world now loads Test-Prompt.
+        assert_eq!(
+            set.resolve_match("play.theforsakenlands.com", 1848, Some("Erelei")),
+            Some("Test-Prompt".into())
+        );
+        let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let am = reloaded
+            .get(DEFAULT_PROFILE_NAME)
+            .unwrap()
+            .auto_match
+            .clone();
+        assert_eq!(am.unwrap().port, Some(4000));
+    }
+
+    #[test]
+    fn set_world_on_a_new_profile_leaves_its_toggle_off() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        set.create("Blank").unwrap();
+        let entry = set
+            .set_world(
+                "Blank",
+                Some("play.theforsakenlands.com".into()),
+                Some(1848),
+            )
+            .unwrap();
+        let am = entry.auto_match.unwrap();
+        assert!(!am.enabled);
+        assert!(am.characters.is_empty());
+        // No fallback appeared for logins with no claim.
+        assert_eq!(
+            set.resolve_match("play.theforsakenlands.com", 1848, None),
+            None
+        );
+        // Clearing the world of a profile with no character drops the
+        // claim, and an unknown name is an error.
+        let entry = set.set_world("Blank", Some("  ".into()), None).unwrap();
+        assert!(entry.auto_match.is_none());
+        assert!(set.set_world("Nobody", None, None).is_err());
     }
 
     #[test]
