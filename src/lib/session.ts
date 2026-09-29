@@ -294,6 +294,13 @@ export async function onGmcpPackage<T = any>(
   });
 }
 
+/** The last Char.Affects payload of this connection, raw as the MUD
+ *  sent it, or null. A window that opens between ticks reads it so it
+ *  shows the affects on you without waiting for the next list. */
+export async function affectsSnapshotGet(): Promise<unknown> {
+  return invoke('affects_snapshot_get');
+}
+
 export interface RoutedPayload {
   pane: string;
   text: string;

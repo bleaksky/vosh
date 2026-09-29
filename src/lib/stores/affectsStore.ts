@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { AffectModifier } from '../affects';
-import { onGmcpPackage, onState } from '../session';
+import { affectsSnapshotGet, onGmcpPackage, onState } from '../session';
 import { asNumber, asText, createStore } from './store';
 
 // Your current affects from Char.Affects, one row per affect name.
@@ -81,16 +81,35 @@ function outlasts(next: number | null, prev: number | null): boolean {
 // can tell "no affects on you" from "the server has not said yet".
 const store = createStore<CurrentAffect[] | null>(null);
 let started = false;
+// Bumped by every list and every disconnect. The snapshot applies only
+// when neither arrived after it was asked for, so it never replaces a
+// newer list or brings back a stale one.
+let generation = 0;
 
 export function startAffectsStore(): void {
   if (started) return;
   started = true;
-  void onGmcpPackage<unknown>('Char.Affects', (data) => {
+  const lists = onGmcpPackage<unknown>('Char.Affects', (data) => {
+    generation += 1;
     store.set(groupCurrentAffects(data));
   });
-  void onState((payload) => {
-    if (payload.kind === 'disconnected') store.set(null);
+  const states = onState((payload) => {
+    if (payload.kind !== 'disconnected') return;
+    generation += 1;
+    store.set(null);
   });
+  // A window that opens between ticks, Settings among them, reads the
+  // last list the backend kept instead of waiting for the next one.
+  // Asked once both listeners are in, so a list that lands meanwhile
+  // is either in the snapshot or newer than it.
+  void Promise.all([lists, states])
+    .then(() => {
+      const mine = generation;
+      return affectsSnapshotGet().then((data) => {
+        if (mine === generation && data != null) store.set(groupCurrentAffects(data));
+      });
+    })
+    .catch(() => undefined);
 }
 
 export function getAffects(): CurrentAffect[] | null {

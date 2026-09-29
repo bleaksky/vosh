@@ -62,6 +62,7 @@ fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(), tauri::E
     })
 }
 
+mod affects_snapshot;
 mod app_menu;
 #[cfg(native_surface)]
 mod cell_render;
@@ -504,6 +505,7 @@ pub fn run() {
             characters::profile_set_login,
             characters::profile_set_world,
             characters::session_identity_get,
+            affects_snapshot::affects_snapshot_get,
             characters::profile_export_file,
             commands::ui_set_theme,
             fonts_list,
