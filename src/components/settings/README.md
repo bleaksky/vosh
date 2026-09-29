@@ -58,7 +58,7 @@ Use monospace only for MUD text. That means patterns, sent commands, macro keys,
 - `actions` renders at the right end of the heading row, like the Appearance import hint and button.
 - `card` wraps the children in a `Card`. It is true by default. Pass false to lay out your own cards or columns.
 
-`Card` is the radius 12 block on the `--inputband` fill. It takes every div prop. `padded` adds 16 px of padding for a card that holds a block instead of rows.
+`Card` is the radius 12 block on the `--inputband` fill. It takes every div prop. `padded` adds 16 px of padding for a card that holds a block instead of rows. `columns` sets its rows two by two with a 1 px line between the columns, like General's `Keep the same for every character`. Only rows below the first pair draw the hairline. Pass `card={false}` to the `Section` and put the `Card` in yourself.
 
 `Row` is one card row, 44 high at least, with padding 10 16.
 
@@ -120,7 +120,7 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 - `expanded` sets aria-expanded and turns the chevron down. Render the content after it and point `aria-controls` at it.
 - `anchor` as on `Row`.
 
-Put the rows it opens in a `div` with the class `st-disclosure-panel` right after it in the same card. Each row in the panel draws the inset hairline, the first one included, and the last one takes the card's bottom corners.
+`DisclosurePanel` holds the rows a `Disclosure` opens, right after it in the same `Card`. Give it the id the Disclosure's `aria-controls` names. Every row inside draws the inset hairline, the first one included, and the last one takes the card's bottom corners. Appearance's `Advanced` and General's `Advanced` on Windows and Linux use it.
 
 `ColorField` is a color control for a row or a grid: a 16 px swatch that opens the system color picker, then the color as text, on the field fill.
 
@@ -135,9 +135,15 @@ Put the rows it opens in a `div` with the class `st-disclosure-panel` right afte
 
 `cx` joins class names.
 
+A few classes in `settings.css` cover small shapes that are not worth a component.
+
+- `st-field-pair` sets two fields in one row 8 px apart, like General's host and port. Give the second field its own `id` and `aria-label`.
+- `st-glyph-toggle` is a 28×24 on and off button drawn as text, like the find bar's `Aa`. It carries `aria-pressed`. Add `st-glyph-case` for the Aa weight.
+- `st-meta` is quiet 11/15 text beside a heading. `data-tone="danger"` turns it to the danger color for an error, like a failed update check.
+
 ## Icons
 
-`ui/icons.tsx` holds the SPEC 6 set. `GearIcon`, `AppearanceIcon`, `LayoutIcon`, `KeyboardIcon`, `BoltIcon`, `UserIcon`, `SearchIcon`, `ChevronRightIcon`, `ChevronDownIcon`, `ChevronUpIcon`, `CloseIcon`, `PlusIcon`, `CheckIcon`, `MoreIcon`, `MinimizeIcon`, and `MaximizeIcon`. Each takes `size` (16 by default, or 12) and `className`. A 12 px icon keeps the 1.25 px stroke.
+`ui/icons.tsx` holds the SPEC 6 set. `GearIcon`, `AppearanceIcon`, `LayoutIcon`, `KeyboardIcon`, `BoltIcon`, `UserIcon`, `SearchIcon`, `ChevronRightIcon`, `ChevronDownIcon`, `ChevronUpIcon`, `CloseIcon`, `PlusIcon`, `CheckIcon`, `CopyIcon`, `MoreIcon`, `MinimizeIcon`, and `MaximizeIcon`. Each takes `size` (16 by default, or 12) and `className`. A 12 px icon keeps the 1.25 px stroke.
 
 ## Focus and motion
 

@@ -146,6 +146,19 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
+/** Two sheets, the front one whole: copy. */
+export function CopyIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="5.25" y="5.25" width="8.5" height="8.5" rx="1.75" {...scale(props.size)} />
+      <path
+        d="M10.75 5.25v-1.5c0-.83-.67-1.5-1.5-1.5h-5.5c-.83 0-1.5.67-1.5 1.5v5.5c0 .83.67 1.5 1.5 1.5h1.5"
+        {...scale(props.size)}
+      />
+    </Glyph>
+  );
+}
+
 /** The more glyph is three filled dots with no stroke. */
 export function MoreIcon({ size = 16, className }: IconProps) {
   return (

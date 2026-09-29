@@ -454,6 +454,54 @@
   background: var(--sep);
 }
 
+/* Rows two by two (General's scope toggles). A 1 px line splits the
+   columns, inset 10 like a row's text, and only rows below the first
+   pair draw the hairline. Each row keeps the card corner it sits in. */
+.st-card-columns {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.st-card-columns::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 50%;
+  width: 1px;
+  background: var(--sep);
+  pointer-events: none;
+}
+
+.st-card.st-card-columns > * + .st-row::before {
+  display: none;
+}
+
+.st-card.st-card-columns > .st-row:nth-child(n + 3)::before {
+  display: block;
+}
+
+.st-card.st-card-columns > .st-row {
+  border-radius: 0;
+}
+
+.st-card.st-card-columns > .st-row:nth-child(1) {
+  border-top-left-radius: var(--r-card);
+}
+
+.st-card.st-card-columns > .st-row:nth-child(2) {
+  border-top-right-radius: var(--r-card);
+}
+
+.st-card.st-card-columns > .st-row:nth-child(odd):nth-last-child(-n + 2) {
+  border-bottom-left-radius: var(--r-card);
+}
+
+.st-card.st-card-columns > .st-row:nth-child(even):last-child {
+  border-bottom-right-radius: var(--r-card);
+}
+
 .st-row-text {
   display: flex;
   flex-direction: column;
@@ -496,6 +544,17 @@
   font-size: 11px;
   line-height: 15px;
   white-space: nowrap;
+}
+
+.st-meta[data-tone='danger'] {
+  color: var(--danger-text);
+}
+
+/* Two fields that share one row, like General's host and port. */
+.st-field-pair {
+  display: flex;
+  flex: none;
+  gap: 8px;
 }
 
 /* A search hit or a deep link flashes its row with the selected row
@@ -951,6 +1010,47 @@
 
 .st-disclosure[aria-expanded='true'] .st-disclosure-chevron {
   transform: rotate(90deg);
+}
+
+/* A glyph drawn as text that turns on and off, like the find bar's Aa
+   (SPEC 6): tertiary while off, the selected row fill while on. */
+.st-glyph-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 24px;
+  margin: 0 0 0 8px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--tertiary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 400;
+}
+
+.st-glyph-case {
+  font-weight: 600;
+}
+
+.st-glyph-toggle:hover {
+  background: var(--hover);
+}
+
+.st-glyph-toggle[aria-pressed='true'],
+.st-glyph-toggle[aria-pressed='true']:hover {
+  background: var(--selrow);
+  color: var(--text);
+  box-shadow: var(--st-selrow-ring);
+}
+
+.st-glyph-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* Visible focus on every control: a 2 px accent outline 2 px out. */
