@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from 'react';
+import { importErrorMessage } from '../../../../lib/automationRecords';
 import {
   applyImport,
   detectImportFormat,
@@ -54,7 +55,7 @@ export function ImportPanel({ onError }: ImportPanelProps) {
       if (isFormat(detected)) setFormat(detected);
       onError(null);
     } catch (e) {
-      onError(String(e));
+      onError(importErrorMessage(e, 'read'));
     }
   };
 
@@ -66,7 +67,7 @@ export function ImportPanel({ onError }: ImportPanelProps) {
       setSummary(await applyImport(format, text));
       onError(null);
     } catch (e) {
-      onError(String(e));
+      onError(importErrorMessage(e, 'import'));
     } finally {
       setBusy(false);
     }

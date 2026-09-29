@@ -365,3 +365,21 @@ export function automationSaveError(error: unknown): string {
   if (/key cannot be empty/i.test(text)) return 'Press a key for every macro before you save.';
   return text || 'Vosh could not save your changes.';
 }
+
+/** An Import error as a sentence. import_apply answers with terse
+ *  lowercase messages, and reading the file can fail on its own. `step`
+ *  says which of the two failed. A message that already reads as a
+ *  sentence passes through. */
+export function importErrorMessage(error: unknown, step: 'read' | 'import'): string {
+  const text = String(error instanceof Error ? error.message : error).trim();
+  if (/could not detect import format/i.test(text)) {
+    return 'Vosh could not tell which client made this file. Choose its format and import again.';
+  }
+  if (/unknown import format/i.test(text)) {
+    return 'Vosh does not read that format. Choose one from the list and import again.';
+  }
+  if (/^[A-Z][^\n:;]*[.?]$/.test(text)) return text;
+  return step === 'read'
+    ? 'Vosh could not read that file. Choose it again or paste its contents.'
+    : 'Vosh could not import that file.';
+}
