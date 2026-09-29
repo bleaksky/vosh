@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import {
   checkForUpdate,
   getUiConfig,
@@ -6,10 +6,21 @@ import {
   type UpdateCheckResult,
 } from '../lib/session';
 
-// Update notice that floats at the bottom of the app. Checks once
-// on mount when ui.auto_update is enabled; renders a small banner
-// when a new version is available. Install triggers backend
-// download + install + relaunch.
+// A press on the notice's buttons leaves the caret on the command line,
+// so a click never strands focus on a button that is about to unmount.
+// Keyboard users still reach the buttons with Tab.
+const keepCaret = (event: MouseEvent) => event.preventDefault();
+
+// Update notice at the bottom right of the terminal column, where the
+// toasts sit. It checks once on mount when auto update is on and shows
+// a floating card (radius 16, the SPEC 3 recipe) while a new version is
+// out: a dot in the accent, Update available, the version in the
+// tertiary tone, then Later and Install and restart. Install downloads,
+// installs, and relaunches from the backend. A failed install turns the
+// dot to danger, says so, and offers Try again. Toasts that arrive
+// meanwhile stack above the card (overlays.css). The card floats over
+// the terminal, so it carries data-occludes-surface for the Windows and
+// Linux on top native path.
 export function UpdateNotice() {
   const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
   const [installing, setInstalling] = useState(false);
@@ -53,31 +64,45 @@ export function UpdateNotice() {
     }
   };
 
+  let message = 'Update available';
+  if (error) message = 'Update failed';
+  else if (installing) message = 'Installing update';
+  const meta = error ?? update.version;
+
   return (
-    <div className="update-notice" role="status" aria-live="polite">
-      <span className="update-notice-tag">update</span>
-      <span className="update-notice-version">v{update.version}</span>
-      <span className="update-notice-sep" aria-hidden="true">
-        ·
+    <div
+      className={`ov-update${error ? ' is-error' : ''}`}
+      role="status"
+      aria-live="polite"
+      data-occludes-surface="true"
+    >
+      <span className="ov-update-dot" aria-hidden="true" />
+      <span className="ov-update-msg">{message}</span>
+      {meta && (
+        <span className="ov-update-meta" title={error ?? undefined}>
+          {meta}
+        </span>
+      )}
+      <span className="ov-update-actions">
+        <button
+          type="button"
+          className="ov-button"
+          onMouseDown={keepCaret}
+          onClick={() => setDismissed(true)}
+          disabled={installing}
+        >
+          Later
+        </button>
+        <button
+          type="button"
+          className="ov-button is-primary"
+          onMouseDown={keepCaret}
+          onClick={() => void handleInstall()}
+          disabled={installing}
+        >
+          {installing ? 'Installing…' : error ? 'Try again' : 'Install and restart'}
+        </button>
       </span>
-      <span className="update-notice-msg">{error ? error : 'new release available'}</span>
-      <span className="update-notice-spacer" />
-      <button
-        type="button"
-        className="settings-btn"
-        onClick={() => void handleInstall()}
-        disabled={installing}
-      >
-        {installing ? 'installing...' : 'install + restart'}
-      </button>
-      <button
-        type="button"
-        className="settings-btn settings-btn-mute"
-        onClick={() => setDismissed(true)}
-        disabled={installing}
-      >
-        later
-      </button>
     </div>
   );
 }

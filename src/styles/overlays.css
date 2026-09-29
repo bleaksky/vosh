@@ -1,9 +1,9 @@
 /* One Window overlays: the command palette, the terminal menu, the
-   find bar, toasts, the confirm dialog, and the scroll depth chip.
-   Every floating surface takes the SPEC 3 recipe (--raised ground,
-   radius 16, --shadow-float) and reads only the One Window tokens.
-   Class names carry the ov- prefix so nothing in the legacy
-   styles.css reaches them. */
+   find bar, toasts, the update notice, the confirm dialog, and the
+   scroll depth chip. Every floating surface takes the SPEC 3 recipe
+   (--raised ground, radius 16, --shadow-float) and reads only the One
+   Window tokens. Class names carry the ov- prefix so nothing in the
+   legacy styles.css reaches them. */
 
 /* Scroll depth. Sits at the terminal's top right, 8 below the band
    and 16 in from the panel edge, and drops under the find bar (8 + 40
@@ -702,12 +702,95 @@
   grid-row: 2 / 3;
 }
 
-/* The update notice mounts the same way. Its legacy rule pins it 40
-   above the bottom of the whole window, which lands on the panel's
-   vitals, so it takes the terminal cell and the toasts' 16 px inset. */
-.shell > .update-notice {
-  grid-column: 1 / 2;
-  grid-row: 2 / 3;
+/* Update notice. A floating card at the toasts' corner, one line tall:
+   an 8 status dot, the message, the version in the tertiary tone, then
+   Later and Install and restart. The buttons sit 8 inside the card, so
+   their radius 8 runs concentric with its 16. The height is fixed at
+   44 (8 + 28 + 8) and a long failure message ellipsizes, which lets
+   the toast stack clear the card by a known offset. */
+.ov-update {
+  position: absolute;
   right: 16px;
   bottom: 16px;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  max-width: calc(100% - 32px);
+  padding: 8px 8px 8px 12px;
+  border-radius: var(--r-float);
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.ov-update-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 0 4px;
+  border-radius: 4px;
+  background: var(--accent);
+}
+
+.ov-update.is-error .ov-update-dot {
+  background: var(--danger);
+}
+
+.ov-update-msg {
+  flex: none;
+}
+
+.ov-update-meta {
+  min-width: 0;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tertiary);
+}
+
+.ov-update-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  margin-left: 8px;
+}
+
+.ov-update .ov-button.is-primary {
+  background: var(--accent);
+  box-shadow: none;
+  color: var(--on-accent);
+}
+
+.ov-update .ov-button.is-primary:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--raised),
+    0 0 0 4px var(--accent);
+}
+
+.ov-update .ov-button:disabled {
+  opacity: 0.45;
+}
+
+/* The notice mounts among the shell's floating surfaces, a direct child
+   of its grid, so it takes the terminal cell as the toasts do and stays
+   clear of the panel's vitals. App mounts it just before the toasts, and
+   while it is up the stack rises by the card's 44 plus an 8 gap. */
+.shell > .ov-update {
+  grid-column: 1 / 2;
+  grid-row: 2 / 3;
+}
+
+.shell > .ov-update ~ .ov-toasts {
+  bottom: 68px;
 }
