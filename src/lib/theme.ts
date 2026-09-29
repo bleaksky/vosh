@@ -300,16 +300,40 @@ onCustomThemesChanged(() => {
 // Tell the backend what a new window opens on: the theme's ground, and
 // the light or dark native appearance while the theme is your pick.
 // While it follows the system the window follows the system too, since
-// a pinned appearance would also pin prefers-color-scheme.
+// a pinned appearance would also pin prefers-color-scheme. A ground
+// that is not one solid color goes as null, and the window keeps its
+// own clear color, but the appearance still goes, so a new window never
+// opens on the previous theme's.
 function reportBackdrop(shown: ThemePaintSide, follow: boolean) {
-  const ground = parseHex(shown.vars['--bg'] ?? '');
-  if (!ground) return;
   invoke('window_backdrop_set', {
-    background: toHex(ground),
+    background: solidHex(shown.vars['--bg'] ?? ''),
     appearance: follow ? null : shown.appearance,
   }).catch(() => {
     // Tauri unavailable. A new window opens on the defaults.
   });
+}
+
+// A CSS color as `#rrggbb`, or null when it is not one solid color. A
+// custom theme's Background takes any color CSS can draw, so anything
+// but hex goes through a canvas, which reads every syntax the webview
+// does. A color the canvas cannot read leaves the clear fill in place.
+function solidHex(css: string): string | null {
+  const hex = parseHex(css);
+  if (hex) return toHex(hex);
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+    ctx.fillStyle = css;
+    ctx.fillRect(0, 0, 1, 1);
+    const [r, g, b, alpha] = ctx.getImageData(0, 0, 1, 1).data;
+    return alpha === 255 ? toHex({ r, g, b }) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Whether the root shows what the startup paint put there, so the

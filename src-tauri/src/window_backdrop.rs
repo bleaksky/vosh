@@ -6,7 +6,9 @@
 //! ground here (`window_backdrop_set`), and `open_settings_window`
 //! builds the window on it. The appearance pins the light or dark native
 //! appearance while the theme is your pick, and is `None` while the
-//! theme follows the system, so the window follows the system too.
+//! theme follows the system, so the window follows the system too. A
+//! theme whose ground is not one solid color reports no ground, and the
+//! window keeps its own clear color.
 
 use std::sync::Mutex;
 
@@ -15,27 +17,29 @@ use tauri::{window::Color, Manager, Runtime, Theme, WebviewWindowBuilder};
 /// What a new window opens on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Backdrop {
-    /// The theme's ground, sRGB.
-    pub(crate) rgb: (u8, u8, u8),
+    /// The theme's ground, sRGB, or `None` when it is not one solid
+    /// color.
+    pub(crate) rgb: Option<(u8, u8, u8)>,
     /// The native appearance to pin, or `None` to follow the system.
     pub(crate) appearance: Option<Theme>,
 }
 
 static BACKDROP: Mutex<Option<Backdrop>> = Mutex::new(None);
 
-/// Read a `#rrggbb` or `#rgb` ground and an appearance of `light`,
-/// `dark`, or none. Anything else is `None`.
-pub(crate) fn parse(background: &str, appearance: Option<&str>) -> Option<Backdrop> {
+/// Read a `#rrggbb` or `#rgb` ground, or none, and an appearance of
+/// `light`, `dark`, or none. Anything else is `None`.
+pub(crate) fn parse(background: Option<&str>, appearance: Option<&str>) -> Option<Backdrop> {
     let appearance = match appearance {
         None => None,
         Some("light") => Some(Theme::Light),
         Some("dark") => Some(Theme::Dark),
         Some(_) => return None,
     };
-    Some(Backdrop {
-        rgb: parse_hex(background)?,
-        appearance,
-    })
+    let rgb = match background {
+        None => None,
+        Some(hex) => Some(parse_hex(hex)?),
+    };
+    Some(Backdrop { rgb, appearance })
 }
 
 fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
@@ -66,13 +70,14 @@ fn set(backdrop: Backdrop) {
 }
 
 impl Backdrop {
-    /// The window's own color. Linux keeps it clear. The Settings page
-    /// draws its own rounded frame there over a transparent window, and
-    /// an opaque window color would fill the corners outside it.
-    pub(crate) fn window_color(self) -> Color {
-        let (r, g, b) = self.rgb;
+    /// The window's own color, or `None` to keep it clear. Linux keeps
+    /// it clear. The Settings page draws its own rounded frame there over
+    /// a transparent window, and an opaque window color would fill the
+    /// corners outside it.
+    pub(crate) fn window_color(self) -> Option<Color> {
+        let (r, g, b) = self.rgb?;
         let alpha = if cfg!(target_os = "linux") { 0 } else { 255 };
-        Color(r, g, b, alpha)
+        Some(Color(r, g, b, alpha))
     }
 
     /// Open a window on this backdrop.
@@ -80,9 +85,11 @@ impl Backdrop {
         self,
         builder: WebviewWindowBuilder<'_, R, M>,
     ) -> WebviewWindowBuilder<'_, R, M> {
-        builder
-            .theme(self.appearance)
-            .background_color(self.window_color())
+        let builder = builder.theme(self.appearance);
+        match self.window_color() {
+            Some(color) => builder.background_color(color),
+            None => builder,
+        }
     }
 }
 
@@ -90,11 +97,11 @@ impl Backdrop {
 /// window should open on.
 #[tauri::command]
 pub(crate) fn window_backdrop_set(
-    background: String,
+    background: Option<String>,
     appearance: Option<String>,
 ) -> Result<(), String> {
-    let backdrop = parse(&background, appearance.as_deref())
-        .ok_or_else(|| format!("not a window backdrop: {background} {appearance:?}"))?;
+    let backdrop = parse(background.as_deref(), appearance.as_deref())
+        .ok_or_else(|| format!("not a window backdrop: {background:?} {appearance:?}"))?;
     set(backdrop);
     Ok(())
 }
@@ -107,23 +114,43 @@ mod tests {
     #[test]
     fn reads_the_ground_and_the_appearance() {
         assert_eq!(
-            parse("#f4efe4", Some("light")),
+            parse(Some("#f4efe4"), Some("light")),
             Some(Backdrop {
-                rgb: (0xf4, 0xef, 0xe4),
+                rgb: Some((0xf4, 0xef, 0xe4)),
                 appearance: Some(Theme::Light),
             })
         );
         assert_eq!(
-            parse(" #1A1B26 ", Some("dark")),
+            parse(Some(" #1A1B26 "), Some("dark")),
             Some(Backdrop {
-                rgb: (0x1a, 0x1b, 0x26),
+                rgb: Some((0x1a, 0x1b, 0x26)),
                 appearance: Some(Theme::Dark),
             })
         );
         assert_eq!(
-            parse("#fff", None),
+            parse(Some("#fff"), None),
             Some(Backdrop {
-                rgb: (255, 255, 255),
+                rgb: Some((255, 255, 255)),
+                appearance: None,
+            })
+        );
+    }
+
+    #[test]
+    fn takes_the_appearance_of_a_theme_without_a_solid_ground() {
+        // A custom theme's Background can be translucent, or a color
+        // only the page can read. The appearance still counts.
+        assert_eq!(
+            parse(None, Some("dark")),
+            Some(Backdrop {
+                rgb: None,
+                appearance: Some(Theme::Dark),
+            })
+        );
+        assert_eq!(
+            parse(None, None),
+            Some(Backdrop {
+                rgb: None,
                 appearance: None,
             })
         );
@@ -142,39 +169,60 @@ mod tests {
             "rgb(0,0,0)",
             "#ffé",
         ] {
-            assert_eq!(parse(bad, None), None, "{bad}");
+            assert_eq!(parse(Some(bad), None), None, "{bad}");
         }
-        assert_eq!(parse("#f4efe4", Some("dim")), None);
-        assert_eq!(parse("#f4efe4", Some("")), None);
+        assert_eq!(parse(Some("#f4efe4"), Some("dim")), None);
+        assert_eq!(parse(Some("#f4efe4"), Some("")), None);
+        assert_eq!(parse(None, Some("dim")), None);
     }
 
     #[test]
     fn paints_the_window_except_on_linux() {
         let backdrop = Backdrop {
-            rgb: (0xf4, 0xef, 0xe4),
+            rgb: Some((0xf4, 0xef, 0xe4)),
             appearance: Some(Theme::Light),
         };
         let alpha = if cfg!(target_os = "linux") { 0 } else { 255 };
-        assert_eq!(backdrop.window_color(), Color(0xf4, 0xef, 0xe4, alpha));
+        assert_eq!(
+            backdrop.window_color(),
+            Some(Color(0xf4, 0xef, 0xe4, alpha))
+        );
+        // No solid ground: the window keeps its own clear color.
+        let clear = Backdrop {
+            rgb: None,
+            appearance: Some(Theme::Dark),
+        };
+        assert_eq!(clear.window_color(), None);
     }
 
     #[test]
     fn keeps_the_last_good_report() {
-        window_backdrop_set("#102030".into(), Some("dark".into())).unwrap();
-        assert!(window_backdrop_set("nope".into(), None).is_err());
+        window_backdrop_set(Some("#102030".into()), Some("dark".into())).unwrap();
+        assert!(window_backdrop_set(Some("nope".into()), None).is_err());
         assert_eq!(
             current(),
             Some(Backdrop {
-                rgb: (0x10, 0x20, 0x30),
+                rgb: Some((0x10, 0x20, 0x30)),
                 appearance: Some(Theme::Dark),
             })
         );
-        window_backdrop_set("#fdfcf8".into(), None).unwrap();
+        window_backdrop_set(Some("#fdfcf8".into()), None).unwrap();
         assert_eq!(
             current(),
             Some(Backdrop {
-                rgb: (0xfd, 0xfc, 0xf8),
+                rgb: Some((0xfd, 0xfc, 0xf8)),
                 appearance: None,
+            })
+        );
+        // A theme without a solid ground drops the old ground and pins
+        // its own appearance, so a new window opens on neither the old
+        // color nor the old appearance.
+        window_backdrop_set(None, Some("light".into())).unwrap();
+        assert_eq!(
+            current(),
+            Some(Backdrop {
+                rgb: None,
+                appearance: Some(Theme::Light),
             })
         );
     }
