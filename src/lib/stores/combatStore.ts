@@ -1,12 +1,28 @@
 import { useSyncExternalStore } from 'react';
 import { onGmcpPackage, onState } from '../session';
-import { asNumber, asText, createStore } from './store';
+import { asNumber, asText, createStore, isHiddenFlag } from './store';
 
 // The opponent you are fighting, from Char.Combat. Aabahran sends
 // `{target, condition, hp_pct}` on each prompt in a fight and `{}` when
 // the fight ends. This is the server's view of the fight, separate
 // from the client target in targetStore. Lifted from useCombat, which
 // held it per mount.
+//
+// Whenever the text battle line would not print (under lamented tears,
+// blind, against mirror image, or with the target in another room) the
+// packet leaves out condition and hp_pct and adds `"hidden": true`. It
+// adds `tank: {name, hp_pct}` while your opponent hits someone in your
+// group, the prompt's %n and %p, and drops the tank's hp_pct under
+// lamented tears. Nothing shows the tank yet. The prompt editor reads
+// it later.
+
+/** The groupmate your opponent hits. */
+export interface CombatTank {
+  name: string;
+  /** Tank health, whole percent 0..100. null when the game withholds
+   *  it. */
+  hp_pct: number | null;
+}
 
 export interface CombatOpponent {
   name: string;
@@ -14,6 +30,25 @@ export interface CombatOpponent {
   hp_pct: number | null;
   /** The server's wording, like "big nasty wounds". */
   condition: string | null;
+  /** The game withholds the opponent's health and condition. Both read
+   *  null, and every view shows the health as hidden. */
+  hidden: boolean;
+  /** The groupmate your opponent hits, or null when it hits no one in
+   *  your group. */
+  tank: CombatTank | null;
+}
+
+function percent(value: unknown): number | null {
+  const n = asNumber(value);
+  return n === null ? null : Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function parseTank(value: unknown): CombatTank | null {
+  if (!value || typeof value !== 'object') return null;
+  const t = value as Record<string, unknown>;
+  const name = asText(t.name);
+  if (!name) return null;
+  return { name, hp_pct: percent(t.hp_pct) };
 }
 
 /** Parse a Char.Combat payload. null when no fight is on. */
@@ -22,17 +57,30 @@ export function parseCombat(data: unknown): CombatOpponent | null {
   const obj = data as Record<string, unknown>;
   const name = asText(obj.target);
   if (!name) return null;
-  const hp = asNumber(obj.hp_pct);
+  const hidden = isHiddenFlag(data);
   return {
     name,
-    hp_pct: hp === null ? null : Math.max(0, Math.min(100, Math.round(hp))),
-    condition: asText(obj.condition),
+    hp_pct: hidden ? null : percent(obj.hp_pct),
+    condition: hidden ? null : asText(obj.condition),
+    hidden,
+    tank: parseTank(obj.tank),
   };
+}
+
+function sameTank(a: CombatTank | null, b: CombatTank | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.name === b.name && a.hp_pct === b.hp_pct;
 }
 
 function sameOpponent(a: CombatOpponent | null, b: CombatOpponent | null): boolean {
   if (a === null || b === null) return a === b;
-  return a.name === b.name && a.hp_pct === b.hp_pct && a.condition === b.condition;
+  return (
+    a.name === b.name &&
+    a.hp_pct === b.hp_pct &&
+    a.condition === b.condition &&
+    a.hidden === b.hidden &&
+    sameTank(a.tank, b.tank)
+  );
 }
 
 const store = createStore<CombatOpponent | null>(null);

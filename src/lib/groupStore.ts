@@ -1,4 +1,5 @@
 import { onGmcpPackage, onState } from './session';
+import { isHiddenFlag } from './stores/store';
 
 export interface GroupMember {
   /** Stable per character identity. Aabahran sends it because the name
@@ -17,6 +18,10 @@ export interface GroupMember {
 export interface GroupInfo {
   leader?: string;
   members?: GroupMember[];
+  /** The game hides your group. Aabahran sends `{"hidden": true}` under
+   *  lamented tears, with no leader and no members, until a Group.Info
+   *  without the flag arrives. */
+  hidden?: true;
 }
 
 export interface Worth {
@@ -81,11 +86,20 @@ export function dedupeMembers(info: GroupInfo): GroupInfo {
   return { ...info, members: [...seen.values()] };
 }
 
+/** Parse a Group.Info payload. A hidden one keeps only the flag, so no
+ *  roster from it ever shows. Anything that is not an object reads as
+ *  solo. */
+export function parseGroupInfo(data: unknown): GroupInfo {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
+  if (isHiddenFlag(data)) return { hidden: true };
+  return dedupeMembers(data as GroupInfo);
+}
+
 export function startGroupStore(): void {
   if (started) return;
   started = true;
   void onGmcpPackage<unknown>('Group.Info', (data) => {
-    group = data && typeof data === 'object' ? dedupeMembers(data as GroupInfo) : {};
+    group = parseGroupInfo(data);
     notify();
   });
   void onGmcpPackage<unknown>('Char.Worth', (data) => {

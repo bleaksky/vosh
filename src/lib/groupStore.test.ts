@@ -1,5 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { dedupeMembers, memberKey } from './groupStore';
+import { aabahranPacket } from '../test/aabahranGmcp';
+import { dedupeMembers, memberKey, parseGroupInfo } from './groupStore';
+
+describe('parseGroupInfo', () => {
+  it('reads the Aabahran roster', () => {
+    const info = parseGroupInfo(aabahranPacket('group-info.gmcp').data);
+    expect(info.hidden).toBeUndefined();
+    expect(info.leader).toBe('Tester');
+    expect(info.members?.map((m) => [m.name, m.hp_pct])).toEqual([
+      ['Tester', 78],
+      ['a loyal wolf', 91],
+    ]);
+  });
+
+  it('reads solo as an empty group', () => {
+    expect(parseGroupInfo(aabahranPacket('group-info-solo.gmcp').data)).toEqual({});
+    expect(parseGroupInfo(null)).toEqual({});
+    expect(parseGroupInfo('x')).toEqual({});
+  });
+
+  it('reads the lamented tears group as hidden with no roster', () => {
+    expect(parseGroupInfo(aabahranPacket('group-info-hidden.gmcp').data)).toEqual({
+      hidden: true,
+    });
+    // A roster that rides a hidden packet never shows.
+    expect(
+      parseGroupInfo({ hidden: true, leader: 'Tester', members: [{ name: 'Tester', hp_pct: 5 }] }),
+    ).toEqual({ hidden: true });
+  });
+});
 
 describe('dedupeMembers', () => {
   it('keeps masked members apart when their ids differ', () => {

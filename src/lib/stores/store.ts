@@ -45,6 +45,15 @@ export function asNumber(value: unknown): number | null {
   return null;
 }
 
+/** True when a GMCP payload carries `"hidden": true`. Aabahran adds it
+ *  to Char.Vitals, Char.Affects, Group.Info and Char.Combat while the
+ *  game withholds their values, under lamented tears among other
+ *  things, and leaves it out once it shows them again. A hidden value
+ *  is never filled from another source and never reads as a warning. */
+export function isHiddenFlag(data: unknown): boolean {
+  return !!data && typeof data === 'object' && (data as { hidden?: unknown }).hidden === true;
+}
+
 /** Trimmed non-empty string, else null. */
 export function asText(value: unknown): string | null {
   if (typeof value !== 'string') return null;

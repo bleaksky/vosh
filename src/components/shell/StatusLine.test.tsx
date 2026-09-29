@@ -23,6 +23,7 @@ const FULL: Vitals = {
   move: 930,
   maxmove: 930,
   low: { hp: false, mana: false, move: false },
+  hidden: false,
 };
 const FIGHT: Vitals = {
   hp: 186,
@@ -32,6 +33,7 @@ const FIGHT: Vitals = {
   move: 870,
   maxmove: 930,
   low: { hp: true, mana: false, move: false },
+  hidden: false,
 };
 const GUARD: CombatHealth = { name: 'Blackwatch Guard', hp_pct: 38 };
 const DEFAULTS: VitalsOptions = { values: 'current-max', meter: 'line', warn_thirds: false };

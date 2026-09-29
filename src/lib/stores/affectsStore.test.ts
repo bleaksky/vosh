@@ -1,5 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { groupCurrentAffects } from './affectsStore';
+import { aabahranPacket } from '../../test/aabahranGmcp';
+import { groupCurrentAffects, parseAffectsPacket } from './affectsStore';
+
+describe('parseAffectsPacket', () => {
+  it('reads the Aabahran list as shown', () => {
+    const packet = parseAffectsPacket(aabahranPacket('char-affects.gmcp').data);
+    expect(packet.hidden).toBe(false);
+    expect(packet.list.map((a) => [a.name, a.kind, a.duration])).toEqual([
+      ['bless', 'spell', 6],
+      ['armor', 'spell', 44],
+      ['bagatelle of bravado', 'song', 8],
+    ]);
+  });
+
+  it('reads the lamented tears list as hidden, not as no affects', () => {
+    expect(parseAffectsPacket(aabahranPacket('char-affects-hidden.gmcp').data)).toEqual({
+      list: [],
+      hidden: true,
+    });
+    expect(parseAffectsPacket({ affects: [] })).toEqual({ list: [], hidden: false });
+    expect(parseAffectsPacket(null)).toEqual({ list: [], hidden: false });
+  });
+});
 
 describe('groupCurrentAffects', () => {
   it('folds the Aabahran rows into one row per name', () => {
