@@ -743,6 +743,67 @@ export function normalizeVitalsDensity(value: unknown): VitalsDensity {
   return value === 'line' ? 'line' : 'rows';
 }
 
+/** What each vital's value shows. `current-max` reads `186 / 1020`,
+ *  `current` reads `186`, and `percent` reads `18%`. */
+export const VITALS_VALUES = ['current-max', 'current', 'percent'] as const;
+
+export type VitalsValues = (typeof VITALS_VALUES)[number];
+
+/** Coerce an unknown value form back to current and max. */
+export function normalizeVitalsValues(value: unknown): VitalsValues {
+  return value === 'current' || value === 'percent' ? value : 'current-max';
+}
+
+/** The meter under each vital. `line` is the 2 px meter, `bar` the
+ *  4 px one, and `none` drops the meters and tightens the rows. */
+export const VITALS_METERS = ['line', 'bar', 'none'] as const;
+
+export type VitalsMeter = (typeof VITALS_METERS)[number];
+
+/** Coerce an unknown meter back to the line. */
+export function normalizeVitalsMeter(value: unknown): VitalsMeter {
+  return value === 'bar' || value === 'none' ? value : 'line';
+}
+
+/** The vitals rows that join Density under Layout, Vitals, as one
+ *  event payload. The panel footer reads all three. The status line
+ *  reads the values and the warning, never the meter. */
+export interface VitalsOptions {
+  values: VitalsValues;
+  meter: VitalsMeter;
+  /** Warn under two thirds and turn danger under one third, like the
+   *  Group pane. Off keeps danger under 20 percent. */
+  warn_thirds: boolean;
+}
+
+export const DEFAULT_VITALS_OPTIONS: VitalsOptions = {
+  values: 'current-max',
+  meter: 'line',
+  warn_thirds: false,
+};
+
+/** The vitals options a config holds. */
+export function vitalsOptionsOf(
+  config: Pick<UiConfig, 'vitals_values' | 'vitals_meter' | 'vitals_warn_thirds'>,
+): VitalsOptions {
+  return {
+    values: config.vitals_values,
+    meter: config.vitals_meter,
+    warn_thirds: config.vitals_warn_thirds,
+  };
+}
+
+/** Read vitals options off the bus, filling anything missing or
+ *  unknown with the defaults. */
+export function normalizeVitalsOptions(raw: unknown): VitalsOptions {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    values: normalizeVitalsValues(o.values),
+    meter: normalizeVitalsMeter(o.meter),
+    warn_thirds: o.warn_thirds === true,
+  };
+}
+
 /** The light theme a profile starts with. */
 export const DEFAULT_LIGHT_THEME_ID = 'vellum';
 
@@ -822,6 +883,12 @@ export interface UiConfig {
   /** How the vitals under the panel's panes lay out, one of
    *  VITALS_DENSITIES. */
   vitals_density: VitalsDensity;
+  /** What each vital's value shows, one of VITALS_VALUES. */
+  vitals_values: VitalsValues;
+  /** The meter under each vital, one of VITALS_METERS. */
+  vitals_meter: VitalsMeter;
+  /** Warn before you run low, by the Group pane's thirds. */
+  vitals_warn_thirds: boolean;
   /** Where to render the World.Moons phase glyphs in the status bar.
    *  `right-edge` is the historical placement; `before-time` and
    *  `after-time` dock the moons next to the centered tick + MUD
@@ -1006,6 +1073,9 @@ export interface RawUiConfig {
   prompt_template?: string;
   vitals?: Partial<VitalsConfig>;
   vitals_density?: string;
+  vitals_values?: string;
+  vitals_meter?: string;
+  vitals_warn_thirds?: boolean;
   moons_position?: string;
   chip_style?: string;
 }
@@ -1070,6 +1140,9 @@ export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
     prompt_template: typeof cfg.prompt_template === 'string' ? cfg.prompt_template : '',
     vitals: normalizeVitalsConfig(cfg.vitals),
     vitals_density: normalizeVitalsDensity(cfg.vitals_density),
+    vitals_values: normalizeVitalsValues(cfg.vitals_values),
+    vitals_meter: normalizeVitalsMeter(cfg.vitals_meter),
+    vitals_warn_thirds: cfg.vitals_warn_thirds === true,
     moons_position:
       cfg.moons_position === 'before-time' || cfg.moons_position === 'after-time'
         ? cfg.moons_position
@@ -1190,6 +1263,7 @@ let lastSentConfig: UiConfig | null = null;
 
 const TERMINAL_LINE_HEIGHT_EVENT = 'vosh://terminal-line-height-changed';
 const VITALS_DENSITY_EVENT = 'vosh://vitals-density-changed';
+const VITALS_OPTIONS_EVENT = 'vosh://vitals-options-changed';
 
 async function emitChanged<T>(
   event: string,
@@ -1308,6 +1382,12 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   );
   await emitChanged('vosh://vitals-config-changed', config.vitals, prev?.vitals, deepEqual);
   await emitChanged(VITALS_DENSITY_EVENT, config.vitals_density, prev?.vitals_density);
+  await emitChanged(
+    VITALS_OPTIONS_EVENT,
+    vitalsOptionsOf(config),
+    prev ? vitalsOptionsOf(prev) : undefined,
+    deepEqual,
+  );
   await emitChanged('vosh://moons-position-changed', config.moons_position, prev?.moons_position);
   await emitChanged('vosh://chip-style-changed', config.chip_style, prev?.chip_style);
   await emitChanged(
@@ -1415,6 +1495,9 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
       prompt_template: config.prompt_template,
       vitals: config.vitals,
       vitals_density: config.vitals_density,
+      vitals_values: config.vitals_values,
+      vitals_meter: config.vitals_meter,
+      vitals_warn_thirds: config.vitals_warn_thirds,
       moons_position: config.moons_position,
       chip_style: config.chip_style,
     },
@@ -1460,6 +1543,16 @@ export async function subscribeVitalsDensityChanged(
 ): Promise<UnlistenFn> {
   return listen<unknown>(VITALS_DENSITY_EVENT, (event) => {
     cb(normalizeVitalsDensity(event.payload));
+  });
+}
+
+/** Hear new vitals options (Values, Meter, Warn before you run low)
+ *  saved from Settings, or the ones a profile switch brings. */
+export async function subscribeVitalsOptionsChanged(
+  cb: (value: VitalsOptions) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(VITALS_OPTIONS_EVENT, (event) => {
+    cb(normalizeVitalsOptions(event.payload));
   });
 }
 

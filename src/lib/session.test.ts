@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
 import { emit } from '@tauri-apps/api/event';
 import {
   broadcastUiConfigChanges,
@@ -7,8 +8,12 @@ import {
   normalizeTerminalLineHeight,
   normalizeUiConfig,
   normalizeVitalsDensity,
+  normalizeVitalsMeter,
+  normalizeVitalsOptions,
+  normalizeVitalsValues,
   primeUiConfigThemePrefs,
   seedDarkTheme,
+  setUiConfig,
   TERMINAL_LINE_HEIGHTS,
   type CustomTheme,
   type RawUiConfig,
@@ -194,6 +199,80 @@ describe('vitals density', () => {
     sent.mockClear();
     await broadcastUiConfigChanges({ ...base, vitals_density: 'line' });
     expect(sent).toHaveBeenCalledWith('vosh://vitals-density-changed', 'line');
+  });
+});
+
+describe('vitals options', () => {
+  it('reads the defaults for a config saved before they existed', () => {
+    const ui = normalizeUiConfig(raw());
+    expect(ui.vitals_values).toBe('current-max');
+    expect(ui.vitals_meter).toBe('line');
+    expect(ui.vitals_warn_thirds).toBe(false);
+  });
+
+  it('keeps the saved values', () => {
+    const ui = normalizeUiConfig(
+      raw({ vitals_values: 'percent', vitals_meter: 'none', vitals_warn_thirds: true }),
+    );
+    expect(ui.vitals_values).toBe('percent');
+    expect(ui.vitals_meter).toBe('none');
+    expect(ui.vitals_warn_thirds).toBe(true);
+    expect(normalizeUiConfig(raw({ vitals_values: 'current' })).vitals_values).toBe('current');
+    expect(normalizeUiConfig(raw({ vitals_meter: 'bar' })).vitals_meter).toBe('bar');
+  });
+
+  it('coerces anything else to the defaults', () => {
+    expect(normalizeVitalsValues('both')).toBe('current-max');
+    expect(normalizeVitalsValues(undefined)).toBe('current-max');
+    expect(normalizeVitalsMeter('gauge')).toBe('line');
+    expect(normalizeVitalsMeter(undefined)).toBe('line');
+    expect(normalizeVitalsOptions(null)).toEqual({
+      values: 'current-max',
+      meter: 'line',
+      warn_thirds: false,
+    });
+    expect(normalizeVitalsOptions({ values: 'percent', meter: 'bar', warn_thirds: 'yes' })).toEqual(
+      { values: 'percent', meter: 'bar', warn_thirds: false },
+    );
+  });
+
+  it('saves all three with the rest of the config', async () => {
+    const sent = vi.mocked(invoke);
+    sent.mockClear();
+    await setUiConfig(
+      normalizeUiConfig(
+        raw({ vitals_values: 'current', vitals_meter: 'bar', vitals_warn_thirds: true }),
+      ),
+    );
+    const [command, args] = sent.mock.calls[0] as [string, { config: Record<string, unknown> }];
+    expect(command).toBe('ui_set_config');
+    expect(args.config).toMatchObject({
+      vitals_values: 'current',
+      vitals_meter: 'bar',
+      vitals_warn_thirds: true,
+    });
+  });
+
+  it('tells every window when one changes, and only then', async () => {
+    const sent = vi.mocked(emit);
+    const base = normalizeUiConfig(raw());
+    await broadcastUiConfigChanges(base);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, vitals_meter: 'none' });
+    expect(sent).toHaveBeenCalledWith('vosh://vitals-options-changed', {
+      values: 'current-max',
+      meter: 'none',
+      warn_thirds: false,
+    });
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, vitals_meter: 'none' });
+    expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://vitals-options-changed');
+    await broadcastUiConfigChanges({ ...base, vitals_meter: 'none', vitals_warn_thirds: true });
+    expect(sent).toHaveBeenCalledWith('vosh://vitals-options-changed', {
+      values: 'current-max',
+      meter: 'none',
+      warn_thirds: true,
+    });
   });
 });
 
