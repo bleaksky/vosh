@@ -853,6 +853,29 @@
   opacity: 1;
 }
 
+/* Number field: 88 wide with the unit in the tertiary color 10 px in
+   from the right edge. */
+.st-number {
+  position: relative;
+  display: block;
+  flex: none;
+  height: 28px;
+}
+
+.st-number-input {
+  width: 100%;
+}
+
+.st-number-unit {
+  position: absolute;
+  top: 5px;
+  right: 10px;
+  color: var(--tertiary);
+  font-size: 13px;
+  line-height: 18px;
+  pointer-events: none;
+}
+
 .st-button {
   display: inline-flex;
   align-items: center;

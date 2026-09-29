@@ -101,6 +101,12 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 - `width` in px or any CSS length, 160 by default.
 - `pickerLabel` names the swatch's picker, like `Choose the divider color`. Inside a `Row` the row label names the text. Outside one, pass `id` for a `<label>` or `aria-label`.
 
+`NumberField` is a whole number setting with its unit inside the field, like `Wait between pasted lines` in ms and the panel `Width` in pt. What you type stays a draft until Enter or leaving the field saves it, clamped to the bounds. Up and Down step it, and Escape puts the saved value back.
+
+- `value`, `onChange(value)`, `min`, and `max`.
+- `unit` is the short unit the field shows, and `unitName` is how a screen reader says it, like `milliseconds`.
+- `width` is 88 by default. `step` is 1, and Shift steps ten times as far.
+
 `Button` forwards its ref.
 
 - `variant` is `secondary` (the default, a hairline ring), `primary` (accent fill, `--on-accent` text), or `danger` (danger text, no fill).
