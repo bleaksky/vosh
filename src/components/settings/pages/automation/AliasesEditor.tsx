@@ -1,17 +1,18 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { draftValues } from '../../../../lib/automationDraft';
 import { groupKeyOf, searchText } from '../../../../lib/automationList';
 import {
-  aliasesForSave,
+  aliasKey,
   blankAlias,
   jsonListText,
+  loadAliases,
   normalizeAlias,
   parseJsonList,
+  saveAliasDraft,
   validateAliases,
   type AliasRecord,
 } from '../../../../lib/automationRecords';
 import { withGroup } from '../../../../lib/automationTriggers';
-import { exportAliases, importAliases, subscribeAliasGroupsChanged } from '../../../../lib/session';
+import { subscribeAliasGroupsChanged } from '../../../../lib/session';
 import { Card, Disclosure, Field, FieldArea, Row, Toggle } from '../../ui';
 import { CodeRow, GroupField } from './fields';
 import { DraftEditor } from './DraftEditor';
@@ -24,10 +25,8 @@ const ALIASES_SPEC: KindSpec<AliasRecord> = {
   deleteLabel: 'Delete alias',
   emptyDetail: 'Choose an alias to edit it.',
   emptyList: 'You have no aliases yet.',
-  load: async () => parseJsonList(await exportAliases(), normalizeAlias) ?? [],
-  save: async (draft) => {
-    await importAliases(aliasesForSave(draftValues(draft)));
-  },
+  load: () => loadAliases(),
+  save: (draft) => saveAliasDraft(draft),
   validate: validateAliases,
   entry: (a) => ({
     name: a.name,
@@ -36,7 +35,7 @@ const ALIASES_SPEC: KindSpec<AliasRecord> = {
     enabled: a.enabled,
     text: searchText(a.name, a.group, a.expansion, a.script),
   }),
-  keyOf: (a) => a.name,
+  keyOf: aliasKey,
   blank: blankAlias,
   json: {
     toText: jsonListText,

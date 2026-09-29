@@ -9,8 +9,10 @@ import {
   draftChanges,
   draftValues,
   isDraftDirty,
+  mergeDraftChanges,
   removeDraftItem,
   replaceDraftValues,
+  saveDraftOnto,
   serializeValue,
   updateDraftItem,
 } from './automationDraft';
@@ -140,6 +142,99 @@ describe('draft model', () => {
     }
     expect(draftChangeCount(draft)).toBe(50);
     expect(performance.now() - started).toBeLessThan(500);
+  });
+});
+
+describe('saving over the store as it is now', () => {
+  const byName = (v: Item) => v.name;
+
+  /** A store that replaces its whole list on each write, like
+   *  triggers_import and aliases_import. */
+  function fakeStore(initial: Item[]) {
+    let list = initial.map((v) => ({ ...v }));
+    return {
+      read: () => Promise.resolve(list.map((v) => ({ ...v }))),
+      write: (values: Item[]) => {
+        list = values.map((v) => ({ ...v }));
+        return Promise.resolve();
+      },
+      add: (value: Item) => {
+        list = [...list, value];
+      },
+      names: () => list.map((v) => v.name),
+      get: (name: string) => list.find((v) => v.name === name),
+    };
+  }
+
+  it('keeps an item added elsewhere after the page loaded', async () => {
+    const store = fakeStore(items);
+    let draft = createDraft(await store.read());
+    // #trigger in the main window, after the page loaded.
+    store.add({ name: 'Bash the door', enabled: true });
+    draft = updateDraftItem(draft, draft.items[0].uid, (v) => ({ ...v, enabled: false }));
+    await saveDraftOnto(draft, store, byName);
+    expect(store.names()).toContain('Bash the door');
+    expect(store.get('Sleep when mana is low')?.enabled).toBe(false);
+  });
+
+  it('keeps an item added elsewhere when the draft adds and removes too', async () => {
+    const store = fakeStore(items);
+    let draft = createDraft(await store.read());
+    store.add({ name: 'Bash the door', enabled: true });
+    draft = addDraftItem(draft, { name: 'Wake', enabled: true });
+    draft = removeDraftItem(draft, draft.items[1].uid);
+    await saveDraftOnto(draft, store, byName);
+    expect(store.names()).toEqual([
+      'Sleep when mana is low',
+      'Loot every kill',
+      'Bash the door',
+      'Wake',
+    ]);
+  });
+
+  it('keeps the store version of items the draft did not touch', () => {
+    const draft = createDraft(items);
+    const current = [{ ...items[0], group: 'rest' }, items[2]];
+    // The draft is clean, so the store stays exactly as it is now, with
+    // an edit and a removal made elsewhere.
+    expect(mergeDraftChanges(current, draft, byName)).toEqual(current);
+  });
+
+  it('applies a rename in place and lets the draft win a shared name', () => {
+    let draft = createDraft(items);
+    draft = updateDraftItem(draft, draft.items[1].uid, (v) => ({ ...v, name: 'Flee early' }));
+    draft = addDraftItem(draft, { name: 'Wake', group: 'mine', enabled: true });
+    const current = [...items, { name: 'Wake', group: 'theirs', enabled: false }];
+    expect(mergeDraftChanges(current, draft, byName)).toEqual([
+      items[0],
+      { ...items[1], name: 'Flee early' },
+      items[2],
+      { name: 'Wake', group: 'mine', enabled: true },
+    ]);
+  });
+
+  it('swaps two names without losing either item', () => {
+    let draft = createDraft(items);
+    const [a, b] = draft.items;
+    draft = updateDraftItem(draft, a.uid, (v) => ({ ...v, name: 'Flee below 20 percent' }));
+    draft = updateDraftItem(draft, b.uid, (v) => ({ ...v, name: 'Sleep when mana is low' }));
+    const merged = mergeDraftChanges(items, draft, byName);
+    expect(merged.map((v) => [v.name, v.group])).toEqual([
+      ['Flee below 20 percent', 'idle'],
+      ['Sleep when mana is low', 'combat'],
+      ['Loot every kill', 'combat'],
+    ]);
+  });
+
+  it('brings back an item you edited that was removed elsewhere', () => {
+    let draft = createDraft(items);
+    draft = updateDraftItem(draft, draft.items[2].uid, (v) => ({ ...v, enabled: false }));
+    const current = [items[0], items[1]];
+    expect(mergeDraftChanges(current, draft, byName)).toEqual([
+      items[0],
+      items[1],
+      { ...items[2], enabled: false },
+    ]);
   });
 });
 

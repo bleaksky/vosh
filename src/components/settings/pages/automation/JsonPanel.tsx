@@ -38,7 +38,7 @@ export function JsonPanel({ noun, text, bad, onChange, onDone }: JsonPanelProps)
       <p id={noteId} className={bad ? 'st-auto-json-note is-bad' : 'st-auto-json-note'}>
         {bad
           ? 'Vosh cannot read this JSON. Fix it to save.'
-          : `Save writes this list over your ${noun.many}.`}
+          : `Save applies what you change here to your ${noun.many}.`}
       </p>
     </section>
   );

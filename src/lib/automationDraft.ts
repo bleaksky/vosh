@@ -1,8 +1,10 @@
 // The draft model behind Settings, Automation. Every kind (triggers,
 // aliases, macros, timers, presets, loadouts, and the tick) edits a
 // draft: a list of items as they stand on the page, next to the same
-// items as Vosh last loaded or saved them. Save writes the whole draft
-// through the kind's existing API, and Discard puts the saved items
+// items as Vosh last loaded or saved them. Save writes what the draft
+// added, changed, and removed through the kind's existing API, over the
+// store as it stands at that moment, so an item #trigger, #alias, or a
+// script made in the meantime survives. Discard puts the saved items
 // back. Each item carries a uid that lives only on the page, so the
 // selection and the list keys survive a rename, a regroup, or an edit
 // in the JSON view.
@@ -173,6 +175,57 @@ export function draftChanges<T>(draft: Draft<T>): DraftChanges<T> {
     if (!seen.has(item.uid)) out.removed.push(item);
   }
   return out;
+}
+
+/** The list a store should hold after Save: `current`, the store as it
+ *  stands now, with the draft's own additions, changes, and removals
+ *  applied by natural key. Everything the draft did not touch keeps the
+ *  store's version, so an item another window or a script added, edited,
+ *  or removed since the page loaded stays that way. Where both sides
+ *  touched the same key, the draft wins. A changed item keeps its place,
+ *  and one the store no longer holds comes back at the end. */
+export function mergeDraftChanges<T>(
+  current: readonly T[],
+  draft: Draft<T>,
+  keyOf: (value: T) => string,
+): T[] {
+  const { added, removed, changed } = draftChanges(draft);
+  const removedKeys = new Set(removed.map((item) => keyOf(item.value)));
+  const changedByKey = new Map<string, T>();
+  for (const { before, after } of changed) changedByKey.set(keyOf(before), after);
+  // Keys the draft writes. The store's own item under one of them gives
+  // way to the draft's.
+  const written = new Set([
+    ...changed.map((c) => keyOf(c.after)),
+    ...added.map((item) => keyOf(item.value)),
+  ]);
+  const placed = new Set<string>();
+  const out: T[] = [];
+  for (const value of current) {
+    const key = keyOf(value);
+    const after = changedByKey.get(key);
+    if (after !== undefined && !placed.has(key)) {
+      placed.add(key);
+      out.push(after);
+    } else if (!removedKeys.has(key) && !written.has(key)) {
+      out.push(value);
+    }
+  }
+  for (const [key, after] of changedByKey) if (!placed.has(key)) out.push(after);
+  for (const item of added) out.push(item.value);
+  return out;
+}
+
+/** Save a draft over the store as it stands now: read it, apply the
+ *  draft's changes with mergeDraftChanges, and write the result. For
+ *  kinds whose API replaces the whole store in one call. */
+export async function saveDraftOnto<T>(
+  draft: Draft<T>,
+  store: { read: () => Promise<T[]>; write: (values: T[]) => Promise<void> },
+  keyOf: (value: T) => string,
+): Promise<void> {
+  const current = await store.read();
+  await store.write(mergeDraftChanges(current, draft, keyOf));
 }
 
 /** How many items Save would add, remove, or change. */

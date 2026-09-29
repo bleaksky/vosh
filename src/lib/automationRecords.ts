@@ -2,13 +2,13 @@
 // Automation page edits them. Each normalizer turns what the backend
 // sends into one shape, so two values that save the same way compare
 // equal. Each save plan turns a draft into the calls the existing API
-// takes: aliases replace the whole store, macros and timers go item by
-// item, presets install and remove triggers, and loadouts set the
-// active list.
+// takes: aliases replace the whole store with the draft's changes
+// applied over it, macros and timers go item by item, presets install
+// and remove triggers, and loadouts set the active list.
 
-import { draftChanges, type Draft } from './automationDraft';
+import { draftChanges, saveDraftOnto, type Draft } from './automationDraft';
 import { defaultEnabledIds, PRESETS } from './presets';
-import type { TickConfig } from './session';
+import { exportAliases, importAliases, type TickConfig } from './session';
 
 const quote = (name: string) => `“${name}”`;
 
@@ -53,6 +53,46 @@ export function aliasesForSave(list: readonly AliasRecord[]): string {
     })),
     null,
     2,
+  );
+}
+
+/** An alias's identity. The store keys aliases by name. */
+export const aliasKey = (alias: AliasRecord): string => alias.name;
+
+/** The two calls the alias store takes a whole list through. */
+export interface AliasStoreApi {
+  exportAliases: () => Promise<string>;
+  importAliases: (json: string) => Promise<unknown>;
+}
+
+const ALIAS_STORE: AliasStoreApi = { exportAliases, importAliases };
+
+/** Every alias the store holds, for display. A reply that does not read
+ *  shows as no aliases. */
+export async function loadAliases(api: AliasStoreApi = ALIAS_STORE): Promise<AliasRecord[]> {
+  return parseJsonList(await api.exportAliases(), normalizeAlias) ?? [];
+}
+
+/** Save the Aliases draft over the store as it stands now, like
+ *  saveTriggerDraft. An alias #alias or a script added after the page
+ *  loaded survives, and a list that does not read stops the save. */
+export async function saveAliasDraft(
+  draft: Draft<AliasRecord>,
+  api: AliasStoreApi = ALIAS_STORE,
+): Promise<void> {
+  await saveDraftOnto(
+    draft,
+    {
+      read: async () => {
+        const list = parseJsonList(await api.exportAliases(), normalizeAlias);
+        if (!list) throw new Error('Vosh could not read your saved aliases, so it saved nothing.');
+        return list;
+      },
+      write: async (values) => {
+        await api.importAliases(aliasesForSave(values));
+      },
+    },
+    aliasKey,
   );
 }
 

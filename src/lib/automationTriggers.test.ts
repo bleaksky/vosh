@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { addDraftItem, createDraft, removeDraftItem, updateDraftItem } from './automationDraft';
 import type { TriggerAction, TriggerRecord } from './session';
 import {
   blankTrigger,
+  loadTriggers,
+  saveTriggerDraft,
   effectOf,
   extraEffects,
   highlightOf,
@@ -206,5 +209,55 @@ describe('validateTriggers', () => {
     expect(validateTriggers([t('')])).toBe('Give every trigger a name before you save.');
     expect(validateTriggers([t('a'), t('a')])).toContain('Two triggers are named');
     expect(validateTriggers([t('a', ' ')])).toContain('needs a pattern');
+  });
+});
+
+describe('saving triggers', () => {
+  const trigger = (name: string, send: string): TriggerRecord => ({
+    ...blankTrigger(),
+    name,
+    patterns: [{ pattern: `^${name}$`, enabled: true }],
+    actions: [{ kind: 'send', template: send }],
+  });
+
+  /** triggers_export and triggers_import over one list. */
+  function fakeStore(initial: TriggerRecord[]) {
+    let json = JSON.stringify(initial);
+    const names = () => (JSON.parse(json) as TriggerRecord[]).map((t) => t.name);
+    return {
+      api: {
+        exportTriggers: () => Promise.resolve(json),
+        importTriggers: (next: string) => {
+          json = next;
+          return Promise.resolve();
+        },
+      },
+      /** #trigger in the main window. */
+      add: (t: TriggerRecord) => {
+        json = JSON.stringify([...(JSON.parse(json) as TriggerRecord[]), t]);
+      },
+      names,
+      list: () => JSON.parse(json) as TriggerRecord[],
+    };
+  }
+
+  it('keeps a trigger #trigger added after the page loaded', async () => {
+    const store = fakeStore([trigger('rest', 'sleep'), trigger('flee', 'flee')]);
+    let draft = createDraft(await loadTriggers(store.api));
+    store.add(trigger('bash', 'bash door'));
+    draft = updateDraftItem(draft, draft.items[0].uid, (t) => ({ ...t, enabled: false }));
+    draft = removeDraftItem(draft, draft.items[1].uid);
+    draft = addDraftItem(draft, trigger('wake', 'wake'));
+    await saveTriggerDraft(draft, store.api);
+    expect(store.names()).toEqual(['rest', 'bash', 'wake']);
+    expect(store.list()[0].enabled).toBe(false);
+  });
+
+  it('saves nothing when the store answer does not read', async () => {
+    const store = fakeStore([trigger('rest', 'sleep')]);
+    const draft = addDraftItem(createDraft(await loadTriggers(store.api)), trigger('wake', 'x'));
+    const broken = { ...store.api, exportTriggers: () => Promise.resolve('not json') };
+    await expect(saveTriggerDraft(draft, broken)).rejects.toThrow('saved nothing');
+    expect(store.names()).toEqual(['rest']);
   });
 });
