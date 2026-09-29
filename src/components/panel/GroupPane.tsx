@@ -3,6 +3,7 @@ import {
   getGroupState,
   memberKey,
   subscribeGroupState,
+  type GroupInfo,
   type GroupMember,
   type GroupState,
 } from '../../lib/groupStore';
@@ -14,6 +15,10 @@ import { PaneHeader, PaneMeta } from './PaneHeader';
 // The meter and percent stay quiet until a member drops into the
 // middle third (warn) or the bottom third (danger). Your own vitals
 // read the same thirds while Warn before you run low is on.
+//
+// While the game hides your group (Group.Info with the hidden flag,
+// under lamented tears) the pane says so in place of the roster. The
+// store keeps no roster from before, so no stale health shows.
 
 // groupStore builds a fresh snapshot object on every read, so keep
 // the last one while its parts are unchanged. useSyncExternalStore
@@ -39,7 +44,18 @@ function getSnapshot(): GroupState {
 
 export function GroupPane() {
   const { group } = useSyncExternalStore(subscribe, getSnapshot);
-  const members = group.leader && Array.isArray(group.members) ? group.members : [];
+  return <GroupPaneView group={group} />;
+}
+
+/** The pane drawn from a plain Group.Info, so each state renders in a
+ *  test. */
+export function GroupPaneView({ group }: { group: GroupInfo }) {
+  const hidden = group.hidden === true;
+  const members = !hidden && group.leader && Array.isArray(group.members) ? group.members : [];
+
+  let empty: string | null = null;
+  if (hidden) empty = 'The game hides your group right now.';
+  else if (members.length === 0) empty = 'Group appears when you join a group.';
 
   return (
     <>
@@ -47,8 +63,8 @@ export function GroupPane() {
         meta={members.length > 0 ? <PaneMeta tone="quiet">{members.length}</PaneMeta> : null}
       />
       <div className="pane-body">
-        {members.length === 0 ? (
-          <p className="pane-empty">Group appears when you join a group.</p>
+        {empty !== null ? (
+          <p className="pane-empty">{empty}</p>
         ) : (
           <ul className="pane-rows">
             {members.map((m) => (
