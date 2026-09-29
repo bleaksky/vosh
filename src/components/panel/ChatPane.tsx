@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { getChatLines, subscribeChatLines, type ChatLine } from '../../lib/chatStore';
 import { MenuItem, MenuSurface } from './MenuSurface';
-import { updateLeafProps, usePaneLeaf } from './paneActions';
+import { returnToCommandLine, updateLeafProps, usePaneLeaf } from './paneActions';
 import { PaneHeader } from './PaneHeader';
 import { CheckIcon, ChevronDownIcon } from './paneIcons';
 import { chatTime, splitSpeaker } from './paneText';
@@ -160,7 +160,7 @@ function ChannelSelect({
           at={{ x: rect.left - 12, y: rect.bottom + 8, flipY: rect.top - 8 }}
           onClose={(reason) => {
             setOpen(false);
-            if (reason === 'escape') anchor.focus();
+            if (reason !== 'outside') returnToCommandLine();
           }}
         >
           {['', ...options].map((c) => (
@@ -169,6 +169,7 @@ function ChannelSelect({
               onSelect={() => {
                 setOpen(false);
                 onPick(c);
+                returnToCommandLine();
               }}
               trailing={c === channel ? <CheckIcon className="pane-menu-check" /> : null}
             >
