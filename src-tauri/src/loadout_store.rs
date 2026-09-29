@@ -208,31 +208,81 @@ pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
 /// src/lib/automationRecords.ts.
 const PRESETS_OFF: &str = "none";
 
-/// The enabled preset list of every profile file in `set`, in index
-/// order, for a catalog that takes the list for the first time. A profile
-/// that never saved a file holds no list and is left out. None when a
-/// file does not read, since the list it holds could name a preset no
-/// other file does.
-pub(crate) fn profile_preset_lists(set: &ProfileSet) -> Option<Vec<Vec<String>>> {
-    let mut lists = Vec::new();
+/// The enabled preset lists of the profile files, for a catalog that
+/// takes the list for the first time. See [`profile_preset_lists`].
+#[derive(Debug, Default)]
+pub(crate) struct ProfilePresetLists {
+    /// The list of every profile file that reads, in index order. A
+    /// profile that never saved a file holds no list and is left out.
+    pub(crate) lists: Vec<Vec<String>>,
+    /// The profiles whose file does not read, in index order. What their
+    /// lists hold is unknown.
+    pub(crate) unread: Vec<String>,
+}
+
+impl ProfilePresetLists {
+    /// The lists the catalog takes, or None while it waits. A file that
+    /// does not read is left out, so every preset a character whose file
+    /// reads had on stays on. With no file that reads but one that does
+    /// not, there is nothing to take, and the catalog waits rather than
+    /// fall back to the live profile, which holds the defaults when its
+    /// own file is the one that does not read.
+    fn usable(&self) -> Option<&[Vec<String>]> {
+        if self.lists.is_empty() && !self.unread.is_empty() {
+            None
+        } else {
+            Some(&self.lists)
+        }
+    }
+
+    /// What launch tells you about each profile file that did not read.
+    /// `adopted` is true when the catalog took its list from the files
+    /// that did.
+    pub(crate) fn unread_notices(&self, adopted: bool) -> Vec<String> {
+        self.unread
+            .iter()
+            .map(|name| {
+                let name = crate::profile_set::display_name(name);
+                if adopted {
+                    format!(
+                        "Vosh could not read the {name} profile file and left its presets out of \
+                         the shared list. Turn on any you miss under Presets in Automation \
+                         settings."
+                    )
+                } else {
+                    format!(
+                        "Vosh could not read the {name} profile file and will build the shared \
+                         preset list once the file reads."
+                    )
+                }
+            })
+            .collect()
+    }
+}
+
+/// The enabled preset list of every profile file in `set`, for a catalog
+/// that takes the list for the first time. A file that does not read is
+/// named in `unread` and never written.
+pub(crate) fn profile_preset_lists(set: &ProfileSet) -> ProfilePresetLists {
+    let mut found = ProfilePresetLists::default();
     for entry in set.list() {
         let path = set.profile_path(&entry.name);
         if !path.exists() {
             continue;
         }
         match ProfileConfig::load(&path) {
-            Ok(config) => lists.push(config.ui.enabled_presets),
+            Ok(config) => found.lists.push(config.ui.enabled_presets),
             Err(e) => {
                 tracing::warn!(
                     error = %e,
                     path = %path.display(),
-                    "profile file unreadable; the catalog waits to take the enabled presets",
+                    "profile file unreadable; its enabled presets are unknown",
                 );
-                return None;
+                found.unread.push(entry.name.clone());
             }
         }
     }
-    Some(lists)
+    found
 }
 
 /// Every preset that is on in any of `lists`, in the `enabled_presets`
@@ -265,22 +315,23 @@ fn presets_on_in_any(lists: &[Vec<String>]) -> Vec<String> {
 /// once, from `lists` (see [`profile_preset_lists`]). The launch that
 /// follows removes every preset that is off, so a list from one profile
 /// alone would take away presets another character used. With no profile
-/// file at all it takes the live profile's list. When a profile file
-/// does not read (`lists` is None) the catalog waits for a launch that
-/// reads them all, and the live profile keeps its own list meanwhile.
-/// Otherwise the live profile then holds the catalog's list. The profile
-/// files keep their own lists as they are. Returns true when the catalog
-/// took a list and needs saving.
+/// file at all it takes the live profile's list. A profile file that does
+/// not read is left out (see [`ProfilePresetLists::usable`]). When there
+/// is nothing to take (`lists` is None, or no file reads) the catalog
+/// waits for a later launch, and the live profile keeps its own list
+/// meanwhile. Otherwise the live profile then holds the catalog's list.
+/// The profile files keep their own lists as they are. Returns true when
+/// the catalog took a list and needs saving.
 pub(crate) fn adopt_catalog_presets(
     catalog: &mut GlobalCatalog,
     profile: &mut Profile,
-    lists: Option<&[Vec<String>]>,
+    lists: Option<&ProfilePresetLists>,
 ) -> bool {
     if let Some(list) = &catalog.enabled_presets {
         profile.ui.enabled_presets.clone_from(list);
         return false;
     }
-    let Some(lists) = lists else {
+    let Some(lists) = lists.and_then(ProfilePresetLists::usable) else {
         return false;
     };
     let adopted = if lists.is_empty() {
@@ -833,19 +884,30 @@ mod tests {
         list.iter().map(|s| (*s).to_string()).collect()
     }
 
-    /// Startup in loadout mode over the profile files in `dir`: load the
-    /// active profile, then let the catalog take or hand out the preset
-    /// list, and save the catalog when it took one.
-    fn launch(dir: &Path, set: &ProfileSet) -> Profile {
+    /// Startup in loadout mode over the profile files in `dir` the way
+    /// lib.rs runs it: load the active profile, then let the catalog take
+    /// or hand out the preset list, and save the catalog when it took
+    /// one. Hands back the notices launch keeps for you too.
+    fn launch_with_notices(dir: &Path, set: &ProfileSet) -> (Profile, Vec<String>) {
         let mut profile = Profile::default();
-        let config = ProfileConfig::load(&set.active_path()).unwrap();
-        let _warnings = config.apply_to(&mut profile);
+        let mut notices = crate::profile_config::load_at_launch(set, &mut profile);
         let mut catalog = load_global_catalog(dir).unwrap();
-        let lists = profile_preset_lists(set);
-        if adopt_catalog_presets(&mut catalog, &mut profile, lists.as_deref()) {
+        let lists = catalog
+            .enabled_presets
+            .is_none()
+            .then(|| profile_preset_lists(set));
+        let adopted = adopt_catalog_presets(&mut catalog, &mut profile, lists.as_ref());
+        if adopted {
             save_global_catalog(dir, &catalog).unwrap();
         }
-        profile
+        if let Some(lists) = &lists {
+            notices.extend(lists.unread_notices(adopted));
+        }
+        (profile, notices)
+    }
+
+    fn launch(dir: &Path, set: &ProfileSet) -> Profile {
+        launch_with_notices(dir, set).0
     }
 
     /// Save `name`'s file with `list` as its enabled presets.
@@ -944,17 +1006,66 @@ mod tests {
     }
 
     #[test]
-    fn the_catalog_waits_while_a_profile_file_does_not_read() {
+    fn a_profile_file_that_does_not_read_is_left_out_of_the_shared_list() {
         let dir = tempfile::tempdir().unwrap();
         let set = two_profiles(dir.path());
+        write_presets(&set, "Test-Prompt", &["healing_basics", "herb_labels"]);
+        // Healer is not the profile you launch as, so no other notice
+        // tells you its file does not read.
         std::fs::write(set.profile_path("Healer"), "presets = = [\n").unwrap();
-        let erelei = launch(dir.path(), &set);
-        // The live profile keeps its own list, and the catalog takes none
-        // until a launch reads every file.
-        assert_eq!(erelei.ui.enabled_presets, presets(&["healing_basics"]));
+
+        let (erelei, notices) = launch_with_notices(dir.path(), &set);
+        // The catalog takes every preset a character whose file reads had
+        // on, so Test-Prompt keeps its herb labels.
+        let on = presets(&["healing_basics", "herb_labels"]);
+        assert_eq!(erelei.ui.enabled_presets, on);
+        assert_eq!(
+            load_global_catalog(dir.path()).unwrap().enabled_presets,
+            Some(on)
+        );
+        assert_eq!(
+            notices,
+            [
+                "Vosh could not read the Healer profile file and left its presets out of the \
+                 shared list. Turn on any you miss under Presets in Automation settings."
+            ]
+        );
+        // The file that does not read stays as it is.
+        assert_eq!(
+            std::fs::read_to_string(set.profile_path("Healer")).unwrap(),
+            "presets = = [\n"
+        );
+    }
+
+    #[test]
+    fn the_catalog_waits_while_no_profile_file_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let set = crate::profile_set::tests::james_like_set(dir.path());
+        save_global_catalog(dir.path(), &GlobalCatalog::default()).unwrap();
+        // The only saved file is the one you launch as, and it does not
+        // read, so there is no list to take.
+        std::fs::write(set.active_path(), "presets = = [\n").unwrap();
+
+        let (erelei, notices) = launch_with_notices(dir.path(), &set);
+        assert!(erelei.ui.enabled_presets.is_empty());
         assert_eq!(
             load_global_catalog(dir.path()).unwrap().enabled_presets,
             None
+        );
+        assert_eq!(
+            notices,
+            [
+                crate::profile_config::unread_profile_notice(
+                    crate::profile_set::DEFAULT_PROFILE_NAME
+                ),
+                "Vosh could not read the Default profile file and will build the shared preset \
+                 list once the file reads."
+                    .to_string(),
+            ]
+        );
+        assert_eq!(
+            std::fs::read_to_string(set.active_path()).unwrap(),
+            "presets = = [\n"
         );
     }
 
@@ -979,7 +1090,10 @@ mod tests {
         assert!(!adopt_catalog_presets(
             &mut catalog,
             &mut profile,
-            Some(&[presets(&["potion_labels"])])
+            Some(&ProfilePresetLists {
+                lists: vec![presets(&["potion_labels"])],
+                unread: Vec::new(),
+            })
         ));
         assert_eq!(profile.ui.enabled_presets, presets(&["none"]));
         assert_eq!(catalog.enabled_presets, Some(presets(&["none"])));

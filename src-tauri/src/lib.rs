@@ -255,8 +255,9 @@ pub fn run() {
                             // the preset triggers. An older catalog takes
                             // every preset any profile file had on, once,
                             // and saves it so a launch as another
-                            // character keeps it. It waits while a profile
-                            // file does not read.
+                            // character keeps it. A profile file that does
+                            // not read is left out, and the notices name
+                            // it.
                             let preset_lists = if catalog.enabled_presets.is_none() {
                                 tauri::async_runtime::block_on(async {
                                     state
@@ -264,7 +265,7 @@ pub fn run() {
                                         .lock()
                                         .await
                                         .as_ref()
-                                        .and_then(loadout_store::profile_preset_lists)
+                                        .map(loadout_store::profile_preset_lists)
                                 })
                             } else {
                                 None
@@ -274,9 +275,12 @@ pub fn run() {
                                 loadout_store::adopt_catalog_presets(
                                     &mut catalog,
                                     &mut p,
-                                    preset_lists.as_deref(),
+                                    preset_lists.as_ref(),
                                 )
                             });
+                            if let Some(lists) = &preset_lists {
+                                state.add_launch_notices(lists.unread_notices(presets_moved));
+                            }
                             if presets_moved {
                                 match loadout_store::save_global_catalog(&path, &catalog) {
                                     Ok(()) => info!("moved the enabled presets into catalog.toml"),

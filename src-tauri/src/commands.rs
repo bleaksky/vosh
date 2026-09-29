@@ -379,7 +379,7 @@ pub(crate) async fn persist_state(state: &SharedState, app_data: Option<&std::pa
 /// the same path in both modes.
 async fn persist_path_b(state: &SharedState, dir: &std::path::Path) {
     // A catalog that has not taken the enabled presets yet waits for a
-    // launch that reads every profile file (see
+    // launch that reads a profile file (see
     // `loadout_store::adopt_catalog_presets`), so a save leaves the list
     // out rather than write the live profile's list alone.
     let presets_waiting = state
@@ -4538,8 +4538,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let state: super::SharedState = Arc::new(super::AppState::default());
         *state.profile_set.lock().await = Some(james_like_set(dir.path()));
-        // A profile file did not read at launch, so the catalog took no
-        // list and the live profile kept its own.
+        // No profile file read at launch, so the catalog took no list and
+        // the live profile kept its own.
         *state.global_catalog.lock().await = Some(crate::loadout::GlobalCatalog::default());
         state.profile.lock().await.ui.enabled_presets = vec!["healing_basics".into()];
 
