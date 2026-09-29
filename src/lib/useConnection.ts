@@ -40,10 +40,24 @@ export const DEFAULT_TARGET: ConnectionTarget = {
 // connection model yet.
 const TARGET_KEY = 'vosh.connection.target';
 
-// Worlds known by name. A host matches its domain or any subdomain of
-// it. Anything else shows its host.
-const KNOWN_WORLDS: { domain: string; name: string }[] = [
-  { domain: 'theforsakenlands.com', name: 'The Forsaken Lands' },
+/** A world known by name, and where you connect to play it. */
+export interface KnownWorld {
+  /** A host matches this domain or any subdomain of it. */
+  domain: string;
+  name: string;
+  host: string;
+  port: number;
+}
+
+/** Worlds known by name. Any other host shows as typed. Mirrors
+ *  KNOWN_WORLDS in src-tauri/src/profile_set.rs. */
+export const KNOWN_WORLDS: readonly KnownWorld[] = [
+  {
+    domain: 'theforsakenlands.com',
+    name: 'The Forsaken Lands',
+    host: 'play.theforsakenlands.com',
+    port: 1848,
+  },
 ];
 
 /** The display name for a host, like `The Forsaken Lands` for
