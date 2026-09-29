@@ -184,6 +184,12 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'split terminal scrollback divider line',
     target: at('layout', 'split', 'divider-color'),
   },
+  {
+    label: 'Tick and time',
+    description: 'How the tick and the game time show in the status line.',
+    keywords: 'chip style caption icon value clock sun moon',
+    target: at('layout', 'status', 'tick-time'),
+  },
 
   // Input, from the approved board.
   {
