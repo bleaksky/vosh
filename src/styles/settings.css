@@ -315,6 +315,14 @@
   display: block;
 }
 
+.st-icon-button:disabled {
+  opacity: 0.45;
+}
+
+.st-icon-button:disabled:hover {
+  background: transparent;
+}
+
 /* Sections start at y 40, 24 in from each side. A group that pins its
    own bar (the Automation save bar) asks for data-scroll="self" and
    scrolls inside itself. */

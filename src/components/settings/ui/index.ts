@@ -9,6 +9,7 @@ export { Chip, ChipButton, type ChipButtonProps, type ChipProps } from './Chip';
 export { cx } from './cx';
 export { Disclosure, type DisclosureProps } from './Disclosure';
 export { Field, type FieldProps } from './Field';
+export { IconButton, type IconButtonProps } from './IconButton';
 export { Keycap } from './Keycap';
 export { Row, type RowProps } from './Row';
 export { useRowIds, type RowIds } from './rowContext';
