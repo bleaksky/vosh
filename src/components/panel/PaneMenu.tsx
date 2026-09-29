@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { profilesList } from '../../lib/session';
 import { splitPane, type PaneLeaf, type SplitDir } from '../../lib/paneLayout';
 import { openSettingsTab } from '../../lib/settingsLink';
+import { formatSettingsTarget } from '../../lib/settingsNav';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from './MenuSurface';
 import {
   closeHere,
@@ -17,7 +18,8 @@ import { PANE_LABELS, offeredPaneTypes } from './paneTypes';
 
 // The more menu on every pane header (SPEC 9): Split right, Split
 // down, Show here instead with a submenu of pane types, Edit tracked
-// affects on the Affects pane, and Close pane. Closing a pane loses
+// affects on the Affects pane (it opens Settings on that profile's
+// Tracked affects in Characters), and Close pane. Closing a pane loses
 // nothing, so it carries no destructive color. A split the panel has
 // no room for, with every pane at its minimum, stays unavailable.
 
@@ -149,7 +151,18 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         {leaf.pane === 'affects' && (
           <>
             <MenuSeparator />
-            <MenuItem onHover={closeSub} onSelect={run(() => openSettingsTab('profiles'))}>
+            <MenuItem
+              onHover={closeSub}
+              onSelect={run(() =>
+                openSettingsTab(
+                  formatSettingsTarget(
+                    profile
+                      ? { group: 'characters', section: profile, anchor: 'tracked' }
+                      : { group: 'characters', anchor: 'tracked' },
+                  ),
+                ),
+              )}
+            >
               {profile ? `Edit tracked affects for ${profile}…` : 'Edit tracked affects…'}
             </MenuItem>
           </>
