@@ -94,6 +94,13 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 
 `FieldArea` is a `Field` for text where a newline means something, like the commands a trigger or timer sends. At one line it looks exactly like `Field`, and it grows a line at a time. It takes `value`, `onChange`, `width`, and `mono` like `Field` and forwards its ref. A plain `Field` drops newlines, so use this one for any value that can hold them.
 
+`ColorField` is a color setting in a row or a grid, like `Sent command color` on Input, `Divider color` on Layout, and the custom theme colors on Appearance. A 16 px swatch at the left opens the system color picker, and the color reads as text in the UI font on the field fill. The hex rules live in `src/lib/colorField.ts`.
+
+- `value` is CSS color text, or an empty string for none. `onChange(value)` runs with each color the field reads. A hex saves as lowercase `#rrggbb` once it has six digits, or three when you press Enter or leave the field. A hex with alpha or any other CSS color saves as typed once the page can draw it. Text that does not read as a color yet stays in the field. Leaving the field puts the saved color back, and Escape does the same while you stay in it.
+- `allowEmpty` lets you clear the text, which runs `onChange('')`, for a color that falls back to the theme. `placeholder` names that fallback, like `Theme default`, and `emptySwatch` is the color the swatch shows meanwhile, var() included. The picker then opens on that color.
+- `width` in px or any CSS length, 160 by default.
+- `pickerLabel` names the swatch's picker, like `Choose the divider color`. Inside a `Row` the row label names the text. Outside one, pass `id` for a `<label>` or `aria-label`.
+
 `Button` forwards its ref.
 
 - `variant` is `secondary` (the default, a hairline ring), `primary` (accent fill, `--on-accent` text), or `danger` (danger text, no fill).
@@ -121,13 +128,6 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 - `anchor` as on `Row`.
 
 `DisclosurePanel` holds the rows a `Disclosure` opens, right after it in the same `Card`. Give it the id the Disclosure's `aria-controls` names. Every row inside draws the inset hairline, the first one included, and the last one takes the card's bottom corners. Appearance's `Advanced` and General's `Advanced` on Windows and Linux use it.
-
-`ColorField` is a color control for a row or a grid: a 16 px swatch that opens the system color picker, then the color as text, on the field fill.
-
-- `value` is CSS color text, or an empty string for none. `onChange(value)` runs with each color the page can draw. Text that does not read as a color yet stays in the field, and leaving the field puts the saved color back.
-- `allowEmpty` lets you clear the text, which runs `onChange('')`, for a color that falls back to the theme. `placeholder` names that fallback, like `Theme color`, and `emptySwatch` is the color the swatch shows meanwhile, var() included.
-- `width` in px or any CSS length, 120 by default.
-- `pickerLabel` names the swatch's picker, like `Choose the split divider color`. Inside a `Row` the row label names the text. Outside one, pass `id` for a `<label>` or `aria-label`.
 
 `VisuallyHidden` holds text a screen reader reads and the page does not show, like a list row's On or Off.
 
