@@ -1,12 +1,10 @@
 import { useId } from 'react';
 import type { UiConfig } from '../../../../lib/session';
 import type { UpdateConfig } from '../../legacy/useSettingsAutoSave';
-import { Card, Disclosure, Row, Toggle } from '../../ui';
+import { Card, Disclosure, DisclosurePanel, Row, Toggle } from '../../ui';
 import { BasePaletteRows } from './BasePaletteRows';
 import { CustomThemeRows } from './CustomThemeRows';
 import { FontStackRow } from './FontStackRow';
-import { SentCommandColorRow } from './SentCommandColorRow';
-import { SplitDividerColorRow } from './SplitDividerColorRow';
 
 interface AdvancedAppearanceProps {
   config: UiConfig;
@@ -17,7 +15,8 @@ interface AdvancedAppearanceProps {
 
 /** The quiet Advanced row at the end of Appearance. It holds what the
  *  board leaves out and you still use: custom themes, the base palette,
- *  bold bright text, the font stack, and two line colors. */
+ *  bold bright text, and the font stack. The split divider color lives
+ *  on Layout and the sent command color on Input. */
 export function AdvancedAppearance({ config, update, open, onToggle }: AdvancedAppearanceProps) {
   const panelId = useId();
   return (
@@ -25,13 +24,13 @@ export function AdvancedAppearance({ config, update, open, onToggle }: AdvancedA
       <Card>
         <Disclosure
           label="Advanced"
-          description="Edit custom themes and the base palette, or recolor the divider and your commands."
+          description="Edit custom themes and the base palette."
           expanded={open}
           aria-controls={panelId}
           onClick={onToggle}
         />
         {open && (
-          <div id={panelId} className="st-disclosure-panel">
+          <DisclosurePanel id={panelId}>
             <CustomThemeRows config={config} update={update} />
             <BasePaletteRows config={config} update={update} />
             <Row
@@ -45,9 +44,7 @@ export function AdvancedAppearance({ config, update, open, onToggle }: AdvancedA
               />
             </Row>
             <FontStackRow config={config} update={update} />
-            <SplitDividerColorRow config={config} update={update} />
-            <SentCommandColorRow config={config} update={update} />
-          </div>
+          </DisclosurePanel>
         )}
       </Card>
     </section>
