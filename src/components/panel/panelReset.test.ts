@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { defaultLayout, layoutFromDock, type PaneLayout } from '../../lib/paneLayout';
+import { defaultLayout, type PaneLayout, type PaneSplit } from '../../lib/paneLayout';
 
 // The palette's Reset panel layout row and what it runs. The store and
-// the pane layout module are real, the backend and toasts are fakes.
+// the pane layout module are real. The backend is a fake that keeps one
+// saved tree and the pane generation, refuses a write made against an
+// older generation, and resets the way pane_layout_reset does.
 const tauri = vi.hoisted(() => ({
   invoke: vi.fn(),
   pushToast: vi.fn(),
@@ -18,6 +20,7 @@ vi.mock('../../lib/toasts', () => ({ pushToast: tauri.pushToast }));
 const { buildPaletteEntries, initialSelection, paletteSections } =
   await import('../../lib/palette');
 const { getPanelLayout, setPaneTree, startPanelLayoutStore } = await import('./panelLayoutStore');
+const { flushPaneLayout } = await import('../../lib/paneLayout');
 const { resetPanelLayout } = await import('./panelReset');
 
 // A profile that arranged its own panes: group over chat, a wider
@@ -35,77 +38,85 @@ const ARRANGED: PaneLayout = {
       { id: 'chat', pane: 'chat', weight: 0.5, props: { channel: 'tell' } },
     ],
   },
-  generation: 7,
 };
 
-const OLD_DOCK = [
-  { id: 'map', zone: 'right', align: 'top' },
-  { id: 'group', zone: 'right', align: 'top' },
-  { id: 'affects', zone: 'right', align: 'bottom' },
-];
+// The same panes side by side, as a splitter drag might leave them.
+const DRAGGED: PaneSplit = { ...ARRANGED.root, split: 'row' };
 
-let dock: unknown = OLD_DOCK;
-let failWrite = false;
+let saved: PaneLayout = ARRANGED;
+let generation = 7;
+let failReset = false;
 
-tauri.invoke.mockImplementation((cmd: string) => {
-  if (cmd === 'pane_layout_get') return Promise.resolve(ARRANGED);
-  if (cmd === 'dock_layout_get') return Promise.resolve(dock);
+tauri.invoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+  if (cmd === 'pane_layout_get') return Promise.resolve({ ...saved, generation });
   if (cmd === 'pane_layout_set') {
-    return failWrite ? Promise.reject(new Error('disk full')) : Promise.resolve(true);
+    if (args?.generation !== null && args?.generation !== generation) {
+      return Promise.resolve(false);
+    }
+    saved = args?.layout as PaneLayout;
+    return Promise.resolve(true);
+  }
+  if (cmd === 'pane_layout_reset') {
+    if (failReset) return Promise.reject(new Error('disk full'));
+    generation += 1;
+    saved = { ...saved, root: defaultLayout().root };
+    return Promise.resolve({ ...saved, generation });
   }
   return Promise.resolve();
 });
 
-const writes = () =>
-  tauri.invoke.mock.calls
-    .filter((c) => c[0] === 'pane_layout_set')
-    .map((c) => c[1] as { layout: PaneLayout; generation: number | null });
+const calls = (cmd: string) => tauri.invoke.mock.calls.filter((c) => c[0] === cmd);
 
 startPanelLayoutStore();
 await vi.waitFor(() => expect(getPanelLayout()).not.toBeNull());
 
-beforeEach(() => {
+beforeEach(async () => {
+  failReset = false;
+  setPaneTree(ARRANGED.root);
+  await flushPaneLayout();
   tauri.invoke.mockClear();
   tauri.pushToast.mockClear();
-  dock = OLD_DOCK;
-  failWrite = false;
-  setPaneTree(ARRANGED.root);
 });
 
 describe('resetPanelLayout', () => {
-  it('puts back the tree the old dock layout migrates to and saves it at once', async () => {
+  it('puts back the stock map over affects tree through the backend', async () => {
+    const before = generation;
     await resetPanelLayout();
-    const expected = layoutFromDock(OLD_DOCK).root;
-    expect(expected.children.map((c) => c.id)).toEqual(['map', 'group', 'affects']);
-    expect(getPanelLayout()?.root).toEqual(expected);
-    // One write, not a debounced one, made against the profile it read.
-    expect(writes()).toHaveLength(1);
-    expect(writes()[0].layout.root).toEqual(expected);
-    expect(writes()[0].generation).toBe(7);
+    expect(calls('pane_layout_reset')).toEqual([['pane_layout_reset', { profile: null }]]);
+    expect(getPanelLayout()?.root).toEqual(defaultLayout().root);
+    // The backend saves the reset, so this window writes nothing.
+    expect(calls('pane_layout_set')).toHaveLength(0);
+    expect(calls('dock_layout_get')).toHaveLength(0);
+    // The next edit targets the tree the reset made.
+    expect(getPanelLayout()?.generation).toBe(before + 1);
     expect(tauri.pushToast).toHaveBeenCalledWith({
       kind: 'success',
       message: 'Panel layout reset',
     });
   });
 
-  it('gives map over affects to a profile with no old dock layout', async () => {
-    dock = [];
-    await resetPanelLayout();
-    expect(getPanelLayout()?.root).toEqual(defaultLayout().root);
-    expect(writes()[0].layout.root).toEqual(defaultLayout().root);
-  });
-
   it('keeps the panel width and whether the panel shows', async () => {
     await resetPanelLayout();
     expect(getPanelLayout()).toMatchObject({ panel_open: false, panel_width: 360 });
-    expect(writes()[0].layout).toMatchObject({ panel_open: false, panel_width: 360 });
   });
 
-  it('says so when the save fails', async () => {
-    failWrite = true;
+  it('sends a drag still waiting to save before the reset, so the reset wins', async () => {
+    setPaneTree(DRAGGED);
+    await resetPanelLayout();
+    const order = tauri.invoke.mock.calls
+      .map((c) => c[0] as string)
+      .filter((cmd) => cmd === 'pane_layout_set' || cmd === 'pane_layout_reset');
+    expect(order).toEqual(['pane_layout_set', 'pane_layout_reset']);
+    expect(getPanelLayout()?.root).toEqual(defaultLayout().root);
+    expect(saved.root).toEqual(defaultLayout().root);
+  });
+
+  it('says so when the reset fails', async () => {
+    failReset = true;
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     await resetPanelLayout();
     log.mockRestore();
+    expect(getPanelLayout()?.root).toEqual(ARRANGED.root);
     expect(tauri.pushToast).toHaveBeenCalledWith({
       kind: 'error',
       message: 'Vosh could not reset the panel layout',
