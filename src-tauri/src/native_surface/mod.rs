@@ -732,6 +732,9 @@ pub(crate) fn set_bounds(x: f64, y: f64, width: f64, height: f64, dpr: f64) {
         platform::set_scale(&handle.platform, dpr);
         platform::set_hidden(&handle.platform, false);
         platform::set_backdrop(&handle.platform, crate::cell_render::theme_bg_rgb());
+        // The window reports its real radius once it is on screen, and a
+        // fullscreen switch also resizes the pane, so re-check here.
+        platform::sync_corner_radius(&handle.platform);
         if px_w != handle.gpu.config.width || px_h != handle.gpu.config.height {
             handle.gpu.config.width = px_w;
             handle.gpu.config.height = px_h;

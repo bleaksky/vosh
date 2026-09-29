@@ -6,7 +6,7 @@
 
 use std::ffi::c_void;
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 use std::sync::OnceLock;
 
 use super::{
@@ -79,10 +79,143 @@ extern "C" {
     fn CGColorRelease(color: *mut c_void);
 }
 
-/// Corner radius of the frameless window, matching `.app` in styles.css.
-/// The underlay layer spans the window, so it clips to the same curve or
-/// its square corners would paint over the transparent window edge.
-const WINDOW_CORNER_RADIUS: f64 = 10.0;
+#[link(name = "AppKit", kind = "framework")]
+extern "C" {
+    static NSWindowDidEnterFullScreenNotification: *mut AnyObject;
+    static NSWindowDidExitFullScreenNotification: *mut AnyObject;
+}
+
+/// Corner radius for the underlay layer when the window cannot report its
+/// own. The underlay spans the window, so it clips to the window's curve or
+/// its square corners would paint past the rounded window edge.
+const FALLBACK_CORNER_RADIUS: f64 = 10.0;
+
+/// `NSWindowStyleMaskFullScreen`. A fullscreen window has square corners.
+const STYLE_MASK_FULL_SCREEN: usize = 1 << 14;
+
+// The radius last set on the layer, as f64 bits. Starts at a NaN pattern
+// so the first real radius always applies.
+static CORNER_RADIUS: AtomicU64 = AtomicU64::new(u64::MAX);
+
+// The underlay layer, for the fullscreen observer, which has no other way
+// to reach it. The layer lives as long as the app.
+static UNDERLAY_LAYER: AtomicPtr<AnyObject> = AtomicPtr::new(std::ptr::null_mut());
+
+/// The radius the underlay should clip to. None in fullscreen, otherwise
+/// the window's own radius when it reports a sane one, else the fallback.
+fn corner_radius_for(fullscreen: bool, reported: Option<f64>) -> f64 {
+    if fullscreen {
+        return 0.0;
+    }
+    match reported {
+        Some(radius) if radius.is_finite() && radius > 0.0 && radius <= 64.0 => radius,
+        _ => FALLBACK_CORNER_RADIUS,
+    }
+}
+
+/// The window's corner radius from the private `_cornerRadius` getter
+/// (16 on macOS 26 and later). Guarded twice: the method must exist
+/// and return a double, since a debug build's `msg_send` check panics on a
+/// mismatched return type and that panic cannot unwind out of `AppKit`.
+/// Main thread only.
+unsafe fn window_corner_radius(ns_window: *mut AnyObject) -> Option<f64> {
+    let selector = sel!(_cornerRadius);
+    let method = (*ns_window).class().instance_method(selector)?;
+    if &*method.return_type() != "d" {
+        return None;
+    }
+    let radius: f64 = msg_send![ns_window, _cornerRadius];
+    Some(radius)
+}
+
+/// Clip the underlay layer to the window's current corner radius. A no-op
+/// when the radius has not changed. Main thread only.
+unsafe fn apply_corner_radius(ns_window: *mut AnyObject, metal_layer: *mut AnyObject) {
+    if ns_window.is_null() || metal_layer.is_null() {
+        return;
+    }
+    let style_mask: usize = msg_send![ns_window, styleMask];
+    let radius = corner_radius_for(
+        style_mask & STYLE_MASK_FULL_SCREEN != 0,
+        window_corner_radius(ns_window),
+    );
+    if CORNER_RADIUS.swap(radius.to_bits(), Ordering::AcqRel) == radius.to_bits() {
+        return;
+    }
+    // Set it without the implicit animation.
+    let _: () = msg_send![class!(CATransaction), begin];
+    let _: () = msg_send![class!(CATransaction), setDisableActions: true];
+    let _: () = msg_send![metal_layer, setCornerRadius: radius];
+    let _: () = msg_send![class!(CATransaction), commit];
+}
+
+/// Re-read the window's corner radius and fullscreen state and clip the
+/// underlay to match. Main thread only.
+pub(super) fn sync_corner_radius(platform: &PlatformSurface) {
+    // SAFETY: main thread; the view and layer are live.
+    unsafe {
+        let window: *mut AnyObject = msg_send![platform.view, window];
+        apply_corner_radius(window, platform.metal_layer);
+    }
+}
+
+/// Fullscreen entered or exited. `AppKit` posts both notifications on the
+/// main thread with the window as the object.
+extern "C" fn full_screen_changed(_this: *mut AnyObject, _cmd: Sel, note: *mut AnyObject) {
+    if note.is_null() {
+        return;
+    }
+    // SAFETY: AppKit hands us a live NSNotification on the main thread,
+    // and the layer lives as long as the app.
+    unsafe {
+        let window: *mut AnyObject = msg_send![note, object];
+        apply_corner_radius(window, UNDERLAY_LAYER.load(Ordering::Acquire));
+    }
+}
+
+/// An `NSObject` subclass that receives the window's fullscreen
+/// notifications. Registered once.
+fn window_observer_class() -> &'static AnyClass {
+    static CLASS: OnceLock<usize> = OnceLock::new();
+    let ptr = *CLASS.get_or_init(|| {
+        let mut builder = ClassBuilder::new("VoshWindowObserver", class!(NSObject))
+            .expect("VoshWindowObserver already registered");
+        // SAFETY: the signature matches a notification observer method.
+        unsafe {
+            builder.add_method(
+                sel!(fullScreenChanged:),
+                full_screen_changed as extern "C" fn(*mut AnyObject, Sel, *mut AnyObject),
+            );
+        }
+        let cls: &'static AnyClass = builder.register();
+        std::ptr::from_ref(cls) as usize
+    });
+    // SAFETY: the pointer comes from a registered, process-lifetime class.
+    unsafe { &*(ptr as *const AnyClass) }
+}
+
+/// Follow the window in and out of fullscreen so the underlay's corners go
+/// square and back. The observer is never released, since the window lives
+/// as long as the app. Main thread only.
+unsafe fn observe_full_screen(ns_window: *mut AnyObject) {
+    let observer: *mut AnyObject = msg_send![window_observer_class(), new];
+    if observer.is_null() {
+        return;
+    }
+    let center: *mut AnyObject = msg_send![class!(NSNotificationCenter), defaultCenter];
+    for name in [
+        NSWindowDidEnterFullScreenNotification,
+        NSWindowDidExitFullScreenNotification,
+    ] {
+        let _: () = msg_send![
+            center,
+            addObserver: observer,
+            selector: sel!(fullScreenChanged:),
+            name: name,
+            object: ns_window
+        ];
+    }
+}
 
 /// The platform's window handles: the surface `NSView` and the
 /// `CAMetalLayer` it hosts. Raw pointers are not Send, but every access is
@@ -530,14 +663,17 @@ pub(super) fn install(window: &tauri::WebviewWindow) -> Result<(), tauri::Error>
                 // Pin the drawn frame to the top-left so a resize that
                 // outpaces the next render exposes backdrop at the right
                 // and bottom instead of stretching the text. Clip to the
-                // window's curve.
+                // window's curve, read at runtime and square in
+                // fullscreen.
                 let top_left: *mut AnyObject = msg_send![
                     class!(NSString),
                     stringWithUTF8String: c"topLeft".as_ptr()
                 ];
                 let _: () = msg_send![metal_layer, setContentsGravity: top_left];
-                let _: () = msg_send![metal_layer, setCornerRadius: WINDOW_CORNER_RADIUS];
+                apply_corner_radius(ns_window, metal_layer);
                 let _: () = msg_send![metal_layer, setMasksToBounds: true];
+                UNDERLAY_LAYER.store(metal_layer, Ordering::Release);
+                observe_full_screen(ns_window);
                 // NSViewWidthSizable | NSViewHeightSizable: AppKit resizes
                 // the view with the window in the same layout pass.
                 let _: () = msg_send![view, setAutoresizingMask: 18_usize];
@@ -603,4 +739,38 @@ pub(super) fn install(window: &tauri::WebviewWindow) -> Result<(), tauri::Error>
             }
         }
     })
+}
+
+#[cfg(test)]
+// The radius passes through untouched, so exact equality is the check.
+#[allow(clippy::float_cmp)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn corner_radius_is_square_in_fullscreen() {
+        assert_eq!(corner_radius_for(true, Some(16.0)), 0.0);
+        assert_eq!(corner_radius_for(true, None), 0.0);
+    }
+
+    #[test]
+    fn corner_radius_uses_the_window_radius() {
+        assert_eq!(corner_radius_for(false, Some(16.0)), 16.0);
+        assert_eq!(corner_radius_for(false, Some(10.0)), 10.0);
+    }
+
+    #[test]
+    fn corner_radius_falls_back_without_a_sane_report() {
+        assert_eq!(corner_radius_for(false, None), FALLBACK_CORNER_RADIUS);
+        assert_eq!(corner_radius_for(false, Some(0.0)), FALLBACK_CORNER_RADIUS);
+        assert_eq!(corner_radius_for(false, Some(-4.0)), FALLBACK_CORNER_RADIUS);
+        assert_eq!(
+            corner_radius_for(false, Some(f64::NAN)),
+            FALLBACK_CORNER_RADIUS
+        );
+        assert_eq!(
+            corner_radius_for(false, Some(500.0)),
+            FALLBACK_CORNER_RADIUS
+        );
+    }
 }
