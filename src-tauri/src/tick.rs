@@ -338,9 +338,15 @@ impl TickRuntime {
     }
 
     /// Take the warning slot if the configured threshold is set, the
-    /// time left before the expected tick has fallen below it, and it
-    /// has not fired this cycle. Returns true at most once per cycle, and
-    /// never while the tick is overdue.
+    /// time left before the expected tick has reached it, and it has not
+    /// fired this cycle. Returns true at most once per cycle, and never
+    /// while the tick is overdue.
+    ///
+    /// The rule is the status line's. It counts the time left in whole
+    /// seconds rounded up and warns once that is at or under Warn at,
+    /// which is the time left at or under Warn at seconds. So the
+    /// warning prints on the report that turns the status line to warn,
+    /// never up to a second before it.
     pub(crate) fn try_consume_warn(&mut self, now: Instant) -> bool {
         if !self.config.enabled || self.warned_this_cycle {
             return false;
@@ -351,7 +357,7 @@ impl TickRuntime {
         let Some(remaining) = self.remaining(now) else {
             return false;
         };
-        if remaining.as_secs() <= secs && remaining > Duration::ZERO {
+        if remaining <= Duration::from_secs(secs) && remaining > Duration::ZERO {
             self.warned_this_cycle = true;
             return true;
         }
@@ -1033,6 +1039,52 @@ mod tests {
             );
             assert!(!t.synced);
         }
+    }
+
+    // ── The terminal warns when the status line does ────────────────
+
+    /// The status line counts the time left in whole seconds rounded up
+    /// and warns once that reaches Warn at (computeTick in
+    /// src/lib/stores/tickStore.ts, whose test checks the same cases).
+    /// Each case is the time into a 30 second tick and whether the
+    /// status line warns there with Warn at 5.
+    const WARN_BOUNDARY: [(f64, bool); 6] = [
+        (24.0, false),
+        (24.75, false),
+        (24.999, false),
+        (25.0, true),
+        (25.001, true),
+        (29.75, true),
+    ];
+
+    #[test]
+    fn the_warning_prints_exactly_when_the_status_line_turns_to_warn() {
+        for (into, warns) in WARN_BOUNDARY {
+            let t0 = Instant::now();
+            let (mut t, tick) = synced_session(t0);
+            t.config.warn_at_secs = Some(5);
+            assert_eq!(
+                t.try_consume_warn(tick + secs(into)),
+                warns,
+                "{into} seconds into the tick"
+            );
+        }
+    }
+
+    #[test]
+    fn the_session_loop_prints_the_warning_on_the_report_that_turns_warn() {
+        let t0 = Instant::now();
+        let (mut t, tick) = synced_session(t0);
+        t.config.warn_at_secs = Some(5);
+        let mut warned = Vec::new();
+        let mut at = tick;
+        while at < tick + secs(30.0) {
+            if t.poll(at).warn_echo.is_some() {
+                warned.push(at);
+            }
+            at += Duration::from_millis(250);
+        }
+        assert_eq!(warned, [tick + secs(25.0)]);
     }
 
     #[test]

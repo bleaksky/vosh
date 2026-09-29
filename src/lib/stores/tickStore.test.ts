@@ -124,6 +124,24 @@ describe('computeTick', () => {
     expect(computeTick(payload(30_000), config(null)).warn).toBe(true);
   });
 
+  // The terminal prints its warning on the same report, by the same
+  // rule (try_consume_warn in src-tauri/src/tick.rs, whose test checks
+  // these cases).
+  it('turns to warn once the whole seconds left reach Warn at', () => {
+    const at = (elapsed: number) => computeTick(payload(elapsed), config(5));
+    const into = [24_000, 24_750, 24_999, 25_000, 25_001, 29_750];
+    expect(into.map((elapsed) => at(elapsed).warn)).toEqual([
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+    ]);
+    expect(at(24_999).secsLeft).toBe(6);
+    expect(at(25_000).secsLeft).toBe(5);
+  });
+
   it('keeps warning while the tick is overdue', () => {
     expect(computeTick(payload(31_000), config(null))).toMatchObject({ warn: true, overdue: true });
     expect(computeTick(payload(58_000), config(8))).toMatchObject({ warn: true, overdue: true });
