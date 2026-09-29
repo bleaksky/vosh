@@ -10,11 +10,16 @@
 //! events that carry the active profile's panes and tracked affects to
 //! the main window.
 
+use std::sync::atomic::Ordering;
+
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, State};
 use tracing::warn;
 
-use crate::commands::{panes_generation, SharedState, PERSIST_LOCK, PROFILES_NOT_LOADED};
+use crate::commands::{
+    broadcast, panes_generation, SharedState, MIGRATION_RELAUNCH_PENDING, PERSIST_LOCK,
+    PROFILES_NOT_LOADED,
+};
 use crate::profile_config::{
     GlobalConfig, PaneLayoutPersist, ProfileConfig, TrackedAffect, UiConfig,
 };
@@ -115,6 +120,96 @@ pub(crate) fn stored_ui(set: &ProfileSet, name: &str) -> Result<UiConfig, String
     let mut ui = load_profile_file(set, name)?.ui;
     apply_global_dock(set, &mut ui);
     Ok(ui)
+}
+
+/// Sent after an edit to one profile's detail, active or not, naming
+/// it as `{ name }`. Unlike `vosh://tracked-affects-changed` and
+/// `vosh://pane-layout-changed` it carries no data, so an edit to an
+/// inactive profile can never reach the main window's stores.
+pub(crate) const PROFILE_CHANGED_EVENT: &str = "vosh://profile-changed";
+
+#[derive(Clone, Serialize)]
+struct ProfileChanged {
+    name: String,
+}
+
+pub(crate) fn broadcast_profile_changed(app: &AppHandle, name: &str) {
+    broadcast(
+        app,
+        PROFILE_CHANGED_EVENT,
+        &ProfileChanged {
+            name: name.to_string(),
+        },
+    );
+}
+
+/// Why an inactive profile edit is refused between `migration_apply`
+/// and the relaunch that finishes it.
+const MIGRATION_PENDING: &str =
+    "Restart Vosh to finish the move to loadouts, then change this profile.";
+
+/// Rewrite `name`'s file with `edit` when `name` is inactive, and hand
+/// back what `edit` returned. Ok(None) without writing when `name` is
+/// the live profile, so the caller edits the live profile instead. Call
+/// with [`PERSIST_LOCK`] held.
+fn rewrite_inactive<R>(
+    set: &ProfileSet,
+    name: &str,
+    migration_pending: bool,
+    edit: impl FnOnce(&ProfileSet, &mut ProfileConfig) -> R,
+) -> Result<Option<R>, String> {
+    if set.get(name).is_none() {
+        return Err(not_found(name));
+    }
+    if set.active_name() == name {
+        return Ok(None);
+    }
+    // The just archived per profile files must not come back before
+    // the relaunch reads the new catalog.
+    if migration_pending {
+        return Err(MIGRATION_PENDING.to_string());
+    }
+    let mut config = load_profile_file(set, name)?;
+    let out = edit(set, &mut config);
+    let path = set.profile_path(name);
+    config.save(&path).map_err(|e| {
+        warn!(error = %e, path = %path.display(), "inactive profile save failed");
+        format!(
+            "Vosh could not save the {} profile file.",
+            display_name(name)
+        )
+    })?;
+    Ok(Some(out))
+}
+
+/// Edit an inactive profile's file. Holds [`PERSIST_LOCK`] and the
+/// profile set lock across the read, the edit and the write, so it
+/// cannot interleave with a persist, a switch, a rename or a delete.
+/// Ok(None) means `name` is live and nothing was written.
+pub(crate) async fn edit_inactive_profile<R>(
+    state: &SharedState,
+    name: &str,
+    edit: impl FnOnce(&ProfileSet, &mut ProfileConfig) -> R + Send,
+) -> Result<Option<R>, String> {
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    let guard = state.profile_set.lock().await;
+    let set = guard.as_ref().ok_or(PROFILES_NOT_LOADED)?;
+    rewrite_inactive(
+        set,
+        name,
+        MIGRATION_RELAUNCH_PENDING.load(Ordering::Acquire),
+        edit,
+    )
+}
+
+/// The active profile's name, for naming a live edit.
+pub(crate) async fn active_name(state: &SharedState) -> Option<String> {
+    state
+        .profile_set
+        .lock()
+        .await
+        .as_ref()
+        .map(|set| set.active_name().to_string())
 }
 
 /// Read one profile for the Characters group.
@@ -229,6 +324,79 @@ mod tests {
         assert!(!detail.login_on);
 
         assert!(profile_detail(&state, "Nobody").await.is_err());
+    }
+
+    fn set_affects(list: &[&str]) -> impl FnOnce(&ProfileSet, &mut ProfileConfig) + Send {
+        let list: Vec<TrackedAffect> = list.iter().map(|n| affect(n)).collect();
+        move |_, config| config.ui.tracked_affects = list
+    }
+
+    #[tokio::test]
+    async fn an_inactive_edit_writes_its_file_and_never_the_live_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = james_like_state(dir.path()).await;
+        let mut config = ProfileConfig::default();
+        config.ui.theme = "nord".into();
+        config.profile_vars.insert("target".into(), "orc".into());
+        write_profile(dir.path(), "Healer", &config);
+
+        let written = edit_inactive_profile(&state, "Healer", set_affects(&["Haste", "Fly"]))
+            .await
+            .unwrap();
+        assert!(written.is_some());
+
+        // The file took the list and kept the rest of the profile.
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        let saved = ProfileConfig::load(&set.profile_path("Healer")).unwrap();
+        assert_eq!(names(&saved.ui.tracked_affects), ["Haste", "Fly"]);
+        assert_eq!(saved.ui.theme, "nord");
+        assert_eq!(
+            saved.profile_vars.get("target").map(String::as_str),
+            Some("orc")
+        );
+
+        // The live profile and the active file never moved.
+        let live = state.profile.lock().await;
+        assert_eq!(names(&live.ui.tracked_affects), ["Sanctuary"]);
+        assert!(!set.profile_path(DEFAULT_PROFILE_NAME).exists());
+    }
+
+    #[tokio::test]
+    async fn an_inactive_edit_creates_the_file_a_profile_never_saved() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = james_like_state(dir.path()).await;
+        edit_inactive_profile(&state, "Test-Prompt", set_affects(&["Fly"]))
+            .await
+            .unwrap();
+        let detail = profile_detail(&state, "Test-Prompt").await.unwrap();
+        assert_eq!(names(&detail.tracked_affects), ["Fly"]);
+        assert_eq!(detail.panes, PaneLayoutPersist::default_layout());
+    }
+
+    #[tokio::test]
+    async fn an_edit_to_the_live_profile_is_handed_back_unwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = james_like_state(dir.path()).await;
+        let written = edit_inactive_profile(&state, DEFAULT_PROFILE_NAME, set_affects(&["Fly"]))
+            .await
+            .unwrap();
+        assert!(written.is_none());
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        assert!(!set.profile_path(DEFAULT_PROFILE_NAME).exists());
+        assert!(
+            edit_inactive_profile(&state, "Nobody", set_affects(&["Fly"]))
+                .await
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn an_inactive_edit_waits_for_the_migration_relaunch() {
+        let dir = tempfile::tempdir().unwrap();
+        let set = james_like_set(dir.path());
+        let err = rewrite_inactive(&set, "Healer", true, set_affects(&["Fly"])).unwrap_err();
+        assert_eq!(err, MIGRATION_PENDING);
+        assert!(!set.profile_path("Healer").exists());
     }
 
     #[tokio::test]
