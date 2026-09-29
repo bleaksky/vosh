@@ -12,11 +12,6 @@ use crate::input;
 use crate::list_events::{broadcast_list_changes, ListChanges, ListRevisions};
 use crate::log_state::{SharedLogStore, SharedScrollback};
 
-/// Send an event to every webview window. `AppHandle::emit` routes via
-/// the global listener pool, which has been observed to skip late-attached
-/// listeners in sibling webviews (the main window misses settings-window
-/// updates). Iterating the live window map and emitting to each one
-/// guarantees delivery to both the main and settings webviews.
 /// Debounce generation for `mark_profile_dirty`: each mark bumps it, and
 /// the delayed persist only fires if no newer mark arrived while waiting.
 static PROFILE_DIRTY_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -95,7 +90,7 @@ pub(crate) static PERSIST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::con
 /// writes off latency-sensitive paths while guaranteeing the change
 /// reaches profile.toml/catalog.toml within a couple of seconds; the
 /// exit hook flushes immediately as a backstop.
-pub(crate) fn mark_profile_dirty(app: &AppHandle) {
+pub(crate) fn mark_profile_dirty<R: tauri::Runtime>(app: &AppHandle<R>) {
     AUTO_PERSIST_SUPPRESSED.store(false, std::sync::atomic::Ordering::Release);
     schedule_profile_persist(app);
 }
@@ -106,7 +101,7 @@ pub(crate) fn mark_profile_dirty(app: &AppHandle) {
 /// the write is skipped and the change waits in memory for the next
 /// durable change or an explicit `#profile save`. For incidental edits
 /// such as a pane layout drag.
-pub(crate) fn schedule_profile_persist(app: &AppHandle) {
+pub(crate) fn schedule_profile_persist<R: tauri::Runtime>(app: &AppHandle<R>) {
     use std::sync::atomic::Ordering;
     let gen = PROFILE_DIRTY_GEN.fetch_add(1, Ordering::AcqRel) + 1;
     let app = app.clone();
@@ -142,7 +137,10 @@ pub(crate) fn schedule_profile_persist(app: &AppHandle) {
 /// not read suppresses nothing, and spelling variants ("#profile  reset",
 /// "# profile load") cannot slip past into the dirty mark and persist the
 /// just-blanked profile.
-pub(crate) async fn settle_line_effects(app: &AppHandle, effects: crate::input::LineEffects) {
+pub(crate) async fn settle_line_effects<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    effects: crate::input::LineEffects,
+) {
     if effects.replaced {
         AUTO_PERSIST_SUPPRESSED.store(true, std::sync::atomic::Ordering::Release);
     }
@@ -186,11 +184,20 @@ pub(crate) fn line_effect_events(
     Vec::new()
 }
 
-pub(crate) fn broadcast<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: &S) {
-    for win in app.webview_windows().values() {
-        if let Err(e) = win.emit(event, payload.clone()) {
-            warn!(error = %e, window = %win.label(), event, "broadcast failed");
-        }
+/// Send `event` to every open window, once. One emit reaches every
+/// listener in every window, main and Settings alike, whichever handle
+/// it goes out through. This used to emit once through each open window,
+/// so each listener heard the event once per open window. A page listens
+/// through `listen`, which hears an event sent to any target, so
+/// `emit_to` with a window label still reaches the page listeners in the
+/// other windows.
+pub(crate) fn broadcast<R: tauri::Runtime, S: serde::Serialize + ?Sized>(
+    app: &AppHandle<R>,
+    event: &str,
+    payload: &S,
+) {
+    if let Err(e) = app.emit(event, payload) {
+        warn!(error = %e, event, "broadcast failed");
     }
 }
 use crate::map_state::SharedMap;
@@ -332,7 +339,7 @@ pub(crate) const PROFILES_NOT_LOADED: &str = "Vosh has not loaded your profiles 
 /// but not surfaced — callers don't want a UI toggle to fail because
 /// the disk is full mid-flight, and the in-memory state is still
 /// correct for the rest of the session.
-pub(crate) async fn persist_profile(app: &AppHandle, state: &SharedState) {
+pub(crate) async fn persist_profile<R: tauri::Runtime>(app: &AppHandle<R>, state: &SharedState) {
     // Serialize whole-persist runs. The debounced dirty-persist and the
     // exit-time flush can overlap each other or an inline command
     // persist, and Settings can write an inactive profile's file.
@@ -341,7 +348,7 @@ pub(crate) async fn persist_profile(app: &AppHandle, state: &SharedState) {
 }
 
 /// The body of [`persist_profile`]. Call with [`PERSIST_LOCK`] held.
-async fn persist_profile_locked(app: &AppHandle, state: &SharedState) {
+async fn persist_profile_locked<R: tauri::Runtime>(app: &AppHandle<R>, state: &SharedState) {
     let app_data = app.path().app_data_dir().ok();
     persist_state(state, app_data.as_deref()).await;
 }
@@ -1827,7 +1834,10 @@ pub(crate) fn profile_ui_events(p: &Profile) -> ProfileUiEvents {
 /// switch also sends `vosh://profile-switched`, so the status line hears
 /// these here after an import, a load, or a reset, and Settings reads
 /// its whole config again on [`UI_CONFIG_REPLACED_EVENT`].
-pub(crate) async fn broadcast_profile_ui(app: &AppHandle, state: &SharedState) {
+pub(crate) async fn broadcast_profile_ui<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+) {
     let events = {
         let p = state.profile.lock().await;
         profile_ui_events(&p)
@@ -3810,13 +3820,10 @@ pub(crate) async fn migration_apply(
 const MIGRATION_APPLIED_EVENT: &str = "vosh://migration-applied";
 
 /// Tell every window once that the wizard wrote its files. The settings
-/// window runs the wizard and the main window listens. One emit reaches
-/// every window, where one per window, as [`broadcast`] sends, reached
-/// each listener once per open window and put the notice up twice.
+/// window runs the wizard and the main window listens, and puts the
+/// notice up once for each time it hears the event.
 fn announce_migration_applied<R: tauri::Runtime>(app: &AppHandle<R>) {
-    if let Err(e) = app.emit(MIGRATION_APPLIED_EVENT, ()) {
-        warn!(error = %e, "the wizard could not announce its files");
-    }
+    broadcast(app, MIGRATION_APPLIED_EVENT, &());
 }
 
 /// [`migration_apply`] over the app data folder `app_data`, so a test
@@ -4397,31 +4404,6 @@ mod tests {
     use crate::profile_config::{ProfileConfig, UiConfig};
     use crate::profile_set::tests::james_like_set;
     use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
-
-    #[test]
-    fn every_window_hears_once_that_the_move_is_done() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        use tauri::Listener;
-        let app = tauri::test::mock_builder()
-            .build(tauri::test::mock_context(tauri::test::noop_assets()))
-            .unwrap();
-        // The wizard runs in the settings window, so the main window is
-        // open too.
-        for label in ["main", "settings"] {
-            tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::default())
-                .build()
-                .unwrap();
-        }
-        let heard = std::sync::Arc::new(AtomicUsize::new(0));
-        let count = heard.clone();
-        app.listen_any(super::MIGRATION_APPLIED_EVENT, move |_| {
-            count.fetch_add(1, Ordering::SeqCst);
-        });
-        super::announce_migration_applied(app.handle());
-        // Each emit reaches every window, so one per window put the
-        // notice in the terminal and a toast up once per open window.
-        assert_eq!(heard.load(Ordering::SeqCst), 1);
-    }
 
     /// Send `ui` the way Settings does: out through `ui_get_config`,
     /// across the JSON bridge, and back through `ui_set_config` onto a
@@ -7918,3 +7900,7 @@ mod tests {
 #[cfg(test)]
 #[path = "wizard_roundtrip_tests.rs"]
 mod wizard_roundtrip_tests;
+
+#[cfg(test)]
+#[path = "broadcast_tests.rs"]
+mod broadcast_tests;

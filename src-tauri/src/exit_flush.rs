@@ -200,7 +200,7 @@ pub(crate) async fn wait_for_answers(rx: oneshot::Receiver<()>, wait: Duration) 
 /// Ask every open window to send the writes it holds, and wait for the
 /// answers up to [`WINDOW_FLUSH_WAIT`]. Then mark the flow answered, so
 /// the next exit request writes the profile.
-pub(crate) async fn ask_windows_to_flush(app: &AppHandle) {
+pub(crate) async fn ask_windows_to_flush<R: tauri::Runtime>(app: &AppHandle<R>) {
     use tauri::Manager;
     static ROUND: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let id = ROUND.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1;
@@ -224,7 +224,7 @@ pub(crate) async fn ask_windows_to_flush(app: &AppHandle) {
 
 /// A window answers the quit request once it has sent what it held.
 #[tauri::command]
-pub(crate) fn pending_writes_flushed(window: tauri::WebviewWindow) {
+pub(crate) fn pending_writes_flushed<R: tauri::Runtime>(window: tauri::WebviewWindow<R>) {
     ANSWERS.answer(window.label());
 }
 
