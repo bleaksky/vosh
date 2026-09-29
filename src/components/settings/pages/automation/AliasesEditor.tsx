@@ -122,7 +122,7 @@ function AliasDetail({ value: a, update, fresh, revealInList }: DetailProps<Alia
           {lua && (
             <CodeRow
               label="Lua script"
-              description="captures holds the words you type after the alias."
+              description="The captures table holds the words you type after the alias."
               value={a.script ?? ''}
               onChange={(script) => set({ script })}
             />
