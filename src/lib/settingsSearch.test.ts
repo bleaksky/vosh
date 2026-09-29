@@ -70,7 +70,16 @@ describe('searchSettingsRows', () => {
     expect(labels('font stack')).toEqual(['Font stack']);
     expect(labels('fallback')).toEqual(['Font stack']);
     expect(labels('palette')[0]).toBe('Base palette');
-    expect(labels('echo')).toContain('Sent command color');
+  });
+
+  it('finds the Input rows, Advanced ones included', () => {
+    expect(labels('paste')).toEqual(['Wait between pasted lines']);
+    expect(labels('sent command')[0]).toBe('Sent command color');
+    expect(labels('prompt template')).toEqual(['Draw your own prompt']);
+    const advanced = searchSettingsRows('prompt', mac).find(
+      (r) => r.label === 'Draw your own prompt',
+    );
+    expect(advanced?.target).toEqual({ group: 'input', section: 'advanced', anchor: 'prompt' });
   });
 
   it('hides GPU rendering on macOS', () => {

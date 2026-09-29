@@ -159,12 +159,6 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'advanced',
     target: at('appearance', 'advanced', 'divider-color'),
   },
-  {
-    label: 'Sent command color',
-    description: 'The color of each command you send when the terminal shows it.',
-    keywords: 'advanced echo local',
-    target: at('appearance', 'advanced', 'sent-color'),
-  },
 
   // Layout has no approved board yet.
   {
@@ -173,36 +167,44 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('layout', 'panel'),
   },
 
-  // Input has no approved board yet. These point at its interim rows.
-  {
-    label: 'Keep last command',
-    keywords: 'history enter resend',
-    target: at('input', 'command-line', 'keep-last'),
-  },
-  {
-    label: 'Spell check chat lines',
-    keywords: 'spelling',
-    target: at('input', 'command-line', 'spellcheck'),
-  },
+  // Input, from the approved board.
   {
     label: 'Caret shape',
-    keywords: 'cursor block underline pipe',
+    keywords: 'cursor block outline underline pipe command line',
     target: at('input', 'command-line', 'caret'),
   },
   {
-    label: 'Echo macro commands',
-    keywords: 'macros echo',
+    label: 'Keep last command',
+    description: 'Your last command stays in the line, selected, so Enter sends it again.',
+    keywords: 'history resend repeat',
+    target: at('input', 'command-line', 'keep-last'),
+  },
+  {
+    label: 'Check spelling when you chat',
+    description: 'Vosh checks only lines that start with say, tell, reply, or a channel name.',
+    keywords: 'spell check spelling',
+    target: at('input', 'command-line', 'spellcheck'),
+  },
+  {
+    label: 'Sent command color',
+    keywords: 'echo local command typed input',
+    target: at('input', 'command-line', 'sent-color'),
+  },
+  {
+    label: 'Show the commands your macros send',
+    keywords: 'macro echo keys',
     target: at('input', 'command-line', 'echo-macros'),
   },
   {
-    label: 'Paste pacing',
-    keywords: 'paste delay flood lines milliseconds',
-    target: at('input', 'command-line', 'paste-pacing'),
+    label: 'Wait between pasted lines',
+    keywords: 'advanced paste pacing delay flood milliseconds',
+    target: at('input', 'advanced', 'paste-delay'),
   },
   {
-    label: 'Custom prompt',
-    keywords: 'prompt template gag replace',
-    target: at('input', 'prompt', 'prompt-template'),
+    label: 'Draw your own prompt',
+    description: "It takes the place of your MUD's prompt. Capture the prompt with #prompt first.",
+    keywords: 'advanced custom prompt template gag replace preview',
+    target: at('input', 'advanced', 'prompt'),
   },
 
   // Automation, from the approved board.
