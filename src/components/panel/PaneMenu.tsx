@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { profilesList } from '../../lib/session';
-import type { PaneLeaf } from '../../lib/paneLayout';
+import { splitPane, type PaneLeaf, type SplitDir } from '../../lib/paneLayout';
 import { MenuItem, MenuSeparator, MenuSurface, type MenuCloseReason } from './MenuSurface';
 import {
   closeHere,
@@ -10,13 +10,16 @@ import {
   showHereInstead,
   splitHere,
 } from './paneActions';
+import { fitsPanel } from './paneGeometry';
 import { ChevronRightIcon } from './paneIcons';
+import { getPanelLayout } from './panelLayoutStore';
 import { PANE_LABELS, offeredPaneTypes } from './paneTypes';
 
 // The more menu on every pane header (SPEC 9): Split right, Split
 // down, Show here instead with a submenu of pane types, Edit tracked
 // affects on the Affects pane, and Close pane. Closing a pane loses
-// nothing, so it carries no destructive color.
+// nothing, so it carries no destructive color. A split the panel has
+// no room for, with every pane at its minimum, stays unavailable.
 
 interface Props {
   leaf: PaneLeaf;
@@ -67,6 +70,13 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
 
   const splitIn = paneToSplitIn();
   const others = offeredPaneTypes().filter((t) => t !== leaf.pane);
+  const area = anchor.closest('.panel-panes');
+  const canSplit = (dir: SplitDir) => {
+    const root = getPanelLayout()?.root;
+    if (!root || splitIn === null) return false;
+    if (!area) return true;
+    return fitsPanel(splitPane(root, leaf.id, dir, splitIn), area.clientWidth, area.clientHeight);
+  };
 
   let sub: React.ReactNode = null;
   const row = showRowRef.current;
@@ -108,14 +118,14 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
         onClose={close}
       >
         <MenuItem
-          disabled={splitIn === null}
+          disabled={!canSplit('row')}
           onHover={closeSub}
           onSelect={run(() => splitHere(leaf.id, 'row'))}
         >
           Split right
         </MenuItem>
         <MenuItem
-          disabled={splitIn === null}
+          disabled={!canSplit('column')}
           onHover={closeSub}
           onSelect={run(() => splitHere(leaf.id, 'column'))}
         >
