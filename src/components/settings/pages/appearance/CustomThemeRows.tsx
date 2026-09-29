@@ -62,10 +62,11 @@ export function CustomThemeRows({ config, update }: CustomThemeRowsProps) {
   const edit = (id: string, patch: Partial<CustomTheme>) => {
     const list = editCustomTheme(customs, id, patch);
     setCustomThemes(list.map(customToAppTheme));
-    if (id === shown) {
+    if (id === shown && (patch.xterm !== undefined || patch.chrome !== undefined)) {
       // The save sends the new catalog but not the theme id, which did
       // not change. Send both now, catalog first, so the main window
-      // repaints with the new colors while you drag the picker.
+      // repaints with the new colors while you drag the picker. A name
+      // or description edit waits for the save.
       applyTheme(id);
       void emit('vosh://custom-themes-changed', list)
         .then(() => emit('vosh://theme-changed', id))
