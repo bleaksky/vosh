@@ -14,8 +14,11 @@ use crate::{loadout_store, profile_config, profile_set};
 /// profile collection. Then load whichever profile the index marks as
 /// active into the live profile, and overlay the shared global.toml
 /// (theme, font, dock layout, keep last, auto update) so those UI prefs
-/// stay the same across every profile.
+/// stay the same across every profile. A shared catalog wizard run that
+/// stopped partway finishes first, so nothing loads a file it had yet to
+/// write.
 pub(crate) async fn load_profiles(state: &SharedState, app_data: &Path) {
+    state.add_launch_notices(loadout_store::finish_wizard_run(app_data));
     let set = match profile_set::ProfileSet::load_or_migrate(app_data.to_path_buf()) {
         Ok(set) => set,
         Err(e) => {

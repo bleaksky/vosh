@@ -3527,7 +3527,9 @@ pub(crate) struct ConflictResolution {
 /// checkboxes in each profile file decide what is on for that profile,
 /// at launch and at every switch, the way each profile had it. A write
 /// that fails puts back every file the run changed, so you stay in per
-/// profile mode and can run it again. Refused while a profile file did
+/// profile mode and can run it again. A run that stops partway, or
+/// cannot put every file back, finishes at the next launch from the
+/// journal it saved first. Refused while a profile file did
 /// not read at launch, or while catalog.toml or loadouts.toml is on
 /// disk, see [`crate::loadout_store::migration_refusal`].
 #[tauri::command]
@@ -3564,8 +3566,9 @@ pub(crate) async fn migration_apply(
 /// [`migration_apply`] over the app data folder `app_data`, so a test
 /// can run it over a folder of its own. `written` runs once catalog.toml,
 /// loadouts.toml, and every profile file are on disk. A write that fails
-/// puts back every file the run changed and skips `written`, unless
-/// catalog.toml stays on disk.
+/// puts back every file the run changed and skips `written`, unless a
+/// file stays changed. The journal then stays for the next launch to
+/// finish the run, and `written` runs.
 async fn apply_migration(
     state: &SharedState,
     app_data: &std::path::Path,
@@ -3695,6 +3698,27 @@ async fn apply_migration_with(
         }
     }
 
+    // Every write the run makes, in a journal saved before the first one,
+    // so a run that stops partway finishes at the next launch, see
+    // `loadout_store::finish_wizard_run`. Built before any write, so a
+    // file that does not serialize changes nothing.
+    let journal = crate::loadout_store::WizardJournal {
+        catalog: toml::to_string_pretty(&catalog).map_err(|e| e.to_string())?,
+        loadouts: toml::to_string_pretty(&loadout_set).map_err(|e| e.to_string())?,
+        profiles: kept
+            .iter()
+            .map(|(file, text)| crate::loadout_store::JournalFile {
+                path: file
+                    .path
+                    .strip_prefix(app_data)
+                    .unwrap_or(&file.path)
+                    .to_string_lossy()
+                    .into_owned(),
+                text: text.clone(),
+            })
+            .collect(),
+    };
+
     // A full copy of each file first, so the files as they were wait in
     // profiles/legacy before anything changes. The wizard refuses to run
     // while profiles/legacy holds a copy from an earlier run, so no copy
@@ -3717,40 +3741,45 @@ async fn apply_migration_with(
         copies.push(copy);
     }
 
+    if let Err(e) = crate::loadout_store::save_wizard_journal(app_data, &journal) {
+        take_out_copies(&copies);
+        return Err(format!(
+            "Vosh could not save catalog.journal.toml and changed nothing ({e})."
+        ));
+    }
+
     // Then the catalog, the loadouts, and each profile file without its
     // items. A write that fails puts back every file this run changed,
-    // so Vosh stays in per profile mode, and takes out the copies in
-    // legacy, so the wizard can run again.
+    // so Vosh stays in per profile mode, and takes out the journal and
+    // the copies in legacy, so the wizard can run again.
     let mut touched = Vec::new();
-    if let Err((what, e)) =
-        write_shared_catalog(app_data, &catalog, &loadout_set, &kept, &mut touched)
-    {
+    if let Err((what, e)) = write_shared_catalog(app_data, &journal, &kept, &mut touched) {
         crate::profile_config::put_back(&touched);
         let restored = touched.iter().all(|(path, before)| match before {
             Some(text) => std::fs::read_to_string(path).ok().as_deref() == Some(text.as_str()),
             None => !path.exists(),
         });
-        // The copies stay while a file the run changed stays changed.
-        if restored {
+        if restored && crate::loadout_store::drop_wizard_journal(app_data).is_ok() {
             take_out_copies(&copies);
-        }
-        // A catalog left on disk starts loadout mode at the next launch,
-        // so the live profile must not save until then.
-        if crate::loadout_store::path_b_mode_active(app_data) {
-            written();
-        }
-        return Err(if restored {
-            format!(
+            return Err(format!(
                 "Vosh could not save {what} ({e}), so it put back every file it changed. Your \
                  profiles work as before, and you can try again."
-            )
-        } else {
-            format!(
-                "Vosh could not save {what} ({e}) and could not put back every file it changed. \
-                 A full copy of each profile file waits in profiles/legacy. Quit Vosh and open \
-                 it again."
-            )
-        });
+            ));
+        }
+        // The journal stays, so the next launch writes every file the run
+        // did not, and loadout mode starts over files without their
+        // items. Nothing may save or switch the live profile until then.
+        written();
+        return Err(format!(
+            "Vosh could not save {what} ({e}) and could not put back every file it changed. \
+             Quit Vosh and open it again to finish the move to loadouts. A full copy of each \
+             profile file waits in profiles/legacy."
+        ));
+    }
+    // Every file holds its text. A journal that stays only writes the same
+    // text again at the next launch.
+    if let Err(e) = crate::loadout_store::drop_wizard_journal(app_data) {
+        warn!(error = %e, "wizard journal could not be taken out");
     }
     written();
     Ok(())
@@ -3767,39 +3796,58 @@ fn take_out_copies(copies: &[std::path::PathBuf]) {
     }
 }
 
-/// Save what the shared catalog wizard built, catalog.toml, then
-/// loadouts.toml, then each profile file in `kept` with its new text.
-/// Notes in `touched` each file it is about to write with what the file
-/// held before, None for a file that was not there, so a failure can put
-/// them back. On a failure, returns the file that did not save, as words
-/// for you, and the error.
+/// Save every file `journal` names, catalog.toml, then loadouts.toml,
+/// then each profile file, the ones in `kept` in the same order. Notes in
+/// `touched` each file it is about to write with what the file held
+/// before, None for a file that was not there, so a failure can put them
+/// back. On a failure, returns the file that did not save, as words for
+/// you, and the error.
 fn write_shared_catalog(
     app_data: &std::path::Path,
-    catalog: &crate::loadout::GlobalCatalog,
-    loadouts: &crate::loadout::LoadoutSet,
+    journal: &crate::loadout_store::WizardJournal,
     kept: &[(&MigrationFile, String)],
     touched: &mut Vec<(std::path::PathBuf, Option<String>)>,
 ) -> Result<(), (String, String)> {
-    // The wizard refuses to run while either file is on disk.
-    touched.push((crate::loadout_store::catalog_path(app_data), None));
-    crate::loadout_store::save_global_catalog(app_data, catalog)
-        .map_err(|e| ("catalog.toml".to_string(), e.to_string()))?;
-    touched.push((crate::loadout_store::loadouts_path(app_data), None));
-    crate::loadout_store::save_loadout_set(app_data, loadouts)
-        .map_err(|e| ("loadouts.toml".to_string(), e.to_string()))?;
-    for (file, text) in kept {
-        touched.push((file.path.clone(), file.text.clone()));
-        crate::profile_config::write_with_backup(&file.path, text).map_err(|e| {
-            (
-                format!(
-                    "the {} profile file",
-                    crate::profile_set::display_name(&file.name)
-                ),
-                e.to_string(),
-            )
-        })?;
+    for (n, (path, text)) in journal.files(app_data).into_iter().enumerate() {
+        #[cfg(test)]
+        WIZARD_WRITES_BEFORE_A_CRASH.with(|left| match left.get() {
+            Some(0) => panic!("the test stops the wizard here"),
+            Some(more) => left.set(Some(more - 1)),
+            None => {}
+        });
+        // The wizard refuses to run while catalog.toml or loadouts.toml
+        // is on disk.
+        let (what, before) = match n.checked_sub(2) {
+            None => (
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned(),
+                None,
+            ),
+            Some(i) => {
+                let file = kept[i].0;
+                (
+                    format!(
+                        "the {} profile file",
+                        crate::profile_set::display_name(&file.name)
+                    ),
+                    file.text.clone(),
+                )
+            }
+        };
+        touched.push((path.clone(), before));
+        crate::profile_config::write_with_backup(&path, text).map_err(|e| (what, e.to_string()))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+thread_local! {
+    /// How many files a wizard run on this thread writes before the test
+    /// stops it where it stands, the way a crash or a force quit would.
+    static WIZARD_WRITES_BEFORE_A_CRASH: std::cell::Cell<Option<usize>> =
+        const { std::cell::Cell::new(None) };
 }
 
 /// Cleanly exit the app. Surfaces a "quit" event first so any window
@@ -5501,6 +5549,8 @@ mod tests {
             assert!(written);
             let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
             assert_eq!(catalog.aliases[0].name, "hh");
+            // A run that wrote every file takes its journal out.
+            assert!(!crate::loadout_store::journal_path(dir.path()).exists());
             // The alias left the profile file, and the copy in legacy
             // still holds it.
             let healer = set.profile_path("Healer");
@@ -6375,6 +6425,75 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn a_wizard_run_that_stops_partway_finishes_at_the_next_launch() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let names = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"];
+            // The run writes catalog.toml, loadouts.toml, and three
+            // profile files. Stop it before each of them.
+            for stop in 0..5 {
+                let dir = tempfile::tempdir().unwrap();
+                let set = james_like_set(dir.path());
+                let mut healer = character("Healer", 2, &[]);
+                healer.disabled_alias_groups = vec!["combat".into()];
+                for (n, config) in [character(DEFAULT_PROFILE_NAME, 1, &[]), healer]
+                    .into_iter()
+                    .enumerate()
+                {
+                    config.save(&set.profile_path(names[n])).unwrap();
+                }
+                // Test-Prompt shares Default's kick alias.
+                let mut prompt = character("Test-Prompt", 3, &[]);
+                prompt
+                    .aliases
+                    .push(vosh_alias::Alias::new("default kick", "kick 1"));
+                prompt.save(&set.profile_path("Test-Prompt")).unwrap();
+                let mut before = Vec::new();
+                for name in names {
+                    before.push(items_on(
+                        &*relaunch_as(dir.path(), name).await.profile.lock().await,
+                    ));
+                }
+
+                // A crash or a force quit stops the run where it stands.
+                let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+                super::super::WIZARD_WRITES_BEFORE_A_CRASH.set(Some(stop));
+                let run = tokio::spawn({
+                    let state = state.clone();
+                    let dir = dir.path().to_path_buf();
+                    async move { super::super::apply_migration(&state, &dir, &[], || {}).await }
+                })
+                .await;
+                super::super::WIZARD_WRITES_BEFORE_A_CRASH.set(None);
+                assert!(run.is_err(), "stop {stop}");
+                let journal = crate::loadout_store::journal_path(dir.path());
+                assert!(journal.exists(), "stop {stop}");
+
+                // The next launch writes what the run did not, before
+                // anything loads, and says so. Loadout mode used to start
+                // over files that still held their items under their old
+                // group names, and every character got every item.
+                for (n, name) in names.iter().enumerate() {
+                    let state = relaunch_as(dir.path(), name).await;
+                    let notices = state.take_launch_notices();
+                    let finished = [crate::loadout_store::WIZARD_FINISHED_NOTICE.to_string()];
+                    if n == 0 {
+                        assert_eq!(notices, finished, "stop {stop}");
+                    } else {
+                        assert!(notices.is_empty(), "stop {stop}");
+                    }
+                    assert!(state.global_catalog.lock().await.is_some(), "stop {stop}");
+                    let p = state.profile.lock().await;
+                    assert_eq!(items_on(&p), before[n], "stop {stop} {name}");
+                    assert!(ProfileConfig::load(&set.profile_path(name))
+                        .unwrap()
+                        .aliases
+                        .is_empty());
+                }
+                assert!(!journal.exists(), "stop {stop}");
+            }
+        }
+
+        #[tokio::test]
         async fn a_wizard_that_cannot_finish_puts_every_file_back() {
             use crate::profile_set::DEFAULT_PROFILE_NAME;
             let dir = tempfile::tempdir().unwrap();
@@ -6435,6 +6554,7 @@ mod tests {
             assert!(!loadouts_path(dir.path()).exists());
             let legacy = crate::loadout_store::legacy_dir(dir.path());
             assert_eq!(std::fs::read_dir(&legacy).unwrap().count(), 0);
+            assert!(!crate::loadout_store::journal_path(dir.path()).exists());
             for (path, text) in &files {
                 match text {
                     Some(text) => assert_eq!(&read(path), text, "{}", path.display()),
