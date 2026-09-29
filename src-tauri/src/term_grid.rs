@@ -242,6 +242,17 @@ pub(crate) fn resize_grid(columns: usize, screen_lines: usize) {
     }
 }
 
+static SEEDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Claim the one seeding of the shared grid from the persisted
+/// scrollback. The grid lives as long as the process, so a webview
+/// reload or a remounted terminal asking again would write the history
+/// a second time over a grid that already holds it (and glue the last
+/// prompt to the first restored line). True on the first call only.
+pub(crate) fn claim_seed() -> bool {
+    !SEEDED.swap(true, std::sync::atomic::Ordering::AcqRel)
+}
+
 /// Feed the live session's display bytes into the shared grid, creating
 /// it on first use. Called from the session loop. Cheap and lock-guarded;
 /// the renderer reads the same grid.
@@ -776,6 +787,13 @@ mod tests {
         g.feed(b"abcdef");
         assert_eq!(&g.row_string(0)[..4], "abcd");
         assert_eq!(&g.row_string(1)[..2], "ef");
+    }
+
+    #[test]
+    fn the_grid_seeds_from_scrollback_once() {
+        assert!(claim_seed());
+        assert!(!claim_seed());
+        assert!(!claim_seed());
     }
 
     #[test]
