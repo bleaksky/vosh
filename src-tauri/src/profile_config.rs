@@ -110,8 +110,11 @@ where
 /// Trim each entry's name and label and drop rows whose name is empty
 /// after trimming (no point tracking "", it never matches a real
 /// affect). An empty label goes back to None so the pane falls
-/// through to the name.
+/// through to the name. A name repeated in any case keeps only its
+/// first row, since the Affects pane matches names without case and
+/// `haste` would otherwise track `Haste` twice.
 pub(crate) fn normalize_tracked_affects(list: Vec<TrackedAffect>) -> Vec<TrackedAffect> {
+    let mut seen: HashSet<String> = HashSet::new();
     list.into_iter()
         .map(|t| TrackedAffect {
             name: t.name.trim().to_string(),
@@ -120,7 +123,7 @@ pub(crate) fn normalize_tracked_affects(list: Vec<TrackedAffect>) -> Vec<Tracked
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty()),
         })
-        .filter(|t| !t.name.is_empty())
+        .filter(|t| !t.name.is_empty() && seen.insert(t.name.to_lowercase()))
         .collect()
 }
 
@@ -1789,6 +1792,24 @@ name = "haste"
                     label: None,
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn normalize_tracked_affects_keeps_the_first_of_a_name_in_any_case() {
+        let row = |name: &str, label: Option<&str>| TrackedAffect {
+            name: name.into(),
+            label: label.map(Into::into),
+        };
+        assert_eq!(
+            normalize_tracked_affects(vec![
+                row("Haste", Some("H")),
+                row("Sanctuary", None),
+                row(" haste ", None),
+                row("HASTE", Some("again")),
+                row("sanctuary", None),
+            ]),
+            vec![row("Haste", Some("H")), row("Sanctuary", None)]
         );
     }
 
