@@ -1,0 +1,791 @@
+//! A generated round trip of the shared catalog wizard. A seeded
+//! generator builds hundreds of profile sets, each with two to four
+//! profiles that hold aliases, triggers, and macros in groups, items
+//! several profiles share alike or in conflict, groups off for one kind
+//! and on for another under one name, presets on and off, preset
+//! triggers a file lacks, a profile that never saved a file, and settings
+//! that are not automation. For each set it launches as every character
+//! in per profile mode to see what each has on, runs the wizard, then
+//! launches as every character in loadout mode, switches between them
+//! with saves in between, and launches as each again. Every time, each
+//! character must have on exactly the aliases, triggers, and macros it
+//! had on before, with the same content, and every other setting as it
+//! was.
+//!
+//! The presets that are on are shared in loadout mode, so where the
+//! characters had different preset lists, each character is compared to
+//! the per profile launch with the shared list in place of its own.
+//! Where two characters had different versions of one item, the wizard
+//! keeps the one you pick, so each character is compared to that
+//! version.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
+use std::sync::Arc;
+
+use vosh_alias::Alias;
+use vosh_trigger::{Trigger, TriggerAction, TriggerPattern, TriggerTarget};
+
+use super::{AppState, SharedState, PERSIST_LOCK};
+use crate::migration::{ItemKind, ItemPayload};
+use crate::profile::{Macro, Profile, Timer};
+use crate::profile_config::{PaneLayoutPersist, ProfileConfig, TrackedAffect};
+use crate::profile_set::{ProfileSet, Scope, ScopeConfig, DEFAULT_PROFILE_NAME};
+
+/// How many profile sets the round trip builds.
+const SETS: u64 = 300;
+
+/// `SplitMix64`, so every run builds the same sets without a new crate.
+struct Rng(u64);
+
+impl Rng {
+    fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    }
+
+    fn below(&mut self, n: usize) -> usize {
+        (self.next() % n as u64) as usize
+    }
+
+    fn chance(&mut self, percent: u64) -> bool {
+        self.next() % 100 < percent
+    }
+
+    fn pick<T: Clone>(&mut self, items: &[T]) -> T {
+        items[self.below(items.len())].clone()
+    }
+}
+
+const PROFILES: [&str; 4] = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt", "Bard"];
+const GROUPS: [&str; 3] = ["combat", "loot", "buffs"];
+const ALIASES: [&str; 6] = ["kk", "bash", "loot", "heal", "cc", "dd"];
+const TRIGGERS: [&str; 4] = ["flee", "loot", "greet", "tell"];
+const MACROS: [&str; 4] = ["f1", "f2", "ctrl+1", "f3"];
+
+/// The preset library the launch below installs from, as src/lib/presets.ts
+/// holds it: each preset id with the names of its triggers. Every preset
+/// is on by default, as every preset in the real library is.
+const LIBRARY: [(&str, &[&str]); 3] = [
+    ("healing_basics", &["preset heal 1", "preset heal 2"]),
+    ("potion_labels", &["preset potion 1"]),
+    ("herb_labels", &["preset herb 1", "preset herb 2"]),
+];
+
+/// A preset trigger as the library holds it, or as an older build left
+/// it in a profile file.
+fn preset_trigger(preset: &str, name: &str, older: bool) -> Trigger {
+    let pattern = if older {
+        format!("^{name} older$")
+    } else {
+        format!("^{name}$")
+    };
+    Trigger {
+        name: name.to_string(),
+        patterns: vec![TriggerPattern {
+            pattern,
+            enabled: true,
+        }],
+        priority: 5,
+        enabled: true,
+        actions: vec![TriggerAction::Send {
+            template: format!("say {name}"),
+        }],
+        preset: Some(preset.to_string()),
+        group: None,
+        target: TriggerTarget::Line,
+    }
+}
+
+/// The presets that are on for a stored `enabled_presets` list, in
+/// library order, as `enabledPresetIds` in src/lib/automationRecords.ts
+/// reads it. An empty list means the defaults, which hold every preset.
+fn presets_on(stored: &[String]) -> Vec<&'static str> {
+    LIBRARY
+        .iter()
+        .map(|(id, _)| *id)
+        .filter(|id| stored.is_empty() || stored.iter().any(|s| s == id))
+        .collect()
+}
+
+/// What the main window does with the preset triggers once a launch has
+/// loaded the profile, as App.tsx does it with `presetLaunchPlan`. Every
+/// preset that is off comes out through `presets_remove`, and every one
+/// that is on installs again through `presets_install`. Each command
+/// saves, as the real commands do.
+async fn preset_launch_plan(state: &SharedState, dir: &Path) {
+    let (remove, install) = {
+        let p = state.profile.lock().await;
+        let on = presets_on(&p.ui.enabled_presets);
+        let installed: BTreeSet<String> = p
+            .triggers
+            .list()
+            .into_iter()
+            .filter_map(|t| t.preset)
+            .collect();
+        let remove: Vec<String> = installed
+            .into_iter()
+            .filter(|id| !on.contains(&id.as_str()))
+            .collect();
+        (remove, on)
+    };
+    for id in remove {
+        state.profile.lock().await.triggers.remove_by_preset(&id);
+        save(state, dir).await;
+    }
+    let triggers: Vec<Trigger> = LIBRARY
+        .iter()
+        .filter(|(id, _)| install.contains(id))
+        .flat_map(|(id, names)| names.iter().map(|n| preset_trigger(id, n, false)))
+        .collect();
+    if !triggers.is_empty() {
+        super::install_preset_triggers(&mut *state.profile.lock().await, triggers).unwrap();
+        save(state, dir).await;
+    }
+}
+
+/// The save a Settings edit, a debounce, or a command runs.
+async fn save(state: &SharedState, dir: &Path) {
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    super::persist_state(state, Some(dir)).await;
+}
+
+/// Open Vosh as `name` over `dir` the way lib.rs launches it, then let
+/// the main window bring the preset triggers in line.
+async fn launch_as(dir: &Path, name: &str) -> SharedState {
+    ProfileSet::load_or_migrate(dir.to_path_buf())
+        .unwrap()
+        .switch(name)
+        .unwrap();
+    let state: SharedState = Arc::new(AppState::default());
+    crate::launch::load_profiles(&state, dir).await;
+    crate::launch::load_loadout_mode(&state, dir).await;
+    preset_launch_plan(&state, dir).await;
+    state
+}
+
+/// One line per alias, trigger, or macro that is on in `p`, with its
+/// content. The group and the enabled flag say whether it is on, so the
+/// line leaves them out.
+fn on_rows(p: &Profile) -> Vec<String> {
+    let mut rows = Vec::new();
+    for a in p.aliases.list() {
+        if a.enabled && p.aliases.is_group_enabled(a.group.as_deref().unwrap_or("")) {
+            rows.push(alias_row(a));
+        }
+    }
+    for t in p.triggers.list() {
+        if t.enabled
+            && p.triggers
+                .is_group_enabled(t.group.as_deref().unwrap_or(""))
+        {
+            rows.push(trigger_row(&t));
+        }
+    }
+    for m in &p.macros {
+        let group_on = m
+            .group
+            .as_deref()
+            .is_none_or(|g| g.is_empty() || !p.disabled_macro_groups.contains(g));
+        if m.enabled && group_on {
+            rows.push(macro_row(m));
+        }
+    }
+    rows.sort();
+    rows
+}
+
+fn alias_row(a: &Alias) -> String {
+    let mut a = a.clone();
+    a.group = None;
+    a.enabled = true;
+    format!("alias\t{}\t{}", a.name, serde_json::to_string(&a).unwrap())
+}
+
+fn trigger_row(t: &Trigger) -> String {
+    let mut t = t.clone();
+    t.group = None;
+    t.enabled = true;
+    format!(
+        "trigger\t{}\t{}",
+        t.name,
+        serde_json::to_string(&t).unwrap()
+    )
+}
+
+fn macro_row(m: &Macro) -> String {
+    let mut m = m.clone();
+    m.group = None;
+    m.enabled = true;
+    format!("macro\t{}\t{}", m.key, serde_json::to_string(&m).unwrap())
+}
+
+/// The kind and the name a row starts with.
+fn row_key(row: &str) -> String {
+    let mut fields = row.splitn(3, '\t');
+    format!(
+        "{}\t{}",
+        fields.next().unwrap_or(""),
+        fields.next().unwrap_or("")
+    )
+}
+
+/// What `config` holds besides the aliases, triggers, and macros, the
+/// preset list the catalog owns, and the group checkbox lists, which name
+/// the catalog groups in loadout mode. As TOML, so it compares every
+/// field.
+fn settings(mut config: ProfileConfig) -> String {
+    config.clear_catalog_items();
+    config.ui.enabled_presets.clear();
+    config.disabled_alias_groups.clear();
+    config.disabled_trigger_groups.clear();
+    config.disabled_macro_groups.clear();
+    config.to_toml().unwrap()
+}
+
+/// Copy the app data folder `from` into `to`, as a snapshot the per
+/// profile launches below can write over without touching the original.
+fn copy_dir(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_dir(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+/// One generated profile set.
+struct Set {
+    names: Vec<String>,
+    /// The file of each profile, None for one that never saved a file.
+    files: Vec<Option<ProfileConfig>>,
+    scope: ScopeConfig,
+    /// The profile you run the wizard as.
+    wizard: usize,
+}
+
+/// A stored preset list: the defaults, every preset off, or some on.
+fn preset_list(rng: &mut Rng) -> Vec<String> {
+    match rng.below(4) {
+        0 => Vec::new(),
+        1 => vec!["none".to_string()],
+        _ => {
+            let on: Vec<String> = LIBRARY
+                .iter()
+                .filter(|_| rng.chance(50))
+                .map(|(id, _)| (*id).to_string())
+                .collect();
+            if on.is_empty() {
+                vec![LIBRARY[0].0.to_string()]
+            } else {
+                on
+            }
+        }
+    }
+}
+
+fn some_group(rng: &mut Rng) -> Option<String> {
+    if rng.chance(25) {
+        None
+    } else {
+        Some(rng.pick(&GROUPS).to_string())
+    }
+}
+
+/// The group an item goes in: mostly the one every profile uses for its
+/// name, so shared items often agree, and now and then another.
+fn item_group(rng: &mut Rng, usual: Option<&String>) -> Option<String> {
+    if rng.chance(75) {
+        usual.cloned()
+    } else {
+        some_group(rng)
+    }
+}
+
+fn generate(seed: u64) -> Set {
+    let mut rng = Rng(seed);
+    let count = 2 + rng.below(3);
+    let names: Vec<String> = PROFILES[..count].iter().map(|s| (*s).to_string()).collect();
+    // Half the sets have a profile that never saved a file. You run the
+    // wizard as a profile that did, since a launch saves the live one.
+    let never_saved = rng.chance(50).then(|| rng.below(count));
+    let saved: Vec<usize> = (0..count).filter(|i| Some(*i) != never_saved).collect();
+    let wizard = rng.pick(&saved);
+    let shared_list = rng.chance(60).then(|| preset_list(&mut rng));
+    let usual: BTreeMap<String, Option<String>> = ALIASES
+        .iter()
+        .map(|n| format!("alias {n}"))
+        .chain(TRIGGERS.iter().map(|n| format!("trigger {n}")))
+        .chain(MACROS.iter().map(|n| format!("macro {n}")))
+        .map(|key| (key, some_group(&mut rng)))
+        .collect();
+
+    let mut files = Vec::new();
+    for i in 0..count {
+        if Some(i) == never_saved {
+            files.push(None);
+            continue;
+        }
+        let mut config = ProfileConfig::default();
+        for group in GROUPS {
+            if rng.chance(30) {
+                config.disabled_alias_groups.push(group.to_string());
+            }
+            if rng.chance(30) {
+                config.disabled_trigger_groups.push(group.to_string());
+            }
+            if rng.chance(30) {
+                config.disabled_macro_groups.push(group.to_string());
+            }
+        }
+        for name in ALIASES {
+            if !rng.chance(55) {
+                continue;
+            }
+            let version = if rng.chance(80) { "one" } else { "two" };
+            let mut a = Alias::new(name, format!("{name} {version}"));
+            if rng.chance(10) {
+                a.script = Some(format!("mud.send('{name}')"));
+            }
+            a.enabled = rng.chance(85);
+            a.group = item_group(&mut rng, usual[&format!("alias {name}")].as_ref());
+            config.aliases.push(a);
+        }
+        for name in TRIGGERS {
+            if !rng.chance(55) {
+                continue;
+            }
+            let version = if rng.chance(80) { "one" } else { "two" };
+            config.triggers.push(Trigger {
+                name: name.to_string(),
+                patterns: vec![TriggerPattern {
+                    pattern: format!("^{name} {version}$"),
+                    enabled: true,
+                }],
+                priority: 0,
+                enabled: rng.chance(85),
+                actions: vec![TriggerAction::Send {
+                    template: format!("say {name}"),
+                }],
+                preset: None,
+                group: item_group(&mut rng, usual[&format!("trigger {name}")].as_ref()),
+                target: TriggerTarget::Line,
+            });
+        }
+        for key in MACROS {
+            if !rng.chance(55) {
+                continue;
+            }
+            let version = if rng.chance(80) { "one" } else { "two" };
+            config.macros.push(Macro {
+                key: key.to_string(),
+                command: format!("cast {version}"),
+                group: item_group(&mut rng, usual[&format!("macro {key}")].as_ref()),
+                enabled: rng.chance(85),
+            });
+        }
+        // The presets this character has on, and their triggers as its
+        // file holds them. A file saved before a preset came out lacks
+        // its triggers, and an older build left older patterns.
+        let list = match &shared_list {
+            Some(list) => list.clone(),
+            None => preset_list(&mut rng),
+        };
+        for (id, triggers) in LIBRARY {
+            let on = presets_on(&list).contains(&id);
+            if !(on && rng.chance(80) || !on && rng.chance(5)) {
+                continue;
+            }
+            for name in triggers {
+                let mut t = preset_trigger(id, name, rng.chance(15));
+                if rng.chance(30) {
+                    t.group = some_group(&mut rng);
+                }
+                t.enabled = rng.chance(90);
+                config.triggers.push(t);
+            }
+        }
+        config.ui.enabled_presets = list;
+        // Settings that are not automation.
+        config.connection.host = format!("host{}.example", rng.below(1000));
+        config.connection.port = 4000 + rng.below(100) as u16;
+        config
+            .profile_vars
+            .insert("target".into(), format!("orc {}", rng.below(100)));
+        if rng.chance(50) {
+            config
+                .profile_vars
+                .insert("pet".into(), format!("wolf {}", rng.below(100)));
+        }
+        config.tick.enabled = rng.chance(50);
+        config.tick.interval_secs = 20 + rng.below(40) as u64;
+        if rng.chance(50) {
+            config.timers = vec![Timer {
+                id: 1 + rng.below(9) as u32,
+                name: format!("drink {i}"),
+                interval_secs: 30 + rng.below(90) as u32,
+                command: "drink".into(),
+                enabled: rng.chance(50),
+            }];
+        }
+        config.ui.vitals_values = rng.pick(&["current-max", "current", "percent"]).into();
+        config.ui.chip_style = rng.pick(&["value_only", "caption", "icon"]).into();
+        if rng.chance(50) {
+            config.ui.tracked_affects = vec![TrackedAffect {
+                name: format!("Sanctuary {i}"),
+                label: rng.chance(50).then(|| format!("S{i}")),
+            }];
+        }
+        config.ui.panes = Some(PaneLayoutPersist {
+            panel_open: rng.chance(50),
+            panel_width: Some(250 + 10 * rng.below(20) as u32),
+            ..PaneLayoutPersist::default_layout()
+        });
+        if rng.chance(30) {
+            config.plugins.enabled = vec![format!("plugin {i}")];
+        }
+        files.push(Some(config));
+    }
+    let scope = if rng.chance(50) {
+        ScopeConfig::default()
+    } else {
+        ScopeConfig {
+            theme: Scope::Profile,
+            dock_layout: Scope::Profile,
+            ..ScopeConfig::default()
+        }
+    };
+    Set {
+        names,
+        files,
+        scope,
+        wizard,
+    }
+}
+
+/// Write `set` into the app data folder `dir`.
+fn write_set(set: &Set, dir: &Path) {
+    let mut profiles = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
+    for name in &set.names[1..] {
+        profiles.create(name).unwrap();
+    }
+    profiles.set_scope(set.scope).unwrap();
+    for (name, file) in set.names.iter().zip(&set.files) {
+        if let Some(config) = file {
+            config.save(&profiles.profile_path(name)).unwrap();
+        }
+    }
+}
+
+/// The shared preset list the catalog takes, by the rule
+/// `first_catalog_presets` follows, worked out here on its own: every
+/// preset that any profile file had on, or the live list when no
+/// profile saved a file.
+fn shared_presets(dir: &Path, names: &[String], live: &[String]) -> Vec<&'static str> {
+    let profiles = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
+    let lists: Vec<Vec<String>> = names
+        .iter()
+        .map(|n| profiles.profile_path(n))
+        .filter(|p| p.exists())
+        .map(|p| ProfileConfig::load(&p).unwrap().ui.enabled_presets)
+        .collect();
+    if lists.is_empty() {
+        return presets_on(live);
+    }
+    let on: BTreeSet<&str> = lists.iter().flat_map(|l| presets_on(l)).collect();
+    LIBRARY
+        .iter()
+        .map(|(id, _)| *id)
+        .filter(|id| on.contains(id))
+        .collect()
+}
+
+/// A stored list that turns on exactly `on`.
+fn stored_list(on: &[&str]) -> Vec<String> {
+    if on.is_empty() {
+        vec!["none".to_string()]
+    } else {
+        on.iter().map(|s| (*s).to_string()).collect()
+    }
+}
+
+/// What one character has in per profile mode.
+struct Before {
+    /// Its settings besides automation, from the live profile.
+    settings: String,
+    /// The items it has on, with the shared preset list in place of its
+    /// own.
+    on: Vec<String>,
+}
+
+/// Launch as each character over a copy of `dir`, in per profile mode.
+async fn before_wizard(dir: &Path, names: &[String], shared: &[&str]) -> Vec<Before> {
+    let mut out = Vec::new();
+    for name in names {
+        let copy = tempfile::tempdir().unwrap();
+        copy_dir(dir, copy.path());
+        let state = launch_as(copy.path(), name).await;
+        let (settings_now, on_now, list) = {
+            let p = state.profile.lock().await;
+            (
+                settings(ProfileConfig::from_profile(&p)),
+                on_rows(&p),
+                p.ui.enabled_presets.clone(),
+            )
+        };
+        let on = if presets_on(&list) == shared {
+            on_now
+        } else {
+            // The launch saved this profile's file. Give it the shared
+            // list and launch again.
+            let path = ProfileSet::load_or_migrate(copy.path().to_path_buf())
+                .unwrap()
+                .profile_path(name);
+            let mut config = ProfileConfig::load(&path).unwrap();
+            config.ui.enabled_presets = stored_list(shared);
+            config.save(&path).unwrap();
+            let state = launch_as(copy.path(), name).await;
+            let p = state.profile.lock().await;
+            on_rows(&p)
+        };
+        out.push(Before {
+            settings: settings_now,
+            on,
+        });
+    }
+    out
+}
+
+fn kind_word(kind: ItemKind) -> &'static str {
+    match kind {
+        ItemKind::Alias => "alias",
+        ItemKind::Trigger => "trigger",
+        ItemKind::Macro => "macro",
+    }
+}
+
+/// What differs between the rows a character has on and the rows it
+/// should have on.
+fn diff(name: &str, when: &str, got: &[String], want: &[String]) -> Result<(), String> {
+    if got == want {
+        return Ok(());
+    }
+    let missing: Vec<&String> = want.iter().filter(|r| !got.contains(r)).collect();
+    let extra: Vec<&String> = got.iter().filter(|r| !want.contains(r)).collect();
+    Err(format!(
+        "{name} {when}: missing {missing:?}, extra {extra:?}"
+    ))
+}
+
+async fn check(
+    state: &SharedState,
+    name: &str,
+    when: &str,
+    before: &Before,
+    want: &[String],
+) -> Result<(), String> {
+    let p = state.profile.lock().await;
+    diff(name, when, &on_rows(&p), want)?;
+    let now = settings(ProfileConfig::from_profile(&p));
+    if now != before.settings {
+        return Err(format!(
+            "{name} {when}: settings changed\n{}\nbecame\n{now}",
+            before.settings
+        ));
+    }
+    Ok(())
+}
+
+/// Build set `seed`, run the wizard over it, and check every character.
+async fn round_trip(seed: u64) -> Result<(), String> {
+    let set = generate(seed);
+    let dir = tempfile::tempdir().unwrap();
+    let dir = dir.path();
+    write_set(&set, dir);
+    let names = &set.names;
+
+    // You play the wizard's character, as a launch leaves it.
+    let wizard = launch_as(dir, &names[set.wizard]).await;
+    let live = wizard.profile.lock().await.ui.enabled_presets.clone();
+    let shared = shared_presets(dir, names, &live);
+    let files_before: Vec<Option<String>> = {
+        let profiles = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
+        names
+            .iter()
+            .map(|n| std::fs::read_to_string(profiles.profile_path(n)).ok())
+            .collect()
+    };
+    let before = before_wizard(dir, names, &shared).await;
+
+    // Pick a version of each item in conflict.
+    let mut rng = Rng(seed ^ 0xa5a5_a5a5);
+    let plan = super::analyze_migration(&wizard, dir)
+        .await
+        .map_err(|e| format!("analyze: {e}"))?;
+    let mut resolutions = Vec::new();
+    let mut chosen: BTreeMap<String, Option<String>> = BTreeMap::new();
+    for conflict in &plan.conflicts {
+        let variant = &conflict.variants[rng.below(conflict.variants.len())];
+        let row = match &variant.item {
+            ItemPayload::Alias { item } => Some(alias_row(item)),
+            // The launch installs the library version of a preset
+            // trigger whichever version you keep.
+            ItemPayload::Trigger { item } if item.preset.is_some() => None,
+            ItemPayload::Trigger { item } => Some(trigger_row(item)),
+            ItemPayload::Macro { item } => Some(macro_row(item)),
+        };
+        chosen.insert(
+            format!("{}\t{}", kind_word(conflict.kind), conflict.name),
+            row,
+        );
+        resolutions.push(super::ConflictResolution {
+            kind: conflict.kind,
+            name: conflict.name.clone(),
+            source_profile: variant.source_profile.clone(),
+        });
+    }
+    let want: Vec<Vec<String>> = before
+        .iter()
+        .map(|b| {
+            let mut rows: Vec<String> =
+                b.on.iter()
+                    .map(|row| match chosen.get(&row_key(row)) {
+                        Some(Some(kept)) => kept.clone(),
+                        _ => row.clone(),
+                    })
+                    .collect();
+            rows.sort();
+            rows
+        })
+        .collect();
+
+    super::apply_migration(&wizard, dir, &resolutions, || {})
+        .await
+        .map_err(|e| format!("apply: {e}"))?;
+    drop(wizard);
+
+    // Every file keeps its settings, and a copy of each waits in legacy.
+    let profiles = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
+    for (n, name) in names.iter().enumerate() {
+        let path = profiles.profile_path(name);
+        match &files_before[n] {
+            Some(text) => {
+                let kept = ProfileConfig::load(&path).map_err(|e| e.to_string())?;
+                if settings(kept) != settings(ProfileConfig::from_toml(text).unwrap()) {
+                    return Err(format!("{name}: the wizard changed a setting in its file"));
+                }
+                let legacy = path
+                    .parent()
+                    .unwrap()
+                    .join("legacy")
+                    .join(format!("{name}.toml"));
+                if std::fs::read_to_string(&legacy).ok().as_ref() != Some(text) {
+                    return Err(format!("{name}: the legacy copy differs from the file"));
+                }
+            }
+            None if path.exists() => {
+                let kept = ProfileConfig::load(&path).map_err(|e| e.to_string())?;
+                if settings(kept) != settings(ProfileConfig::default()) {
+                    return Err(format!("{name}: the wizard gave a new file settings"));
+                }
+            }
+            None => {}
+        }
+    }
+
+    // Quit, then open Vosh as each character.
+    for (n, name) in names.iter().enumerate() {
+        let state = launch_as(dir, name).await;
+        if state.global_catalog.lock().await.is_none() {
+            return Err(format!("{name}: no loadout mode after the wizard"));
+        }
+        check(&state, name, "at the first launch", &before[n], &want[n]).await?;
+    }
+
+    // Switch between the characters with saves in between.
+    let start = rng.below(names.len());
+    let state = launch_as(dir, &names[start]).await;
+    for step in 0..4 {
+        let n = rng.below(names.len());
+        super::switch_profile(&state, Some(dir), &names[n])
+            .await
+            .map_err(|e| format!("switch: {e}"))?;
+        check(
+            &state,
+            &names[n],
+            &format!("after switch {step}"),
+            &before[n],
+            &want[n],
+        )
+        .await?;
+        if rng.chance(60) {
+            save(&state, dir).await;
+        }
+    }
+    save(&state, dir).await;
+    drop(state);
+
+    // And once more from a fresh launch as each.
+    for (n, name) in names.iter().enumerate() {
+        let state = launch_as(dir, name).await;
+        check(&state, name, "at the last launch", &before[n], &want[n]).await?;
+    }
+    Ok(())
+}
+
+/// Threads the sets spread over, each with a runtime of its own.
+const THREADS: u64 = 4;
+
+#[test]
+fn every_character_keeps_what_it_had_on_after_the_wizard() {
+    let mut failures: Vec<(u64, String)> = std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..THREADS)
+            .map(|first| {
+                scope.spawn(move || {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .unwrap();
+                    runtime.block_on(async {
+                        let mut failed = Vec::new();
+                        for seed in (first..SETS).step_by(THREADS as usize) {
+                            if let Err(e) = round_trip(seed).await {
+                                failed.push((seed, e));
+                            }
+                        }
+                        failed
+                    })
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|worker| worker.join().unwrap())
+            .collect()
+    });
+    failures.sort_by_key(|(seed, _)| *seed);
+    if !failures.is_empty() {
+        let first: Vec<String> = failures
+            .iter()
+            .take(5)
+            .map(|(seed, e)| format!("seed {seed}: {e}"))
+            .collect();
+        panic!(
+            "{} of {SETS} sets failed. Seeds {:?}\n{}",
+            failures.len(),
+            failures
+                .iter()
+                .map(|(s, _)| *s)
+                .take(20)
+                .collect::<Vec<_>>(),
+            first.join("\n")
+        );
+    }
+}
