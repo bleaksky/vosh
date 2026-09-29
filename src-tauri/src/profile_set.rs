@@ -39,6 +39,8 @@ pub(crate) enum ProfileSetError {
     Serialize(#[from] toml::ser::Error),
     #[error("You already have a profile named {0}.")]
     AlreadyExists(String),
+    #[error("Your profiles folder already holds a file named {0}.toml. Choose another name.")]
+    FileExists(String),
     #[error("Vosh cannot find a profile named {0}.")]
     NotFound(String),
     #[error("You cannot delete the profile you are using. Switch to another profile first.")]
@@ -374,6 +376,29 @@ impl ProfileSet {
         self.index.profiles.iter().find(|p| p.name == name)
     }
 
+    /// Refuse `name` for a new or renamed profile when another profile
+    /// has it in any case, or when its file is already on disk. Profile
+    /// files live on disks that ignore case, as macOS and Windows do by
+    /// default, so `Default.toml` is the file of `default`, and a name
+    /// that differs only in case would write over that profile. A
+    /// rename passes the profile's current name as `renaming`, which
+    /// may keep its own name in another case.
+    fn check_free(&self, name: &str, renaming: Option<&str>) -> Result<(), ProfileSetError> {
+        if let Some(other) = self
+            .index
+            .profiles
+            .iter()
+            .find(|p| Some(p.name.as_str()) != renaming && p.name.eq_ignore_ascii_case(name))
+        {
+            return Err(ProfileSetError::AlreadyExists(display_name(&other.name)));
+        }
+        let own_file = renaming.is_some_and(|old| old.eq_ignore_ascii_case(name));
+        if !own_file && self.profile_path(name).exists() {
+            return Err(ProfileSetError::FileExists(name.to_string()));
+        }
+        Ok(())
+    }
+
     /// Find the best-matching profile for a connect target plus optional
     /// character name. Pure function over the entry list so both the
     /// `profile_resolve_match` Tauri command and the Char.Status auto-
@@ -603,9 +628,7 @@ impl ProfileSet {
             }
             None => None,
         };
-        if self.get(&name).is_some() {
-            return Err(ProfileSetError::AlreadyExists(name));
-        }
+        self.check_free(&name, None)?;
         if let Some(source) = copy_from {
             let src_path = self.profile_path(source);
             if src_path.exists() {
@@ -639,15 +662,14 @@ impl ProfileSet {
         Ok(())
     }
 
-    /// Rename an entry. Moves the per-profile file too.
+    /// Rename an entry. Moves the per-profile file too. A new name that
+    /// differs only in case from the old one keeps the same file.
     pub(crate) fn rename(&mut self, old: &str, new: &str) -> Result<(), ProfileSetError> {
         let new = sanitize_name(new)?;
-        if self.get(&new).is_some() && new != old {
-            return Err(ProfileSetError::AlreadyExists(new));
-        }
         let Some(idx) = self.index.profiles.iter().position(|p| p.name == old) else {
             return Err(ProfileSetError::NotFound(old.to_string()));
         };
+        self.check_free(&new, Some(old))?;
         let old_path = self.profile_path(old);
         let new_path = self.profile_path(&new);
         if old_path.exists() {
@@ -851,7 +873,7 @@ pub(crate) mod tests {
         );
         assert_eq!(
             set.create(DEFAULT_PROFILE_NAME).unwrap_err().to_string(),
-            "You already have a profile named default."
+            "You already have a profile named Default."
         );
         assert_eq!(
             set.switch("Nobody").unwrap_err().to_string(),
@@ -1352,6 +1374,80 @@ characters = ["Erelei", "Vanek"]
         );
         assert_eq!(set.claimed_by(world, 1848, "Vanek"), None);
         assert_eq!(set.claimed_by("mud.example.org", 4000, "Erelei"), None);
+    }
+
+    fn read_profile(set: &ProfileSet, name: &str) -> String {
+        std::fs::read_to_string(set.profile_path(name)).unwrap()
+    }
+
+    #[test]
+    fn profile_names_compare_without_case() {
+        let dir = tempdir().unwrap();
+        let mut set = james_like_set(dir.path());
+        std::fs::write(set.profile_path(DEFAULT_PROFILE_NAME), "marker = 1\n").unwrap();
+        std::fs::write(set.profile_path("Healer"), "marker = 2\n").unwrap();
+
+        // Characters shows default as Default, and a disk that ignores
+        // case keeps Default.toml and default.toml as one file.
+        for name in ["Default", "DEFAULT", "healer", " HEALER "] {
+            assert!(
+                matches!(
+                    set.create_from(name, Some("Healer"), None),
+                    Err(ProfileSetError::AlreadyExists(_))
+                ),
+                "create {name}"
+            );
+            assert!(
+                matches!(
+                    set.duplicate("Test-Prompt", name),
+                    Err(ProfileSetError::AlreadyExists(_))
+                ),
+                "duplicate {name}"
+            );
+        }
+        assert_eq!(
+            set.rename("Healer", "Default").unwrap_err().to_string(),
+            "You already have a profile named Default."
+        );
+        assert_eq!(
+            set.rename("Test-Prompt", "HEALER").unwrap_err().to_string(),
+            "You already have a profile named Healer."
+        );
+
+        // Nothing was written over or added.
+        assert_eq!(read_profile(&set, DEFAULT_PROFILE_NAME), "marker = 1\n");
+        assert_eq!(read_profile(&set, "Healer"), "marker = 2\n");
+        assert_eq!(set.list().len(), 3);
+        assert!(set.get("Healer").is_some());
+
+        // A profile may change the case of its own name and keeps its
+        // file.
+        set.rename("Healer", "healer").unwrap();
+        assert!(set.get("Healer").is_none());
+        assert_eq!(read_profile(&set, "healer"), "marker = 2\n");
+    }
+
+    #[test]
+    fn a_name_whose_file_is_on_disk_is_refused() {
+        let dir = tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        std::fs::write(set.profile_path("Orphan"), "marker = 3\n").unwrap();
+        assert_eq!(
+            set.create("Orphan").unwrap_err().to_string(),
+            "Your profiles folder already holds a file named Orphan.toml. Choose another name."
+        );
+        set.create("Kept").unwrap();
+        assert!(matches!(
+            set.rename("Kept", "Orphan"),
+            Err(ProfileSetError::FileExists(_))
+        ));
+        assert!(matches!(
+            set.duplicate(DEFAULT_PROFILE_NAME, "Orphan"),
+            Err(ProfileSetError::FileExists(_))
+        ));
+        assert_eq!(read_profile(&set, "Orphan"), "marker = 3\n");
+        assert!(set.get("Orphan").is_none());
+        assert!(set.get("Kept").is_some());
     }
 
     #[test]
