@@ -1938,13 +1938,21 @@ pub(crate) async fn open_settings_window(app: AppHandle) -> Result<(), String> {
             .min_inner_size(SETTINGS_MIN_SIZE.0, SETTINGS_MIN_SIZE.1)
             .resizable(true)
             .transparent(true)
-            // Stay hidden until the React app calls show() on first render
-            // so the user never sees the unstyled default state.
+            // Stay hidden until the page has painted your theme and shows
+            // the window itself, so the first frame is never the dark
+            // stylesheet defaults.
             .visible(false)
             // Disable Tauri's OS file-drop handler. When enabled it
             // intercepts HTML5 drag-and-drop inside the webview, which
             // can break overlay drag interactions.
             .disable_drag_drop_handler();
+    // Open on the theme's ground and appearance, which the last theme
+    // paint reported, so even a frame the page has not painted yet is
+    // in your theme. Before any paint the window keeps the defaults.
+    let builder = match crate::window_backdrop::current() {
+        Some(backdrop) => backdrop.dress(builder),
+        None => builder,
+    };
     // macOS gives Settings the main window's titled frame: native
     // traffic lights over the sidebar at the same centers, a hidden
     // title, and the system's corners and rim. Windows and Linux stay

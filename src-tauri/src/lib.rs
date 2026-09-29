@@ -96,6 +96,7 @@ mod session;
 mod term_grid;
 mod tick;
 mod tintin_import;
+mod window_backdrop;
 
 use commands::{
     aliases_export, aliases_groups_list, aliases_import, aliases_set_group_enabled, app_quit,
@@ -367,6 +368,7 @@ pub fn run() {
             plugins_set_enabled,
             plugins_reload,
             open_settings_window,
+            window_backdrop::window_backdrop_set,
             dock_layout_get,
             dock_layout_set,
             commands::pane_layout_get,

@@ -10,10 +10,11 @@
 // `dark_theme` or `light_theme`, whichever matches the OS appearance,
 // and a prefers-color-scheme listener swaps them when the OS flips.
 
+import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { tokensToCssVars, type Appearance } from './chrome';
-import { parseHex, toRgba } from './color';
+import { parseHex, toHex, toRgba } from './color';
 import {
   bootPaintSide,
   osPrefersDark,
@@ -251,6 +252,22 @@ function rememberPaint(shown: ThemePaintSide) {
       }
     : { v: 1, follow: false, manual: shown };
   writeThemePaint(paint, pageStorage());
+  reportBackdrop(shown, prefs.follow_system_appearance);
+}
+
+// Tell the backend what a new window opens on: the theme's ground, and
+// the light or dark native appearance while the theme is your pick.
+// While it follows the system the window follows the system too, since
+// a pinned appearance would also pin prefers-color-scheme.
+function reportBackdrop(shown: ThemePaintSide, follow: boolean) {
+  const ground = parseHex(shown.vars['--bg'] ?? '');
+  if (!ground) return;
+  invoke('window_backdrop_set', {
+    background: toHex(ground),
+    appearance: follow ? null : shown.appearance,
+  }).catch(() => {
+    // Tauri unavailable. A new window opens on the defaults.
+  });
 }
 
 /** Whether the root shows what the startup paint put there, so the
