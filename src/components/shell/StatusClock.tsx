@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import type { ChipStyle } from '../../lib/session';
+import type { ChipStyle, TickCount } from '../../lib/session';
 import { SunPathIcon, TickRingIcon } from './icons';
 import { MoonPhaseIcon } from './MoonPhaseIcon';
 
@@ -8,13 +8,28 @@ import { MoonPhaseIcon } from './MoonPhaseIcon';
 // StatusLine reads the stores and the theme and hands them in.
 
 export interface ClockTick {
-  /** Whole seconds since the last tick. */
+  /** The whole seconds the tick shows. Counting up, the seconds since
+   *  the last tick. Counting down, the seconds left until the next,
+   *  below zero past 0 while the tick is late. */
   secs: number;
-  /** Inside the warn window before the next tick. */
+  /** Inside the warn window before the next tick, or late. */
   warn: boolean;
   /** The tick interval in seconds the ring fills against, null while
    *  unknown. */
   interval: number | null;
+  /** Which way the count runs. Up when left out. */
+  count?: TickCount;
+  /** The expected tick has come and the game's tick has not, so the
+   *  reading pulses in the warn tone. */
+  overdue?: boolean;
+}
+
+/** The tick as the line shows it, like `14s`, with the true minus sign
+ *  below zero so the figures keep their width, and what a screen reader
+ *  says for it when that differs, like `minus 5s`. */
+function tickText(secs: number): { text: string; spoken: string | undefined } {
+  if (secs >= 0) return { text: `${secs}s`, spoken: undefined };
+  return { text: `−${-secs}s`, spoken: `minus ${-secs}s` };
 }
 
 export interface ClockTime {
@@ -59,15 +74,20 @@ interface Props {
 export function StatusClock({ style, tick, time, moons = null }: Props) {
   const sky = moons && moons.moons.length > 0 ? moons : null;
   if (!tick && !time && !sky) return null;
+  const shown = tick ? tickText(tick.secs) : null;
   return (
     <span className="shell-status-clock">
-      {tick && (
+      {tick && shown && (
         <Reading
           style={style}
           caption="Tick"
-          icon={<TickRingIcon secs={tick.secs} interval={tick.interval} />}
+          icon={
+            <TickRingIcon secs={tick.secs} interval={tick.interval} count={tick.count ?? 'up'} />
+          }
           warn={tick.warn}
-          value={`${tick.secs}s`}
+          overdue={tick.overdue === true}
+          value={shown.text}
+          spoken={shown.spoken}
         />
       )}
       {time && (
@@ -112,19 +132,41 @@ interface ReadingProps {
   caption: string;
   icon: ReactNode;
   value: string;
+  /** What a screen reader says for the value when the line's glyphs
+   *  would not read right, like `minus 5s` for the true minus sign. */
+  spoken?: string | undefined;
   warn?: boolean;
+  /** Late, so the warn tone pulses. */
+  overdue?: boolean;
   valueStyle?: CSSProperties | undefined;
 }
 
 /** One value with its caption or icon, 6 px before it. A screen reader
  *  hears the caption in every style. */
-function Reading({ style, caption, icon, value, warn = false, valueStyle }: ReadingProps) {
+function Reading({
+  style,
+  caption,
+  icon,
+  value,
+  spoken,
+  warn = false,
+  overdue = false,
+  valueStyle,
+}: ReadingProps) {
+  const tone = `${warn ? ' is-warn' : ''}${warn && overdue ? ' is-overdue' : ''}`;
   return (
-    <span className={`shell-status-part${warn ? ' is-warn' : ''}`}>
+    <span className={`shell-status-part${tone}`}>
       {style === 'icon_value' && icon}
       <span className={style === 'caption_value' ? undefined : 'shell-sr'}>{caption}</span>
       <span className="shell-status-value" style={valueStyle}>
-        {value}
+        {spoken === undefined ? (
+          value
+        ) : (
+          <>
+            <span aria-hidden="true">{value}</span>
+            <span className="shell-sr">{spoken}</span>
+          </>
+        )}
       </span>
     </span>
   );

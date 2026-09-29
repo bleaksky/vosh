@@ -6,6 +6,7 @@ import {
   subscribeTickConfigChanged,
   tickGetConfig,
   type TickConfig,
+  type TickCount,
   type TickPayload,
 } from '../session';
 import { createStore } from './store';
@@ -101,6 +102,23 @@ export function computeTick(payload: TickPayload | null, config: TickConfig | nu
     overdue: intervalMs !== null && elapsedMs >= intervalMs,
     synced: payload.synced === true,
   };
+}
+
+/** The number the status line shows for the tick, counting `count`.
+ *  Up is the whole seconds since the last tick, past the interval while
+ *  the game runs late. Down is the whole seconds left until the expected
+ *  tick, waiting at 0 until the tick lands. Down past 0 is the same
+ *  count, going on below zero while the tick is late. Without a known
+ *  interval there is nothing to count down from, so every way counts
+ *  up, and `count` says which way it ran. Null while the tick hides. */
+export function shownTick(
+  state: TickState,
+  count: TickCount,
+): { secs: number; count: TickCount } | null {
+  if (!state.active || state.secsSinceTick === null) return null;
+  if (count === 'up' || state.secsLeft === null) return { secs: state.secsSinceTick, count: 'up' };
+  if (count === 'down') return { secs: Math.max(0, state.secsLeft), count };
+  return { secs: state.secsLeft, count };
 }
 
 function sameTick(a: TickState, b: TickState): boolean {

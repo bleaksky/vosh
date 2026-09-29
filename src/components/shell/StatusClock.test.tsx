@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { ChipStyle } from '../../lib/session';
+import type { ChipStyle, TickCount } from '../../lib/session';
 import { BUILTIN_THEMES, themeTokens } from '../../lib/themes';
 import frameCss from '../../styles/frame.css?raw';
 import { daylightTint } from './daylight';
@@ -344,5 +344,135 @@ describe('StatusClock sun path', () => {
     expect(html.indexOf('27s')).toBeLessThan(html.lastIndexOf('<svg '));
     expect(html.lastIndexOf('<svg ')).toBeLessThan(html.indexOf('19:00'));
     expect(html.match(/aria-hidden="true"/g)).toHaveLength(2);
+  });
+});
+
+const COUNTS: TickCount[] = ['up', 'down', 'down_past_zero'];
+
+/** The tick reading `secs` into or out of a 30 second tick. */
+function tickAt(
+  count: TickCount,
+  secs: number,
+  { warn = false, overdue = false }: { warn?: boolean; overdue?: boolean } = {},
+): string {
+  return draw('icon_value', { secs, warn, overdue, interval: 30, count }, null);
+}
+
+/** The tick's value as the line shows it. */
+function shownValue(html: string): string | null {
+  return (
+    /<span class="shell-status-value">(?:<span aria-hidden="true">)?([^<]*)</.exec(html)?.[1] ??
+    null
+  );
+}
+
+describe('StatusClock tick counts', () => {
+  it('shows the seconds since the tick counting up, past the interval while late', () => {
+    expect(shownValue(tickAt('up', 14))).toBe('14s');
+    expect(shownValue(tickAt('up', 31, { warn: true, overdue: true }))).toBe('31s');
+  });
+
+  it('shows the seconds left counting down, and 0 while late', () => {
+    expect(shownValue(tickAt('down', 30))).toBe('30s');
+    expect(shownValue(tickAt('down', 1, { warn: true }))).toBe('1s');
+    expect(shownValue(tickAt('down', 0, { warn: true, overdue: true }))).toBe('0s');
+  });
+
+  it('shows a late tick below zero with the true minus sign past 0', () => {
+    const html = tickAt('down_past_zero', -5, { warn: true, overdue: true });
+    expect(shownValue(html)).toBe('−5s');
+    expect(html).not.toContain('-5s');
+    expect(shownValue(tickAt('down_past_zero', 0, { warn: true, overdue: true }))).toBe('0s');
+    expect(shownValue(tickAt('down_past_zero', 12))).toBe('12s');
+  });
+
+  it('says minus to a screen reader below zero', () => {
+    const html = tickAt('down_past_zero', -5, { warn: true, overdue: true });
+    expect(html).toContain(
+      '<span class="shell-status-value"><span aria-hidden="true">−5s</span>' +
+        '<span class="shell-sr">minus 5s</span></span>',
+    );
+    expect(tickAt('down_past_zero', 12)).toContain('<span class="shell-status-value">12s</span>');
+  });
+
+  it('marks the late tick for the pulse in every count', () => {
+    for (const count of COUNTS) {
+      const late = count === 'up' ? 33 : count === 'down' ? 0 : -3;
+      expect(readings(tickAt(count, late, { warn: true, overdue: true }))[0], count).toEqual([
+        'shell-status-part',
+        'is-warn',
+        'is-overdue',
+      ]);
+      expect(readings(tickAt(count, count === 'up' ? 27 : 3, { warn: true }))[0], count).toEqual([
+        'shell-status-part',
+        'is-warn',
+      ]);
+      expect(readings(tickAt(count, 10))[0], count).toEqual(['shell-status-part']);
+    }
+  });
+
+  it('counts up when no count is given', () => {
+    const html = draw('icon_value', { secs: 15, warn: false, interval: 60 }, null);
+    expect(glyph(html, 0)).toContain('<path d="M8 2.25A5.75 5.75 0 0 1 13.75 8"');
+  });
+});
+
+describe('StatusClock tick ring in each count', () => {
+  const ring = (count: TickCount, secs: number, overdue = false) =>
+    glyph(tickAt(count, secs, { warn: overdue, overdue }), 0);
+  const faint = `${GLYPH_OPEN}${TICK_TRACK}</svg>`;
+  const whole = `${GLYPH_OPEN}${TICK_TRACK}<circle cx="8" cy="8" r="5.75"></circle></svg>`;
+
+  it('fills clockwise toward the tick counting up, and stays full while late', () => {
+    expect(ring('up', 0)).toBe(faint);
+    expect(ring('up', 15)).toContain('<path d="M8 2.25A5.75 5.75 0 0 1 8 13.75"');
+    expect(ring('up', 33, true)).toBe(whole);
+  });
+
+  it('shows the share left counting down, emptying toward the tick', () => {
+    for (const count of ['down', 'down_past_zero'] as const) {
+      expect(ring(count, 30)).toBe(whole);
+      // Half left, from 6 o clock up to the top.
+      expect(ring(count, 15)).toBe(
+        `${GLYPH_OPEN}${TICK_TRACK}<path d="M8 13.75A5.75 5.75 0 0 1 8 2.25"></path></svg>`,
+      );
+    }
+  });
+
+  it('leaves the faint ring alone while late counting down', () => {
+    expect(ring('down', 0, true)).toBe(faint);
+    expect(ring('down_past_zero', 0, true)).toBe(faint);
+    expect(ring('down_past_zero', -4, true)).toBe(faint);
+  });
+
+  it('draws the same edge in every count, where the count stands', () => {
+    // 3 seconds in is 27 left. Counting up ends where counting down starts.
+    expect(ring('up', 3)).toContain('<path d="M8 2.25A5.75 5.75 0 0 1 11.38 3.35"');
+    expect(ring('down', 27)).toContain('<path d="M11.38 3.35A5.75 5.75 0 1 1 8 2.25"');
+  });
+});
+
+describe('StatusClock late tick pulse', () => {
+  it('pulses the late tick in the warn tone between full and 0.55 once a second', () => {
+    const pulse = rule('.shell-status-part.is-warn.is-overdue');
+    expect(pulse).toMatch(/animation:\s*shell-tick-late 1s ease-in-out infinite/);
+    const keyframes = frameCss.slice(frameCss.indexOf('@keyframes shell-tick-late'));
+    expect(keyframes).toMatch(
+      /^@keyframes shell-tick-late \{\s*0%,\s*100% \{\s*opacity: 1;\s*\}\s*50% \{\s*opacity: 0\.55;\s*\}/,
+    );
+    // The warn ground itself never moves, only the late tick pulses.
+    expect(rule('.shell-status-part.is-warn')).not.toMatch(/animation/);
+  });
+
+  it('holds still in the warn tone for reduced motion', () => {
+    const at = frameCss.indexOf('@media (prefers-reduced-motion: reduce)');
+    expect(at).toBeGreaterThan(frameCss.indexOf('.shell-status-part.is-warn.is-overdue {'));
+    const reduced = frameCss.slice(at, frameCss.indexOf('}\n}', at));
+    expect(reduced).toMatch(/\.shell-status-part\.is-warn\.is-overdue \{\s*animation: none;/);
+    expect(rule('.shell-statusline .is-warn')).toMatch(/color:\s*var\(--warn\)/);
+  });
+
+  it('keeps the minus sign in tabular figures', () => {
+    expect(rule('.shell-statusline')).toMatch(/font-variant-numeric:\s*tabular-nums/);
   });
 });
