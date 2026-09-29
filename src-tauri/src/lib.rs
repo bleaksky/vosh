@@ -480,21 +480,9 @@ fn flush_profile_on_exit(app_handle: &tauri::AppHandle) {
 /// survive the rebrand. Skips if the new directory already has its own
 /// data (so we never clobber a real fresh install).
 fn migrate_from_mudclient_dir(new_dir: &std::path::Path) {
-    let Some(parent) = new_dir.parent() else {
+    let Some(old_dir) = mudclient_dir_for(new_dir) else {
         return;
     };
-    let Some(new_name) = new_dir.file_name().and_then(|s| s.to_str()) else {
-        return;
-    };
-    // Replace the trailing "vosh" segment with "mudclient". The
-    // identifier change is the only diff between the two paths.
-    let Some(old_name) = new_name
-        .strip_suffix("vosh")
-        .map(|prefix| format!("{prefix}mudclient"))
-    else {
-        return;
-    };
-    let old_dir = parent.join(&old_name);
     if !old_dir.exists() {
         return;
     }
@@ -536,6 +524,19 @@ fn migrate_from_mudclient_dir(new_dir: &std::path::Path) {
             error!(error = %e, "app data migration failed");
         }
     }
+}
+
+/// The app data folder from before the rename, next to `new_dir`. The
+/// identifier change is the only difference between the two paths, a
+/// trailing `mudclient` in place of `vosh`. The migration copies from it
+/// and leaves it in place.
+pub(crate) fn mudclient_dir_for(new_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    let parent = new_dir.parent()?;
+    let new_name = new_dir.file_name()?.to_str()?;
+    let old_name = new_name
+        .strip_suffix("vosh")
+        .map(|prefix| format!("{prefix}mudclient"))?;
+    Some(parent.join(old_name))
 }
 
 fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<usize> {
@@ -620,5 +621,18 @@ mod tests {
     #[test]
     fn app_version_matches_cargo_pkg_version() {
         assert_eq!(app_version(), env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn the_folder_from_before_the_rename_sits_next_to_the_new_one() {
+        let new_dir = std::path::Path::new("/data/com.aabahran.vosh");
+        assert_eq!(
+            mudclient_dir_for(new_dir),
+            Some(std::path::PathBuf::from("/data/com.aabahran.mudclient"))
+        );
+        assert_eq!(
+            mudclient_dir_for(std::path::Path::new("/data/elsewhere")),
+            None
+        );
     }
 }
