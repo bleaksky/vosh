@@ -10,8 +10,11 @@
 //!    reads as a password prompt ([`is_password_prompt`]).
 //! 2. The game's login was waiting for a password when you sent it.
 //! 3. It is a game command that takes a password as its argument, like
-//!    `password <old> <new>`. The commands and their shortest forms come
-//!    from the game's command table in interp.c.
+//!    `password <old> <new>`, or an implementor command that sets one,
+//!    `account password <account> <new>` or `set char <name> pwdreset
+//!    <new>`. The commands and their shortest forms come from the game's
+//!    command table in interp.c, and the subcommands and fields from the
+//!    order `do_account` and `do_mset` check them in.
 //! 4. It went out in the same write as a line blanked by rules 1 to 3,
 //!    with no game output between. The input pipeline used to split a
 //!    typed line at `;`, and each piece of a password landed as its own
@@ -125,6 +128,23 @@ const PASSWORD_COMMANDS: [(&str, usize); 5] = [
     ("delete", 6),
 ];
 
+/// `account password <account> <new password>` (`act_info.c`
+/// `do_account`). `acco` is the shortest form of `account` in interp.c,
+/// and `do_account` reads `p` as `password`, since no subcommand it
+/// checks first starts with `p`.
+const ACCOUNT: (&str, usize) = ("account", 4);
+const ACCOUNT_PASSWORD: (&str, usize) = ("password", 1);
+
+/// `set char <name> pwdreset <new password>` and the same with
+/// `immpwdreset` (`act_wiz.c` `do_set`, then `do_mset`). `do_set` reads
+/// any prefix of `mob` or `char` as the character form. `do_mset` tries
+/// its fields in order, so `p` reaches `pkstrip` first and `pw` is the
+/// shortest `pwdreset`, while no field before `immpwdreset` starts with
+/// `i`.
+const SET: (&str, usize) = ("set", 3);
+const SET_CHARACTER: [(&str, usize); 2] = [("mob", 1), ("char", 1)];
+const SET_PASSWORD: [(&str, usize); 2] = [("pwdreset", 2), ("immpwdreset", 1)];
+
 /// Sent lines that still hold a password. Row ids only, never text.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PasswordLines {
@@ -195,17 +215,31 @@ pub fn is_password_prompt(line: &str) -> bool {
         .is_match(line.trim())
 }
 
+/// True when `word`, as typed, is a form of `name` the game accepts, at
+/// least `shortest` letters of it in any case.
+fn reads_as(word: &str, (name, shortest): (&str, usize)) -> bool {
+    word.len() >= shortest
+        && word.len() <= name.len()
+        && name.as_bytes()[..word.len()].eq_ignore_ascii_case(word.as_bytes())
+}
+
 /// True when `answer`, a line as the game reads it, runs a command that
-/// takes a password and gives it at least one argument.
+/// takes a password and gives it one. The player commands take it as
+/// their first argument, the implementor commands as their last.
 fn carries_password(answer: &str) -> bool {
-    let mut words = answer.split_whitespace();
-    let (Some(command), Some(_)) = (words.next(), words.next()) else {
-        return false;
-    };
-    let command = command.to_ascii_lowercase();
-    PASSWORD_COMMANDS
-        .iter()
-        .any(|(name, shortest)| command.len() >= *shortest && name.starts_with(&command))
+    let words: Vec<&str> = answer.split_whitespace().collect();
+    match words.as_slice() {
+        [command, _, ..] if PASSWORD_COMMANDS.iter().any(|c| reads_as(command, *c)) => true,
+        [command, sub, _account, _password, ..] => {
+            let account = reads_as(command, ACCOUNT) && reads_as(sub, ACCOUNT_PASSWORD);
+            let set = reads_as(command, SET)
+                && words.len() >= 5
+                && SET_CHARACTER.iter().any(|c| reads_as(sub, *c))
+                && SET_PASSWORD.iter().any(|f| reads_as(words[3], *f));
+            account || set
+        }
+        _ => false,
+    }
 }
 
 fn is_account_menu(line: &str) -> bool {
@@ -1351,6 +1385,54 @@ mod tests {
         // The account password, then every password command from
         // `password` through `delete`. The pick in between keeps its text.
         let expected: Vec<usize> = [2, 4, 5, 6, 7, 8, 9, 10, 11]
+            .iter()
+            .map(|&n| sent_at(&rows, n))
+            .collect();
+        assert_eq!(blanked(&rows), expected);
+    }
+
+    #[test]
+    fn an_implementor_command_that_sets_a_password_is_blanked() {
+        // act_info.c do_account and act_wiz.c do_mset, reached through
+        // do_set, take a new password as their last argument. The game
+        // reads the command, the subcommand, and the field by prefix.
+        let rows = session(&[
+            &greeting(),
+            &login(SECRET_ACCOUNT),
+            &account_menu(),
+            &[
+                Sent("2"),
+                Out(""),
+                Sent(SECRET_IMM),
+                Out(MOTD),
+                Sent("account password Tester Pw9cinderLark"),
+                Out("Password for account 'Tester' has been changed."),
+                Sent("acco p Tester Pw9cinderLark"),
+                Sent("ACCOUNT Pass Tester Pw9cinderLark"),
+                Sent("set char Quill pwdreset Pw9cinderLark"),
+                Out("New password set."),
+                Sent("set c Quill pw Pw9cinderLark"),
+                Sent("set mob Vellin immpwdreset Pw9cinderLark"),
+                Sent("SET M Vellin i Pw9cinderLark"),
+                Sent("set cha Vellin immpw two words"),
+                // Another subcommand or field, another command, or no
+                // password given.
+                Sent("account list"),
+                Sent("account password Tester"),
+                Sent("account link Quill Tester"),
+                Sent("acc password Tester Pw9cinderLark"),
+                Sent("set char Quill pwdreset"),
+                Sent("set char Quill p 5"),
+                Sent("set char Quill int 18"),
+                Sent("set skill Quill pw 75"),
+                Sent("set obj sword i 5"),
+                Sent("se char Quill pwdreset Pw9cinderLark"),
+                Sent("say set char Quill pwdreset is the syntax"),
+            ],
+        ]);
+        // The account password, the immortal password, then the eight
+        // commands from `account password` through `set cha`.
+        let expected: Vec<usize> = [2, 4, 5, 6, 7, 8, 9, 10, 11, 12]
             .iter()
             .map(|&n| sent_at(&rows, n))
             .collect();
