@@ -23,7 +23,8 @@ interface Props {
   connection: Connection;
   panelOpen: boolean;
   onTogglePanel: () => void;
-  onOpenPalette: () => void;
+  /** Open the palette, or close it when it is open. */
+  onTogglePalette: () => void;
   /** The panel's pane tree. Add a pane lists the pane types it does
    *  not show yet. */
   paneTree: PaneSplit | null;
@@ -37,7 +38,7 @@ export function TitleBand({
   connection,
   panelOpen,
   onTogglePanel,
-  onOpenPalette,
+  onTogglePalette,
   paneTree,
   onAddPane,
   onMenuClosed,
@@ -88,7 +89,9 @@ export function TitleBand({
           type="button"
           className="shell-icon-button"
           aria-label={`Search commands (${shortcutLabel('Mod+K')})`}
-          onClick={onOpenPalette}
+          // The palette leaves presses on its own button to this toggle.
+          data-palette-anchor=""
+          onClick={onTogglePalette}
         >
           <SearchIcon />
         </button>
