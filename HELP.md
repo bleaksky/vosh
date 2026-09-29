@@ -380,6 +380,8 @@ Place the bar in any zone from the `panels` tab. It ships in the right column, l
 
 `reset vitals` restores the stock config.
 
+When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter, in the panel and on the status line alike. Nothing turns yellow or red while they stay hidden. Your numbers come back with the next update the game sends. In a fight the opponent row reads `?` the same way when the game hides its health, and the status line drops the health of your target.
+
 ### 4.5 Watch your group and affects
 
 The group pane shows member health while grouped and your worth while solo. The affects pane counts down spell durations. The group pane sits at the top of the right column, and its header shows `group` plus a member count, or `solo`.
@@ -390,6 +392,8 @@ The group pane shows member health while grouped and your worth while solo. The 
 - Place `affects` in a side zone for full rows, each with a mono name, a duration mini bar filled by the fraction of a day remaining, and a countdown. In the top or bottom strip it compresses to pills, and absent tracked affects render dim with `—`.
 
 Group data arrives from `Group.Info` and worth from `Char.Worth`. Affects come from `Char.Affects`, and duration color shifts with urgency. With no group the pane says so and suggests `follow <name>` to start one.
+
+When the game hides your affects or your group, as it does under lamented tears, the pane says so in place of its rows. The affects pane marks no tracked affect missing, and the group pane shows no member health from before. Each fills in again with the next update the game sends.
 
 ### 4.6 Read the room strip
 

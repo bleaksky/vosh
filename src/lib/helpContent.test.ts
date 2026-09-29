@@ -8,6 +8,28 @@ function body(id: string): string {
   return topic.body;
 }
 
+describe('the help on values the game hides', () => {
+  // Under lamented tears the game hides your vitals, affects, and group,
+  // and Vosh shows that instead of zeros, missing affects, or solo.
+  it('says what the vitals show', () => {
+    const text = body('shape.read-vitals');
+    expect(text).toContain(
+      'When the game hides your vitals, as it does under lamented tears, every value reads `?` in dim text over an empty meter',
+    );
+    expect(text).toContain('Nothing turns yellow or red while they stay hidden.');
+    expect(text).toContain('the status line drops the health of your target');
+  });
+
+  it('says what the affects and group panes show', () => {
+    const text = body('shape.group-affects');
+    expect(text).toContain(
+      'When the game hides your affects or your group, as it does under lamented tears, the pane says so in place of its rows.',
+    );
+    expect(text).toContain('marks no tracked affect missing');
+    expect(text).toContain('shows no member health from before');
+  });
+});
+
 describe('the help on loadouts', () => {
   // The shared catalog wizard keeps each profile file in place with every
   // setting but its items, puts a copy in profiles/legacy, and builds the
