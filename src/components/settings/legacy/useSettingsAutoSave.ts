@@ -14,6 +14,9 @@ export interface AutoSaveOptions {
   now?: boolean;
 }
 
+/** Patch the window's config copy and save the whole snapshot. */
+export type UpdateConfig = (patch: Partial<UiConfig>, options?: AutoSaveOptions) => void;
+
 // Debounced auto-save shared by the config-backed editors. Text inputs
 // can fire many updates in a row while the user types; the debounce
 // coalesces them into one setUiConfig call after typing settles.
@@ -45,7 +48,7 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
       })();
     }, delay);
   };
-  const update = (patch: Partial<UiConfig>, options: AutoSaveOptions = {}) => {
+  const update: UpdateConfig = (patch, options = {}) => {
     setConfig((prev) => {
       if (!prev) return prev;
       const next = { ...prev, ...patch };

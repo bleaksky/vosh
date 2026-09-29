@@ -1,6 +1,6 @@
 # Settings
 
-`src/SettingsApp.tsx` is the frame. It draws the sidebar (`Sidebar.tsx`), the breadcrumb band, and one page per group from `groups/`. Every page builds from the primitives in `ui/`.
+`src/SettingsApp.tsx` is the frame. It draws the sidebar (`Sidebar.tsx`), the breadcrumb band, and one page per group. A page built from its board lives in `pages/`, and a group still waiting for its board keeps its placeholder in `groups/`. Every page builds from the primitives in `ui/`.
 
 ## Pages
 
@@ -14,7 +14,11 @@ A page is a component in `pages/` or `groups/` that takes `SettingsPageProps` fr
 
 Register a page in `PAGES` in `SettingsApp.tsx`. A page that pins its own bar and scrolls inside itself, like the Automation save bar, sets `selfScroll` there.
 
-A page built on its board lives in `pages/`. `pages/CharactersPage.tsx` is the Characters board, with its parts in `pages/characters/`. The placeholders for Appearance and Automation still show the old editors under the board's headings. Replace each whole component with its board. General, Layout, and Input have no board yet. Their old editors sit in `legacy/` and render inside `LegacyIsland`, which marks them `data-interim`.
+A page that saves as you go takes `update` from `useSettingsAutoSave` in `legacy/`. `update(patch)` patches the config copy and saves the whole snapshot once typing settles. Pass `{ now: true }` for a discrete pick another window shows at once, like a theme or a toggle.
+
+A page built on its board lives in `pages/`. `pages/CharactersPage.tsx` is the Characters board, with its parts in `pages/characters/`. `pages/AppearancePage.tsx` is the Appearance board. Its parts sit in `pages/appearance/`. The split divider and sent command color rows are self contained, so either can move to another group by rendering it there with `config` and `update`.
+
+The placeholder for Automation still shows the old editors under the board's headings. Replace the whole component with its board. General, Layout, and Input have no board yet. Their old editors sit in `legacy/` and render inside `LegacyIsland`, which marks them `data-interim`. The old Appearance and Characters placeholders, `groups/AppearanceGroup.tsx` and `groups/CharactersGroup.tsx`, no longer render.
 
 ## Deep links and search
 
