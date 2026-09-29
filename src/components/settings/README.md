@@ -11,6 +11,7 @@ A page is a component in `pages/` or `groups/` that takes `SettingsPageProps` fr
 - `config`, `setConfig`, and `onError` are the window's UiConfig copy, its setter, and the error line above the page. Every save sends the whole snapshot, so never keep a second copy of the config.
 - `pathB` is true in loadout mode.
 - `navigate(target)` goes somewhere else in Settings.
+- `setLeaveGuard(guard)` registers a question the frame asks before it moves to another group. The guard gets a `proceed` callback and returns true to hold the move, then calls `proceed` once you confirm. Automation uses it to ask before it drops unsaved changes. Clear it with null when the page unmounts.
 
 Register a page in `PAGES` in `SettingsApp.tsx`. A page that pins its own bar and scrolls inside itself, like the Automation save bar, sets `selfScroll` there.
 
