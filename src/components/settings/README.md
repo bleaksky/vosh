@@ -74,7 +74,7 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 `Select` is a native select drawn as a field, with the 12 px chevron.
 
 - `value`, `onChange(value)`, and `options` as a list of `{ value, label, disabled? }`.
-- `width` in px, 160 by default. The boards use 160 and 240.
+- `width` in px or any CSS length, 160 by default. The boards use 160 and 240.
 
 `Field` is a text field. It forwards its ref.
 
@@ -82,6 +82,8 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 - `width` in px or any CSS length, 240 by default.
 - `mono` sets MUD text in the terminal font.
 - `icon` adds a leading 16 px icon, like the search icon on the Automation filter.
+
+`FieldArea` is a `Field` for text where a newline means something, like the commands a trigger or timer sends. At one line it looks exactly like `Field`, and it grows a line at a time. It takes `value`, `onChange`, `width`, and `mono` like `Field` and forwards its ref. A plain `Field` drops newlines, so use this one for any value that can hold them.
 
 `Button` forwards its ref.
 

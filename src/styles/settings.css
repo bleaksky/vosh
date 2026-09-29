@@ -664,6 +664,27 @@
   line-height: 17.5px;
 }
 
+/* A placeholder is a hint, not MUD text, so it keeps the UI font. */
+.st-field-mono::placeholder {
+  font-family: var(--font-ui);
+}
+
+/* A Field that grows by a line at a time. The padding sets one line
+   on the same baseline a single line Field draws in its 28 px. */
+.st-field-area {
+  min-height: 28px;
+  padding-top: 6px;
+  padding-bottom: 4px;
+  overflow: hidden;
+  resize: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.st-field-area.st-field-mono {
+  padding-bottom: 4.5px;
+}
+
 .st-field-wrap {
   position: relative;
   display: block;
