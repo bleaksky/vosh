@@ -1,9 +1,9 @@
 import { useMemo, type CSSProperties } from 'react';
 import CodeMirror, { type Extension } from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
-import { StreamLanguage } from '@codemirror/language';
+import { StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { lua } from '@codemirror/legacy-modes/mode/lua';
-import { codeEditorAttributes } from '../lib/codeEditor';
+import { codeEditorAttributes, codeHighlightStyle } from '../lib/codeEditor';
 
 interface Props {
   value: string;
@@ -70,9 +70,12 @@ export function CodeEditor({
   // wrapped via StreamLanguage — the modern CodeMirror 6 dedicated
   // Lua package does not exist (only JS / CSS / HTML / etc. have
   // first-class @codemirror/lang-* packages). The label goes on the
-  // contenteditable text box, the element a screen reader reaches.
+  // contenteditable text box, the element a screen reader reaches. The
+  // syntax colors come from the theme tokens and replace CodeMirror's
+  // default palette, which is made for a white page.
   const extensions = useMemo<Extension[]>(() => {
     const out: Extension[] = [
+      syntaxHighlighting(codeHighlightStyle),
       EditorView.contentAttributes.of(
         codeEditorAttributes({ ariaLabel, ariaLabelledBy, ariaDescribedBy }),
       ),
