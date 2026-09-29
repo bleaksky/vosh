@@ -2134,6 +2134,14 @@
   min-width: 96px;
 }
 
+/* A field with a remove button after it, like an Also send row, shares
+   the control's width with the button. Held at its full width, it
+   pushed out of the control and over the label. */
+.st-auto-card .st-row-control > .st-auto-grow {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .st-auto-card
   .st-row:has(> .st-row-control > .st-field, > .st-row-control > .st-select)
   .st-row-label {

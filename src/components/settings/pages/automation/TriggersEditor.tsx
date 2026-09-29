@@ -318,6 +318,7 @@ function TriggerAdvanced({
       {extras.map((extra) => (
         <Row key={extra.index} label={EFFECT_LABELS[extra.kind]}>
           <FieldArea
+            className="st-auto-grow"
             mono={extra.kind !== 'route'}
             width="100%"
             value={extra.value}
