@@ -787,8 +787,10 @@
   pointer-events: none;
 }
 
-/* A color field: the field fill with a 16 px swatch that opens the
-   system color picker, then the color as text. */
+/* A color field: the field fill with a 16 px swatch at (6, 6) that
+   opens the system color picker, then the color as text from 30. The
+   real color input sits over the swatch at the same size, so a press
+   on the swatch opens the picker on every platform. */
 .st-color {
   display: flex;
   align-items: center;
@@ -841,6 +843,7 @@
   font: inherit;
   font-size: 13px;
   line-height: 18px;
+  font-variant-numeric: tabular-nums;
   -webkit-appearance: none;
   appearance: none;
 }
