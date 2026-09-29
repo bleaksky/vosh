@@ -664,13 +664,15 @@ async fn handle_tick(
     }
 
     if let Some(command) = auto_fire {
+        let mut effects = input::LineEffects::default();
         let (result, lists) = {
             let mut p = profile.lock().await;
             let before = ListRevisions::of(&p);
-            let result = input::process(&mut p, &command);
+            let result = process_fired_line(&mut p, &command, &mut effects);
             (result, ListChanges::since(before, &p))
         };
         broadcast_list_changes(app, lists);
+        crate::commands::settle_line_effects(app, effects).await;
         if !result.echo.is_empty() {
             let mut buf = Vec::new();
             for line in &result.echo {
@@ -742,6 +744,68 @@ async fn fire_due_profile_timers(
     Ok(())
 }
 
+/// Run `line` through the input pipeline for a path other than typed
+/// input, and note what it asks of the saved profile the way the typed
+/// path does. Call with the profile lock held. A `#profile reset` or
+/// `#profile load` swaps the live panes, so the pane generation moves in
+/// the same step.
+fn process_fired_line(
+    p: &mut Profile,
+    line: &str,
+    effects: &mut input::LineEffects,
+) -> input::InputResult {
+    let result = input::process(p, line);
+    if effects.note_line(line) {
+        crate::commands::bump_panes_generation();
+    }
+    result
+}
+
+/// What one timer command produced under the profile lock.
+struct FiredRun {
+    echoes: Vec<String>,
+    bytes: Vec<u8>,
+    lists: ListChanges,
+    effects: input::LineEffects,
+}
+
+/// The part of [`run_fired_command`] that runs under the profile lock:
+/// the input pipeline, then the Lua bodies of any script aliases it
+/// queued.
+fn run_fired_locked(p: &mut Profile, command: &str) -> FiredRun {
+    let lists_before = ListRevisions::of(p);
+    let mut effects = input::LineEffects::default();
+    let result = process_fired_line(p, command, &mut effects);
+    let mut echoes = result.echo;
+    let mut bytes = result.bytes;
+    // Evaluate any Lua bodies queued by script-bodied aliases and
+    // fold their sends / echoes in, same as the typed-input path.
+    if !result.scripts.is_empty() {
+        let mut outcome = vosh_script::ScriptOutcome::default();
+        for call in &result.scripts {
+            match script_state::eval_with_captures(
+                &mut p.script,
+                &call.body,
+                &call.captures,
+                "timer-script",
+            ) {
+                Ok(o) => outcome.actions.extend(o.actions),
+                Err(err) => warn!(error = %err, "timer script eval failed"),
+            }
+        }
+        let apply = script_state::apply_actions(p, outcome);
+        effects.note_script(apply.durable_changed);
+        echoes.extend(apply.echoes);
+        bytes.extend(apply.send_bytes);
+    }
+    FiredRun {
+        echoes,
+        bytes,
+        lists: ListChanges::since(lists_before, p),
+        effects,
+    }
+}
+
 /// Run one command produced by a timer (or any non-typed source) through
 /// the full input pipeline and deliver its results: echo lines to the
 /// terminal, queued alias-script Lua bodies evaluated and their actions
@@ -754,34 +818,17 @@ async fn run_fired_command(
     profile: &Arc<Mutex<Profile>>,
     command: &str,
 ) -> std::io::Result<()> {
-    let (echoes, bytes, lists) = {
+    let FiredRun {
+        echoes,
+        bytes,
+        lists,
+        effects,
+    } = {
         let mut p = profile.lock().await;
-        let lists_before = ListRevisions::of(&p);
-        let result = input::process(&mut p, command);
-        let mut echoes = result.echo;
-        let mut bytes = result.bytes;
-        // Evaluate any Lua bodies queued by script-bodied aliases and
-        // fold their sends / echoes in, same as the typed-input path.
-        if !result.scripts.is_empty() {
-            let mut outcome = vosh_script::ScriptOutcome::default();
-            for call in &result.scripts {
-                match script_state::eval_with_captures(
-                    &mut p.script,
-                    &call.body,
-                    &call.captures,
-                    "timer-script",
-                ) {
-                    Ok(o) => outcome.actions.extend(o.actions),
-                    Err(err) => warn!(error = %err, "timer script eval failed"),
-                }
-            }
-            let apply = script_state::apply_actions(&mut p, outcome);
-            echoes.extend(apply.echoes);
-            bytes.extend(apply.send_bytes);
-        }
-        (echoes, bytes, ListChanges::since(lists_before, &p))
+        run_fired_locked(&mut p, command)
     };
     broadcast_list_changes(app, lists);
+    crate::commands::settle_line_effects(app, effects).await;
     if !echoes.is_empty() {
         let mut buf = Vec::new();
         for line in &echoes {
@@ -1356,17 +1403,19 @@ async fn apply_script_result(
     if !apply.inputs.is_empty() {
         let mut input_bytes = Vec::new();
         let mut input_echoes: Vec<String> = Vec::new();
+        let mut effects = input::LineEffects::default();
         let lists = {
             let mut p = profile.lock().await;
             let before = ListRevisions::of(&p);
             for line in apply.inputs {
-                let result = crate::input::process(&mut p, &line);
+                let result = process_fired_line(&mut p, &line, &mut effects);
                 input_bytes.extend(result.bytes);
                 input_echoes.extend(result.echo);
             }
             ListChanges::since(before, &p)
         };
         broadcast_list_changes(app, lists);
+        crate::commands::settle_line_effects(app, effects).await;
         if !input_bytes.is_empty() {
             stream.write_all(&input_bytes).await?;
             stream.flush().await?;
@@ -1722,6 +1771,47 @@ fn emit_input_mode(app: &AppHandle, password: bool) {
 #[cfg(test)]
 mod tests {
     use super::base64_encode;
+    use crate::input::LineEffects;
+    use crate::profile::Profile;
+
+    #[test]
+    fn a_timer_command_that_edits_the_profile_marks_it_dirty() {
+        let mut p = Profile::default();
+        let run = super::run_fired_locked(&mut p, "#alias greet wave");
+        assert!(run.effects.dirty);
+        assert!(run.lists.aliases);
+        assert!(p.aliases.get("greet").is_some());
+
+        let run = super::run_fired_locked(&mut p, "#trigger flee {^You flee} send look");
+        assert!(run.effects.dirty);
+        assert!(run.lists.triggers);
+
+        // A plain command leaves the saved profile alone.
+        let run = super::run_fired_locked(&mut p, "greet");
+        assert_eq!(run.effects, LineEffects::default());
+        assert_eq!(run.bytes, b"wave\r\n");
+    }
+
+    #[test]
+    fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
+        let mut p = Profile::default();
+        let mut effects = LineEffects::default();
+        let _ = super::process_fired_line(&mut p, "#alias greet wave", &mut effects);
+        assert!(effects.dirty);
+        assert!(p.aliases.get("greet").is_some());
+
+        // A reset from a timer or a script keeps the blanked profile off
+        // the disk, as it does when you type it.
+        let _ = super::process_fired_line(&mut p, "#profile reset", &mut effects);
+        assert_eq!(
+            effects,
+            LineEffects {
+                replaced: true,
+                dirty: false,
+            }
+        );
+        assert!(p.aliases.get("greet").is_none());
+    }
 
     #[test]
     fn base64_matches_rfc4648_vectors() {
