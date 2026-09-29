@@ -1,11 +1,15 @@
 import {
+  PANE_HEADER_PX,
+  PANE_MIN_H,
+  PANE_ROW_PX,
   isLeaf,
   type PaneLeaf,
   type PaneNode,
   type PaneSplit,
-  type PaneType,
   type SplitDir,
 } from '../../lib/paneLayout';
+
+export { PANE_MIN_H };
 
 // Pixel boxes for the panel's pane tree. PanelHost renders every pane
 // as a flat, absolutely placed sibling keyed by its pane, so editing
@@ -58,24 +62,10 @@ export interface PaneGeometry {
 
 /** Handle thickness. The visible line and the space it takes. */
 export const HANDLE_PX = 1;
-/** The pane header, the --pane-header token. */
-const HEADER_PX = 28;
-/** One dense row, the --row token. */
-const ROW_PX = 22;
 
-/** The height each pane type needs to be read: Affects its header and
- *  six rows, Group and Staff queues their header and three rows, Chat
- *  a couple of messages, and the Map a drawing you can follow. */
-export const PANE_MIN_H: Record<PaneType, number> = {
-  map: 180,
-  affects: HEADER_PX + 6 * ROW_PX,
-  group: HEADER_PX + 3 * ROW_PX,
-  chat: 120,
-  imm: HEADER_PX + 3 * ROW_PX,
-};
 /** The least a pane gets on a panel too short for every minimum: its
  *  header and one dense row, with the rest scrolling inside. */
-export const PANE_FLOOR_H = HEADER_PX + ROW_PX;
+export const PANE_FLOOR_H = PANE_HEADER_PX + PANE_ROW_PX;
 /** Narrowest a side by side pane gets. */
 export const MIN_PANE_W = 120;
 

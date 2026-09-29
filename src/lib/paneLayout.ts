@@ -16,6 +16,22 @@ import { panelLayoutFromDock, type PanelId } from './panels';
 export const PANE_TYPES = ['map', 'affects', 'group', 'chat', 'imm'] as const;
 export type PaneType = (typeof PANE_TYPES)[number];
 
+/** The pane header, the --pane-header token. */
+export const PANE_HEADER_PX = 28;
+/** One dense row, the --row token. */
+export const PANE_ROW_PX = 22;
+
+/** The height each pane type needs to be read: Affects its header and
+ *  six rows, Group and Staff queues their header and three rows, Chat
+ *  a couple of messages, and the Map a drawing you can follow. */
+export const PANE_MIN_H: Record<PaneType, number> = {
+  map: 180,
+  affects: PANE_HEADER_PX + 6 * PANE_ROW_PX,
+  group: PANE_HEADER_PX + 3 * PANE_ROW_PX,
+  chat: 120,
+  imm: PANE_HEADER_PX + 3 * PANE_ROW_PX,
+};
+
 /** `column` stacks children top to bottom (Split down), `row` sets
  *  them side by side (Split right). */
 export type SplitDir = 'row' | 'column';
@@ -436,22 +452,40 @@ export function setWeights(tree: PaneSplit, parentId: string, weights: number[])
   );
 }
 
-/** Add `pane` at the bottom of the panel with an even share (Add a
- *  pane). A row root nests under a new column so the pane still lands
- *  at the bottom. A pane already shown leaves the tree alone. */
+/** Add `pane` at the bottom of the panel (Add a pane). Its share
+ *  stands to the panes already there as its reading height stands to
+ *  theirs, so a short list such as Group takes a short share and the
+ *  panes above keep their rows. An even share would squeeze Affects to
+ *  its minimum and leave Group half empty. A row root nests under a new
+ *  column so the pane still lands at the bottom. A pane already shown
+ *  leaves the tree alone. */
 export function addPane(tree: PaneSplit, pane: PaneType): PaneSplit {
   if (allPanes(tree).includes(pane)) return tree;
-  const count = tree.children.length;
   const fresh: PaneLeaf = { id: freshId(tree, pane), pane, weight: 1, props: {} };
-  if (tree.split === 'column' || count === 0) {
-    return sanitize({
-      ...tree,
-      split: 'column',
-      children: [...tree.children, { ...fresh, weight: count === 0 ? 1 : 1 / count }],
-    });
+  if (tree.children.length === 0) {
+    return sanitize({ ...tree, split: 'column', children: [fresh] });
   }
-  const row: PaneSplit = { ...tree, id: freshId(tree, 'split'), weight: 1 };
-  return sanitize({ id: tree.id, split: 'column', weight: 1, children: [row, fresh] });
+  const above: PaneNode[] =
+    tree.split === 'column' ? tree.children : [{ ...tree, id: freshId(tree, 'split'), weight: 1 }];
+  const held = above.reduce((acc, c) => acc + c.weight, 0);
+  const read = above.reduce((acc, c) => acc + readingHeight(c), 0);
+  const weight =
+    held > 0 && read > 0 ? (held * PANE_MIN_H[pane]) / read : 1 / Math.max(1, above.length);
+  return sanitize({
+    id: tree.id,
+    split: 'column',
+    weight: 1,
+    children: [...above, { ...fresh, weight }],
+  });
+}
+
+// The least height `node` reads at in a column: a pane's minimum, the
+// sum over a column, and the tallest pane of a row.
+function readingHeight(node: PaneNode): number {
+  if (isLeaf(node)) return PANE_MIN_H[node.pane];
+  const parts = node.children.map(readingHeight);
+  if (parts.length === 0) return 0;
+  return node.split === 'column' ? parts.reduce((acc, p) => acc + p, 0) : Math.max(...parts);
 }
 
 // ---------------------------------------------------------------
