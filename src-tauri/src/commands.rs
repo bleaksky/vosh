@@ -3640,10 +3640,16 @@ fn migration_sources(set: &crate::profile_set::ProfileSet) -> Result<MigrationSo
             ));
         }
         let text = if path.exists() {
-            Some(
-                std::fs::read_to_string(&path)
-                    .map_err(|e| crate::profile_config::ConfigError::from(e).to_string())?,
-            )
+            // The error goes to the log. Its text can hold colons and a
+            // path, which a sentence for you leaves out.
+            Some(std::fs::read_to_string(&path).map_err(|e| {
+                warn!(error = %e, path = %path.display(), "wizard could not read a profile file");
+                format!(
+                    "Vosh could not read the {} profile file, so it changed nothing. Check that \
+                     you can open the file, then try again.",
+                    crate::profile_set::display_name(&entry.name)
+                )
+            })?)
         } else {
             None
         };
@@ -3897,9 +3903,11 @@ async fn apply_migration_with(
         let name = file.path.file_name().unwrap_or_default();
         let copy = legacy_dir.join(name);
         if let Err(e) = crate::profile_config::write_with_backup(&copy, text) {
+            warn!(error = %e, path = %copy.display(), "wizard could not copy a profile file");
             take_out_copies(&copies);
             return Err(format!(
-                "Vosh could not copy {} into profiles/legacy and changed nothing ({e}).",
+                "Vosh could not copy {} into profiles/legacy and changed nothing. \
+                 {WIZARD_WRITE_NEXT_STEP}",
                 name.to_string_lossy()
             ));
         }
@@ -3907,9 +3915,11 @@ async fn apply_migration_with(
     }
 
     if let Err(e) = crate::loadout_store::save_wizard_journal(app_data, &journal) {
+        warn!(error = %e, "wizard could not save its journal");
         take_out_copies(&copies);
         return Err(format!(
-            "Vosh could not save catalog.journal.toml and changed nothing ({e})."
+            "Vosh could not save catalog.journal.toml and changed nothing. \
+             {WIZARD_WRITE_NEXT_STEP}"
         ));
     }
 
@@ -3919,6 +3929,7 @@ async fn apply_migration_with(
     // the copies in legacy, so the wizard can run again.
     let mut touched = Vec::new();
     if let Err((what, e)) = write_shared_catalog(app_data, &journal, &kept, &mut touched) {
+        warn!(error = %e, file = %what, "wizard could not save a file");
         crate::profile_config::put_back(&touched);
         let restored = touched.iter().all(|(path, before)| match before {
             Some(text) => std::fs::read_to_string(path).ok().as_deref() == Some(text.as_str()),
@@ -3927,8 +3938,8 @@ async fn apply_migration_with(
         if restored && crate::loadout_store::drop_wizard_journal(app_data).is_ok() {
             take_out_copies(&copies);
             return Err(format!(
-                "Vosh could not save {what} ({e}), so it put back every file it changed. Your \
-                 profiles work as before, and you can try again."
+                "Vosh could not save {what}, so it put back every file it changed. Your profiles \
+                 work as before, and you can try again."
             ));
         }
         // The journal stays, so the next launch writes every file the run
@@ -3936,9 +3947,9 @@ async fn apply_migration_with(
         // items. Nothing may save or switch the live profile until then.
         written();
         return Err(format!(
-            "Vosh could not save {what} ({e}) and could not put back every file it changed. \
-             Quit Vosh and open it again to finish the move to loadouts. A full copy of each \
-             profile file waits in profiles/legacy."
+            "Vosh could not save {what} and could not put back every file it changed. Quit Vosh \
+             and open it again to finish the move to loadouts. A full copy of each profile file \
+             waits in profiles/legacy."
         ));
     }
     // Every file holds its text. A journal that stays only writes the same
@@ -3949,6 +3960,12 @@ async fn apply_migration_with(
     written();
     Ok(())
 }
+
+/// What to do when the wizard could not write the copies in
+/// profiles/legacy or its journal, before it changed anything. The error
+/// itself goes to the log, since its text can hold colons and paths.
+const WIZARD_WRITE_NEXT_STEP: &str =
+    "Check that your disk has room and that Vosh can write to its folder, then try again.";
 
 /// Take out the copies in profiles/legacy a wizard run wrote, when the
 /// run changed nothing else in the end, so the wizard can run again. A
@@ -7284,16 +7301,12 @@ mod tests {
             let err = super::super::apply_migration(&state, dir.path(), &[], || written = true)
                 .await
                 .unwrap_err();
-            assert!(
-                err.starts_with("Vosh could not save the Bard profile file ("),
-                "{err}"
-            );
-            assert!(
-                err.ends_with(
-                    "), so it put back every file it changed. Your profiles work as before, \
-                     and you can try again."
-                ),
-                "{err}"
+            // The raw error text of the failed write, with its colons, no
+            // longer shows.
+            assert_eq!(
+                err,
+                "Vosh could not save the Bard profile file, so it put back every file it \
+                 changed. Your profiles work as before, and you can try again."
             );
 
             // Nothing changed, so Vosh stays in per profile mode and its
@@ -7330,6 +7343,78 @@ mod tests {
             let bard = ProfileConfig::load(&set.profile_path("Bard")).unwrap();
             assert!(bard.aliases.is_empty());
             assert_eq!(bard.profile_vars.get("target").unwrap(), "orc 3");
+        }
+
+        /// The next step a wizard that could not write its first files
+        /// gives.
+        const WRITE_NEXT_STEP: &str =
+            "Check that your disk has room and that Vosh can write to its folder, then try again.";
+
+        #[tokio::test]
+        async fn a_wizard_that_cannot_copy_or_journal_says_what_to_do() {
+            use crate::loadout_store::{journal_path, legacy_dir};
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_alias(&set, "Healer", "hh");
+            let state = launch_state(dir.path()).await;
+            let healer = read(&set.profile_path("Healer"));
+
+            // A file sits where the legacy folder goes, so no copy lands.
+            let legacy = legacy_dir(dir.path());
+            std::fs::write(&legacy, "").unwrap();
+            let err = super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap_err();
+            assert!(err.starts_with("Vosh could not copy "), "{err}");
+            assert!(
+                err.ends_with(&format!(
+                    " into profiles/legacy and changed nothing. {WRITE_NEXT_STEP}"
+                )),
+                "{err}"
+            );
+            assert!(!err.contains(':'), "{err}");
+            std::fs::remove_file(&legacy).unwrap();
+
+            // The journal does not save.
+            let blocked = journal_path(dir.path()).with_extension("toml.tmp");
+            std::fs::create_dir(&blocked).unwrap();
+            let err = super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap_err();
+            assert_eq!(
+                err,
+                format!(
+                    "Vosh could not save catalog.journal.toml and changed nothing. \
+                     {WRITE_NEXT_STEP}"
+                )
+            );
+            std::fs::remove_dir(&blocked).unwrap();
+
+            // Both changed nothing, so the wizard runs once you fix it.
+            assert!(!catalog_path(dir.path()).exists());
+            assert_eq!(read(&set.profile_path("Healer")), healer);
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+        }
+
+        #[tokio::test]
+        async fn a_profile_file_that_stops_reading_is_named_without_the_raw_error() {
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_alias(&set, "Healer", "hh");
+            let state = launch_state(dir.path()).await;
+            // Something puts a folder in place of the Healer file after
+            // launch read it.
+            let healer = set.profile_path("Healer");
+            std::fs::remove_file(&healer).unwrap();
+            std::fs::create_dir(&healer).unwrap();
+            assert_eq!(
+                refused(&state, dir.path()).await,
+                "Vosh could not read the Healer profile file, so it changed nothing. Check that \
+                 you can open the file, then try again."
+            );
+            assert!(!catalog_path(dir.path()).exists());
         }
 
         /// Build the catalog over Default, Healer, and Test-Prompt, each set
