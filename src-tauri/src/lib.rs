@@ -202,6 +202,18 @@ pub fn run() {
                 // consistent across all profiles.
                 match profile_set::ProfileSet::load_or_migrate(path.clone()) {
                     Ok(set) => {
+                        // Before any profile loads, move the custom
+                        // themes older profile files still hold into
+                        // global.toml, which owns the list from here on.
+                        match profile_config::migrate_custom_themes(&set) {
+                            Ok(0) => {}
+                            Ok(files) => {
+                                info!(files, "moved custom themes into global.toml");
+                            }
+                            Err(e) => {
+                                error!(error = %e, "failed to move custom themes into global.toml");
+                            }
+                        }
                         let active_path = set.active_path();
                         let global_path = set.global_path();
                         if active_path.exists() {

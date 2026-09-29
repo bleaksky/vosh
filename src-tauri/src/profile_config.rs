@@ -16,7 +16,7 @@ use vosh_trigger::Trigger;
 use vosh_vars::Scope;
 
 use crate::profile::{Macro, Profile, Timer};
-use crate::profile_set::ScopeConfig;
+use crate::profile_set::{ProfileSet, ScopeConfig};
 use crate::tick::{TickConfig, TickRuntime};
 
 #[derive(Debug, Error)]
@@ -1512,8 +1512,13 @@ impl GlobalConfig {
         if let Some(v) = &self.terminal_line_height {
             profile.ui.terminal_line_height.clone_from(v);
         }
+        // The shared list replaces the profile's own. A profile file
+        // written before custom themes joined the `theme` scope still
+        // holds a list, and `migrate_custom_themes` moves it into
+        // global.toml at startup, so nothing is lost and a theme you
+        // deleted does not come back from an old file.
         if let Some(v) = &self.custom_themes {
-            profile.ui.custom_themes = merge_custom_themes(v, &profile.ui.custom_themes);
+            profile.ui.custom_themes.clone_from(v);
         }
     }
 
@@ -1530,19 +1535,130 @@ impl GlobalConfig {
     }
 }
 
-/// The shared custom themes, then any theme only the profile file still
-/// holds. Profile files written before custom themes joined the `theme`
-/// scope carry their own lists, and this keeps each of those themes
-/// until the next save moves it into global.toml. The shared copy wins
-/// when both hold the same id.
-fn merge_custom_themes(global: &[CustomTheme], profile: &[CustomTheme]) -> Vec<CustomTheme> {
-    let mut merged = global.to_vec();
-    for theme in profile {
-        if !merged.iter().any(|t| t.id == theme.id) {
-            merged.push(theme.clone());
+/// Profile files that still hold their own custom themes while the
+/// `theme` scope category is global. Files written before custom themes
+/// joined that category carry a list, and so does every profile saved
+/// while the category was per profile. Each list moves into global.toml
+/// once and then leaves its file, so global.toml holds the one list and
+/// a theme you delete stays deleted.
+pub(crate) struct HeldCustomThemes {
+    files: Vec<(PathBuf, ProfileConfig)>,
+}
+
+impl HeldCustomThemes {
+    /// Read every profile file in `set` except `skip` and keep the ones
+    /// that hold custom themes, in index order. A file Vosh cannot read
+    /// stays as it is.
+    pub(crate) fn find(set: &ProfileSet, skip: Option<&str>) -> Self {
+        let mut files = Vec::new();
+        for entry in set.list() {
+            if skip == Some(entry.name.as_str()) {
+                continue;
+            }
+            let path = set.profile_path(&entry.name);
+            if !path.exists() {
+                continue;
+            }
+            match ProfileConfig::load(&path) {
+                Ok(config) if !config.ui.custom_themes.is_empty() => files.push((path, config)),
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(error = %e, path = %path.display(), "profile file unreadable");
+                }
+            }
+        }
+        Self { files }
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.files.is_empty()
+    }
+
+    /// Add each held theme whose id `shared` does not hold yet. The
+    /// shared copy wins a clash, then the first file in index order.
+    fn add_to(&self, shared: &mut Vec<CustomTheme>) {
+        for (_, config) in &self.files {
+            for theme in &config.ui.custom_themes {
+                if !shared.iter().any(|t| t.id == theme.id) {
+                    shared.push(theme.clone());
+                }
+            }
         }
     }
-    merged
+
+    /// Clear the list from each file. Call only after global.toml holds
+    /// the themes. A file that fails to save keeps its list, and the
+    /// next launch moves it again. Returns how many files it cleared.
+    fn strip(self) -> usize {
+        let mut cleared = 0;
+        for (path, mut config) in self.files {
+            config.ui.custom_themes.clear();
+            match config.save(&path) {
+                Ok(()) => cleared += 1,
+                Err(e) => {
+                    tracing::warn!(error = %e, path = %path.display(), "profile file kept its custom themes");
+                }
+            }
+        }
+        cleared
+    }
+}
+
+/// Move the custom themes that profile files still hold into
+/// global.toml, then clear them from those files. Vosh runs this at
+/// startup before it loads the active profile, and after the first run
+/// no file holds a list, so it finds nothing to do. It leaves every file
+/// alone while the `theme` scope category is per profile, since each
+/// file then owns its list. Returns how many files it cleared.
+pub(crate) fn migrate_custom_themes(set: &ProfileSet) -> Result<usize, ConfigError> {
+    if !matches!(set.scope().theme, crate::profile_set::Scope::Global) {
+        return Ok(0);
+    }
+    let held = HeldCustomThemes::find(set, None);
+    if held.is_empty() {
+        return Ok(0);
+    }
+    let path = set.global_path();
+    let mut global = if path.exists() {
+        GlobalConfig::load(&path)?
+    } else {
+        GlobalConfig::default()
+    };
+    let mut shared = global.custom_themes.take().unwrap_or_default();
+    held.add_to(&mut shared);
+    global.custom_themes = Some(shared);
+    // global.toml first, so a failure between the writes leaves every
+    // theme on disk for the next launch to finish.
+    global.save(&path)?;
+    Ok(held.strip())
+}
+
+/// Fold the custom themes that the other profile files hold into the
+/// live profile when the `theme` scope category turns global, save the
+/// shared list to global.toml, and clear those files. Without this a
+/// switch to one of those profiles lays the shared list over its own
+/// and its themes are gone. `held` comes from `HeldCustomThemes::find`
+/// with the active profile skipped, since the live profile holds its
+/// list. Call with the new global `scope` and the persist lock held.
+/// Returns true when the live list gained a theme.
+pub(crate) fn share_custom_themes(
+    held: HeldCustomThemes,
+    scope: &ScopeConfig,
+    global_path: &Path,
+    live: &mut Profile,
+) -> Result<bool, ConfigError> {
+    if held.is_empty() {
+        return Ok(false);
+    }
+    let mut shared = live.ui.custom_themes.clone();
+    held.add_to(&mut shared);
+    let gained = shared.len() > live.ui.custom_themes.len();
+    let mut global = GlobalConfig::from_profile(live, scope);
+    global.custom_themes = Some(shared.clone());
+    global.save(global_path)?;
+    live.ui.custom_themes = shared;
+    held.strip();
+    Ok(gained)
 }
 
 /// Zero out the fields whose scope is `Global` on a
@@ -2388,32 +2504,188 @@ name = "haste"
         assert_eq!(restored.ui.dark_theme, "night-ink");
     }
 
+    fn theme_ids(themes: &[CustomTheme]) -> Vec<&str> {
+        themes.iter().map(|t| t.id.as_str()).collect()
+    }
+
+    fn background(theme: &CustomTheme) -> &str {
+        theme.xterm.get("background").map_or("", String::as_str)
+    }
+
+    /// Write a profile file that holds its own custom themes, the way a
+    /// build before custom themes joined the theme scope saved it.
+    fn write_profile_themes(set: &ProfileSet, name: &str, themes: Vec<CustomTheme>) {
+        let mut config = ProfileConfig::default();
+        config.ui.custom_themes = themes;
+        config.save(&set.profile_path(name)).unwrap();
+    }
+
+    /// Mirror `persist_profile` for the active profile.
+    fn persist_live(set: &ProfileSet, profile: &Profile) {
+        let mut snapshot = ProfileConfig::from_profile(profile);
+        strip_global_fields(&mut snapshot, set.scope());
+        snapshot.save(&set.active_path()).unwrap();
+        GlobalConfig::from_profile(profile, set.scope())
+            .save(&set.global_path())
+            .unwrap();
+    }
+
+    /// Mirror a launch or a switch. The active profile file loads first,
+    /// then global.toml over it.
+    fn load_live(set: &ProfileSet) -> Profile {
+        let mut profile = Profile::default();
+        let path = set.active_path();
+        if path.exists() {
+            ProfileConfig::load(&path).unwrap().apply_to(&mut profile);
+        }
+        if set.global_path().exists() {
+            GlobalConfig::load(&set.global_path())
+                .unwrap()
+                .apply_to(&mut profile);
+        }
+        profile
+    }
+
     #[test]
-    fn a_custom_theme_only_an_older_profile_file_holds_survives() {
-        // global.toml already holds the shared list, and this profile
-        // file was written before custom themes went global.
+    fn the_shared_custom_themes_replace_the_profile_list() {
+        // A list left in a profile file never comes back through a
+        // switch. The shared list is the whole list.
         let global = GlobalConfig {
             custom_themes: Some(vec![theme("shared", "#101010")]),
             ..GlobalConfig::default()
         };
         let mut profile = Profile::default();
-        profile.ui.custom_themes = vec![theme("shared", "#ffffff"), theme("mine", "#202020")];
+        profile.ui.custom_themes = vec![theme("shared", "#ffffff"), theme("deleted", "#202020")];
         global.apply_to(&mut profile);
-        let ids: Vec<&str> = profile
-            .ui
-            .custom_themes
-            .iter()
-            .map(|t| t.id.as_str())
-            .collect();
-        assert_eq!(ids, ["shared", "mine"]);
-        // The shared copy wins a clash.
-        assert_eq!(
-            profile.ui.custom_themes[0]
-                .xterm
-                .get("background")
-                .map(String::as_str),
-            Some("#101010")
+        assert_eq!(theme_ids(&profile.ui.custom_themes), ["shared"]);
+        assert_eq!(background(&profile.ui.custom_themes[0]), "#101010");
+    }
+
+    #[test]
+    fn startup_moves_older_profile_themes_into_global_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.create("alt").unwrap();
+        GlobalConfig {
+            theme: Some("nord".into()),
+            custom_themes: Some(vec![theme("shared", "#101010")]),
+            ..GlobalConfig::default()
+        }
+        .save(&set.global_path())
+        .unwrap();
+        write_profile_themes(
+            &set,
+            "default",
+            vec![theme("shared", "#ffffff"), theme("mine", "#202020")],
         );
+        write_profile_themes(
+            &set,
+            "alt",
+            vec![theme("mine", "#303030"), theme("alts", "#404040")],
+        );
+
+        assert_eq!(migrate_custom_themes(&set).unwrap(), 2);
+
+        let global = GlobalConfig::load(&set.global_path()).unwrap();
+        assert_eq!(global.theme.as_deref(), Some("nord"));
+        let shared = global.custom_themes.unwrap();
+        assert_eq!(theme_ids(&shared), ["shared", "mine", "alts"]);
+        // The shared copy wins a clash, then the first file in the index.
+        assert_eq!(background(&shared[0]), "#101010");
+        assert_eq!(background(&shared[1]), "#202020");
+        for name in ["default", "alt"] {
+            let file = ProfileConfig::load(&set.profile_path(name)).unwrap();
+            assert!(file.ui.custom_themes.is_empty(), "{name} kept its list");
+        }
+        // The next launch finds nothing left to move.
+        assert_eq!(migrate_custom_themes(&set).unwrap(), 0);
+    }
+
+    #[test]
+    fn a_deleted_custom_theme_stays_deleted_after_a_switch() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.create("alt").unwrap();
+        // Both files predate the shared list.
+        write_profile_themes(&set, "default", vec![theme("keep", "#101010")]);
+        write_profile_themes(&set, "alt", vec![theme("gone", "#202020")]);
+        migrate_custom_themes(&set).unwrap();
+
+        let mut live = load_live(&set);
+        assert_eq!(theme_ids(&live.ui.custom_themes), ["keep", "gone"]);
+        // You delete a theme on the default profile.
+        live.ui.custom_themes.retain(|t| t.id != "gone");
+        persist_live(&set, &live);
+
+        set.switch("alt").unwrap();
+        assert_eq!(theme_ids(&load_live(&set).ui.custom_themes), ["keep"]);
+        // The next launch does not bring it back either.
+        assert_eq!(migrate_custom_themes(&set).unwrap(), 0);
+        assert_eq!(theme_ids(&load_live(&set).ui.custom_themes), ["keep"]);
+    }
+
+    #[test]
+    fn profile_scoped_custom_themes_stay_in_their_files() {
+        use crate::profile_set::Scope as Kind;
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.set_scope(ScopeConfig {
+            theme: Kind::Profile,
+            ..ScopeConfig::default()
+        })
+        .unwrap();
+        write_profile_themes(&set, "default", vec![theme("mine", "#101010")]);
+
+        assert_eq!(migrate_custom_themes(&set).unwrap(), 0);
+        let file = ProfileConfig::load(&set.profile_path("default")).unwrap();
+        assert_eq!(theme_ids(&file.ui.custom_themes), ["mine"]);
+        assert!(!set.global_path().exists());
+    }
+
+    #[test]
+    fn turning_the_theme_scope_global_keeps_every_profile_theme() {
+        use crate::profile_set::Scope as Kind;
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.create("alt").unwrap();
+        set.set_scope(ScopeConfig {
+            theme: Kind::Profile,
+            ..ScopeConfig::default()
+        })
+        .unwrap();
+        // Each profile saved its own list while the theme was per profile.
+        let mut live = Profile::default();
+        live.ui.custom_themes = vec![theme("mine", "#101010")];
+        persist_live(&set, &live);
+        write_profile_themes(
+            &set,
+            "alt",
+            vec![theme("mine", "#ffffff"), theme("alts", "#202020")],
+        );
+
+        set.set_scope(ScopeConfig::default()).unwrap();
+        let share = |set: &ProfileSet, live: &mut Profile| {
+            let held = HeldCustomThemes::find(set, Some(set.active_name()));
+            share_custom_themes(held, set.scope(), &set.global_path(), live).unwrap()
+        };
+        assert!(share(&set, &mut live));
+        assert_eq!(theme_ids(&live.ui.custom_themes), ["mine", "alts"]);
+        assert_eq!(background(&live.ui.custom_themes[0]), "#101010");
+        let global = GlobalConfig::load(&set.global_path()).unwrap();
+        assert_eq!(theme_ids(&global.custom_themes.unwrap()), ["mine", "alts"]);
+        let alt = ProfileConfig::load(&set.profile_path("alt")).unwrap();
+        assert!(alt.ui.custom_themes.is_empty());
+
+        // The persist that follows the scope change clears the active
+        // file, and the other profile sees every theme.
+        persist_live(&set, &live);
+        set.switch("alt").unwrap();
+        assert_eq!(
+            theme_ids(&load_live(&set).ui.custom_themes),
+            ["mine", "alts"]
+        );
+        // Nothing is left for a second pass.
+        assert!(!share(&set, &mut live));
     }
 
     #[test]
