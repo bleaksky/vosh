@@ -32,7 +32,7 @@ import type { LeaveGuard, SettingsPageProps } from './components/settings/pageTy
 import { GeneralGroup } from './components/settings/groups/GeneralGroup';
 import { LayoutGroup } from './components/settings/groups/LayoutGroup';
 import { InputGroup } from './components/settings/groups/InputGroup';
-import { AutomationGroup } from './components/settings/groups/AutomationGroup';
+import { AutomationPage } from './components/settings/pages/AutomationPage';
 import { CharactersPage } from './components/settings/pages/CharactersPage';
 import { AppearancePage } from './components/settings/pages/AppearancePage';
 
@@ -59,7 +59,7 @@ const PAGES: Record<SettingsGroup, GroupPage> = {
   appearance: { Page: AppearancePage },
   layout: { Page: LayoutGroup },
   input: { Page: InputGroup },
-  automation: { Page: AutomationGroup },
+  automation: { Page: AutomationPage, selfScroll: true },
   characters: { Page: CharactersPage },
 };
 
