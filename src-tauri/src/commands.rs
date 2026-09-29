@@ -9,6 +9,7 @@ use vosh_log::{SearchHit, SearchOptions, SearchPage, SessionRow};
 use vosh_trigger::Trigger;
 
 use crate::input;
+use crate::list_events::{broadcast_list_changes, ListChanges, ListRevisions};
 use crate::log_state::{SharedLogStore, SharedScrollback};
 
 /// Send an event to every webview window. `AppHandle::emit` routes via
@@ -522,8 +523,9 @@ pub(crate) async fn session_send_input(
     // into echoes, so there they change nothing.
     let path_b_live = crate::input::PATH_B_ACTIVE.load(std::sync::atomic::Ordering::Acquire);
     let is_reset_or_load = !path_b_live && crate::input::is_profile_reset_or_load(&line);
-    let (mut result, target_after, script_apply) = {
+    let (mut result, target_after, script_apply, lists) = {
         let mut profile = state.profile.lock().await;
+        let lists_before = ListRevisions::of(&profile);
         let before_name = profile.target.name.clone();
         let before_idx = profile.target.room_idx;
         let before_keys = profile.target.quick_keys.clone();
@@ -570,8 +572,12 @@ pub(crate) async fn session_send_input(
             }
             Some(script_state::apply_actions(&mut profile, combined))
         };
-        (result, payload, script_apply)
+        let lists = ListChanges::since(lists_before, &profile);
+        (result, payload, script_apply, lists)
     };
+    // #trigger, #alias, and the Lua they run change the lists an open
+    // Settings page shows, so tell it.
+    broadcast_list_changes(&app, lists);
 
     // Slash commands (#alias, #trigger, #var, #endrec, #import-tintin,
     // ...) and durable Lua actions mutate the profile but historically
@@ -764,8 +770,10 @@ pub(crate) async fn import_apply(
     let mut rejected: Vec<String> = Vec::new();
     let mut macros_changed = false;
     let macros_snapshot: Vec<Macro>;
+    let lists;
     {
         let mut p = state.profile.lock().await;
+        let lists_before = ListRevisions::of(&p);
         for alias in &report.aliases {
             p.aliases.set(alias.clone());
         }
@@ -786,12 +794,14 @@ pub(crate) async fn import_apply(
             p.vars.set(vosh_vars::Scope::Profile, k.clone(), v.clone());
         }
         macros_snapshot = p.macros.clone();
+        lists = ListChanges::since(lists_before, &p);
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
     if macros_changed {
         broadcast(&app, "vosh://macros-changed", &macros_snapshot);
     }
+    broadcast_list_changes(&app, lists);
     Ok(ImportSummary {
         aliases: report.aliases.len(),
         triggers: report.triggers.len() - rejected.len(),
@@ -1088,6 +1098,7 @@ pub(crate) async fn triggers_import(
     // Empty string, not unit: the frontend listener types this
     // payload as string. Empty means "more than one group changed".
     broadcast(&app, "vosh://trigger-groups-changed", &"");
+    broadcast_list_changes(&app, ListChanges::TRIGGERS);
     Ok(count)
 }
 
@@ -1130,6 +1141,7 @@ pub(crate) async fn aliases_import(
     // Empty string, not unit: the frontend listener types this
     // payload as string. Empty means "more than one group changed".
     broadcast(&app, "vosh://alias-groups-changed", &"");
+    broadcast_list_changes(&app, ListChanges::ALIASES);
     Ok(count)
 }
 
@@ -2741,6 +2753,9 @@ pub(crate) async fn presets_install(
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
+    if installed > 0 {
+        broadcast_list_changes(&app, ListChanges::TRIGGERS);
+    }
     Ok(installed)
 }
 
@@ -2758,6 +2773,9 @@ pub(crate) async fn presets_remove(
     };
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
+    if removed > 0 {
+        broadcast_list_changes(&app, ListChanges::TRIGGERS);
+    }
     Ok(removed)
 }
 
@@ -2826,6 +2844,7 @@ pub(crate) async fn plugins_set_enabled(
         p.plugins.enabled = mgr.enabled_names();
     }
 
+    let mut lists = ListChanges::default();
     if let Some(code) = body {
         let mut p = state.profile.lock().await;
         crate::script_state::snapshot_vars(&p.script, &p.vars);
@@ -2833,15 +2852,17 @@ pub(crate) async fn plugins_set_enabled(
             .script
             .load_script(&format!("plugin:{name}"), code)
             .map_err(|e| e.to_string())?;
-        let _ = crate::script_state::apply_actions(&mut p, outcome);
+        lists = crate::script_state::apply_actions(&mut p, outcome).lists;
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
+    broadcast_list_changes(&app, lists);
     Ok(enabled)
 }
 
 #[tauri::command]
 pub(crate) async fn plugins_reload(
+    app: AppHandle,
     state: State<'_, SharedState>,
     name: String,
 ) -> Result<(), String> {
@@ -2849,13 +2870,16 @@ pub(crate) async fn plugins_reload(
         let mgr = state.plugins.lock().await;
         mgr.read_entry(&name).map_err(|e| e.to_string())?
     };
-    let mut p = state.profile.lock().await;
-    crate::script_state::snapshot_vars(&p.script, &p.vars);
-    let outcome = p
-        .script
-        .load_script(&format!("plugin:{name}"), code)
-        .map_err(|e| e.to_string())?;
-    let _ = crate::script_state::apply_actions(&mut p, outcome);
+    let lists = {
+        let mut p = state.profile.lock().await;
+        crate::script_state::snapshot_vars(&p.script, &p.vars);
+        let outcome = p
+            .script
+            .load_script(&format!("plugin:{name}"), code)
+            .map_err(|e| e.to_string())?;
+        crate::script_state::apply_actions(&mut p, outcome).lists
+    };
+    broadcast_list_changes(&app, lists);
     Ok(())
 }
 

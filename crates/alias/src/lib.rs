@@ -14,6 +14,7 @@
 //! re-fed through the engine, bounded by a maximum recursion depth.
 
 use std::collections::{BTreeSet, HashMap};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -109,6 +110,16 @@ pub struct AliasStore {
     /// (disabled list) rather than enabled list so a freshly added
     /// group defaults to enabled.
     disabled_groups: BTreeSet<String>,
+    /// See [`AliasStore::revision`].
+    revision: u64,
+}
+
+/// Hands out list revisions. One counter serves every store, so a store
+/// built to replace another never reads as the same list by accident.
+static NEXT_REVISION: AtomicU64 = AtomicU64::new(1);
+
+fn next_revision() -> u64 {
+    NEXT_REVISION.fetch_add(1, Ordering::Relaxed)
 }
 
 impl Default for AliasStore {
@@ -124,7 +135,16 @@ impl AliasStore {
             max_depth: DEFAULT_MAX_DEPTH,
             separator: DEFAULT_SEPARATOR,
             disabled_groups: BTreeSet::new(),
+            revision: 0,
         }
+    }
+
+    /// Moves each time an alias is added, replaced, or removed, so a
+    /// caller can tell whether the list changed across a step without
+    /// comparing it. Turning a group on or off leaves it alone, since
+    /// the list itself stays the same.
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
     /// True when the named group is effectively enabled. Returns true
@@ -196,10 +216,15 @@ impl AliasStore {
 
     pub fn set(&mut self, alias: Alias) {
         self.aliases.insert(alias.name.clone(), alias);
+        self.revision = next_revision();
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
-        self.aliases.remove(name).is_some()
+        let removed = self.aliases.remove(name).is_some();
+        if removed {
+            self.revision = next_revision();
+        }
+        removed
     }
 
     pub fn get(&self, name: &str) -> Option<&Alias> {
@@ -665,6 +690,31 @@ mod tests {
         assert!(s.remove("greet"));
         assert!(!s.remove("greet"));
         assert_eq!(s.expand_line("greet").unwrap(), vec!["greet".to_string()]);
+    }
+
+    #[test]
+    fn revision_moves_only_when_the_list_changes() {
+        let mut s = AliasStore::new();
+        let empty = s.revision();
+        s.set(Alias::new("greet", "wave").with_group("social"));
+        let after_add = s.revision();
+        assert_ne!(after_add, empty);
+        s.set_group_enabled("social", false);
+        s.set_disabled_groups(["social"]);
+        assert!(!s.remove("missing"));
+        assert_eq!(s.revision(), after_add);
+        s.set(Alias::new("greet", "bow"));
+        let after_replace = s.revision();
+        assert_ne!(after_replace, after_add);
+        assert!(s.remove("greet"));
+        assert_ne!(s.revision(), after_replace);
+    }
+
+    #[test]
+    fn a_replacement_store_reads_as_a_change() {
+        let first = store(&[("greet", "wave")]);
+        let second = store(&[("greet", "wave")]);
+        assert_ne!(first.revision(), second.revision());
     }
 
     #[test]
