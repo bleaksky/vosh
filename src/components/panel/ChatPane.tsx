@@ -82,14 +82,28 @@ export function ChatPane() {
           </p>
         ) : (
           <ol className="pane-chat-log">
-            {visible.map((line, i) => (
-              <ChatMessage key={`${line.ts}-${i}`} line={line} />
+            {visible.map((line) => (
+              <ChatMessage key={lineKey(line)} line={line} />
             ))}
           </ol>
         )}
       </div>
     </>
   );
+}
+
+// chatStore appends line objects and never changes one, so an id per
+// object keys each message across the 500 line roll off.
+const lineIds = new WeakMap<ChatLine, number>();
+let nextLineId = 0;
+
+function lineKey(line: ChatLine): number {
+  let id = lineIds.get(line);
+  if (id === undefined) {
+    id = nextLineId++;
+    lineIds.set(line, id);
+  }
+  return id;
 }
 
 function ChatMessage({ line }: { line: ChatLine }) {
