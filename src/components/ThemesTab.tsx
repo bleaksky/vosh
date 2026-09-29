@@ -5,7 +5,9 @@ import {
   customToAppTheme,
   DEFAULT_THEME_ID,
   findTheme,
+  migrateCustomChrome,
   setCustomThemes,
+  themeTokens,
   type AppTheme,
 } from '../lib/themes';
 import { applyTheme } from '../lib/theme';
@@ -28,8 +30,9 @@ interface Props {
 // ones, then the dashed "+ new from active" card. Clicking a card
 // sets the active theme. Whenever the active theme is a custom one,
 // the editor renders directly below the catalog: a tile grid of
-// color slots grouped by role (surfaces / text / borders / accent /
-// semantic / terminal surfaces / ANSI 16).
+// color slots grouped by role (accent / status / terminal surfaces /
+// ANSI 16). The chrome derives from the terminal slots, so its groups
+// show the derived colors and an edit pins that token.
 //
 // Edits live-apply to the running window via applyTheme + the
 // theme-changed event so the user sees the result instantly. The
@@ -113,7 +116,7 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
         label: `${base.label} (custom)`,
         description: `Forked from ${base.label}`,
         xterm: { ...(base.xterm as unknown as Record<string, string>) },
-        chrome: { ...(base.chrome as unknown as Record<string, string>) },
+        chrome: { ...base.chrome } as Record<string, string>,
       };
       const next = [...prev.custom_themes, newTheme];
       setCustomThemes(next.map(customToAppTheme));
@@ -203,7 +206,11 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
             updateCustom(activeCustom.id, { label, description })
           }
           onColorChange={(slot, key, value) => {
-            const next = { ...activeCustom[slot], [key]: value };
+            // Chrome edits write the token override shape, which also
+            // converts a legacy 20 slot palette on its first edit.
+            const current =
+              slot === 'chrome' ? migrateCustomChrome(activeCustom.chrome) : activeCustom.xterm;
+            const next = { ...current, [key]: value };
             updateCustom(activeCustom.id, { [slot]: next } as Partial<CustomTheme>);
           }}
         />
@@ -453,6 +460,7 @@ interface CardProps {
 // delete affordance on inactive custom cards. The whole card is the
 // select target; delete stops propagation so it never also selects.
 function ThemeCard({ theme, isActive, isCustom, onSelect, onDelete }: CardProps) {
+  const tokens = themeTokens(theme);
   return (
     <div
       className={`theme-card${isActive ? ' is-active' : ''}`}
@@ -469,11 +477,7 @@ function ThemeCard({ theme, isActive, isCustom, onSelect, onDelete }: CardProps)
       {isCustom && <span className="caps theme-card-tag">custom</span>}
       <div className="theme-card-swatches" aria-hidden="true">
         {SWATCH_KEYS.map((k) => (
-          <span
-            key={k}
-            className="theme-card-swatch"
-            style={{ background: (theme.chrome as unknown as Record<string, string>)[k] }}
-          />
+          <span key={k} className="theme-card-swatch" style={{ background: tokens[k] }} />
         ))}
       </div>
       {isCustom && !isActive && onDelete && (
@@ -493,34 +497,21 @@ function ThemeCard({ theme, isActive, isCustom, onSelect, onDelete }: CardProps)
   );
 }
 
-// Swatch trio on each card — surface / accent / warn read as a theme
+// Swatch trio on each card — ground / accent / warn read as a theme
 // fingerprint at a glance.
-const SWATCH_KEYS = ['surface', 'accent', 'warn'];
+const SWATCH_KEYS = ['bg', 'accent', 'warn'] as const;
 
 // Grouped color slots for the editor grid. Each group renders as a
-// labeled section with the slots inside. Keeping the keys here
-// rather than scattered across the JSX means adding a new chrome
-// slot is a one-line change.
+// labeled section with the slots inside. The chrome groups list the
+// tokens a custom theme can pin; the rest derive from the terminal.
 const CHROME_GROUPS: { label: string; keys: string[] }[] = [
   {
-    label: 'surfaces',
-    keys: ['surfaceDeep', 'surface', 'surfacePane', 'surfaceLift', 'surfaceEmphasis'],
-  },
-  {
-    label: 'text',
-    keys: ['textStrong', 'text', 'textMuted', 'textFaint', 'textDim'],
-  },
-  {
-    label: 'borders',
-    keys: ['borderSoft', 'border', 'borderStrong', 'borderHover'],
-  },
-  {
     label: 'accent',
-    keys: ['accent', 'accentSoft'],
+    keys: ['accent'],
   },
   {
-    label: 'semantic',
-    keys: ['warn', 'danger', 'info', 'success'],
+    label: 'status',
+    keys: ['danger', 'warn', 'success'],
   },
 ];
 
@@ -593,7 +584,7 @@ function ThemeEditor({
               label={g.label}
               slot="chrome"
               keys={g.keys}
-              values={theme.chrome as unknown as Record<string, string>}
+              values={themeTokens(theme) as unknown as Record<string, string>}
               onColorChange={onColorChange}
             />
           ))}

@@ -1,14 +1,17 @@
-// Theme runtime. Applies the active theme to the document root via
-// CSS custom properties + a `data-theme` attribute, and broadcasts a
-// window event so the Terminal can refresh its xterm palette.
+// Theme runtime. Applies the active theme to the document root via the
+// derived chrome token vars (lib/chrome) plus `data-theme` and
+// `data-appearance` attributes, and broadcasts a window event so the
+// Terminal can refresh its xterm palette.
 
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { tokensToCssVars } from './chrome';
+import { parseHex, toRgba } from './color';
 import {
-  chromeToCssVars,
   customToAppTheme,
   DEFAULT_THEME_ID,
   findTheme,
   setCustomThemes,
+  themeTokens,
   type AppTheme,
 } from './themes';
 
@@ -19,11 +22,18 @@ let currentThemeId: string = DEFAULT_THEME_ID;
 
 function applyToRoot(theme: AppTheme) {
   const root = document.documentElement;
+  const tokens = themeTokens(theme);
   root.setAttribute('data-theme', theme.id);
-  const vars = chromeToCssVars(theme.chrome);
-  for (const [key, value] of Object.entries(vars)) {
+  root.setAttribute('data-appearance', tokens.appearance);
+  for (const [key, value] of Object.entries(tokensToCssVars(tokens))) {
     root.style.setProperty(key, value);
   }
+  // The legacy --c-* names alias the tokens in styles/tokens.css. The
+  // one exception is the soft accent: the map canvas reads it through
+  // getComputedStyle, and a canvas fill cannot parse the color-mix()
+  // alias in every webview, so it lands here as plain rgba.
+  const accent = parseHex(tokens.accent);
+  if (accent) root.style.setProperty('--c-accent-soft', toRgba(accent, 0.13));
   // Expose the xterm background as a CSS var so the split history
   // overlay can paint an opaque undercoat that matches the renderer's
   // own background — covers xterm's sub-frame render gap during scroll.

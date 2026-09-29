@@ -1,7 +1,10 @@
-// Theme palettes — drives both the chrome (sidebar, panes, room info,
-// statusbar, etc. via CSS variables) and the xterm.js terminal palette
-// (16 ANSI slots). Each theme is a single source of truth so adding a
-// new scheme is mechanical: define one entry and the whole UI flips.
+// Theme palettes. A theme is a terminal palette (the 16 ANSI slots plus
+// surfaces) and nothing else by default: lib/chrome derives the window
+// chrome from it, so adding a scheme is one xterm block. A theme may pin
+// individual chrome tokens where the derivation misses a look the theme
+// is known for (Nord's frost accent, for example).
+
+import { CHROME_COLOR_KEYS, deriveChrome, type ChromeOverrides, type ChromeTokens } from './chrome';
 
 export interface XtermPalette {
   background: string;
@@ -28,58 +31,13 @@ export interface XtermPalette {
   brightWhite: string;
 }
 
-export interface ChromePalette {
-  /// Settings sidebar / off-floor backgrounds — deepest surface tone.
-  surfaceDeep: string;
-  /// Primary app background — terminal host, side panel, etc.
-  surface: string;
-  /// Pane headers and similar slightly darker accents over surface.
-  surfacePane: string;
-  /// Lifted surface on hover.
-  surfaceLift: string;
-  /// More emphasized surface (active card, etc.).
-  surfaceEmphasis: string;
-
-  /// Brightest text — section titles, names.
-  textStrong: string;
-  /// Body text default.
-  text: string;
-  /// Muted secondary labels.
-  textMuted: string;
-  /// Faint tertiary text (meta, descriptions).
-  textFaint: string;
-  /// Dimmest readable text (eyebrows, dividers).
-  textDim: string;
-
-  /// Soft hairline dividers.
-  borderSoft: string;
-  /// Standard borders.
-  border: string;
-  /// Emphasized borders (around fields, buttons).
-  borderStrong: string;
-  /// Hover state for borders.
-  borderHover: string;
-
-  /// Primary accent — cool blue in Kanso Zen, frost blue in Nord, etc.
-  accent: string;
-  /// Translucent accent for subtle backgrounds (linear-gradient targets).
-  accentSoft: string;
-  /// Warning / amber tone.
-  warn: string;
-  /// Danger / red tone.
-  danger: string;
-  /// Info / blue tone.
-  info: string;
-  /// Success / green tone.
-  success: string;
-}
-
 export interface AppTheme {
   id: string;
   label: string;
   description: string;
   xterm: XtermPalette;
-  chrome: ChromePalette;
+  /// Chrome tokens this theme pins instead of deriving.
+  chrome?: ChromeOverrides;
 }
 
 // ── Kanso Zen ───────────────────────────────────────────────────────
@@ -113,43 +71,15 @@ const kansoZen: AppTheme = {
     brightCyan: '#7aa89f',
     brightWhite: '#c5c9c7',
   },
-  // Chrome aligned with the canonical Kanso website theme:
-  //   accent        = #b0c8d4  cool blue  (primary CTAs / focus / active)
-  //   warn          = #c4b28a  muted gold
-  //   danger        = #c4746e  muted red
-  //   success       = #87a987  sage green
-  //   info          = #b0c8d4  same as accent (the website uses one cool blue)
-  // Pink (#ff3399) was a mistake; it never matched the Kanso brand.
-  chrome: {
-    surfaceDeep: '#0e1318',
-    surface: '#090e13',
-    surfacePane: '#14171d',
-    surfaceLift: '#1b2027',
-    surfaceEmphasis: '#22262d',
-    textStrong: '#c5c9c7',
-    text: '#a8acaa',
-    textMuted: '#75797f',
-    textFaint: '#5c6066',
-    textDim: '#3a3e44',
-    borderSoft: '#161b22',
-    border: '#22262d',
-    borderStrong: '#393b44',
-    borderHover: '#393b44',
-    accent: '#b0c8d4',
-    accentSoft: 'rgba(176, 200, 212, 0.12)',
-    warn: '#c4b28a',
-    danger: '#c4746e',
-    info: '#b0c8d4',
-    success: '#87a987',
-  },
+  // Kanso's brand cool blue lives outside its terminal palette.
+  chrome: { accent: '#b0c8d4' },
 };
 
 // ── Obsidian Ember ──────────────────────────────────────────────────
-// The Ember redesign palette. One warm near-black neutral ramp for
-// every surface, one text ramp on the same hue, a single ember accent,
-// and translucent hairline borders. Values come from the OKLCH ramp
-// (hue 55, chroma 0.004-0.006) converted to sRGB, so the app matches
-// the approved design canvas exactly.
+// The Ember redesign palette. A warm near-black ground, pastel ANSI,
+// and an ember cursor the chrome takes as its single accent. The
+// derived panel, hairlines, and text tiers land on the approved One
+// Window canvas values.
 const obsidianEmber: AppTheme = {
   id: 'obsidian-ember',
   label: 'Obsidian Ember',
@@ -178,28 +108,8 @@ const obsidianEmber: AppTheme = {
     brightCyan: '#97dde8',
     brightWhite: '#ece7e1',
   },
-  chrome: {
-    surface: '#0a0908',
-    surfaceDeep: '#0e0c0b',
-    surfacePane: '#100f0d',
-    surfaceLift: '#181514',
-    surfaceEmphasis: '#201d1c',
-    textStrong: '#f2efee',
-    text: '#e0dddb',
-    textMuted: '#c0bdbb',
-    textFaint: '#9b9795',
-    textDim: '#726e6b',
-    borderSoft: 'rgba(80, 76, 74, 0.24)',
-    border: 'rgba(80, 76, 74, 0.24)',
-    borderStrong: 'rgba(80, 76, 74, 0.42)',
-    borderHover: 'rgba(80, 76, 74, 0.42)',
-    accent: '#ef8f2f',
-    accentSoft: 'rgba(239, 143, 47, 0.13)',
-    warn: '#e5c057',
-    danger: '#e3645e',
-    info: '#6ec3eb',
-    success: '#76cf8a',
-  },
+  // The ember ink the approved canvas sets on accent buttons.
+  chrome: { onAccent: '#140b02' },
 };
 
 // ── Tokyo Night Storm ───────────────────────────────────────────────
@@ -233,28 +143,6 @@ const tokyoNight: AppTheme = {
     brightCyan: '#7dcfff',
     brightWhite: '#c0caf5',
   },
-  chrome: {
-    surfaceDeep: '#16161e',
-    surface: '#1a1b26',
-    surfacePane: '#13141c',
-    surfaceLift: '#24283b',
-    surfaceEmphasis: '#2f334d',
-    textStrong: '#c0caf5',
-    text: '#a9b1d6',
-    textMuted: '#737aa2',
-    textFaint: '#565f89',
-    textDim: '#3b4261',
-    borderSoft: '#1f2335',
-    border: '#292e42',
-    borderStrong: '#3b4261',
-    borderHover: '#545c7e',
-    accent: '#7aa2f7',
-    accentSoft: 'rgba(122, 162, 247, 0.12)',
-    warn: '#e0af68',
-    danger: '#f7768e',
-    info: '#7dcfff',
-    success: '#9ece6a',
-  },
 };
 
 // ── Nord ────────────────────────────────────────────────────────────
@@ -287,27 +175,18 @@ const nord: AppTheme = {
     brightCyan: '#8fbcbb',
     brightWhite: '#eceff4',
   },
+  // otty's Nord, measured from otty's own theme file. The panel and
+  // floating surfaces stay on the terminal ground, and the text tiers
+  // follow nord5 rather than the terminal's nord4 foreground.
   chrome: {
-    surfaceDeep: '#242933',
-    surface: '#2e3440',
-    surfacePane: '#272c36',
-    surfaceLift: '#3b4252',
-    surfaceEmphasis: '#434c5e',
-    textStrong: '#eceff4',
-    text: '#d8dee9',
-    textMuted: '#8a92a4',
-    textFaint: '#6e7889',
-    textDim: '#4c566a',
-    borderSoft: '#2b303b',
-    border: '#353b48',
-    borderStrong: '#434c5e',
-    borderHover: '#4c566a',
+    panel: '#2e3440',
+    raised: '#2e3440',
+    sep: '#434c5e',
+    selrow: '#3b4252',
+    text: '#e5e9f0',
+    secondary: '#c0c7d3',
+    tertiary: '#7b8294',
     accent: '#88c0d0',
-    accentSoft: 'rgba(136, 192, 208, 0.12)',
-    warn: '#ebcb8b',
-    danger: '#bf616a',
-    info: '#81a1c1',
-    success: '#a3be8c',
   },
 };
 
@@ -341,28 +220,7 @@ const gruvbox: AppTheme = {
     brightCyan: '#8ec07c',
     brightWhite: '#ebdbb2',
   },
-  chrome: {
-    surfaceDeep: '#1d2021',
-    surface: '#282828',
-    surfacePane: '#222222',
-    surfaceLift: '#3c3836',
-    surfaceEmphasis: '#504945',
-    textStrong: '#fbf1c7',
-    text: '#ebdbb2',
-    textMuted: '#bdae93',
-    textFaint: '#928374',
-    textDim: '#665c54',
-    borderSoft: '#32302f',
-    border: '#3c3836',
-    borderStrong: '#504945',
-    borderHover: '#665c54',
-    accent: '#fabd2f',
-    accentSoft: 'rgba(250, 189, 47, 0.12)',
-    warn: '#fe8019',
-    danger: '#fb4934',
-    info: '#83a598',
-    success: '#b8bb26',
-  },
+  chrome: { accent: '#fabd2f' },
 };
 
 // ── Catppuccin Mocha ────────────────────────────────────────────────
@@ -395,28 +253,7 @@ const catppuccin: AppTheme = {
     brightCyan: '#94e2d5',
     brightWhite: '#a6adc8',
   },
-  chrome: {
-    surfaceDeep: '#181825',
-    surface: '#1e1e2e',
-    surfacePane: '#11111b',
-    surfaceLift: '#313244',
-    surfaceEmphasis: '#45475a',
-    textStrong: '#cdd6f4',
-    text: '#bac2de',
-    textMuted: '#a6adc8',
-    textFaint: '#7f849c',
-    textDim: '#585b70',
-    borderSoft: '#1e1e2e',
-    border: '#313244',
-    borderStrong: '#45475a',
-    borderHover: '#585b70',
-    accent: '#f5c2e7',
-    accentSoft: 'rgba(245, 194, 231, 0.12)',
-    warn: '#f9e2af',
-    danger: '#f38ba8',
-    info: '#89b4fa',
-    success: '#a6e3a1',
-  },
+  chrome: { accent: '#f5c2e7' },
 };
 
 // ── Classic Vivid ───────────────────────────────────────────────────
@@ -454,32 +291,9 @@ const classicVivid: AppTheme = {
     brightCyan: '#00ffff',
     brightWhite: '#ffffff',
   },
-  chrome: {
-    surfaceDeep: '#000000',
-    surface: '#0a0a0a',
-    surfacePane: '#050505',
-    surfaceLift: '#1a1a1a',
-    surfaceEmphasis: '#2a2a2a',
-    textStrong: '#ffffff',
-    text: '#cccccc',
-    textMuted: '#999999',
-    textFaint: '#777777',
-    textDim: '#555555',
-    borderSoft: '#1a1a1a',
-    border: '#2a2a2a',
-    borderStrong: '#444444',
-    borderHover: '#888888',
-    // Vivid amber for the accent. Distinct from warn (yellow),
-    // success (green), info (cyan), and danger (red) — and reads as
-    // a CGA-era highlight color in keeping with the rest of the
-    // palette.
-    accent: '#ffaa00',
-    accentSoft: 'rgba(255, 170, 0, 0.12)',
-    warn: '#ffff00',
-    danger: '#ff0000',
-    info: '#00ffff',
-    success: '#00ff00',
-  },
+  // Vivid amber accent, distinct from every ANSI status color and in
+  // keeping with a CGA era highlight.
+  chrome: { accent: '#ffaa00' },
 };
 
 // ── Dracula at Night ────────────────────────────────────────────────
@@ -515,28 +329,7 @@ const dracula: AppTheme = {
     brightCyan: '#a4ffff',
     brightWhite: '#ffffff',
   },
-  chrome: {
-    surfaceDeep: '#13141a',
-    surface: '#1a1c23',
-    surfacePane: '#16181f',
-    surfaceLift: '#252834',
-    surfaceEmphasis: '#363948',
-    textStrong: '#f8f8f2',
-    text: '#f8f8f2',
-    textMuted: '#b8b8a8',
-    textFaint: '#6272a4',
-    textDim: '#363948',
-    borderSoft: '#0e0f15',
-    border: '#363948',
-    borderStrong: '#6272a4',
-    borderHover: '#7e88b6',
-    accent: '#bd93f9',
-    accentSoft: 'rgba(189, 147, 249, 0.15)',
-    warn: '#f1fa8c',
-    danger: '#ff5555',
-    info: '#8be9fd',
-    success: '#50fa7b',
-  },
+  chrome: { accent: '#bd93f9' },
 };
 
 // ── Monokai ─────────────────────────────────────────────────────────
@@ -571,28 +364,7 @@ const monokai: AppTheme = {
     brightCyan: '#a1efe4',
     brightWhite: '#f9f8f5',
   },
-  chrome: {
-    surfaceDeep: '#1e1f1c',
-    surface: '#272822',
-    surfacePane: '#2d2e26',
-    surfaceLift: '#3e3d32',
-    surfaceEmphasis: '#49483e',
-    textStrong: '#f8f8f2',
-    text: '#f8f8f2',
-    textMuted: '#aaa898',
-    textFaint: '#75715e',
-    textDim: '#49483e',
-    borderSoft: '#1e1f1c',
-    border: '#49483e',
-    borderStrong: '#75715e',
-    borderHover: '#a59f85',
-    accent: '#f92672',
-    accentSoft: 'rgba(249, 38, 114, 0.15)',
-    warn: '#f4bf75',
-    danger: '#f92672',
-    info: '#66d9ef',
-    success: '#a6e22e',
-  },
+  chrome: { accent: '#f92672' },
 };
 
 // ── One Dark ────────────────────────────────────────────────────────
@@ -626,28 +398,6 @@ const oneDark: AppTheme = {
     brightMagenta: '#c678dd',
     brightCyan: '#56b6c2',
     brightWhite: '#ffffff',
-  },
-  chrome: {
-    surfaceDeep: '#21252b',
-    surface: '#282c34',
-    surfacePane: '#21252b',
-    surfaceLift: '#2c313a',
-    surfaceEmphasis: '#3e4451',
-    textStrong: '#ffffff',
-    text: '#abb2bf',
-    textMuted: '#7f8590',
-    textFaint: '#5c6370',
-    textDim: '#3e4451',
-    borderSoft: '#21252b',
-    border: '#3e4451',
-    borderStrong: '#5c6370',
-    borderHover: '#7f8590',
-    accent: '#61afef',
-    accentSoft: 'rgba(97, 175, 239, 0.15)',
-    warn: '#e5c07b',
-    danger: '#e06c75',
-    info: '#56b6c2',
-    success: '#98c379',
   },
 };
 
@@ -683,28 +433,6 @@ const oneHalfDark: AppTheme = {
     brightCyan: '#56b6c2',
     brightWhite: '#ffffff',
   },
-  chrome: {
-    surfaceDeep: '#21252b',
-    surface: '#282c34',
-    surfacePane: '#23272f',
-    surfaceLift: '#363c46',
-    surfaceEmphasis: '#474e5d',
-    textStrong: '#ffffff',
-    text: '#dcdfe4',
-    textMuted: '#a5aab4',
-    textFaint: '#5d677a',
-    textDim: '#474e5d',
-    borderSoft: '#21252b',
-    border: '#474e5d',
-    borderStrong: '#5d677a',
-    borderHover: '#838d9d',
-    accent: '#61afef',
-    accentSoft: 'rgba(97, 175, 239, 0.15)',
-    warn: '#e5c07b',
-    danger: '#e06c75',
-    info: '#56b6c2',
-    success: '#98c379',
-  },
 };
 
 // ── Tango Dark ──────────────────────────────────────────────────────
@@ -739,39 +467,16 @@ const tangoDark: AppTheme = {
     brightCyan: '#34e2e2',
     brightWhite: '#eeeeec',
   },
-  chrome: {
-    surfaceDeep: '#252a2c',
-    surface: '#2e3436',
-    surfacePane: '#363c3e',
-    surfaceLift: '#3d4446',
-    surfaceEmphasis: '#4d5456',
-    textStrong: '#eeeeec',
-    text: '#d3d7cf',
-    textMuted: '#a9aeac',
-    textFaint: '#7a7e7c',
-    textDim: '#555753',
-    borderSoft: '#3d4446',
-    border: '#555753',
-    borderStrong: '#7a7e7c',
-    borderHover: '#888a85',
-    accent: '#729fcf',
-    accentSoft: 'rgba(114, 159, 207, 0.15)',
-    warn: '#fce94f',
-    danger: '#ef2929',
-    info: '#34e2e2',
-    success: '#8ae234',
-  },
 };
 
 // ── High Contrast ───────────────────────────────────────────────────
-// Re-thought from the original WCAG-AA stab: deeper blacks for chrome
-// (so it isn't a flat black void), pure white text, yellow + bright
-// cyan accents for emphasis. Borders are bright white so structure
-// reads at a glance.
+// Re-thought from the original WCAG-AA stab: an off-black ground (so
+// it isn't a flat black void), pure white text, and a yellow cursor
+// the chrome takes as its accent.
 const highContrast: AppTheme = {
   id: 'high-contrast',
   label: 'High Contrast',
-  description: 'Maximum readability. Off-black surfaces, white borders.',
+  description: 'Maximum readability. White text on off-black, yellow accent.',
   xterm: {
     // Slight off-black instead of pure #000000. xterm.js can't be
     // told to override the 256-color cube; ANSI 256 codes like 022
@@ -801,28 +506,6 @@ const highContrast: AppTheme = {
     brightCyan: '#88ffff',
     brightWhite: '#ffffff',
   },
-  chrome: {
-    surfaceDeep: '#070707',
-    surface: '#0d0d0d',
-    surfacePane: '#101010',
-    surfaceLift: '#1a1a1a',
-    surfaceEmphasis: '#2a2a2a',
-    textStrong: '#ffffff',
-    text: '#ffffff',
-    textMuted: '#ffff00',
-    textFaint: '#cccccc',
-    textDim: '#888888',
-    borderSoft: '#555555',
-    border: '#888888',
-    borderStrong: '#ffffff',
-    borderHover: '#ffff00',
-    accent: '#ffff00',
-    accentSoft: 'rgba(255, 255, 0, 0.2)',
-    warn: '#ffff00',
-    danger: '#ff5555',
-    info: '#55ffff',
-    success: '#55ff55',
-  },
 };
 
 export const BUILTIN_THEMES: AppTheme[] = [
@@ -841,6 +524,11 @@ export const BUILTIN_THEMES: AppTheme[] = [
   highContrast,
 ];
 
+/** The chrome tokens a theme paints the window with. */
+export function themeTokens(theme: AppTheme): ChromeTokens {
+  return deriveChrome(theme.xterm, theme.chrome);
+}
+
 // User-authored themes, set by the Settings UI on load. Merged into
 // THEMES via a Proxy so callers that iterate THEMES (the picker
 // dropdown, findTheme) see custom entries without changes.
@@ -853,10 +541,57 @@ export function setCustomThemes(themes: AppTheme[]): void {
   CUSTOM_THEMES = themes.slice();
 }
 
+// Slots of the hand-authored chrome palette custom themes carried
+// before chrome was derived. A chrome map holding any of them is the
+// legacy shape.
+const LEGACY_CHROME_KEYS = new Set([
+  'surfaceDeep',
+  'surface',
+  'surfacePane',
+  'surfaceLift',
+  'surfaceEmphasis',
+  'textStrong',
+  'textMuted',
+  'textFaint',
+  'textDim',
+  'borderSoft',
+  'border',
+  'borderStrong',
+  'borderHover',
+  'accentSoft',
+  'info',
+]);
+
+const OVERRIDE_KEYS = new Set<string>(CHROME_COLOR_KEYS);
+
+/** Read a custom theme's on-disk chrome map as token overrides.
+ *
+ *  Legacy maps hold a full 20 slot palette forked from a built-in, so
+ *  every slot would pin a token and nothing would derive. Only the
+ *  accent carries over from them, since it is the one slot people
+ *  chose on purpose. Status colors now follow the ANSI slots. The
+ *  current shape holds token names and passes through, minus unknown
+ *  keys and empty values. The result is what the editor writes back,
+ *  so a legacy map converts on its first edit and the file on disk
+ *  stays readable by older builds until then. */
+export function migrateCustomChrome(chrome: Record<string, string> | undefined): ChromeOverrides {
+  const src = chrome ?? {};
+  const legacy = Object.keys(src).some((k) => LEGACY_CHROME_KEYS.has(k));
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(src)) {
+    if (typeof value !== 'string' || value.trim() === '') continue;
+    if (legacy ? key === 'accent' : OVERRIDE_KEYS.has(key)) out[key] = value;
+  }
+  if (!legacy && (src.appearance === 'dark' || src.appearance === 'light')) {
+    out.appearance = src.appearance;
+  }
+  return out as ChromeOverrides;
+}
+
 /** Convert a CustomTheme record (the on-disk shape with bare maps)
- *  into a full AppTheme by overlaying it on a Kanso-Zen base, so
- *  missing color slots fall back to a sensible default rather than
- *  rendering as undefined. */
+ *  into a full AppTheme. The xterm map overlays a Kanso Zen base so
+ *  missing slots fall back to a sensible default rather than rendering
+ *  as undefined, and the chrome map becomes token overrides. */
 export function customToAppTheme(custom: {
   id: string;
   label: string;
@@ -869,7 +604,7 @@ export function customToAppTheme(custom: {
     label: custom.label,
     description: custom.description,
     xterm: { ...kansoZen.xterm, ...(custom.xterm as Partial<XtermPalette>) },
-    chrome: { ...kansoZen.chrome, ...(custom.chrome as Partial<ChromePalette>) },
+    chrome: migrateCustomChrome(custom.chrome),
   };
 }
 
@@ -902,31 +637,4 @@ export const DEFAULT_THEME_ID = 'obsidian-ember';
 export function findTheme(id: string | undefined): AppTheme {
   const all = [...BUILTIN_THEMES, ...CUSTOM_THEMES];
   return all.find((t) => t.id === id) ?? all[0];
-}
-
-// Map a ChromePalette to CSS custom property pairs that styles.css
-// reads. Centralized so the variable names stay in one place.
-export function chromeToCssVars(chrome: ChromePalette): Record<string, string> {
-  return {
-    '--c-surface-deep': chrome.surfaceDeep,
-    '--c-surface': chrome.surface,
-    '--c-surface-pane': chrome.surfacePane,
-    '--c-surface-lift': chrome.surfaceLift,
-    '--c-surface-emphasis': chrome.surfaceEmphasis,
-    '--c-text-strong': chrome.textStrong,
-    '--c-text': chrome.text,
-    '--c-text-muted': chrome.textMuted,
-    '--c-text-faint': chrome.textFaint,
-    '--c-text-dim': chrome.textDim,
-    '--c-border-soft': chrome.borderSoft,
-    '--c-border': chrome.border,
-    '--c-border-strong': chrome.borderStrong,
-    '--c-border-hover': chrome.borderHover,
-    '--c-accent': chrome.accent,
-    '--c-accent-soft': chrome.accentSoft,
-    '--c-warn': chrome.warn,
-    '--c-danger': chrome.danger,
-    '--c-info': chrome.info,
-    '--c-success': chrome.success,
-  };
 }
