@@ -15,6 +15,7 @@ import {
   normalizeTick,
   normalizeTimer,
   parseJsonList,
+  timerKey,
   timerLabel,
   timerSavePlan,
   validateTimers,
@@ -60,8 +61,7 @@ const TIMERS_SPEC: KindSpec<TimerRecord> = {
     enabled: t.enabled,
     text: searchText(t.name, t.command),
   }),
-  // A new timer has no id until it saves, so find it again by content.
-  keyOf: (t) => `${t.name.trim()}\n${t.interval_secs}\n${t.command.trim()}`,
+  keyOf: timerKey,
   blank: blankTimer,
   json: {
     toText: jsonListText,
