@@ -28,11 +28,16 @@
 //!     profile name).
 //!   - An item already grouped as `combat` becomes
 //!     `<source-profile>.combat` (namespaced under the source).
+//!   - An item two or more profiles hold under one name, alike or in
+//!     conflict, takes the names of all of them joined with `+`, such
+//!     as `default+warrior` or `default+warrior.combat`, after the
+//!     group the first of them had it in.
 //!
 //! The derived loadout for that profile then carries every emerged
 //! group in its `enabled_groups` list, so day-one behavior matches
-//! today: turning on loadout `default` enables every group that came
-//! from the original `default` profile.
+//! today: turning on loadout `default` enables every item the original
+//! `default` profile had on, the ones it shared included, and nothing
+//! it did not have.
 //!
 //! ## Scope
 //!
@@ -131,37 +136,37 @@ pub(crate) fn analyze_profiles(profiles: &[(String, ProfileConfig)]) -> Migratio
     // Bucket aliases / triggers / macros by name across every
     // profile, tagging each variant with its source. Each bucket is
     // a Vec of (source_profile, tagged_item) where tagged_item has
-    // its `group` already rewritten per the migration rule.
+    // its `group` rewritten per the migration rule, the same for every
+    // variant in the bucket.
     let mut aliases_by_name: BTreeMap<String, Vec<(String, Alias)>> = BTreeMap::new();
     let mut triggers_by_name: BTreeMap<String, Vec<(String, Trigger)>> = BTreeMap::new();
     let mut macros_by_key: BTreeMap<String, Vec<(String, Macro)>> = BTreeMap::new();
 
     for (profile_name, cfg) in profiles {
         for alias in &cfg.aliases {
-            let mut tagged = alias.clone();
-            tagged.group = Some(retag_group(profile_name, alias.group.as_deref()));
             aliases_by_name
                 .entry(alias.name.clone())
                 .or_default()
-                .push((profile_name.clone(), tagged));
+                .push((profile_name.clone(), alias.clone()));
         }
         for trigger in &cfg.triggers {
-            let mut tagged = trigger.clone();
-            tagged.group = Some(retag_group(profile_name, trigger.group.as_deref()));
             triggers_by_name
                 .entry(trigger.name.clone())
                 .or_default()
-                .push((profile_name.clone(), tagged));
+                .push((profile_name.clone(), trigger.clone()));
         }
         for mac in &cfg.macros {
-            let mut tagged = mac.clone();
-            tagged.group = Some(retag_group(profile_name, mac.group.as_deref()));
             macros_by_key
                 .entry(mac.key.clone())
                 .or_default()
-                .push((profile_name.clone(), tagged));
+                .push((profile_name.clone(), mac.clone()));
         }
     }
+    let groups = CatalogGroups {
+        aliases: tag_buckets(&mut aliases_by_name, |a| &mut a.group),
+        triggers: tag_buckets(&mut triggers_by_name, |t| &mut t.group),
+        macros: tag_buckets(&mut macros_by_key, |m| &mut m.group),
+    };
 
     // Classify each bucket.
     for (name, variants) in aliases_by_name {
@@ -218,16 +223,60 @@ pub(crate) fn analyze_profiles(profiles: &[(String, ProfileConfig)]) -> Migratio
 
     plan.loadouts = profiles
         .iter()
-        .map(|(name, cfg)| derive_loadout(name, cfg))
+        .map(|(name, cfg)| derive_loadout(name, cfg, &groups))
         .collect();
 
     plan
+}
+
+/// The catalog group each name of each kind lands in, by name (by key
+/// for macros).
+struct CatalogGroups {
+    aliases: BTreeMap<String, String>,
+    triggers: BTreeMap<String, String>,
+    macros: BTreeMap<String, String>,
+}
+
+/// Tag every variant in each bucket with the catalog group of its
+/// bucket, and return that group by bucket name. The group names the
+/// profiles that hold the name, in index order and joined with `+`,
+/// and namespaces the group the first of them had it in (see
+/// [`retag_group`]). An item one profile holds keeps that profile's
+/// name alone, and an item two profiles share lands in a group both of
+/// their loadouts turn on and nothing else does. The first profile's
+/// group used to tag a shared item, so the loadout of every other
+/// profile that had it left it off.
+fn tag_buckets<T>(
+    buckets: &mut BTreeMap<String, Vec<(String, T)>>,
+    group: impl Fn(&mut T) -> &mut Option<String>,
+) -> BTreeMap<String, String> {
+    let mut tags = BTreeMap::new();
+    for (name, variants) in buckets.iter_mut() {
+        let mut holders: Vec<&str> = Vec::new();
+        for (source, _) in variants.iter() {
+            if !holders.contains(&source.as_str()) {
+                holders.push(source);
+            }
+        }
+        let owner = holders.join("+");
+        let tag = match variants.first_mut() {
+            Some((_, first)) => retag_group(&owner, group(first).as_deref()),
+            None => continue,
+        };
+        for (_, item) in variants.iter_mut() {
+            *group(item) = Some(tag.clone());
+        }
+        tags.insert(name.clone(), tag);
+    }
+    tags
 }
 
 /// Migration group-tag rule: items without a group go to the bare
 /// profile name; items with one get namespaced under it. So a
 /// `combat` group in profile `default` becomes `default.combat`,
 /// and an ungrouped item in `default` becomes group `default`.
+/// `profile_name` is every profile that holds the item, joined with
+/// `+`, when more than one does.
 fn retag_group(profile_name: &str, current: Option<&str>) -> String {
     match current {
         Some(g) if !g.is_empty() => format!("{profile_name}.{g}"),
@@ -287,31 +336,46 @@ fn strip_group_for_compare_trigger(t: &Trigger) -> Trigger {
 }
 
 /// Build a loadout for one source profile. `enabled_groups` collects
-/// every group that emerged from this profile's items per the
-/// retag rule, plus the bare profile-name group for any ungrouped
-/// items, so day-one behavior matches today exactly. A group the
-/// profile had off in Settings stays out, since a loadout that lists
-/// a group turns it on. A loadout names groups for every kind at
-/// once, so a group that one kind had on and another had off stays in.
-fn derive_loadout(profile_name: &str, cfg: &ProfileConfig) -> Loadout {
+/// the catalog group of every item this profile had, from `tags` (see
+/// [`tag_buckets`]), so day-one behavior matches today exactly. A group
+/// the profile had off in Settings stays out, since a loadout that
+/// lists a group turns it on. A loadout names groups for every kind at
+/// once, and items several profiles share land in one group, so a
+/// group that holds an item this profile had on stays in even when it
+/// also holds one this profile had off.
+fn derive_loadout(profile_name: &str, cfg: &ProfileConfig, tags: &CatalogGroups) -> Loadout {
     let mut groups: Vec<String> = Vec::new();
-    let mut push = |group: Option<&str>, off: &[String]| {
+    let mut push = |group: Option<&str>, off: &[String], tag: Option<&String>| {
         if group.is_some_and(|g| !g.is_empty() && off.iter().any(|o| o == g)) {
             return;
         }
-        let g = retag_group(profile_name, group);
-        if !groups.iter().any(|x| x == &g) {
-            groups.push(g);
+        let Some(tag) = tag else {
+            return;
+        };
+        if !groups.iter().any(|x| x == tag) {
+            groups.push(tag.clone());
         }
     };
     for alias in &cfg.aliases {
-        push(alias.group.as_deref(), &cfg.disabled_alias_groups);
+        push(
+            alias.group.as_deref(),
+            &cfg.disabled_alias_groups,
+            tags.aliases.get(&alias.name),
+        );
     }
     for trigger in &cfg.triggers {
-        push(trigger.group.as_deref(), &cfg.disabled_trigger_groups);
+        push(
+            trigger.group.as_deref(),
+            &cfg.disabled_trigger_groups,
+            tags.triggers.get(&trigger.name),
+        );
     }
     for mac in &cfg.macros {
-        push(mac.group.as_deref(), &cfg.disabled_macro_groups);
+        push(
+            mac.group.as_deref(),
+            &cfg.disabled_macro_groups,
+            tags.macros.get(&mac.key),
+        );
     }
     // The variables, tick, and connection stay in the profile file, which
     // loadout mode loads them from. No runtime code reads them from a
@@ -430,13 +494,38 @@ mod tests {
             ),
         ]);
         assert_eq!(plan.conflicts.len(), 0);
-        // One catalog entry, not two. The first profile's tagging
-        // wins for the canonical group.
+        // One catalog entry, not two, in a group that names both
+        // profiles, which both loadouts turn on.
         assert_eq!(plan.auto_resolved.aliases.len(), 1);
         assert_eq!(
             plan.auto_resolved.aliases[0].group.as_deref(),
-            Some("default")
+            Some("default+warrior")
         );
+        for loadout in &plan.loadouts {
+            assert_eq!(loadout.enabled_groups, ["default+warrior"]);
+        }
+    }
+
+    #[test]
+    fn every_variant_of_a_conflict_lands_in_the_group_of_all_its_holders() {
+        let mut kk = Alias::new("kk", "kick 1.");
+        kk.group = Some("combat".into());
+        let plan = analyze_profiles(&[
+            (
+                "default".into(),
+                profile_with(vec![Alias::new("kk", "kick %1")], vec![], vec![]),
+            ),
+            ("bard".into(), profile_with(vec![], vec![], vec![])),
+            ("warrior".into(), profile_with(vec![kk], vec![], vec![])),
+        ]);
+        let ItemPayload::Alias { item } = &plan.conflicts[0].variants[1].item else {
+            panic!("an alias conflict");
+        };
+        // The first holder had kk ungrouped, so whichever version you
+        // keep, it stays on for both of them and off for the bard.
+        assert_eq!(item.group.as_deref(), Some("default+warrior"));
+        assert!(plan.loadouts[1].enabled_groups.is_empty());
+        assert_eq!(plan.loadouts[2].enabled_groups, ["default+warrior"]);
     }
 
     #[test]
