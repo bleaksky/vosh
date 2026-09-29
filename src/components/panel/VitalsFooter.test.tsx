@@ -62,19 +62,42 @@ function draw(
   );
 }
 
-/** Each drawn value with its row's tone class, in order. */
+// Lamented tears: Char.Vitals all zeros with the hidden flag, and a
+// Char.Combat that names the guard and withholds its health.
+const HIDDEN: Vitals = {
+  hp: 0,
+  maxhp: 0,
+  mana: 0,
+  maxmana: 0,
+  move: 0,
+  maxmove: 0,
+  low: { hp: false, mana: false, move: false },
+  hidden: true,
+};
+const GUARD_HIDDEN: CombatOpponent = {
+  name: 'Blackwatch Guard',
+  hp_pct: null,
+  condition: null,
+  hidden: true,
+  tank: null,
+};
+
+/** Each drawn value with the tone class of the row or One line item
+ *  that holds it, in order. */
 function values(html: string): { value: string; tone: string }[] {
   const out: { value: string; tone: string }[] = [];
   const re =
-    /<div class="(panel-vitals-(?:row|item)[^"]*)">.*?<span class="panel-vitals-value">([^<]*)<\/span>/g;
+    /<div class="(panel-vitals-(?:row|item)[^"]*)"><div class="panel-vitals-line">.*?<span class="panel-vitals-value">([^<]*)<\/span>/g;
   for (const m of html.matchAll(re)) {
-    const tone = /panel-vitals-row-(low|warn|combat)/.exec(m[1]);
+    const tone =
+      /panel-vitals-row-(hidden)/.exec(m[1]) ?? /panel-vitals-row-(low|warn|combat)/.exec(m[1]);
     out.push({ value: m[2], tone: tone ? tone[1] : 'quiet' });
   }
   return out;
 }
 
 const meters = (html: string) => html.match(/class="panel-vitals-meter"/g)?.length ?? 0;
+const fills = (html: string) => html.match(/class="panel-vitals-fill"/g)?.length ?? 0;
 
 /** The declarations of one rule in panel.css. */
 function rule(selector: string): string {
@@ -184,6 +207,72 @@ describe('VitalsBlock', () => {
       '--vitals-min-height:48px',
     );
     expect(draw({}, { vitals: null, combat: null })).toContain('Vitals appear when you log in.');
+  });
+
+  it('draws ? for each hidden vital, quiet, with empty meters, in every option', () => {
+    const forms = { 'current-max': '? / ?', current: '?', percent: '?%' } as const;
+    for (const density of ['rows', 'line'] as const) {
+      for (const fit of ['labels', 'values', 'rows'] as const) {
+        for (const form of ['current-max', 'current', 'percent'] as const) {
+          for (const meter of ['line', 'bar', 'none'] as const) {
+            for (const warn_thirds of [false, true]) {
+              const html = draw(
+                { values: form, meter, warn_thirds },
+                { density, fit, vitals: HIDDEN, combat: null },
+              );
+              const at = `${density} ${fit} ${form} ${meter} ${warn_thirds}`;
+              expect(values(html), at).toEqual([
+                { value: forms[form], tone: 'hidden' },
+                { value: forms[form], tone: 'hidden' },
+                { value: forms[form], tone: 'hidden' },
+              ]);
+              expect(meters(html), at).toBe(meter === 'none' ? 0 : 3);
+              expect(fills(html), at).toBe(0);
+              expect(html, at).not.toMatch(/panel-vitals-row-(low|warn)/);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it('keeps Health, Mana, and Moves while hidden, though the game sends every max as 0', () => {
+    const html = draw({}, { vitals: HIDDEN, combat: null });
+    for (const label of ['Health', 'Mana', 'Moves']) {
+      expect(html).toContain(`<span class="panel-vitals-label">${label}</span>`);
+    }
+    expect(html).toContain('--vitals-min-height:104px');
+  });
+
+  it('shows your vitals again, low tone and all, once the game sends them', () => {
+    expect(values(draw({}, { vitals: HIDDEN })).map((v) => v.value)).toEqual([
+      '38%',
+      '? / ?',
+      '? / ?',
+      '? / ?',
+    ]);
+    expect(values(draw()).map((v) => v.tone)).toEqual(['combat', 'low', 'quiet', 'quiet']);
+  });
+
+  it('draws the opponent health as ? in the quiet tone when the game withholds it', () => {
+    const html = draw({}, { combat: GUARD_HIDDEN });
+    expect(values(html)[0]).toEqual({ value: '?', tone: 'hidden' });
+    expect(html).toContain('<span class="panel-vitals-label">Blackwatch Guard</span>');
+    // The opponent's meter sits empty. Only your own three fill.
+    expect(meters(html)).toBe(4);
+    expect(fills(html)).toBe(3);
+    // A condition that rode along never shows either.
+    expect(values(draw({}, { combat: { ...GUARD_HIDDEN, condition: 'awful' } }))[0].value).toBe(
+      '?',
+    );
+  });
+
+  it('sets the hidden tone in panel.css after the warn and combat tones', () => {
+    const hidden = rule('.panel-vitals-row-hidden .panel-vitals-value');
+    expect(hidden).toContain('color: var(--tertiary)');
+    expect(panelCss.indexOf('.panel-vitals-row-hidden .panel-vitals-value {')).toBeGreaterThan(
+      panelCss.indexOf('.panel-vitals-row-combat .panel-vitals-value {'),
+    );
   });
 
   it('reads the geometry and the warn tone in panel.css', () => {

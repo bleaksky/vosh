@@ -7,8 +7,9 @@ import { vitalPercent } from './stores/vitalsStore';
 // run low the thresholds that color it. Kept pure for the unit tests.
 
 /** A vital's color. Quiet at rest, warn in the middle third while Warn
- *  before you run low is on, danger when it runs low. */
-export type VitalTone = 'quiet' | 'warn' | 'danger';
+ *  before you run low is on, danger when it runs low. Hidden while the
+ *  game hides the value, a tertiary `?` that never warns. */
+export type VitalTone = 'quiet' | 'warn' | 'danger' | 'hidden';
 
 /** The Group pane's thirds, by whole percent: quiet from 67, warn from
  *  34, danger under 34. */
@@ -42,11 +43,19 @@ export function formatVital(values: VitalsValues, current: number, max: number):
   return `${current} / ${max}`;
 }
 
+/** A vital the game hides, in the form Values asks for, with `?` for
+ *  each number: `? / ?`, `?`, or `?%`. */
+export function hiddenVital(values: VitalsValues): string {
+  if (values === 'current') return '?';
+  if (values === 'percent') return '?%';
+  return '? / ?';
+}
+
 /** The widest a vital with this max reads, the vital at full. One line
  *  fits by it, so the row keeps its form while a value loses a digit in
- *  a fight. */
-export function widestVital(values: VitalsValues, max: number): string {
-  return formatVital(values, max, max);
+ *  a fight. A hidden vital reads its hidden form. */
+export function widestVital(values: VitalsValues, max: number, hidden = false): string {
+  return hidden ? hiddenVital(values) : formatVital(values, max, max);
 }
 
 /** Meter fill in percent, unrounded so the meter moves smoothly. */

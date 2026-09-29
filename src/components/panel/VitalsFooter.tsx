@@ -13,6 +13,7 @@ import { useVitalsOptions } from '../../lib/stores/vitalsOptionsStore';
 import { useVitals, type Vitals, type VitalKey } from '../../lib/stores/vitalsStore';
 import {
   formatVital,
+  hiddenVital,
   meterFill,
   vitalsFooterHeight,
   vitalsGeometry,
@@ -40,6 +41,11 @@ import { vitalsLineFit, type VitalsLineFit } from './vitalsLine';
 // 4 px bar, or none at the panes' 22 px pitch. Warn before you run low
 // turns a vital warn under two thirds and danger under one third. The
 // rules live in vitalsView.ts.
+//
+// While the game hides your vitals (Char.Vitals with the hidden flag,
+// under lamented tears) each one reads `?` in its Values form, in
+// tertiary, over an empty meter, and nothing warns. The opponent's
+// health reads `?` the same way while Char.Combat withholds it.
 
 const ROWS: { key: VitalKey; label: string; max: 'maxhp' | 'maxmana' | 'maxmove' }[] = [
   { key: 'hp', label: 'Health', max: 'maxhp' },
@@ -47,8 +53,10 @@ const ROWS: { key: VitalKey; label: string; max: 'maxhp' | 'maxmana' | 'maxmove'
   { key: 'move', label: 'Moves', max: 'maxmove' },
 ];
 
-/** The vitals the MUD sends. Health always shows. */
+/** The vitals the MUD sends. Health always shows. While the game hides
+ *  your vitals it sends every max as 0, so all three show. */
 function shownRows(vitals: Vitals) {
+  if (vitals.hidden) return ROWS;
   return ROWS.filter((r) => r.key === 'hp' || vitals[r.max] > 0);
 }
 
@@ -69,7 +77,10 @@ export function VitalsFooter() {
           box.width,
           shownRows(vitals).map((r) => ({
             label: textWidth(r.label, `400 12px ${box.family}`),
-            value: textWidth(widestVital(options.values, vitals[r.max]), `500 12px ${box.family}`),
+            value: textWidth(
+              widestVital(options.values, vitals[r.max], vitals.hidden),
+              `500 12px ${box.family}`,
+            ),
           })),
         )
       : 'rows';
@@ -112,13 +123,28 @@ export function VitalsBlock({
   const rows =
     vitals === null
       ? []
-      : shownRows(vitals).map((r) => ({
-          key: r.key,
-          label: r.label,
-          value: formatVital(options.values, vitals[r.key], vitals[r.max]),
-          pct: meterFill(vitals[r.key], vitals[r.max]),
-          tone: vitalTone(vitals[r.key], vitals[r.max], vitals.low[r.key], options.warn_thirds),
-        }));
+      : shownRows(vitals).map((r) =>
+          vitals.hidden
+            ? {
+                key: r.key,
+                label: r.label,
+                value: hiddenVital(options.values),
+                pct: null,
+                tone: 'hidden' as const,
+              }
+            : {
+                key: r.key,
+                label: r.label,
+                value: formatVital(options.values, vitals[r.key], vitals[r.max]),
+                pct: meterFill(vitals[r.key], vitals[r.max]),
+                tone: vitalTone(
+                  vitals[r.key],
+                  vitals[r.max],
+                  vitals.low[r.key],
+                  options.warn_thirds,
+                ),
+              },
+        );
 
   return (
     <section
@@ -129,15 +155,24 @@ export function VitalsBlock({
       style={footerStyle(geometry, density === 'line' ? 1 : 3)}
       aria-label="Vitals"
     >
-      {combat && (
-        <VitalRow
-          className="panel-vitals-row-combat"
-          label={combat.name}
-          value={combat.hp_pct !== null ? `${combat.hp_pct}%` : (combat.condition ?? '')}
-          pct={combat.hp_pct}
-          meter={meter}
-        />
-      )}
+      {combat &&
+        (combat.hidden ? (
+          <VitalRow
+            className="panel-vitals-row-combat panel-vitals-row-hidden"
+            label={combat.name}
+            value="?"
+            pct={null}
+            meter={meter}
+          />
+        ) : (
+          <VitalRow
+            className="panel-vitals-row-combat"
+            label={combat.name}
+            value={combat.hp_pct !== null ? `${combat.hp_pct}%` : (combat.condition ?? '')}
+            pct={combat.hp_pct}
+            meter={meter}
+          />
+        ))}
       {vitals === null ? (
         <div className="panel-vitals-row">
           <p className="panel-vitals-empty">Vitals appear when you log in.</p>
@@ -189,6 +224,7 @@ function footerStyle(geometry: VitalsGeometry, rows: number): CSSProperties {
 function toneClass(tone: VitalTone): string | undefined {
   if (tone === 'danger') return 'panel-vitals-row-low';
   if (tone === 'warn') return 'panel-vitals-row-warn';
+  if (tone === 'hidden') return 'panel-vitals-row-hidden';
   return undefined;
 }
 
@@ -280,7 +316,7 @@ function VitalItem({
   label: string;
   showLabel: boolean;
   value: string;
-  pct: number;
+  pct: number | null;
   tone: VitalTone;
   meter: boolean;
 }) {

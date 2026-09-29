@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatVital,
+  hiddenVital,
   meterFill,
   targetHealthPercent,
   thirdsTone,
@@ -41,6 +42,19 @@ describe('widestVital', () => {
     expect(widestVital('current-max', 1020)).toBe('1020 / 1020');
     expect(widestVital('current', 1020)).toBe('1020');
     expect(widestVital('percent', 1020)).toBe('100%');
+  });
+
+  it('reads the hidden form while the game hides your vitals', () => {
+    expect(widestVital('current-max', 0, true)).toBe('? / ?');
+    expect(widestVital('percent', 0, true)).toBe('?%');
+  });
+});
+
+describe('hiddenVital', () => {
+  it('writes ? for each number the form would show', () => {
+    expect(hiddenVital('current-max')).toBe('? / ?');
+    expect(hiddenVital('current')).toBe('?');
+    expect(hiddenVital('percent')).toBe('?%');
   });
 });
 
