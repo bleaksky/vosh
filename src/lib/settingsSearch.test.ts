@@ -97,6 +97,7 @@ describe('searchSettingsRows', () => {
     expect(settingsRowKey(row)).toBe('layout:status#tick-time');
     expect(labels('status line')).toContain('Tick and time');
     expect(labels('icon')).toContain('Tick and time');
+    expect(labels('moons')).toContain('Tick and time');
   });
 
   it('hides GPU rendering on macOS', () => {

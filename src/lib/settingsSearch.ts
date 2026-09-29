@@ -186,8 +186,8 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   },
   {
     label: 'Tick and time',
-    description: 'How the tick and the game time show in the status line.',
-    keywords: 'chip style caption icon value clock sun moon',
+    description: 'How the tick, the game time, and the moons show in the status line.',
+    keywords: 'chip style caption icon value clock sun moon moons phase',
     target: at('layout', 'status', 'tick-time'),
   },
 
