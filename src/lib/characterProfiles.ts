@@ -1,0 +1,233 @@
+import type { ProfileAutoMatch, ProfileEntry, SessionIdentity } from './session';
+import { KNOWN_WORLDS, worldName, type KnownWorld } from './useConnection';
+
+// The words and choices Settings > Characters builds from the profile
+// index and the session: display names, the login toggle's character,
+// the World select, and the sentences the page reports. Pure, so the
+// page stays about layout.
+
+/** The reserved profile every install starts with. */
+export const DEFAULT_PROFILE = 'default';
+
+/** `Default` for the reserved profile, else the name as typed. */
+export function profileDisplayName(name: string): string {
+  return name === DEFAULT_PROFILE ? 'Default' : name;
+}
+
+/** The profile a deep link names: the exact name, else one that
+ *  matches it in any case, else one whose display name matches (so
+ *  `Default` finds `default`). Null when none does. */
+export function findProfileName(names: readonly string[], wanted: string): string | null {
+  const want = wanted.trim();
+  if (want.length === 0) return null;
+  if (names.includes(want)) return want;
+  const lower = want.toLowerCase();
+  return (
+    names.find((n) => n.toLowerCase() === lower) ??
+    names.find((n) => profileDisplayName(n).toLowerCase() === lower) ??
+    null
+  );
+}
+
+/** The character the login toggle names: the profile's first
+ *  character, else the one logged in now, else null (the toggle waits
+ *  until a character is known). */
+export function loginCharacter(
+  autoMatch: ProfileAutoMatch | null | undefined,
+  identity: SessionIdentity | null,
+): string | null {
+  const first = autoMatch?.characters?.map((c) => c.trim()).find((c) => c.length > 0);
+  if (first) return first;
+  const live = identity?.character?.trim();
+  return live ? live : null;
+}
+
+export function loginLabel(character: string | null): string {
+  return character
+    ? `Use this profile when you log in as ${character}`
+    : 'Use this profile when you log in';
+}
+
+/** Whether the profile names a world to connect to. */
+export function hasWorld(autoMatch: ProfileAutoMatch | null | undefined): boolean {
+  return (autoMatch?.host?.trim().length ?? 0) > 0;
+}
+
+// ---------------------------------------------------------------
+// World select
+// ---------------------------------------------------------------
+
+/** The World select's value for a profile with no world. */
+export const NO_WORLD = '';
+
+export interface WorldOption {
+  value: string;
+  label: string;
+  host: string | null;
+  port: number | null;
+}
+
+function cleanHost(host: string): string {
+  return host.trim().toLowerCase().replace(/\.$/, '');
+}
+
+function knownWorldFor(host: string): KnownWorld | undefined {
+  const clean = cleanHost(host);
+  return KNOWN_WORLDS.find((w) => clean === w.domain || clean.endsWith(`.${w.domain}`));
+}
+
+/** The select value for a host and port. A known world on its own port
+ *  (or with no port) is one choice however its host is spelled. */
+export function worldKey(host: string | null | undefined, port: number | null | undefined): string {
+  const clean = host ? cleanHost(host) : '';
+  if (clean.length === 0) return NO_WORLD;
+  const known = knownWorldFor(clean);
+  if (known && (port === null || port === undefined || port === known.port)) {
+    return `world:${known.domain}`;
+  }
+  return `host:${clean}:${port ?? ''}`;
+}
+
+/** A host and port where the World select finds its choices: every
+ *  profile's world, the connection you saved, and the one you are on. */
+export interface WorldSource {
+  host: string | null | undefined;
+  port: number | null | undefined;
+}
+
+/** The World select's choices: every known world, then every other
+ *  host a source names in the order first seen, then No world. */
+export function worldOptions(sources: readonly WorldSource[]): WorldOption[] {
+  const out: WorldOption[] = KNOWN_WORLDS.map((w) => ({
+    value: `world:${w.domain}`,
+    label: w.name,
+    host: w.host,
+    port: w.port,
+  }));
+  const seen = new Set(out.map((o) => o.value));
+  for (const source of sources) {
+    const value = worldKey(source.host, source.port);
+    if (value === NO_WORLD || seen.has(value)) continue;
+    seen.add(value);
+    const host = (source.host ?? '').trim().replace(/\.$/, '');
+    const port = source.port ?? null;
+    out.push({ value, label: port === null ? host : `${host}:${port}`, host, port });
+  }
+  out.push({ value: NO_WORLD, label: 'No world', host: null, port: null });
+  return out;
+}
+
+/** The sources for worldOptions from the profile index, the saved
+ *  connection, and the session. */
+export function worldSources(
+  profiles: readonly ProfileEntry[],
+  saved: WorldSource | null,
+  identity: SessionIdentity | null,
+): WorldSource[] {
+  const out: WorldSource[] = profiles.map((p) => ({
+    host: p.auto_match?.host,
+    port: p.auto_match?.port,
+  }));
+  if (saved) out.push(saved);
+  if (identity) out.push({ host: identity.host, port: identity.port });
+  return out;
+}
+
+/** The world meta a profile row shows, like `The Forsaken Lands`, or
+ *  null when the profile has no world. */
+export function profileWorldName(entry: ProfileEntry): string | null {
+  const host = entry.auto_match?.host?.trim();
+  return host ? worldName(host) : null;
+}
+
+// ---------------------------------------------------------------
+// Names and sentences
+// ---------------------------------------------------------------
+
+function listNames(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+}
+
+/** What turning a login toggle on took from other profiles, like
+ *  `Vosh moved Erelei from Test-Prompt to Erelei.` Null when it took
+ *  nothing. */
+export function movedSentence(
+  character: string,
+  releasedFrom: readonly string[],
+  to: string,
+): string | null {
+  if (releasedFrom.length === 0) return null;
+  const from = listNames(releasedFrom.map(profileDisplayName));
+  return `Vosh moved ${character} from ${from} to ${profileDisplayName(to)}.`;
+}
+
+function taken(names: readonly string[]): Set<string> {
+  return new Set(names.map((n) => n.toLowerCase()));
+}
+
+/** The name a new profile starts with: the character you are logged in
+ *  as when no profile has that name yet, else nothing. */
+export function newProfileName(identity: SessionIdentity | null, names: readonly string[]): string {
+  const character = identity?.character?.trim();
+  if (!character || taken(names).has(character.toLowerCase())) return '';
+  return character;
+}
+
+/** A free name for a copy of `source`: `Erelei copy`, then `Erelei
+ *  copy 2` and on. */
+export function copyName(source: string, names: readonly string[]): string {
+  const used = taken(names);
+  const base = `${profileDisplayName(source)} copy`;
+  if (!used.has(base.toLowerCase())) return base;
+  for (let n = 2; ; n += 1) {
+    const candidate = `${base} ${n}`;
+    if (!used.has(candidate.toLowerCase())) return candidate;
+  }
+}
+
+/** Character names typed as a list: split on commas, trimmed, blanks
+ *  and repeats in another case dropped. */
+export function parseCharacterNames(text: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const part of text.split(',')) {
+    const name = part.trim();
+    const key = name.toLowerCase();
+    if (name.length === 0 || seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
+export function formatCharacterNames(names: readonly string[] | undefined): string {
+  return (names ?? []).join(', ');
+}
+
+/** A typed port: null for blank, the number for a TCP port, undefined
+ *  for anything else. */
+export function parsePort(text: string): number | null | undefined {
+  const clean = text.trim();
+  if (clean.length === 0) return null;
+  if (!/^\d+$/.test(clean)) return undefined;
+  const port = Number(clean);
+  return port >= 1 && port <= 65535 ? port : undefined;
+}
+
+/** The login claim a new profile starts with: the world you are on (or
+ *  the active profile's) and the character you are logged in as. The
+ *  toggle stays off here. The page turns it on with profileSetLogin so
+ *  the new profile takes the character from any other. A world with no
+ *  character stays off so the profile never matches every login. */
+export function newProfileClaim(
+  identity: SessionIdentity | null,
+  active: ProfileEntry | undefined,
+): ProfileAutoMatch | null {
+  const host = identity?.host ?? active?.auto_match?.host ?? null;
+  if (!host || host.trim().length === 0) return null;
+  const port = identity ? identity.port : (active?.auto_match?.port ?? null);
+  const character = identity?.character?.trim();
+  return { host, port, characters: character ? [character] : [], enabled: false };
+}
