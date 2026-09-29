@@ -808,8 +808,9 @@ export interface UiConfig {
    *  `after-time` dock the moons next to the centered tick + MUD
    *  time chip on the chosen side. */
   moons_position: MoonsPosition;
-  /** How the status line draws the tick and the game time. The value
-   *  alone, a caption before each value, or an icon before each. */
+  /** How the status line draws the tick, the game time, and the moons.
+   *  The value alone, a caption before each value, or an icon before
+   *  each. The moons are icons already, so only Caption changes them. */
   chip_style: ChipStyle;
 }
 
