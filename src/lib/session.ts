@@ -1105,6 +1105,8 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
 // changing wire-protocol or subscriber surface.
 let lastSentConfig: UiConfig | null = null;
 
+const TERMINAL_LINE_HEIGHT_EVENT = 'vosh://terminal-line-height-changed';
+
 async function emitChanged<T>(
   event: string,
   value: T,
@@ -1162,6 +1164,11 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     { family: config.font_family, size: config.font_size },
     prev ? { family: prev.font_family, size: prev.font_size } : undefined,
     (a, b) => a.family === b.family && a.size === b.size,
+  );
+  await emitChanged(
+    TERMINAL_LINE_HEIGHT_EVENT,
+    config.terminal_line_height,
+    prev?.terminal_line_height,
   );
   await emitChanged('vosh://keep-last-changed', config.keep_last_command, prev?.keep_last_command);
   // The event carries the RESOLVED boolean so listeners never see the
@@ -1310,6 +1317,15 @@ export async function subscribeSidePanelsFillHeightChanged(
 ): Promise<UnlistenFn> {
   return listen<boolean>('vosh://side-panels-fill-height-changed', (event) => {
     cb(Boolean(event.payload));
+  });
+}
+
+/** Hear a new terminal line height saved from Settings. */
+export async function subscribeTerminalLineHeightChanged(
+  cb: (value: TerminalLineHeight) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(TERMINAL_LINE_HEIGHT_EVENT, (event) => {
+    cb(normalizeTerminalLineHeight(event.payload));
   });
 }
 

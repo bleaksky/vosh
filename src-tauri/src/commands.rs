@@ -1335,14 +1335,16 @@ pub(crate) fn native_surface_set_bright_bold(on: bool) {
 
 /// Tier 3 native renderer (macOS): report xterm's device cell size so the
 /// surface grid matches the webview's spacing exactly instead of deriving it
-/// from font metrics. A no-op elsewhere.
+/// from font metrics. `char_height` is xterm's device glyph box, which it
+/// centers in a cell taller than the box, so the surface can put its
+/// baseline in the same place at every line height. A no-op elsewhere.
 #[tauri::command]
-pub(crate) fn native_surface_set_cell_metrics(width: u32, height: u32) {
+pub(crate) fn native_surface_set_cell_metrics(width: u32, height: u32, char_height: Option<u32>) {
     #[cfg(native_surface)]
-    crate::native_surface::set_cell_metrics(width, height);
+    crate::native_surface::set_cell_metrics(width, height, char_height.unwrap_or(0));
     #[cfg(not(native_surface))]
     {
-        let _ = (width, height);
+        let _ = (width, height, char_height);
     }
 }
 

@@ -282,6 +282,10 @@ static ORIGIN_Y: AtomicU32 = AtomicU32::new(0);
 // (0 = unset, fall back to the font's metrics).
 static XTERM_CELL_W: AtomicU32 = AtomicU32::new(0);
 static XTERM_CELL_H: AtomicU32 = AtomicU32::new(0);
+// xterm's device glyph box height, reported with the cell. The cell is the
+// box times the line height, and xterm centers the box in it, so the atlas
+// needs both to put its baseline where xterm's is (0 = unset).
+static XTERM_CHAR_H: AtomicU32 = AtomicU32::new(0);
 
 /// xterm's reported device cell size, if the frontend has sent it. The glyph
 /// atlas sizes its cells to this so spacing matches the webview.
@@ -293,6 +297,13 @@ pub(crate) fn reported_cell() -> Option<(u32, u32)> {
     } else {
         None
     }
+}
+
+/// xterm's reported device glyph box height, if the frontend sent one with
+/// the cell size.
+pub(crate) fn reported_char_height() -> Option<u32> {
+    let h = XTERM_CHAR_H.load(Ordering::Acquire);
+    (h > 0).then_some(h)
 }
 
 // The URL under the pointer as (grid_line, start_col, end_col), so the
@@ -766,21 +777,29 @@ pub(crate) fn request_set_font(family: String, font_size: u32) {
     let _ = app.run_on_main_thread(move || rebuild_font(&family, font_px));
 }
 
-/// Record xterm's device cell size and rebuild the atlas to it, so the
-/// surface matches the webview's spacing exactly. No-op if unchanged.
+/// Record xterm's device cell size and glyph box height and rebuild the
+/// atlas to them, so the surface matches the webview's spacing and
+/// baseline exactly. A `char_height` of 0 means the page did not send
+/// one. No-op if unchanged.
 #[allow(clippy::cast_precision_loss)]
-pub(crate) fn set_cell_metrics(width: u32, height: u32) {
+pub(crate) fn set_cell_metrics(width: u32, height: u32, char_height: u32) {
     if width == 0 || height == 0 {
         return;
     }
-    // Swap both unconditionally; a short-circuiting && would skip the second
-    // store and leave the height unset.
+    // Swap all three unconditionally; a short-circuiting && would skip a
+    // later store and leave that value unset.
     let prev_w = XTERM_CELL_W.swap(width, Ordering::AcqRel);
     let prev_h = XTERM_CELL_H.swap(height, Ordering::AcqRel);
-    if prev_w == width && prev_h == height {
+    let prev_char = XTERM_CHAR_H.swap(char_height, Ordering::AcqRel);
+    if prev_w == width && prev_h == height && prev_char == char_height {
         return;
     }
-    tracing::debug!(width, height, "native-surface: xterm reported cell metrics");
+    tracing::debug!(
+        width,
+        height,
+        char_height,
+        "native-surface: xterm reported cell metrics"
+    );
     let Some(app) = APP.get() else {
         return;
     };

@@ -674,6 +674,19 @@ fn rect_to_uv(x: u32, y: u32, w: u32, h: u32, aw: u32, ah: u32) -> ([f32; 2], [f
     )
 }
 
+/// How far xterm drops its glyph box from the top of a cell taller than
+/// the box, which is its `device.char.top`: half the spare height,
+/// rounding half up the way `Math.round` does. Zero at line height 1.
+pub(crate) fn centered_glyph_top(cell_h: u32, char_h: u32) -> u32 {
+    cell_h.saturating_sub(char_h).div_ceil(2)
+}
+
+/// The native baseline's row inside a cell, for a glyph box `glyph_top`
+/// below the cell top and a font ascent of `ascent` pixels.
+fn native_baseline(glyph_top: u32, ascent: f32) -> u32 {
+    glyph_top + ascent.round().max(0.0) as u32
+}
+
 /// A monospace glyph atlas: every glyph is rasterized into a uniform
 /// cell-sized slot (with the glyph placed at its baseline inside the
 /// slot), packed into one A8 coverage texture. The renderer draws each
@@ -690,6 +703,10 @@ pub(crate) struct GlyphAtlas {
     // glyph quad is drawn at slot width and overhangs the next cell.
     slot_w: u32,
     ascent: f32,
+    // How far the glyph box sits below the top of the cell. xterm centers
+    // its box in a cell taller than the box (line height above 1), and the
+    // atlas drops each glyph the same amount so the baselines agree.
+    glyph_top: u32,
     cols: u32,
     rows: u32,
     atlas_w: u32,
@@ -709,6 +726,23 @@ impl GlyphAtlas {
     /// `family_stack` (falling back to the system monospace) at `px`
     /// pixels. Returns `None` if no font can be loaded.
     pub(crate) fn new(family_stack: &str, px: f32) -> Option<Self> {
+        Self::with_reported(
+            family_stack,
+            px,
+            crate::native_surface::reported_cell(),
+            crate::native_surface::reported_char_height(),
+        )
+    }
+
+    /// Build the atlas against xterm's reported device cell and glyph box
+    /// height, or against the font's own metrics when the page has not
+    /// reported yet.
+    fn with_reported(
+        family_stack: &str,
+        px: f32,
+        reported: Option<(u32, u32)>,
+        char_h: Option<u32>,
+    ) -> Option<Self> {
         let font = load_font(family_stack, false)?;
         let bold_font = load_font(family_stack, true).or_else(|| load_font(family_stack, false))?;
         let metrics = font.metrics();
@@ -725,8 +759,16 @@ impl GlyphAtlas {
         let cell_w_font = ((advance * scale).round() as u32).max(1);
         // Prefer xterm's reported device cell so spacing matches the webview
         // exactly; fall back to the font-derived size before it reports.
-        let (cell_w, cell_h) = crate::native_surface::reported_cell()
-            .map_or((cell_w_font, cell_h_font), |(w, h)| (w.max(1), h.max(1)));
+        let (cell_w, cell_h) =
+            reported.map_or((cell_w_font, cell_h_font), |(w, h)| (w.max(1), h.max(1)));
+        // The line height lives in the reported cell: xterm multiplies its
+        // glyph box by it and centers the box in the result. Drop the glyphs
+        // by the same amount, from the box height the page reports with the
+        // cell, so the native baseline lands on xterm's at every line height.
+        let glyph_top = match (reported, char_h) {
+            (Some(_), Some(char_h)) => centered_glyph_top(cell_h, char_h),
+            _ => 0,
+        };
         // Slots get a full extra cell of width so italic overhang fits.
         let slot_w = cell_w * 2;
         tracing::debug!(
@@ -734,6 +776,7 @@ impl GlyphAtlas {
             cell_h,
             cell_w_font,
             cell_h_font,
+            glyph_top,
             "native-surface: atlas metrics"
         );
         // 32x32 = 1024 slots: printable ASCII across four faces (regular,
@@ -761,6 +804,7 @@ impl GlyphAtlas {
             cell_h,
             slot_w,
             ascent,
+            glyph_top,
             cols,
             rows,
             atlas_w,
@@ -774,6 +818,11 @@ impl GlyphAtlas {
 
     pub(crate) fn cell_w(&self) -> u32 {
         self.cell_w
+    }
+    /// The baseline's row inside a cell: the centered glyph box's top plus
+    /// the font ascent.
+    fn baseline(&self) -> u32 {
+        native_baseline(self.glyph_top, self.ascent)
     }
     pub(crate) fn cell_h(&self) -> u32 {
         self.cell_h
@@ -887,7 +936,7 @@ impl GlyphAtlas {
         // The glyph's pen origin sits at the cell baseline; bounds.origin is
         // the ink's offset from it (negative y reaches above the baseline).
         let dst_x0 = sx as i32 + bounds.origin_x();
-        let dst_y0 = sy as i32 + self.ascent.round() as i32 + bounds.origin_y();
+        let dst_y0 = sy as i32 + self.baseline() as i32 + bounds.origin_y();
         for row in 0..h {
             for col in 0..w {
                 let cov = coverage[row * w + col];
@@ -2168,6 +2217,85 @@ mod tests {
         };
         assert!(coverage(&atlas, 0) > 0, "A should have ink");
         assert_eq!(coverage(&atlas, 1), 0, "space should be blank");
+    }
+
+    #[test]
+    fn centered_glyph_top_matches_xterm_char_top() {
+        // xterm leaves no gap at line height 1, else Math.round((cell - char) / 2).
+        assert_eq!(centered_glyph_top(34, 34), 0);
+        assert_eq!(centered_glyph_top(37, 34), 2);
+        assert_eq!(centered_glyph_top(40, 34), 3);
+        assert_eq!(centered_glyph_top(45, 34), 6);
+        assert_eq!(centered_glyph_top(30, 34), 0);
+    }
+
+    /// Where xterm's WebGL renderer puts the alphabetic baseline inside a
+    /// cell, from the same font metrics. The glyph box is ceil(ascent +
+    /// descent) device pixels, centered in the cell at Math.round of half
+    /// the spare height. Text sits on the ideographic baseline at the box
+    /// bottom, which `WebKit` places round(descent) below the alphabetic one.
+    fn xterm_baseline(cell_h: u32, ascent: f64, descent: f64) -> f64 {
+        let char_h = (ascent + descent).ceil();
+        let top = ((f64::from(cell_h) - char_h) / 2.0 + 0.5).floor();
+        top + char_h - descent.round()
+    }
+
+    #[test]
+    fn native_baseline_matches_xterm_at_every_line_height() {
+        for bytes in [BERKELEY_REGULAR, JETBRAINS_REGULAR] {
+            let font = Font::from_bytes(Arc::new(bytes.to_vec()), 0).unwrap();
+            let m = font.metrics();
+            for css_px in 11..=18u32 {
+                for dpr in [1u32, 2] {
+                    let scale = f64::from(css_px * dpr) / f64::from(m.units_per_em);
+                    let ascent = f64::from(m.ascent) * scale;
+                    let descent = -f64::from(m.descent) * scale;
+                    let char_h = (ascent + descent).ceil() as u32;
+                    // Compact, default, and loose.
+                    for line_height in [1.1, 1.2, 1.35] {
+                        let cell_h = (f64::from(char_h) * line_height).floor() as u32;
+                        let native = native_baseline(
+                            centered_glyph_top(cell_h, char_h),
+                            (f64::from(m.ascent) * scale) as f32,
+                        );
+                        let xterm = xterm_baseline(cell_h, ascent, descent);
+                        assert!(
+                            (f64::from(native) - xterm).abs() <= 1.0,
+                            "{css_px}px at {dpr}x, line height {line_height}: \
+                             native {native}, xterm {xterm}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_taller_cell_drops_each_glyph_to_the_centered_baseline() {
+        // The lowest inked row of 'H' in its slot, which sits on the baseline.
+        let lowest_ink = |atlas: &mut GlyphAtlas| -> u32 {
+            let _ = atlas.glyph_uv('H', false, false);
+            let (sx, sy, w, h) = slot_rect(0, atlas.cols, atlas.slot_w, atlas.cell_h);
+            (sy..sy + h)
+                .rev()
+                .find(|&y| (sx..sx + w).any(|x| atlas.pixels[(y * atlas.atlas_w + x) as usize] > 0))
+                .map(|y| y - sy)
+                .expect("H has ink")
+        };
+        // Berkeley Mono at 14 px on a 2x screen: a 34 px glyph box in the
+        // 40 px cell xterm reports at the default line height.
+        let Some(mut flat) = GlyphAtlas::with_reported("BerkeleyMono", 28.0, Some((17, 40)), None)
+        else {
+            return;
+        };
+        let mut centered =
+            GlyphAtlas::with_reported("BerkeleyMono", 28.0, Some((17, 40)), Some(34)).unwrap();
+        assert_eq!(centered.glyph_top, 3);
+        assert_eq!(centered.baseline(), flat.baseline() + 3);
+        assert_eq!(lowest_ink(&mut centered), lowest_ink(&mut flat) + 3);
+        // No report yet means the font's own cell and no drop.
+        let unreported = GlyphAtlas::with_reported("BerkeleyMono", 28.0, None, Some(34)).unwrap();
+        assert_eq!(unreported.glyph_top, 0);
     }
 
     fn paint(r: u8, g: u8, b: u8, a: f32) -> Paint {

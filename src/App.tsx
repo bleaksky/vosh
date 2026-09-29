@@ -42,7 +42,11 @@ import {
   subscribeCustomThemesChanged,
   subscribeProfileSwitched,
   subscribeSplitDividerChanged,
+  subscribeTerminalLineHeightChanged,
+  normalizeTerminalLineHeight,
+  TERMINAL_LINE_HEIGHTS,
   type StatePayload,
+  type TerminalLineHeight,
 } from './lib/session';
 import {
   applyAndBroadcastTheme,
@@ -196,6 +200,15 @@ function App() {
       return Number.isFinite(n) && n >= 6 && n <= 64 ? n : 14;
     } catch {
       return 14;
+    }
+  });
+  // Cached like the font so the first paint uses the saved row spacing
+  // instead of reflowing once the config arrives.
+  const [terminalLineHeight, setTerminalLineHeight] = useState<TerminalLineHeight>(() => {
+    try {
+      return normalizeTerminalLineHeight(localStorage.getItem('vosh.cache.lineHeight'));
+    } catch {
+      return 'default';
     }
   });
   const [themeTerminalColors, setThemeTerminalColors] = useState(false);
@@ -805,6 +818,7 @@ function App() {
         applyThemePrefs(cfg, { broadcast: true, broadcastFlips: true });
         setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
         setFontSize(cfg.font_size || 14);
+        setTerminalLineHeight(cfg.terminal_line_height);
         setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
         applyBrightBold(cfg.bright_bold);
         applySplitDividerColor(cfg.split_divider_color);
@@ -872,6 +886,7 @@ function App() {
           applyThemePrefs(cfg, { broadcast: true });
           setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
           setFontSize(cfg.font_size || 14);
+          setTerminalLineHeight(cfg.terminal_line_height);
           setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
           applyBrightBold(cfg.bright_bold);
           applySplitDividerColor(cfg.split_divider_color);
@@ -914,6 +929,30 @@ function App() {
       const detail = event.payload;
       setFontFamily(detail.family || DEFAULT_FONT_FAMILY);
       setFontSize(detail.size || 14);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vosh.cache.lineHeight', terminalLineHeight);
+    } catch {
+      // cache only; config remains the source of truth
+    }
+  }, [terminalLineHeight]);
+
+  useEffect(() => {
+    // Settings save broadcasts the terminal line height.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    subscribeTerminalLineHeightChanged((value) => {
+      setTerminalLineHeight(value);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -1407,6 +1446,7 @@ function App() {
             <Terminal
               fontFamily={fontFamily}
               fontSize={fontSize}
+              lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
               themeTerminalColors={themeTerminalColors}
               quiet
               onReady={(handle) => {
@@ -1468,6 +1508,7 @@ function App() {
           <Terminal
             fontFamily={fontFamily}
             fontSize={fontSize}
+            lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
             themeTerminalColors={themeTerminalColors}
             onReady={(handle) => {
               termRef.current = handle;
