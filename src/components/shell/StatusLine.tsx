@@ -17,9 +17,10 @@ import { StatusClock } from './StatusClock';
 //
 // The tick and the game time share one item, the way the old input row
 // chip kept them, 8 px apart inside it. The tick counts up from the last
-// tick and turns the warn tone in the last seconds you set in the tick
-// config. The time takes a daylight tint from your theme. The chip style
-// in Settings shows each value alone, after a caption, or after an icon.
+// tick and turns the warn tone on a soft warn ground in the last seconds
+// you set in the tick config. The time takes a daylight tint from your
+// theme. The chip style in Settings shows each value alone, after a
+// caption, or after an icon.
 
 const VITAL_ROWS: { key: VitalKey; label: string; max: 'maxhp' | 'maxmana' | 'maxmove' }[] = [
   { key: 'hp', label: 'Health', max: 'maxhp' },

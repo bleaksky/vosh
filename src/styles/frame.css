@@ -408,6 +408,18 @@
   color: inherit;
 }
 
+/* The tick in its warn window sits on a soft warn ground as well. The
+   daylight tint reads the same ANSI slot as the warn tone at midday on
+   every theme and all day on several, so the warn text alone no longer
+   sets the tick apart from the time. The negative margin holds the
+   line still when the ground comes and goes. */
+.shell-status-part.is-warn {
+  margin: 0 -4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
 .shell-status-part > svg {
   flex: none;
 }
