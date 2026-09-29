@@ -3,7 +3,7 @@ import { createDebouncedWrite, pendingWrites } from '../../../lib/pendingWrites'
 import {
   isOwnThemeEcho,
   setUiConfig,
-  subscribeProfileSwitched,
+  subscribeUiConfigReplaced,
   type UiConfig,
 } from '../../../lib/session';
 import { applyThemePrefs, subscribeThemeChanges, subscribeThemePrefs } from '../../../lib/theme';
@@ -78,12 +78,13 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
     [],
   );
   // A save still waiting on the debounce holds the previous profile's
-  // snapshot. Drop it on a profile switch so it cannot land on the new
-  // profile once SettingsApp has re-read the config.
+  // snapshot. Drop it when the backend replaces the whole config, on a
+  // profile switch, #profile load, #profile reset, or an import, so it
+  // cannot land on the new profile once SettingsApp has read it again.
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    void subscribeProfileSwitched(() => {
+    void subscribeUiConfigReplaced(() => {
       autoSave.drop();
     }).then((fn) => {
       if (cancelled) fn();

@@ -1647,13 +1647,54 @@ pub(crate) fn pane_layout_envelope(p: &Profile) -> PaneLayoutEnvelope {
     }
 }
 
+/// Sent last by [`broadcast_profile_ui`]. The live profile's whole UI
+/// config was replaced, by a switch, an import, `#profile load` or
+/// `reset`. A window that saves the whole config (Settings) reads it
+/// again here, or its next save writes the old profile's values back.
+pub(crate) const UI_CONFIG_REPLACED_EVENT: &str = "vosh://ui-config-replaced";
+
 /// What [`broadcast_profile_ui`] hands every window, read from the live
 /// profile.
 pub(crate) struct ProfileUiEvents {
     pub(crate) panes: PaneLayoutEnvelope,
     pub(crate) tracked: Vec<crate::profile_config::TrackedAffect>,
     pub(crate) tick_count: String,
+    pub(crate) chip_style: String,
     pub(crate) tick: TickConfigPayload,
+}
+
+impl ProfileUiEvents {
+    /// Every event [`broadcast_profile_ui`] sends, in order, with its
+    /// payload. The replace notice goes last, so a window that reads
+    /// the config again on it finds the stores these feed current.
+    pub(crate) fn events(&self) -> Vec<(&'static str, serde_json::Value)> {
+        [
+            event_json("vosh://pane-layout-changed", &self.panes),
+            event_json("vosh://tracked-affects-changed", &self.tracked),
+            event_json("vosh://tick-count-changed", &self.tick_count),
+            event_json("vosh://chip-style-changed", &self.chip_style),
+            event_json("vosh://tick-config-changed", &self.tick),
+            Some((UI_CONFIG_REPLACED_EVENT, serde_json::Value::Null)),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+}
+
+/// `payload` as JSON for `event`, or `None` with a warning when it does
+/// not serialize, so the rest still go out.
+fn event_json<S: serde::Serialize>(
+    event: &'static str,
+    payload: &S,
+) -> Option<(&'static str, serde_json::Value)> {
+    match serde_json::to_value(payload) {
+        Ok(value) => Some((event, value)),
+        Err(e) => {
+            warn!(error = %e, event, "broadcast payload did not serialize");
+            None
+        }
+    }
 }
 
 /// Read the events [`broadcast_profile_ui`] sends. Call with the profile
@@ -1663,26 +1704,27 @@ pub(crate) fn profile_ui_events(p: &Profile) -> ProfileUiEvents {
         panes: pane_layout_envelope(p),
         tracked: p.ui.tracked_affects.clone(),
         tick_count: p.ui.tick_count.clone(),
+        chip_style: p.ui.chip_style.clone(),
         tick: tick_config_payload(&p.tick.config),
     }
 }
 
-/// Hand every window the active profile's panes, tracked affects, and
-/// tick settings. For the paths that replace the live UI config
-/// wholesale (a profile switch, an import, `#profile load` and `reset`),
-/// which must also bump the pane generation under the profile lock as
-/// they swap. Only a switch also sends `vosh://profile-switched`, so the
-/// status line hears the tick count and the tick config here after an
-/// import, a load, or a reset.
+/// Hand every window the active profile's panes, tracked affects, tick
+/// settings, and chip style, then say the UI config was replaced. For
+/// the paths that replace the live UI config wholesale (a profile
+/// switch, an import, `#profile load` and `reset`), which must also bump
+/// the pane generation under the profile lock as they swap. Only a
+/// switch also sends `vosh://profile-switched`, so the status line hears
+/// these here after an import, a load, or a reset, and Settings reads
+/// its whole config again on [`UI_CONFIG_REPLACED_EVENT`].
 pub(crate) async fn broadcast_profile_ui(app: &AppHandle, state: &SharedState) {
     let events = {
         let p = state.profile.lock().await;
         profile_ui_events(&p)
     };
-    broadcast(app, "vosh://pane-layout-changed", &events.panes);
-    broadcast(app, "vosh://tracked-affects-changed", &events.tracked);
-    broadcast(app, "vosh://tick-count-changed", &events.tick_count);
-    broadcast(app, "vosh://tick-config-changed", &events.tick);
+    for (event, payload) in events.events() {
+        broadcast(app, event, &payload);
+    }
 }
 
 /// Read a profile's pane layout, the active one when `profile` is
@@ -4429,6 +4471,74 @@ mod tests {
         assert_eq!(after.tick_count, "up");
         assert_eq!(after.tick.warn_at_secs, None);
         assert!(after.tick.sound);
+    }
+
+    /// The payload `events` carries for `name`.
+    fn event_payload(events: &super::ProfileUiEvents, name: &str) -> serde_json::Value {
+        events
+            .events()
+            .into_iter()
+            .find_map(|(event, payload)| (event == name).then_some(payload))
+            .unwrap_or_else(|| panic!("{name} goes out"))
+    }
+
+    #[test]
+    fn a_profile_reset_hands_every_window_the_chip_style_it_put_back() {
+        let mut profile = crate::profile::Profile::default();
+        profile.ui.chip_style = "icon_value".into();
+        let before = super::profile_ui_events(&profile);
+        assert_eq!(
+            event_payload(&before, "vosh://chip-style-changed"),
+            serde_json::json!("icon_value")
+        );
+
+        let ran = crate::input::run_line(&mut profile, "#profile reset");
+        assert!(ran.replaced);
+        let after = super::profile_ui_events(&profile);
+        assert_eq!(
+            event_payload(&after, "vosh://chip-style-changed"),
+            serde_json::json!("value_only")
+        );
+    }
+
+    #[test]
+    fn a_profile_load_or_import_hands_every_window_the_loaded_settings() {
+        let mut profile = crate::profile::Profile::default();
+        let mut file = crate::profile_config::ProfileConfig::default();
+        file.ui.chip_style = "caption_value".into();
+        file.ui.tick_count = "down_past_zero".into();
+        let _ = file.apply_to(&mut profile);
+        let events = super::profile_ui_events(&profile);
+        assert_eq!(
+            event_payload(&events, "vosh://chip-style-changed"),
+            serde_json::json!("caption_value")
+        );
+        assert_eq!(
+            event_payload(&events, "vosh://tick-count-changed"),
+            serde_json::json!("down_past_zero")
+        );
+    }
+
+    #[test]
+    fn the_profile_broadcast_ends_by_saying_the_ui_config_was_replaced() {
+        let profile = crate::profile::Profile::default();
+        let names: Vec<&str> = super::profile_ui_events(&profile)
+            .events()
+            .into_iter()
+            .map(|(event, _)| event)
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "vosh://pane-layout-changed",
+                "vosh://tracked-affects-changed",
+                "vosh://tick-count-changed",
+                "vosh://chip-style-changed",
+                "vosh://tick-config-changed",
+                super::UI_CONFIG_REPLACED_EVENT,
+            ]
+        );
+        assert_eq!(super::UI_CONFIG_REPLACED_EVENT, "vosh://ui-config-replaced");
     }
 
     #[test]

@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { emit } from '@tauri-apps/api/event';
+import { emit, listen, type EventCallback } from '@tauri-apps/api/event';
 import {
   broadcastUiConfigChanges,
+  followReplacedUiConfig,
+  getUiConfig,
   isOwnThemeEcho,
   normalizeChipStyle,
   normalizeTerminalLineHeight,
@@ -19,6 +21,7 @@ import {
   TICK_COUNTS,
   type CustomTheme,
   type RawUiConfig,
+  type UiConfig,
 } from './session';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -335,5 +338,117 @@ describe('chip style', () => {
     sent.mockClear();
     await broadcastUiConfigChanges({ ...base, chip_style: 'icon_value' });
     expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://chip-style-changed');
+  });
+});
+
+describe('a replaced UI config', () => {
+  const REPLACED = 'vosh://ui-config-replaced';
+
+  afterEach(() => {
+    vi.mocked(invoke).mockReset();
+    vi.mocked(invoke).mockImplementation(() => Promise.resolve());
+  });
+
+  /** Follow the replace notice the way the Settings window does, and
+   *  hand back a way to send it. */
+  async function follow(apply: (config: UiConfig) => void): Promise<() => void> {
+    let heard: EventCallback<unknown> | undefined;
+    vi.mocked(listen).mockImplementationOnce((event, handler) => {
+      if (event === REPLACED) heard = handler as EventCallback<unknown>;
+      return Promise.resolve(() => {});
+    });
+    await followReplacedUiConfig(apply, () => {});
+    return () => heard?.({ event: REPLACED, id: 0, payload: null });
+  }
+
+  /** Answer every ui_get_config with `config`. */
+  function answer(config: RawUiConfig): void {
+    vi.mocked(invoke).mockImplementation(((command: string) =>
+      Promise.resolve(command === 'ui_get_config' ? config : undefined)) as typeof invoke);
+  }
+
+  /** Answer the next ui_get_config when the test says so. */
+  function answerLater(): (config: RawUiConfig) => void {
+    let resolve: (config: RawUiConfig) => void = () => {};
+    vi.mocked(invoke).mockImplementationOnce(
+      (() =>
+        new Promise<RawUiConfig>((done) => {
+          resolve = done;
+        })) as typeof invoke,
+    );
+    return (config) => resolve(config);
+  }
+
+  const settle = () => new Promise((done) => setTimeout(done, 0));
+
+  it('keeps the loaded values when Settings saves after a #profile load', async () => {
+    // Settings opened on a profile that counts down with the icon, and
+    // its last save sent those.
+    const opened = normalizeUiConfig(
+      raw({ tick_count: 'down', chip_style: 'icon_value', vitals_density: 'line' }),
+    );
+    await setUiConfig(opened);
+    let config = opened;
+    const replace = await follow((next) => {
+      config = next;
+    });
+
+    // #profile load brings a profile that counts up with the value alone.
+    const loaded = raw({ tick_count: 'up', chip_style: 'value_only', vitals_density: 'rows' });
+    answer(loaded);
+    replace();
+    await vi.waitFor(() => expect(config.tick_count).toBe('up'));
+    expect(config).toEqual(normalizeUiConfig(loaded));
+
+    // You change the font size.
+    const saved = vi.mocked(invoke);
+    const sent = vi.mocked(emit);
+    saved.mockClear();
+    sent.mockClear();
+    await setUiConfig({ ...config, font_size: 16 });
+    const [command, args] = saved.mock.calls[0] as [string, { config: Record<string, unknown> }];
+    expect(command).toBe('ui_set_config');
+    expect(args.config).toMatchObject({
+      font_size: 16,
+      tick_count: 'up',
+      chip_style: 'value_only',
+      vitals_density: 'rows',
+    });
+    // Every window already heard the loaded values, so the save sends
+    // only what you changed.
+    const events = sent.mock.calls.map(([event]) => event);
+    expect(events).toContain('vosh://font-changed');
+    expect(events).not.toContain('vosh://tick-count-changed');
+    expect(events).not.toContain('vosh://chip-style-changed');
+    expect(events).not.toContain('vosh://vitals-density-changed');
+  });
+
+  it('applies only the newest read when two replaces come close together', async () => {
+    const applied: UiConfig[] = [];
+    const replace = await follow((next) => applied.push(next));
+    const answerReset = answerLater();
+    const answerLoad = answerLater();
+    replace();
+    replace();
+    answerLoad(raw({ tick_count: 'down' }));
+    await vi.waitFor(() => expect(applied).toHaveLength(1));
+    answerReset(raw({ tick_count: 'up' }));
+    await settle();
+    expect(applied.map((c) => c.tick_count)).toEqual(['down']);
+  });
+
+  it('reads the config again rather than share a read from before the replace', async () => {
+    const applied: UiConfig[] = [];
+    const replace = await follow((next) => applied.push(next));
+    const answerEarly = answerLater();
+    const early = getUiConfig();
+    answer(raw({ tick_count: 'down' }));
+    replace();
+    await vi.waitFor(() => expect(applied).toHaveLength(1));
+    expect(applied[0].tick_count).toBe('down');
+    answerEarly(raw({ tick_count: 'up' }));
+    await early;
+    await settle();
+    expect(applied.map((c) => c.tick_count)).toEqual(['down']);
   });
 });

@@ -1434,6 +1434,40 @@ export function primeUiConfigBroadcast(config: UiConfig): void {
   lastSentConfig = config;
 }
 
+/** The backend replaced the live profile's whole UI config, on a
+ *  profile switch, a #profile load or reset, or an import. It comes
+ *  after the events that carry the panes, the tracked affects, the tick
+ *  settings, and the chip style. */
+export const UI_CONFIG_REPLACED_EVENT = 'vosh://ui-config-replaced';
+
+/** Hear that the backend replaced the whole UI config. */
+export async function subscribeUiConfigReplaced(cb: () => void): Promise<UnlistenFn> {
+  return listen<unknown>(UI_CONFIG_REPLACED_EVENT, () => cb());
+}
+
+/** Keep a window that saves the whole UiConfig on the live profile.
+ *  Each save sends every field, so a copy from before a replace would
+ *  write the old profile's values back. Every replace reads the config
+ *  again, never sharing a read that started before it, adopts it as
+ *  this window's last broadcast so the next save sends only what you
+ *  change, and hands it to `apply`. Only the newest read applies. */
+export async function followReplacedUiConfig(
+  apply: (config: UiConfig) => void,
+  onError: (error: unknown) => void,
+): Promise<UnlistenFn> {
+  let generation = 0;
+  return subscribeUiConfigReplaced(() => {
+    const mine = ++generation;
+    fetchUiConfig()
+      .then((config) => {
+        if (mine !== generation) return;
+        primeUiConfigBroadcast(config);
+        apply(config);
+      })
+      .catch(onError);
+  });
+}
+
 // Adopt a theme another window already applied and broadcast, and
 // nothing else, so this window's next save does not emit it again
 // while its own unsaved edits still diff as changes.
