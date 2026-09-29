@@ -13,7 +13,9 @@ A page is a component in `pages/` or `groups/` that takes `SettingsPageProps` fr
 - `navigate(target)` goes somewhere else in Settings.
 - `setLeaveGuard(guard)` registers a question the frame asks before it moves to another group. The guard gets a `proceed` callback and returns true to hold the move, then calls `proceed` once you confirm. Automation uses it to ask before it drops unsaved changes. Clear it with null when the page unmounts.
 
-Register a page in `PAGES` in `SettingsApp.tsx`. A page that pins its own bar and scrolls inside itself, like the Automation save bar, sets `selfScroll` there.
+Register a page in `PAGES` in `SettingsApp.tsx`. A page that pins its own bar and scrolls inside itself, like the Automation save bar, sets `selfScroll` there. `selfScroll` can also be a function of the target, for a group where only some targets scroll on their own.
+
+A group can hold a page inside it, like the session logs at `general:logs`. Name it in `SETTINGS_SUBPAGES` in `src/lib/settingsNav.ts` with its title. The breadcrumb then reads `Settings › General › Session logs` with the group as a link back, the nav keeps the group active, and the frame does not scroll to the section. The group's page draws the inner page when `settingsSubpage(target)` names it.
 
 A page that saves as you go takes `update` from `useSettingsAutoSave` in `legacy/`. `update(patch)` patches the config copy and saves the whole snapshot once typing settles. Pass `{ now: true }` for a discrete pick another window shows at once, like a theme or a toggle.
 

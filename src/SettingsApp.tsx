@@ -20,6 +20,7 @@ import {
   resolveSettingsTarget,
   settingsGroupLabel,
   settingsScrollIds,
+  settingsSubpage,
   type SettingsGroup,
   type SettingsTarget,
 } from './lib/settingsNav';
@@ -50,12 +51,14 @@ import { AppearancePage } from './components/settings/pages/AppearancePage';
 interface GroupPage {
   Page: ComponentType<SettingsPageProps>;
   /** The page pins its own bar and scrolls inside itself, so the
-   *  content column does not scroll. */
-  selfScroll?: boolean;
+   *  content column does not scroll. A function decides per target,
+   *  for a group whose page inside it scrolls on its own. */
+  selfScroll?: boolean | ((target: SettingsTarget) => boolean);
 }
 
 const PAGES: Record<SettingsGroup, GroupPage> = {
-  general: { Page: GeneralGroup },
+  // The session logs page pins its toolbar over the results.
+  general: { Page: GeneralGroup, selfScroll: (target) => settingsSubpage(target) !== null },
   appearance: { Page: AppearancePage },
   layout: { Page: LayoutGroup },
   input: { Page: InputGroup },
@@ -289,7 +292,11 @@ export function SettingsApp() {
   }, [fontFamily]);
 
   const group = nav.target.group;
-  const { Page, selfScroll } = PAGES[group];
+  const { Page, selfScroll: scrollsSelf } = PAGES[group];
+  const selfScroll = typeof scrollsSelf === 'function' ? scrollsSelf(nav.target) : scrollsSelf;
+  // A page inside the group, like General's session logs, adds a step
+  // to the breadcrumb, and the group's name there leads back.
+  const subpage = settingsSubpage(nav.target);
 
   return (
     <div className="st-app">
@@ -301,8 +308,23 @@ export function SettingsApp() {
               Settings
             </span>
             <ChevronRightIcon size={12} className="st-crumb-sep" />
+            {subpage !== null && (
+              <>
+                <a
+                  href={`#${group}`}
+                  className="st-crumb-link"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    go({ group });
+                  }}
+                >
+                  {settingsGroupLabel(group)}
+                </a>
+                <ChevronRightIcon size={12} className="st-crumb-sep" />
+              </>
+            )}
             <h1 className="st-crumb-title" data-tauri-drag-region="">
-              {settingsGroupLabel(group)}
+              {subpage ?? settingsGroupLabel(group)}
             </h1>
           </div>
           {!mac && <WindowControls />}
