@@ -107,8 +107,8 @@ pub(crate) struct MigrationPlan {
     pub conflicts: Vec<Conflict>,
     /// One loadout per source profile, with `enabled_groups`
     /// populated for every group that emerged from the migration of
-    /// that profile's items. Connection defaults, tick config, and
-    /// `profile_vars` are copied from the source `ProfileConfig`.
+    /// that profile's items and was on. Connection defaults, tick
+    /// config, and `profile_vars` stay in the profile file.
     pub loadouts: Vec<Loadout>,
     /// Names of source profiles the plan covered. Useful for the
     /// wizard summary header.
@@ -313,11 +313,11 @@ fn derive_loadout(profile_name: &str, cfg: &ProfileConfig) -> Loadout {
     for mac in &cfg.macros {
         push(mac.group.as_deref(), &cfg.disabled_macro_groups);
     }
+    // The variables, tick, and connection stay in the profile file, which
+    // loadout mode loads them from. No runtime code reads them from a
+    // loadout, so a copy here would only go stale beside the file.
     let mut loadout = Loadout::empty(profile_name);
     loadout.enabled_groups = groups;
-    loadout.connection = cfg.connection.clone();
-    loadout.tick = cfg.tick.clone();
-    loadout.profile_vars = cfg.profile_vars.clone();
     loadout
 }
 
@@ -563,14 +563,19 @@ mod tests {
     }
 
     #[test]
-    fn loadout_pulls_connection_and_tick_from_source() {
+    fn a_loadout_leaves_vars_tick_and_connection_to_the_profile_file() {
         let mut cfg = profile_with(vec![], vec![], vec![]);
-        cfg.connection.host = "play.theforsakenlands.com".into();
-        cfg.connection.port = 1848;
+        cfg.connection.host = "aabahran.example".into();
+        cfg.connection.port = 4000;
+        cfg.tick.interval_secs = 45;
+        cfg.profile_vars.insert("target".into(), "orc".into());
         let plan = analyze_profiles(&[("default".into(), cfg)]);
         let loadout = &plan.loadouts[0];
-        assert_eq!(loadout.connection.host, "play.theforsakenlands.com");
-        assert_eq!(loadout.connection.port, 1848);
+        let empty = Loadout::empty("default");
+        assert_eq!(loadout.connection.host, empty.connection.host);
+        assert_eq!(loadout.connection.port, empty.connection.port);
+        assert_eq!(loadout.tick.interval_secs, empty.tick.interval_secs);
+        assert!(loadout.profile_vars.is_empty());
     }
 
     #[test]

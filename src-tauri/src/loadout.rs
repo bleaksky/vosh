@@ -10,9 +10,10 @@
 //!     Items are gated for effective enable/disable by their `group`
 //!     field — the same per-store `disabled_groups` machinery added
 //!     in v0.3.0.
-//!   - **[`Loadout`]** is the user-facing "profile": a named set of
-//!     groups to enable plus the per-character runtime state (vars,
-//!     tick config, connection defaults, auto-match).
+//!   - **[`Loadout`]** is a named set of groups to enable. The
+//!     per-character state (vars, tick config, timers, UI settings)
+//!     stays in each profile file, which loadout mode loads as per
+//!     profile mode does.
 //!   - **[`LoadoutSet`]** holds every loadout the user has plus a
 //!     list of currently-active ones. Multiple loadouts can stack:
 //!     the runtime enables the union of `enabled_groups` across
@@ -73,12 +74,10 @@ impl GlobalCatalog {
     }
 }
 
-/// One named loadout. Replaces today's "profile" concept from the
-/// user's perspective. A loadout has no items of its own — it only
-/// references groups in the global catalog and carries the
-/// session-coupled state (vars, tick, connection defaults,
-/// auto-match) that does NOT cleanly cross-share between
-/// characters.
+/// One named loadout. A loadout has no items of its own — it only
+/// references groups in the global catalog. The vars, tick, and
+/// connection fields below are planned but not applied; the profile
+/// file holds that state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Loadout {
     pub name: String,
@@ -100,17 +99,19 @@ pub(crate) struct Loadout {
     /// Settings group checkboxes govern instead.
     #[serde(default)]
     pub enabled_groups: Vec<String>,
-    /// Per-loadout profile-scoped vars. Stay separated from the
-    /// global catalog because vars are state, not authored content
-    /// — `$target` should differ across characters even when
-    /// they share the same alias library.
+    /// Per-loadout profile-scoped vars, planned but not applied: no
+    /// runtime code reads them, and the profile file holds each
+    /// character's vars in loadout mode as it does per profile. The
+    /// shared catalog wizard leaves this empty. Kept so loadouts.toml
+    /// files that carry a copy still read.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub profile_vars: BTreeMap<String, String>,
-    /// Per-loadout tick config (same per-loadout rationale).
+    /// Per-loadout tick config, planned but not applied, like
+    /// `profile_vars`. The profile file holds the tick config.
     #[serde(default)]
     pub tick: TickPersistConfig,
-    /// Default host / port / TLS for the connect form when this
-    /// loadout is the currently-active picker target.
+    /// Default host / port / TLS for the connect form, planned but not
+    /// applied, like `profile_vars`.
     #[serde(default)]
     pub connection: ConnectionConfig,
 }
