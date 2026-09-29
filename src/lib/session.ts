@@ -909,6 +909,8 @@ export interface UiConfig {
    *  The value alone, a caption before each value, or an icon before
    *  each. The moons are icons already, so only Caption changes them. */
   chip_style: ChipStyle;
+  /** Which way the status line tick counts, one of TICK_COUNTS. */
+  tick_count: TickCount;
 }
 
 export type MoonsPosition = 'right-edge' | 'before-time' | 'after-time';
@@ -918,6 +920,18 @@ export type ChipStyle = 'value_only' | 'caption_value' | 'icon_value';
  *  value alone, the default. */
 export function normalizeChipStyle(raw: unknown): ChipStyle {
   return raw === 'caption_value' || raw === 'icon_value' ? raw : 'value_only';
+}
+
+/** The ways the status line tick counts. `up`, the default, shows the
+ *  seconds since the last tick. `down` shows the seconds left until the
+ *  next and waits at 0 while the game runs late. `down_past_zero`
+ *  counts on below zero until the tick lands. */
+export const TICK_COUNTS = ['up', 'down', 'down_past_zero'] as const;
+export type TickCount = (typeof TICK_COUNTS)[number];
+
+/** Read a stored or broadcast tick count. Anything unknown counts up. */
+export function normalizeTickCount(raw: unknown): TickCount {
+  return TICK_COUNTS.find((count) => count === raw) ?? 'up';
 }
 
 /** `ember` (the default) draws a sidebar-pane block — caps header
@@ -1089,6 +1103,7 @@ export interface RawUiConfig {
   vitals_warn_thirds?: boolean;
   moons_position?: string;
   chip_style?: string;
+  tick_count?: string;
 }
 
 async function fetchUiConfig(): Promise<UiConfig> {
@@ -1159,6 +1174,7 @@ export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
         ? cfg.moons_position
         : 'right-edge',
     chip_style: normalizeChipStyle(cfg.chip_style),
+    tick_count: normalizeTickCount(cfg.tick_count),
   };
 }
 
@@ -1401,6 +1417,7 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   );
   await emitChanged('vosh://moons-position-changed', config.moons_position, prev?.moons_position);
   await emitChanged('vosh://chip-style-changed', config.chip_style, prev?.chip_style);
+  await emitChanged('vosh://tick-count-changed', config.tick_count, prev?.tick_count);
   await emitChanged(
     TRACKED_AFFECTS_EVENT,
     config.tracked_affects,
@@ -1511,6 +1528,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
       vitals_warn_thirds: config.vitals_warn_thirds,
       moons_position: config.moons_position,
       chip_style: config.chip_style,
+      tick_count: config.tick_count,
     },
   });
   // Theme + custom-themes go out first so any other window's theme
@@ -1527,6 +1545,16 @@ export async function subscribeChipStyleChanged(
 ): Promise<UnlistenFn> {
   return listen<unknown>('vosh://chip-style-changed', (event) => {
     cb(normalizeChipStyle(event.payload));
+  });
+}
+
+/** Hear a new tick count saved from Settings. setUiConfig emits it to
+ *  every window, so the main window's status line follows at once. */
+export async function subscribeTickCountChanged(
+  cb: (value: TickCount) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>('vosh://tick-count-changed', (event) => {
+    cb(normalizeTickCount(event.payload));
   });
 }
 

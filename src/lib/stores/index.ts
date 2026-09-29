@@ -6,6 +6,7 @@ import { startChipStyleStore } from './chipStyleStore';
 import { startCombatStore } from './combatStore';
 import { startRoomStore } from './roomStore';
 import { startTargetStore } from './targetStore';
+import { startTickCountStore } from './tickCountStore';
 import { startTickStore } from './tickStore';
 import { startTrackedAffectsStore } from './trackedAffectsStore';
 import { startVitalsDensityStore } from './vitalsDensityStore';
@@ -32,5 +33,6 @@ export function startStores(): void {
   startRoomStore();
   startTargetStore();
   startTickStore();
+  startTickCountStore();
   startChipStyleStore();
 }

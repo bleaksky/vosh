@@ -325,6 +325,13 @@ pub(crate) struct UiConfig {
     /// values coerce back to `"value_only"` server-side.
     #[serde(default = "default_chip_style")]
     pub chip_style: String,
+    /// Which way the status line tick counts. `up` (the default) shows
+    /// the seconds since the last tick, `down` the seconds left until
+    /// the next and waits at 0 while the game runs late, and
+    /// `down_past_zero` counts on below zero until the tick lands. Per
+    /// profile, like `chip_style`. Unknown values coerce back to `up`.
+    #[serde(default = "default_tick_count")]
+    pub tick_count: String,
 }
 
 /// Vitals row appearance. Each `show_*` toggle controls whether the
@@ -563,6 +570,23 @@ fn default_moons_position() -> String {
 
 fn default_chip_style() -> String {
     "value_only".to_string()
+}
+
+/// The ways the status line tick counts. Anything else saves as the
+/// default, counting up.
+pub(crate) const TICK_COUNTS: [&str; 3] = ["up", "down", "down_past_zero"];
+
+fn default_tick_count() -> String {
+    "up".to_string()
+}
+
+/// Keep a known tick count and turn anything else into `up`.
+pub(crate) fn coerce_tick_count(value: String) -> String {
+    if TICK_COUNTS.contains(&value.as_str()) {
+        value
+    } else {
+        default_tick_count()
+    }
 }
 
 fn default_echo_macros() -> bool {
@@ -1137,6 +1161,7 @@ impl Default for UiConfig {
             vitals_warn_thirds: false,
             moons_position: default_moons_position(),
             chip_style: default_chip_style(),
+            tick_count: default_tick_count(),
         }
     }
 }

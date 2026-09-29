@@ -50,6 +50,7 @@ async function load() {
     target: await import('./targetStore'),
     tick: await import('./tickStore'),
     chipStyle: await import('./chipStyleStore'),
+    tickCount: await import('./tickCountStore'),
     vitalsOptions: await import('./vitalsOptionsStore'),
   };
 }
@@ -260,6 +261,35 @@ describe('stores on the event bus', () => {
     fire('vosh://profile-switched', 'Erelei');
     await settle();
     expect(s.chipStyle.getChipStyle()).toBe('icon_value');
+  });
+
+  it('follow the tick count Settings saves and each profile keeps', async () => {
+    commands.set('ui_get_config', { tracked_affects: [], tick_count: 'down' });
+    const s = await load();
+    expect(s.tickCount.getTickCount()).toBe('down');
+    fire('vosh://tick-count-changed', 'down_past_zero');
+    expect(s.tickCount.getTickCount()).toBe('down_past_zero');
+    fire('vosh://tick-count-changed', 'backwards');
+    expect(s.tickCount.getTickCount()).toBe('up');
+    commands.set('ui_get_config', { tracked_affects: [] });
+    fire('vosh://tick-count-changed', 'down');
+    fire('vosh://profile-switched', 'Erelei');
+    await settle();
+    // A profile saved before the setting counts up.
+    expect(s.tickCount.getTickCount()).toBe('up');
+  });
+
+  it('keep a tick count Settings saved over a slower config read', async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    commands.set('ui_get_config', { tracked_affects: [], tick_count: 'down' });
+    const s = await load();
+    // A profile switch starts a read that lands late.
+    commands.set('ui_get_config', new Promise((resolve) => (answer = resolve)));
+    fire('vosh://profile-switched', 'Erelei');
+    fire('vosh://tick-count-changed', 'down_past_zero');
+    answer({ tracked_affects: [], tick_count: 'up' });
+    await settle();
+    expect(s.tickCount.getTickCount()).toBe('down_past_zero');
   });
 
   it('follow the vitals options Settings saves and each profile keeps', async () => {
