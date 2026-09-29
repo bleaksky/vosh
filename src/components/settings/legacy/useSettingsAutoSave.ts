@@ -1,14 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
-import { setUiConfig, subscribeProfileSwitched, type UiConfig } from '../../../lib/session';
-import { applyTheme, subscribeThemeChanges } from '../../../lib/theme';
+import {
+  isOwnThemeEcho,
+  setUiConfig,
+  subscribeProfileSwitched,
+  type UiConfig,
+} from '../../../lib/session';
+import { applyThemePrefs, subscribeThemeChanges, subscribeThemePrefs } from '../../../lib/theme';
 import type { SetUiConfig } from '../pageTypes';
+
+export interface AutoSaveOptions {
+  /** Save on the next tick instead of after typing settles. Discrete
+   *  picks that other windows show at once, like a theme, pass it. */
+  now?: boolean;
+}
 
 // Debounced auto-save shared by the config-backed editors. Text inputs
 // can fire many updates in a row while the user types; the debounce
 // coalesces them into one setUiConfig call after typing settles.
 // setUiConfig owns every cross-window emit and dedupes against the
 // previous snapshot, so callers only get the local theme refresh and
-// the saved indicator. Moved here unchanged from the old SettingsApp.
+// the saved indicator.
 export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string | null) => void) {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const saveTimerRef = useRef<number | null>(null);
@@ -16,7 +27,7 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
   // window while it waits patches it, so the save does not put the old
   // theme back.
   const pendingRef = useRef<UiConfig | null>(null);
-  const scheduleAutoSave = (next: UiConfig) => {
+  const scheduleAutoSave = (next: UiConfig, delay: number) => {
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     pendingRef.current = next;
     saveTimerRef.current = window.setTimeout(() => {
@@ -26,19 +37,19 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
       void (async () => {
         try {
           await setUiConfig(cfg);
-          applyTheme(cfg.theme);
+          applyThemePrefs(cfg);
           setSavedAt(Date.now());
         } catch (e) {
           onError(String(e));
         }
       })();
-    }, 250);
+    }, delay);
   };
-  const update = (patch: Partial<UiConfig>) => {
+  const update = (patch: Partial<UiConfig>, options: AutoSaveOptions = {}) => {
     setConfig((prev) => {
       if (!prev) return prev;
       const next = { ...prev, ...patch };
-      scheduleAutoSave(next);
+      scheduleAutoSave(next, options.now ? 0 : 250);
       return next;
     });
   };
@@ -61,11 +72,36 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
       unsub?.();
     };
   }, []);
+  // The theme id another window applied is the manual pick only while
+  // follow system appearance is off. This window's own save comes back
+  // too, and is skipped.
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
     void subscribeThemeChanges((themeId) => {
-      if (pendingRef.current) pendingRef.current = { ...pendingRef.current, theme: themeId };
+      const pending = pendingRef.current;
+      if (!pending || pending.follow_system_appearance || isOwnThemeEcho(themeId)) return;
+      pendingRef.current = { ...pending, theme: themeId };
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unsub = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+  // The four theme fields another window saved, like a palette pick
+  // that filled the light or dark entry while follow is on.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void subscribeThemePrefs((prefs) => {
+      const pending = pendingRef.current;
+      if (!pending || isOwnThemeEcho(prefs)) return;
+      pendingRef.current = { ...pending, ...prefs };
     })
       .then((fn) => {
         if (cancelled) fn();

@@ -3,14 +3,16 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   getUiConfig,
+  isOwnThemeEcho,
   loadoutsGetState,
   primeUiConfigBroadcast,
   primeUiConfigTheme,
+  primeUiConfigThemePrefs,
   subscribeLoadoutsChanged,
   subscribeProfileSwitched,
   type UiConfig,
 } from './lib/session';
-import { applyTheme, subscribeThemeChanges } from './lib/theme';
+import { applyThemePrefs, subscribeThemeChanges, subscribeThemePrefs } from './lib/theme';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
 import { loadFontStack } from './lib/fontLoader';
 import { isMacPlatform } from './lib/palette';
@@ -87,6 +89,11 @@ export function SettingsApp() {
     seq: 0,
   }));
   const [config, setConfig] = useState<UiConfig | null>(null);
+  // The latest config for event handlers, which outlive a render.
+  const configRef = useRef<UiConfig | null>(null);
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
   const [error, setError] = useState<string | null>(null);
   const [pathB, setPathB] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -166,7 +173,9 @@ export function SettingsApp() {
       .then((cfg) => {
         setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
         setConfig(cfg);
-        applyTheme(cfg.theme);
+        // The main window owns sending OS appearance flips. This window
+        // follows them on its own listener.
+        applyThemePrefs(cfg);
       })
       .catch((e) => setError(String(e)))
       .finally(reveal);
@@ -186,7 +195,7 @@ export function SettingsApp() {
           if (cancelled) return;
           setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
           setConfig(cfg);
-          applyTheme(cfg.theme);
+          applyThemePrefs(cfg);
           primeUiConfigBroadcast(cfg);
         })
         .catch((e) => setError(String(e)));
@@ -201,15 +210,47 @@ export function SettingsApp() {
   }, []);
 
   // Another window can change the theme (the palette's Choose theme).
-  // subscribeThemeChanges repaints this window, and the config copy
-  // takes the new choice so the next full save from any page carries
-  // it instead of writing the old theme back.
+  // subscribeThemeChanges repaints this window. While follow system
+  // appearance is off the id is your manual pick, so the config copy
+  // takes it and the next full save from any page carries it instead
+  // of writing the old theme back. While follow is on the id is only
+  // the pair entry the OS shows, and the theme fields below carry the
+  // pick. This window's own save comes back too, and is skipped.
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
     void subscribeThemeChanges((themeId) => {
+      const current = configRef.current;
+      if (!current || current.follow_system_appearance || isOwnThemeEcho(themeId)) return;
       primeUiConfigTheme(themeId);
-      setConfig((prev) => (prev && prev.theme !== themeId ? { ...prev, theme: themeId } : prev));
+      setConfig((prev) =>
+        prev && !prev.follow_system_appearance && prev.theme !== themeId
+          ? { ...prev, theme: themeId }
+          : prev,
+      );
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unsub = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+
+  // The four theme fields another window saved. A palette pick while
+  // follow is on fills the light or dark entry, and the config copy
+  // takes it the same way.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void subscribeThemePrefs((prefs) => {
+      if (isOwnThemeEcho(prefs)) return;
+      primeUiConfigThemePrefs(prefs);
+      applyThemePrefs(prefs);
+      setConfig((prev) => (prev ? { ...prev, ...prefs } : prev));
     })
       .then((fn) => {
         if (cancelled) fn();
