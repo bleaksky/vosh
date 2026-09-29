@@ -478,6 +478,7 @@ pub fn run() {
             commands::pane_layout_set,
             commands::tracked_affects_set,
             characters::profile_detail_get,
+            characters::pane_layout_reset,
             commands::ui_set_theme,
             fonts_list,
             macros_list,

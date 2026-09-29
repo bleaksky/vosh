@@ -1469,20 +1469,22 @@ pub(crate) async fn dock_layout_set(
 
 /// A pane tree as the frontend receives it: the layout plus the
 /// [`PANES_GENERATION`] it was read at. The generation never reaches
-/// disk.
+/// disk, and an inactive profile's tree carries none, since no pane
+/// layout write can target it.
 #[derive(Clone, serde::Serialize)]
 pub(crate) struct PaneLayoutEnvelope {
     #[serde(flatten)]
-    layout: PaneLayoutPersist,
-    generation: u64,
+    pub(crate) layout: PaneLayoutPersist,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) generation: Option<u64>,
 }
 
 /// The active profile's pane layout and its generation. Call with the
 /// profile lock held.
-fn pane_layout_envelope(p: &Profile) -> PaneLayoutEnvelope {
+pub(crate) fn pane_layout_envelope(p: &Profile) -> PaneLayoutEnvelope {
     PaneLayoutEnvelope {
         layout: p.ui.pane_layout(),
-        generation: panes_generation(),
+        generation: Some(panes_generation()),
     }
 }
 
@@ -1499,13 +1501,25 @@ pub(crate) async fn broadcast_profile_ui(app: &AppHandle, state: &SharedState) {
     broadcast(app, "vosh://tracked-affects-changed", &tracked);
 }
 
-/// Read the active profile's pane layout. A profile that has never
-/// saved one gets a tree migrated from its dock layout (or the
-/// default), with nothing written to disk until the first edit.
+/// Read a profile's pane layout, the active one when `profile` is
+/// absent. A profile that has never saved one gets a tree migrated from
+/// its dock layout (or the default), with nothing written to disk until
+/// the first edit. An inactive profile's tree comes from its file and
+/// carries no generation.
 #[tauri::command]
 pub(crate) async fn pane_layout_get(
     state: State<'_, SharedState>,
+    profile: Option<String>,
 ) -> Result<PaneLayoutEnvelope, String> {
+    if let Some(name) = profile.as_deref() {
+        let shared: SharedState = state.inner().clone();
+        if let Some(layout) = crate::characters::inactive_pane_layout(&shared, name).await? {
+            return Ok(PaneLayoutEnvelope {
+                layout,
+                generation: None,
+            });
+        }
+    }
     let p = state.profile.lock().await;
     Ok(pane_layout_envelope(&p))
 }
@@ -1547,7 +1561,7 @@ pub(crate) async fn pane_layout_set(
         "vosh://pane-layout-changed",
         &PaneLayoutEnvelope {
             layout,
-            generation: current,
+            generation: Some(current),
         },
     );
     Ok(true)
