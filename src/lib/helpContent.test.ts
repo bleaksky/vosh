@@ -71,7 +71,8 @@ describe('the help on loadouts', () => {
     expect(text).toContain('Every other setting stays with its profile.');
     expect(text).not.toMatch(/run the migration wizard again/);
     expect(text).toContain('The migration wizard runs once');
-    expect(text).toContain('or while `profiles/legacy/` holds the copies from an earlier run');
+    expect(text).toContain('while `profiles/legacy/` holds the copies from an earlier run');
+    expect(text).toContain('or while an earlier run waits to finish at the next launch');
   });
 
   it('says where the items live in loadout mode', () => {
