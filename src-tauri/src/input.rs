@@ -1190,8 +1190,32 @@ fn describe_action(action: &TriggerAction) -> String {
     }
 }
 
+/// What `#profile save`, `load`, and `reset` answer between the shared
+/// catalog wizard and the relaunch that finishes it. Nothing saves in
+/// that window, the profile files hold no aliases, triggers, or macros
+/// any more, and the shared catalog loads only at launch.
+const PROFILE_MIGRATION_PENDING: &str =
+    "Quit Vosh and open it again to finish the move to loadouts.";
+
 fn slash_profile(profile: &mut Profile, args: &str, replaced: &mut bool) -> InputResult {
+    let pending =
+        crate::commands::MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
+    slash_profile_with(profile, args, replaced, pending)
+}
+
+/// [`slash_profile`] with `migration_pending` in place of
+/// [`crate::commands::MIGRATION_RELAUNCH_PENDING`], so a test can run it
+/// after the wizard without touching the flag every other test reads.
+fn slash_profile_with(
+    profile: &mut Profile,
+    args: &str,
+    replaced: &mut bool,
+    migration_pending: bool,
+) -> InputResult {
     let (cmd, _rest) = split_first_word(args);
+    if migration_pending && matches!(cmd, "save" | "load" | "reset") {
+        return error_echo(PROFILE_MIGRATION_PENDING.to_string());
+    }
     // Path B keeps authored items in the catalog and persists them
     // automatically. The legacy save/load/reset trio would write, load,
     // or blank the wrong files there, so it bows out with a pointer.
@@ -1814,6 +1838,23 @@ mod tests {
             assert_eq!(effects_of(&[line]), DIRTY, "{line}");
         }
         assert_eq!(effects_of(&["look", "greet"]), LineEffects::default());
+    }
+
+    #[test]
+    fn profile_save_load_and_reset_wait_for_the_relaunch_after_the_wizard() {
+        let mut p = Profile::default();
+        p.aliases.set(vosh_alias::Alias::new("kk", "kick %1"));
+        for sub in ["save", "load", "reset"] {
+            let mut replaced = false;
+            let result = slash_profile_with(&mut p, sub, &mut replaced, true);
+            assert_eq!(
+                result.echo,
+                ["[Quit Vosh and open it again to finish the move to loadouts.]"],
+                "{sub}"
+            );
+            assert!(!replaced, "{sub}");
+            assert!(p.aliases.get("kk").is_some(), "{sub}");
+        }
     }
 
     #[test]
