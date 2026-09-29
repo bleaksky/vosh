@@ -45,9 +45,9 @@ export function Disclosure({
 }
 
 /** The rows a Disclosure opens, right after it in the same Card. Give
- *  it the id the Disclosure's aria-controls names. Each row inside
- *  draws the hairline above it, and the last one takes the card's
- *  bottom corners. */
+ *  it the id the Disclosure's aria-controls names. Each row or block
+ *  inside draws the hairline above it, and the last one takes the
+ *  card's bottom corners. */
 export function DisclosurePanel({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
   return <div {...rest} className={cx('st-disclosure-panel', className)} />;
 }

@@ -133,7 +133,9 @@ Rows after the first in a card draw the inset hairline themselves. A row that ho
 - `expanded` sets aria-expanded and turns the chevron down. Render the content after it and point `aria-controls` at it.
 - `anchor` as on `Row`.
 
-`DisclosurePanel` holds the rows a `Disclosure` opens, right after it in the same `Card`. Give it the id the Disclosure's `aria-controls` names. Every row inside draws the inset hairline, the first one included, and the last one takes the card's bottom corners. Appearance's `Advanced` and General's `Advanced` on Windows and Linux use it.
+`DisclosurePanel` holds the rows a `Disclosure` opens, right after it in the same `Card`. Give it the id the Disclosure's `aria-controls` names. Every row or block inside draws the inset hairline, the first one included, and the last one takes the card's bottom corners. The `Advanced` cards on Appearance and Input, and General's `Advanced` on Windows and Linux, use it.
+
+A row whose content sits under its label line at full width, like the prompt template on Input, is a `div` with the `st-block` class holding a `Row` for the label line and the content after it. The `Row` drops its own padding there, and the block draws the hairline like any row.
 
 `VisuallyHidden` holds text a screen reader reads and the page does not show, like a list row's On or Off.
 
