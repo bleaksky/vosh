@@ -126,15 +126,16 @@ export function shortcutKey(e: { key: string; code: string }): string {
 // ── Registry ─────────────────────────────────────────────────────────
 
 /** Home sections, in the order the palette lists them. Session goes
- *  last so Disconnect is the final row. */
-export type PaletteSection = 'view' | 'settings' | 'aliases' | 'session';
+ *  last so Disconnect is the final row. With nothing typed the palette
+ *  shows Recent, View, and Session (SPEC 7). Aliases, settings, help,
+ *  and find surface as you type or through Recent. */
+export type PaletteSection = 'view' | 'aliases' | 'session';
 
-export const SECTION_ORDER: PaletteSection[] = ['view', 'settings', 'aliases', 'session'];
+export const SECTION_ORDER: PaletteSection[] = ['view', 'aliases', 'session'];
 
 export const SECTION_LABELS: Record<PaletteSection | 'recent', string> = {
   recent: 'Recent',
   view: 'View',
-  settings: 'Settings',
   aliases: 'Aliases',
   session: 'Session',
 };
@@ -177,6 +178,10 @@ export interface PaletteDeps {
    *  passes togglePanel. */
   panelOpen?: boolean;
   togglePanel?: () => void;
+  /** Scrollback split state. The Split terminal row appears when the
+   *  shell passes toggleSplit. */
+  splitOpen?: boolean;
+  toggleSplit?: () => void;
   paneVisible: (pane: PaneType) => boolean;
   togglePane: (pane: PaneType) => void;
   openHelp: () => void;
@@ -234,6 +239,28 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       run: toggle,
     });
   }
+  if (deps.toggleSplit) {
+    entries.push({
+      id: 'split',
+      section: 'view',
+      title: 'Split terminal',
+      keywords: 'scrollback history scroll back',
+      keys: 'Mod+\\',
+      checked: deps.splitOpen ?? false,
+      run: deps.toggleSplit,
+    });
+  }
+  const currentTheme = THEMES.find((t) => t.id === getCurrentThemeId());
+  entries.push({
+    id: 'theme',
+    section: 'view',
+    title: 'Choose theme',
+    keywords: 'colors appearance dark light',
+    ...(currentTheme ? { meta: currentTheme.label } : {}),
+    children: themeEntries,
+    childLabel: 'Themes',
+    run: () => {},
+  });
   for (const pane of PANE_TYPES) {
     entries.push({
       id: `pane-${pane}`,
@@ -251,18 +278,8 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
     title: 'Find in scrollback…',
     keywords: 'search',
     keys: 'Mod+F',
+    searchOnly: true,
     run: deps.openFind,
-  });
-  const currentTheme = THEMES.find((t) => t.id === getCurrentThemeId());
-  entries.push({
-    id: 'theme',
-    section: 'view',
-    title: 'Choose theme',
-    keywords: 'colors appearance dark light',
-    ...(currentTheme ? { meta: currentTheme.label } : {}),
-    children: themeEntries,
-    childLabel: 'Themes',
-    run: () => {},
   });
   entries.push({
     id: 'help',
@@ -270,21 +287,22 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
     title: 'Open help',
     keywords: 'docs manual',
     keys: 'Mod+/',
+    searchOnly: true,
     run: deps.openHelp,
   });
-
   entries.push({
     id: 'settings',
-    section: 'settings',
+    section: 'view',
     title: 'Open settings',
     keywords: 'preferences options',
     keys: 'Mod+,',
+    searchOnly: true,
     run: deps.openSettings ?? (() => deps.openSettingsTab('general')),
   });
   for (const tab of SETTINGS_TABS) {
     entries.push({
       id: `settings-${tab.id}`,
-      section: 'settings',
+      section: 'view',
       title: tab.title,
       keywords: `settings preferences ${tab.keywords}`,
       searchOnly: true,
@@ -297,6 +315,7 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
     section: 'session',
     title: 'Save profile',
     keywords: '#profile',
+    searchOnly: true,
     run: () => void sendInput('#profile save'),
   });
   // Disconnect is the final row. The palette opens with its first safe

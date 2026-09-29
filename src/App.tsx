@@ -55,6 +55,7 @@ import { pushToast } from './lib/toasts';
 import { CommandPalette } from './components/CommandPalette';
 import { disconnectSession } from './lib/session';
 import { isMacPlatform, shortcutKey, type PaletteDeps } from './lib/palette';
+import { getNativeScroll } from './lib/nativeScroll';
 import {
   addPane,
   allPanes,
@@ -1285,6 +1286,8 @@ function App() {
     worldName: connection.world,
     panelOpen,
     togglePanel: togglePanelOpen,
+    splitOpen: splitOpen || (nativeSurfaceEnabled() && getNativeScroll().offset > 0),
+    toggleSplit,
     paneVisible: (pane) => panelOpen && shownPanes.includes(pane),
     togglePane,
     openHelp: () => setHelpOpen(true),
