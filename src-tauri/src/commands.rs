@@ -6047,6 +6047,112 @@ mod tests {
             }
         }
 
+        /// The healing basics trigger as the preset library holds it.
+        fn heal_preset() -> vosh_trigger::Trigger {
+            vosh_trigger::Trigger {
+                preset: Some("healing_basics".into()),
+                ..send_trigger("heal 1", "^You heal", "say healed")
+            }
+        }
+
+        /// Open Vosh as `name` and install the preset triggers again, as
+        /// the main window does at launch for every preset that is on.
+        async fn launch_with_presets(
+            dir: &std::path::Path,
+            name: &str,
+        ) -> super::super::SharedState {
+            let state = relaunch_as(dir, name).await;
+            let installed = {
+                let mut p = state.profile.lock().await;
+                let on = p.ui.enabled_presets.is_empty()
+                    || p.ui.enabled_presets.iter().any(|id| id == "healing_basics");
+                on.then(|| super::super::install_preset_triggers(&mut p, vec![heal_preset()]))
+            };
+            if let Some(result) = installed {
+                result.unwrap();
+                persist(&state, dir).await;
+            }
+            state
+        }
+
+        /// Whether the healing basics trigger is on in `state`, and
+        /// whether the Presets tab shows healing basics on.
+        async fn heal_preset_on(state: &super::super::SharedState) -> (bool, bool) {
+            let p = state.profile.lock().await;
+            let tab = p.ui.enabled_presets.is_empty()
+                || p.ui.enabled_presets.iter().any(|id| id == "healing_basics");
+            (items_on(&p).contains(&"trigger heal 1".to_string()), tab)
+        }
+
+        #[tokio::test]
+        async fn a_preset_stays_on_for_a_character_whose_file_lacked_it() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            // Default has healing basics in its file. The Healer saved its
+            // file before the preset came out, on the default presets.
+            let mut default = ProfileConfig::default();
+            default.triggers.push(heal_preset());
+            default
+                .save(&set.profile_path(DEFAULT_PROFILE_NAME))
+                .unwrap();
+            let mut healer = ProfileConfig::default();
+            healer.profile_vars.insert("target".into(), "orc".into());
+            healer.save(&set.profile_path("Healer")).unwrap();
+            // Per profile, a launch as the Healer installs the preset. It
+            // runs over a copy, since the launch saves the Healer file.
+            {
+                let copy = tempfile::tempdir().unwrap();
+                let copy_set = james_like_set(copy.path());
+                healer.save(&copy_set.profile_path("Healer")).unwrap();
+                let state = launch_with_presets(copy.path(), "Healer").await;
+                assert_eq!(heal_preset_on(&state).await, (true, true));
+            }
+
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+
+            // The trigger used to sit in the default group, which the
+            // Healer file kept off, while the Presets tab showed it on,
+            // and each launch put it back in that group.
+            for _ in 0..2 {
+                let state = launch_with_presets(dir.path(), "Healer").await;
+                assert_eq!(heal_preset_on(&state).await, (true, true));
+            }
+        }
+
+        #[tokio::test]
+        async fn a_preset_stays_on_for_a_character_that_never_saved_a_file() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            let mut default = ProfileConfig::default();
+            default.triggers.push(heal_preset());
+            default
+                .save(&set.profile_path(DEFAULT_PROFILE_NAME))
+                .unwrap();
+            // Test-Prompt never saved a file, and per profile a launch as
+            // it installs every preset.
+            {
+                let copy = tempfile::tempdir().unwrap();
+                james_like_set(copy.path());
+                let state = launch_with_presets(copy.path(), "Test-Prompt").await;
+                assert_eq!(heal_preset_on(&state).await, (true, true));
+            }
+
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+
+            for _ in 0..2 {
+                let state = launch_with_presets(dir.path(), "Test-Prompt").await;
+                assert_eq!(heal_preset_on(&state).await, (true, true));
+            }
+        }
+
         #[tokio::test]
         async fn a_wizard_that_cannot_finish_puts_every_file_back() {
             use crate::profile_set::DEFAULT_PROFILE_NAME;
