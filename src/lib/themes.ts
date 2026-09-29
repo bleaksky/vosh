@@ -664,10 +664,19 @@ export function migrateCustomChrome(chrome: Record<string, string> | undefined):
   return out as ChromeOverrides;
 }
 
+/** The name a custom theme shows under. You can clear the Name field,
+ *  and a blank name would leave a gallery radio and a select option
+ *  with nothing to read, so the theme then shows under its id. */
+export function customThemeLabel(custom: { id: string; label: string }): string {
+  const label = custom.label.trim();
+  return label === '' ? custom.id : label;
+}
+
 /** Convert a CustomTheme record (the on-disk shape with bare maps)
  *  into a full AppTheme. The xterm map overlays a Kanso Zen base so
  *  missing slots fall back to a sensible default rather than rendering
- *  as undefined, and the chrome map becomes token overrides. */
+ *  as undefined, and the chrome map becomes token overrides. The label
+ *  is never blank (customThemeLabel). */
 export function customToAppTheme(custom: {
   id: string;
   label: string;
@@ -677,7 +686,7 @@ export function customToAppTheme(custom: {
 }): AppTheme {
   return {
     id: custom.id,
-    label: custom.label,
+    label: customThemeLabel(custom),
     description: custom.description,
     xterm: { ...kansoZen.xterm, ...(custom.xterm as Partial<XtermPalette>) },
     chrome: migrateCustomChrome(custom.chrome),

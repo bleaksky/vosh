@@ -16,6 +16,7 @@ import {
 } from '../../../../lib/theme';
 import {
   BUILTIN_THEMES,
+  customThemeLabel,
   customToAppTheme,
   findTheme,
   migrateCustomChrome,
@@ -103,7 +104,7 @@ export function CustomThemeRows({ config, update }: CustomThemeRowsProps) {
             <Select
               width={240}
               value={editing.id}
-              options={customs.map((t) => ({ value: t.id, label: t.label || t.id }))}
+              options={customs.map((t) => ({ value: t.id, label: customThemeLabel(t) }))}
               onChange={setEditId}
             />
             <Button variant="danger" onClick={() => setConfirmDelete(true)}>
@@ -146,7 +147,7 @@ export function CustomThemeRows({ config, update }: CustomThemeRowsProps) {
           </ColorBlock>
           {confirmDelete && (
             <ConfirmDialog
-              title={`Delete ${editing.label || 'this theme'}?`}
+              title={`Delete ${theme.label}?`}
               body="Vosh removes the theme and its colors. You cannot undo this."
               confirmLabel="Delete"
               onConfirm={() => {

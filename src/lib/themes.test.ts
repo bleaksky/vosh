@@ -12,6 +12,7 @@ import {
 import { composite, contrast, deltaE2000, parseHex, type Rgb } from './color';
 import {
   BUILTIN_THEMES,
+  customThemeLabel,
   customToAppTheme,
   findTheme,
   migrateCustomChrome,
@@ -264,5 +265,19 @@ describe('custom theme chrome', () => {
     expect(t.panel).toBe('#0c0a08');
     expect(t.text).toBe('#c0bdbb');
     expect(t.warn).toBe('#ecc985');
+  });
+});
+
+describe('customThemeLabel', () => {
+  const base = { description: '', xterm: {}, chrome: {} };
+
+  it('shows a custom theme with a blank name under its id', () => {
+    expect(customToAppTheme({ ...base, id: 'nord-copy', label: '' }).label).toBe('nord-copy');
+    expect(customToAppTheme({ ...base, id: 'paper', label: '   ' }).label).toBe('paper');
+  });
+
+  it('keeps a name you typed, without the spaces around it', () => {
+    expect(customThemeLabel({ id: 'dusk', label: ' Dusk ' })).toBe('Dusk');
+    expect(customToAppTheme({ ...base, id: 'dusk', label: 'Dusk' }).label).toBe('Dusk');
   });
 });

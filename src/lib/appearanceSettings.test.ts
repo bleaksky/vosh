@@ -153,6 +153,13 @@ describe('pairChoices', () => {
   it('keeps an id it cannot find', () => {
     expect(pairChoices(themes, 'dark', 'gone')[0]).toEqual({ value: 'gone', label: 'gone' });
   });
+
+  it('lists a custom theme with a blank name under its id', () => {
+    const withBlank = galleryThemes(BUILTIN_THEMES, [customToAppTheme(custom('nord-copy', ''))]);
+    const dark = pairChoices(withBlank, 'dark', 'nord');
+    expect(dark).toContainEqual({ value: 'nord-copy', label: 'nord-copy' });
+    expect(dark.every((c) => c.label.trim() !== '')).toBe(true);
+  });
 });
 
 describe('stepGalleryTheme', () => {
