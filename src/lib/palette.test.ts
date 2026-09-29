@@ -77,6 +77,7 @@ function deps(over: Partial<PaletteDeps> = {}): PaletteDeps {
     togglePanel: () => {},
     splitOpen: false,
     toggleSplit: () => {},
+    paneTypes: ['map', 'affects', 'group', 'chat'],
     paneVisible: (pane) => pane === 'map' || pane === 'affects',
     togglePane: () => {},
     openHelp: () => {},
@@ -112,6 +113,15 @@ describe('paletteSections', () => {
     expect(checked).toEqual(['panel', 'pane-map', 'pane-affects']);
     const split = buildPaletteEntries(deps({ splitOpen: true })).find((r) => r.id === 'split');
     expect(split?.checked).toBe(true);
+  });
+
+  it('lists a Show row for each pane type the shell offers', () => {
+    const ids = (paneTypes: PaletteDeps['paneTypes']) =>
+      buildPaletteEntries(deps({ paneTypes }))
+        .filter((r) => r.id.startsWith('pane-'))
+        .map((r) => r.id);
+    expect(ids(['map', 'affects', 'group', 'chat'])).not.toContain('pane-imm');
+    expect(ids(['map', 'imm'])).toEqual(['pane-map', 'pane-imm']);
   });
 
   it('names the world on the connect row when you are offline', () => {

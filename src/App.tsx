@@ -61,9 +61,11 @@ import {
   allPanes,
   closePane,
   isLeaf,
+  PANE_TYPES,
   type PaneNode,
   type PaneType,
 } from './lib/paneLayout';
+import { offeredPaneTypes } from './components/panel/paneTypes';
 import { useConnection, type ConnectionStatus } from './lib/useConnection';
 import { useEscape } from './lib/escapeStack';
 
@@ -1288,6 +1290,9 @@ function App() {
     togglePanel: togglePanelOpen,
     splitOpen: splitOpen || (nativeSurfaceEnabled() && getNativeScroll().offset > 0),
     toggleSplit,
+    // The staff queues row waits for Imm.Queues, like Add a pane, but a
+    // pane the tree already shows stays listed so you can hide it.
+    paneTypes: PANE_TYPES.filter((t) => offeredPaneTypes().includes(t) || shownPanes.includes(t)),
     paneVisible: (pane) => panelOpen && shownPanes.includes(pane),
     togglePane,
     openHelp: () => setHelpOpen(true),
