@@ -193,7 +193,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     number: '4.4',
     title: 'Configure the vitals readout',
     section: 'Shape the window',
-    body: 'The vitals sit at the bottom of the panel, under the panes. Health, Mana, and Moves each show the value with a thin meter under it. The meters stay quiet until a vital runs low. Under 20% its value and meter turn red, and they stay red until it climbs back to 25%. In a fight your opponent gets a row on top with its health.\n\n- Open Settings and choose Layout.\n- Under Vitals, set `Density` to `Rows` for one row per vital, or to `One line` to fit Health, Mana, and Moves on a single row.\n\nOne line drops the Health, Mana, and Moves labels when the panel is narrower than about 360 pt, and keeps the values and meters. Turn off `Show the panel` under Layout and your vitals move to the status line.',
+    body: 'The vitals sit at the bottom of the panel, under the panes. Health, Mana, and Moves each show the value with a thin meter under it. The meters stay quiet until a vital runs low. Under 20% its value and meter turn red, and they stay red until it climbs back to 25%. In a fight your opponent gets a row on top with its health.\n\n- Open Settings and choose Layout.\n- Under Vitals, set `Density` to `Rows` for one row per vital, or to `One line` to fit Health, Mana, and Moves on a single row.\n\nOne line drops the Health, Mana, and Moves labels when the panel is narrower than about 360 pt, and keeps the values and meters. A panel too narrow for even the values stacks them in rows. Turn off `Show the panel` under Layout and your vitals move to the status line.',
   },
   {
     id: 'shape.group-affects',
