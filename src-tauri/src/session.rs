@@ -19,6 +19,7 @@ use vosh_trigger::LineResult;
 
 use crate::connection::{self, ConnectionError, Stream};
 use crate::gmcp_bind;
+use crate::hidden_input::{self, ServerEcho};
 use crate::input;
 use crate::line_accumulator::{ChunkOp, LineAccumulator};
 use crate::list_events::{broadcast_list_changes, ListChanges, ListRevisions};
@@ -345,6 +346,12 @@ async fn io_loop(
     // OutgoingMsg::WindowSize emits a fresh NAWS subneg so the MUD
     // re-wraps its output at the new column count.
     let mut naws_active = false;
+    // Who echoes your input on this connection. Every read updates it
+    // in wire order before the loop takes the next outgoing line, so
+    // each send is logged by the state in force as its bytes leave.
+    // It lives and dies with this loop, so a connection that dropped
+    // mid password prompt hands nothing to the next one.
+    let mut server_echo = ServerEcho::default();
 
     // Activate the tick timer for this session, unsynced until the game's
     // first tick. The user can disable it later through the slash command.
@@ -377,31 +384,16 @@ async fn io_loop(
                     accumulator.forget_partial();
                     // Append the input line(s) to the same log session
                     // as server output so transcripts include both
-                    // directions. The wire payload is one or more
-                    // commands terminated by `\r\n`; split on those
-                    // boundaries, prefix each line with `> ` so a
-                    // future viewer can distinguish input from output
-                    // at a glance, and skip empty lines (a bare Enter
-                    // shows up here as `\r\n` with no command body).
+                    // directions. While the server holds echo (a
+                    // password prompt) each line is logged as
+                    // `> (hidden)` and its text never reaches the
+                    // store. See `hidden_input::sent_log_rows`.
                     if let Some(sid) = log_session_id {
-                        let text = String::from_utf8_lossy(&bytes);
-                        let mut to_append: Vec<String> = Vec::new();
-                        for raw in text.split('\n') {
-                            let line = raw.trim_end_matches('\r').trim_end();
-                            if line.is_empty() {
-                                continue;
-                            }
-                            to_append.push(format!("> {line}"));
-                        }
-                        if !to_append.is_empty() {
+                        let rows = hidden_input::sent_log_rows(&bytes, server_echo.held());
+                        if !rows.is_empty() {
                             let mut guard = logs.lock().await;
                             if let Some(store) = guard.as_mut() {
-                                let ts = now_ms();
-                                for line in &to_append {
-                                    if let Err(e) = store.append(sid, ts, line, None) {
-                                        warn!(error = %e, "log append (input) failed");
-                                    }
-                                }
+                                hidden_input::append_sent_rows(store, sid, now_ms(), &rows);
                             }
                         }
                     }
@@ -462,6 +454,7 @@ async fn io_loop(
                             &logs,
                             log_session_id,
                             &scrollback,
+                            &mut server_echo,
                             event,
                             &mut perf,
                         ).await {
@@ -502,6 +495,7 @@ async fn io_loop(
                                         &logs,
                                         log_session_id,
                                         &scrollback,
+                                        &mut server_echo,
                                         event,
                                         &mut perf,
                                     )
@@ -833,9 +827,18 @@ async fn handle_event(
     logs: &crate::log_state::SharedLogStore,
     log_session_id: Option<i64>,
     scrollback: &crate::log_state::SharedScrollback,
+    server_echo: &mut ServerEcho,
     event: TelnetEvent,
     perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
+    // WILL ECHO means the server takes over echoing what you type, which
+    // ROM derivatives do for a password prompt. WONT ECHO hands echo back.
+    // Note it before anything else in the event runs, then tell the
+    // frontend to mask or unmask the input row. The negotiation reply
+    // goes out through the catch all arm below.
+    if let Some(held) = server_echo.observe(&event) {
+        emit_input_mode(app, held);
+    }
     match event {
         TelnetEvent::Data(bytes) => {
             // Batch every byte we want to push to xterm across all
@@ -1066,27 +1069,6 @@ async fn handle_event(
             stream.write_all(&hello_subnegotiation()).await?;
             stream.write_all(&supports_subnegotiation()).await?;
             stream.flush().await?;
-            Ok(())
-        }
-        TelnetEvent::Will(opt) if opt == telnet_option::ECHO => {
-            // Server is taking over echo (password prompt incoming).
-            // Acknowledge and tell the frontend to mask the input.
-            let response = negotiator.handle(&TelnetEvent::Will(opt));
-            if !response.is_empty() {
-                stream.write_all(&response).await?;
-                stream.flush().await?;
-            }
-            emit_input_mode(app, true);
-            Ok(())
-        }
-        TelnetEvent::Wont(opt) if opt == telnet_option::ECHO => {
-            // Server hands echo back to us (password done).
-            let response = negotiator.handle(&TelnetEvent::Wont(opt));
-            if !response.is_empty() {
-                stream.write_all(&response).await?;
-                stream.flush().await?;
-            }
-            emit_input_mode(app, false);
             Ok(())
         }
         other => {
