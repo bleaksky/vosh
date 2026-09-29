@@ -32,7 +32,7 @@ export function StatusLine({ connected, showVitals }: Props) {
   const moon = moonLabel(world.moons);
 
   return (
-    <div className="shell-statusline" aria-label="Status">
+    <div className="shell-statusline" role="group" aria-label="Status">
       {!connected && <span>Not connected</span>}
       {showVitals &&
         vitals &&
