@@ -1,0 +1,1 @@
+Char.Affects {"affects":[{"kind":"spell","name":"bless","duration":6,"level":50,"location":"hitroll","modifier":4},{"kind":"spell","name":"armor","duration":44,"level":50,"location":"ac","modifier":-20},{"kind":"song","name":"bagatelle of bravado","duration":8,"level":50,"location":"damroll","modifier":3}]}
