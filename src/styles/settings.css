@@ -427,24 +427,29 @@
 /* A row carries the card's corners, so a flash fill stays inside
    them. */
 .st-card > .st-row:first-child,
+.st-card > .st-block:first-child,
 .st-card > .st-disclosure:first-child {
   border-top-left-radius: var(--r-card);
   border-top-right-radius: var(--r-card);
 }
 
 .st-card > .st-row:last-child,
+.st-card > .st-block:last-child,
 .st-card > .st-disclosure:last-child,
-.st-card > .st-disclosure-panel:last-child > .st-row:last-child {
+.st-card > .st-disclosure-panel:last-child > .st-row:last-child,
+.st-card > .st-disclosure-panel:last-child > .st-block:last-child {
   border-bottom-left-radius: var(--r-card);
   border-bottom-right-radius: var(--r-card);
 }
 
 /* Every row after the first draws a hairline inset 16. Rows a
    Disclosure opens sit in a panel after it, so each of them draws one
-   too. */
+   too, blocks included. */
 .st-card > * + .st-row::before,
+.st-card > * + .st-block::before,
 .st-card > * + .st-disclosure::before,
-.st-disclosure-panel > .st-row::before {
+.st-disclosure-panel > .st-row::before,
+.st-disclosure-panel > .st-block::before {
   content: '';
   position: absolute;
   top: 0;
@@ -500,6 +505,19 @@
 
 .st-card.st-card-columns > .st-row:nth-child(even):last-child {
   border-bottom-right-radius: var(--r-card);
+}
+
+/* A block: a row whose content sits under its label line at full
+   width, like the prompt template on Input. The label line is a Row
+   without its own padding. */
+.st-block {
+  position: relative;
+  padding: 10px 16px;
+}
+
+.st-block > .st-row {
+  min-height: 0;
+  padding: 0;
 }
 
 .st-row-text {
