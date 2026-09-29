@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { panelLayoutFromDock, type PanelId } from './panels';
+import { pendingWrites } from './pendingWrites';
 
 // The one-window panel's pane tree, saved per profile. Mirrors
 // PaneLayoutPersist and PaneNode in src-tauri/src/profile_config.rs.
@@ -651,6 +652,10 @@ export function setPaneLayout(layout: PaneLayout): void {
     flushPaneLayout().catch((e: unknown) => console.error('[paneLayout] save failed', e));
   }, SAVE_DEBOUNCE_MS);
 }
+
+// A write waiting on its debounce goes at once when the Settings window
+// closes over a Width you just typed, and when Vosh quits.
+pendingWrites.register(flushPaneLayout);
 
 /** Send a debounced write now. Resolves once the backend has it, and
  *  rejects if the write fails. */

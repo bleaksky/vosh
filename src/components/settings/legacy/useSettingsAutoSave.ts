@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createDebouncedWrite, pendingWrites } from '../../../lib/pendingWrites';
 import {
   isOwnThemeEcho,
   setUiConfig,
@@ -17,6 +18,31 @@ export interface AutoSaveOptions {
 /** Patch the window's config copy and save the whole snapshot. */
 export type UpdateConfig = (patch: Partial<UiConfig>, options?: AutoSaveOptions) => void;
 
+/** One save waiting on the debounce, with the page that asked for it. */
+interface AutoSave {
+  cfg: UiConfig;
+  saved: () => void;
+  failed: (error: unknown) => void;
+}
+
+// Every page in the window saves through this one writer. Each save
+// sends the whole config snapshot, built from the window's latest copy,
+// so the newest snapshot holds every earlier edit. One writer sends only
+// the newest, and an older snapshot can never land after it, which two
+// writers flushed together on close could do. The save waiting on the
+// debounce goes at once when the Settings window closes and when Vosh
+// quits, through pendingWrites.
+const autoSave = createDebouncedWrite<AutoSave>(async (job) => {
+  try {
+    await setUiConfig(job.cfg);
+    applyThemePrefs(job.cfg);
+    job.saved();
+  } catch (e) {
+    job.failed(e);
+  }
+});
+pendingWrites.register(() => autoSave.flush());
+
 // Debounced auto-save shared by the config-backed editors. Text inputs
 // can fire many updates in a row while the user types; the debounce
 // coalesces them into one setUiConfig call after typing settles.
@@ -25,37 +51,32 @@ export type UpdateConfig = (patch: Partial<UiConfig>, options?: AutoSaveOptions)
 // the saved indicator.
 export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string | null) => void) {
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const saveTimerRef = useRef<number | null>(null);
-  // The snapshot waiting on the debounce. A theme picked in another
-  // window while it waits patches it, so the save does not put the old
-  // theme back.
-  const pendingRef = useRef<UiConfig | null>(null);
-  const scheduleAutoSave = (next: UiConfig, delay: number) => {
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    pendingRef.current = next;
-    saveTimerRef.current = window.setTimeout(() => {
-      saveTimerRef.current = null;
-      const cfg = pendingRef.current ?? next;
-      pendingRef.current = null;
-      void (async () => {
-        try {
-          await setUiConfig(cfg);
-          applyThemePrefs(cfg);
-          setSavedAt(Date.now());
-        } catch (e) {
-          onError(String(e));
-        }
-      })();
-    }, delay);
-  };
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
   const update: UpdateConfig = (patch, options = {}) => {
     setConfig((prev) => {
       if (!prev) return prev;
       const next = { ...prev, ...patch };
-      scheduleAutoSave(next, options.now ? 0 : 250);
+      autoSave.schedule(
+        {
+          cfg: next,
+          saved: () => setSavedAt(Date.now()),
+          failed: (e) => onErrorRef.current(String(e)),
+        },
+        options.now ? 0 : 250,
+      );
       return next;
     });
   };
+  // Leaving the page sends the waiting save at once too.
+  useEffect(
+    () => () => {
+      void autoSave.flush();
+    },
+    [],
+  );
   // A save still waiting on the debounce holds the previous profile's
   // snapshot. Drop it on a profile switch so it cannot land on the new
   // profile once SettingsApp has re-read the config.
@@ -63,9 +84,7 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
     let cancelled = false;
     let unsub: (() => void) | undefined;
     void subscribeProfileSwitched(() => {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-      pendingRef.current = null;
+      autoSave.drop();
     }).then((fn) => {
       if (cancelled) fn();
       else unsub = fn;
@@ -75,16 +94,19 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
       unsub?.();
     };
   }, []);
-  // The theme id another window applied is the manual pick only while
-  // follow system appearance is off. This window's own save comes back
-  // too, and is skipped.
+  // A theme picked in another window while a save waits patches it, so
+  // the save does not put the old theme back. The theme id another
+  // window applied is the manual pick only while follow system
+  // appearance is off. This window's own save comes back too, and is
+  // skipped.
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
     void subscribeThemeChanges((themeId) => {
-      const pending = pendingRef.current;
-      if (!pending || pending.follow_system_appearance || isOwnThemeEcho(themeId)) return;
-      pendingRef.current = { ...pending, theme: themeId };
+      if (isOwnThemeEcho(themeId)) return;
+      autoSave.patch((job) =>
+        job.cfg.follow_system_appearance ? job : { ...job, cfg: { ...job.cfg, theme: themeId } },
+      );
     })
       .then((fn) => {
         if (cancelled) fn();
@@ -102,9 +124,8 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
     let cancelled = false;
     let unsub: (() => void) | undefined;
     void subscribeThemePrefs((prefs) => {
-      const pending = pendingRef.current;
-      if (!pending || isOwnThemeEcho(prefs)) return;
-      pendingRef.current = { ...pending, ...prefs };
+      if (isOwnThemeEcho(prefs)) return;
+      autoSave.patch((job) => ({ ...job, cfg: { ...job.cfg, ...prefs } }));
     })
       .then((fn) => {
         if (cancelled) fn();
