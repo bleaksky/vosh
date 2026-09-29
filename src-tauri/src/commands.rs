@@ -340,14 +340,9 @@ async fn persist_path_b(app: &AppHandle, state: &SharedState) {
     // #alias / Settings made it into Profile and now into the file.
     let (catalog, global_snapshot, scope) = {
         let p = state.profile.lock().await;
-        let aliases: Vec<vosh_alias::Alias> = p.aliases.list().into_iter().cloned().collect();
-        let triggers: Vec<Trigger> = p.triggers.list();
-        let macros: Vec<Macro> = p.macros.clone();
-        let catalog = crate::loadout::GlobalCatalog {
-            aliases,
-            triggers,
-            macros,
-        };
+        // The enabled presets ride along, since the preset triggers they
+        // name live in the catalog too.
+        let catalog = crate::loadout::GlobalCatalog::from_profile(&p);
         let scope = state
             .profile_set
             .lock()
@@ -393,14 +388,16 @@ async fn persist_path_b(app: &AppHandle, state: &SharedState) {
     // loadouts / global, which meant every UI field outside the five
     // scope-controlled ones (tracked_affects, theme_terminal_colors,
     // vitals config, custom themes, paste pacing, moons position,
-    // chip style, side-panels fill, split-divider color, enabled
-    // presets, dock layout when its scope is profile, ...) silently
-    // dropped on every quit. Writing a per-profile file lets these
-    // persist per-loadout the same way legacy mode does. The catalog
-    // stays authoritative for aliases / triggers / macros, so we
-    // blank those out of the per-profile snapshot before saving —
-    // otherwise switching to an older loadout would resurrect that
-    // loadout's stale alias copy and override fresher catalog edits.
+    // chip style, side-panels fill, split-divider color, dock layout
+    // when its scope is profile, ...) silently dropped on every quit.
+    // Writing a per-profile file lets these persist per-loadout the
+    // same way legacy mode does. The catalog stays authoritative for
+    // aliases / triggers / macros, so we blank those out of the
+    // per-profile snapshot before saving — otherwise switching to an
+    // older loadout would resurrect that loadout's stale alias copy and
+    // override fresher catalog edits. The catalog owns the enabled
+    // presets too. The file keeps a copy of the shared list, which the
+    // next load replaces with the catalog's.
     if let Some(p) = per_profile_path {
         let mut per_profile_snapshot = {
             let live = state.profile.lock().await;
@@ -2099,6 +2096,11 @@ async fn apply_path_b_overlays(state: &SharedState) {
     triggers.set_disabled_groups(trigger_disabled);
     p.triggers = triggers;
     p.macros.clone_from(&catalog.macros);
+    // The presets that are on belong to the catalog with the preset
+    // triggers, so the profile's own list gives way to it.
+    if let Some(list) = &catalog.enabled_presets {
+        p.ui.enabled_presets.clone_from(list);
+    }
     if let Some(set) = set.as_ref() {
         crate::loadout_store::apply_effective_state(set, &mut p);
     }
@@ -4243,5 +4245,23 @@ mod tests {
                 std::fs::read_to_string(guard.as_ref().unwrap().profile_path("Healer")).unwrap();
             assert_eq!(healer_after, healer_before);
         }
+    }
+
+    #[tokio::test]
+    async fn a_switch_in_loadout_mode_keeps_the_catalog_presets() {
+        use std::sync::Arc;
+        let state: super::SharedState = Arc::new(super::AppState::default());
+        *state.global_catalog.lock().await = Some(crate::loadout::GlobalCatalog {
+            enabled_presets: Some(vec!["healing_basics".into()]),
+            ..crate::loadout::GlobalCatalog::default()
+        });
+        // The switch just loaded Healer's file, with its own older list.
+        state.profile.lock().await.ui.enabled_presets =
+            vec!["healing_basics".into(), "potion_labels".into()];
+        super::apply_path_b_overlays(&state).await;
+        assert_eq!(
+            state.profile.lock().await.ui.enabled_presets,
+            vec!["healing_basics".to_string()]
+        );
     }
 }
