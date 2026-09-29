@@ -3,6 +3,7 @@ import {
   addDraftItem,
   createDraft,
   removeDraftItem,
+  replaceDraftValues,
   saveListThenPinned,
   updateDraftItem,
   isDraftDirty,
@@ -29,6 +30,7 @@ import {
   presetToggles,
   PRESETS_OFF_MARKER,
   storedPresetIds,
+  timerKey,
   timerLabel,
   timerSavePlan,
   validateAliases,
@@ -167,6 +169,23 @@ describe('timers', () => {
       [1, 'drink'],
       [null, 'look'],
     ]);
+  });
+
+  it('creates a timer copied in the JSON view instead of overwriting its original', () => {
+    const draft = createDraft(timers);
+    // You copy the first entry, id and all, and paste it at the end.
+    const text = jsonListText([...timers, { ...timers[0] }]);
+    const next = replaceDraftValues(draft, parseJsonList(text, normalizeTimer) ?? [], timerKey);
+    const plan = timerSavePlan(next);
+    expect(plan.remove).toEqual([]);
+    expect(plan.set).toEqual([{ ...timers[0], id: null }]);
+  });
+
+  it('updates the id a timer loaded with, whatever id the JSON view gives it', () => {
+    const draft = createDraft(timers);
+    const edited = [{ ...timers[0], id: 2, interval_secs: 600 }, timers[1]];
+    const plan = timerSavePlan(replaceDraftValues(draft, edited, timerKey));
+    expect(plan.set.map((t) => [t.id, t.interval_secs])).toEqual([[1, 600]]);
   });
 
   it('creates a new timer once when the tick fails after it', async () => {

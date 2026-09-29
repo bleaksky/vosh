@@ -208,10 +208,24 @@ export interface TimerSavePlan {
   set: TimerRecord[];
 }
 
+/** A timer's identity across a reload. A new timer has no id until it
+ *  saves, so the page finds it again by what it holds. */
+export function timerKey(timer: TimerRecord): string {
+  return `${timer.name.trim()}\n${timer.interval_secs}\n${timer.command.trim()}`;
+}
+
+/** The timers_delete and timers_set calls that make the store match the
+ *  draft. Ids come from the load, never from the draft values: a changed
+ *  timer updates the id it loaded with, and a new one always creates.
+ *  The JSON view shows ids, so a copied entry carries its original's id,
+ *  and sending that id would overwrite the original. */
 export function timerSavePlan(draft: Draft<TimerRecord>): TimerSavePlan {
   const { added, removed, changed } = draftChanges(draft);
   const remove = removed.map((item) => item.value.id).filter((id): id is number => id !== null);
-  const set = [...changed.map((c) => c.after), ...added.map((item) => item.value)];
+  const set = [
+    ...changed.map((c) => ({ ...c.after, id: c.before.id })),
+    ...added.map((item) => ({ ...item.value, id: null })),
+  ];
   return { remove, set };
 }
 
