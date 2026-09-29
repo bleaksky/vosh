@@ -1,10 +1,10 @@
-// How Settings names a profile in its copy.
+import { profileDisplayName } from './characterProfiles';
 
-/** The reserved `default` profile reads Default. Every other profile
- *  reads as its name. */
-export function profileDisplayName(name: string): string {
-  return name === 'default' ? 'Default' : name;
-}
+// How Settings names a profile in its copy. The display name comes
+// from characterProfiles.ts, the one Characters uses, so every page
+// reads the reserved profile the same way.
+
+export { profileDisplayName };
 
 /** The possessive of a profile's display name, like `Erelei's`. */
 export function profilePossessive(name: string): string {
