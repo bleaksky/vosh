@@ -446,11 +446,11 @@ fn keyed_entries<T: CatalogItem>(
 /// The triggers in `configs`, in the order the catalog keeps them. A
 /// name whose every copy is a preset trigger is one preset entry, since
 /// a launch installs the library version whichever copy the catalog
-/// keeps, and puts it last among the triggers of its priority. `library`
-/// names the presets the library still has. The
+/// keeps, and puts it last among the triggers of its priority. The
 /// others come in an order that keeps the order each profile's store
 /// runs them in, see [`merge_run`], since every trigger that matches a
-/// line fires in that order.
+/// line fires in that order. `library` names the presets the library
+/// still has.
 ///
 /// The copies of a trigger that are the same apart from their folder and
 /// whether they are on share an entry. A trigger's name is only a label,
