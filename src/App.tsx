@@ -63,9 +63,29 @@ import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
 import { CommandPalette } from './components/CommandPalette';
 import { disconnectSession } from './lib/session';
-import { isMacPlatform, shortcutKey, type PaletteDeps } from './lib/palette';
+import {
+  buildPaletteEntries,
+  isMacPlatform,
+  shortcutKey,
+  themeEntries,
+  themesInGalleryOrder,
+  type PaletteDeps,
+} from './lib/palette';
+import {
+  buildMenuState,
+  commandBlocked,
+  commandRepeats,
+  listenAppMenu,
+  menuCopy,
+  pageHasSelection,
+  requestSessionMenu,
+  resolveShortcut,
+  setAppMenuState,
+} from './lib/appMenu';
+import { getImmState, subscribeImmState } from './lib/immStore';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import { openSettingsTab, openSettingsWindow } from './lib/settingsLink';
-import { getNativeScroll } from './lib/nativeScroll';
+import { getNativeScroll, startNativeScroll, subscribeNativeScroll } from './lib/nativeScroll';
 import {
   addPane,
   allPanes,
@@ -269,6 +289,15 @@ function App() {
   const findToolbarRef = useRef<FindToolbarHandle | null>(null);
   // ⌘K command palette.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Close window (⌘W on macOS) while a session is live asks first,
+  // since closing the main window ends the session and quits Vosh.
+  const [confirmClose, setConfirmClose] = useState(false);
+  // What the macOS menu bar mirrors beyond the panel and the session: a
+  // tick for every theme apply or custom theme change, whether the MUD
+  // offers staff queues, and whether the native grid is scrolled back.
+  const [themeTick, setThemeTick] = useState(0);
+  const [staffOffered, setStaffOffered] = useState(false);
+  const [nativeScrolled, setNativeScrolled] = useState(false);
   // Right-click context menu over the terminal area. Non-null while
   // open; the value is the pointer's viewport position (the menu
   // clamps itself to the window edges).
@@ -615,7 +644,8 @@ function App() {
   // Window shortcuts, in the capture phase so they fire before xterm's
   // own keybindings, the webview's find and reload, and the command
   // line's macros. macOS binds Cmd only, because Ctrl belongs to your
-  // macros there. Windows and Linux bind Ctrl.
+  // macros there. Windows and Linux bind Ctrl. The keys live in
+  // lib/appShortcuts.json, which the macOS menu bar reads too.
   //   Mod+K        command palette (toggles)
   //   Mod+F        find in scrollback (again refocuses the find field)
   //   Mod+R        connect to the saved world. Ctrl+R never reloads the
@@ -624,17 +654,14 @@ function App() {
   //   Mod+/        help
   //   Mod+Shift+L  show or hide the panel
   //   Mod+\        open or close the scrollback split
-  // The help modal carries its own search, so Mod+F and Mod+K stand
-  // down while it is open. Keys match through shortcutKey, so a
-  // Cyrillic or Greek layout still reaches them by the physical key.
+  // A key this handler takes never reaches the menu bar, and the menu
+  // bar sends its commands through runCommand below too, so each press
+  // runs once. The help modal carries its own search, so Mod+F and
+  // Mod+K stand down while it is open, from either path. Keys match
+  // through shortcutKey, so a Cyrillic or Greek layout still reaches
+  // them by the physical key.
   const shortcutState = useRef({ helpOpen, findOpen, paletteOpen, live: connection.live });
-  const connectRef = useRef(connection.connect);
-  const toggleSplitRef = useRef(() => {});
-  useEffect(() => {
-    shortcutState.current = { helpOpen, findOpen, paletteOpen, live: connection.live };
-    connectRef.current = connection.connect;
-    toggleSplitRef.current = toggleSplit;
-  });
+  const runCommandRef = useRef<(id: string, opts?: { repeat?: boolean }) => void>(() => {});
 
   // Open or close the scrollback split, the keyboard twin of a middle
   // click. The native grid splits itself when it scrolls back, so it
@@ -659,56 +686,34 @@ function App() {
     const onKey = (e: globalThis.KeyboardEvent) => {
       const primary = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
       if (!primary || e.altKey) return;
-      const key = shortcutKey(e);
-      const {
-        helpOpen: inHelp,
-        findOpen: finding,
-        paletteOpen: inPalette,
-        live,
-      } = shortcutState.current;
-      const take = () => {
-        e.preventDefault();
-        e.stopPropagation();
-      };
-      if (key === 'r') {
-        take();
-        if (!e.shiftKey && !e.repeat && !live) void connectRef.current();
-        return;
-      }
-      if (e.shiftKey) {
-        if (key === 'l') {
-          take();
-          if (!e.repeat) togglePanelKeepingCaret(() => inputRef.current?.focus());
-        }
-        return;
-      }
-      if (key === 'k') {
-        if (inHelp) return;
-        take();
-        if (e.repeat) return;
-        setPaletteOpen(!inPalette);
-        if (inPalette) inputRef.current?.focus();
-      } else if (key === 'f') {
-        if (inHelp) return;
-        take();
-        // Open just the toolbar. Whether to open the split is decided
-        // per search: only when a match would scroll the live pane up
-        // off its tail (see submitFind below).
-        if (finding) findToolbarRef.current?.focus();
-        else setFindOpen(true);
-      } else if (key === ',') {
-        take();
-        if (!e.repeat) openSettingsWindow();
-      } else if (key === '/') {
-        take();
-        setHelpOpen(true);
-      } else if (key === '\\') {
-        take();
-        if (!e.repeat) toggleSplitRef.current();
-      }
+      const hit = resolveShortcut(shortcutKey(e), e.shiftKey);
+      if (!hit) return;
+      // A blocked command leaves the key alone, so help's own search
+      // gets it. The menu path blocks the same commands.
+      if (hit.id && commandBlocked(hit.id, shortcutState.current)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (hit.id) runCommandRef.current(hit.id, { repeat: e.repeat });
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+
+  // Menu bar commands (macOS only). Each arrives with its palette id.
+  useEffect(() => {
+    if (!isMacPlatform()) return;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    listenAppMenu((id) => runCommandRef.current(id))
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, []);
 
   // The native surface is opaque and on top, so DOM popovers (dropdowns,
@@ -1119,6 +1124,8 @@ function App() {
     let cancelled = false;
     subscribeCustomThemesChanged((list) => {
       setCustomThemes(list.map(customToAppTheme));
+      // The menu bar lists custom themes too.
+      setThemeTick((n) => n + 1);
     }).then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
@@ -1376,6 +1383,146 @@ function App() {
     insertInput: (text) => inputRef.current?.insert(text),
   });
 
+  const closeMainWindow = () => {
+    getCurrentWindow()
+      .close()
+      .catch((e: unknown) => console.error('[main] closing the window failed', e));
+  };
+
+  // Edit, then Copy, in the menu bar. With no selection of the page's
+  // own, the terminal selection wins, the same as Cmd+C in the command
+  // line and Copy in the terminal menu. Otherwise the system copies the
+  // field or page selection.
+  const copyFromMenu = () => {
+    const own = pageHasSelection();
+    if (!own && !nativeSurfaceEnabled()) {
+      const text = termRef.current?.getSelection() || historyTermRef.current?.getSelection() || '';
+      if (text.length > 0) {
+        void navigator.clipboard.writeText(text).catch(() => {});
+        return;
+      }
+    }
+    menuCopy(!own && nativeSurfaceEnabled());
+  };
+
+  // One dispatcher for the window shortcuts and the macOS menu bar, by
+  // palette id. It keeps the shortcut gates: help blocks the palette and
+  // the find bar, a held key repeats only find and help, and Connect
+  // does nothing while a session is live. An id it does not own runs
+  // the palette entry of the same id.
+  const runCommand = (id: string, opts: { repeat?: boolean } = {}) => {
+    const {
+      helpOpen: inHelp,
+      findOpen: finding,
+      paletteOpen: inPalette,
+      live,
+    } = shortcutState.current;
+    if (commandBlocked(id, { helpOpen: inHelp })) return;
+    if (opts.repeat && !commandRepeats(id)) return;
+    switch (id) {
+      case 'connect':
+        if (!live) void connection.connect();
+        return;
+      case 'panel':
+        togglePanelKeepingCaret(() => inputRef.current?.focus());
+        return;
+      case 'palette':
+        setPaletteOpen(!inPalette);
+        if (inPalette) inputRef.current?.focus();
+        return;
+      case 'find':
+        // Open just the toolbar. Whether to open the split is decided
+        // per search: only when a match would scroll the live pane up
+        // off its tail (see submitFind above).
+        if (finding) findToolbarRef.current?.focus();
+        else setFindOpen(true);
+        return;
+      case 'settings':
+        openSettingsWindow();
+        return;
+      case 'help':
+        setHelpOpen(true);
+        return;
+      case 'split':
+        toggleSplit();
+        return;
+      case 'session-edit':
+        requestSessionMenu('edit');
+        return;
+      case 'session-new':
+        requestSessionMenu('new');
+        return;
+      case 'close-window':
+        if (live) setConfirmClose(true);
+        else closeMainWindow();
+        return;
+      case 'copy':
+        copyFromMenu();
+        return;
+    }
+    const entry = [...buildPaletteEntries(paletteDeps()), ...themeEntries()].find(
+      (e) => e.id === id,
+    );
+    if (entry) void entry.run();
+  };
+  useEffect(() => {
+    shortcutState.current = { helpOpen, findOpen, paletteOpen, live: connection.live };
+    runCommandRef.current = runCommand;
+  });
+
+  // The macOS menu bar mirrors this window. Theme applies write
+  // data-theme on the root, so one observer catches every source.
+  useEffect(() => {
+    if (!isMacPlatform()) return;
+    const observer = new MutationObserver(() => setThemeTick((n) => n + 1));
+    observer.observe(document.documentElement, { attributeFilter: ['data-theme'] });
+    setStaffOffered(getImmState().received);
+    const unsubImm = subscribeImmState((s) => setStaffOffered(s.received));
+    let unsubScroll = () => {};
+    if (nativeSurfaceEnabled()) {
+      startNativeScroll();
+      const readScroll = () => setNativeScrolled(getNativeScroll().offset > 0);
+      readScroll();
+      unsubScroll = subscribeNativeScroll(readScroll);
+    }
+    return () => {
+      observer.disconnect();
+      unsubImm();
+      unsubScroll();
+    };
+  }, []);
+
+  // Send the menu bar a snapshot when one of its inputs changes. The
+  // theme tick stands in for the theme id and the custom theme list.
+  useEffect(() => {
+    if (!isMacPlatform()) return;
+    setAppMenuState(
+      buildMenuState({
+        live: connection.live,
+        worldName: connection.world,
+        panelOpen,
+        splitOpen: splitOpen || nativeScrolled,
+        shownPanes,
+        staffOffered,
+        themes: themesInGalleryOrder().map(({ theme, custom }) => ({
+          id: theme.id,
+          label: theme.label,
+          custom,
+        })),
+        theme: getCurrentThemeId(),
+      }),
+    );
+  }, [
+    connection.live,
+    connection.world,
+    panelOpen,
+    splitOpen,
+    nativeScrolled,
+    shownPanes,
+    staffOffered,
+    themeTick,
+  ]);
+
   const terminalAreaElement = (
     <div
       ref={terminalAreaRef}
@@ -1549,6 +1696,18 @@ function App() {
       )}
       {paletteOpen && <CommandPalette deps={paletteDeps()} onClose={closePalette} />}
       {helpOpen && <HelpView onClose={() => setHelpOpen(false)} />}
+      {confirmClose && (
+        <ConfirmDialog
+          title="Close this window?"
+          body={`You are connected to ${connection.world}. Closing this window ends your session and quits Vosh.`}
+          confirmLabel="Close window"
+          onConfirm={() => {
+            setConfirmClose(false);
+            closeMainWindow();
+          }}
+          onCancel={() => setConfirmClose(false)}
+        />
+      )}
     </AppShell>
   );
 }
