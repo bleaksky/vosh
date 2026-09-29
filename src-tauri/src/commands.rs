@@ -5249,6 +5249,72 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn each_loadout_turns_on_the_items_its_character_shared() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            let save = |name: &str, aliases: &[(&str, &str)], combat: &[(&str, &str)]| {
+                let mut config = ProfileConfig::default();
+                for (alias, expansion) in aliases {
+                    config
+                        .aliases
+                        .push(vosh_alias::Alias::new(*alias, *expansion));
+                }
+                for (alias, expansion) in combat {
+                    let mut a = vosh_alias::Alias::new(*alias, *expansion);
+                    a.group = Some("combat".into());
+                    config.aliases.push(a);
+                }
+                config.save(&set.profile_path(name)).unwrap();
+            };
+            // Test-Prompt began as a copy of Default. Both have kk and
+            // bash as they are, each changed cc its own way, and each
+            // added one alias of its own.
+            save(
+                DEFAULT_PROFILE_NAME,
+                &[("kk", "kick %1"), ("cc", "cast a"), ("dd", "dig")],
+                &[("bash", "bash %1")],
+            );
+            save(
+                "Test-Prompt",
+                &[("kk", "kick %1"), ("cc", "cast b"), ("tp", "prompt")],
+                &[("bash", "bash %1")],
+            );
+            save("Healer", &[("hh", "heal %1")], &[]);
+
+            let names = [DEFAULT_PROFILE_NAME, "Healer", "Test-Prompt"];
+            let mut before = Vec::new();
+            for name in names {
+                let state = relaunch_as(dir.path(), name).await;
+                before.push(items_on(&*state.profile.lock().await));
+            }
+
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], || {})
+                .await
+                .unwrap();
+            let (catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+            let group = |alias: &str| {
+                let found = catalog.aliases.iter().find(|a| a.name == alias).unwrap();
+                found.group.clone().unwrap()
+            };
+            // What both characters had sits in a group of its own.
+            assert_eq!(group("kk"), "default+Test-Prompt");
+            assert_eq!(group("cc"), "default+Test-Prompt");
+            assert_eq!(group("bash"), "default+Test-Prompt.combat");
+            assert_eq!(group("dd"), "default");
+            assert_eq!(group("tp"), "Test-Prompt");
+
+            for (n, name) in names.iter().enumerate() {
+                let mut loadouts = crate::loadout_store::load_loadout_set(dir.path()).unwrap();
+                loadouts.active = vec![(*name).to_string()];
+                save_loadout_set(dir.path(), &loadouts).unwrap();
+                let state = relaunch_as(dir.path(), name).await;
+                assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
+            }
+        }
+
+        #[tokio::test]
         async fn each_loadout_keeps_off_the_groups_its_character_had_off() {
             use crate::profile_set::DEFAULT_PROFILE_NAME;
             let dir = tempfile::tempdir().unwrap();
