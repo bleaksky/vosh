@@ -1,5 +1,69 @@
-import { describe, expect, it } from 'vitest';
-import { KNOWN_WORLDS, parseTarget, worldName } from './useConnection';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { emit, listen } from '@tauri-apps/api/event';
+import {
+  CONNECTION_TARGET_EVENT,
+  KNOWN_WORLDS,
+  knownWorld,
+  loadTarget,
+  parseTarget,
+  saveConnectionTarget,
+  subscribeConnectionTarget,
+  worldName,
+} from './useConnection';
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
+vi.mock('@tauri-apps/api/event', () => ({
+  emit: vi.fn(() => Promise.resolve()),
+  listen: vi.fn(() => Promise.resolve(() => {})),
+}));
+
+describe('the saved target', () => {
+  const store = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => void store.set(key, value),
+    removeItem: (key: string) => void store.delete(key),
+  });
+  afterEach(() => {
+    store.clear();
+    vi.mocked(emit).mockClear();
+    vi.mocked(listen).mockClear();
+  });
+
+  it('saves for the next launch and tells every window', () => {
+    const target = { host: 'mud.example.org', port: 4000, tls: true };
+    saveConnectionTarget(target);
+    expect(loadTarget()).toEqual(target);
+    expect(emit).toHaveBeenCalledWith(CONNECTION_TARGET_EVENT, target);
+  });
+
+  it('follows a target another window saves and ignores a bad one', async () => {
+    let handler: ((event: { payload: unknown }) => void) | undefined;
+    const unlisten = vi.fn();
+    vi.mocked(listen).mockImplementationOnce((_name, fn) => {
+      handler = fn as typeof handler;
+      return Promise.resolve(unlisten);
+    });
+    const seen: unknown[] = [];
+    const stop = subscribeConnectionTarget((t) => seen.push(t));
+    expect(listen).toHaveBeenCalledWith(CONNECTION_TARGET_EVENT, expect.any(Function));
+    handler?.({ payload: { host: 'mud.example.org', port: 23, tls: false } });
+    handler?.({ payload: { host: '', port: 23 } });
+    expect(seen).toEqual([{ host: 'mud.example.org', port: 23, tls: false }]);
+    await Promise.resolve();
+    stop();
+    expect(unlisten).toHaveBeenCalled();
+    handler?.({ payload: { host: 'late.example.org', port: 23 } });
+    expect(seen).toHaveLength(1);
+  });
+});
+
+describe('knownWorld', () => {
+  it('finds the world a host plays', () => {
+    expect(knownWorld('play.theforsakenlands.com')?.name).toBe('The Forsaken Lands');
+    expect(knownWorld('mud.example.org')).toBeUndefined();
+  });
+});
 
 describe('KNOWN_WORLDS', () => {
   it('knows where to connect to The Forsaken Lands', () => {
