@@ -712,6 +712,18 @@ export function normalizeTerminalLineHeight(value: unknown): TerminalLineHeight 
   return value === 'compact' || value === 'loose' ? value : 'default';
 }
 
+/** How the vitals under the panel's panes lay out. `rows` gives each
+ *  vital its own row. `line` sets Health, Mana, and Moves side by side
+ *  on one row. */
+export const VITALS_DENSITIES = ['rows', 'line'] as const;
+
+export type VitalsDensity = (typeof VITALS_DENSITIES)[number];
+
+/** Coerce an unknown vitals density back to rows. */
+export function normalizeVitalsDensity(value: unknown): VitalsDensity {
+  return value === 'line' ? 'line' : 'rows';
+}
+
 /** The light theme a profile starts with. */
 export const DEFAULT_LIGHT_THEME_ID = 'vellum';
 
@@ -788,6 +800,9 @@ export interface UiConfig {
   /** Vitals panel appearance. Toggles which columns render and lets
    *  the user pick their own bar glyphs and width. */
   vitals: VitalsConfig;
+  /** How the vitals under the panel's panes lay out, one of
+   *  VITALS_DENSITIES. */
+  vitals_density: VitalsDensity;
   /** Where to render the World.Moons phase glyphs in the status bar.
    *  `right-edge` is the historical placement; `before-time` and
    *  `after-time` dock the moons next to the centered tick + MUD
@@ -965,6 +980,7 @@ export interface RawUiConfig {
   prompt_template_enabled?: boolean;
   prompt_template?: string;
   vitals?: Partial<VitalsConfig>;
+  vitals_density?: string;
   moons_position?: string;
   chip_style?: string;
 }
@@ -1028,6 +1044,7 @@ export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
     prompt_template_enabled: Boolean(cfg.prompt_template_enabled),
     prompt_template: typeof cfg.prompt_template === 'string' ? cfg.prompt_template : '',
     vitals: normalizeVitalsConfig(cfg.vitals),
+    vitals_density: normalizeVitalsDensity(cfg.vitals_density),
     moons_position:
       cfg.moons_position === 'before-time' || cfg.moons_position === 'after-time'
         ? cfg.moons_position
@@ -1150,6 +1167,7 @@ function normalizeVitalsConfig(raw: Partial<VitalsConfig> | undefined): VitalsCo
 let lastSentConfig: UiConfig | null = null;
 
 const TERMINAL_LINE_HEIGHT_EVENT = 'vosh://terminal-line-height-changed';
+const VITALS_DENSITY_EVENT = 'vosh://vitals-density-changed';
 
 async function emitChanged<T>(
   event: string,
@@ -1267,6 +1285,7 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     deepEqual,
   );
   await emitChanged('vosh://vitals-config-changed', config.vitals, prev?.vitals, deepEqual);
+  await emitChanged(VITALS_DENSITY_EVENT, config.vitals_density, prev?.vitals_density);
   await emitChanged('vosh://moons-position-changed', config.moons_position, prev?.moons_position);
   await emitChanged('vosh://chip-style-changed', config.chip_style, prev?.chip_style);
   await emitChanged(
@@ -1373,6 +1392,7 @@ export async function setUiConfig(config: UiConfig): Promise<void> {
       prompt_template_enabled: config.prompt_template_enabled,
       prompt_template: config.prompt_template,
       vitals: config.vitals,
+      vitals_density: config.vitals_density,
       moons_position: config.moons_position,
       chip_style: config.chip_style,
     },
@@ -1398,6 +1418,16 @@ export async function subscribeTerminalLineHeightChanged(
 ): Promise<UnlistenFn> {
   return listen<unknown>(TERMINAL_LINE_HEIGHT_EVENT, (event) => {
     cb(normalizeTerminalLineHeight(event.payload));
+  });
+}
+
+/** Hear a new vitals density saved from Settings, or the one a
+ *  profile switch brings. */
+export async function subscribeVitalsDensityChanged(
+  cb: (value: VitalsDensity) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(VITALS_DENSITY_EVENT, (event) => {
+    cb(normalizeVitalsDensity(event.payload));
   });
 }
 

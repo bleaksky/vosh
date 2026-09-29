@@ -286,6 +286,12 @@ pub(crate) struct UiConfig {
     /// bar glyphs and width. Default mirrors the historical look.
     #[serde(default)]
     pub vitals: VitalsConfig,
+    /// How the vitals under the panel's panes lay out: `rows` (one row
+    /// per vital, the default) or `line` (Health, Mana, and Moves side
+    /// by side on one row). Per profile, like the rest of the panel.
+    /// Unknown values coerce back to `rows` on save.
+    #[serde(default = "default_vitals_density")]
+    pub vitals_density: String,
     /// Where to render the World.Moons phase glyphs in the status bar.
     /// Values: `"right-edge"` (the historical placement, far right of
     /// the status bar), `"before-time"` (left of the centered tick +
@@ -1109,6 +1115,7 @@ impl Default for UiConfig {
             prompt_template_enabled: false,
             prompt_template: String::new(),
             vitals: VitalsConfig::default(),
+            vitals_density: default_vitals_density(),
             moons_position: default_moons_position(),
             chip_style: default_chip_style(),
         }
@@ -1137,6 +1144,23 @@ pub(crate) fn coerce_terminal_line_height(value: String) -> String {
         value
     } else {
         default_terminal_line_height()
+    }
+}
+
+/// The vitals densities the panel knows. Anything else saves as the
+/// default.
+pub(crate) const VITALS_DENSITIES: [&str; 2] = ["rows", "line"];
+
+fn default_vitals_density() -> String {
+    "rows".to_string()
+}
+
+/// Keep a known vitals density and turn anything else into `rows`.
+pub(crate) fn coerce_vitals_density(value: String) -> String {
+    if VITALS_DENSITIES.contains(&value.as_str()) {
+        value
+    } else {
+        default_vitals_density()
     }
 }
 
