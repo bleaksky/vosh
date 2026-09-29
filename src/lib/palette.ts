@@ -1,3 +1,4 @@
+import { resetPanelLayout } from '../components/panel/panelReset';
 import { exportAliases, sendInput, setUiTheme } from './session';
 import type { PaneType } from './paneLayout';
 import { applyAndBroadcastTheme, getCurrentThemeId } from './theme';
@@ -274,6 +275,17 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
       run: () => deps.togglePane(pane),
     });
   }
+  // Throws away the panes you arranged, so it wears the danger color
+  // and stays out of Recent, and the palette never opens on it.
+  entries.push({
+    id: 'panel-reset',
+    section: 'view',
+    title: 'Reset panel layout',
+    keywords: 'panes default restore arrangement',
+    destructive: true,
+    searchOnly: true,
+    run: resetPanelLayout,
+  });
   entries.push({
     id: 'find',
     section: 'view',
