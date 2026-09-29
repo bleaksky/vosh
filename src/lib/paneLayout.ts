@@ -491,8 +491,8 @@ function readingHeight(node: PaneNode): number {
 // ---------------------------------------------------------------
 // Migration from the old dock layout. Mirrors
 // PaneLayoutPersist::from_dock in Rust, which seeds a profile's tree
-// the first time it opens. Reset panel layout runs it again here, since
-// the backend only migrates a profile that never saved a tree.
+// the first time it opens. Reset panel layout used to run it here and
+// now asks the backend for the stock tree, so only its tests call it.
 // ---------------------------------------------------------------
 
 // Reading order of the old zones when they fold into one column: the
@@ -678,6 +678,14 @@ export async function flushPaneLayout(): Promise<void> {
     inFlight -= 1;
     settle();
   }
+}
+
+/** Take a tree this window got back from a command of its own, such as
+ *  a reset, the way a tree from another window lands: at once when no
+ *  write of ours is waiting, else once our writes settle. The backend's
+ *  broadcast of the same tree then changes nothing. */
+export function acceptPaneLayout(layout: unknown): void {
+  onRemoteLayout(layout);
 }
 
 /** Hear pane layouts that change outside this window's own writes: a
