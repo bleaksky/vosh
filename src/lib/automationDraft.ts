@@ -1,0 +1,210 @@
+// The draft model behind Settings, Automation. Every kind (triggers,
+// aliases, macros, timers, presets, loadouts, and the tick) edits a
+// draft: a list of items as they stand on the page, next to the same
+// items as Vosh last loaded or saved them. Save writes the whole draft
+// through the kind's existing API, and Discard puts the saved items
+// back. Each item carries a uid that lives only on the page, so the
+// selection and the list keys survive a rename, a regroup, or an edit
+// in the JSON view.
+//
+// Values are treated as immutable. An edit replaces the item's value,
+// and every other item keeps its object, which lets the list skip
+// rows that did not change and lets the change count reuse a cached
+// serialization. That keeps the page quick with 500 triggers.
+
+export interface DraftItem<T> {
+  readonly uid: string;
+  readonly value: T;
+}
+
+export interface Draft<T> {
+  /** The items as they stand on the page. */
+  readonly items: readonly DraftItem<T>[];
+  /** The items as Vosh last loaded or saved them. */
+  readonly saved: readonly DraftItem<T>[];
+}
+
+let uidSeq = 0;
+
+/** A uid for a new draft item, unique for the life of the page. */
+export function nextDraftUid(): string {
+  uidSeq += 1;
+  return `d${uidSeq}`;
+}
+
+/** A clean draft over `values`. */
+export function createDraft<T>(values: readonly T[]): Draft<T> {
+  const items = values.map((value) => ({ uid: nextDraftUid(), value }));
+  return { items, saved: items };
+}
+
+export function draftValues<T>(draft: Draft<T>): T[] {
+  return draft.items.map((item) => item.value);
+}
+
+export function findDraftItem<T>(draft: Draft<T>, uid: string): DraftItem<T> | undefined {
+  return draft.items.find((item) => item.uid === uid);
+}
+
+/** Replace one item's value. Returns the same draft when nothing
+ *  changed, so a no-op edit does not re-render the page. */
+export function updateDraftItem<T>(
+  draft: Draft<T>,
+  uid: string,
+  update: (value: T) => T,
+): Draft<T> {
+  let changed = false;
+  const items = draft.items.map((item) => {
+    if (item.uid !== uid) return item;
+    const value = update(item.value);
+    if (value === item.value) return item;
+    changed = true;
+    return { uid, value };
+  });
+  return changed ? { ...draft, items } : draft;
+}
+
+/** Append a new item. */
+export function addDraftItem<T>(draft: Draft<T>, value: T, uid: string = nextDraftUid()): Draft<T> {
+  return { ...draft, items: [...draft.items, { uid, value }] };
+}
+
+export function removeDraftItem<T>(draft: Draft<T>, uid: string): Draft<T> {
+  const items = draft.items.filter((item) => item.uid !== uid);
+  return items.length === draft.items.length ? draft : { ...draft, items };
+}
+
+/** Put the saved items back. */
+export function discardDraft<T>(draft: Draft<T>): Draft<T> {
+  return draft.items === draft.saved ? draft : { ...draft, items: draft.saved };
+}
+
+/** Replace every value at once, the way the JSON view does. An item
+ *  keeps the uid of the current item with the same natural key when
+ *  one is free, and otherwise the uid of the item at its position, so
+ *  an edit in place reads as a change and not as a removal and an
+ *  addition. */
+export function replaceDraftValues<T>(
+  draft: Draft<T>,
+  values: readonly T[],
+  keyOf?: (value: T) => string,
+): Draft<T> {
+  const used = new Set<string>();
+  const byKey = new Map<string, string>();
+  if (keyOf) {
+    for (const item of draft.items) {
+      const key = keyOf(item.value);
+      if (!byKey.has(key)) byKey.set(key, item.uid);
+    }
+  }
+  const claimed: (string | null)[] = values.map((value) => {
+    if (!keyOf) return null;
+    const uid = byKey.get(keyOf(value));
+    if (uid === undefined || used.has(uid)) return null;
+    used.add(uid);
+    return uid;
+  });
+  const items = values.map((value, index) => {
+    let uid = claimed[index];
+    if (uid === null) {
+      const positional = draft.items[index]?.uid;
+      uid = positional !== undefined && !used.has(positional) ? positional : nextDraftUid();
+      used.add(uid);
+    }
+    return { uid, value };
+  });
+  return { ...draft, items };
+}
+
+const serialCache = new WeakMap<object, string>();
+
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value).sort()) {
+      const field = (value as Record<string, unknown>)[key];
+      if (field !== undefined) out[key] = canonical(field);
+    }
+    return out;
+  }
+  return value;
+}
+
+/** A stable string for a value: keys sorted, undefined fields left
+ *  out. Two values that save the same way serialize the same way. */
+export function serializeValue(value: unknown): string {
+  if (value && typeof value === 'object') {
+    const hit = serialCache.get(value);
+    if (hit !== undefined) return hit;
+    const text = JSON.stringify(canonical(value));
+    serialCache.set(value, text);
+    return text;
+  }
+  return JSON.stringify(value) ?? 'undefined';
+}
+
+export interface DraftChanges<T> {
+  added: DraftItem<T>[];
+  removed: DraftItem<T>[];
+  changed: { uid: string; before: T; after: T }[];
+}
+
+/** What Save has to write: the items added, removed, and changed
+ *  since the last load or save. Order alone is not a change, since the
+ *  stores keep their own order. */
+export function draftChanges<T>(draft: Draft<T>): DraftChanges<T> {
+  const out: DraftChanges<T> = { added: [], removed: [], changed: [] };
+  if (draft.items === draft.saved) return out;
+  const saved = new Map(draft.saved.map((item) => [item.uid, item.value]));
+  const seen = new Set<string>();
+  for (const item of draft.items) {
+    if (!saved.has(item.uid)) {
+      out.added.push(item);
+      continue;
+    }
+    seen.add(item.uid);
+    const before = saved.get(item.uid) as T;
+    if (before !== item.value && serializeValue(before) !== serializeValue(item.value)) {
+      out.changed.push({ uid: item.uid, before, after: item.value });
+    }
+  }
+  for (const item of draft.saved) {
+    if (!seen.has(item.uid)) out.removed.push(item);
+  }
+  return out;
+}
+
+/** How many items Save would add, remove, or change. */
+export function draftChangeCount<T>(draft: Draft<T>): number {
+  const { added, removed, changed } = draftChanges(draft);
+  return added.length + removed.length + changed.length;
+}
+
+export function isDraftDirty<T>(draft: Draft<T>): boolean {
+  return draftChangeCount(draft) > 0;
+}
+
+/** The singular and plural name of what a kind holds. */
+export interface KindNoun {
+  one: string;
+  many: string;
+}
+
+/** `1 trigger`, `3 triggers`. */
+export function countPhrase(count: number, noun: KindNoun): string {
+  return `${count} ${count === 1 ? noun.one : noun.many}`;
+}
+
+/** The title the discard dialog asks with, like `Discard changes to 3
+ *  triggers?` or `Discard changes to 2 timers and the tick?`. Pass the
+ *  phrases for each part that changed. */
+export function discardTitle(phrases: readonly string[]): string {
+  const parts = phrases.filter((p) => p.length > 0);
+  if (parts.length === 0) return 'Discard your changes?';
+  const joined =
+    parts.length === 1
+      ? parts[0]
+      : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  return `Discard changes to ${joined}?`;
+}
