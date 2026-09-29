@@ -179,14 +179,29 @@ function glyph(html: string, index: number): string | null {
 const GLYPH_OPEN =
   '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" ' +
   'stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
-const KEEP = ' vector-effect="non-scaling-stroke"';
-const TICK_TRACK = `<circle cx="8" cy="8" r="5.75" stroke-opacity="0.35"${KEEP}></circle>`;
+const TICK_TRACK = `<circle cx="8" cy="8" r="5.75" stroke-opacity="0.35"></circle>`;
+
+describe('StatusClock icon strokes', () => {
+  it('draws the tick ring and the sun path with strokes that scale, as approved', () => {
+    // 1.25 units on the 16 unit grid, about 0.94 px at 12 px. Held at
+    // 1.25 px instead, the open sun under the horizon fused with it.
+    const html = draw(
+      'icon_value',
+      { secs: 14, warn: false, interval: 30 },
+      { text: '21:00', tint: null, daytime: false, hour: 21 },
+    );
+    expect(html.match(/<svg /g)).toHaveLength(2);
+    expect(html.match(/stroke-width="1.25"/g)).toHaveLength(2);
+    expect(html).not.toContain('vector-effect');
+    expect(html).not.toContain('non-scaling-stroke');
+  });
+});
 
 describe('StatusClock tick ring', () => {
   it('draws the faint ring and the arc gone so far before the tick', () => {
     const html = draw('icon_value', { secs: 15, warn: false, interval: 60 }, null);
     expect(glyph(html, 0)).toBe(
-      `${GLYPH_OPEN}${TICK_TRACK}<path d="M8 2.25A5.75 5.75 0 0 1 13.75 8"${KEEP}></path></svg>`,
+      `${GLYPH_OPEN}${TICK_TRACK}<path d="M8 2.25A5.75 5.75 0 0 1 13.75 8"></path></svg>`,
     );
     expect(html.indexOf('<svg')).toBeLessThan(html.indexOf('<span class="shell-sr">Tick</span>'));
     expect(html.indexOf('<span class="shell-sr">Tick</span>')).toBeLessThan(html.indexOf('15s'));
@@ -198,7 +213,7 @@ describe('StatusClock tick ring', () => {
     expect(ring(0, 30)).toBe(`${GLYPH_OPEN}${TICK_TRACK}</svg>`);
     expect(ring(15, 30)).toContain('<path d="M8 2.25A5.75 5.75 0 0 1 8 13.75"');
     expect(ring(30, 30)).toBe(
-      `${GLYPH_OPEN}${TICK_TRACK}<circle cx="8" cy="8" r="5.75"${KEEP}></circle></svg>`,
+      `${GLYPH_OPEN}${TICK_TRACK}<circle cx="8" cy="8" r="5.75"></circle></svg>`,
     );
     expect(ring(34, 30)).toBe(ring(30, 30));
   });
@@ -249,10 +264,10 @@ describe('StatusClock tick ring', () => {
 });
 
 const SUN_TRACK =
-  `<path d="M2.5 10.5A5.5 5.5 0 0 1 13.5 10.5" stroke-opacity="0.35"${KEEP}></path>` +
-  `<path d="M1.5 10.5h13"${KEEP}></path>`;
+  `<path d="M2.5 10.5A5.5 5.5 0 0 1 13.5 10.5" stroke-opacity="0.35"></path>` +
+  `<path d="M1.5 10.5h13"></path>`;
 const SUN_UP_TOP = '<circle cx="8" cy="5" r="1.75" fill="currentColor" stroke="none"></circle>';
-const SUN_DOWN = `<circle cx="8" cy="13.4" r="1.35"${KEEP}></circle>`;
+const SUN_DOWN = `<circle cx="8" cy="13.4" r="1.35"></circle>`;
 
 /** The time reading's glyph in the Icon style. */
 function sun(time: ClockTime): string | null {
