@@ -1244,9 +1244,18 @@ export function primeUiConfigTheme(theme: string): void {
 }
 
 /** Save the theme choice alone. A full setUiConfig from a window that
- *  is not Settings would write its stale copy of every other field. */
-export async function setUiTheme(theme: string): Promise<void> {
-  await invoke('ui_set_theme', { theme });
+ *  is not Settings would write its stale copy of every other field.
+ *  Pass the light and dark pair too when the pick came from pickTheme,
+ *  which fills one of them while follow system appearance is on. */
+export async function setUiTheme(
+  theme: string,
+  pair?: { light_theme: string; dark_theme: string },
+): Promise<void> {
+  await invoke('ui_set_theme', {
+    theme,
+    lightTheme: pair?.light_theme ?? null,
+    darkTheme: pair?.dark_theme ?? null,
+  });
 }
 
 export async function setUiConfig(config: UiConfig): Promise<void> {

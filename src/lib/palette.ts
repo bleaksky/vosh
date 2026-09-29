@@ -1,7 +1,14 @@
 import { resetPanelLayout } from '../components/panel/panelReset';
 import { exportAliases, sendInput, setUiTheme } from './session';
 import type { PaneType } from './paneLayout';
-import { applyAndBroadcastTheme, getCurrentThemeId } from './theme';
+import {
+  applyAndBroadcastTheme,
+  applyThemePrefs,
+  broadcastThemePrefs,
+  getCurrentThemeId,
+  getThemePrefs,
+  pickTheme,
+} from './theme';
 import { THEMES } from './themes';
 
 // Command registry for the ⌘K palette. Commands are built fresh each
@@ -358,7 +365,9 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
 }
 
 /** Every theme as a submenu row, the active one checked. Picking one
- *  applies it in every window and saves it. */
+ *  follows pickTheme, so while follow system appearance is on it fills
+ *  the light or dark slot and shows only when that matches the OS. The
+ *  pick applies in every window and saves. */
 export function themeEntries(): PaletteEntry[] {
   const current = getCurrentThemeId();
   return THEMES.map((t) => ({
@@ -371,10 +380,23 @@ export function themeEntries(): PaletteEntry[] {
   }));
 }
 
-async function chooseTheme(id: string): Promise<void> {
-  await applyAndBroadcastTheme(id);
+export async function chooseTheme(id: string): Promise<void> {
+  const prefs = getThemePrefs();
+  if (!prefs) {
+    // The config has not loaded yet, so there is no pair to fill.
+    await applyAndBroadcastTheme(id);
+    try {
+      await setUiTheme(id);
+    } catch (e) {
+      console.error('[palette] saving the theme failed', e);
+    }
+    return;
+  }
+  const next = pickTheme(prefs, id);
+  applyThemePrefs(next, { broadcast: true });
+  void broadcastThemePrefs(next);
   try {
-    await setUiTheme(id);
+    await setUiTheme(next.theme, next);
   } catch (e) {
     console.error('[palette] saving the theme failed', e);
   }
