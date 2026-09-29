@@ -6,6 +6,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useEscape } from '../../lib/escapeStack';
 
 // The floating menu the title band opens: the session menu and Add a
@@ -14,7 +15,10 @@ import { useEscape } from '../../lib/escapeStack';
 // the window, closes on Esc through the escape stack or on a press
 // outside it, and moves focus with the arrow keys. The role (menu, or
 // dialog while it holds a form) is what tells the Windows and Linux
-// on-top terminal to step aside while it is open.
+// on-top terminal to step aside while it is open. It renders into the
+// body, like the pane menus, because the band is a stacking context
+// and the find bar and the scroll depth chip would paint over a menu
+// left inside it.
 
 const GAP_BELOW_ANCHOR = 12;
 const WINDOW_INSET = 8;
@@ -119,7 +123,7 @@ export function ShellMenu({
     items[next].focus();
   };
 
-  return (
+  return createPortal(
     <div
       ref={ref}
       role={kind}
@@ -129,7 +133,8 @@ export function ShellMenu({
       onKeyDown={onKeyDown}
     >
       {children}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
