@@ -699,6 +699,13 @@ pub(crate) async fn session_send_input(
     state: State<'_, SharedState>,
     line: String,
 ) -> Result<(), String> {
+    // `#logs` works on the log store, not the profile, and can take a
+    // while on a large log, so it runs on its own task and echoes when
+    // done.
+    if let Some(command) = crate::input::logs_command(&line) {
+        crate::forget_passwords::start(&app, command);
+        return Ok(());
+    }
     // `#profile reset` and `#profile load` replace the live profile
     // wholesale, panes and tracked affects included. Path B turns them
     // into echoes, so there they change nothing.
