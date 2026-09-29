@@ -2482,6 +2482,13 @@ pub(crate) async fn apply_profile_switch(
     Ok(())
 }
 
+/// Why a profile cannot switch between `migration_apply` and the relaunch
+/// that finishes it. The next profile's file holds no aliases, triggers,
+/// or macros any more, and the shared catalog that holds them loads only
+/// at launch, so the switch would leave you with none.
+const SWITCH_MIGRATION_PENDING: &str =
+    "Quit Vosh and open it again to finish the move to loadouts, then switch profiles.";
+
 /// Steps 1 to 3 of [`apply_profile_switch`] over the app data folder
 /// `app_data`, so a test can run them over a folder of its own.
 async fn switch_profile(
@@ -2489,11 +2496,27 @@ async fn switch_profile(
     app_data: Option<&std::path::Path>,
     name: &str,
 ) -> Result<(), String> {
+    switch_profile_with(state, app_data, name, &MIGRATION_RELAUNCH_PENDING).await
+}
+
+/// [`switch_profile`] with `relaunch_pending` in place of
+/// [`MIGRATION_RELAUNCH_PENDING`], so a test can run a switch after the
+/// wizard without touching the flag every other test reads.
+async fn switch_profile_with(
+    state: &SharedState,
+    app_data: Option<&std::path::Path>,
+    name: &str,
+    relaunch_pending: &std::sync::atomic::AtomicBool,
+) -> Result<(), String> {
     // Hold the persist lock from the flush through loading the next
     // file, so a Settings write to the incoming profile's file lands
     // either before the load reads it or after the switch made the
     // profile live, never in between.
     let _persist_guard = PERSIST_LOCK.lock().await;
+    // Read under the lock, which the wizard holds until it sets the flag.
+    if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
+        return Err(SWITCH_MIGRATION_PENDING.into());
+    }
 
     // Step 1: snapshot + write the CURRENT active profile so user
     // changes since the last persist are not lost on switch. Skipped
@@ -6255,6 +6278,45 @@ mod tests {
             assert_eq!(kept.profile_vars.get("target").unwrap(), "orc");
             assert_eq!(kept.ui.panes.unwrap().panel_width, Some(300));
             assert_eq!(items_on(&p), ["alias kk"]);
+        }
+
+        #[tokio::test]
+        async fn a_switch_waits_for_the_relaunch_after_the_wizard() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            use std::sync::atomic::{AtomicBool, Ordering};
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_alias(&set, DEFAULT_PROFILE_NAME, "kk");
+            write_alias(&set, "Healer", "hh");
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            let pending = AtomicBool::new(false);
+            super::super::apply_migration(&state, dir.path(), &[], || {
+                pending.store(true, Ordering::Release);
+            })
+            .await
+            .unwrap();
+
+            // The Healer file holds no aliases now, and the catalog loads
+            // only at launch, so a switch would leave you with none. A
+            // login that picks the Healer says why on the terminal.
+            let err =
+                super::super::switch_profile_with(&state, Some(dir.path()), "Healer", &pending)
+                    .await
+                    .unwrap_err();
+            assert_eq!(
+                super::super::auto_switch_failed_line(&err),
+                "\r\n\x1b[33mQuit Vosh and open it again to finish the move to loadouts, then \
+                 switch profiles.\x1b[0m\r\n"
+            );
+            assert_eq!(super::active(&state).await, DEFAULT_PROFILE_NAME);
+            assert_eq!(items_on(&*state.profile.lock().await), ["alias kk"]);
+
+            // Once Vosh opens again, the switch runs.
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::switch_profile(&state, Some(dir.path()), "Healer")
+                .await
+                .unwrap();
+            assert_eq!(items_on(&*state.profile.lock().await), ["alias hh"]);
         }
 
         #[tokio::test]
