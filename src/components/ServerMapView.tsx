@@ -456,10 +456,10 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // Squares, glyphs, and tileset paint on the terminal ground their
-    // sector colors were tuned against, so deep water and lava stay
-    // visible, and in a pane the drawing reads as a well in the panel.
-    const ground = MAP_COLORS.bg;
+    // A pane's drawing sits on the panel's own color with no box
+    // around it, as the approved Map pane shows: rooms, corridors, and
+    // doors, nothing behind them.
+    const ground = embedded ? MAP_COLORS.panel : MAP_COLORS.bg;
     ctx.fillStyle = ground;
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
@@ -483,68 +483,73 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     const centerR = Math.floor((rows + 1) / 2);
     const centerC = Math.floor((cols + 1) / 2);
 
-    // Pick the dominant sector from the visible cells. Drives both the
-    // terrain decorations in the void and the watermark tint.
-    const sectorCounts: Record<string, number> = {};
-    for (const rowKey of Object.keys(tiles.g ?? {})) {
-      const colMap = tiles.g?.[rowKey];
-      if (!colMap) continue;
-      for (const cellKey of Object.keys(colMap)) {
-        const cell = colMap[cellKey];
-        if (!cell || typeof cell === 'string') continue;
-        const code = cell.s ?? '';
-        if (!code) continue;
-        sectorCounts[code] = (sectorCounts[code] ?? 0) + 1;
+    // Terrain decorations in the void around the rooms. A pane leaves
+    // them out, so the drawing is only rooms, corridors, and doors on
+    // the panel's color.
+    if (!embedded) {
+      // Pick the dominant sector from the visible cells. Drives both the
+      // terrain decorations in the void and the watermark tint.
+      const sectorCounts: Record<string, number> = {};
+      for (const rowKey of Object.keys(tiles.g ?? {})) {
+        const colMap = tiles.g?.[rowKey];
+        if (!colMap) continue;
+        for (const cellKey of Object.keys(colMap)) {
+          const cell = colMap[cellKey];
+          if (!cell || typeof cell === 'string') continue;
+          const code = cell.s ?? '';
+          if (!code) continue;
+          sectorCounts[code] = (sectorCounts[code] ?? 0) + 1;
+        }
       }
-    }
-    let dominantCode = '0';
-    let bestCount = 0;
-    for (const [code, count] of Object.entries(sectorCounts)) {
-      if (count > bestCount) {
-        bestCount = count;
-        dominantCode = code;
+      let dominantCode = '0';
+      let bestCount = 0;
+      for (const [code, count] of Object.entries(sectorCounts)) {
+        if (count > bestCount) {
+          bestCount = count;
+          dominantCode = code;
+        }
       }
-    }
-    const sector = sectorForCode(dominantCode) ?? sectorForCode('0');
-    const halo = sector?.halo ?? '#7fb4ca';
-    let dominantSectorId = 0;
-    for (const [id, theme] of Object.entries(SECTORS)) {
-      if (theme === sector) {
-        dominantSectorId = Number(id);
-        break;
+      const sector = sectorForCode(dominantCode) ?? sectorForCode('0');
+      const halo = sector?.halo ?? '#7fb4ca';
+      let dominantSectorId = 0;
+      for (const [id, theme] of Object.entries(SECTORS)) {
+        if (theme === sector) {
+          dominantSectorId = Number(id);
+          break;
+        }
       }
-    }
 
-    // Terrain decorations in the void around the visible cell cluster.
-    // We don't have the area's true world bbox here; approximate it
-    // from the rendered tile grid.
-    {
-      const anchorPitch = computeAnchor(
-        tiles,
-        rows,
-        cols,
-        centerR,
-        centerC,
-        cssWidth,
-        cssHeight,
-        zoom,
-      );
-      const halfW = (cols / 2) * anchorPitch.pitch;
-      const halfH = (rows / 2) * anchorPitch.pitch;
-      drawTerrainDecorations(
-        ctx,
-        [
-          {
-            cx: anchorPitch.playerX,
-            cy: anchorPitch.playerY,
-            hw: halfW,
-            hh: halfH,
-            sector: dominantSectorId,
-            haloColor: halo,
-          },
-        ],
-        { cssWidth, cssHeight, pitch: anchorPitch.pitch },
-      );
+      // Terrain decorations in the void around the visible cell cluster.
+      // We don't have the area's true world bbox here; approximate it
+      // from the rendered tile grid.
+      {
+        const anchorPitch = computeAnchor(
+          tiles,
+          rows,
+          cols,
+          centerR,
+          centerC,
+          cssWidth,
+          cssHeight,
+          zoom,
+        );
+        const halfW = (cols / 2) * anchorPitch.pitch;
+        const halfH = (rows / 2) * anchorPitch.pitch;
+        drawTerrainDecorations(
+          ctx,
+          [
+            {
+              cx: anchorPitch.playerX,
+              cy: anchorPitch.playerY,
+              hw: halfW,
+              hh: halfH,
+              sector: dominantSectorId,
+              haloColor: halo,
+            },
+          ],
+          { cssWidth, cssHeight, pitch: anchorPitch.pitch },
+        );
+      }
     }
 
     const anchor = computeAnchor(tiles, rows, cols, centerR, centerC, cssWidth, cssHeight, zoom);

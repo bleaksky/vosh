@@ -363,9 +363,10 @@
   padding-bottom: 8px;
 }
 
-/* The drawing: inset 8, radius 8, no border. The map paints its own
-   ground, the terminal's, so the box reads as a well in the panel. It
-   takes the height the rows leave and keeps at least 96 px. */
+/* The drawing: inset 8, radius 8, no fill or border of its own. The
+   map paints on the panel's color, so the rooms sit in the pane with
+   no box around them. It takes the height the rows leave and keeps at
+   least 96 px. */
 .pane-map-box {
   position: relative;
   display: flex;

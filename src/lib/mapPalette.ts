@@ -65,6 +65,11 @@ export const MAP_COLORS = {
   get bg(): string {
     return readCssVar('--c-surface', '#090e13');
   },
+  /// The panel's own color. A map inside a panel pane paints on it, so
+  /// the drawing sits in the pane with no box around it.
+  get panel(): string {
+    return readCssVar('--panel', readCssVar('--c-surface', '#090e13'));
+  },
   /// Player's room cell uses a sector-style fill+border pair: a dim
   /// tint of the accent inside with the bright accent as the outline,
   /// so the player tile reads the same shape as a regular sector tile,
@@ -87,7 +92,7 @@ export const MAP_COLORS = {
 
 // Every custom property a map style reads. A change to any of them
 // means the canvas needs a fresh paint.
-const THEME_VARS = ['--c-surface', '--c-accent', '--c-accent-soft', '--c-text-faint'];
+const THEME_VARS = ['--panel', '--c-surface', '--c-accent', '--c-accent-soft', '--c-text-faint'];
 
 /** One string that changes whenever a color the map paints with does. */
 export function mapThemeSignature(): string {
