@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { emit, listen } from '@tauri-apps/api/event';
 import {
   connectSession,
   disconnectSession,
@@ -37,8 +38,14 @@ export const DEFAULT_TARGET: ConnectionTarget = {
 // The last target you saved or dialed, so Connect after a relaunch
 // dials the world you last used instead of the stock one. This is a
 // per-machine convenience in browser storage. The backend has no saved
-// connection model yet.
+// connection model yet. It is the one saved target: the session
+// popover and Settings › General › Connection both edit it through
+// saveConnectionTarget, and every window follows it through
+// subscribeConnectionTarget.
 const TARGET_KEY = 'vosh.connection.target';
+
+/** The event that carries a newly saved target to every window. */
+export const CONNECTION_TARGET_EVENT = 'vosh://connection-target-changed';
 
 /** A world known by name, and where you connect to play it. */
 export interface KnownWorld {
@@ -60,12 +67,17 @@ export const KNOWN_WORLDS: readonly KnownWorld[] = [
   },
 ];
 
+/** The known world a host plays, matching its domain or any subdomain,
+ *  or undefined for any other host. */
+export function knownWorld(host: string): KnownWorld | undefined {
+  const clean = host.trim().toLowerCase().replace(/\.$/, '');
+  return KNOWN_WORLDS.find((w) => clean === w.domain || clean.endsWith(`.${w.domain}`));
+}
+
 /** The display name for a host, like `The Forsaken Lands` for
  *  `play.theforsakenlands.com`. Unknown hosts show as typed. */
 export function worldName(host: string): string {
-  const clean = host.trim().toLowerCase().replace(/\.$/, '');
-  const known = KNOWN_WORLDS.find((w) => clean === w.domain || clean.endsWith(`.${w.domain}`));
-  return known ? known.name : host.trim();
+  return knownWorld(host)?.name ?? host.trim();
 }
 
 /** A target read back from storage or a form, or null when the host is
@@ -94,6 +106,47 @@ function storeTarget(target: ConnectionTarget): void {
   } catch {
     // Storage unavailable. The target still holds for this session.
   }
+}
+
+/** Save where Connect and ⌘R dial, and tell every window. */
+export function saveConnectionTarget(target: ConnectionTarget): void {
+  storeTarget(target);
+  emit(CONNECTION_TARGET_EVENT, target).catch(() => {
+    // No other window to tell. Storage still holds the target.
+  });
+}
+
+/** Follow the saved target as any window saves it, this one included.
+ *  Returns the unsubscribe. */
+export function subscribeConnectionTarget(cb: (target: ConnectionTarget) => void): () => void {
+  let cancelled = false;
+  let unlisten: (() => void) | undefined;
+  listen<unknown>(CONNECTION_TARGET_EVENT, (event) => {
+    const target = parseTarget(event.payload);
+    if (target && !cancelled) cb(target);
+  })
+    .then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    })
+    .catch(() => {
+      // No event bridge. The target only changes from this window.
+    });
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
+}
+
+/** The saved target and a setter that saves it for every window. */
+export function useSavedTarget(): [ConnectionTarget, (target: ConnectionTarget) => void] {
+  const [target, setTarget] = useState<ConnectionTarget>(loadTarget);
+  useEffect(() => subscribeConnectionTarget(setTarget), []);
+  const save = useCallback((next: ConnectionTarget) => {
+    setTarget(next);
+    saveConnectionTarget(next);
+  }, []);
+  return [target, save];
 }
 
 /** Switch to the profile that matches the host, then connect. Profiles
@@ -190,8 +243,19 @@ export function useConnection(
   const saveTarget = useCallback((next: ConnectionTarget) => {
     targetRef.current = next;
     setTarget(next);
-    storeTarget(next);
+    saveConnectionTarget(next);
   }, []);
+
+  // Settings edits the same saved target. Follow it, so the popover,
+  // the title, and Cmd+R dial what Settings shows.
+  useEffect(
+    () =>
+      subscribeConnectionTarget((next) => {
+        targetRef.current = next;
+        setTarget(next);
+      }),
+    [],
+  );
 
   const dial = useCallback(async (to: ConnectionTarget) => {
     try {
