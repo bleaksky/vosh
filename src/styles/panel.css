@@ -385,6 +385,74 @@
   pointer-events: none;
 }
 
+/* The map's style and zoom button, in the drawing's bottom right
+   corner. It shows while you point at the map, tab to it, or have its
+   menu open, so the drawing stands alone at rest. It sits on the
+   panel's own color to stay readable over rooms. */
+.pane-map-tools {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-row);
+  background-color: var(--panel);
+  color: var(--tertiary);
+  opacity: 0;
+  transition: opacity 120ms ease;
+  cursor: default;
+}
+
+.pane-map-box:hover .pane-map-tools,
+.pane-map-tools:focus-visible,
+.pane-map-tools[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.pane-map-tools:hover {
+  background-image: linear-gradient(var(--hover), var(--hover));
+  color: var(--secondary);
+}
+
+.pane-map-tools[aria-expanded='true'] {
+  background-image: linear-gradient(var(--selrow), var(--selrow));
+  color: var(--secondary);
+}
+
+/* A light theme's selected fill is white, so it takes a ring. */
+:root[data-appearance='light'] .pane-map-tools[aria-expanded='true'] {
+  box-shadow: 0 0 0 1px var(--sep);
+}
+
+.pane-map-tools:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.pane-map-tools svg {
+  display: block;
+}
+
+/* The zoom percent on the menu's Actual size row. */
+.pane-map-zoom {
+  flex: none;
+  margin-left: 16px;
+  color: var(--tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane-map-tools {
+    transition: none;
+  }
+}
+
 /* A short pane gives up the people rows first, down to the room row. */
 .pane-map-rows {
   flex: 0 1 auto;
