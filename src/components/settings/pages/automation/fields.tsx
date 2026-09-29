@@ -1,7 +1,7 @@
 import { forwardRef, useId, useState, type ReactNode } from 'react';
 import { CodeEditor } from '../../../CodeEditor';
 import { canonicalKeyFromEvent, labelForKey } from '../../../../lib/macroKeys';
-import { Field, type FieldProps } from '../../ui';
+import { Field, useRowIds, type FieldProps } from '../../ui';
 
 // Controls the Automation detail cards share. Each one wraps a
 // primitive from ui/ with the editing rule its field needs.
@@ -44,36 +44,55 @@ export function GroupField({
 }
 
 /** A whole number field. It takes digits only, clamps to `max` as you
- *  type, and to `min` when you leave it. */
+ *  type, and to `min` when you leave it. A `unit` shows beside the field
+ *  and describes it, so a screen reader says `30, seconds` and not a
+ *  bare number. */
 export function NumberField({
   value,
   onChange,
   min = 0,
   max = Number.MAX_SAFE_INTEGER,
   width = 64,
+  unit,
   ...rest
 }: PassThrough & {
   value: number;
   onChange: (value: number) => void;
   min?: number;
   max?: number;
+  /** The unit after the field, like `seconds`. */
+  unit?: string;
 }) {
   const [text, setText] = useState<string | null>(null);
+  const row = useRowIds();
+  const unitId = useId();
+  const describedBy =
+    [rest['aria-describedby'] ?? row?.descriptionId, unit !== undefined ? unitId : undefined]
+      .filter(Boolean)
+      .join(' ') || undefined;
   return (
-    <Field
-      {...rest}
-      inputMode="numeric"
-      width={width}
-      value={text ?? String(value)}
-      onChange={(next) => {
-        const digits = next.replace(/[^0-9]/g, '');
-        setText(digits);
-        if (!digits) return;
-        const n = Math.min(max, Math.max(min, parseInt(digits, 10)));
-        if (n !== value) onChange(n);
-      }}
-      onBlur={() => setText(null)}
-    />
+    <>
+      <Field
+        {...rest}
+        aria-describedby={describedBy}
+        inputMode="numeric"
+        width={width}
+        value={text ?? String(value)}
+        onChange={(next) => {
+          const digits = next.replace(/[^0-9]/g, '');
+          setText(digits);
+          if (!digits) return;
+          const n = Math.min(max, Math.max(min, parseInt(digits, 10)));
+          if (n !== value) onChange(n);
+        }}
+        onBlur={() => setText(null)}
+      />
+      {unit !== undefined && (
+        <span id={unitId} className="st-auto-unit">
+          {unit}
+        </span>
+      )}
+    </>
   );
 }
 
