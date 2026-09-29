@@ -56,6 +56,14 @@ export interface Segment {
   y2: number;
 }
 
+// A line and the rooms at its ends, by grid key. `to` is null for a
+// stub that leads off the drawing.
+interface Linked {
+  seg: Segment;
+  from: string;
+  to: string | null;
+}
+
 export interface PlainLabel {
   text: string;
   /** Left edge and alphabetic baseline. */
@@ -175,8 +183,10 @@ export function layoutPlain(input: PlainInput): PlainScene {
   // Lines run from edge to edge through the gap. Round caps reach half
   // the line width past each end, so the ends sit that far inside, and
   // an end at your room starts past the ring instead.
-  const lines: Segment[] = [];
-  const hidden: Segment[] = [];
+  // Each line keeps the rooms at its ends, so a line between two rooms
+  // the box leaves out can go with them.
+  const lines: Linked[] = [];
+  const hidden: Linked[] = [];
   const seen = new Set<string>();
   for (const cell of cells) {
     for (const [dir, opp, dx, dy] of STEPS) {
@@ -191,6 +201,7 @@ export function layoutPlain(input: PlainInput): PlainScene {
       const x0 = cx(cell.col);
       const y0 = cy(cell.row);
       let seg: Segment | null = null;
+      let to: string | null = null;
       if (neighbor && !upper) {
         const pair =
           dx + dy > 0
@@ -206,6 +217,7 @@ export function layoutPlain(input: PlainInput): PlainScene {
           x2: x0 + dx * endAt,
           y2: y0 + dy * endAt,
         };
+        to = key(nRow, nCol);
       } else {
         const base = isCurrent(cell.row, cell.col) ? half + ringReach : half;
         const endAt = base + stub - cap;
@@ -216,7 +228,7 @@ export function layoutPlain(input: PlainInput): PlainScene {
           y2: y0 + dy * endAt,
         };
       }
-      (secret ? hidden : lines).push(seg);
+      (secret ? hidden : lines).push({ seg, from: key(cell.row, cell.col), to });
     }
   }
 
@@ -245,17 +257,48 @@ export function layoutPlain(input: PlainInput): PlainScene {
 
   // Center the drawing. When it is larger than the box, follow your
   // room instead, but never past the drawing's own edge, so the box
-  // has no empty band while there is map to show.
-  const fit = (min: number, max: number, view: number, focus: number | null) => {
+  // has no empty band while there is map to show. Then nudge it up to
+  // half a pitch either way to fit the most whole rows (or columns),
+  // keeping your room and its ring in view.
+  const fit = (min: number, max: number, view: number, focus: number | null, centers: number[]) => {
     const span = max - min;
     if (span + 2 * PLAIN.edge <= view) return Math.round((view - (min + max)) / 2);
     const want = view / 2 - (focus ?? (min + max) / 2);
     const least = view - PLAIN.edge - max;
     const most = PLAIN.edge - min;
-    return Math.round(Math.min(most, Math.max(least, want)));
+    const clamp = (o: number) => Math.round(Math.min(most, Math.max(least, o)));
+    const whole = (o: number) =>
+      centers.filter((c) => c - half + o >= 0 && c + half + o <= view).length;
+    const holdsFocus = (o: number) =>
+      focus === null || (focus - half - ringReach + o >= 0 && focus + half + ringReach + o <= view);
+    let best = clamp(want);
+    let bestWhole = whole(best);
+    for (let d = 1; d <= pitch / 2; d++) {
+      for (const o of [clamp(want - d), clamp(want + d)]) {
+        const n = whole(o);
+        if (n > bestWhole && holdsFocus(o)) {
+          best = o;
+          bestWhole = n;
+        }
+      }
+    }
+    return best;
   };
-  const ox = fit(lo.x, hi.x, width, current ? cx(current.col) : null);
-  const oy = fit(lo.y, hi.y, height, current ? cy(current.row) : null);
+  const unique = (xs: number[]) => [...new Set(xs)];
+  const ox = fit(
+    lo.x,
+    hi.x,
+    width,
+    current ? cx(current.col) : null,
+    unique(cells.map((c) => cx(c.col))),
+  );
+  const oy = fit(
+    lo.y,
+    hi.y,
+    height,
+    current ? cy(current.row) : null,
+    unique(cells.map((c) => cy(c.row))),
+  );
   const move = (s: Segment): Segment => ({
     x1: s.x1 + ox,
     y1: s.y1 + oy,
@@ -263,11 +306,22 @@ export function layoutPlain(input: PlainInput): PlainScene {
     y2: s.y2 + oy,
   });
 
+  // Only whole rooms show. A room the box edge would cut through is
+  // left out, and so is every line between two rooms left out, so a
+  // short or narrow box ends on whole rows and columns. A line from a
+  // room that shows toward one left out stays, pointing where the map
+  // goes on. Your room always shows.
+  const shown = new Set<string>();
   const rooms: { x: number; y: number }[] = [];
   for (const c of cells) {
-    if (isCurrent(c.row, c.col)) continue;
-    rooms.push({ x: cx(c.col) - half + ox, y: cy(c.row) - half + oy });
+    const x = cx(c.col) - half + ox;
+    const y = cy(c.row) - half + oy;
+    const inBox = x >= 0 && y >= 0 && x + size <= width && y + size <= height;
+    if (!inBox && !isCurrent(c.row, c.col)) continue;
+    shown.add(key(c.row, c.col));
+    if (!isCurrent(c.row, c.col)) rooms.push({ x, y });
   }
+  const keep = (l: Linked) => shown.has(l.from) || (l.to !== null && shown.has(l.to));
   const here = current ? { x: cx(current.col) - half + ox, y: cy(current.row) - half + oy } : null;
   const ringInset = ringGap + PLAIN.ringWidth / 2;
   const ring = here
@@ -279,10 +333,19 @@ export function layoutPlain(input: PlainInput): PlainScene {
         radius: radius + ringInset,
       }
     : null;
-  const movedLines = lines.map(move);
-  const movedHidden = hidden.map(move);
+  const movedLines = lines.filter(keep).map((l) => move(l.seg));
+  const movedHidden = hidden.filter(keep).map((l) => move(l.seg));
 
-  const labels = placeLabels(input, m, ox, oy, rooms, here, ring, [...movedLines, ...movedHidden]);
+  const labels = placeLabels(
+    { ...input, cells: cells.filter((c) => shown.has(key(c.row, c.col))) },
+    m,
+    ox,
+    oy,
+    rooms,
+    here,
+    ring,
+    [...movedLines, ...movedHidden],
+  );
 
   return {
     size,

@@ -188,6 +188,50 @@ describe('layoutPlain in a small box', () => {
     expect(right).toBe(120 - 8);
   });
 
+  it('shows whole rows when the box is shorter than the drawing', () => {
+    // The Map pane at its minimum leaves the drawing a 96 px box.
+    const scene = layoutPlain({
+      cells: village(),
+      current: BANK,
+      width: 284,
+      height: 96,
+      zoom: 1,
+      measure,
+    });
+    const all = [...scene.rooms, scene.current!];
+    for (const r of all) {
+      expect(r.y).toBeGreaterThanOrEqual(0);
+      expect(r.y + scene.size).toBeLessThanOrEqual(96);
+    }
+    // Four 22 px rows fit in 96 px, and the drawing is nudged to show
+    // all four instead of three and two halves.
+    const rows = new Set(all.map((r) => r.y));
+    expect(rows.size).toBe(4);
+    // No line runs along a row the box left out.
+    for (const l of scene.lines) {
+      if (l.y1 !== l.y2) continue;
+      expect([...rows].some((y) => Math.abs(y + scene.size / 2 - l.y1) < 0.01)).toBe(true);
+    }
+    expect(scene.labels).toEqual([
+      { text: 'Bank', x: scene.current!.x + 21, y: expect.any(Number) },
+    ]);
+  });
+
+  it('keeps a line from a room that shows toward one left out', () => {
+    const scene = layoutPlain({
+      cells: village(),
+      current: BANK,
+      width: 284,
+      height: 96,
+      zoom: 1,
+      measure,
+    });
+    const top = Math.min(...scene.rooms.map((r) => r.y));
+    // The north road leaves the top row for the rooms above.
+    const up = scene.lines.filter((l) => l.x1 === l.x2 && Math.min(l.y1, l.y2) < top);
+    expect(up.length).toBeGreaterThan(0);
+  });
+
   it('drops a label that would leave the box', () => {
     const scene = layoutPlain({
       cells: village(),
