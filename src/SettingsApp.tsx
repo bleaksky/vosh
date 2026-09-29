@@ -2,15 +2,14 @@ import { useCallback, useEffect, useRef, useState, type ComponentType } from 're
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
+  followReplacedUiConfig,
   getUiConfig,
   isOwnThemeEcho,
   loadoutsGetState,
-  primeUiConfigBroadcast,
   primeUiConfigTheme,
   primeUiConfigThemePrefs,
   subscribeLoadoutsChanged,
   subscribeProfilesChanged,
-  subscribeProfileSwitched,
   type UiConfig,
 } from './lib/session';
 import { applyThemePrefs, subscribeThemeChanges, subscribeThemePrefs } from './lib/theme';
@@ -207,24 +206,25 @@ export function SettingsApp() {
     return () => window.clearTimeout(fallback);
   }, []);
 
-  // A profile switch replaces the whole UI config in the backend. Every
-  // save from this window sends the full snapshot, so re-read it here or
-  // the next edit writes the old profile's tracked affects, custom
-  // themes, and prompt template over the new profile.
+  // A profile switch, #profile load, #profile reset, and an import each
+  // replace the whole UI config in the backend. Every save from this
+  // window sends the full snapshot, so read it again here, or the next
+  // edit writes the old profile's tick count, chip style, tracked
+  // affects, custom themes, and the rest over the new one.
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    void subscribeProfileSwitched(() => {
-      getUiConfig()
-        .then((cfg) => {
-          if (cancelled) return;
-          setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
-          setConfig(cfg);
-          applyThemePrefs(cfg);
-          primeUiConfigBroadcast(cfg);
-        })
-        .catch((e) => setError(String(e)));
-    }).then((fn) => {
+    void followReplacedUiConfig(
+      (cfg) => {
+        if (cancelled) return;
+        setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
+        setConfig(cfg);
+        applyThemePrefs(cfg);
+      },
+      (e) => {
+        if (!cancelled) setError(String(e));
+      },
+    ).then((fn) => {
       if (cancelled) fn();
       else unsub = fn;
     });

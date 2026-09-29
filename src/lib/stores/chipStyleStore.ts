@@ -10,8 +10,9 @@ import { createStore } from './store';
 // How the status line draws the tick, the game time, and the moons,
 // from UiConfig chip_style. Seeded from ui_get_config, then kept live by
 // vosh://chip-style-changed, which setUiConfig emits to every window
-// when Settings saves, and refetched on vosh://profile-switched since
-// the style is per profile. Lifted from the old useChipStyle hook.
+// when Settings saves and the backend sends after a switch, a #profile
+// load or reset, or an import, and refetched on vosh://profile-switched
+// since the style is per profile. Lifted from the old useChipStyle hook.
 
 const store = createStore<ChipStyle>('value_only');
 let started = false;
