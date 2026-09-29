@@ -251,6 +251,14 @@ impl TickRuntime {
         Some(self.next_fire()?.saturating_duration_since(now))
     }
 
+    /// Time since the last tick. `None` while the timer is off.
+    pub(crate) fn elapsed(&self, now: Instant) -> Option<Duration> {
+        if !self.config.enabled {
+            return None;
+        }
+        Some(now.saturating_duration_since(self.last_tick?))
+    }
+
     /// Restart the count on a tick and open a new warning cycle.
     fn restart(&mut self, now: Instant) {
         self.last_tick = Some(now);
@@ -432,7 +440,16 @@ pub(crate) fn warn_color_escape(name: Option<&str>) -> String {
 pub(crate) struct TickPayload {
     pub enabled: bool,
     pub interval_ms: u64,
+    /// Time left until the expected tick, zero once it has passed.
     pub remaining_ms: u64,
+    /// Time since the last tick. It keeps growing past the interval
+    /// while the game runs late, so the frontend can show how late.
+    pub elapsed_ms: u64,
+    /// The expected tick has come and the game's tick has not, the
+    /// elapsed time at or past the interval.
+    pub overdue: bool,
+    /// The game's tick decides when the timer fires.
+    pub synced: bool,
     /// True for the emit that corresponds to a tick fire. Used by the
     /// frontend to play the optional beep exactly once per cycle.
     pub fired: bool,
@@ -441,10 +458,15 @@ pub(crate) struct TickPayload {
 
 impl TickPayload {
     pub(crate) fn from_runtime(runtime: &TickRuntime, now: Instant, fired: bool) -> Self {
+        let millis = |d: Duration| d.as_millis() as u64;
+        let elapsed = runtime.elapsed(now);
         Self {
             enabled: runtime.config.enabled,
-            interval_ms: runtime.config.interval.as_millis() as u64,
-            remaining_ms: runtime.remaining(now).map_or(0, |d| d.as_millis() as u64),
+            interval_ms: millis(runtime.config.interval),
+            remaining_ms: runtime.remaining(now).map_or(0, millis),
+            elapsed_ms: elapsed.map_or(0, millis),
+            overdue: elapsed.is_some_and(|e| e >= runtime.config.interval),
+            synced: runtime.synced,
             fired,
             sound: runtime.config.sound,
         }
@@ -775,6 +797,55 @@ mod tests {
         t.set_interval(40, tick + secs(10.0));
         assert_eq!(t.last_tick, Some(tick));
         assert_eq!(t.remaining(tick + secs(10.0)), Some(secs(30.0)));
+    }
+
+    #[test]
+    fn the_report_carries_the_time_since_the_tick_and_whether_it_is_overdue() {
+        let t0 = Instant::now();
+        let mut t = session(t0);
+        let p = t.poll(t0 + secs(12.5)).payload;
+        assert_eq!(
+            (p.elapsed_ms, p.remaining_ms, p.interval_ms),
+            (12_500, 17_500, 30_000)
+        );
+        assert!(!p.overdue);
+        assert!(!p.synced);
+
+        let tick = t0 + secs(14.0);
+        let p = t.on_game_tick(tick).expect("the tick lands").payload;
+        assert_eq!((p.elapsed_ms, p.remaining_ms), (0, 30_000));
+        assert!(p.synced);
+        assert!(p.fired);
+
+        // At the expected tick and past it, the report says overdue and
+        // keeps counting while the time left holds at zero.
+        let p = t.poll(tick + secs(30.0)).payload;
+        assert_eq!((p.elapsed_ms, p.remaining_ms), (30_000, 0));
+        assert!(p.overdue);
+        let p = t.poll(tick + secs(36.75)).payload;
+        assert_eq!((p.elapsed_ms, p.remaining_ms), (36_750, 0));
+        assert!(p.overdue);
+        assert!(p.synced);
+        assert!(!p.fired);
+
+        // Off, the report counts nothing.
+        t.disable();
+        let p = t.poll(tick + secs(40.0)).payload;
+        assert!(!p.enabled);
+        assert_eq!((p.elapsed_ms, p.remaining_ms), (0, 0));
+        assert!(!p.overdue);
+        assert!(!p.synced);
+    }
+
+    #[test]
+    fn the_report_serializes_the_new_fields() {
+        let t0 = Instant::now();
+        let t = session(t0);
+        let json =
+            serde_json::to_value(TickPayload::from_runtime(&t, t0 + secs(2.0), false)).unwrap();
+        assert_eq!(json["elapsed_ms"], 2_000);
+        assert_eq!(json["overdue"], false);
+        assert_eq!(json["synced"], false);
     }
 
     #[test]

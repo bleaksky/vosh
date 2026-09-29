@@ -211,24 +211,39 @@ describe('stores on the event bus', () => {
   it('count up from the last tick, warn at your threshold, and hide when reports stop', async () => {
     const s = await load();
     vi.useFakeTimers();
-    const tick = (remaining_ms: number) =>
+    const tick = (elapsed_ms: number, synced = false) =>
       fire('session://tick', {
         enabled: true,
         interval_ms: 30_000,
-        remaining_ms,
+        remaining_ms: Math.max(0, 30_000 - elapsed_ms),
+        elapsed_ms,
+        overdue: elapsed_ms >= 30_000,
+        synced,
         fired: false,
         sound: false,
       });
-    tick(14_000);
+    tick(16_000);
     expect(s.tick.getTick()).toEqual({
       active: true,
       secsSinceTick: 16,
+      secsLeft: 14,
       intervalSecs: 30,
       warnAt: 8,
       warn: false,
+      overdue: false,
+      synced: false,
     });
-    tick(7_500);
+    tick(22_500);
     expect(s.tick.getTick().warn).toBe(true);
+    // The game runs late. The count goes on past the interval.
+    tick(33_000, true);
+    expect(s.tick.getTick()).toMatchObject({
+      secsSinceTick: 33,
+      secsLeft: -3,
+      warn: true,
+      overdue: true,
+      synced: true,
+    });
     vi.advanceTimersByTime(2_000);
     expect(s.tick.getTick().active).toBe(false);
   });
