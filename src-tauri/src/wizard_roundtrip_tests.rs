@@ -6,7 +6,9 @@
 //! bar fires the last copy that is on, triggers in orders and at priorities of each
 //! profile's own, groups off for one kind and on for another under one
 //! name, presets on and off, preset triggers a file lacks, a profile that
-//! never saved a file, and settings that are not automation. For each set
+//! never saved a file, which you now and then switch to and run the
+//! wizard as before anything saves it, and settings that are not
+//! automation. For each set
 //! it launches as every character in per profile mode to see what each
 //! has on, and what each has on after each of a run of `#group` commands.
 //! It runs the wizard, then launches as every character in loadout mode,
@@ -570,14 +572,22 @@ fn write_set(set: &Set, dir: &Path) {
 /// The shared preset list the catalog takes, by the rule
 /// `first_catalog_presets` follows, worked out here on its own: every
 /// preset that any profile file had on, or the live list when no
-/// profile saved a file.
-fn shared_presets(dir: &Path, names: &[String], live: &[String]) -> Vec<&'static str> {
+/// profile saved a file. The wizard saves the live profile before it
+/// reads the files, so with `unsaved` naming the live profile when it has
+/// no file yet, its live list counts as the one that save gives it.
+fn shared_presets(
+    dir: &Path,
+    names: &[String],
+    unsaved: Option<&str>,
+    live: &[String],
+) -> Vec<&'static str> {
     let profiles = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
     let lists: Vec<Vec<String>> = names
         .iter()
         .map(|n| profiles.profile_path(n))
         .filter(|p| p.exists())
         .map(|p| ProfileConfig::load(&p).unwrap().ui.enabled_presets)
+        .chain(unsaved.map(|_| live.to_vec()))
         .collect();
     if lists.is_empty() {
         return presets_on(live);
@@ -738,8 +748,23 @@ async fn round_trip(seed: u64) -> Result<(), String> {
     // ones it keeps.
     let wizard = launch_as(dir, &names[set.wizard]).await;
     save(&wizard, dir).await;
+    // Now and then you switch to the profile that never saved a file and
+    // open the wizard before anything saves it. The preview used to leave
+    // it out of the shared list, which apply then counted.
+    let mut rng = Rng(seed ^ 0x3c6e_f372);
+    let unsaved = set
+        .files
+        .iter()
+        .position(Option::is_none)
+        .filter(|_| rng.chance(50))
+        .map(|n| names[n].as_str());
+    if let Some(name) = unsaved {
+        super::switch_profile(&wizard, Some(dir), name)
+            .await
+            .map_err(|e| format!("switch: {e}"))?;
+    }
     let live = wizard.profile.lock().await.ui.enabled_presets.clone();
-    let shared = shared_presets(dir, names, &live);
+    let shared = shared_presets(dir, names, unsaved, &live);
     let files_before: Vec<Option<String>> = {
         let profiles = ProfileSet::load_or_migrate(dir.to_path_buf()).unwrap();
         names
