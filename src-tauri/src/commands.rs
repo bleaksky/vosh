@@ -3380,17 +3380,41 @@ pub(crate) async fn tick_get_config(
     })
 }
 
-/// Apply a new tick configuration. Routes interval changes through
-/// `TickRuntime::set_interval` so the next-fire deadline rebuilds,
-/// and reset-pattern changes through `set_reset_pattern` so the
-/// regex re-compiles (an invalid regex returns the underlying error
-/// to the caller). Other fields are direct assignments. Persists the
-/// active profile and broadcasts `vosh://tick-config-changed`.
+/// Apply a new tick configuration through [`apply_tick_config`], which
+/// changes every field or none. Persists the active profile and
+/// broadcasts `vosh://tick-config-changed` only after the whole
+/// configuration applied.
 #[tauri::command]
 pub(crate) async fn tick_set_config(
     app: AppHandle,
     state: State<'_, SharedState>,
     config: TickConfigPayload,
+) -> Result<TickConfigPayload, String> {
+    let snapshot = {
+        let mut p = state.profile.lock().await;
+        apply_tick_config(&mut p.tick, &config, tokio::time::Instant::now())?
+    };
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    broadcast(&app, "vosh://tick-config-changed", &snapshot);
+    Ok(snapshot)
+}
+
+/// The error `tick_set_config` returns for a Reset on pattern that does
+/// not compile.
+const TICK_RESET_PATTERN_ERROR: &str =
+    "Vosh could not read the Reset on pattern. Check it and save again.";
+
+/// Apply a tick configuration from Settings to `tick`. Checks the Reset
+/// on pattern before it changes anything, so a pattern that does not
+/// compile leaves the running tick exactly as it was and returns a
+/// sentence. Routes interval changes through `TickRuntime::set_interval`
+/// so the next-fire deadline rebuilds. Other fields are direct
+/// assignments. Returns the configuration as it now reads.
+fn apply_tick_config(
+    tick: &mut crate::tick::TickRuntime,
+    config: &TickConfigPayload,
+    now: tokio::time::Instant,
 ) -> Result<TickConfigPayload, String> {
     // Normalize string options: empty / whitespace-only -> None so the
     // persisted state does not carry an empty placeholder.
@@ -3415,44 +3439,41 @@ pub(crate) async fn tick_set_config(
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
 
-    let snapshot = {
-        let mut p = state.profile.lock().await;
-        let now = tokio::time::Instant::now();
-        if config.enabled {
-            if !p.tick.config.enabled {
-                p.tick.enable(now);
-            }
-            p.tick.set_interval(config.interval_secs, now);
-        } else {
-            p.tick.disable();
-            // Still record the interval so the user can flip enabled
-            // back on without re-typing it.
-            p.tick.config.interval = std::time::Duration::from_secs(config.interval_secs.max(1));
-        }
-        p.tick
-            .set_reset_pattern(reset_pattern.clone())
-            .map_err(|e| format!("invalid reset pattern: {e}"))?;
-        p.tick.config.auto_fire.clone_from(&auto_fire);
-        p.tick.config.sound = config.sound;
-        p.tick.config.warn_at_secs = config.warn_at_secs.filter(|s| *s > 0);
-        p.tick.config.warn_message.clone_from(&warn_message);
-        p.tick.config.warn_color.clone_from(&warn_color);
+    // Everything that can fail runs before the first change.
+    let reset_regex =
+        crate::tick::compile_reset_pattern(reset_pattern.as_deref()).map_err(|e| {
+            warn!(error = %e, "tick reset pattern did not compile");
+            TICK_RESET_PATTERN_ERROR.to_string()
+        })?;
 
-        TickConfigPayload {
-            enabled: p.tick.config.enabled,
-            interval_secs: p.tick.config.interval.as_secs(),
-            auto_fire: auto_fire.clone(),
-            sound: p.tick.config.sound,
-            reset_pattern: reset_pattern.clone(),
-            warn_at_secs: p.tick.config.warn_at_secs,
-            warn_message: warn_message.clone(),
-            warn_color: warn_color.clone(),
+    if config.enabled {
+        if !tick.config.enabled {
+            tick.enable(now);
         }
-    };
-    let shared: SharedState = state.inner().clone();
-    persist_profile(&app, &shared).await;
-    broadcast(&app, "vosh://tick-config-changed", &snapshot);
-    Ok(snapshot)
+        tick.set_interval(config.interval_secs, now);
+    } else {
+        tick.disable();
+        // Still record the interval so the user can flip enabled
+        // back on without re-typing it.
+        tick.config.interval = std::time::Duration::from_secs(config.interval_secs.max(1));
+    }
+    tick.set_compiled_reset_pattern(reset_pattern.clone(), reset_regex);
+    tick.config.auto_fire.clone_from(&auto_fire);
+    tick.config.sound = config.sound;
+    tick.config.warn_at_secs = config.warn_at_secs.filter(|s| *s > 0);
+    tick.config.warn_message.clone_from(&warn_message);
+    tick.config.warn_color.clone_from(&warn_color);
+
+    Ok(TickConfigPayload {
+        enabled: tick.config.enabled,
+        interval_secs: tick.config.interval.as_secs(),
+        auto_fire,
+        sound: tick.config.sound,
+        reset_pattern,
+        warn_at_secs: tick.config.warn_at_secs,
+        warn_message,
+        warn_color,
+    })
 }
 
 /// Download + install the pending update and restart the app. Errors
@@ -3801,6 +3822,82 @@ mod tests {
         assert_eq!(live_affects(&state).await, ["Sanctuary"]);
         // Erelei belongs to the live profile, so nothing switches.
         assert_eq!(super::auto_switch_target(&state, "Erelei").await, None);
+    }
+
+    /// A Tick block from Settings: off, every minute, with every option
+    /// filled in and `reset_pattern` as the Reset on pattern.
+    fn tick_payload(reset_pattern: &str) -> super::TickConfigPayload {
+        super::TickConfigPayload {
+            enabled: false,
+            interval_secs: 60,
+            auto_fire: Some(" score ".into()),
+            sound: false,
+            reset_pattern: Some(reset_pattern.into()),
+            warn_at_secs: Some(5),
+            warn_message: Some("Tick soon".into()),
+            warn_color: Some("red".into()),
+        }
+    }
+
+    /// A running 30 second tick that resets on `^You feel`.
+    fn running_tick(now: tokio::time::Instant) -> crate::tick::TickRuntime {
+        let mut tick = crate::tick::TickRuntime::default();
+        tick.enable(now);
+        tick.set_reset_pattern(Some("^You feel".into())).unwrap();
+        tick
+    }
+
+    #[test]
+    fn a_tick_config_with_a_bad_reset_pattern_changes_nothing() {
+        let now = tokio::time::Instant::now();
+        let mut tick = running_tick(now);
+        let before = format!("{:?}", tick.config);
+        let next_fire = tick.next_fire;
+
+        let err = super::apply_tick_config(&mut tick, &tick_payload("[bad"), now).unwrap_err();
+        assert_eq!(
+            err,
+            "Vosh could not read the Reset on pattern. Check it and save again."
+        );
+        // Still on, still every 30 seconds, still on the same clock, and
+        // still resetting on the old pattern.
+        assert_eq!(format!("{:?}", tick.config), before);
+        assert!(tick.config.enabled);
+        assert_eq!(tick.config.interval.as_secs(), 30);
+        assert_eq!(tick.next_fire, next_fire);
+        assert!(tick.check_reset_match("You feel less tired."));
+    }
+
+    #[test]
+    fn a_tick_config_that_reads_applies_every_field() {
+        let now = tokio::time::Instant::now();
+        let mut tick = running_tick(now);
+
+        let saved = super::apply_tick_config(&mut tick, &tick_payload(" ^Dawn "), now).unwrap();
+        assert!(!saved.enabled);
+        assert_eq!(saved.interval_secs, 60);
+        assert_eq!(saved.auto_fire.as_deref(), Some("score"));
+        assert_eq!(saved.reset_pattern.as_deref(), Some("^Dawn"));
+        assert_eq!(saved.warn_at_secs, Some(5));
+        assert!(!tick.config.enabled);
+        assert_eq!(tick.next_fire, None);
+        assert_eq!(tick.config.interval.as_secs(), 60);
+        assert!(!tick.config.sound);
+        assert!(tick.check_reset_match("Dawn breaks."));
+        assert!(!tick.check_reset_match("You feel less tired."));
+
+        // Turned back on, the tick runs at the saved interval, and a
+        // blank pattern clears the reset.
+        let mut on = tick_payload("  ");
+        on.enabled = true;
+        let saved = super::apply_tick_config(&mut tick, &on, now).unwrap();
+        assert!(saved.enabled);
+        assert_eq!(saved.reset_pattern, None);
+        assert_eq!(
+            tick.next_fire,
+            Some(now + std::time::Duration::from_secs(60))
+        );
+        assert!(!tick.check_reset_match("Dawn breaks."));
     }
 
     #[test]

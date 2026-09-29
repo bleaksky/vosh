@@ -101,13 +101,20 @@ impl TickRuntime {
         &mut self,
         pattern: Option<String>,
     ) -> Result<(), regex::Error> {
-        let regex = match &pattern {
-            Some(p) => Some(Regex::new(p)?),
-            None => None,
-        };
+        let regex = compile_reset_pattern(pattern.as_deref())?;
+        self.set_compiled_reset_pattern(pattern, regex);
+        Ok(())
+    }
+
+    /// Install a pattern that [`compile_reset_pattern`] already
+    /// compiled, so a caller that checked it first cannot fail here.
+    pub(crate) fn set_compiled_reset_pattern(
+        &mut self,
+        pattern: Option<String>,
+        regex: Option<Regex>,
+    ) {
         self.config.reset_pattern = pattern;
         self.reset_regex = regex;
-        Ok(())
     }
 
     pub(crate) fn check_reset_match(&self, line: &str) -> bool {
@@ -171,6 +178,12 @@ impl TickRuntime {
         }
         false
     }
+}
+
+/// Compile a Reset on pattern without touching any runtime, so a caller
+/// can check it before it changes anything.
+pub(crate) fn compile_reset_pattern(pattern: Option<&str>) -> Result<Option<Regex>, regex::Error> {
+    pattern.map(Regex::new).transpose()
 }
 
 /// Resolve a color spec into the SGR escape that paints it: an ANSI name,

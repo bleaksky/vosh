@@ -332,11 +332,10 @@ describe('automationSaveError', () => {
   });
 
   it('names the Tick field when its Reset on pattern does not read', () => {
-    const raw =
-      'invalid reset pattern: regex parse error:\n    [bad\n    ^\nerror: unclosed character class';
-    expect(automationSaveError(raw)).toBe(
-      'Vosh could not read the Reset on pattern. Fix it and save again.',
-    );
+    // tick_set_config answers with this sentence, which passes through.
+    const sentence = 'Vosh could not read the Reset on pattern. Check it and save again.';
+    expect(automationSaveError(sentence)).toBe(sentence);
+    expect(automationSaveError(new Error(sentence))).toBe(sentence);
   });
 });
 
