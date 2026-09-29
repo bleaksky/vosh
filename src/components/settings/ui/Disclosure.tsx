@@ -1,0 +1,45 @@
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { cx } from './cx';
+import { ChevronRightIcon } from './icons';
+
+export interface DisclosureProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
+  /** The row label at 12/16. */
+  label: ReactNode;
+  /** Optional line under the label at 11/15 in the secondary color. */
+  description?: ReactNode;
+  /** Whether the content it controls shows. Render that content after
+   *  the Disclosure and point aria-controls at it. */
+  expanded: boolean;
+  /** Search and deep link anchor, like Row's. */
+  anchor?: string;
+}
+
+/** A row sized button that opens more settings, like the boards'
+ *  `Advanced` row: the label and description on the left and a 16 px
+ *  chevron right in the tertiary color that turns down while open. As
+ *  the last child of a Card it takes the card's bottom corners. */
+export function Disclosure({
+  label,
+  description,
+  expanded,
+  anchor,
+  className,
+  ...rest
+}: DisclosureProps) {
+  return (
+    <button
+      type="button"
+      {...rest}
+      className={cx('st-disclosure', className)}
+      aria-expanded={expanded}
+      data-st-anchor={anchor}
+      data-st-flash={anchor ? '' : undefined}
+    >
+      <span className="st-row-text">
+        <span className="st-row-label">{label}</span>
+        {description !== undefined && <span className="st-row-desc">{description}</span>}
+      </span>
+      <ChevronRightIcon className="st-disclosure-chevron" />
+    </button>
+  );
+}
