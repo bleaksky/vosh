@@ -525,8 +525,11 @@
 
 /* The Windows and Linux on-top native path insets the terminal while
    find is open so the bar clears the opaque surface: 8 above the bar,
-   40 of bar, 8 below. */
-.terminal-area-find-inset {
+   40 of bar, 8 below. Scoped like the shell's own terminal padding
+   (frame.css), which would otherwise win and leave the bar under the
+   surface. */
+.terminal-area-find-inset,
+.shell .terminal-area.terminal-area-find-inset {
   padding-top: 56px;
 }
 
