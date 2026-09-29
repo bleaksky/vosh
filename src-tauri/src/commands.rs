@@ -2081,21 +2081,40 @@ pub(crate) async fn logs_export(
 pub(crate) async fn scrollback_load(
     state: State<'_, SharedState>,
     feed_native: bool,
-) -> Result<Vec<u8>, String> {
+) -> Result<ScrollbackLoad, String> {
     let sb = state.scrollback.lock().await;
     let bytes = sb.dump();
     // The native grid is fed only live output, so the persisted scrollback
     // would be missing there. The live pane asks us to seed it, and only
     // the first ask per process lands. A reloaded page asks again while
-    // the grid still holds everything.
+    // the grid still holds everything. The seed is claimed even when the
+    // scrollback is empty, since the grid then gets every line live.
     #[cfg(native_surface)]
-    if feed_native && crate::term_grid::claim_seed() && !bytes.is_empty() {
+    let seeded_native = feed_native && crate::term_grid::claim_seed() && !bytes.is_empty();
+    #[cfg(native_surface)]
+    if seeded_native {
         crate::term_grid::feed_bytes(&bytes);
         crate::native_surface::request_redraw();
     }
     #[cfg(not(native_surface))]
-    let _ = feed_native;
-    Ok(bytes)
+    let seeded_native = {
+        let _ = feed_native;
+        false
+    };
+    Ok(ScrollbackLoad {
+        bytes,
+        seeded_native,
+    })
+}
+
+/// The persisted scrollback for a mounting terminal, and whether this call
+/// also wrote it into the native grid. The page mirrors its restored banner
+/// into the grid only when the seed landed here, so a reloaded page, whose
+/// grid already holds the history and the first banner, adds no second one.
+#[derive(Debug, serde::Serialize)]
+pub(crate) struct ScrollbackLoad {
+    pub bytes: Vec<u8>,
+    pub seeded_native: bool,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -2937,4 +2956,21 @@ pub(crate) async fn updater_install_and_relaunch(app: AppHandle) -> Result<(), S
         .await
         .map_err(|e| e.to_string())?;
     app.restart();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ScrollbackLoad;
+
+    #[test]
+    fn scrollback_load_names_the_fields_the_page_reads() {
+        let load = ScrollbackLoad {
+            bytes: vec![104, 105],
+            seeded_native: true,
+        };
+        assert_eq!(
+            serde_json::to_value(&load).unwrap(),
+            serde_json::json!({ "bytes": [104, 105], "seeded_native": true })
+        );
+    }
 }

@@ -596,9 +596,19 @@ export async function exportLogSession(sessionId: number, withAnsi: boolean): Pr
   return invoke('logs_export', { sessionId, withAnsi });
 }
 
-export async function loadScrollback(feedNative = false): Promise<Uint8Array> {
-  const bytes = await invoke<number[]>('scrollback_load', { feedNative });
-  return new Uint8Array(bytes);
+export interface ScrollbackLoad {
+  bytes: Uint8Array;
+  /** True when this load also seeded the native grid with the bytes. Only
+   *  the first seed request per process does, so a reloaded page sees
+   *  false while the grid still holds the history. */
+  seededNative: boolean;
+}
+
+export async function loadScrollback(feedNative = false): Promise<ScrollbackLoad> {
+  const res = await invoke<{ bytes: number[]; seeded_native: boolean }>('scrollback_load', {
+    feedNative,
+  });
+  return { bytes: new Uint8Array(res.bytes), seededNative: res.seeded_native };
 }
 
 // ThemeChoice is now a free-form string keyed against THEMES in

@@ -754,7 +754,7 @@ export function Terminal({
     // The live pane seeds the native grid with the persisted scrollback so
     // it has the same history as xterm; the quiet history pane must not.
     loadScrollback(!quietRef.current && nativeSurfaceEnabled())
-      .then((bytes) => {
+      .then(({ bytes, seededNative }) => {
         if (bytes.length > 0) {
           term.write(bytes);
           if (!quietRef.current) {
@@ -764,8 +764,10 @@ export function Terminal({
             term.write(banner);
             // Mirror the banner into the native grid so xterm and the surface
             // have the same line count; otherwise a dropdown swap to xterm
-            // shifts the content up by these rows.
-            if (nativeSurfaceEnabled()) {
+            // shifts the content up by these rows. Only when this load
+            // seeded the grid: after a reload the grid already holds the
+            // history and its first banner, and another would stack.
+            if (seededNative) {
               void invoke('native_surface_echo', { text: banner }).catch(() => {});
             }
           }
