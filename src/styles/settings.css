@@ -976,6 +976,19 @@
   padding: 0;
 }
 
+/* A row of keycaps 4 apart, and a shortcut set 12 before its toggle
+   (Show the panel on Layout). */
+.st-keys {
+  display: flex;
+  gap: 4px;
+}
+
+.st-control-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .st-chip {
   display: inline-flex;
   align-items: center;
