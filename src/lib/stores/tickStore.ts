@@ -79,7 +79,10 @@ function wholeSecsUp(ms: number): number {
 export function computeTick(payload: TickPayload | null, config: TickConfig | null): TickState {
   const warnAt =
     config?.warn_at_secs && config.warn_at_secs > 0 ? config.warn_at_secs : DEFAULT_TICK_WARN_SECS;
-  const active = payload !== null && payload.enabled && config?.enabled !== false;
+  // The report is the live timer. A connection starts the tick whatever
+  // the profile saved, so the config read at launch can say off while
+  // the tick runs.
+  const active = payload !== null && payload.enabled;
   if (!active) return inactive(warnAt);
   const intervalMs =
     payload.interval_ms > 0
@@ -175,6 +178,12 @@ export function startTickStore(): void {
   void subscribeTickConfigChanged((cfg) => {
     configGeneration += 1;
     config = cfg;
+    // Turned off, the timer stops reporting. Hide the count now rather
+    // than when the last report goes stale.
+    if (!cfg.enabled) {
+      payload = null;
+      window.clearTimeout(staleTimer);
+    }
     publish();
   });
   // Tick config is per profile, and a switch does not broadcast it.

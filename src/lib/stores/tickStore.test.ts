@@ -139,7 +139,7 @@ describe('computeTick', () => {
     expect(computeTick(bad, null)).toMatchObject({ secsSinceTick: 0, secsLeft: 30 });
   });
 
-  it('is inactive without a report or with the timer off', () => {
+  it('is inactive without a report or with the timer off in the report', () => {
     const off = {
       active: false,
       secsSinceTick: null,
@@ -152,7 +152,15 @@ describe('computeTick', () => {
     };
     expect(computeTick(null, config(null))).toEqual(off);
     expect(computeTick(payload(3_000, false), null)).toEqual(off);
-    expect(computeTick(payload(3_000), config(null, false))).toEqual(off);
+  });
+
+  it('shows a tick the session reports running even when the config read says off', () => {
+    // A connection starts the tick whatever the profile saved, and the
+    // config read at launch can predate it.
+    expect(computeTick(payload(3_000), config(null, false))).toMatchObject({
+      active: true,
+      secsSinceTick: 3,
+    });
   });
 });
 
