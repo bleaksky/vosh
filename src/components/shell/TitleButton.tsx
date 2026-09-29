@@ -1,6 +1,7 @@
 import { forwardRef } from 'react';
 import type { Connection } from '../../lib/useConnection';
 import { ChevronDownIcon } from './icons';
+import { useWindowTitle, windowTitle } from './windowTitle';
 
 // The session control centered in the title band (SPEC 1 and G2): a
 // status dot, your character in the title tone, the world in the
@@ -20,6 +21,7 @@ export const TitleButton = forwardRef<HTMLButtonElement, Props>(function TitleBu
   ref,
 ) {
   const { status, character, world } = connection;
+  useWindowTitle(windowTitle(status, character, world));
   let dot: DotKind;
   let primary: string;
   let secondary: string | null = null;
