@@ -1,0 +1,106 @@
+// Where a Settings deep link lands. A target travels as a bare string,
+// so localStorage, the goto event, and palette Recent ids need no
+// migration. The grammar is `group`, `group:section`, and
+// `group:section#anchor`, with `group#anchor` when no section applies.
+// For example `automation:macros` or `characters:Erelei#tracked`.
+// Every tab id the old Settings window used still resolves.
+
+export type SettingsGroup =
+  | 'general'
+  | 'appearance'
+  | 'layout'
+  | 'input'
+  | 'automation'
+  | 'characters';
+
+/** The six groups in nav order, with their visible names. */
+export const SETTINGS_GROUPS: readonly { id: SettingsGroup; label: string }[] = [
+  { id: 'general', label: 'General' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'layout', label: 'Layout' },
+  { id: 'input', label: 'Input' },
+  { id: 'automation', label: 'Automation' },
+  { id: 'characters', label: 'Characters' },
+];
+
+export function settingsGroupLabel(group: SettingsGroup): string {
+  return SETTINGS_GROUPS.find((g) => g.id === group)?.label ?? group;
+}
+
+export function isSettingsGroup(value: string): value is SettingsGroup {
+  return SETTINGS_GROUPS.some((g) => g.id === value);
+}
+
+/** A place in Settings. What `section` means depends on the group.
+ *  In Automation it is the kind (`triggers`, `timers`, `loadouts`).
+ *  In Characters it is a profile name, and no section means the active
+ *  profile. Everywhere else it is a section id the page scrolls to.
+ *  `anchor` is a row or block inside that. */
+export interface SettingsTarget {
+  group: SettingsGroup;
+  section?: string;
+  anchor?: string;
+}
+
+// Groups whose section names a kind or a profile rather than a place
+// to scroll to.
+const SECTION_IS_STATE: ReadonlySet<SettingsGroup> = new Set(['automation', 'characters']);
+
+// The tab ids the old Settings window used, from the palette, the pane
+// menu, and any pending tab left over from an older build.
+const LEGACY_TARGETS: Readonly<Record<string, SettingsTarget>> = {
+  general: { group: 'general' },
+  themes: { group: 'appearance', section: 'theme' },
+  typography: { group: 'appearance', section: 'text' },
+  vitals: { group: 'layout' },
+  tick: { group: 'automation', section: 'timers', anchor: 'tick' },
+  panels: { group: 'characters', anchor: 'layout' },
+  profiles: { group: 'characters' },
+  loadouts: { group: 'automation', section: 'loadouts' },
+  triggers: { group: 'automation', section: 'triggers' },
+  aliases: { group: 'automation', section: 'aliases' },
+  macros: { group: 'automation', section: 'macros' },
+  timers: { group: 'automation', section: 'timers' },
+  import: { group: 'automation', anchor: 'import' },
+  logs: { group: 'general', section: 'logs' },
+};
+
+/** Resolve a deep link string. Legacy tab ids map to their new place.
+ *  Anything this cannot read opens General. */
+export function resolveSettingsTarget(raw: string): SettingsTarget {
+  const text = raw.trim();
+  const legacy = LEGACY_TARGETS[text.toLowerCase()];
+  if (legacy) return { ...legacy };
+
+  const hash = text.indexOf('#');
+  const head = hash === -1 ? text : text.slice(0, hash);
+  const anchor = hash === -1 ? '' : text.slice(hash + 1).trim();
+  const colon = head.indexOf(':');
+  const group = (colon === -1 ? head : head.slice(0, colon)).trim().toLowerCase();
+  const rawSection = colon === -1 ? '' : head.slice(colon + 1).trim();
+  if (!isSettingsGroup(group)) return { group: 'general' };
+
+  const target: SettingsTarget = { group };
+  // A profile name keeps its case. Every other section is an id.
+  const section = group === 'characters' ? rawSection : rawSection.toLowerCase();
+  if (section) target.section = section;
+  if (anchor) target.anchor = anchor.toLowerCase();
+  return target;
+}
+
+/** The string form of a target, the inverse of resolveSettingsTarget. */
+export function formatSettingsTarget(target: SettingsTarget): string {
+  let out: string = target.group;
+  if (target.section) out += `:${target.section}`;
+  if (target.anchor) out += `#${target.anchor}`;
+  return out;
+}
+
+/** The anchors the page should scroll to for `target`, best first:
+ *  the anchor, then the section when the section names a place. */
+export function settingsScrollIds(target: SettingsTarget): string[] {
+  const ids: string[] = [];
+  if (target.anchor) ids.push(target.anchor);
+  if (target.section && !SECTION_IS_STATE.has(target.group)) ids.push(target.section);
+  return ids;
+}
