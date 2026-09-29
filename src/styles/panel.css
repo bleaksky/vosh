@@ -431,6 +431,91 @@
   color: var(--warn);
 }
 
+/* ── Vitals, pinned under the panes ──────────────────────────────── */
+
+/* 8 above, 28 per row, 11 below, and a 1 px line on top. The empty
+   state keeps the three row height so logging in moves nothing. */
+.panel-vitals {
+  flex: none;
+  min-height: 104px;
+  padding: 8px 0 11px;
+  border-top: 1px solid var(--sep);
+}
+
+.panel-vitals-row {
+  height: 28px;
+  padding: 4px 12px 0 18px;
+}
+
+.panel-vitals-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 16px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.panel-vitals-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--secondary);
+}
+
+.panel-vitals-value {
+  flex: none;
+  margin-left: 8px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.panel-vitals-meter {
+  height: 2px;
+  margin-top: 1px;
+  border-radius: 1px;
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.panel-vitals-fill {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--tertiary);
+}
+
+.panel-vitals-row-low .panel-vitals-value {
+  color: var(--danger);
+}
+
+.panel-vitals-row-low .panel-vitals-fill {
+  background: var(--danger);
+}
+
+.panel-vitals-row-combat .panel-vitals-label {
+  color: var(--text);
+}
+
+.panel-vitals-row-combat .panel-vitals-value {
+  color: var(--warn);
+}
+
+.panel-vitals-row-combat .panel-vitals-fill {
+  background: var(--warn);
+}
+
+.panel-vitals-empty {
+  margin: 0;
+  height: 16px;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--tertiary);
+}
+
 /* ── Pane menus (SPEC 7 menu recipe) ─────────────────────────────── */
 
 .pane-menu {
