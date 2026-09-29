@@ -1,7 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { sanitizeLayout, type PaneLayout } from './paneLayout';
-import { resolveActiveTheme, systemPrefersDark, THEME_PREFS_EVENT, themePrefsOf } from './theme';
+import {
+  resolveActiveTheme,
+  systemPrefersDark,
+  THEME_PREFS_EVENT,
+  themePrefsOf,
+  type ThemePrefs,
+} from './theme';
 import { BUILTIN_THEMES, customToAppTheme, DEFAULT_THEME_ID, themeTokens } from './themes';
 
 /** Resolve the tri-state tint setting: an explicit user choice wins;
@@ -1146,19 +1152,17 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   );
   // The four theme fields go out whole so Settings and the palette keep
   // current copies. theme-changed carries the id they resolve to, which
-  // is `theme` unless follow is on.
-  await emitChanged(
-    THEME_PREFS_EVENT,
-    themePrefsOf(config),
-    prev ? themePrefsOf(prev) : undefined,
-    deepEqual,
-  );
+  // is `theme` unless follow is on. Both come back to this window too,
+  // so note them first as its own.
+  const prefs = themePrefsOf(config);
+  const prevPrefs = prev ? themePrefsOf(prev) : undefined;
+  if (!prevPrefs || !deepEqual(prefs, prevPrefs)) noteThemeEcho(prefs);
+  await emitChanged(THEME_PREFS_EVENT, prefs, prevPrefs, deepEqual);
   const systemDark = systemPrefersDark();
-  await emitChanged(
-    'vosh://theme-changed',
-    resolveActiveTheme(config, systemDark),
-    prev ? resolveActiveTheme(prev, systemDark) : undefined,
-  );
+  const shown = resolveActiveTheme(config, systemDark);
+  const prevShown = prev ? resolveActiveTheme(prev, systemDark) : undefined;
+  if (shown !== prevShown) noteThemeEcho(shown);
+  await emitChanged('vosh://theme-changed', shown, prevShown);
   await emitChanged(
     'vosh://font-changed',
     { family: config.font_family, size: config.font_size },
@@ -1248,6 +1252,36 @@ export function primeUiConfigBroadcast(config: UiConfig): void {
 // while its own unsaved edits still diff as changes.
 export function primeUiConfigTheme(theme: string): void {
   if (lastSentConfig) lastSentConfig = { ...lastSentConfig, theme };
+}
+
+// Adopt the four theme fields another window saved (the palette's
+// Choose theme), the same way.
+export function primeUiConfigThemePrefs(prefs: ThemePrefs): void {
+  if (lastSentConfig) lastSentConfig = { ...lastSentConfig, ...themePrefsOf(prefs) };
+}
+
+// Every window hears its own broadcast. A theme id or theme fields
+// this window sent in the last second are its own echo, and adopting
+// one could undo a newer pick made while that save was in flight.
+const THEME_ECHO_MS = 1000;
+let themeEchoes: { key: string; at: number }[] = [];
+
+function themeEchoKey(value: string | ThemePrefs): string {
+  return typeof value === 'string' ? `id:${value}` : `prefs:${JSON.stringify(themePrefsOf(value))}`;
+}
+
+function noteThemeEcho(value: string | ThemePrefs): void {
+  const now = Date.now();
+  themeEchoes = themeEchoes.filter((e) => now - e.at < THEME_ECHO_MS);
+  themeEchoes.push({ key: themeEchoKey(value), at: now });
+}
+
+/** Whether a theme id or theme fields heard on the bus are this
+ *  window's own broadcast coming back. */
+export function isOwnThemeEcho(value: string | ThemePrefs): boolean {
+  const now = Date.now();
+  const key = themeEchoKey(value);
+  return themeEchoes.some((e) => e.key === key && now - e.at < THEME_ECHO_MS);
 }
 
 /** Save the theme choice alone. A full setUiConfig from a window that

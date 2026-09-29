@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { emit } from '@tauri-apps/api/event';
 import {
   broadcastUiConfigChanges,
+  isOwnThemeEcho,
   normalizeTerminalLineHeight,
   normalizeUiConfig,
+  primeUiConfigThemePrefs,
   seedDarkTheme,
   TERMINAL_LINE_HEIGHTS,
   type CustomTheme,
@@ -124,6 +126,46 @@ describe('broadcastUiConfigChanges theme events', () => {
     await broadcastUiConfigChanges({ ...base, dark_theme: 'dracula' });
     const events = sent.mock.calls.map(([event]) => event);
     expect(events).toContain('vosh://theme-prefs-changed');
+    expect(events).not.toContain('vosh://theme-changed');
+  });
+});
+
+describe('own theme echoes', () => {
+  it('knows the theme this window just sent', async () => {
+    const base = normalizeUiConfig(raw({ theme: 'nord' }));
+    await broadcastUiConfigChanges(base);
+    const next = { ...base, theme: 'gruvbox' };
+    await broadcastUiConfigChanges(next);
+    expect(isOwnThemeEcho('gruvbox')).toBe(true);
+    expect(isOwnThemeEcho({ ...next })).toBe(true);
+    expect(isOwnThemeEcho('dracula')).toBe(false);
+    expect(isOwnThemeEcho({ ...next, theme: 'dracula' })).toBe(false);
+  });
+
+  it('forgets an echo after a second', async () => {
+    vi.useFakeTimers();
+    try {
+      const base = normalizeUiConfig(raw({ theme: 'nord' }));
+      await broadcastUiConfigChanges(base);
+      await broadcastUiConfigChanges({ ...base, theme: 'monokai' });
+      expect(isOwnThemeEcho('monokai')).toBe(true);
+      vi.advanceTimersByTime(1000);
+      expect(isOwnThemeEcho('monokai')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not send theme fields another window already sent', async () => {
+    const sent = vi.mocked(emit);
+    const base = normalizeUiConfig(raw({ theme: 'nord' }));
+    await broadcastUiConfigChanges(base);
+    const picked = { ...base, follow_system_appearance: true, dark_theme: 'dracula' };
+    primeUiConfigThemePrefs(picked);
+    sent.mockClear();
+    await broadcastUiConfigChanges(picked);
+    const events = sent.mock.calls.map(([event]) => event);
+    expect(events).not.toContain('vosh://theme-prefs-changed');
     expect(events).not.toContain('vosh://theme-changed');
   });
 });
