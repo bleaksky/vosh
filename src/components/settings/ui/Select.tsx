@@ -16,9 +16,9 @@ export interface SelectProps extends Omit<
   value: string;
   onChange: (value: string) => void;
   options: readonly SelectOption[];
-  /** Width in px. The boards use 160 (Appearance) and 240 (Automation,
-   *  Characters). */
-  width?: number;
+  /** Width in px or any CSS length. The boards use 160 (Appearance)
+   *  and 240 (Automation, Characters). */
+  width?: number | string;
 }
 
 /** A native select drawn as a settings field: 28 high, radius 8, white
