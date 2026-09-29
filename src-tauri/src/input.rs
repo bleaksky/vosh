@@ -4,7 +4,7 @@
 //! profile rather than the connection.
 
 use tokio::time::Instant;
-use vosh_alias::{Alias, ExpandError};
+use vosh_alias::ExpandError;
 use vosh_trigger::{HighlightStyle, NamedColor, Trigger, TriggerAction};
 use vosh_vars::Scope;
 
@@ -428,7 +428,7 @@ fn slash_endrec(profile: &mut Profile) -> InputResult {
     let expansion = recorder.commands.join(";");
     let name = recorder.name.clone();
     let count = recorder.commands.len();
-    profile.aliases.set(Alias::new(name.clone(), expansion));
+    crate::script_state::define_alias(profile, name.clone(), expansion);
     echo_one(format!(
         "saved macro `{name}` ({count} command(s)) — invoke by typing `{name}`"
     ))
@@ -1733,6 +1733,7 @@ fn echo_lines<'a>(lines: impl IntoIterator<Item = &'a str>) -> InputResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vosh_alias::Alias;
 
     /// Run `lines` through the pipeline the way the typed path does and
     /// note each one.
@@ -2141,6 +2142,20 @@ mod tests {
             buff.expansion,
             "cast 'sanctuary' self;cast 'haste' self;cast 'bless' self"
         );
+    }
+
+    #[test]
+    fn a_recording_replaces_an_alias_in_its_group() {
+        let mut p = Profile::default();
+        let mut buff = Alias::new("buff", "cast 'armor' self");
+        buff.group = Some("buffs".into());
+        p.aliases.set(buff);
+        let _ = process(&mut p, "#record buff");
+        let _ = process(&mut p, "cast 'haste' self");
+        let _ = process(&mut p, "#endrec");
+        let buff = p.aliases.get("buff").unwrap();
+        assert_eq!(buff.expansion, "cast 'haste' self");
+        assert_eq!(buff.group.as_deref(), Some("buffs"));
     }
 
     #[test]
