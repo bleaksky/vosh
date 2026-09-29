@@ -3,8 +3,10 @@
 // is in the room, so the drawing keeps one size while you walk and
 // people come and go. Pure so the counts are unit tested.
 
-/** The most rows the band holds, the room row included. */
-export const MAP_BAND_MAX_ROWS = 4;
+/** The most rows the band holds, the room row included: the room and
+ *  two people, as on the approved board. Every row here is height the
+ *  drawing gives up, filled or not. */
+export const MAP_BAND_MAX_ROWS = 3;
 
 /** How many rows the band holds. `shared` is the height the drawing
  *  and the band split between them, `floor` the drawing's minimum, and

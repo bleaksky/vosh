@@ -12,6 +12,7 @@ import {
   type PlainColors,
 } from '../lib/mapPalette';
 import { PLAIN, layoutPlain, type PlainCell } from '../lib/mapPlain';
+import { MAP_STYLE_KEY, loadMapStyle, type MapStyle } from '../lib/mapStyle';
 import { drawTerrainDecorations } from '../lib/terrainDecor';
 import { subscribeThemeChanges } from '../lib/theme';
 import { pushToast } from '../lib/toasts';
@@ -90,15 +91,8 @@ interface MapTilesPayload {
   areas?: Record<string, AreaInfo>;
 }
 
-/** How the map draws. `plain` is the One Window drawing (SPEC 10 G7)
- *  and the default. The other three are the earlier styles. */
-export type MapStyle = 'plain' | 'squares' | 'glyphs' | 'tileset';
 type Style = MapStyle;
 
-const STYLE_KEY = 'vosh.map.style';
-// The earlier key. It held `squares` by default, written on every
-// mount, so only `glyphs` or `tileset` there is a choice you made.
-const LEGACY_STYLE_KEY = 'vosh.layout.serverMapStyle';
 const TILESET_KEY = 'vosh.layout.serverMapTileset';
 const ZOOM_KEY = 'vosh.layout.serverMapZoom';
 const CONTROLS_KEY = 'vosh.map.controlsOpen';
@@ -110,19 +104,11 @@ const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3.0;
 const ZOOM_STEP = 0.25;
 
-function isStyle(value: string | null): value is Style {
-  return value === 'plain' || value === 'squares' || value === 'glyphs' || value === 'tileset';
-}
-
 function loadStyle(): Style {
   try {
-    const value = localStorage.getItem(STYLE_KEY);
-    if (isStyle(value)) return value;
-    const legacy = localStorage.getItem(LEGACY_STYLE_KEY);
-    if (legacy === 'glyphs' || legacy === 'tileset') return legacy;
-    return 'plain';
+    return loadMapStyle(localStorage);
   } catch {
-    return 'plain';
+    return 'squares';
   }
 }
 
@@ -346,7 +332,7 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
 
   useEffect(() => {
     try {
-      localStorage.setItem(STYLE_KEY, style);
+      localStorage.setItem(MAP_STYLE_KEY, style);
     } catch {
       // ignore
     }
@@ -473,10 +459,14 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // A pane's drawing sits on the panel's own color, so it has no box
-    // around it. One style read serves the whole draw.
-    const colors = plainColors(getComputedStyle(document.documentElement));
-    const ground = embedded ? colors.ground : MAP_COLORS.bg;
+    // Squares, glyphs, and tileset paint on the terminal ground their
+    // sector colors were tuned against, so deep water and lava stay
+    // visible, and in a pane the drawing reads as a well in the panel.
+    // Only the plain drawing sits on the panel's own color. One style
+    // read serves the whole plain draw.
+    const plain =
+      style === 'plain' ? plainColors(getComputedStyle(document.documentElement)) : null;
+    const ground = embedded && plain ? plain.ground : MAP_COLORS.bg;
     ctx.fillStyle = ground;
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
@@ -498,8 +488,8 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     }
 
     // The plain drawing has no terrain around it and no sector colors.
-    if (style === 'plain') {
-      drawPlain(ctx, cssWidth, cssHeight, tiles, rows, cols, zoom, colors);
+    if (plain) {
+      drawPlain(ctx, cssWidth, cssHeight, tiles, rows, cols, zoom, plain);
       return;
     }
 
@@ -738,13 +728,6 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
       {!embedded && controlsOpen && (
         <div className="map-controls-row">
           <div className="map-mode-toggle">
-            <button
-              type="button"
-              aria-pressed={style === 'plain'}
-              onClick={() => setStyle('plain')}
-            >
-              plain
-            </button>
             <button
               type="button"
               aria-pressed={style === 'squares'}
