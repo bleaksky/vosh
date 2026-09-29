@@ -39,13 +39,14 @@ import {
   installUpdateAndRelaunch,
   listSystemFonts,
   primeUiConfigBroadcast,
+  primeUiConfigTheme,
   setUiConfig,
   subscribeDockLayoutChanged,
   subscribeProfileSwitched,
   type SystemFontEntry,
   type UiConfig,
 } from './lib/session';
-import { applyTheme } from './lib/theme';
+import { applyTheme, subscribeThemeChanges } from './lib/theme';
 import { customToAppTheme, setCustomThemes } from './lib/themes';
 import { loadFontStack, loadSystemFont } from './lib/fontLoader';
 import {
@@ -365,6 +366,28 @@ export function SettingsApp() {
     };
   }, []);
 
+  // Another window can change the theme (the palette's Choose theme).
+  // subscribeThemeChanges repaints this window, and the config copy
+  // takes the new choice so the next full save from any tab carries it
+  // instead of writing the old theme back.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void subscribeThemeChanges((themeId) => {
+      primeUiConfigTheme(themeId);
+      setConfig((prev) => (prev && prev.theme !== themeId ? { ...prev, theme: themeId } : prev));
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unsub = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+
   return (
     <main className="app settings-app">
       <TopBar
@@ -549,14 +572,21 @@ function useSettingsAutoSave(
 ) {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const saveTimerRef = useRef<number | null>(null);
+  // The snapshot waiting on the debounce. A theme picked in another
+  // window while it waits patches it, so the save does not put the old
+  // theme back.
+  const pendingRef = useRef<UiConfig | null>(null);
   const scheduleAutoSave = (next: UiConfig) => {
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    pendingRef.current = next;
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = null;
+      const cfg = pendingRef.current ?? next;
+      pendingRef.current = null;
       void (async () => {
         try {
-          await setUiConfig(next);
-          applyTheme(next.theme);
+          await setUiConfig(cfg);
+          applyTheme(cfg.theme);
           setSavedAt(Date.now());
         } catch (e) {
           onError(String(e));
@@ -581,10 +611,27 @@ function useSettingsAutoSave(
     void subscribeProfileSwitched(() => {
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
+      pendingRef.current = null;
     }).then((fn) => {
       if (cancelled) fn();
       else unsub = fn;
     });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void subscribeThemeChanges((themeId) => {
+      if (pendingRef.current) pendingRef.current = { ...pendingRef.current, theme: themeId };
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unsub = fn;
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
       unsub?.();
