@@ -205,7 +205,7 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
 }
 
 /// Define the alias `name`, or replace the one of that name, the way
-/// `mud.alias` and `#alias` do. A replaced alias stays in its group, so
+/// `mud.alias`, `#alias`, and `#endrec` do. A replaced alias stays in its group, so
 /// the group still turns it on and off. In loadout mode that group is
 /// what keeps a character's alias to that character, and a script that
 /// set the alias again at launch used to put it in front of every other
