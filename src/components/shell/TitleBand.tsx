@@ -98,8 +98,9 @@ export function TitleBand({
         <button
           type="button"
           className={`shell-icon-button${panelOpen ? '' : ' is-quiet'}`}
+          // The label says what a press does, so no pressed state on top
+          // of it ("Hide panel, pressed" reads backward).
           aria-label={panelLabel}
-          aria-pressed={panelOpen}
           title={`${panelLabel} (${shortcutLabel('Mod+Shift+L')})`}
           onClick={onTogglePanel}
         >
@@ -140,9 +141,34 @@ export function TitleBand({
 }
 
 // Minimize, maximize, and close for the frameless window on Windows and
-// Linux, after the band's own buttons.
+// Linux, after the band's own buttons. Maximize reads Restore while the
+// window is maximized.
 function WindowControls() {
   const win = () => getCurrentWindow();
+  const [maximized, setMaximized] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    const w = getCurrentWindow();
+    const read = () => {
+      w.isMaximized()
+        .then((m) => {
+          if (!cancelled) setMaximized(m);
+        })
+        .catch(() => {});
+    };
+    read();
+    w.onResized(read)
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
   return (
     <div className="shell-window-controls">
       <button
@@ -156,7 +182,7 @@ function WindowControls() {
       <button
         type="button"
         className="shell-icon-button"
-        aria-label="Maximize"
+        aria-label={maximized ? 'Restore' : 'Maximize'}
         onClick={() => void win().toggleMaximize()}
       >
         <MaximizeIcon />
