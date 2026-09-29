@@ -4,7 +4,8 @@
 // Terminal can refresh its xterm palette.
 
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { tokensToCssVars } from './chrome';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { tokensToCssVars, type Appearance } from './chrome';
 import { parseHex, toRgba } from './color';
 import {
   customToAppTheme,
@@ -19,6 +20,25 @@ const SYNC_EVENT = 'vosh://theme-changed';
 
 let cleanupContrastListener: (() => void) | null = null;
 let currentThemeId: string = DEFAULT_THEME_ID;
+let windowAppearance: Appearance | null = null;
+
+// Match the native window appearance to the theme: on macOS the window
+// rim and the inactive traffic lights, elsewhere the title bar where
+// the system draws one. It runs in whichever window applies the theme,
+// so the main and Settings windows each follow. Outside Tauri, or when
+// the call fails, the window keeps the system appearance.
+function syncWindowAppearance(appearance: Appearance) {
+  if (appearance === windowAppearance) return;
+  windowAppearance = appearance;
+  const retry = () => {
+    windowAppearance = null;
+  };
+  try {
+    getCurrentWindow().setTheme(appearance).catch(retry);
+  } catch {
+    retry();
+  }
+}
 
 function applyToRoot(theme: AppTheme) {
   const root = document.documentElement;
@@ -40,6 +60,7 @@ function applyToRoot(theme: AppTheme) {
   if (theme.xterm.background) {
     root.style.setProperty('--xterm-bg', theme.xterm.background);
   }
+  syncWindowAppearance(tokens.appearance);
   currentThemeId = theme.id;
 }
 
