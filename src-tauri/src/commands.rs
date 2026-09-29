@@ -3637,25 +3637,30 @@ fn plan_migration(
     plan
 }
 
-/// Why the shared catalog wizard may not run, or None when it may. Past
-/// what the app data folder holds, see
-/// [`crate::loadout_store::migration_refusal`], it refuses a session that
-/// runs in loadout mode. Its profile files hold no items, so a run would
-/// build a catalog with none, even once catalog.toml has left the folder.
+/// Why the shared catalog wizard may not run, or None when it may. It
+/// refuses a session that runs in loadout mode first. Its profile files
+/// hold no items, so a run would build a catalog with none, even once
+/// catalog.toml has left the folder. The save at quit writes catalog.toml
+/// and loadouts.toml back from the session, so the refusal says to quit
+/// before you follow the steps for a new catalog in the help. The
+/// refusals over what the app data folder holds come after it, see
+/// [`crate::loadout_store::migration_refusal`]. Those say what to do with
+/// Vosh closed, and in this session the save at quit would undo it, as a
+/// catalog written back beside the backups you copied over lays their old
+/// items over it.
 async fn migration_refusal(
     state: &SharedState,
     app_data: &std::path::Path,
 ) -> Option<&'static str> {
-    if let Some(reason) = crate::loadout_store::migration_refusal(app_data) {
-        return Some(reason);
-    }
     if state.global_catalog.lock().await.is_some() {
         return Some(
-            "You already use a shared catalog in this session, so Vosh will not build another \
-             one. Quit Vosh and open it again before you run the wizard.",
+            "This session runs on a shared catalog, and Vosh saves it to catalog.toml again when \
+             you quit, so Vosh will not build another one now. To build a new catalog, quit \
+             Vosh first, then follow the steps for a new catalog under Set up loadouts in the \
+             help.",
         );
     }
-    None
+    crate::loadout_store::migration_refusal(app_data)
 }
 
 /// What the shared catalog wizard reads, see [`migration_sources`].
@@ -5667,6 +5672,12 @@ mod tests {
             assert_eq!(library.matches("\n    id: '").count(), LIBRARY.len());
         }
 
+        const LOADOUT_SESSION_REFUSAL: &str =
+            "This session runs on a shared catalog, and Vosh saves it to catalog.toml again \
+             when you quit, so Vosh will not build another one now. To build a new catalog, quit \
+             Vosh first, then follow the steps for a new catalog under Set up loadouts in the \
+             help.";
+
         const HELD: &str = "Vosh could not read your shared catalog at launch, so it will not \
                             build a new one over it. Fix catalog.toml or loadouts.toml and \
                             restart Vosh.";
@@ -5869,15 +5880,66 @@ mod tests {
             std::fs::rename(legacy_dir(dir.path()), aside.path().join("legacy")).unwrap();
             let healer = read(&set.profile_path("Healer"));
 
-            assert_eq!(
-                refused(&state, dir.path()).await,
-                "You already use a shared catalog in this session, so Vosh will not build \
-                 another one. Quit Vosh and open it again before you run the wizard."
-            );
+            assert_eq!(refused(&state, dir.path()).await, LOADOUT_SESSION_REFUSAL);
             assert!(!catalog_path(dir.path()).exists());
             assert!(!loadouts_path(dir.path()).exists());
             assert!(!legacy_dir(dir.path()).exists());
             assert_eq!(read(&set.profile_path("Healer")), healer);
+
+            // The refusal used to say to quit and open Vosh again before
+            // the wizard. The save at quit writes the catalog and the
+            // loadouts back, so the wizard refused again after that.
+            persist(&state, dir.path()).await;
+            drop(state);
+            assert!(catalog_path(dir.path()).exists());
+            assert!(loadouts_path(dir.path()).exists());
+
+            // With Vosh closed, you follow the steps for a new catalog in
+            // the help, and the new catalog holds the items of the backups.
+            let later = tempfile::tempdir().unwrap();
+            for path in [catalog_path(dir.path()), loadouts_path(dir.path())] {
+                std::fs::rename(&path, later.path().join(path.file_name().unwrap())).unwrap();
+            }
+            for entry in std::fs::read_dir(aside.path().join("legacy")).unwrap() {
+                let entry = entry.unwrap();
+                let back = set.profile_path(entry.path().file_stem().unwrap().to_str().unwrap());
+                std::fs::copy(entry.path(), back).unwrap();
+            }
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
+                .await
+                .unwrap();
+            let state = relaunch_as(dir.path(), "Healer").await;
+            assert!(state.global_catalog.lock().await.is_some());
+            assert_eq!(items_on(&*state.profile.lock().await), ["alias hh"]);
+        }
+
+        #[tokio::test]
+        async fn a_session_on_the_catalog_says_so_before_it_names_the_backups() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            write_alias(&set, "Healer", "hh");
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::apply_migration(&state, dir.path(), &[], LIBRARY, || {})
+                .await
+                .unwrap();
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            assert_eq!(refused(&state, dir.path()).await, LOADOUT_SESSION_REFUSAL);
+
+            // While Vosh runs on the catalog, you move the catalog out, then
+            // the loadouts. The refusals over loadouts.toml and the backups
+            // used to answer and said to quit and copy the backups back.
+            // The save at quit writes the catalog back, and a backup copied
+            // back beside it lays its old items over it.
+            let aside = tempfile::tempdir().unwrap();
+            for path in [catalog_path(dir.path()), loadouts_path(dir.path())] {
+                std::fs::rename(&path, aside.path().join(path.file_name().unwrap())).unwrap();
+                assert_eq!(refused(&state, dir.path()).await, LOADOUT_SESSION_REFUSAL);
+            }
+            persist(&state, dir.path()).await;
+            assert!(catalog_path(dir.path()).exists());
+            assert!(loadouts_path(dir.path()).exists());
         }
 
         #[tokio::test]
@@ -6132,13 +6194,12 @@ mod tests {
                 .unwrap();
 
             // Later you want to build the catalog again, and you do what
-            // each refusal says, in turn.
+            // each refusal says, in turn, with Vosh closed.
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
             let aside = tempfile::tempdir().unwrap();
-            assert_eq!(
-                refused(&state, dir.path()).await,
-                "You already have a shared catalog, so Vosh will not build another one over it."
-            );
+            assert_eq!(refused(&state, dir.path()).await, LOADOUT_SESSION_REFUSAL);
+            persist(&state, dir.path()).await;
+            drop(state);
             let catalog = catalog_path(dir.path());
             std::fs::rename(&catalog, aside.path().join("catalog.toml")).unwrap();
             let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
