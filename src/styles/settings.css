@@ -265,6 +265,11 @@
   color: var(--tertiary);
 }
 
+/* A press on the chevron drags the window like the rest of the band. */
+.st-crumb-sep {
+  pointer-events: none;
+}
+
 .st-crumb-title {
   margin: 0;
   min-width: 0;

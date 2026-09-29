@@ -1,16 +1,42 @@
-# Settings primitives
+# Settings
 
-Every Settings page builds from the primitives in `ui/`. Import them from `ui/index.ts`.
+`src/SettingsApp.tsx` is the frame. It draws the sidebar (`Sidebar.tsx`), the breadcrumb band, and one page per group from `groups/`. Every page builds from the primitives in `ui/`.
+
+## Pages
+
+A page is a component in `groups/` that takes `SettingsPageProps` from `pageTypes.ts`.
+
+- `target` is where the page should land. `target.section` and `target.anchor` come from the nav, a deep link, or a search hit.
+- `navSeq` goes up on every navigation, even to the same target. React to it when the target changes state on the page, like the Automation kind or the Characters profile.
+- `config`, `setConfig`, and `onError` are the window's UiConfig copy, its setter, and the error line above the page. Every save sends the whole snapshot, so never keep a second copy of the config.
+- `pathB` is true in loadout mode.
+- `navigate(target)` goes somewhere else in Settings.
+
+Register a page in `PAGES` in `SettingsApp.tsx`. A page that pins its own bar and scrolls inside itself, like the Automation save bar, sets `selfScroll` there.
+
+The placeholders for Appearance, Automation, and Characters show the old editors under the board's headings. Replace each whole component with its board. General, Layout, and Input have no board yet. Their old editors sit in `legacy/` and render inside `LegacyIsland`, which marks them `data-interim`.
+
+## Deep links and search
+
+A deep link is a string like `automation:macros` or `characters:Erelei#tracked`. `src/lib/settingsNav.ts` resolves it and maps every old tab id. `src/lib/settingsLink.ts` opens Settings on one from the main window.
+
+What a section means depends on the group. In Automation it is the kind. In Characters it is the profile name, and no section means the active profile. Everywhere else it is a section `id` the frame scrolls to.
+
+Search finds rows. `src/lib/settingsSearch.ts` lists every row with its label and target. When a page adds a row, add it there too, and give the element the same anchor, `anchor` on `Row` or `Disclosure` and `id` on `Section`. The frame scrolls to it and flashes a row (`revealAnchor.ts`). When the anchor sits inside a closed `Disclosure`, open it when `target.anchor` names it.
+
+# Primitives
+
+Import the primitives from `ui/index.ts`. A page in `groups/` does it like this.
 
 ```tsx
-import { Section, Row, Toggle, Select } from './ui';
+import { Section, Row, Toggle, Select } from '../ui';
 ```
 
 The styles live in `src/styles/settings.css`. Every class starts with `st-` and reads only the One Window tokens (`--bg`, `--panel`, `--sep`, `--selrow`, `--inputband`, `--text`, `--secondary`, `--tertiary`, `--accent`, `--on-accent`, `--danger-text`, and the rest in `tokens.css`). The Settings root is not under `.settings-app`, so the legacy rules in `styles.css` never reach new markup. Keep it that way. Do not add a `settings-` class to new markup.
 
 Use monospace only for MUD text. That means patterns, sent commands, macro keys, host, and port. Everything else uses the UI font with tabular numbers, which the root already sets.
 
-## Layout
+## Layout blocks
 
 `Section` holds a heading and a card.
 
