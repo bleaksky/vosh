@@ -1316,10 +1316,9 @@ function deepEqual<T>(a: T, b: T): boolean {
 
 // Fire the cross-window `vosh://*-changed` event fan-out for every
 // field in `config` that differs from the last-broadcast snapshot.
-// Both `setUiConfig` (after writing to disk) and the
-// profile-switched handler in App.tsx (after re-fetching the new
-// profile's config) call this so every window's per-field subscriber
-// sees the updated value.
+// `setUiConfig` calls this after writing to disk, and the main window's
+// followReplacedUiConfig sends every field through it after a replace,
+// so every window's per-field subscriber sees the updated value.
 export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> {
   const prev = lastSentConfig;
   lastSentConfig = config;
@@ -1427,9 +1426,10 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
 }
 
 // Adopt `config` as this window's last-broadcast snapshot without
-// emitting anything. A window that re-reads its config after a profile
-// switch calls this, since every window already heard the new values,
-// so its next save diffs against the new profile rather than the old.
+// emitting anything. A window that reads its config again after a
+// replace calls this, since the main window sends every window the new
+// values, so its next save diffs against the new profile rather than
+// the old.
 export function primeUiConfigBroadcast(config: UiConfig): void {
   lastSentConfig = config;
 }
@@ -1445,24 +1445,47 @@ export async function subscribeUiConfigReplaced(cb: () => void): Promise<Unliste
   return listen<unknown>(UI_CONFIG_REPLACED_EVENT, () => cb());
 }
 
-/** Keep a window that saves the whole UiConfig on the live profile.
- *  Each save sends every field, so a copy from before a replace would
- *  write the old profile's values back. Every replace reads the config
- *  again, never sharing a read that started before it, adopts it as
- *  this window's last broadcast so the next save sends only what you
- *  change, and hands it to `apply`. Only the newest read applies. */
+/** How followReplacedUiConfig hands a window the replaced config. */
+export interface FollowReplacedOptions {
+  /** After `apply`, send every field to every window. The main window
+   *  does this, since Input, the vitals, the prompt, and the other
+   *  per-field listeners follow those events, and the backend sends
+   *  only a few of them. A diff against this window's last broadcast
+   *  could skip a field, since saves from Settings never move it. */
+  broadcast?: boolean;
+}
+
+/** Keep a window on the live profile's UI config. The backend replaces
+ *  it on a profile switch, a #profile load or reset, or an import.
+ *  Every replace reads the config again, never sharing a read that
+ *  started before it, and hands it to `apply`. Only the newest read
+ *  applies.
+ *
+ *  A window that saves the whole UiConfig (Settings) sends every field
+ *  with each save, so a copy from before the replace would write the
+ *  old profile's values back. Its read becomes this window's last
+ *  broadcast, so the next save sends only what you change, since the
+ *  main window has sent the rest. The main window passes `broadcast`
+ *  and sends them. */
 export async function followReplacedUiConfig(
   apply: (config: UiConfig) => void,
   onError: (error: unknown) => void,
+  options: FollowReplacedOptions = {},
 ): Promise<UnlistenFn> {
   let generation = 0;
   return subscribeUiConfigReplaced(() => {
     const mine = ++generation;
     fetchUiConfig()
-      .then((config) => {
+      .then(async (config) => {
         if (mine !== generation) return;
-        primeUiConfigBroadcast(config);
+        if (!options.broadcast) {
+          primeUiConfigBroadcast(config);
+          apply(config);
+          return;
+        }
         apply(config);
+        lastSentConfig = null;
+        await broadcastUiConfigChanges(config);
       })
       .catch(onError);
   });

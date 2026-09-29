@@ -2387,12 +2387,12 @@ pub(crate) async fn apply_profile_switch(
     let app_data = app.path().app_data_dir().ok();
     switch_profile(state, app_data.as_deref(), name).await?;
 
-    // Hand every window the new profile's panes and tracked affects
-    // from here rather than leaving each window to re-fetch. The main
-    // window's broadcast after its re-fetch diffs against its own last
-    // snapshot, so it can skip a list that Settings changed meanwhile.
-    // These go out before profile-switched so the stores already hold
-    // the new values when windows react to the switch.
+    // Hand every window the new profile's panes, tracked affects, tick
+    // settings, and chip style from here, then the replace notice, on
+    // which the main window reads the config again and sends every
+    // window the rest. These go out before profile-switched so the
+    // stores already hold the new values when windows react to the
+    // switch.
     broadcast_profile_ui(app, state).await;
 
     broadcast(app, "vosh://profile-switched", &name);

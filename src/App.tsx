@@ -29,7 +29,7 @@ import {
   usePanelLayout,
 } from './components/panel/panelLayoutStore';
 import {
-  broadcastUiConfigChanges,
+  followReplacedUiConfig,
   getUiConfig,
   setWindowSize,
   listTriggers,
@@ -40,7 +40,6 @@ import {
   subscribeBrightBoldChanged,
   subscribeBaseAnsiChanged,
   subscribeCustomThemesChanged,
-  subscribeProfileSwitched,
   subscribeSplitDividerChanged,
   subscribeTerminalLineHeightChanged,
   normalizeTerminalLineHeight,
@@ -880,38 +879,34 @@ function App() {
     return onUnmount;
   }, []);
 
-  // When the active profile changes (manual #profile switch, Settings
-  // click, or Char.Status auto-swap after login), the backend has
-  // already swapped the in-memory Profile but the frontend's React
-  // state still mirrors the old profile's theme / font / vitals /
-  // etc. Re-fetch the new UiConfig, apply locally, and broadcast the
-  // diff so every other window's per-field subscriber settles too.
-  // The pane layout and the tracked affects are not part of the
-  // UiConfig fan-out. The backend sends each on its own event after
-  // the switch, and the panel's stores follow those.
+  // A profile switch (#profile switch, a Settings click, or the
+  // Char.Status swap after login), #profile load, #profile reset, and
+  // an import each replace the whole UI config in the backend, while
+  // this window still shows the old profile's theme, font, and the
+  // rest. Read the new config, apply it here, and send every field to
+  // every window, so Input, the vitals, the prompt, and each other
+  // per-field listener settle too. The panes, the tracked affects, the
+  // tick settings, and the chip style also come from the backend on
+  // their own events.
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
-    void subscribeProfileSwitched(() => {
-      void (async () => {
-        try {
-          const cfg = await getUiConfig();
-          if (cancelled) return;
-          setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
-          setBaseAnsi(cfg.terminal_base_ansi);
-          applyThemePrefs(cfg, { broadcast: true });
-          setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
-          setFontSize(cfg.font_size || 14);
-          setTerminalLineHeight(cfg.terminal_line_height);
-          setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
-          applyBrightBold(cfg.bright_bold);
-          applySplitDividerColor(cfg.split_divider_color);
-          await broadcastUiConfigChanges(cfg);
-        } catch (e) {
-          console.error('[app] profile-switched refresh failed', e);
-        }
-      })();
-    }).then((fn) => {
+    void followReplacedUiConfig(
+      (cfg) => {
+        if (cancelled) return;
+        setCustomThemes((cfg.custom_themes ?? []).map(customToAppTheme));
+        setBaseAnsi(cfg.terminal_base_ansi);
+        applyThemePrefs(cfg, { broadcast: true });
+        setFontFamily(cfg.font_family || DEFAULT_FONT_FAMILY);
+        setFontSize(cfg.font_size || 14);
+        setTerminalLineHeight(cfg.terminal_line_height);
+        setThemeTerminalColors(resolveThemeTerminalColors(cfg.theme, cfg.theme_terminal_colors));
+        applyBrightBold(cfg.bright_bold);
+        applySplitDividerColor(cfg.split_divider_color);
+      },
+      (e) => console.error('[app] reading the replaced config failed', e),
+      { broadcast: true },
+    ).then((fn) => {
       if (cancelled) fn();
       else unsub = fn;
     });
