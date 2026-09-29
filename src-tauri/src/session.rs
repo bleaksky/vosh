@@ -21,6 +21,7 @@ use crate::connection::{self, ConnectionError, Stream};
 use crate::gmcp_bind;
 use crate::input;
 use crate::line_accumulator::{ChunkOp, LineAccumulator};
+use crate::list_events::{broadcast_list_changes, ListChanges, ListRevisions};
 use crate::map_state::{self, SharedMap};
 use crate::profile::Profile;
 use crate::script_state::{self, ApplyResult, PendingTimer, SharedTimers};
@@ -663,10 +664,13 @@ async fn handle_tick(
     }
 
     if let Some(command) = auto_fire {
-        let result = {
+        let (result, lists) = {
             let mut p = profile.lock().await;
-            input::process(&mut p, &command)
+            let before = ListRevisions::of(&p);
+            let result = input::process(&mut p, &command);
+            (result, ListChanges::since(before, &p))
         };
+        broadcast_list_changes(app, lists);
         if !result.echo.is_empty() {
             let mut buf = Vec::new();
             for line in &result.echo {
@@ -750,8 +754,9 @@ async fn run_fired_command(
     profile: &Arc<Mutex<Profile>>,
     command: &str,
 ) -> std::io::Result<()> {
-    let (echoes, bytes) = {
+    let (echoes, bytes, lists) = {
         let mut p = profile.lock().await;
+        let lists_before = ListRevisions::of(&p);
         let result = input::process(&mut p, command);
         let mut echoes = result.echo;
         let mut bytes = result.bytes;
@@ -774,8 +779,9 @@ async fn run_fired_command(
             echoes.extend(apply.echoes);
             bytes.extend(apply.send_bytes);
         }
-        (echoes, bytes)
+        (echoes, bytes, ListChanges::since(lists_before, &p))
     };
+    broadcast_list_changes(app, lists);
     if !echoes.is_empty() {
         let mut buf = Vec::new();
         for line in &echoes {
@@ -1331,6 +1337,8 @@ async fn apply_script_result(
     if apply.durable_changed {
         crate::commands::mark_profile_dirty(app);
     }
+    // A Lua `mud.alias` changes the list an open Settings page shows.
+    broadcast_list_changes(app, apply.lists);
 
     if !apply.send_bytes.is_empty() {
         stream.write_all(&apply.send_bytes).await?;
@@ -1348,14 +1356,17 @@ async fn apply_script_result(
     if !apply.inputs.is_empty() {
         let mut input_bytes = Vec::new();
         let mut input_echoes: Vec<String> = Vec::new();
-        {
+        let lists = {
             let mut p = profile.lock().await;
+            let before = ListRevisions::of(&p);
             for line in apply.inputs {
                 let result = crate::input::process(&mut p, &line);
                 input_bytes.extend(result.bytes);
                 input_echoes.extend(result.echo);
             }
-        }
+            ListChanges::since(before, &p)
+        };
+        broadcast_list_changes(app, lists);
         if !input_bytes.is_empty() {
             stream.write_all(&input_bytes).await?;
             stream.flush().await?;

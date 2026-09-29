@@ -13,6 +13,7 @@ use vosh_alias::Alias;
 use vosh_script::{Action, ScriptEngine, ScriptOutcome, VarScope};
 use vosh_vars::{Scope, VariableStore};
 
+use crate::list_events::{ListChanges, ListRevisions};
 use crate::profile::Profile;
 
 /// One pending one-shot Lua timer.
@@ -105,6 +106,9 @@ pub(crate) struct ApplyResult {
     /// debounced profile persist; ephemeral runtime state (prompt
     /// vars, timers, echoes) does not set it.
     pub durable_changed: bool,
+    /// The trigger and alias lists this apply changed, like an alias a
+    /// Lua `mud.alias` set. The caller tells the windows.
+    pub lists: ListChanges,
     pub new_timers: Vec<PendingTimer>,
     pub cancel_timers: Vec<u32>,
 }
@@ -113,6 +117,7 @@ pub(crate) struct ApplyResult {
 /// for performing the IO listed in the returned [`ApplyResult`].
 pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> ApplyResult {
     let mut result = ApplyResult::default();
+    let lists_before = ListRevisions::of(profile);
     for action in outcome.actions {
         match action {
             Action::Send(line) => {
@@ -194,6 +199,7 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
             }
         }
     }
+    result.lists = ListChanges::since(lists_before, profile);
     result
 }
 

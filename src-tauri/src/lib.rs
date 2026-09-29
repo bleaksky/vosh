@@ -74,6 +74,7 @@ mod gmcp_bind;
 mod import;
 mod input;
 mod line_accumulator;
+mod list_events;
 mod loadout;
 mod loadout_store;
 mod log_state;

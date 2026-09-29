@@ -2,6 +2,7 @@
 //! insert, and exposes them in priority order.
 
 use std::collections::BTreeSet;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use regex::Regex;
 use serde::ser::SerializeStruct;
@@ -218,6 +219,14 @@ pub(crate) struct CompiledTrigger {
     pub regexes: Vec<Regex>,
 }
 
+/// Hands out list revisions. One counter serves every store, so a store
+/// built to replace another never reads as the same list by accident.
+static NEXT_REVISION: AtomicU64 = AtomicU64::new(1);
+
+fn next_revision() -> u64 {
+    NEXT_REVISION.fetch_add(1, Ordering::Relaxed)
+}
+
 #[derive(Default)]
 pub struct TriggerStore {
     items: Vec<CompiledTrigger>,
@@ -226,11 +235,21 @@ pub struct TriggerStore {
     /// its own `enabled` flag. Stored as the disabled inverse so a
     /// freshly-tagged group defaults to ON.
     disabled_groups: BTreeSet<String>,
+    /// See [`TriggerStore::revision`].
+    revision: u64,
 }
 
 impl TriggerStore {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Moves each time a trigger is added, replaced, or removed, so a
+    /// caller can tell whether the list changed across a step without
+    /// comparing it. Turning a group on or off leaves it alone, since
+    /// the list itself stays the same.
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
     /// Insert or replace a trigger by name. Compiles every enabled
@@ -254,13 +273,18 @@ impl TriggerStore {
         self.items.push(CompiledTrigger { trigger, regexes });
         self.items
             .sort_by_key(|t| std::cmp::Reverse(t.trigger.priority));
+        self.revision = next_revision();
         Ok(())
     }
 
     pub fn remove(&mut self, name: &str) -> bool {
         let before = self.items.len();
         self.items.retain(|t| t.trigger.name != name);
-        before != self.items.len()
+        let removed = before != self.items.len();
+        if removed {
+            self.revision = next_revision();
+        }
+        removed
     }
 
     /// Remove every trigger tagged with the given preset id. Returns the
@@ -269,7 +293,11 @@ impl TriggerStore {
         let before = self.items.len();
         self.items
             .retain(|t| t.trigger.preset.as_deref() != Some(preset_id));
-        before - self.items.len()
+        let removed = before - self.items.len();
+        if removed > 0 {
+            self.revision = next_revision();
+        }
+        removed
     }
 
     /// List preset ids currently present in the store, deduplicated.
@@ -389,6 +417,7 @@ impl TriggerStore {
         // a bad pattern must leave self (including its disabled set)
         // untouched.
         next.disabled_groups = std::mem::take(&mut self.disabled_groups);
+        next.revision = next_revision();
         *self = next;
         Ok(self.items.len())
     }
@@ -404,6 +433,68 @@ impl std::fmt::Debug for TriggerStore {
         f.debug_struct("TriggerStore")
             .field("count", &self.items.len())
             .field("disabled_groups", &self.disabled_groups)
+            .field("revision", &self.revision)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn trigger(name: &str, pattern: &str) -> Trigger {
+        Trigger {
+            name: name.into(),
+            patterns: vec![TriggerPattern {
+                pattern: pattern.into(),
+                enabled: true,
+            }],
+            priority: 0,
+            enabled: true,
+            actions: vec![TriggerAction::Gag],
+            preset: None,
+            group: Some("combat".into()),
+            target: TriggerTarget::Line,
+        }
+    }
+
+    #[test]
+    fn revision_moves_when_the_list_changes() {
+        let mut store = TriggerStore::new();
+        let empty = store.revision();
+        store.set(trigger("flee", "^You flee")).unwrap();
+        let after_add = store.revision();
+        assert_ne!(after_add, empty);
+        store.set(trigger("flee", "^You run")).unwrap();
+        let after_replace = store.revision();
+        assert_ne!(after_replace, after_add);
+        assert!(store.remove("flee"));
+        assert_ne!(store.revision(), after_replace);
+    }
+
+    #[test]
+    fn revision_stays_when_nothing_in_the_list_changes() {
+        let mut store = TriggerStore::new();
+        store.set(trigger("flee", "^You flee")).unwrap();
+        let rev = store.revision();
+        assert!(!store.remove("missing"));
+        assert_eq!(store.remove_by_preset("highlights"), 0);
+        assert!(store.set(trigger("bad", "(")).is_err());
+        store.set_group_enabled("combat", false);
+        store.set_disabled_groups(["combat"]);
+        assert!(store.import_json("not json").is_err());
+        assert_eq!(store.revision(), rev);
+    }
+
+    #[test]
+    fn a_replacement_store_reads_as_a_change() {
+        let mut first = TriggerStore::new();
+        first.set(trigger("flee", "^You flee")).unwrap();
+        let mut second = TriggerStore::new();
+        second.set(trigger("flee", "^You flee")).unwrap();
+        assert_ne!(first.revision(), second.revision());
+        let rev = first.revision();
+        first.import_json("[]").unwrap();
+        assert_ne!(first.revision(), rev);
     }
 }
