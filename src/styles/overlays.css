@@ -250,7 +250,7 @@
 }
 
 .ov-pal-row.is-danger {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .ov-pal-check {
@@ -352,7 +352,7 @@
 }
 
 .ov-menu-item.is-danger {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .ov-menu-label {
@@ -447,7 +447,7 @@
 }
 
 .ov-find-count.is-miss {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .ov-find-btn {
@@ -685,7 +685,7 @@
 }
 
 .ov-button.is-danger {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 /* The shell mounts the toasts among its floating surfaces, a direct

@@ -177,7 +177,8 @@ const nord: AppTheme = {
   },
   // otty's Nord, measured from otty's own theme file. The panel and
   // floating surfaces stay on the terminal ground, and the text tiers
-  // follow nord5 rather than the terminal's nord4 foreground.
+  // follow nord5 rather than the terminal's nord4 foreground. Danger
+  // words use the lighter red the approved boards draw them in.
   chrome: {
     panel: '#2e3440',
     raised: '#2e3440',
@@ -187,6 +188,7 @@ const nord: AppTheme = {
     secondary: '#c0c7d3',
     tertiary: '#7b8294',
     accent: '#88c0d0',
+    dangerText: '#dc8a92',
   },
 };
 

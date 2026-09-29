@@ -132,7 +132,7 @@
 }
 
 .pane-meta-danger {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .pane-meta-warn {
@@ -309,7 +309,7 @@
 .pane-affect-missing .pane-row-name,
 .pane-affect-missing .pane-row-value,
 .pane-affect-harmful .pane-row-value {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .pane-affect-expiring .pane-marker {
@@ -439,7 +439,7 @@
 }
 
 .pane-member-danger .pane-member-pct {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 /* ── Chat ────────────────────────────────────────────────────────── */
@@ -499,7 +499,7 @@
 
 .pane-imm-overdue .pane-row-value,
 .pane-imm-overdue .pane-row-note {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .pane-imm-nearing .pane-marker {
@@ -568,7 +568,7 @@
 }
 
 .panel-vitals-row-low .panel-vitals-value {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .panel-vitals-row-low .panel-vitals-fill {
