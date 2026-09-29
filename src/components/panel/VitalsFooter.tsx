@@ -14,8 +14,9 @@ import { vitalsLineFit } from './vitalsLine';
 // The density comes from Settings, Layout. Rows gives each vital its
 // own row. One line sets Health, Mana, and Moves side by side, the
 // Focus board's status line form with a meter under each value, and
-// drops the labels on a panel narrower than about 360 pt. A panel too
-// narrow for even the values stacks them in rows (vitalsLine.ts).
+// drops the labels only when they no longer fit beside the values,
+// under about 360 pt for four digit health. A panel too narrow for even
+// the values stacks them in rows (vitalsLine.ts).
 
 const ROWS: { key: VitalKey; label: string; max: 'maxhp' | 'maxmana' | 'maxmove' }[] = [
   { key: 'hp', label: 'Health', max: 'maxhp' },
