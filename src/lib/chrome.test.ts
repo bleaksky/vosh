@@ -5,6 +5,7 @@ import {
   ON_ACCENT_CONTRAST,
   SECONDARY_CONTRAST,
   STATUS_CONTRAST,
+  STATUS_TEXT_CONTRAST,
   TERTIARY_CONTRAST,
   tokensToCssVars,
 } from './chrome';
@@ -68,6 +69,20 @@ describe('derivation rules', () => {
     const t = deriveChrome(dim);
     expect(contrast(hex(t.danger), hex(t.panel))).toBeGreaterThanOrEqual(STATUS_CONTRAST);
     expect(t.danger).not.toBe('#401010');
+  });
+
+  it('gives danger words their own tier at 4.5:1', () => {
+    // Nord's red clears 3:1 as a dot but reads at about 3:1 as words.
+    const nord = findTheme('nord');
+    const { dangerText: _pinned, ...unpinned } = nord.chrome ?? {};
+    const t = deriveChrome(nord.xterm, unpinned);
+    expect(t.danger).toBe('#bf616a');
+    expect(contrast(hex(t.danger), hex(t.panel))).toBeLessThan(STATUS_TEXT_CONTRAST);
+    expect(contrast(hex(t.dangerText), hex(t.panel))).toBeGreaterThanOrEqual(STATUS_TEXT_CONTRAST);
+    // A red that already reads as words keeps one color for both.
+    expect(deriveChrome(ember).dangerText).toBe(deriveChrome(ember).danger);
+    // Nord pins the tier to the red the approved boards draw words in.
+    expect(deriveChrome(nord.xterm, nord.chrome).dangerText).toBe('#dc8a92');
   });
 
   it('reads the normal ANSI slots on a light ground', () => {

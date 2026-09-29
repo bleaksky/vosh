@@ -4,6 +4,7 @@ import {
   ON_ACCENT_CONTRAST,
   SECONDARY_CONTRAST,
   STATUS_CONTRAST,
+  STATUS_TEXT_CONTRAST,
   TERTIARY_CONTRAST,
   type Appearance,
   type ChromeColorKey,
@@ -59,6 +60,7 @@ const NORD: CanvasSheet = {
     accent: '#88c0d0',
     onAccent: '#1b1f27',
     danger: '#bf616a',
+    dangerText: '#dc8a92',
     warn: '#ebcb8b',
     success: '#a3be8c',
     selection: 'rgba(136, 192, 208, 0.22)',
@@ -84,6 +86,7 @@ const EMBER: CanvasSheet = {
     accent: '#ef8f2f',
     onAccent: '#140b02',
     danger: '#ea8f80',
+    dangerText: '#ea8f80',
     warn: '#ecc985',
     success: '#8fdaa8',
     selection: 'rgba(239, 143, 47, 0.20)',
@@ -109,6 +112,7 @@ const VELLUM: CanvasSheet = {
     accent: '#3f6690',
     onAccent: '#ffffff',
     danger: '#a8453a',
+    dangerText: '#a8453a',
     warn: '#94661a',
     success: '#4f7a3a',
     selection: 'rgba(63, 102, 144, 0.18)',
@@ -152,6 +156,7 @@ describe('contrast floors', () => {
       expect(on('secondary', panel), 'secondary').toBeGreaterThanOrEqual(SECONDARY_CONTRAST);
       expect(on('tertiary', panel), 'tertiary').toBeGreaterThanOrEqual(TERTIARY_CONTRAST);
       expect(on('danger', panel), 'danger').toBeGreaterThanOrEqual(STATUS_CONTRAST);
+      expect(on('dangerText', panel), 'dangerText').toBeGreaterThanOrEqual(STATUS_TEXT_CONTRAST);
       expect(on('warn', panel), 'warn').toBeGreaterThanOrEqual(STATUS_CONTRAST);
       expect(on('success', panel), 'success').toBeGreaterThanOrEqual(STATUS_CONTRAST);
       expect(on('title', bg), 'title').toBeGreaterThanOrEqual(3);

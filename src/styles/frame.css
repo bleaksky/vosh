@@ -378,7 +378,7 @@
 }
 
 .shell-status-value.is-low {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .shell-statusline .is-warn {
@@ -437,7 +437,7 @@
 }
 
 .shell-menu-item.is-danger {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .shell-menu-item:disabled {
