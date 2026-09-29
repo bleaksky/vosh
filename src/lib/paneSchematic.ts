@@ -21,8 +21,14 @@ const LABEL_X = 10;
 const LABEL_Y = 16;
 /** Vitals label baseline, centered on the 20 px strip under its line. */
 const VITALS_LABEL_Y = 103.5;
-/** A region shorter than this shows no label. */
+/** A region this tall takes its label 16 down from its top. */
 const LABEL_MIN_H = 22;
+/** A shorter region centers its label, like the Vitals strip, and one
+ *  shorter than this shows no label. */
+const LABEL_SHORT_MIN_H = 12;
+/** From a short region's middle to the baseline of a centered label,
+ *  the same offset the Vitals label takes in its 20 px strip. */
+const LABEL_CENTER_DROP = 3.5;
 /** Room to keep after a label before the region's right edge. */
 const LABEL_END_PAD = 6;
 /** A generous average advance for the 10 px UI font, so a label that
@@ -133,7 +139,12 @@ function layout(
 function labelFits(region: SchematicRegion): boolean {
   const { width, height } = region.rect;
   const need = LABEL_X + region.label.length * LABEL_CHAR_W + LABEL_END_PAD;
-  return height >= LABEL_MIN_H && width >= need;
+  return height >= LABEL_SHORT_MIN_H && width >= need;
+}
+
+function labelY(rect: SchematicRect): number {
+  if (rect.height >= LABEL_MIN_H) return rect.y + LABEL_Y;
+  return rect.y + rect.height / 2 + LABEL_CENTER_DROP;
 }
 
 /** `Erelei's`, or `Rhys'` for a name that ends in s. */
@@ -208,7 +219,7 @@ export function paneSchematic(
   lines.push(`M1 ${VITALS_LINE + 0.5}H${SCHEMATIC_WIDTH - 1}`);
   const labels: SchematicLabel[] = regions.filter(labelFits).map((region) => ({
     x: region.rect.x + LABEL_X,
-    y: region.rect.y + LABEL_Y,
+    y: labelY(region.rect),
     text: region.label,
   }));
   labels.push({ x: LABEL_X, y: VITALS_LABEL_Y, text: 'Vitals' });

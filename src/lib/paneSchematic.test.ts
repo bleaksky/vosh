@@ -114,6 +114,28 @@ describe('paneSchematic', () => {
     expect(s.labels.map((l) => l.text)).toEqual(['Group', 'Vitals']);
   });
 
+  it('centers the label in a short row instead of leaving it out', () => {
+    const s = paneSchematic(
+      tree({
+        split: 'column',
+        children: [leaf('affects', 2), leaf('group', 2), leaf('chat', 0.8)],
+      }),
+      labelFor,
+      'Erelei',
+    );
+    const chat = s.regions.find((r) => r.pane === 'chat')?.rect;
+    expect(chat?.height).toBeLessThan(22);
+    expect(chat?.height).toBeGreaterThanOrEqual(12);
+    const label = s.labels.find((l) => l.text === 'Chat');
+    expect(label).toEqual({
+      x: 10,
+      y: (chat?.y ?? 0) + (chat?.height ?? 0) / 2 + 3.5,
+      text: 'Chat',
+    });
+    // A tall row keeps its label 16 down from its top.
+    expect(s.labels[0]).toEqual({ x: 10, y: 16, text: 'Affects' });
+  });
+
   it('leaves out a label the region is too narrow for', () => {
     const s = paneSchematic(
       tree({
