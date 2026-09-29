@@ -1647,17 +1647,42 @@ pub(crate) fn pane_layout_envelope(p: &Profile) -> PaneLayoutEnvelope {
     }
 }
 
-/// Hand every window the active profile's panes and tracked affects.
-/// For the paths that replace the live UI config wholesale (a profile
-/// switch, an import, `#profile load` and `reset`), which must also
-/// bump the pane generation under the profile lock as they swap.
+/// What [`broadcast_profile_ui`] hands every window, read from the live
+/// profile.
+pub(crate) struct ProfileUiEvents {
+    pub(crate) panes: PaneLayoutEnvelope,
+    pub(crate) tracked: Vec<crate::profile_config::TrackedAffect>,
+    pub(crate) tick_count: String,
+    pub(crate) tick: TickConfigPayload,
+}
+
+/// Read the events [`broadcast_profile_ui`] sends. Call with the profile
+/// lock held.
+pub(crate) fn profile_ui_events(p: &Profile) -> ProfileUiEvents {
+    ProfileUiEvents {
+        panes: pane_layout_envelope(p),
+        tracked: p.ui.tracked_affects.clone(),
+        tick_count: p.ui.tick_count.clone(),
+        tick: tick_config_payload(&p.tick.config),
+    }
+}
+
+/// Hand every window the active profile's panes, tracked affects, and
+/// tick settings. For the paths that replace the live UI config
+/// wholesale (a profile switch, an import, `#profile load` and `reset`),
+/// which must also bump the pane generation under the profile lock as
+/// they swap. Only a switch also sends `vosh://profile-switched`, so the
+/// status line hears the tick count and the tick config here after an
+/// import, a load, or a reset.
 pub(crate) async fn broadcast_profile_ui(app: &AppHandle, state: &SharedState) {
-    let (panes, tracked) = {
+    let events = {
         let p = state.profile.lock().await;
-        (pane_layout_envelope(&p), p.ui.tracked_affects.clone())
+        profile_ui_events(&p)
     };
-    broadcast(app, "vosh://pane-layout-changed", &panes);
-    broadcast(app, "vosh://tracked-affects-changed", &tracked);
+    broadcast(app, "vosh://pane-layout-changed", &events.panes);
+    broadcast(app, "vosh://tracked-affects-changed", &events.tracked);
+    broadcast(app, "vosh://tick-count-changed", &events.tick_count);
+    broadcast(app, "vosh://tick-config-changed", &events.tick);
 }
 
 /// Read a profile's pane layout, the active one when `profile` is
@@ -3679,8 +3704,12 @@ pub(crate) async fn tick_get_config(
     state: State<'_, SharedState>,
 ) -> Result<TickConfigPayload, String> {
     let p = state.profile.lock().await;
-    let cfg = &p.tick.config;
-    Ok(TickConfigPayload {
+    Ok(tick_config_payload(&p.tick.config))
+}
+
+/// The live tick configuration as `tick_get_config` reads it.
+fn tick_config_payload(cfg: &crate::tick::TickConfig) -> TickConfigPayload {
+    TickConfigPayload {
         enabled: cfg.enabled,
         interval_secs: cfg.interval.as_secs(),
         auto_fire: cfg.auto_fire.clone(),
@@ -3689,7 +3718,7 @@ pub(crate) async fn tick_get_config(
         warn_at_secs: cfg.warn_at_secs,
         warn_message: cfg.warn_message.clone(),
         warn_color: cfg.warn_color.clone(),
-    })
+    }
 }
 
 /// Apply a new tick configuration through [`apply_tick_config`], which
@@ -4382,6 +4411,24 @@ mod tests {
             Some(now + std::time::Duration::from_secs(60))
         );
         assert!(!tick.check_reset_match("Dawn breaks."));
+    }
+
+    #[test]
+    fn profile_reset_hands_every_window_the_tick_settings_it_put_back() {
+        let mut profile = crate::profile::Profile::default();
+        profile.ui.tick_count = "down".into();
+        profile.tick.config.warn_at_secs = Some(8);
+        profile.tick.config.sound = false;
+        let before = super::profile_ui_events(&profile);
+        assert_eq!(before.tick_count, "down");
+        assert_eq!(before.tick.warn_at_secs, Some(8));
+
+        let ran = crate::input::run_line(&mut profile, "#profile reset");
+        assert!(ran.replaced);
+        let after = super::profile_ui_events(&profile);
+        assert_eq!(after.tick_count, "up");
+        assert_eq!(after.tick.warn_at_secs, None);
+        assert!(after.tick.sound);
     }
 
     #[test]
