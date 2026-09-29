@@ -91,6 +91,14 @@ describe('searchSettingsRows', () => {
     expect(divider.target).toEqual({ group: 'layout', section: 'split', anchor: 'divider-color' });
   });
 
+  it('finds the tick and time style under Layout', () => {
+    const [row] = searchSettingsRows('chip style', mac);
+    expect(row.label).toBe('Tick and time');
+    expect(settingsRowKey(row)).toBe('layout:status#tick-time');
+    expect(labels('status line')).toContain('Tick and time');
+    expect(labels('icon')).toContain('Tick and time');
+  });
+
   it('hides GPU rendering on macOS', () => {
     expect(labels('gpu')).toEqual([]);
     expect(labels('gpu', { pathB: false, mac: false })).toEqual(['GPU rendering']);
