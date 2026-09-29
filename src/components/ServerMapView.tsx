@@ -1,14 +1,15 @@
-import { memo, useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent } from 'react';
 import { onGmcpPackage, onState } from '../lib/session';
 import {
   MAP_COLORS,
-  PLAIN_COLORS,
   SECTORS,
   UNKNOWN_GLYPH,
   hexToRgba,
   mapThemeSignature,
+  plainColors,
   sectorForCode,
   sectorGlyphColor,
+  type PlainColors,
 } from '../lib/mapPalette';
 import { PLAIN, layoutPlain, type PlainCell } from '../lib/mapPlain';
 import { drawTerrainDecorations } from '../lib/terrainDecor';
@@ -285,13 +286,6 @@ function startTilesCache(): void {
   });
 }
 
-// The canvas ground when the map sits in a panel pane: the panel's
-// own color, so the drawing has no box around it.
-function panelGround(): string {
-  const v = getComputedStyle(document.documentElement).getPropertyValue('--panel').trim();
-  return v || MAP_COLORS.bg;
-}
-
 interface ServerMapViewProps {
   /** Inside a One Window pane. The pane header replaces the map's own
    *  header and controls, the canvas takes the panel's color, and the
@@ -426,6 +420,9 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
   }, []);
 
   useEffect(() => {
+    // A pane's header names the area itself, and a render per room
+    // would only redraw what never shows.
+    if (embedded) return;
     let unsubRoom: (() => void) | undefined;
     let unsubState: (() => void) | undefined;
 
@@ -449,7 +446,7 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
       unsubRoom?.();
       unsubState?.();
     };
-  }, []);
+  }, [embedded]);
 
   // draw() closes over this render's tiles/style/tileset/zoom. The
   // effects and persistent observers below call it through drawRef so
@@ -476,7 +473,10 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const ground = embedded ? panelGround() : MAP_COLORS.bg;
+    // A pane's drawing sits on the panel's own color, so it has no box
+    // around it. One style read serves the whole draw.
+    const colors = plainColors(getComputedStyle(document.documentElement));
+    const ground = embedded ? colors.ground : MAP_COLORS.bg;
     ctx.fillStyle = ground;
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
@@ -499,7 +499,7 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
 
     // The plain drawing has no terrain around it and no sector colors.
     if (style === 'plain') {
-      drawPlain(ctx, cssWidth, cssHeight, tiles, rows, cols, zoom);
+      drawPlain(ctx, cssWidth, cssHeight, tiles, rows, cols, zoom, colors);
       return;
     }
 
@@ -597,16 +597,13 @@ export function ServerMapView({ embedded = false, emptyText }: ServerMapViewProp
   const drawRef = useRef(draw);
   drawRef.current = draw;
 
-  // Tiles-driven redraw: exactly one rAF per push. Movement sends one
-  // Map.Tiles per step, and the old combined effect answered each push
-  // with five full-canvas repaints (sync draw, rAF, 80ms, 240ms, plus
-  // the fresh ResizeObserver's initial callback) on the same webview
-  // thread that dispatches keystrokes. React runs the cleanup below
-  // (cancelling any still-pending frame) before re-running the effect,
-  // so back-to-back pushes inside one frame coalesce into one repaint.
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => drawRef.current());
-    return () => cancelAnimationFrame(raf);
+  // Tiles-driven redraw: one repaint per push, in the frame that
+  // commits it. Movement sends one Map.Tiles per step. A passive effect
+  // runs after the browser paints, so waiting there and then on a
+  // frame showed each step a frame or two after the terminal and the
+  // room row had moved on. A layout effect draws before that paint.
+  useLayoutEffect(() => {
+    drawRef.current();
   }, [tiles]);
 
   // Style/layout-driven redraw keeps the settle sequence. Layout for
@@ -935,11 +932,11 @@ function drawPlain(
   rows: number,
   cols: number,
   zoom: number,
+  colors: PlainColors,
 ) {
-  const room = PLAIN_COLORS.room;
-  const accent = PLAIN_COLORS.accent;
+  const { room, accent } = colors;
   ctx.save();
-  ctx.font = `${PLAIN.font}px ${PLAIN_COLORS.font}`;
+  ctx.font = `${PLAIN.font}px ${colors.font}`;
   const scene = layoutPlain({
     cells: plainCellsOf(payload),
     current: playerCellOf(payload, rows, cols),
@@ -984,7 +981,7 @@ function drawPlain(
   }
 
   ctx.globalAlpha = 1;
-  ctx.fillStyle = PLAIN_COLORS.label;
+  ctx.fillStyle = colors.label;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   for (const label of scene.labels) ctx.fillText(label.text, label.x, label.y);
