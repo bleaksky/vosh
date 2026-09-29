@@ -235,7 +235,7 @@ export function ThemesTab({ config, setConfig, onError }: Props) {
             </label>
           </span>
           <span className="settings-fhelp">
-            follows the theme by default &#183; ember ships its pastel ANSI on
+            on by default for every theme &#183; turn it off to use the base palette below
           </span>
         </div>
       </div>

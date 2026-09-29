@@ -156,10 +156,10 @@ pub(crate) struct UiConfig {
     /// When true, the chrome theme also tints the terminal's 16
     /// ANSI palette. When false, the terminal uses the canonical
     /// xterm-256 ANSI palette so server output reads identically
-    /// across themes. When unset (None), the frontend follows the
-    /// active theme: on for Obsidian Ember (whose pastel ANSI is the
-    /// point of the theme), off for everything else. An explicit
-    /// user choice always wins over the theme default.
+    /// across themes. When unset (None), the frontend treats it as on
+    /// for every theme, since the chrome derives its status colors
+    /// from the same ANSI slots. An explicit user choice always wins
+    /// over the default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme_terminal_colors: Option<bool>,
     /// Draw bright (effective ANSI 8-15) text with the heavier bold font on
