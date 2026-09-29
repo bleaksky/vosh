@@ -722,6 +722,43 @@
   color: var(--tertiary);
 }
 
+/* One line (Settings, Layout, Density). Health, Mana, and Moves sit
+   side by side on one 28 px row, 16 apart, each the status line form
+   (label, 6, value) with its meter under it. A panel under about
+   360 pt drops the labels, which stay for screen readers. The combat
+   row and the empty state keep their own rows. */
+.panel-vitals.is-one-line {
+  min-height: 48px;
+}
+
+.panel-vitals-oneline {
+  display: flex;
+  gap: 16px;
+}
+
+.panel-vitals-item {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.panel-vitals-item .panel-vitals-line {
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.panel-vitals-item .panel-vitals-value {
+  margin-left: 0;
+}
+
+.panel-vitals-label-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* ── Pane menus (SPEC 7 menu recipe) ─────────────────────────────── */
 
 .pane-menu {

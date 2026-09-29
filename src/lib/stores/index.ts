@@ -7,6 +7,7 @@ import { startRoomStore } from './roomStore';
 import { startTargetStore } from './targetStore';
 import { startTickStore } from './tickStore';
 import { startTrackedAffectsStore } from './trackedAffectsStore';
+import { startVitalsDensityStore } from './vitalsDensityStore';
 import { startVitalsStore } from './vitalsStore';
 import { startWorldStore } from './worldStore';
 
@@ -20,6 +21,7 @@ export function startStores(): void {
   startGroupStore();
   startImmStore();
   startVitalsStore();
+  startVitalsDensityStore();
   startAffectsStore();
   startTrackedAffectsStore();
   startCombatStore();
