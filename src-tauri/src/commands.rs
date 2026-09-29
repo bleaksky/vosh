@@ -122,6 +122,11 @@ pub(crate) struct AppState {
     pub(crate) map: SharedMap,
     pub(crate) script_timers: SharedTimers,
     pub(crate) logs: SharedLogStore,
+    /// A second connection to the same log database for the read
+    /// commands. The session loop appends through `logs`, and a search
+    /// can read the whole log, so reads take their own lock and never
+    /// hold up the live session. WAL lets both run at once.
+    pub(crate) log_reader: SharedLogStore,
     pub(crate) scrollback: SharedScrollback,
     pub(crate) plugins: SharedPluginManager,
     /// Catalog of named profiles. Loaded (or migrated from the legacy
@@ -167,6 +172,7 @@ impl Default for AppState {
             map: SharedMap::default(),
             script_timers: SharedTimers::default(),
             logs: SharedLogStore::default(),
+            log_reader: SharedLogStore::default(),
             scrollback: SharedScrollback::default(),
             plugins: SharedPluginManager::default(),
             profile_set: Arc::new(Mutex::new(None)),
@@ -2183,19 +2189,31 @@ pub(crate) async fn map_set_avoid(
         .map_err(|e| e.to_string())
 }
 
+/// Run `read` on the log store's read connection, or on the writer when
+/// the read connection did not open. None when neither is open.
+async fn read_logs<T>(state: &AppState, read: impl FnOnce(&vosh_log::LogStore) -> T) -> Option<T> {
+    {
+        let guard = state.log_reader.lock().await;
+        if let Some(store) = guard.as_ref() {
+            return Some(read(store));
+        }
+    }
+    let guard = state.logs.lock().await;
+    guard.as_ref().map(read)
+}
+
 #[tauri::command]
 pub(crate) async fn logs_list_sessions(
     state: State<'_, SharedState>,
     limit: usize,
     hide_local: Option<bool>,
 ) -> Result<Vec<SessionRow>, String> {
-    let guard = state.logs.lock().await;
-    let Some(store) = guard.as_ref() else {
-        return Ok(Vec::new());
-    };
-    store
-        .list_sessions(limit, hide_local.unwrap_or(false))
-        .map_err(|e| e.to_string())
+    read_logs(&state, |store| {
+        store.list_sessions(limit, hide_local.unwrap_or(false))
+    })
+    .await
+    .unwrap_or_else(|| Ok(Vec::new()))
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2206,17 +2224,16 @@ pub(crate) async fn logs_search(
     max_results: usize,
     session_id: Option<i64>,
 ) -> Result<Vec<SearchHit>, String> {
-    let guard = state.logs.lock().await;
-    let Some(store) = guard.as_ref() else {
-        return Ok(Vec::new());
-    };
     let opts = SearchOptions {
         case_sensitive,
         max_results,
         session_id,
         ..SearchOptions::default()
     };
-    store.search(&pattern, &opts).map_err(|e| e.to_string())
+    read_logs(&state, |store| store.search(&pattern, &opts))
+        .await
+        .unwrap_or_else(|| Ok(Vec::new()))
+        .map_err(|e| e.to_string())
 }
 
 /// One page of the Settings log view: the newest `max_results` matches
@@ -2236,13 +2253,6 @@ pub(crate) async fn logs_search_page(
     hide_local: bool,
     with_total: bool,
 ) -> Result<SearchPage, String> {
-    let guard = state.logs.lock().await;
-    let Some(store) = guard.as_ref() else {
-        return Ok(SearchPage {
-            hits: Vec::new(),
-            total: with_total.then_some(0),
-        });
-    };
     let opts = SearchOptions {
         case_sensitive,
         max_results,
@@ -2250,9 +2260,17 @@ pub(crate) async fn logs_search_page(
         before_line_id,
         hide_local,
     };
-    store
-        .search_page(&pattern, &opts, with_total)
-        .map_err(|e| e.to_string())
+    read_logs(&state, |store| {
+        store.search_page(&pattern, &opts, with_total)
+    })
+    .await
+    .unwrap_or_else(|| {
+        Ok(SearchPage {
+            hits: Vec::new(),
+            total: with_total.then_some(0),
+        })
+    })
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2261,12 +2279,9 @@ pub(crate) async fn logs_export(
     session_id: i64,
     with_ansi: bool,
 ) -> Result<String, String> {
-    let guard = state.logs.lock().await;
-    let Some(store) = guard.as_ref() else {
-        return Err("log store not ready".to_string());
-    };
-    store
-        .export_session(session_id, with_ansi)
+    read_logs(&state, |store| store.export_session(session_id, with_ansi))
+        .await
+        .ok_or_else(|| "log store not ready".to_string())?
         .map_err(|e| e.to_string())
 }
 
