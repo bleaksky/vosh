@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   draftAfterMaskChange,
+  isMasked,
   keepsLastCommand,
   macroEcho,
   planSubmit,
@@ -92,6 +93,33 @@ describe('a macro pressed at a password prompt', () => {
     expect(macroEcho('stand', macro())).toBe('stand\r\n');
     expect(macroEcho('stand', macro({ enabled: false }))).toBeNull();
     expect(macroEcho('gg', macro({ quickKey: true }))).toBeNull();
+  });
+});
+
+describe('Enter pressed before the input row catches up with the server', () => {
+  // The input-mode event lands before React renders the row again, so a
+  // key handler holds the draft of the last render while the newest
+  // event already says something else.
+
+  it('keeps a password masked when the server hands echo back before the row unmasks', () => {
+    // WONT ECHO, or the input-mode false a disconnect sends, arrived
+    // while the masked field still holds the password as its draft.
+    const masked = isMasked(true, false);
+    expect(masked).toBe(true);
+    const plan = planSubmit(SECRET, typed({ masked, echoColor: '#a0c4ff' }));
+    expect(plan.echo).toBe('\r\n');
+    expect(plan.remember).toBe(false);
+    expect(plan.masked).toBe(true);
+    expect(keepsLastCommand(true, SECRET, masked)).toBe(false);
+  });
+
+  it('masks a line sent after the server takes echo but before the row masks', () => {
+    expect(isMasked(false, true)).toBe(true);
+  });
+
+  it('treats the row as plain once both agree', () => {
+    expect(isMasked(false, false)).toBe(false);
+    expect(isMasked(true, true)).toBe(true);
   });
 });
 
