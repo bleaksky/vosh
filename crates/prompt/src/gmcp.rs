@@ -315,6 +315,29 @@ impl Snapshot {
         })
     }
 
+    /// Char.State, parsed. The new build sends it with every prompt.
+    pub fn state(&self) -> Option<State> {
+        let data = self.get(CHAR_STATE)?;
+        Some(State {
+            position: data.get("position").and_then(text).map(str::to_string),
+            language: data.get("language").and_then(text).map(str::to_string),
+        })
+    }
+
+    /// Room.Weather, parsed. The new build sends it with every prompt.
+    pub fn weather(&self) -> Option<Weather> {
+        let data = self.get(ROOM_WEATHER)?;
+        Some(Weather {
+            sky: data.get("sky").and_then(text).map(str::to_string),
+            temp: data.get("temp").and_then(int),
+            unit: data
+                .get("unit")
+                .and_then(text)
+                .and_then(|u| u.chars().next()),
+            region: data.get("region").and_then(text).map(str::to_string),
+        })
+    }
+
     /// The names in a list package such as Room.Chars or Room.Items.
     pub fn names(&self, package: &str) -> Option<Vec<String>> {
         let data = self.get(package)?;
@@ -423,6 +446,25 @@ pub struct Affect {
     pub kind: Option<String>,
     /// Ticks left, -1 for permanent.
     pub duration: Option<i64>,
+}
+
+/// Char.State. `position` is the game's word, `standing` or
+/// `mortally wounded`, and `language` is spelled as the game stores it,
+/// `Thsu'ul`. A switched immortal sends no language.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct State {
+    pub position: Option<String>,
+    pub language: Option<String>,
+}
+
+/// Room.Weather, what the prompt's `%W`, `%w` and `%G` print. `sky` has
+/// `%W`'s words, `indoors` inside, and `unit` is `F` or `C`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Weather {
+    pub sky: Option<String>,
+    pub temp: Option<i64>,
+    pub unit: Option<char>,
+    pub region: Option<String>,
 }
 
 /// True when a packet carries `"hidden": true`.
@@ -665,6 +707,36 @@ mod tests {
         assert!(!group.empty);
         s.observe("Group.Info", json!({}), at(0));
         assert!(s.group().is_some_and(|g| g.empty && g.members.is_empty()));
+    }
+
+    #[test]
+    fn state_and_weather_read_their_fields() {
+        let mut s = Snapshot::new();
+        assert_eq!(s.state(), None);
+        s.observe(
+            "Char.State",
+            json!({"position": "mortally wounded", "language": "Thsu'ul"}),
+            at(0),
+        );
+        s.observe(
+            "Room.Weather",
+            json!({"sky": "rainy", "temp": 60, "unit": "F", "region": "Coastal North"}),
+            at(0),
+        );
+        let state = s.state().expect("a state");
+        assert_eq!(state.position.as_deref(), Some("mortally wounded"));
+        assert_eq!(state.language.as_deref(), Some("Thsu'ul"));
+        let weather = s.weather().expect("the weather");
+        assert_eq!(weather.sky.as_deref(), Some("rainy"));
+        assert_eq!(weather.temp, Some(60));
+        assert_eq!(weather.unit, Some('F'));
+        assert_eq!(weather.region.as_deref(), Some("Coastal North"));
+        s.observe(
+            "Char.State",
+            json!({"position": "standing", "language": ""}),
+            at(0),
+        );
+        assert_eq!(s.state().and_then(|st| st.language), None);
     }
 
     #[test]

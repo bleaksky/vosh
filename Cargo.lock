@@ -5248,6 +5248,7 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
+ "vosh-gmcp",
 ]
 
 [[package]]

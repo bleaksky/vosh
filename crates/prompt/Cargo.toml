@@ -13,5 +13,8 @@ serde_json = { workspace = true }
 # Local time for the clock pieces (clock only, no default features).
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
+[dev-dependencies]
+vosh-gmcp = { path = "../gmcp" }
+
 [lints]
 workspace = true
