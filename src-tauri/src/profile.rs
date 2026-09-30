@@ -53,6 +53,11 @@ pub(crate) struct Profile {
     /// package, and the hidden state worked out from them. Session only.
     /// A profile switch keeps the packets and a disconnect clears them.
     pub(crate) prompt: vosh_prompt::Vars,
+    /// The active profile's name as Vosh shows it, `Default` for the
+    /// reserved default, which the custom prompt draws for `%profile`.
+    /// Set at launch, on a switch and on a rename, so the session reads
+    /// it without the profile set's lock. None before any profile loads.
+    pub(crate) display_name: Option<String>,
     /// Interval timers: each fires its command every `interval_secs`
     /// while connected. Independent of the tick timer (one command on
     /// the game tick) and of Lua `mud.timer` (script callbacks). The

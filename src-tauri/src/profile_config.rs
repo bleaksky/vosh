@@ -2290,6 +2290,7 @@ pub(crate) const UNREAD_GLOBAL_NOTICE: &str = "Vosh could not read global.toml, 
 /// place for this session, and returns the sentence that tells you so.
 pub(crate) fn load_at_launch(set: &ProfileSet, profile: &mut Profile) -> Vec<String> {
     let mut notices = Vec::new();
+    profile.display_name = Some(crate::profile_set::display_name(set.active_name()));
     let active_path = set.active_path();
     if active_path.exists() {
         match ProfileConfig::load(&active_path) {

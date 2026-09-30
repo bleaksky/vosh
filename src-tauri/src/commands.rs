@@ -2223,11 +2223,20 @@ async fn rename_profile(
     if relaunch_pending.load(std::sync::atomic::Ordering::Acquire) {
         return Err(RENAME_MIGRATION_PENDING.into());
     }
-    let mut guard = state.profile_set.lock().await;
-    let Some(set) = guard.as_mut() else {
-        return Err(PROFILES_NOT_LOADED.into());
+    let live = {
+        let mut guard = state.profile_set.lock().await;
+        let Some(set) = guard.as_mut() else {
+            return Err(PROFILES_NOT_LOADED.into());
+        };
+        let renames_live = set.active_name() == old;
+        set.rename(old, new).map_err(|e| e.to_string())?;
+        renames_live.then(|| crate::profile_set::display_name(set.active_name()))
     };
-    set.rename(old, new).map_err(|e| e.to_string())
+    // The custom prompt draws the live profile's new name.
+    if let Some(name) = live {
+        state.profile.lock().await.display_name = Some(name);
+    }
+    Ok(())
 }
 
 /// Copy `source` under a new name without its login claim. Duplicating
@@ -2604,6 +2613,7 @@ async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), Stri
         // The custom prompt keeps the connection's GMCP packets and drops
         // the values the last profile's triggers set.
         p.prompt.switch_profile(forsaken);
+        p.display_name = Some(crate::profile_set::display_name(name));
         match per_profile {
             Some(snap) => {
                 snap.apply_to(&mut p);
@@ -7400,6 +7410,49 @@ mod tests {
                     None => assert!(!path.exists(), "{}", path.display()),
                 }
             }
+        }
+
+        #[tokio::test]
+        async fn the_live_profile_keeps_the_name_the_prompt_draws() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            use std::sync::atomic::AtomicBool;
+            let dir = tempfile::tempdir().unwrap();
+            james_like_set(dir.path());
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            let shown = |p: &crate::profile::Profile| p.display_name.clone();
+            assert_eq!(
+                shown(&*state.profile.lock().await).as_deref(),
+                Some("Default")
+            );
+            super::super::switch_profile(&state, Some(dir.path()), "Healer")
+                .await
+                .unwrap();
+            assert_eq!(
+                shown(&*state.profile.lock().await).as_deref(),
+                Some("Healer")
+            );
+            // Renaming the live profile renames what the prompt draws.
+            let pending = AtomicBool::new(false);
+            super::super::rename_profile(&state, "Healer", "Cleric", &pending)
+                .await
+                .unwrap();
+            assert_eq!(
+                shown(&*state.profile.lock().await).as_deref(),
+                Some("Cleric")
+            );
+            // Renaming another profile leaves it alone.
+            super::super::rename_profile(&state, "Test-Prompt", "Scratch", &pending)
+                .await
+                .unwrap();
+            assert_eq!(
+                shown(&*state.profile.lock().await).as_deref(),
+                Some("Cleric")
+            );
+            let state = relaunch_as(dir.path(), "Scratch").await;
+            assert_eq!(
+                shown(&*state.profile.lock().await).as_deref(),
+                Some("Scratch")
+            );
         }
 
         #[tokio::test]
