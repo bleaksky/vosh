@@ -15,6 +15,8 @@
 //!   your codes from them.
 //! - [`shapes`] compiles your settings into the shapes Vosh recognizes
 //!   your prompt by, with the settle flag of each.
+//! - [`observer`] reads the lines the game answers `prompt` and
+//!   `fprompt` with, and your own `prompt off`.
 //!
 //! Every warning carries the span of the setting it is about, as the
 //! game stores it, and a sentence the card and `#prompt` show as they
@@ -23,6 +25,7 @@
 pub mod codes;
 pub mod colors;
 pub mod lex;
+pub mod observer;
 pub mod shapes;
 
 pub use shapes::{compile, Compiled, Origin, Shape, ShapeKind, ShapeLine};

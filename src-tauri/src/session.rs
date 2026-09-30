@@ -511,7 +511,7 @@ async fn io_loop(
                     // the last prompt set go stale.
                     let pulse = {
                         let mut p = profile.lock().await;
-                        send_step(&mut p, &accumulator, now_ms())
+                        send_step(&mut p, &accumulator, &bytes, now_ms())
                     };
                     // The frontend already echoed the typed line inline
                     // with the on-screen prompt. Drop the buffered partial
@@ -1240,6 +1240,12 @@ fn line_step(
     now: Instant,
     log_session_id: Option<i64>,
 ) -> Vec<LineStep> {
+    // Without Char.Prompt this session, the game's reply to your own
+    // `prompt` tells Vosh your setting.
+    if p.prompt.observing(now_ms()) {
+        p.prompt
+            .observe_line(&line.bytes, &plain, chrono::Local::now().fixed_offset());
+    }
     let offered = p
         .prompt
         .stage
@@ -1370,6 +1376,7 @@ fn prompt_block(
         values: block.values.clone(),
         raw: Some(block.raw_text()),
     });
+    p.prompt.note_prompt();
     if !disagree.is_empty() {
         debug!(target: "vosh::prompt", fields = ?disagree, "the prompt and GMCP disagree");
     }
@@ -1603,9 +1610,10 @@ fn partial_step(
 
 /// A line you sent. The candidates ring records the prompt it answers,
 /// before the partial goes, and the open row closes, since your typed
-/// echo follows it. Returns true when the send started a pulse, on a
-/// server that sends no Char.Vitals.
-fn send_step(p: &mut Profile, accumulator: &LineAccumulator, at_ms: i64) -> bool {
+/// echo follows it. `sent` is what went to the game, aliases expanded,
+/// which opens the observer's window. Returns true when the send started
+/// a pulse, on a server that sends no Char.Vitals.
+fn send_step(p: &mut Profile, accumulator: &LineAccumulator, sent: &[u8], at_ms: i64) -> bool {
     let partial = accumulator
         .partial()
         .map(|bytes| (bytes.to_vec(), vosh_ansi::plain_text(bytes)));
@@ -1617,6 +1625,7 @@ fn send_step(p: &mut Profile, accumulator: &LineAccumulator, at_ms: i64) -> bool
     );
     p.prompt.stage.close();
     p.prompt.stage.forget_held();
+    p.prompt.note_send(&String::from_utf8_lossy(sent), at_ms);
     p.prompt.vars.on_send()
 }
 
@@ -2774,7 +2783,18 @@ mod tests {
 
         /// You send a line.
         fn send(&mut self) {
-            let _ = super::send_step(&mut self.p, &self.acc, 0);
+            let _ = super::send_step(&mut self.p, &self.acc, b"look\r\n", 0);
+            self.acc.forget_partial();
+        }
+
+        /// You send `line` now.
+        fn send_line(&mut self, line: &str) {
+            let _ = super::send_step(
+                &mut self.p,
+                &self.acc,
+                format!("{line}\r\n").as_bytes(),
+                super::now_ms(),
+            );
             self.acc.forget_partial();
         }
 
@@ -4039,6 +4059,34 @@ mod tests {
                 b"<159>\x1b[0m"
             ])
         );
+    }
+
+    #[test]
+    fn the_reply_to_your_prompt_updates_the_capture_before_the_next_prompt() {
+        let mut p = codes_profile("<%hhp> ", HP);
+        super::start_prompt(&mut p, true);
+        let mut wire = Wire::new(p);
+        wire.send_line("prom %n%P%C<%hhp %mm %vmv>");
+        let out = wire.read(b"Prompt set to %n%P%C<%hhp %mm %vmv> \n\r<159hp 310m 489mv> ");
+        assert_eq!(
+            out.bytes,
+            with(&[
+                b"Prompt set to %n%P%C<%hhp %mm %vmv> \r\n",
+                &wire.mark(1),
+                b"<159>\x1b[0m"
+            ])
+        );
+        let seen = wire.p.prompt.take_seen();
+        assert!(seen[0].applied);
+
+        // prompt off sets nothing, whatever the reply says.
+        wire.send_line("prompt off");
+        let _ = wire.read(b"You will no longer see prompts.\n\rPrompt set to \x01\x02\n\r");
+        assert!(wire.p.prompt.prompts_off());
+        let vosh_prompt::CaptureConfig::Aabahran(codes) = &wire.p.prompt.config().capture else {
+            panic!("an aabahran capture");
+        };
+        assert_eq!(codes.prompt, "%n%P%C<%hhp %mm %vmv> ");
     }
 
     #[test]
