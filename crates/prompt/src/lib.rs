@@ -8,9 +8,12 @@
 //!   editor shows.
 //! - [`format`] holds the values a template draws and the plain text of
 //!   each format.
+//! - [`render`] draws a template as ANSI text with a span per piece.
 
 pub mod format;
+pub mod render;
 pub mod template;
 
 pub use format::{Position, Resolved, Value};
+pub use render::{render, render_str, MapValues, RenderOptions, Rendered, Span, SpanColor, Values};
 pub use template::{FieldRef, Format, Template};
