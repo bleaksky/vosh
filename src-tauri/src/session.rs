@@ -125,6 +125,16 @@ pub(crate) struct OutputPayload {
     /// base64, written back before anything else lands on the renderer.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub restore: Option<String>,
+    /// What the band above the command line shows from now on, as base64,
+    /// while your prompt shows pinned. An empty string clears the band.
+    /// Only the band reads it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pin: Option<String>,
+    /// Line ends at the end of this payload that each renderer keeps back
+    /// until the next write lands on it, as base64. See
+    /// `vosh_prompt::stage::Output::hold`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hold: Option<String>,
 }
 
 /// `OutputPayload.replace`: region `gen`, its new bytes as base64, and
@@ -671,7 +681,7 @@ async fn io_loop<R: tauri::Runtime>(
                         warn!(error = %e, "letting go of held lines failed");
                     }
                     let mut p = profile.lock().await;
-                    p.prompt.stage.close();
+                    p.prompt.stage.local_write();
                 }
                 Some(OutgoingMsg::PromptRepaint) => {
                     let out = {
@@ -1613,6 +1623,9 @@ fn prompt_block(
 
     let mut before = Vec::new();
     let mut scrollback = Vec::new();
+    // Pinned, the prompt leaves the text for the band above the command
+    // line. It is logged and kept exactly as it is in the text.
+    let pinned = p.prompt.show() == vosh_prompt::PromptShow::Pinned;
     // The away prompt shows as sent, even while Vosh draws.
     if p.prompt.draws() && !block.afk {
         // Echoes land where the prompt was, above the drawn prompt.
@@ -1630,9 +1643,15 @@ fn prompt_block(
             .filter(|(index, _)| !block.replaced.contains(index))
             .map(|(_, line)| line.clone())
             .collect();
-        p.prompt
-            .stage
-            .draw(&mut batch.out, block, painted, &before, &rendered);
+        if pinned {
+            p.prompt
+                .stage
+                .pin_drawn(&mut batch.out, block, painted, &before, &rendered);
+        } else {
+            p.prompt
+                .stage
+                .draw(&mut batch.out, block, painted, &before, &rendered);
+        }
         for head in &heads_shown {
             keep_shown(batch, &mut scrollback, head, &head.raw, log_session_id);
         }
@@ -1647,9 +1666,15 @@ fn prompt_block(
         // The lines above the last one show as sent, whatever Prompts
         // triggers do to the last one.
         let heads: Vec<BlockLine> = block.lines[..block.lines.len() - 1].to_vec();
-        p.prompt
-            .stage
-            .show(&mut batch.out, block, painted, &before, display);
+        if pinned {
+            p.prompt
+                .stage
+                .pin_shown(&mut batch.out, block, painted, &before, display);
+        } else {
+            p.prompt
+                .stage
+                .show(&mut batch.out, block, painted, &before, display);
+        }
         for head in &heads {
             keep_shown(batch, &mut scrollback, head, &head.raw, log_session_id);
         }
@@ -2188,7 +2213,8 @@ async fn finish_read<R: tauri::Runtime>(
     if !out.is_empty() {
         perf.output_emits += 1;
         perf.output_emit_bytes +=
-            (out.bytes.len() + out.replace.as_ref().map_or(0, |r| r.bytes.len())) as u64;
+            (out.bytes.len() + out.hold.len() + out.replace.as_ref().map_or(0, |r| r.bytes.len()))
+                as u64;
         *seen = emit_session_output(app, &out);
     }
     if !log.is_empty() {
@@ -2759,6 +2785,8 @@ impl OutputPayload {
                 fresh: r.fresh,
             }),
             restore: out.restore.as_deref().map(base64_encode),
+            pin: out.pin.as_deref().map(base64_encode),
+            hold: (!out.hold.is_empty()).then(|| base64_encode(&out.hold)),
         }
     }
 }

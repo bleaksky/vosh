@@ -66,12 +66,14 @@ fn cuts(bytes: &[u8]) -> Vec<usize> {
 }
 
 /// One read's worth of what the session hands on: the output, the log
-/// rows and the lines kept for scrollback, in order.
+/// rows and the lines kept for scrollback, in order, and what triggers
+/// asked to send.
 #[derive(Debug, Default)]
 struct Read {
     out: Output,
     log: Vec<String>,
     kept: Vec<Vec<u8>>,
+    sends: Vec<String>,
 }
 
 /// The session's state for one connection, fed through its own steps.
@@ -90,6 +92,15 @@ impl Session {
         }
     }
 
+    /// A new connection on the same profile, which starts the prompt over
+    /// the way a connect does. Cheaper than a new profile, whose script
+    /// engine takes a while to start.
+    fn restart(&mut self) {
+        start_prompt(&mut self.p, false);
+        self.acc = LineAccumulator::new();
+        self.parser = vosh_telnet::Parser::new();
+    }
+
     /// One socket read of raw wire bytes, then the end of the read and
     /// the hold's deadline before the next one.
     fn read(&mut self, data: &[u8]) -> Read {
@@ -97,13 +108,18 @@ impl Session {
         batch.out = Output::new(false);
         let now = Instant::now();
         let mut kept = Vec::new();
+        let mut sends = Vec::new();
+        let mut take = |step: LineStep, kept: &mut Vec<Vec<u8>>| {
+            kept.extend(step.scrollback);
+            sends.extend(step.result.sends);
+        };
         for event in self.parser.feed(data) {
             match event {
                 TelnetEvent::Data(bytes) => {
                     for line in self.acc.feed(&bytes) {
                         let plain = vosh_ansi::plain_text(&line.bytes);
                         for step in line_step(&mut self.p, &mut batch, line, plain, now, Some(1)) {
-                            kept.extend(step.scrollback);
+                            take(step, &mut kept);
                         }
                     }
                 }
@@ -117,14 +133,14 @@ impl Session {
                     if byte == telnet_codes::GA || byte == telnet_codes::EOR =>
                 {
                     for step in marker_step(&mut self.p, &mut self.acc, &mut batch, now, Some(1)) {
-                        kept.extend(step.scrollback);
+                        take(step, &mut kept);
                     }
                 }
                 _ => {}
             }
         }
         if let Some(step) = partial_step(&mut self.p, &mut self.acc, &mut batch, now, Some(1)) {
-            kept.extend(step.scrollback);
+            take(step, &mut kept);
         }
         if batch.hold {
             hold_step(&mut self.p, &mut self.acc, &mut batch.out);
@@ -134,6 +150,7 @@ impl Session {
             out: batch.out,
             log: batch.log.into_iter().map(|row| row.text).collect(),
             kept,
+            sends,
         }
     }
 
@@ -151,12 +168,13 @@ impl Session {
             out: batch.out,
             log: batch.log.into_iter().map(|row| row.text).collect(),
             kept,
+            sends: Vec::new(),
         }
     }
 
     /// The webview wrote to the terminal itself, such as your echo.
     fn local_write(&mut self) {
-        self.p.prompt.stage.close();
+        self.p.prompt.stage.local_write();
     }
 
     /// The `[prompt]` table changed, so the open row repaints.
@@ -428,4 +446,270 @@ fn in_the_text_every_payload_log_row_and_kept_line_stays_as_today() {
         .collect();
     assert!(moved.is_empty(), "{moved:#?}");
     assert_eq!(now.len(), TODAY.len());
+}
+
+/// `p` with its prompt shown at `show`.
+fn showing(mut p: Profile, show: vosh_prompt::PromptShow) -> Profile {
+    let mut config = p.prompt.config().clone();
+    config.show = show;
+    p.set_prompt_config(config);
+    p
+}
+
+/// A Prompts trigger that asks to send `seen` for every prompt, so a test
+/// can count what Prompts triggers saw.
+fn counting(mut p: Profile) -> Profile {
+    p.triggers
+        .set(vosh_trigger::Trigger {
+            name: "count".into(),
+            patterns: vec![vosh_trigger::TriggerPattern {
+                pattern: ".".into(),
+                enabled: true,
+            }],
+            priority: 0,
+            enabled: true,
+            actions: vec![vosh_trigger::TriggerAction::Send {
+                template: "seen".into(),
+            }],
+            preset: None,
+            group: None,
+            target: vosh_trigger::TriggerTarget::Prompt,
+        })
+        .expect("the trigger compiles");
+    p
+}
+
+/// Everything a session hands on for `bytes` cut at `at`, read by the
+/// profile `make` gives: the payloads, the log rows, the kept lines and
+/// what Prompts triggers sent.
+fn play_reads(make: &dyn Fn() -> Profile, bytes: &[u8], at: &[usize]) -> Vec<Read> {
+    replay(&mut Session::new(make()), bytes, at)
+}
+
+/// [`play_reads`] on a new connection of `session`.
+fn replay(session: &mut Session, bytes: &[u8], at: &[usize]) -> Vec<Read> {
+    session.restart();
+    vosh_prompt::testkit::reads(bytes, at)
+        .into_iter()
+        .map(|read| session.read(read))
+        .collect()
+}
+
+/// The plain text of every byte the reads wrote to the text, held line
+/// ends included.
+fn text_of(reads: &[Read]) -> String {
+    let mut bytes = Vec::new();
+    for read in reads {
+        if let Some(replace) = &read.out.replace {
+            bytes.extend_from_slice(&replace.bytes);
+        }
+        bytes.extend_from_slice(&read.out.bytes);
+        bytes.extend_from_slice(&read.out.hold);
+    }
+    vosh_ansi::plain_text(&bytes)
+}
+
+#[test]
+fn pinned_logs_keeps_and_triggers_every_prompt_as_the_text_does_at_every_split() {
+    use vosh_prompt::PromptShow;
+    for case in vosh_prompt::testkit::wire::CASES {
+        let prompt = if case.prompt == CODES_ALL {
+            CODES_ALL
+        } else {
+            CODES
+        };
+        let bytes = wire_fixture(case.name);
+        for draw in [true, false] {
+            let text = || counting(profile(prompt, HP, draw));
+            let pinned = || showing(counting(profile(prompt, HP, draw)), PromptShow::Pinned);
+            let mut splits = vec![Vec::new()];
+            splits.extend(cuts(&bytes).into_iter().map(|at| vec![at]));
+            let mut in_text = Session::new(text());
+            let mut in_band = Session::new(pinned());
+            for at in &splits {
+                let want = replay(&mut in_text, &bytes, at);
+                let got = replay(&mut in_band, &bytes, at);
+                let label = format!("{} draw {draw} cut {at:?}", case.name);
+                let log =
+                    |reads: &[Read]| reads.iter().flat_map(|r| r.log.clone()).collect::<Vec<_>>();
+                let kept = |reads: &[Read]| {
+                    reads
+                        .iter()
+                        .flat_map(|r| r.kept.clone())
+                        .collect::<Vec<_>>()
+                };
+                let sends = |reads: &[Read]| {
+                    reads
+                        .iter()
+                        .flat_map(|r| r.sends.clone())
+                        .collect::<Vec<_>>()
+                };
+                assert_eq!(log(&got), log(&want), "log rows, {label}");
+                assert_eq!(kept(&got), kept(&want), "kept lines, {label}");
+                assert_eq!(sends(&got), sends(&want), "Prompts triggers, {label}");
+                // In one read no prompt reaches the text: not the design,
+                // not the game's prompt, not the tank line above it. A
+                // read that ends partway through a prompt paints that
+                // part, which the next one erases, so the renderer tests
+                // hold the screens of split reads.
+                if at.is_empty() {
+                    let shown = text_of(&got);
+                    for prompt_text in ["<1020>", "<765>", "<?>", "mv]", "mv> ", "Tester:"] {
+                        assert!(
+                            !shown.contains(prompt_text),
+                            "{prompt_text} in {shown:?}, {label}"
+                        );
+                    }
+                }
+            }
+            // One read's prompts reach the band, one Prompts trigger send
+            // each.
+            let got = play_reads(&pinned, &bytes, &[]);
+            let pins: Vec<&Vec<u8>> = got.iter().filter_map(|r| r.out.pin.as_ref()).collect();
+            let recognized = got.iter().map(|r| r.sends.len()).sum::<usize>();
+            if case.name == "prompts-off-new" {
+                assert!(pins.is_empty(), "{}", case.name);
+            } else {
+                assert!(!pins.is_empty(), "{} draw {draw}", case.name);
+                assert!(recognized >= 1, "{} draw {draw}", case.name);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_pinned_band_shows_the_design_or_the_game_prompt_with_its_tank_line() {
+    use vosh_prompt::PromptShow;
+    let fight = wire_fixture("fight-tank");
+    let pinned = |draw| showing(profile(CODES, HP, draw), PromptShow::Pinned);
+    let reads = play_reads(&|| pinned(true), &fight, &[]);
+    let pin = reads[0].out.pin.clone().expect("the band");
+    // The design reads nothing on the tank line, so it shows as sent.
+    assert_eq!(
+        vosh_ansi::plain_text(&pin),
+        "Tester: [===|===|===|---]\r\n<765>"
+    );
+    assert_eq!(
+        text_of(&reads),
+        "A Blackwatch guard attacks you!\r\nA Blackwatch guard has quite a few wounds. \r\n\r\n"
+    );
+    assert!(reads[0].out.bytes.ends_with(b"wounds. "));
+    assert_eq!(reads[0].out.hold, b"\r\n\r\n");
+    // A design that reads the tank takes the whole band.
+    let make = || {
+        showing(
+            profile(CODES, "%tank %{tank_hp:pct}%% <%hp>", true),
+            PromptShow::Pinned,
+        )
+    };
+    let reads = play_reads(&make, &fight, &[]);
+    let pin = reads[0].out.pin.clone().expect("the band");
+    assert_eq!(vosh_ansi::plain_text(&pin), "Tester 75% <765>");
+    // Drawing off, the band holds the game's lines as sent.
+    let reads = play_reads(&|| pinned(false), &fight, &[]);
+    let pin = reads[0].out.pin.clone().expect("the band");
+    assert_eq!(
+        vosh_ansi::plain_text(&pin),
+        "Tester: [===|===|===|---]\r\n[765/1020hp 800/800mn 930/930mv]"
+    );
+}
+
+#[test]
+fn a_prompts_trigger_that_hides_the_prompt_leaves_the_band_empty() {
+    use vosh_prompt::PromptShow;
+    let mut p = showing(profile(CODES, HP, false), PromptShow::Pinned);
+    p.triggers
+        .set(vosh_trigger::Trigger {
+            name: "hide".into(),
+            patterns: vec![vosh_trigger::TriggerPattern {
+                pattern: "hp".into(),
+                enabled: true,
+            }],
+            priority: 0,
+            enabled: true,
+            actions: vec![vosh_trigger::TriggerAction::Gag],
+            preset: None,
+            group: None,
+            target: vosh_trigger::TriggerTarget::Prompt,
+        })
+        .expect("the trigger compiles");
+    let mut session = Session::new(p);
+    let read = session.read(&wire_fixture("quiet"));
+    assert_eq!(read.out.pin.as_deref(), Some(&b""[..]));
+}
+
+#[test]
+fn enter_on_an_empty_line_while_pinned_moves_nothing_and_updates_the_band() {
+    use vosh_prompt::testkit::{Build, Mud, Options};
+    use vosh_prompt::PromptShow;
+    let mut mud = Mud::playing(Options::new(Build::New));
+    let mut session = Session::new(showing(profile(CODES, HP, true), PromptShow::Pinned));
+    let login = session.read(&mud.login());
+    assert!(!login.out.hold.is_empty());
+    assert!(session.p.prompt.stage.swallows(), "armed after login");
+    // Enter on an empty line: the webview echoes nothing while pinned,
+    // so only the send reaches the session.
+    let _ = session.send("");
+    assert!(session.p.prompt.stage.swallows(), "armed after the send");
+    for write in mud.command("") {
+        let read = session.read(&write.bytes);
+        assert!(read.out.bytes.is_empty(), "{:?}", read.out);
+        assert!(read.out.hold.is_empty());
+        assert!(read.out.replace.is_none());
+        assert!(read.out.pin.is_some());
+        assert!(!read.out.is_empty(), "the band still goes out");
+    }
+    // A typed line lands where the prompt was, and its reply follows.
+    let _ = session.send("look");
+    session.local_write();
+    let reply = mud.command("look");
+    let read = session.read(&reply[0].bytes);
+    assert!(read.out.bytes.starts_with(b"The Bank of Aabahran"));
+}
+
+#[test]
+fn a_repaint_while_pinned_goes_to_the_band_and_a_change_of_place_moves_the_prompt() {
+    use vosh_prompt::PromptShow;
+    let mut session = Session::new(profile(CODES, HP, true));
+    let _ = session.read(&wire_fixture("quiet"));
+    assert!(session.p.prompt.stage.open_row().is_some());
+    // You choose Pinned: the open row is erased and goes to the band.
+    session.p = showing(std::mem::take(&mut session.p), PromptShow::Pinned);
+    let out = session.repaint();
+    assert!(out
+        .replace
+        .as_ref()
+        .is_some_and(|r| r.bytes.is_empty() && !r.fresh));
+    assert_eq!(
+        out.pin.as_deref().map(vosh_ansi::plain_text).as_deref(),
+        Some("<1020>")
+    );
+    // A design change only redraws the band.
+    let mut config = session.p.prompt.config().clone();
+    config.template = "hp %hp> ".into();
+    session.p.set_prompt_config(config);
+    let out = session.repaint();
+    assert!(out.bytes.is_empty() && out.replace.is_none());
+    assert_eq!(
+        out.pin.as_deref().map(vosh_ansi::plain_text).as_deref(),
+        Some("hp 1020> ")
+    );
+    // Back to the text: the prompt comes back at the cursor.
+    session.p = showing(std::mem::take(&mut session.p), PromptShow::Text);
+    let out = session.repaint();
+    assert_eq!(out.pin.as_deref(), Some(&b""[..]));
+    assert_eq!(
+        drawn_after_mark(&out.bytes).as_deref(),
+        Some("hp 1020> \x1b[0m")
+    );
+    assert!(session.p.prompt.stage.open_row().is_some());
+}
+
+/// The bytes after the last region mark, as text.
+fn drawn_after_mark(bytes: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(bytes);
+    let at = text.rfind("\x1b]7717;o;")?;
+    let rest = &text[at..];
+    let end = rest.find('\x07')?;
+    Some(rest[end + 1..].to_string())
 }
