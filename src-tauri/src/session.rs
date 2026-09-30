@@ -2383,9 +2383,13 @@ mod tests {
         // The hidden state that ended with the connection is never
         // reported, since the stores clear on the disconnect.
         assert!(p.prompt.vars.take_hidden_change().is_none());
+        // The profile's [prompt] table outlives the connection.
+        assert!(p.prompt.config().draw);
+        assert_eq!(p.prompt.config().template, GATE);
 
         super::start_prompt(&mut p, false);
         assert!(!p.prompt.forsaken());
+        assert_eq!(p.prompt.config().template, GATE);
     }
 
     #[test]

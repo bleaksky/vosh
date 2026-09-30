@@ -4931,6 +4931,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_switch_hands_the_prompt_the_next_profile_table_and_its_rules() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = switch_state(dir.path()).await;
+        {
+            let mut p = state.profile.lock().await;
+            // A world Vosh does not know, where no Forsaken Lands rule
+            // holds until a capture reads Aabahran's codes.
+            p.prompt.connect(false);
+            p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
+            let at = chrono::Local::now().fixed_offset();
+            p.prompt
+                .vars
+                .observe("Char.Vitals", serde_json::json!({"hp":850,"maxhp":900}), at);
+            p.prompt.vars.set_script("mood", "grim");
+            assert!(!p.prompt.forsaken());
+        }
+        let healer = vosh_prompt::PromptConfig {
+            draw: false,
+            template: "%mana".into(),
+            previous_templates: vec!["%move".into()],
+            capture: vosh_prompt::CaptureConfig::Aabahran(vosh_prompt::config::AabahranCapture {
+                prompt: "<%h%m %vmv> ".into(),
+                ..vosh_prompt::config::AabahranCapture::default()
+            }),
+        };
+        let mut file = ProfileConfig::default();
+        file.set_prompt(healer.clone());
+        file.save(&healer_file(dir.path())).unwrap();
+
+        super::switch_live_profile(&state, "Healer").await.unwrap();
+        {
+            let p = state.profile.lock().await;
+            assert_eq!(*p.prompt.config(), healer);
+            assert!(!p.ui.prompt_template_enabled);
+            assert_eq!(p.ui.prompt_template, "%mana");
+            assert!(p.prompt.forsaken(), "the capture reads Aabahran's codes");
+            assert!(p.prompt.vars.gmcp().get("Char.Vitals").is_some());
+            assert!(p.prompt.vars.prompt_vars().is_empty());
+        }
+
+        // Back to a profile with no file, which holds no table.
+        super::switch_live_profile(&state, "Test-Prompt")
+            .await
+            .unwrap();
+        let p = state.profile.lock().await;
+        assert!(p.prompt.config().is_default());
+        assert!(!p.prompt.forsaken());
+        assert!(p.prompt.vars.gmcp().get("Char.Vitals").is_some());
+    }
+
+    #[tokio::test]
     async fn hidden_get_answers_what_the_session_last_reported() {
         let state: super::SharedState = std::sync::Arc::new(super::AppState::default());
         let nothing = serde_json::json!({
