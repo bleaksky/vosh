@@ -396,6 +396,7 @@ pub fn run() {
             affects_snapshot::affects_snapshot_get,
             affect_full::affect_full_get,
             commands::hidden_get,
+            commands::prompt_show_get,
             prompt_lookup::prompt_last_seen,
             characters::profile_export_file,
             commands::ui_set_theme,

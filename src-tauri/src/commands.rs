@@ -3425,6 +3425,37 @@ async fn reported_hidden(state: &SharedState) -> vosh_prompt::vars::Hidden {
     state.profile.lock().await.prompt.vars.reported()
 }
 
+/// Where your prompt shows, with what the Settings row and the main
+/// window need beside it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct PromptShowState {
+    /// `text`, `lifted` or `pinned`, from `[prompt] show`.
+    pub show: String,
+    /// The profile has a capture that reads a prompt. Without one Vosh
+    /// finds no prompt to lift or pin.
+    pub capture: bool,
+    /// The game sent Char.Prompt this session.
+    pub game_sent: bool,
+}
+
+/// Where the active profile's prompt shows, and whether it reads one.
+/// Every window reads it again on `vosh://prompt-config-changed`.
+#[tauri::command]
+pub(crate) async fn prompt_show_get(
+    state: State<'_, SharedState>,
+) -> Result<PromptShowState, String> {
+    Ok(prompt_show_state(&*state.profile.lock().await))
+}
+
+/// The body of [`prompt_show_get`].
+fn prompt_show_state(p: &crate::profile::Profile) -> PromptShowState {
+    PromptShowState {
+        show: p.prompt.show().name().to_string(),
+        capture: p.prompt.stage.has_recognizer(),
+        game_sent: p.prompt.vars.gmcp().prompt_seen(),
+    }
+}
+
 /// Replace a profile's tracked affects without touching the rest of
 /// its UI config, so an editor outside Settings cannot write a stale
 /// snapshot over other fields. Returns the normalized list.
@@ -4864,6 +4895,33 @@ mod tests {
         let text = toml::to_string(&file).unwrap();
         assert!(text.contains("show = \"pinned\""), "{text}");
         assert!(!text.contains("prompt_show"), "{text}");
+    }
+
+    #[test]
+    fn the_prompt_show_state_says_where_it_shows_and_whether_a_capture_reads_it() {
+        let mut p = crate::profile::Profile::default();
+        assert_eq!(
+            super::prompt_show_state(&p),
+            super::PromptShowState {
+                show: "text".into(),
+                capture: false,
+                game_sent: false,
+            }
+        );
+        p = prompt_profile();
+        let mut config = p.prompt.config().clone();
+        config.show = vosh_prompt::PromptShow::Lifted;
+        p.set_prompt_config(config);
+        p.prompt.connect(true);
+        p.prompt.observe(
+            "Char.Prompt",
+            serde_json::json!({"enabled": true, "prompt": "<%hhp> ", "fprompt": ""}),
+            chrono::Local::now().fixed_offset(),
+        );
+        let state = super::prompt_show_state(&p);
+        assert_eq!(state.show, "lifted");
+        assert!(state.capture);
+        assert!(state.game_sent);
     }
 
     #[test]

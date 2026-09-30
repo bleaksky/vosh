@@ -520,6 +520,23 @@
   padding: 0;
 }
 
+/* Rows stacked in one block, like Where your prompt shows under Draw
+   your own prompt. */
+.st-block > .st-row + .st-row {
+  margin-top: 12px;
+}
+
+/* A row whose control waits on something else, as P13 draws the Draw
+   row without a capture: the label in the tertiary tone and the control
+   at 40 percent. */
+.st-row.is-disabled .st-row-label {
+  color: var(--tertiary);
+}
+
+.st-row.is-disabled .st-row-control {
+  opacity: 0.4;
+}
+
 .st-row-text {
   display: flex;
   flex-direction: column;
