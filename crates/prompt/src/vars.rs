@@ -1082,6 +1082,14 @@ pub fn is_sourced(name: &str) -> bool {
         || entry(name).is_some_and(|e| e.group != Group::Vosh || e.kind == Kind::Raw)
 }
 
+/// True for a name Vosh knows: a catalog field, another spelling of one,
+/// or one of the percents and tank health a capture fills. Every name a
+/// PROMPT code fills is one of them, so a value under any other name
+/// comes only from a pattern or a script.
+pub fn known(name: &str) -> bool {
+    CAPTURE_KEYS.contains(&name) || entry(name).is_some()
+}
+
 /// A vital pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pair {
