@@ -21,8 +21,9 @@ regex-automata = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [features]
-# The test kit: the game's own prompt printer, for the tests here and the
-# session tests in src-tauri.
+# The test kit: the game's own prompt printer and a fake Aabahran that
+# plays pulses from a PROMPT, for the tests here and the session tests in
+# src-tauri.
 testkit = []
 
 [dev-dependencies]
