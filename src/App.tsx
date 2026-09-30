@@ -243,6 +243,7 @@ function App() {
   // Where your prompt shows, and whether this profile reads one.
   const promptShow = usePromptShow();
   const promptPinned = promptShow?.show === 'pinned' && promptShow.capture;
+  const promptLifted = promptShow?.show === 'lifted' && promptShow.capture;
   // The cell the live terminal draws at, which the pinned band lays its
   // characters out on.
   const [cellSize, setCellSize] = useState<CellSize | null>(null);
@@ -1711,6 +1712,7 @@ function App() {
               setFindResults({ index: event.resultIndex, count: event.resultCount })
             }
             onCellSize={setCellSize}
+            lifted={promptLifted}
           />
         </div>
       </div>
