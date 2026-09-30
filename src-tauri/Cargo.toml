@@ -38,6 +38,7 @@ vosh-ansi = { path = "../crates/ansi" }
 vosh-map = { path = "../crates/map" }
 vosh-script = { path = "../crates/script" }
 vosh-log = { path = "../crates/log" }
+vosh-prompt = { path = "../crates/prompt" }
 regex = "1"
 # Local time for the custom prompt's %time / %date tokens (clock only, no
 # default features).

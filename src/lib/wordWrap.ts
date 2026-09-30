@@ -17,6 +17,9 @@
 // flush timer fires or the next chunk lands; for live MUD output
 // that means around 20 ms on prompts, zero ms on every \n-terminated
 // chunk. No more "city" splitting into "ci" / "ty".
+//
+// The native grid wraps with the Rust twin in crates/prompt/src/wrap.rs.
+// Both run fixtures/wrap/cases.json, so keep them in step.
 
 type AnsiState = 'normal' | 'esc' | 'csi' | 'osc';
 

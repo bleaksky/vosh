@@ -1,0 +1,106 @@
+{
+  "cases": [
+    {
+      "name": "a short line stays as it is",
+      "cols": 20,
+      "input": "hello world",
+      "expected": "hello world"
+    },
+    {
+      "name": "a line breaks at the last space before the width",
+      "cols": 10,
+      "input": "the quick brown fox",
+      "expected": "the quick\r\nbrown fox"
+    },
+    {
+      "name": "a space right at the edge carries the next word down",
+      "cols": 5,
+      "input": "hello world",
+      "expected": "hello\r\nworld"
+    },
+    {
+      "name": "escape sequences take no width",
+      "cols": 10,
+      "input": "\u001b[33mthe quick\u001b[0m brown fox",
+      "expected": "\u001b[33mthe quick\u001b[0m\r\nbrown fox"
+    },
+    {
+      "name": "a word wider than the width breaks at the edge",
+      "cols": 5,
+      "input": "abcdefgh",
+      "expected": "abcde\r\nfgh"
+    },
+    {
+      "name": "a long word breaks as often as it must",
+      "cols": 5,
+      "input": "abcdefghijkl",
+      "expected": "abcde\r\nfghij\r\nkl"
+    },
+    {
+      "name": "complete lines wrap and the partial tail flushes",
+      "cols": 12,
+      "input": "a long enough line here\r\nprompt> ",
+      "expected": "a long\r\nenough line\r\nhere\r\nprompt> "
+    },
+    {
+      "name": "the game line endings pass through",
+      "cols": 20,
+      "input": "You are hungry.\n\r[1020/1020hp]",
+      "expected": "You are hungry.\n\r[1020/1020hp]"
+    },
+    {
+      "name": "a carriage return alone ends a line",
+      "cols": 4,
+      "input": "abc def\rghi jkl",
+      "expected": "abc\r\ndef\rghi\r\njkl"
+    },
+    {
+      "name": "a tab counts as a space to break at",
+      "cols": 6,
+      "input": "abc\tdefgh",
+      "expected": "abc\r\ndefgh"
+    },
+    {
+      "name": "the last of several spaces takes the break",
+      "cols": 5,
+      "input": "ab   cdefg",
+      "expected": "ab  \r\ncdefg"
+    },
+    {
+      "name": "an accented letter takes one cell",
+      "cols": 4,
+      "input": "café noir",
+      "expected": "café\r\nnoir"
+    },
+    {
+      "name": "a region mark takes no width",
+      "cols": 10,
+      "input": "\u001b]7717;o;3\u0007[1020/1020hp]",
+      "expected": "\u001b]7717;o;3\u0007[1020/1020\r\nhp]"
+    },
+    {
+      "name": "a drawn prompt wraps between words and keeps its colors",
+      "cols": 16,
+      "input": "\u001b[38;2;100;100;100m[\u001b[0m\u001b[3m1020(\u001b[32m100\u001b[0m\u001b[3m%)h 800(\u001b[38;2;128;200;255m100\u001b[0m\u001b[3m%)m\u001b[0m",
+      "expected": "\u001b[38;2;100;100;100m[\u001b[0m\u001b[3m1020(\u001b[32m100\u001b[0m\u001b[3m%)h\r\n800(\u001b[38;2;128;200;255m100\u001b[0m\u001b[3m%)m\u001b[0m"
+    },
+    {
+      "name": "bar cells take one cell each",
+      "cols": 6,
+      "input": "hp ██████░░░░",
+      "expected": "hp\r\n██████\r\n░░░░"
+    },
+    {
+      "name": "a width of 0 wraps as a width of 1",
+      "cols": 0,
+      "input": "ab",
+      "expected": "a\r\nb"
+    },
+    {
+      "name": "an empty chunk stays empty",
+      "cols": 10,
+      "input": "",
+      "expected": ""
+    }
+  ]
+}
