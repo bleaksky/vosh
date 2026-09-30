@@ -23,12 +23,13 @@ use crate::commands::{AppState, SharedState};
 use crate::profile_set::{AutoMatch, ProfileSet, DEFAULT_PROFILE_NAME};
 
 /// The events the tests read, as the webview would hear them.
-const EVENTS: [&str; 5] = [
+const EVENTS: [&str; 6] = [
     "session://output",
     "session://game-prompt-seen",
     "session://prompt-status",
     "session://hidden",
     "session://state",
+    crate::affect_full::AFFECT_FULL_CHANGED_EVENT,
 ];
 
 /// What the prompts off status says in `#prompt`.
@@ -1201,5 +1202,85 @@ async fn a_reconnect_keeps_the_moved_pattern_until_the_game_sends_your_prompt() 
     assert_eq!(codes.prompt, PROMPT);
     assert_eq!(codes.source, Some(vosh_prompt::config::CaptureSource::Gmcp));
     h.until_last_row(DRAWN).await;
+    h.finish(grid).await;
+}
+
+/// The affect fulls `pairs`, as the store keeps them.
+fn fulls(pairs: &[(&str, i64)]) -> crate::affect_full::FullMap {
+    pairs.iter().map(|(k, v)| ((*k).to_string(), *v)).collect()
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn affect_fulls_follow_a_cast_and_come_back_at_the_next_login() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    let file = h.dir.path().join(crate::affect_full::FILE_NAME);
+    h.state.affect_full.set_path(file.clone());
+    h.connect().await;
+    // Tester logs in with bless at 6 and armor at 44, both first seen.
+    h.until("the login fulls", |h| {
+        h.state.affect_full.map() == fulls(&[("armor", 44), ("bless", 6)])
+    })
+    .await;
+    let passes = |h: &Harness| {
+        h.screen()
+            .iter()
+            .filter(|r| r.contains("The hour passes."))
+            .count()
+    };
+    // Two ticks drain both and change no full.
+    h.type_line("tick").await;
+    h.type_line("tick").await;
+    h.until("two ticks", |h| passes(h) == 2).await;
+    assert_eq!(
+        h.state.affect_full.map(),
+        fulls(&[("armor", 44), ("bless", 6)])
+    );
+    // A recast of armor for more hours starts its full over.
+    h.type_line("cast 48 armor").await;
+    h.until("the recast", |h| {
+        h.state.affect_full.map() == fulls(&[("armor", 48), ("bless", 6)])
+    })
+    .await;
+    h.type_line("tick").await;
+    h.until("a third tick", |h| passes(h) == 3).await;
+    // The windows heard each change, the last one the fulls now.
+    let heard = h.events(crate::affect_full::AFFECT_FULL_CHANGED_EVENT);
+    assert_eq!(
+        heard,
+        [
+            serde_json::json!({ "armor": 44, "bless": 6 }),
+            serde_json::json!({ "armor": 48, "bless": 6 }),
+        ]
+    );
+
+    // Log out: the fulls are written for the next login and cleared.
+    h.disconnect().await;
+    let text = std::fs::read_to_string(&file).expect("the fulls are written");
+    let key = format!("127.0.0.1:{} tester", h.port);
+    let saved: toml::Table = text.parse().expect("the file reads");
+    assert_eq!(
+        saved["characters"][key.as_str()]["armor"].as_integer(),
+        Some(48)
+    );
+    assert_eq!(
+        saved["characters"][key.as_str()]["bless"].as_integer(),
+        Some(6)
+    );
+    assert!(h.state.affect_full.map().is_empty());
+
+    // Log back in with armor at 47 and bless at 3, as the game kept them.
+    h.fake.lock().expect("the options").affects = vec![
+        vosh_prompt::testkit::Affect::spell("bless", 3),
+        vosh_prompt::testkit::Affect::spell("armor", 47),
+    ];
+    h.connect().await;
+    h.until("the same fulls", |h| {
+        h.state.affect_full.map() == fulls(&[("armor", 48), ("bless", 6)])
+    })
+    .await;
     h.finish(grid).await;
 }

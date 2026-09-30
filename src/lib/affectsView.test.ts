@@ -4,6 +4,7 @@ import {
   affectsPaneRows,
   affectsSummary,
   affectsView,
+  gaugeFraction,
   hoursTone,
   isTrackedRow,
   type AffectInput,
@@ -281,6 +282,39 @@ describe('affectsPaneRows', () => {
       ['sanctuary', 'missing'],
       ['haste', 'present'],
     ]);
+  });
+});
+
+describe('gaugeFraction', () => {
+  const row = (state: AffectRow['state'], ticks: number | null, key = 'armor'): AffectRow => ({
+    key,
+    name: key,
+    state,
+    ticks,
+  });
+  const full = { armor: 48, sanctuary: 10 };
+
+  it('drains from full toward empty as the hours run down', () => {
+    expect(gaugeFraction(row('present', 48), full)).toBe(1);
+    expect(gaugeFraction(row('present', 24), full)).toBe(0.5);
+    expect(gaugeFraction(row('expiring', 1, 'sanctuary'), full)).toBe(0.1);
+    expect(gaugeFraction(row('expiring', 0, 'sanctuary'), full)).toBe(0);
+    expect(gaugeFraction(row('untracked', 12), full)).toBe(0.25);
+  });
+
+  it('reads empty while missing and full while permanent', () => {
+    expect(gaugeFraction(row('missing', null), full)).toBe(0);
+    expect(gaugeFraction(row('present', -1), full)).toBe(1);
+  });
+
+  it('reads full for an affect Vosh has no full for, and null with no hours', () => {
+    expect(gaugeFraction(row('present', 30, 'haste'), full)).toBe(1);
+    expect(gaugeFraction(row('present', 0, 'haste'), { haste: 0 })).toBe(1);
+    expect(gaugeFraction(row('present', null), full)).toBeNull();
+  });
+
+  it('never passes full, even before a recast reaches the store', () => {
+    expect(gaugeFraction(row('present', 60), full)).toBe(1);
   });
 });
 

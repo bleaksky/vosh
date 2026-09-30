@@ -255,6 +255,9 @@ pub(crate) struct AppState {
     /// opens between ticks. Cleared on connect and when the session
     /// ends.
     pub(crate) last_affects: crate::affects_snapshot::AffectsSnapshot,
+    /// How full each affect was cast, per character, for the Affects
+    /// pane's gauges. See [`crate::affect_full`].
+    pub(crate) affect_full: crate::affect_full::AffectFull,
     /// Path B authoring catalog. `Some` when the app started up with
     /// `catalog.toml` present (Path B mode); `None` in legacy per-
     /// profile mode. Mutated alongside the live `Profile` so on-disk
@@ -321,6 +324,7 @@ impl Default for AppState {
             current_connection: std::sync::Mutex::new(None),
             current_character: std::sync::Mutex::new(None),
             last_affects: crate::affects_snapshot::AffectsSnapshot::default(),
+            affect_full: crate::affect_full::AffectFull::default(),
             global_catalog: Arc::new(Mutex::new(None)),
             loadout_set: Arc::new(Mutex::new(None)),
             launch_notices: std::sync::Mutex::new(Vec::new()),
@@ -600,6 +604,7 @@ pub(crate) async fn session_connect(
     // The old session cleared the list as it ended. A new connection
     // starts with none until the MUD sends its own.
     state.last_affects.clear();
+    crate::affect_full::connect(&app, state.inner());
 
     let scrollback_path = tauri::Manager::path(&app)
         .app_data_dir()
@@ -2765,6 +2770,8 @@ pub(crate) async fn handle_char_known_for_auto_switch<R: tauri::Runtime>(
     if !should_resolve {
         return;
     }
+    // The affect gauges read this character's saved fulls.
+    crate::affect_full::character_known(app, state, trimmed);
     auto_switch_for_character(app, state, trimmed).await;
     crate::characters::broadcast_session_identity(app, state).await;
 }

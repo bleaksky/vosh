@@ -142,6 +142,26 @@ export function affectMark(row: AffectRow): AffectMark | null {
   return hoursTone(row.ticks) ?? 'up';
 }
 
+/** Hours at full for each affect key, the most Vosh has seen for the
+ *  affect on this character since it was last cast. The backend keeps
+ *  them (src-tauri/src/affect_full.rs), the one place that decides
+ *  full, and nothing here computes one. An affect with no entry reads
+ *  as full. */
+export type AffectFulls = Readonly<Record<string, number>>;
+
+/** How full an affect's gauge is, 0 to 1: the hours left over the
+ *  hours at full. Missing is empty. Permanent is full and never drains.
+ *  An affect with no full yet reads as full. Null when the server sent
+ *  no duration, which draws no gauge. */
+export function gaugeFraction(row: AffectRow, full: AffectFulls): number | null {
+  if (row.state === 'missing') return 0;
+  if (row.ticks === null) return null;
+  if (row.ticks < 0) return 1;
+  const top = full[row.key];
+  if (top === undefined || !(top > 0)) return 1;
+  return Math.min(1, Math.max(0, row.ticks / Math.max(top, row.ticks)));
+}
+
 /** What the pane header counts: tracked affects you are missing, and
  *  tracked affects running out, two ticks or fewer left. */
 export function affectsSummary(rows: readonly AffectRow[]): {
