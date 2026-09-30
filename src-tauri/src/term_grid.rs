@@ -1542,6 +1542,29 @@ mod tests {
         }
 
         #[test]
+        fn a_prompt_whole_before_its_line_end_repaints_with_its_line_end() {
+            // A capture that settles, on a prompt the game followed with
+            // a line end in the same read.
+            let mut stage = Stage::default();
+            stage.set_capture(&CaptureConfig::Regex(RegexCapture {
+                lines: vec![r"^\[(?<hp>\d+)/(?<maxhp>\d+)hp\]$".to_string()],
+                settle: true,
+                ..RegexCapture::default()
+            }));
+            for columns in [40, 12] {
+                let mut g = TermGrid::new(columns, 12);
+                g.session_output(&prompt_read(&mut stage, b"You are hungry.\r\n", ONE_ROW));
+                // Drawing off shows the game's prompt where the design
+                // was, and your echo lands on the row after it.
+                g.session_output(&repaint(&mut stage, None));
+                g.local_write(b"look\r\n");
+                let mut expect = TermGrid::new(columns, 12);
+                expect.session_output(&text(b"You are hungry.\r\n[1020/1020hp]\r\nlook\r\n"));
+                assert_eq!(screen(&g), screen(&expect), "{columns} wide");
+            }
+        }
+
+        #[test]
         fn a_prompt_split_across_reads_replaces_its_painted_start() {
             let mut stage = stage();
             let mut g = TermGrid::new(12, 12);

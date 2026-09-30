@@ -90,6 +90,17 @@ describe('RegionWriter', () => {
     });
   }
 
+  it('replaces a region that ends with its line end in place', async () => {
+    // A prompt whole before the line end that came after it keeps that
+    // line end in its region.
+    const { term, writer } = setup();
+    writer.output({ text: `You are hungry.\r\n${mark(1)}<1020>\r\n` });
+    writer.output(replace(1, `${mark(2)}<1020hp 800m> \r\n`));
+    writer.local('look\r\n');
+    await parsed(writer);
+    expect(screen(term)).toEqual(['You are hungry.', '<1020hp 800m> ', 'look']);
+  });
+
   it('counts the rows xterm wrapped the region into', async () => {
     const { term, writer } = setup(12);
     writer.output({ text: `before\r\n${mark(1)}[1020/1020hp 800/800mn 930/930mv]` });

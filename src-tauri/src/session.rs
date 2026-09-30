@@ -2981,6 +2981,60 @@ mod tests {
         );
     }
 
+    /// A profile that draws `<%hp>` from a capture that settles.
+    fn settling_profile(draw: bool) -> Profile {
+        let mut p = capture_profile(HP);
+        p.set_prompt_config(vosh_prompt::PromptConfig {
+            draw,
+            capture: regex_capture(r"^<(?<hp>\d+)hp (?<mana>\d+)m> $", true),
+            ..p.prompt.config().clone()
+        });
+        p
+    }
+
+    #[test]
+    fn a_prompt_whole_before_its_line_end_keeps_the_line_end() {
+        let mut wire = Wire::new(settling_profile(true));
+        let out = wire.read(b"<1020hp 800m> \n\rA rat arrives.\n\r");
+        assert_eq!(
+            out.bytes,
+            with(&[&wire.mark(1), b"<1020>\x1b[0m\r\n", b"A rat arrives.\r\n"])
+        );
+    }
+
+    #[test]
+    fn a_prompt_that_settles_draws_the_same_wherever_the_reads_split() {
+        let draws = || settling_profile(true);
+        let shows = || settling_profile(false);
+        // No GA: the line end after a prompt ends its row, as it does
+        // when the prompt settled at the end of an earlier read.
+        let text = "You are hungry.\n\r<1020hp 800m> \n\rA rat arrives.\n\r<1000hp 800m> ";
+        assert_eq!(
+            same_at_every_split(&draws, text),
+            ["You are hungry.", "<1020>", "A rat arrives.", "<1000>"]
+        );
+        assert_eq!(
+            same_at_every_split(&shows, text),
+            [
+                "You are hungry.",
+                "<1020hp 800m>",
+                "A rat arrives.",
+                "<1000hp 800m>"
+            ]
+        );
+        // With a GA, drawn or shown as sent, the prompt keeps the cursor
+        // after it, as it does when it settled before the GA came.
+        let text = "<1020hp 800m> *\n\rA rat arrives.\n\r<1000hp 800m> *";
+        assert_eq!(
+            same_at_every_split(&draws, text),
+            ["<1020>", "A rat arrives.", "<1000>"]
+        );
+        assert_eq!(
+            same_at_every_split(&shows, text),
+            ["<1020hp 800m>", "A rat arrives.", "<1000hp 800m>"]
+        );
+    }
+
     #[test]
     fn a_prompt_that_waits_for_its_line_end_draws_the_same_wherever_the_reads_split() {
         // The migrated capture on a prompt ending in %c, which the game
