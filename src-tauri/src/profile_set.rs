@@ -876,8 +876,11 @@ pub(crate) struct KnownWorld {
     pub port: u16,
 }
 
+/// The domain of The Forsaken Lands.
+const FORSAKEN_LANDS: &str = "theforsakenlands.com";
+
 pub(crate) const KNOWN_WORLDS: &[KnownWorld] = &[KnownWorld {
-    domain: "theforsakenlands.com",
+    domain: FORSAKEN_LANDS,
     name: "The Forsaken Lands",
     port: 1848,
 }];
@@ -892,6 +895,13 @@ pub(crate) fn known_world(host: &str) -> Option<&'static KnownWorld> {
                 .strip_suffix(w.domain)
                 .is_some_and(|rest| rest.ends_with('.'))
     })
+}
+
+/// True when the host is The Forsaken Lands, so the custom prompt
+/// follows Aabahran's rules there, the hidden values of lamented tears
+/// among them.
+pub(crate) fn is_forsaken_lands(host: &str) -> bool {
+    known_world(host).is_some_and(|w| w.domain == FORSAKEN_LANDS)
 }
 
 /// The name Vosh shows for a host, like `The Forsaken Lands` for
@@ -1127,6 +1137,14 @@ characters = ["Erelei", "Vanek"]
         assert_eq!(set.resolve_match("h", 1848, Some("Erelei")), None);
         // A host-only entry that is off is no fallback at connect.
         assert_eq!(set.resolve_match("h", 1848, None), None);
+    }
+
+    #[test]
+    fn the_forsaken_lands_rules_hold_on_its_hosts_alone() {
+        assert!(is_forsaken_lands("play.theforsakenlands.com"));
+        assert!(is_forsaken_lands(" TheForsakenLands.com. "));
+        assert!(!is_forsaken_lands("127.0.0.1"));
+        assert!(!is_forsaken_lands("nottheforsakenlands.com"));
     }
 
     #[test]

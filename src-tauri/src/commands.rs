@@ -2586,12 +2586,24 @@ async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), Stri
     // catalog.
     let catalog = state.global_catalog.lock().await.clone();
     let loadouts = state.loadout_set.lock().await.clone();
+    let forsaken = state
+        .current_connection
+        .lock()
+        .ok()
+        .and_then(|g| {
+            g.as_ref()
+                .map(|(host, _)| crate::profile_set::is_forsaken_lands(host))
+        })
+        .unwrap_or(false);
 
     // Step 3: apply the per-profile file (or defaults) and then overlay
     // global.toml so theme/font/keep-last/auto-update/dock_layout
     // survive the switch.
     {
         let mut p = state.profile.lock().await;
+        // The custom prompt keeps the connection's GMCP packets and drops
+        // the values the last profile's triggers set.
+        p.prompt.switch_profile(forsaken);
         match per_profile {
             Some(snap) => {
                 snap.apply_to(&mut p);
@@ -4753,6 +4765,40 @@ mod tests {
         assert_eq!(live_affects(&state).await, ["Haste"]);
         let reloaded = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
         assert_eq!(reloaded.active_name(), "Healer");
+    }
+
+    #[tokio::test]
+    async fn a_switch_keeps_the_gmcp_packets_and_drops_the_values_triggers_set() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = switch_state(dir.path()).await;
+        *state.current_connection.lock().unwrap() =
+            Some(("play.theforsakenlands.com".into(), 1848));
+        {
+            let mut p = state.profile.lock().await;
+            p.prompt.set_forsaken(true);
+            let at = chrono::Local::now().fixed_offset();
+            p.prompt.observe(
+                "Char.Prompt",
+                serde_json::json!({"enabled":true,"prompt":"%n%P%C<%hhp %mm %vmv> ","fprompt":""}),
+                at,
+            );
+            p.prompt
+                .observe("Char.Vitals", serde_json::json!({"hp":850,"maxhp":900}), at);
+            p.prompt.set_script("hp", "840");
+            p.prompt.set_script("mood", "grim");
+            assert_eq!(p.prompt.prompt_vars().len(), 2);
+        }
+
+        super::switch_live_profile(&state, "Healer").await.unwrap();
+
+        let p = state.profile.lock().await;
+        assert!(p.prompt.forsaken());
+        assert!(
+            p.prompt.new_build(),
+            "the Char.Prompt of this connection stays"
+        );
+        assert!(p.prompt.gmcp().get("Char.Vitals").is_some());
+        assert!(p.prompt.prompt_vars().is_empty());
     }
 
     #[tokio::test]

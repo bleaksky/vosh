@@ -2,7 +2,7 @@
 //! store; lives across reconnects so user customization survives disconnect
 //! cycles.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use vosh_alias::AliasStore;
 use vosh_script::ScriptEngine;
@@ -48,11 +48,11 @@ pub(crate) struct Profile {
     /// The catalog groups each of this profile's folders became in the
     /// shared catalog, which `#group` follows. See [`GroupFolders`].
     pub(crate) group_folders: GroupFolders,
-    /// Live "prompt vars" — written by user triggers via
-    /// `mud.set_prompt_var(name, value)` and read with priority
-    /// over GMCP by the vitals template resolver. Session-only;
-    /// reset on reconnect like vitals snapshots.
-    pub(crate) prompt_vars: BTreeMap<String, String>,
+    /// What the custom prompt reads: the values triggers write with
+    /// `mud.set_prompt_var(name, value)`, the latest packet of each GMCP
+    /// package, and the hidden state worked out from them. Session only.
+    /// A profile switch keeps the packets and a disconnect clears them.
+    pub(crate) prompt: vosh_prompt::Vars,
     /// Interval timers: each fires its command every `interval_secs`
     /// while connected. Independent of the tick timer (one command on
     /// the game tick) and of Lua `mud.timer` (script callbacks). The
