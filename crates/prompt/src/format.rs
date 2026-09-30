@@ -128,6 +128,15 @@ pub enum Value {
         max: Option<i64>,
         pct: Option<i64>,
     },
+    /// A number with a decimal point, as some games and scripts write
+    /// health (`1.5`), with its max when one is known. It prints as
+    /// written and draws a percent, a bar and a color by how full as a
+    /// gauge does.
+    Decimal {
+        text: String,
+        value: f64,
+        max: Option<f64>,
+    },
     /// A percent, such as the opponent's health or a member's mana.
     Pct(i64),
     /// The tank's health percent. Its game format is the `%P` bar.
@@ -337,12 +346,68 @@ pub fn tank_bar_cells(pct: i64) -> [bool; 12] {
 }
 
 impl Value {
+    /// A number as a prompt value writes it, whole or with a decimal
+    /// point. None when the text is no number.
+    pub fn parse_number(text: &str) -> Option<Value> {
+        let t = text.trim();
+        if let Ok(n) = t.parse::<i64>() {
+            return Some(Value::Num(n));
+        }
+        let value = t.parse::<f64>().ok().filter(|n| n.is_finite())?;
+        Some(Value::Decimal {
+            text: t.to_string(),
+            value,
+            max: None,
+        })
+    }
+
+    /// The number a whole or decimal value holds.
+    pub fn number(&self) -> Option<f64> {
+        match self {
+            Value::Num(n) => Some(*n as f64),
+            Value::Decimal { value, .. } => Some(*value),
+            _ => None,
+        }
+    }
+
+    /// True for a whole or decimal 0, a max that means no such pool.
+    pub fn is_zero(&self) -> bool {
+        match self {
+            Value::Num(n) => *n == 0,
+            Value::Decimal { value, .. } => value.abs() < f64::EPSILON,
+            _ => false,
+        }
+    }
+
+    /// This number over `max`, with the game's own percent when it gave
+    /// one. Two whole numbers make a gauge, and a decimal point on either
+    /// makes a decimal with its max. None when either is no number.
+    pub fn over(&self, max: &Value, pct: Option<i64>) -> Option<Value> {
+        match (self, max) {
+            (Value::Num(cur), Value::Num(max)) => Some(Value::Gauge {
+                cur: *cur,
+                max: Some(*max),
+                pct,
+            }),
+            _ => Some(Value::Decimal {
+                text: self.value_text(""),
+                value: self.number()?,
+                max: Some(max.number()?),
+            }),
+        }
+    }
+
     /// How full the value is, 0 to 1, for bars and color by how full.
     /// None when nothing gives a share.
     pub fn fraction(&self) -> Option<f64> {
         let share =
             |cur: i64, max: i64| (max > 0).then(|| (cur as f64 / max as f64).clamp(0.0, 1.0));
         match self {
+            Value::Decimal {
+                value,
+                max: Some(max),
+                ..
+            } if *max > 0.0 => Some((value / max).clamp(0.0, 1.0)),
             Value::Gauge { cur, max, pct } => match (max, pct) {
                 (Some(max), _) => share(*cur, *max),
                 (None, Some(pct)) => share(*pct, 100),
@@ -362,6 +427,7 @@ impl Value {
         matches!(
             self,
             Value::Gauge { .. }
+                | Value::Decimal { .. }
                 | Value::Pct(_)
                 | Value::TankHp(_)
                 | Value::Member { .. }
@@ -372,6 +438,11 @@ impl Value {
     /// The rounded percent the `pct` format prints.
     pub fn percent(&self) -> Option<i64> {
         match self {
+            Value::Decimal {
+                value,
+                max: Some(max),
+                ..
+            } if *max > 0.0 => Some((value / max * 100.0).round() as i64),
             Value::Gauge { cur, max, pct } => match (max, pct) {
                 (Some(max), _) if *max > 0 => percent_rounded(*cur, *max),
                 (_, Some(pct)) => Some(*pct),
@@ -387,8 +458,14 @@ impl Value {
     }
 
     /// The percent by the server's integer division, for the game's bands.
+    /// A decimal cuts its fraction off the same way.
     pub fn game_percent(&self) -> Option<i64> {
         match self {
+            Value::Decimal {
+                value,
+                max: Some(max),
+                ..
+            } if *max > 0.0 => Some((value * 100.0 / max).trunc() as i64),
             Value::Gauge { cur, max, pct } => match (max, pct) {
                 (Some(max), _) if *max >= 1 => percent_game(*cur, *max),
                 (_, Some(pct)) => Some(*pct),
@@ -411,7 +488,11 @@ impl Value {
             }
             Value::Gauge { cur, .. } => cur.to_string(),
             Value::Pct(pct) | Value::TankHp(pct) => pct.to_string(),
-            Value::Text(s) | Value::Lang(s) | Value::Slot(s) | Value::Styled(s) => s.clone(),
+            Value::Text(s)
+            | Value::Lang(s)
+            | Value::Slot(s)
+            | Value::Styled(s)
+            | Value::Decimal { text: s, .. } => s.clone(),
             Value::Flag => label.to_string(),
             Value::List(names) => names.len().to_string(),
             Value::Moon { phase, active, .. } => moon_code(*phase, *active).to_string(),
@@ -437,6 +518,7 @@ impl Value {
                 Value::Gauge { max, .. } | Value::Seconds { max, .. } => {
                     Some(max.map(|m| m.to_string()).unwrap_or_default())
                 }
+                Value::Decimal { max, .. } => Some(max.map(|m| m.to_string()).unwrap_or_default()),
                 _ => None,
             },
             Format::Pct => self.percent().map(|p| p.to_string()),
@@ -658,6 +740,44 @@ mod tests {
         assert_eq!(text(&zero, Format::Pct), None);
         assert_eq!(zero.fraction(), None);
         assert!(zero.has_bar());
+    }
+
+    #[test]
+    fn numbers_read_whole_or_with_a_decimal_point() {
+        assert_eq!(Value::parse_number(" 42 "), Some(Value::Num(42)));
+        let half = Value::parse_number("1.5").expect("a number");
+        assert_eq!(
+            half,
+            Value::Decimal {
+                text: "1.5".to_string(),
+                value: 1.5,
+                max: None,
+            }
+        );
+        assert_eq!(Value::parse_number("inf"), None);
+        assert_eq!(Value::parse_number("full"), None);
+        assert!(Value::Num(0).is_zero());
+        assert!(Value::parse_number("0.0").is_some_and(|v| v.is_zero()));
+        assert!(!half.is_zero());
+        // Two whole numbers make a gauge, and a decimal point on either
+        // makes a decimal with its max.
+        assert_eq!(
+            Value::Num(300).over(&Value::Num(1020), Some(29)),
+            Some(Value::Gauge {
+                cur: 300,
+                max: Some(1020),
+                pct: Some(29),
+            })
+        );
+        let gauge = half.over(&Value::Num(3), None).expect("a gauge");
+        assert_eq!(text(&gauge, Format::Value).as_deref(), Some("1.5"));
+        assert_eq!(text(&gauge, Format::Max).as_deref(), Some("3"));
+        assert_eq!(text(&gauge, Format::Pct).as_deref(), Some("50"));
+        assert_eq!(text(&gauge, Format::Grouped), None);
+        assert_eq!(gauge.fraction(), Some(0.5));
+        assert_eq!(gauge.game_percent(), Some(50));
+        assert!(gauge.has_bar());
+        assert_eq!(Value::Text("full".into()).over(&Value::Num(3), None), None);
     }
 
     #[test]
