@@ -653,3 +653,105 @@ async fn the_log_lookup_finds_only_the_prompt_of_the_profiles_own_character() {
     assert_eq!(crate::prompt_lookup::last_seen(&h.state).await, None);
     h.finish(grid).await;
 }
+
+/// What `session://hidden` says for each value.
+fn hidden(vitals: bool, tank: bool, opponent: bool, affects: bool, group: bool) -> Json {
+    serde_json::json!({
+        "vitals": vitals,
+        "tank": tank,
+        "opponent": opponent,
+        "affects": affects,
+        "group": group,
+    })
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lament_and_blindness_hide_what_each_build_hides() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let mut done = Vec::new();
+    for build in [Build::New, Build::Unflagged, Build::Older] {
+        let h = Harness::new(Options::new(build)).await;
+        h.set_prompt(codes(PROMPT)).await;
+        h.connect().await;
+        h.until_last_row("<1020>").await;
+        h.type_line("fight").await;
+        h.until_last_row("<765>").await;
+        // The design reads nothing on the tank line, so it shows as sent.
+        assert!(h.screen().iter().any(|r| r == "Tester: [===|===|===|---]"));
+
+        // The song hides every value it hides, on every build.
+        h.type_line("lament").await;
+        h.until_last_row("<?>").await;
+        h.until(&format!("{build:?} to hide everything"), |h| {
+            h.events("session://hidden").last() == Some(&hidden(true, true, true, true, true))
+        })
+        .await;
+        assert!(h.screen().iter().any(|r| r == "Tester:"), "{build:?}");
+
+        // The song ends, and each value shows again.
+        h.type_line("lament").await;
+        h.until(&format!("{build:?} to hide nothing"), |h| {
+            h.events("session://hidden").last() == Some(&hidden(false, false, false, false, false))
+        })
+        .await;
+        h.until_last_row("<765>").await;
+
+        // Blindness withholds your opponent's health on the builds that
+        // withhold it, and the tank's health stays.
+        h.type_line("blind").await;
+        h.until_shown("You are blinded!").await;
+        h.until_last_row("<765>").await;
+        let want = hidden(false, false, build != Build::Older, false, false);
+        h.until(&format!("{build:?} blind"), |h| {
+            h.events("session://hidden").last() == Some(&want)
+        })
+        .await;
+        h.disconnect().await;
+        done.push(h);
+    }
+    // Let the saves the song marked land before the folders go.
+    drop(grid);
+    tokio::time::sleep(Duration::from_millis(2_500)).await;
+    drop(done);
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options {
+        reconnect: true,
+        ..Options::new(Build::New)
+    })
+    .await;
+    h.set_prompt(codes(PROMPT)).await;
+    h.connect().await;
+    // No Char.Prompt comes, so the session has no sign of the new build,
+    // and the prompt reads from the saved codes all the same.
+    h.until_shown("Reconnecting.").await;
+    h.until_last_row("<1020>").await;
+    assert!(!h.state.profile.lock().await.prompt.vars.new_build());
+    assert!(h.events("session://game-prompt-seen").is_empty());
+    // prompt in the game sends Char.Prompt again.
+    h.type_line("prompt").await;
+    h.until_shown(&format!("Current prompt: {PROMPT}")).await;
+    h.until("the game's prompt settings", |h| {
+        !h.events("session://game-prompt-seen").is_empty()
+    })
+    .await;
+    assert!(h.state.profile.lock().await.prompt.vars.new_build());
+    assert_eq!(
+        h.events("session://game-prompt-seen"),
+        [serde_json::json!({"kind": "gmcp", "text": PROMPT, "applied": false})]
+    );
+    let seen = crate::prompt_lookup::last_seen(&h.state)
+        .await
+        .expect("seen");
+    assert_eq!(seen.source, "gmcp");
+    h.finish(grid).await;
+}
