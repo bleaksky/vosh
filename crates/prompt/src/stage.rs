@@ -645,6 +645,9 @@ pub struct OpenRow {
 /// One entry of the candidates ring.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate {
+    /// Which entry this is. Entries count up from 1 and never start over,
+    /// so an id the card holds never names a later entry.
+    pub id: u64,
     /// As the game sent it, colors included, before any gag.
     pub raw: Vec<u8>,
     pub plain: String,
@@ -797,6 +800,9 @@ pub struct Stage {
     /// The last recognized prompt, as sent.
     last_raw: Option<Block>,
     ring: VecDeque<Candidate>,
+    /// The last candidate id handed out. It never starts over, as the
+    /// generation does not.
+    candidates: u64,
     /// Output the ring has not recorded yet came in.
     unrecorded: bool,
     /// The latest recognized prompt since the last ring entry.
@@ -869,12 +875,13 @@ impl Stage {
     }
 
     /// A connection opened or closed. The regions, the ring and what the
-    /// session noted go. The capture, what the design reads and the
-    /// generation count stay.
+    /// session noted go. The capture, what the design reads, the
+    /// generation count and the candidate count stay.
     pub fn reset(&mut self) {
         *self = Self {
             recognizer: self.recognizer.take(),
             gen: self.gen,
+            candidates: self.candidates,
             hides: std::mem::take(&mut self.hides),
             show: self.show,
             shown_as: self.show,
@@ -1720,7 +1727,9 @@ impl Stage {
         if self.ring.len() == RING {
             self.ring.pop_front();
         }
+        self.candidates += 1;
         self.ring.push_back(Candidate {
+            id: self.candidates,
             raw: seen.raw,
             plain: seen.plain,
             at_ms,
@@ -1733,6 +1742,11 @@ impl Stage {
     /// The candidates ring, oldest first.
     pub fn ring(&self) -> impl Iterator<Item = &Candidate> {
         self.ring.iter()
+    }
+
+    /// The ring entry with this id, while the ring still holds it.
+    pub fn candidate(&self, id: u64) -> Option<&Candidate> {
+        self.ring.iter().find(|c| c.id == id)
     }
 
     /// Note that `trigger` hid a line and set prompt values while nothing
@@ -2347,6 +2361,7 @@ mod tests {
         assert_eq!(
             ring[0],
             &Candidate {
+                id: 1,
                 raw: colored.as_bytes().to_vec(),
                 plain: PROMPT.to_string(),
                 at_ms: 10,
@@ -2358,6 +2373,7 @@ mod tests {
         assert_eq!(
             ring[1],
             &Candidate {
+                id: 2,
                 raw: b"<10hp> ".to_vec(),
                 plain: "<10hp> ".to_string(),
                 at_ms: 20,
@@ -2369,6 +2385,7 @@ mod tests {
         assert_eq!(
             ring[2],
             &Candidate {
+                id: 3,
                 raw: b"Healer> ".to_vec(),
                 plain: "Healer> ".to_string(),
                 at_ms: 30,
@@ -2378,6 +2395,16 @@ mod tests {
             }
         );
         assert_eq!(ring.len(), 3);
+        assert_eq!(stage.candidate(2).map(|c| c.at_ms), Some(20));
+        assert_eq!(stage.candidate(4), None);
+
+        // A new connection starts the ring over and keeps counting, so
+        // an id from before never names a new entry.
+        stage.reset();
+        stage.line(&mut out, b"> ", "> ", None, b"> \r\n");
+        stage.record(None, 40, false, true);
+        assert_eq!(stage.ring().map(|c| c.id).collect::<Vec<_>>(), [4]);
+        assert_eq!(stage.candidate(1), None);
     }
 
     #[test]
