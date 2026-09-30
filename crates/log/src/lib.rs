@@ -117,6 +117,9 @@ pub struct CharacterScope<'a> {
     pub mine: &'a [String],
     /// Every character any profile claims on this host and port.
     pub claimed: &'a [String],
+    /// A profile plays this host and port with no character named, so a
+    /// session may belong to a character no profile claims.
+    pub open: bool,
 }
 
 /// A session a character lookup read, with the character it belongs to.
@@ -521,7 +524,7 @@ impl LogStore {
     /// session with none belongs to the character its first sent line
     /// names, when that is a character `scope.claimed` holds, and
     /// otherwise to the one character claimed on the host and port when
-    /// there is exactly one. The query compares sent lines against those
+    /// there is exactly one and `scope.open` is false. The query compares sent lines against those
     /// names only and reads no other sent line. A prefix must not start
     /// with the `> ` of a sent line.
     pub fn find_in_sessions<T>(
@@ -604,7 +607,9 @@ impl LogStore {
         if let Some(name) = named {
             return Ok(Some(name));
         }
-        Ok((claimed.len() == 1).then(|| claimed.remove(0)))
+        // With one character claimed here and no profile that plays by
+        // host alone, the session was theirs.
+        Ok((claimed.len() == 1 && !scope.open).then(|| claimed.remove(0)))
     }
 
     /// A session's lines that start with one of `prefixes`, newest first.
@@ -1017,6 +1022,7 @@ mod tests {
             port: 1848,
             mine,
             claimed,
+            open: false,
         }
     }
 
@@ -1101,6 +1107,14 @@ mod tests {
             newest(&s, &scope(&mine, &names(&["Tester", "Healer"]))),
             None
         );
+        // A profile that plays the game with no character named could have
+        // played it as anyone.
+        let claimed = names(&["Tester"]);
+        let open = CharacterScope {
+            open: true,
+            ..scope(&mine, &claimed)
+        };
+        assert_eq!(newest(&s, &open), None);
     }
 
     #[test]
