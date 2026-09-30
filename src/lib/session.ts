@@ -1577,6 +1577,50 @@ export async function followReplacedUiConfig(
   };
 }
 
+/** Sent to every window when a command changed the active profile's
+ *  `[prompt]` table, like `#prompt` or `#unprompt`. */
+export const PROMPT_CONFIG_CHANGED_EVENT = 'vosh://prompt-config-changed';
+
+/** Hear that a command changed the active profile's `[prompt]` table. */
+export async function subscribePromptConfigChanged(cb: () => void): Promise<UnlistenFn> {
+  return listen<unknown>(PROMPT_CONFIG_CHANGED_EVENT, () => cb());
+}
+
+/** The prompt switch and design, which Settings still holds in its
+ *  UiConfig until the Prompt section replaces PromptBlock. */
+export type PromptFields = Pick<UiConfig, 'prompt_template_enabled' | 'prompt_template'>;
+
+export function promptFieldsOf(config: UiConfig): PromptFields {
+  return {
+    prompt_template_enabled: config.prompt_template_enabled,
+    prompt_template: config.prompt_template,
+  };
+}
+
+/** The prompt fields in `fresh` that differ from `known`, what a window
+ *  last read or saved. Those changed somewhere else and win. The rest
+ *  stay as the window holds them, your unsaved typing included. With
+ *  nothing known, all of them. */
+export function changedPromptFields(
+  known: PromptFields | null,
+  fresh: PromptFields,
+): Partial<PromptFields> {
+  const patch: Partial<PromptFields> = {};
+  if (!known || known.prompt_template_enabled !== fresh.prompt_template_enabled) {
+    patch.prompt_template_enabled = fresh.prompt_template_enabled;
+  }
+  if (!known || known.prompt_template !== fresh.prompt_template) {
+    patch.prompt_template = fresh.prompt_template;
+  }
+  return patch;
+}
+
+// Adopt prompt fields a command saved, the same way, so this window's
+// next save does not send them on as its own change.
+export function primeUiConfigPrompt(fields: Partial<PromptFields>): void {
+  if (lastSentConfig) lastSentConfig = { ...lastSentConfig, ...fields };
+}
+
 // Adopt a theme another window already applied and broadcast, and
 // nothing else, so this window's next save does not emit it again
 // while its own unsaved edits still diff as changes.

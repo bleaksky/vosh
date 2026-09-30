@@ -18,7 +18,7 @@ use super::{AppState, SharedState};
 use crate::characters::{PROFILE_CHANGED_EVENT, SESSION_IDENTITY_EVENT};
 use crate::exit_flush::FLUSH_REQUEST_EVENT;
 use crate::input::LineEffects;
-use crate::list_events::{ListChanges, ALIASES_CHANGED, TRIGGERS_CHANGED};
+use crate::list_events::{ListChanges, ALIASES_CHANGED, PROMPT_CONFIG_CHANGED, TRIGGERS_CHANGED};
 use crate::profile::Profile;
 
 /// The main window, and Settings open beside it.
@@ -107,12 +107,16 @@ fn every_event_reaches_each_listener_once_with_settings_open() {
     super::broadcast(handle, "vosh://any-event", &"payload");
     listening.finish("broadcast", &mut heard, &mut want);
 
-    let listening = Heard::listen(&app, &[TRIGGERS_CHANGED, ALIASES_CHANGED]);
+    let listening = Heard::listen(
+        &app,
+        &[TRIGGERS_CHANGED, ALIASES_CHANGED, PROMPT_CONFIG_CHANGED],
+    );
     crate::list_events::broadcast_list_changes(
         handle,
         ListChanges {
             triggers: true,
             aliases: true,
+            prompt: true,
         },
     );
     listening.finish("broadcast_list_changes", &mut heard, &mut want);

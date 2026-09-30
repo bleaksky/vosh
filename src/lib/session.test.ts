@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type EventCallback } from '@tauri-apps/api/event';
 import {
   broadcastUiConfigChanges,
+  changedPromptFields,
   decodeOutputPayload,
   followReplacedUiConfig,
   getUiConfig,
@@ -660,5 +661,27 @@ describe('a session output payload', () => {
     expect(out.replace?.fresh).toBe(true);
     expect(text(out.replace?.bytes)).toBe('\x1b]7717;o;8\x07NEW> ');
     expect(text(out.restore)).toBe('LIVE> ');
+  });
+});
+
+describe('the prompt fields a command changed', () => {
+  const fields = (on: boolean, template: string) => ({
+    prompt_template_enabled: on,
+    prompt_template: template,
+  });
+
+  it('takes only what changed since the window read or saved it', () => {
+    const known = fields(true, '%hp');
+    expect(changedPromptFields(known, fields(true, '%hp'))).toEqual({});
+    expect(changedPromptFields(known, fields(false, '%hp'))).toEqual({
+      prompt_template_enabled: false,
+    });
+    expect(changedPromptFields(known, fields(true, '[%hp]'))).toEqual({
+      prompt_template: '[%hp]',
+    });
+  });
+
+  it('takes both when the window knows neither', () => {
+    expect(changedPromptFields(null, fields(false, '%mana'))).toEqual(fields(false, '%mana'));
   });
 });
