@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { AFFECTS_MARKER_LABELS, AFFECTS_STYLE_LABELS } from '../../../lib/affectsDisplay';
 import APP_SHORTCUTS from '../../../lib/appShortcuts.json';
 import { PANEL_WIDTH_MAX, PANEL_WIDTH_MIN } from '../../../lib/paneLayout';
 import { isMacPlatform, shortcutKeys, shortcutLabel } from '../../../lib/palette';
 import { profilePossessive } from '../../../lib/profileLabel';
 import {
   AFFECTS_MARKERS,
+  AFFECTS_STYLES,
   profilesList,
   subscribeProfileSwitched,
   subscribeProfilesChanged,
@@ -199,18 +201,9 @@ export function StatusLineSection({
   );
 }
 
-const AFFECTS_STYLE_OPTIONS: readonly SegmentedOption<AffectsStyle>[] = [
-  { value: 'timers', label: 'Timers first' },
-  { value: 'countdown', label: 'Countdown' },
-  { value: 'chips', label: 'Grouped chips' },
-];
-
-const MARKER_NAMES: Record<AffectsMarker, string> = {
-  dot: 'Dot',
-  square: 'Square',
-  plus_minus: 'Plus and minus',
-  none: 'None',
-};
+const AFFECTS_STYLE_OPTIONS: readonly SegmentedOption<AffectsStyle>[] = AFFECTS_STYLES.map(
+  (value) => ({ value, label: AFFECTS_STYLE_LABELS[value] }),
+);
 
 /** A Marker segment's picture: the mark of an affect you have, then
  *  the mark of one you are missing, the pane's own 8 px shapes 4 px
@@ -226,8 +219,8 @@ function MarkerPicture({ marker }: { marker: AffectsMarker }) {
 
 const MARKER_OPTIONS: readonly SegmentedOption<AffectsMarker>[] = AFFECTS_MARKERS.map((id) =>
   id === 'none'
-    ? { value: id, label: MARKER_NAMES[id] }
-    : { value: id, name: MARKER_NAMES[id], label: <MarkerPicture marker={id} /> },
+    ? { value: id, label: AFFECTS_MARKER_LABELS[id] }
+    : { value: id, name: AFFECTS_MARKER_LABELS[id], label: <MarkerPicture marker={id} /> },
 );
 
 /** How the Affects pane draws (AffectsStyles SPEC 4.1): one of the
