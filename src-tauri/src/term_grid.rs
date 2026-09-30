@@ -724,6 +724,41 @@ pub(crate) fn with_grid<R>(f: impl FnOnce(Option<&TermGrid>) -> R) -> R {
     }
 }
 
+/// Held by every test that feeds or reads the shared grid. The grid
+/// lives for the whole process, so two such tests on different threads
+/// would otherwise see each other's rows.
+#[cfg(test)]
+pub(crate) fn lock_shared_grid_for_test() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: Mutex<()> = Mutex::new(());
+    LOCK.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Swap a blank `columns` by `screen_lines` grid in for the shared one,
+/// with no half character carried over. Call with
+/// [`lock_shared_grid_for_test`] held.
+#[cfg(test)]
+pub(crate) fn blank_shared_grid_for_test(columns: usize, screen_lines: usize) {
+    if let Ok(mut pending) = WRAP_PENDING.lock() {
+        pending.clear();
+    }
+    *grid_slot().lock().unwrap() = Some(TermGrid::new(columns, screen_lines));
+}
+
+/// The rows on the shared grid's screen, trailing blanks trimmed. Empty
+/// before the first feed.
+#[cfg(test)]
+pub(crate) fn shared_screen_rows_for_test() -> Vec<String> {
+    with_grid(|grid| {
+        grid.map(|g| {
+            (0..g.screen_lines())
+                .map(|line| g.row_string(line).trim_end().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -798,6 +833,8 @@ mod tests {
 
     #[test]
     fn feed_bytes_creates_and_fills_the_shared_grid() {
+        let _shared = lock_shared_grid_for_test();
+        *grid_slot().lock().unwrap() = None;
         feed_bytes(b"shared");
         let slot = grid_slot().lock().unwrap();
         let g = slot.as_ref().expect("grid created on first feed");
@@ -877,6 +914,7 @@ mod tests {
 
     #[test]
     fn session_feed_word_wraps_at_the_grid_width() {
+        let _shared = lock_shared_grid_for_test();
         let Ok(mut slot) = grid_slot().lock() else {
             panic!("grid lock");
         };
