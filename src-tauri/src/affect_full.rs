@@ -23,10 +23,11 @@
 //!
 //! Each character's map is kept across logins in
 //! `<app_data_dir>/affect_full.toml`, keyed by `{host}:{port} {name}`.
-//! The file is written only when a map changes, a moment after a burst
-//! of changes settles, never on a tick that changes nothing. It is a
-//! cache, so it keeps no backups, and a file Vosh cannot read is left
-//! alone while the store runs in memory for the session.
+//! The file is written only when the map would change what it holds, a
+//! moment after a burst of changes settles, never on a tick and never
+//! for a login that finds the fulls it saved. It is a cache, so it keeps
+//! no backups, and a file Vosh cannot read is left alone while the store
+//! runs in memory for the session.
 //!
 //! This module is the one place that decides full. A server field for
 //! the cast length would be read here first, with the peak rule as the
@@ -167,8 +168,10 @@ struct Inner {
     /// The character's saved map, held for the first list when the game
     /// names the character before it sends one.
     pending: Option<FullMap>,
-    /// The map changed since it was last written.
-    dirty: bool,
+    /// What the file holds for the character, as read when the game named
+    /// it or as last written. None before the name, and after a write
+    /// that failed, so the next flush tries again.
+    stored: Option<FullMap>,
 }
 
 /// One write of a character's map.
@@ -237,7 +240,6 @@ impl AffectFull {
             return None;
         }
         inner.full.clone_from(&full);
-        inner.dirty = true;
         Some(full)
     }
 
@@ -257,23 +259,18 @@ impl AffectFull {
         if inner.character.is_some() {
             inner.full.clear();
             inner.last = None;
-            inner.dirty = false;
         }
         inner.character = Some(key);
+        inner.stored = Some(saved.clone());
         if inner.last.is_some() {
-            let mut merged = false;
+            // The map on you now belongs to this character, and the next
+            // flush writes it where it differs from the file.
             for (affect, top) in &mut inner.full {
                 if let Some(&stored) = saved.get(affect) {
-                    if stored > *top {
-                        *top = stored;
-                        merged = true;
-                    }
+                    *top = (*top).max(stored);
                 }
             }
             inner.pending = None;
-            // The map on you now belongs to this character, and the file
-            // should say so.
-            inner.dirty = inner.dirty || merged || !inner.full.is_empty();
         } else {
             inner.pending = Some(saved);
         }
@@ -329,8 +326,8 @@ impl AffectFull {
         self.write_gen.load(Ordering::Acquire) == ticket
     }
 
-    /// Write the character's map now when it changed since the last
-    /// write. Nothing is written before the game names the character.
+    /// Write the character's map now when it differs from what the file
+    /// holds. Nothing is written before the game names the character.
     /// Returns whether a file was written.
     pub(crate) fn flush(&self) -> bool {
         let Some(job) = self.take_write() else {
@@ -348,8 +345,12 @@ impl AffectFull {
             }
             Err(WriteError::Io(e)) => {
                 warn!(error = %e, path = %job.path.display(), "affect_full: write failed");
-                // Try again with the next change.
-                self.lock().dirty = true;
+                // What the file holds is not known now, so the next flush
+                // tries again.
+                let mut inner = self.lock();
+                if inner.character.as_deref() == Some(job.character.as_str()) {
+                    inner.stored = None;
+                }
                 false
             }
         }
@@ -357,16 +358,20 @@ impl AffectFull {
 
     fn take_write(&self) -> Option<WriteJob> {
         let mut inner = self.lock();
-        if !inner.dirty || inner.unreadable {
+        if inner.unreadable {
             return None;
         }
         let path = inner.path.clone()?;
         let character = inner.character.clone()?;
-        inner.dirty = false;
+        let full = inner.full.clone();
+        if inner.stored.as_ref() == Some(&full) {
+            return None;
+        }
+        inner.stored = Some(full.clone());
         Some(WriteJob {
             path,
             character,
-            full: inner.full.clone(),
+            full,
         })
     }
 
@@ -732,6 +737,54 @@ mod tests {
             assert!(!store.flush(), "a tick at {hours} writes nothing");
         }
         assert_eq!(store.writes(), 1);
+    }
+
+    #[test]
+    fn a_login_that_changes_no_full_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(FILE_NAME);
+        let text = "version = 1\n\n[characters.\"aabahran.com:4000 erelei\"]\narmor = 48\n";
+        // The name first, then the list, and the list first, then the name.
+        for name_first in [true, false] {
+            std::fs::write(&path, text).unwrap();
+            let store = store_in(&dir);
+            if name_first {
+                store.character_known(ERELEI.into());
+                seen(&store, &[("armor", 31)]);
+            } else {
+                seen(&store, &[("armor", 31)]);
+                store.character_known(ERELEI.into());
+            }
+            assert_eq!(store.map(), map(&[("armor", 48)]));
+            assert!(!store.flush(), "the file holds these fulls already");
+            assert!(store.disconnect(), "a map was showing");
+            assert_eq!(store.writes(), 0, "nor does logging out write");
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+        }
+    }
+
+    #[test]
+    fn a_login_drops_the_saved_fulls_of_affects_not_on_you() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(FILE_NAME);
+        std::fs::write(
+            &path,
+            "version = 1\n\n[characters.\"aabahran.com:4000 erelei\"]\narmor = 48\nfly = 53\n",
+        )
+        .unwrap();
+        let store = store_in(&dir);
+        store.character_known(ERELEI.into());
+        seen(&store, &[("armor", 31)]);
+        assert!(store.flush());
+        let table: toml::Table = std::fs::read_to_string(&path).unwrap().parse().unwrap();
+        assert_eq!(map_of(&table["characters"][ERELEI]), map(&[("armor", 48)]));
+        // A login with nothing on you drops the character.
+        let next = store_in(&dir);
+        next.character_known(ERELEI.into());
+        assert_eq!(seen(&next, &[]), None, "the pane had nothing to show");
+        assert!(next.flush());
+        let table: toml::Table = std::fs::read_to_string(&path).unwrap().parse().unwrap();
+        assert!(!table["characters"].as_table().unwrap().contains_key(ERELEI));
     }
 
     #[test]
