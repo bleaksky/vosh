@@ -212,6 +212,10 @@ pub(crate) enum OutgoingMsg {
     /// been negotiated, push a fresh NAWS subnegotiation to the wire
     /// so the server re-wraps its output at the new width.
     WindowSize { cols: u16, rows: u16 },
+    /// Repaint the open row as the profile's `[prompt]` table now says,
+    /// as a change to the switch or the design asks. Only the session
+    /// task writes session output, so a command sends this instead.
+    PromptRepaint,
 }
 
 /// Everything one socket read writes to the terminal and reports, kept
@@ -306,6 +310,12 @@ impl SessionHandle {
         self.tx_outgoing
             .send(OutgoingMsg::WindowSize { cols, rows })
             .is_ok()
+    }
+
+    /// Repaint the open row as the `[prompt]` table now says. Returns
+    /// false when the session has already been torn down.
+    pub(crate) fn prompt_repaint(&self) -> bool {
+        self.tx_outgoing.send(OutgoingMsg::PromptRepaint).is_ok()
     }
 
     pub(crate) async fn shutdown(self) {
@@ -536,6 +546,15 @@ async fn io_loop(
                             error!(error = %e, "naws flush failed");
                             break Some(format!("naws flush failed: {e}"));
                         }
+                    }
+                }
+                Some(OutgoingMsg::PromptRepaint) => {
+                    let out = {
+                        let mut p = profile.lock().await;
+                        repaint_step(&mut p, output_count() != seen_output, Instant::now())
+                    };
+                    if !out.is_empty() {
+                        emit_repaint(&app, &out);
                     }
                 }
                 None => {
@@ -1467,6 +1486,18 @@ fn send_step(p: &mut Profile, accumulator: &LineAccumulator, at_ms: i64) -> bool
     p.prompt.vars.on_send()
 }
 
+/// Repaint the open row as the `[prompt]` table now says: your design
+/// while Vosh draws, else the lines the design replaced, as the game sent
+/// them, so turning drawing off shows the game's prompt at once. `other`
+/// says output from elsewhere landed since the session last wrote, which
+/// closed the row. Returns the repaint, empty when no row is open.
+fn repaint_step(p: &mut Profile, other: bool, now: Instant) -> Output {
+    let mut out = Output::new(other);
+    let rendered = p.prompt.draws().then(|| render_prompt(p, now));
+    p.prompt.stage.repaint(&mut out, rendered.as_deref());
+    out
+}
+
 /// A trigger hid a line or partial. When nothing reads your prompt in
 /// this profile and the trigger also sets prompt values, it hides your
 /// prompt with nothing drawn in its place, so the webview hears its name
@@ -2189,6 +2220,12 @@ fn emit_session_output(app: &AppHandle, out: &Output) -> u64 {
     emit_counted(app, out, true)
 }
 
+/// Send a repaint of the open row. It leaves the output count alone,
+/// since the row it writes is still the last thing on screen.
+fn emit_repaint(app: &AppHandle, out: &Output) {
+    let _ = emit_counted(app, out, false);
+}
+
 /// Send `out` to both renderers under [`OUTPUT_ORDER`]. `count` moves the
 /// output count, which a repaint of the open row never does. Returns the
 /// count after it.
@@ -2888,6 +2925,62 @@ mod tests {
             Some(vec!["hp-watch".to_string()])
         );
     }
+
+    #[test]
+    fn draw_off_repaints_the_open_row_as_the_game_sent_it() {
+        let mut wire = Wire::new(capture_profile(HP));
+        let _ = wire.read(PROMPT_ROW);
+        let config = vosh_prompt::PromptConfig {
+            draw: false,
+            ..wire.p.prompt.config().clone()
+        };
+        wire.p.set_prompt_config(config);
+        let now = tokio::time::Instant::now();
+        let off = super::repaint_step(&mut wire.p, false, now);
+        assert_eq!(
+            off.replace,
+            Some(vosh_prompt::stage::Replace {
+                gen: wire.gen0 + 1,
+                bytes: with(&[&wire.mark(2), PROMPT_ROW_SHOWN]),
+                fresh: false,
+            })
+        );
+        assert!(off.bytes.is_empty());
+
+        // Drawing back on paints the design over the same row, and a new
+        // design repaints it.
+        let config = vosh_prompt::PromptConfig {
+            draw: true,
+            ..wire.p.prompt.config().clone()
+        };
+        wire.p.set_prompt_config(config);
+        let on = super::repaint_step(&mut wire.p, false, now);
+        assert_eq!(
+            on.replace.map(|r| (r.gen, r.bytes)),
+            Some((wire.gen0 + 2, with(&[&wire.mark(3), b"<1020>\x1b[0m"])))
+        );
+        assert!(super::repaint_step(&mut wire.p, false, now).is_empty());
+        let config = vosh_prompt::PromptConfig {
+            template: "[%hp]".into(),
+            ..wire.p.prompt.config().clone()
+        };
+        wire.p.set_prompt_config(config);
+        let new = super::repaint_step(&mut wire.p, false, now);
+        assert_eq!(
+            new.replace.map(|r| r.bytes),
+            Some(with(&[&wire.mark(4), b"[1020]\x1b[0m"]))
+        );
+
+        // Nothing repaints once other output closed the row, or after a
+        // send.
+        assert!(super::repaint_step(&mut wire.p, true, now).is_empty());
+        let _ = wire.read(PROMPT_ROW);
+        wire.send();
+        assert!(super::repaint_step(&mut wire.p, false, now).is_empty());
+    }
+
+    /// The prompt row as the game sent it, with its line end.
+    const PROMPT_ROW_SHOWN: &[u8] = b"[1020/1020hp 800/800mn 930/930mv]\r\n";
 
     #[test]
     fn the_ring_records_a_candidate_on_every_send_and_ga() {
