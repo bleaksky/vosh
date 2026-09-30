@@ -716,7 +716,9 @@
   background: var(--recast-wash);
 }
 
-[data-affects-tint] .pane-countdown-cell::before {
+/* As specific as the rule above, and after it, so Countdown's wash
+   starts at the cell's top. */
+[data-affects-tint] .pane-countdown-cell:is(.pane-affect-missing, .pane-affect-expiring)::before {
   top: 0;
 }
 
