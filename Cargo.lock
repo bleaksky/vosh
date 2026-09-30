@@ -5241,6 +5241,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "vosh-prompt"
+version = "0.7.2"
+
+[[package]]
 name = "vosh-script"
 version = "0.7.2"
 dependencies = [

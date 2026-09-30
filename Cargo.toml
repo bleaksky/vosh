@@ -11,6 +11,7 @@ members = [
     "crates/map",
     "crates/script",
     "crates/log",
+    "crates/prompt",
 ]
 
 [workspace.package]
