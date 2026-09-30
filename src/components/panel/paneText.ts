@@ -31,21 +31,28 @@ export function chatTime(ts: number, locale?: string): string {
     .trim();
 }
 
-/** The value an Affects row shows: `missing`, the ticks left, or
- *  `permanent`. Empty when the server sent no duration. */
-export function ticksLabel(state: string, ticks: number | null): string {
-  if (state === 'missing') return 'missing';
+/** The hours an Affects cell shows, with the marks of the game's own
+ *  affects bar: `-` for a tracked affect you are missing, `+` for a
+ *  permanent one, else the ticks left. Empty when the server sent no
+ *  duration. */
+export function affectHours(state: string, ticks: number | null): string {
+  if (state === 'missing') return '-';
   if (ticks === null) return '';
-  if (ticks < 0) return 'permanent';
+  if (ticks < 0) return '+';
   return String(ticks);
 }
 
-/** The state an Affects row shows only through its marker color, as
- *  words for a screen reader: `expiring` or `harmful`. Null for rows
- *  whose visible text already says it (missing) or that need nothing. */
-export function affectStateWord(state: string): string | null {
-  if (state === 'expiring' || state === 'harmful') return state;
-  return null;
+/** What an Affects cell shows only in its hours column and its mark,
+ *  as words after the name for a screen reader: `, 31 hours`,
+ *  `, 1 hour, running out`, `, permanent, harmful`, `, missing`. */
+export function affectWords(state: string, ticks: number | null): string {
+  if (state === 'missing') return ', missing';
+  const words: string[] = [];
+  if (ticks !== null)
+    words.push(ticks < 0 ? 'permanent' : `${ticks} hour${ticks === 1 ? '' : 's'}`);
+  if (state === 'expiring') words.push('running out');
+  if (state === 'harmful') words.push('harmful');
+  return words.map((w) => `, ${w}`).join('');
 }
 
 /** Exits in the Map pane's room row, `north east south`. */

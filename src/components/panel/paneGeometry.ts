@@ -1,4 +1,5 @@
 import { isTrackedRow, type AffectRow } from '../../lib/affectsView';
+import { AFFECTS_RULE_PX, affectsRestMinRows } from './affectsGrid';
 import {
   PANE_HEADER_PX,
   PANE_MIN_H,
@@ -21,13 +22,14 @@ export { PANE_MIN_H };
 // and the drag clamps are unit tested.
 //
 // Every pane type has a minimum height it can be read at. Affects and
-// Group raise theirs to hold the rows you most need, a harmful affect
-// or a member in danger, so those never fall below the fold. While the
-// panel has room for every minimum, panes share the space by weight
-// and none drops below its own. On a panel too short for that, every
-// pane keeps its header and one row, the heaviest panes then get
-// their minimum in turn, and the lightest ones come up short and
-// scroll inside their own box. No two boxes ever overlap.
+// Group raise theirs to hold the rows you most need, your tracked
+// affects and anything harmful on you, or a member in danger, so those
+// never fall below the fold. While the panel has room for every
+// minimum, panes share the space by weight and none drops below its
+// own. On a panel too short for that, every pane keeps its header and
+// one row, the heaviest panes then get their minimum in turn, and the
+// lightest ones come up short and scroll inside their own box. No two
+// boxes ever overlap.
 
 export interface Rect {
   x: number;
@@ -77,9 +79,6 @@ export const MIN_PANE_W = 120;
  *  of its PANE_MIN_H entry. */
 export type PaneMins = Partial<Record<PaneType, number>>;
 
-/** The divider over the Not tracked rows with its 4 px above, then the
- *  label with 10 px above and 4 px below. */
-const SUBLABEL_PX = 5 + 10 + 15 + 4;
 /** Most rows a list pane holds on to as its minimum, so a long list
  *  never crowds every other pane out of the panel. */
 const LIST_MIN_ROWS = 12;
@@ -95,21 +94,18 @@ function withPeek(shows: number, total: number): number {
   return total > shows ? Math.min(total, shows + PEEK_PX) : shows;
 }
 
-/** The Affects pane's minimum for the rows it shows: every tracked
- *  affect you are missing, and while something harmful is on you,
- *  every row down to the last harmful one under Not tracked. Never
- *  under the stock minimum, and never over a dozen rows. A peek at the
- *  next row follows when there is one. */
-export function affectsMinH(rows: readonly AffectRow[]): number {
+/** The Affects pane's minimum for the rows it shows in `columns`
+ *  columns: every tracked slot, then under the hairline every harmful
+ *  affect and the count cell after them. Never under the stock
+ *  minimum, and never over a dozen rows. The pane shows whole rows
+ *  only and counts the rest, so no peek follows. */
+export function affectsMinH(rows: readonly AffectRow[], columns = 2): number {
   const tracked = rows.filter(isTrackedRow).length;
-  const missing = rows.filter((r) => r.state === 'missing').length;
-  const harmful = rows.filter((r) => r.state === 'harmful').length;
-  const label = tracked > 0 && tracked < rows.length ? SUBLABEL_PX : 0;
-  // With nothing tracked the harmful rows sit at the top, no label.
-  const need = harmful > 0 ? (tracked + harmful) * PANE_ROW_PX + label : missing * PANE_ROW_PX;
-  const cap = PANE_HEADER_PX + LIST_MIN_ROWS * PANE_ROW_PX + SUBLABEL_PX;
-  const shows = Math.min(cap, Math.max(PANE_MIN_H.affects, PANE_HEADER_PX + need));
-  return withPeek(shows, PANE_HEADER_PX + rows.length * PANE_ROW_PX + label);
+  const trackedRows = Math.ceil(tracked / columns);
+  const restRows = affectsRestMinRows(rows, columns);
+  const rule = tracked > 0 && restRows > 0 ? AFFECTS_RULE_PX : 0;
+  const need = PANE_HEADER_PX + Math.min(LIST_MIN_ROWS, trackedRows + restRows) * PANE_ROW_PX;
+  return Math.max(PANE_MIN_H.affects, need + rule);
 }
 
 /** The Group pane's minimum for `members` rows: every member up to

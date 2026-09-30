@@ -147,6 +147,12 @@
   color: var(--warn);
 }
 
+/* A second meta, like the Affects pane's running out count, sits 10 px
+   after the first. */
+.pane-meta + .pane-meta {
+  margin-left: 10px;
+}
+
 .pane-more {
   position: absolute;
   top: 4px;
@@ -274,22 +280,6 @@
   background: var(--tertiary);
 }
 
-/* A sub label inside a pane, after a divider inset 18 on both sides. */
-.pane-divider {
-  height: 1px;
-  margin: 4px 18px 0;
-  background: var(--divider);
-}
-
-.pane-sublabel {
-  margin: 0;
-  padding: 10px 18px 4px;
-  font-size: 11px;
-  line-height: 15px;
-  font-weight: 600;
-  color: var(--tertiary);
-}
-
 /* A plain sentence where a pane has nothing to show yet. */
 .pane-empty {
   margin: 0;
@@ -309,7 +299,8 @@
 
 /* ── Affects ─────────────────────────────────────────────────────── */
 
-/* Words for a screen reader that the row shows only as color. */
+/* Words for a screen reader that a cell shows only as glyphs and
+   color. */
 .pane-sr {
   position: absolute;
   width: 1px;
@@ -322,39 +313,176 @@
   white-space: nowrap;
 }
 
-.pane-affect-missing .pane-marker {
+/* Board Affects A, timers first. Two columns 16 apart on 22 px rows,
+   18 in from the left and 12 from the right. In each cell the mark
+   sits at x 0, the hours right aligned in a column of three cells from
+   x 14, and the name 8 after them, both in the terminal face. */
+.pane-affects-grid {
+  display: grid;
+  column-gap: 16px;
+  grid-auto-rows: var(--row);
+  margin: 0;
+  padding: 0 12px 0 18px;
+  list-style: none;
+}
+
+.pane-affect {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: var(--row);
+}
+
+.pane-affect-mark {
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+/* A tracked slot's dot agrees with its hours. */
+.pane-affect-mark.is-up {
+  background: var(--success);
+}
+
+.pane-affect-mark.is-warn {
+  background: var(--warn);
+}
+
+.pane-affect-mark.is-danger {
+  background: var(--danger);
+}
+
+.pane-affect-mark.is-missing {
   border: 1.25px solid var(--danger);
   background: transparent;
 }
 
-.pane-affect-missing .pane-row-name,
-.pane-affect-missing .pane-row-value,
-.pane-affect-harmful .pane-row-value {
-  color: var(--danger-text);
-}
-
-.pane-affect-expiring .pane-marker {
-  background: var(--warn);
-}
-
-.pane-affect-expiring .pane-row-value {
-  color: var(--warn);
-}
-
-.pane-affect-present .pane-marker {
-  background: var(--success);
-}
-
-.pane-affect-harmful .pane-marker {
+/* Something harmful on you takes a 6 px diamond, never a dot. */
+.pane-affect-mark.is-harmful {
+  left: 1px;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
   background: var(--danger);
+  transform: rotate(45deg);
 }
 
-.pane-affect-untracked .pane-row-name {
+/* The hours follow the game: one hour or none in bold red, and Vosh
+   warns in yellow at two. `+` is permanent and `-` missing. */
+.pane-affect-hours {
+  flex: none;
+  width: 22px;
+  min-width: 3ch;
+  margin-left: 14px;
+  text-align: right;
+  font-family: var(--font-mud, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: var(--secondary);
 }
 
-.pane-affect-untracked .pane-row-value {
+.pane-affect-hours.is-warn {
+  color: var(--warn);
+}
+
+.pane-affect-hours.is-danger {
+  font-weight: 700;
+  color: var(--danger-text);
+}
+
+.pane-affect-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mud, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.pane-affect-untracked .pane-affect-name {
+  color: var(--secondary);
+}
+
+.pane-affect-missing .pane-affect-name,
+.pane-affect-harmful .pane-affect-name {
+  color: var(--danger-text);
+}
+
+/* The hairline between your tracked slots and the rest. */
+.pane-affects-rule {
+  height: 1px;
+  margin: 4px 12px 4px 18px;
+  background: var(--divider);
+}
+
+/* The rest scroll in a window of whole rows, a page at a time, so a
+   row is never cut. AffectsPane sets the height. The count cell stands
+   in for the scroll bar. */
+.pane-affects-rest {
+  overflow: hidden;
+}
+
+.pane-affects-rest.is-paged {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+
+.pane-affects-rest.is-paged::-webkit-scrollbar {
+  display: none;
+}
+
+.pane-affects-rest .is-page-start {
+  scroll-snap-align: start;
+}
+
+.pane-affects-more-cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: var(--row);
+}
+
+/* The count of what does not fit, set in the UI face where the names
+   start. */
+.pane-affects-more {
+  display: flex;
+  align-items: center;
+  height: var(--row);
+  margin: 0 0 0 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--tertiary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.pane-affects-more:hover {
+  color: var(--secondary);
+}
+
+.pane-affects-more:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--r-key);
 }
 
 /* ── Map ─────────────────────────────────────────────────────────── */

@@ -38,7 +38,7 @@ export function ProfileAdvanced({ tracked, onTracked }: Props) {
           <>
             <Row
               label="Affect labels and order"
-              description="The Affects pane shows your label in place of the server name and lists missing affects in this order."
+              description="The Affects pane shows your label in place of the name the game sends and keeps your tracked affects in this order, each in its own slot."
             />
             {tracked.map((affect, index) => {
               const display = trackedAffectLabel(affect);

@@ -1,17 +1,20 @@
 import { normalizeAffectName } from './affects';
 import { HARMFUL_AFFECTS, harmfulSet } from './harmfulAffects';
 
-// View model for the Affects pane, the at a glance checklist. Pure so
-// the ordering rules are unit tested without a pane or a server.
+// View model for the Affects pane, the at a glance checklist (board
+// Affects A, timers first). Pure so the ordering rules are unit tested
+// without a pane or a server.
 //
-// Rows come out in three runs:
-//   1. tracked affects you do not have, in the order you track them;
-//   2. tracked affects you have, fewest ticks first, permanent after
-//      every timed one, marked expiring at two ticks or fewer;
-//   3. affects you have but do not track, harmful ones first, each run
-//      fewest ticks first, ties broken by name.
-// Durations are server ticks. -1 (any negative) means permanent and
-// null means the server sent no usable duration.
+// Rows come out in two runs:
+//   1. every tracked affect in the order you set in Characters, each in
+//      its slot whether you have it or not, marked expiring at two
+//      ticks or fewer;
+//   2. affects you have but do not track, harmful ones first, each run
+//      fewest ticks first, permanent after every timed one, ties broken
+//      by name.
+// Durations are server ticks, which the game prints as hours. -1 (any
+// negative) means permanent and null means the server sent no usable
+// duration.
 
 export type AffectRowState = 'missing' | 'present' | 'expiring' | 'untracked' | 'harmful';
 
@@ -45,6 +48,10 @@ export interface TrackedInput {
  *  drop. An affect at 0 goes on the next tick. */
 export const EXPIRING_TICKS = 2;
 
+/** The game prints the hours of an affect at or under this many ticks
+ *  in bold red, in its own affects bar. */
+export const CRITICAL_TICKS = 1;
+
 export function isTrackedRow(row: AffectRow): boolean {
   return row.state === 'missing' || row.state === 'present' || row.state === 'expiring';
 }
@@ -68,8 +75,7 @@ export function affectsView(
     }
   }
 
-  const missing: AffectRow[] = [];
-  const present: AffectRow[] = [];
+  const slots: AffectRow[] = [];
   const trackedKeys = new Set<string>();
   for (const entry of tracked) {
     const key = normalizeAffectName(entry.name);
@@ -78,19 +84,17 @@ export function affectsView(
     const label = entry.label?.trim();
     const affect = live.get(key);
     if (!affect) {
-      missing.push({ key, name: label || entry.name, state: 'missing', ticks: null });
+      slots.push({ key, name: label || entry.name, state: 'missing', ticks: null });
       continue;
     }
     const ticks = ticksOf(affect.duration);
-    present.push({
+    slots.push({
       key,
       name: label || affect.name,
       state: ticks !== null && ticks >= 0 && ticks <= EXPIRING_TICKS ? 'expiring' : 'present',
       ticks,
     });
   }
-  // Array.prototype.sort is stable, so equal ticks keep tracked order.
-  present.sort((a, b) => rank(a.ticks) - rank(b.ticks));
 
   const others: AffectRow[] = [];
   for (const [key, affect] of live) {
@@ -110,7 +114,47 @@ export function affectsView(
     return a.key.localeCompare(b.key);
   });
 
-  return [...missing, ...present, ...others];
+  return [...slots, ...others];
+}
+
+export type HoursTone = 'danger' | 'warn';
+
+/** The color of an affect's hours, by the game's rule: one hour or none
+ *  in bold red. Vosh warns a tick earlier, at two, in yellow. The same
+ *  rule holds for every affect, tracked or not. */
+export function hoursTone(ticks: number | null): HoursTone | null {
+  if (ticks === null || ticks < 0) return null;
+  if (ticks <= CRITICAL_TICKS) return 'danger';
+  if (ticks <= EXPIRING_TICKS) return 'warn';
+  return null;
+}
+
+/** The mark before an affect. A tracked slot takes a dot that agrees
+ *  with its hours (`up`, `warn`, `danger`) or a hollow ring while you
+ *  are `missing` it. A harmful affect you do not track takes the
+ *  `harmful` diamond. Anything else has no mark. */
+export type AffectMark = 'up' | 'warn' | 'danger' | 'missing' | 'harmful';
+
+export function affectMark(row: AffectRow): AffectMark | null {
+  if (row.state === 'missing') return 'missing';
+  if (row.state === 'harmful') return 'harmful';
+  if (row.state === 'untracked') return null;
+  return hoursTone(row.ticks) ?? 'up';
+}
+
+/** What the pane header counts: tracked affects you are missing, and
+ *  tracked affects running out, two ticks or fewer left. */
+export function affectsSummary(rows: readonly AffectRow[]): {
+  missing: number;
+  runningOut: number;
+} {
+  let missing = 0;
+  let runningOut = 0;
+  for (const row of rows) {
+    if (row.state === 'missing') missing += 1;
+    else if (row.state === 'expiring') runningOut += 1;
+  }
+  return { missing, runningOut };
 }
 
 /** The rows the Affects pane draws. None before the first list since you

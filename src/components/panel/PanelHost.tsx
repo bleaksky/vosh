@@ -32,10 +32,11 @@ import { VitalsFooter } from './VitalsFooter';
 // moved with Show here instead keeps its state too.
 //
 // No pane drops below the height it reads at while the panel has room
-// (PANE_MIN_H, raised for Affects and Group to hold a harmful affect
-// and every member). On a panel too short for every pane, the lightest
-// ones come up short and scroll inside their box, header and all for
-// the map, whose drawing has no list of its own to scroll.
+// (PANE_MIN_H, raised for Affects and Group to hold your tracked
+// affects, anything harmful, and every member). On a panel too short
+// for every pane, the lightest ones come up short and scroll inside
+// their box, header and all for the map, whose drawing has no list of
+// its own to scroll.
 
 // Arrow keys move a focused handle this far, Shift for bigger steps.
 const KEY_STEP = 8;
@@ -71,7 +72,7 @@ export function PanelHost() {
   useMoreBelow(areaRef);
 
   const root = layout?.root ?? null;
-  const mins = usePaneMins();
+  const mins = usePaneMins(size.w);
   const geometry = useMemo(
     () => (root ? layoutPanes(root, size.w, size.h, mins) : null),
     [root, size.w, size.h, mins],

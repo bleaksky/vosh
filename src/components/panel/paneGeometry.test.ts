@@ -49,50 +49,66 @@ describe('PANE_MIN_H', () => {
 
 // Affects rows by state, in the order the pane draws them.
 const rowsOf = (...states: AffectRowState[]): AffectRow[] =>
-  states.map((state, i) => ({ key: `a${i}`, name: `A${i}`, state, ticks: null }));
+  states.map((state, i) => ({ key: `a${i}`, name: `a${i}`, state, ticks: null }));
+const times = (n: number, state: AffectRowState): AffectRowState[] =>
+  Array<AffectRowState>(n).fill(state);
 
-// The approved boards' Affects pane: two missing, four present, then
-// Poison and four more under Not tracked.
+// The approved board's Affects pane: eight tracked slots, bless among
+// them missing, then seven more under the hairline.
 const BOARD_AFFECTS = rowsOf(
+  'present',
+  'expiring',
   'missing',
-  'missing',
+  'present',
+  'present',
+  'present',
   'expiring',
   'present',
-  'present',
-  'present',
-  'harmful',
-  'untracked',
-  'untracked',
-  'untracked',
-  'untracked',
+  ...times(7, 'untracked'),
+);
+
+// The same slots in a fight: four harmful affects and three more.
+const FIGHT_AFFECTS = rowsOf(
+  ...times(8, 'present'),
+  ...times(4, 'harmful'),
+  ...times(3, 'untracked'),
 );
 
 describe('affectsMinH', () => {
-  it('reaches down to the last harmful row, then peeks at the next', () => {
-    // Header, six tracked rows, the Not tracked label, Poison, and half
-    // of the next row under the fade.
-    expect(affectsMinH(BOARD_AFFECTS)).toBe(28 + 6 * 22 + 34 + 22 + 11);
-  });
-
-  it('keeps the stock minimum when nothing harmful is on you', () => {
-    expect(affectsMinH(rowsOf('missing', 'present', 'untracked'))).toBe(PANE_MIN_H.affects);
+  it('keeps the stock minimum when the slots and one row of the rest fit in it', () => {
+    // Four rows of slots, the hairline, and a row of the rest: 147 px.
+    expect(affectsMinH(BOARD_AFFECTS)).toBe(PANE_MIN_H.affects);
     expect(affectsMinH([])).toBe(PANE_MIN_H.affects);
   });
 
-  it('holds every missing affect', () => {
-    const missing = rowsOf(...Array<AffectRowState>(8).fill('missing'));
-    expect(affectsMinH(missing)).toBe(28 + 8 * 22);
+  it('holds every tracked slot', () => {
+    expect(affectsMinH(rowsOf(...times(16, 'present')))).toBe(28 + 8 * 22);
+    expect(affectsMinH(rowsOf(...times(15, 'missing'), 'untracked'))).toBe(28 + 9 * 22 + 9);
   });
 
-  it('puts harmful rows at the top when you track nothing', () => {
+  it('holds every harmful affect and the count after them', () => {
+    // Four rows of slots, the hairline, then three rows for the four
+    // harmful affects and the count cell.
+    expect(affectsMinH(FIGHT_AFFECTS)).toBe(28 + 7 * 22 + 9);
+  });
+
+  it('puts harmful affects at the top when you track nothing', () => {
     expect(affectsMinH(rowsOf('harmful', 'harmful', 'untracked'))).toBe(PANE_MIN_H.affects);
-    const many = rowsOf(...Array<AffectRowState>(7).fill('harmful'));
-    expect(affectsMinH(many)).toBe(28 + 7 * 22);
+    expect(affectsMinH(rowsOf(...times(13, 'harmful')))).toBe(28 + 7 * 22);
   });
 
-  it('stops at a dozen rows and the label, then peeks', () => {
-    const long = rowsOf(...Array<AffectRowState>(20).fill('present'), 'harmful');
-    expect(affectsMinH(long)).toBe(28 + 12 * 22 + 34 + 11);
+  it('counts rows for one column in a narrow pane', () => {
+    expect(affectsMinH(rowsOf(...times(8, 'present'), 'harmful', 'untracked'), 1)).toBe(
+      28 + 10 * 22 + 9,
+    );
+    // One affect and the count need a row each in one column.
+    expect(affectsMinH(BOARD_AFFECTS, 1)).toBe(28 + 10 * 22 + 9);
+    expect(affectsMinH(rowsOf(...times(8, 'present'), 'untracked'), 1)).toBe(28 + 9 * 22 + 9);
+  });
+
+  it('stops at a dozen rows and the hairline', () => {
+    const long = rowsOf(...times(30, 'present'), 'harmful');
+    expect(affectsMinH(long)).toBe(28 + 12 * 22 + 9);
   });
 });
 
@@ -238,14 +254,14 @@ describe('layoutPanes', () => {
     expect(rects[0].h).toBeGreaterThanOrEqual(PANE_MIN_H.map);
   });
 
-  it('keeps Poison and every group member in view after adding panes', () => {
-    // Add Group, then Chat, at 1280 by 800, with the boards' affects
+  it('keeps every harmful affect and every group member in view after adding panes', () => {
+    // Add Group, then Chat, at 1280 by 800, with the slots in a fight
     // and four group members.
     const tree = addPane(addPane(defaultLayout().root, 'group'), 'chat');
-    const mins = { affects: affectsMinH(BOARD_AFFECTS), group: groupMinH(4) };
+    const mins = { affects: affectsMinH(FIGHT_AFFECTS), group: groupMinH(4) };
     const { leaves } = layoutPanes(tree, 300, 664, mins);
     const h = Object.fromEntries(leaves.map((l) => [l.leaf.pane, l.rect.h]));
-    expect(h.affects).toBeGreaterThanOrEqual(216);
+    expect(h.affects).toBeGreaterThanOrEqual(191);
     expect(h.group).toBeGreaterThanOrEqual(116);
     expect(h.map).toBeGreaterThanOrEqual(PANE_MIN_H.map);
     expect(h.chat).toBeGreaterThanOrEqual(PANE_MIN_H.chat);
@@ -258,13 +274,13 @@ describe('layoutPanes', () => {
       split: 'column',
       children: [{ pane: 'map' }, { pane: 'group' }, { pane: 'chat' }, { pane: 'affects' }],
     });
-    const mins = { affects: affectsMinH(BOARD_AFFECTS), group: groupMinH(4) };
+    const mins = { affects: affectsMinH(FIGHT_AFFECTS), group: groupMinH(4) };
     const { leaves, handles } = layoutPanes(tree, 300, 664, mins);
     const h = Object.fromEntries(leaves.map((l) => [l.leaf.pane, l.rect.h]));
-    expect(h.affects).toBe(227);
+    expect(h.affects).toBe(191);
     expect(h.group).toBeGreaterThanOrEqual(116);
     // A drag stops at the raised minimum as well.
-    expect(handles[2].mins).toEqual([180, 116, 120, 227]);
+    expect(handles[2].mins).toEqual([180, 116, 120, 191]);
   });
 
   it('lays out nothing for an empty root', () => {
