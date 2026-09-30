@@ -1068,6 +1068,16 @@ pub fn entry(name: &str) -> Option<&'static Entry> {
         .find(|e| !e.param && (e.name == name || e.aliases.contains(&name)))
 }
 
+/// The catalog entry for a field as a template reads it: a name or an
+/// alias, or a field written with a parameter, `aff:sanctuary` among
+/// them. None for a name only scripts set.
+pub fn entry_for(field: &FieldRef) -> Option<&'static Entry> {
+    match &field.param {
+        Some(_) => CATALOG.iter().find(|e| e.param && e.name == field.name),
+        None => entry(&field.name),
+    }
+}
+
 /// Names the capture fills that are no field of their own: the percents
 /// of `%K %k %E` and the tank's health from `%p` and `%P`.
 const CAPTURE_KEYS: [&str; 5] = ["hp_pct", "mana_pct", "move_pct", "tank_pct", "tank_bar"];

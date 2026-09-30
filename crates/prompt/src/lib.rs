@@ -11,6 +11,8 @@
 //!   older builds used, into a capture.
 //! - [`template`] parses a prompt template into tokens and the pieces the
 //!   editor shows.
+//! - [`edit`] writes the template changes the editor makes, keeping the
+//!   look of every other piece.
 //! - [`format`] holds the values a template draws and the plain text of
 //!   each format.
 //! - [`gmcp`] keeps the latest packet of each package, the pulse and the
@@ -30,6 +32,7 @@
 pub mod aabahran;
 pub mod capture;
 pub mod config;
+pub mod edit;
 pub mod engine;
 pub mod format;
 pub mod gmcp;
