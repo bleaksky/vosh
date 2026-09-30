@@ -19,6 +19,7 @@ import { loadScrollback, onOutput, setWindowSize } from '../lib/session';
 import { findTheme, type AppTheme } from '../lib/themes';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 import { WordWrapper } from '../lib/wordWrap';
+import { RegionWriter, type RegionOutput, type RegionReplace } from '../lib/terminalRegion';
 import { ingestRecentNames } from '../lib/recentNames';
 import { hexToRgba } from '../lib/mapPalette';
 
@@ -306,6 +307,12 @@ export function Terminal({
       scrollSensitivity: 0.75,
       theme: xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColorsRef.current),
     });
+
+    // Every write to this xterm goes through one ordered writer, which
+    // finds the regions the session marks and replaces them only while
+    // nothing was written after them (src/lib/terminalRegion.ts).
+    const writer = new RegionWriter(term);
+    const localDecoder = new TextDecoder('utf-8', { fatal: false });
 
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -765,7 +772,7 @@ export function Terminal({
       const cursorY = term.buffer.active.cursorY;
       const rowsBelow = term.rows - 1 - cursorY;
       if (rowsBelow > 0) {
-        term.write('\r\n'.repeat(rowsBelow));
+        writer.local('\r\n'.repeat(rowsBelow));
       }
     };
 
@@ -774,12 +781,12 @@ export function Terminal({
     loadScrollback(!quietRef.current && nativeSurfaceEnabled())
       .then(({ bytes, seededNative }) => {
         if (bytes.length > 0) {
-          term.write(bytes);
+          writer.local(localDecoder.decode(bytes));
           if (!quietRef.current) {
             // Explicit 256-palette gray, not dim: xterm and the native
             // renderer dim differently, so dim would show two shades.
             const banner = '\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n';
-            term.write(banner);
+            writer.local(banner);
             // Mirror the banner into the native grid so xterm and the surface
             // have the same line count; otherwise a dropdown swap to xterm
             // shifts the content up by these rows. Only when this load
@@ -802,7 +809,7 @@ export function Terminal({
           onScrollbackLoadedRef.current?.();
         };
         if (bytes.length > 0) {
-          term.write('', notify);
+          writer.whenParsed(notify);
         } else {
           notify();
         }
@@ -848,12 +855,29 @@ export function Terminal({
         term.scrollToBottom();
       }
     });
-    onOutput((bytes) => {
-      const text = decoder.decode(bytes, { stream: true });
-      const wrapped = wrapper.process(text);
-      const tail = wrapper.flush();
-      if (wrapped.length > 0 || tail.length > 0) {
-        term.write(wrapped + tail);
+    // Wrap a whole chunk: complete lines and the partial at its end.
+    const wrapChunk = (text: string) => wrapper.process(text) + wrapper.flush();
+    const replaceDecoder = new TextDecoder('utf-8', { fatal: false });
+    onOutput((out) => {
+      let replace: RegionReplace | undefined;
+      if (out.replace) {
+        // A replace rewrites its region whole, so half a character the
+        // last output held back goes with it.
+        decoder.decode();
+        replace = {
+          gen: out.replace.gen,
+          text: wrapChunk(replaceDecoder.decode(out.replace.bytes)),
+          fresh: out.replace.fresh,
+        };
+      }
+      const text = decoder.decode(out.bytes, { stream: true });
+      const wrapped = wrapChunk(text);
+      const restore = out.restore ? wrapChunk(replaceDecoder.decode(out.restore)) : undefined;
+      if (wrapped.length > 0 || replace !== undefined || restore !== undefined) {
+        const output: RegionOutput = { text: wrapped };
+        if (replace) output.replace = replace;
+        if (restore !== undefined) output.restore = restore;
+        writer.output(output);
         // Live pane is a strict tail of server output. Without this
         // snap, dragging the split-scrollback divider can leave the
         // live pane's viewport above its baseY — xterm preserves
@@ -875,7 +899,10 @@ export function Terminal({
       // who-lists, comm-channel chatter, considers, etc. — not just
       // names they have typed before or chars currently in the room.
       // Cost is one regex pass per output chunk; sub-millisecond.
-      if (!quietRef.current) ingestRecentNames(text);
+      if (!quietRef.current) {
+        ingestRecentNames(text);
+        if (replace) ingestRecentNames(replace.text);
+      }
     }).then((unlisten) => {
       unsubOutput = unlisten;
     });
@@ -941,7 +968,7 @@ export function Terminal({
     };
 
     const handle: TerminalHandle = {
-      write: (data) => term.write(data),
+      write: (data) => writer.local(typeof data === 'string' ? data : localDecoder.decode(data)),
       fit: () => fit.fit(),
       focus: () => term.focus(),
       clear: () => term.clear(),
@@ -1081,6 +1108,7 @@ export function Terminal({
       if (naws_timer) clearTimeout(naws_timer);
       unsubOutput?.();
       unsubGridSize?.();
+      writer.dispose();
       resultsSub.dispose();
       scrollDisposable.dispose();
       searchAddon.dispose();

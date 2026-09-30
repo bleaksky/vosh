@@ -71,6 +71,40 @@ export interface OutputPayload {
    *  `onOutput`. Replaces the old `number[]` array, which made the
    *  backend serialize one JSON number per byte. */
   b64: string;
+  /** Replace a region an earlier payload marked, applied before `b64`
+   *  (see src/lib/terminalRegion.ts). */
+  replace?: { gen: number; b64: string; fresh: boolean };
+  /** The live render for the region this payload leaves open, as
+   *  base64, written back before anything else lands. */
+  restore?: string;
+}
+
+/** One session write, decoded: the replace goes first, then `bytes`. */
+export interface SessionOutput {
+  bytes: Uint8Array;
+  replace?: { gen: number; bytes: Uint8Array; fresh: boolean };
+  restore?: Uint8Array;
+}
+
+/** Standard base64 to bytes. `atob` yields a binary string, one char per
+ *  byte, and each char code goes back to a byte. Far cheaper than parsing
+ *  a JSON number[] and copying it. */
+function base64Bytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+/** Decode a `session://output` payload. */
+export function decodeOutputPayload(payload: OutputPayload): SessionOutput {
+  const out: SessionOutput = { bytes: base64Bytes(payload.b64) };
+  const replace = payload.replace;
+  if (replace) {
+    out.replace = { gen: replace.gen, bytes: base64Bytes(replace.b64), fresh: replace.fresh };
+  }
+  if (typeof payload.restore === 'string') out.restore = base64Bytes(payload.restore);
+  return out;
 }
 
 export type StatePayload =
@@ -604,15 +638,9 @@ export async function setRoomAvoid(roomId: number, avoid: boolean): Promise<void
   await invoke('map_set_avoid', { roomId, avoid });
 }
 
-export async function onOutput(cb: (bytes: Uint8Array) => void): Promise<UnlistenFn> {
+export async function onOutput(cb: (out: SessionOutput) => void): Promise<UnlistenFn> {
   return listen<OutputPayload>('session://output', (event) => {
-    // Decode the base64 payload to bytes in one pass. `atob` yields a
-    // binary string (one char per byte); map each char code back to a
-    // byte. Far cheaper than parsing a JSON number[] and copying it.
-    const bin = atob(event.payload.b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    cb(bytes);
+    cb(decodeOutputPayload(event.payload));
   });
 }
 
