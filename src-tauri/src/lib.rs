@@ -183,6 +183,10 @@ pub fn run() {
         )
         .manage(state.clone())
         .setup(move |app| {
+            // Read the font list for Appearance while the app starts,
+            // on the blocking pool, never here on the main thread.
+            #[cfg(target_os = "macos")]
+            fonts::warm_font_cache();
             match open_map_store(app) {
                 Ok(store) => {
                     let map = state.map.clone();

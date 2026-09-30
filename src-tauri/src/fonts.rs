@@ -68,6 +68,18 @@ pub(crate) async fn fonts_list() -> Vec<FontEntry> {
         .unwrap_or_default()
 }
 
+/// Start reading the font list on the blocking pool at launch, so the
+/// first Appearance open finds it in the cache. It returns at once.
+/// macOS only, where the read takes about 0.1 s and opens no font
+/// file. Windows and Linux read the list when Appearance first asks,
+/// since their cost was never measured.
+#[cfg(target_os = "macos")]
+pub(crate) fn warm_font_cache() {
+    tauri::async_runtime::spawn_blocking(|| {
+        cached_fonts(&FONTS_CACHE, enumerate_fonts);
+    });
+}
+
 /// The list in `cache`, enumerating it first when the cache is empty.
 /// It blocks while the enumeration runs, in this call or in another
 /// thread's, so call it only on the blocking pool, never on the main
