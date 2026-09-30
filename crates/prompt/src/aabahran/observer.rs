@@ -95,6 +95,73 @@ pub fn setting(reply: Reply, raw: &[u8]) -> String {
     }
 }
 
+/// How long after your send its reply counts, in milliseconds. In the
+/// log it is also how close the reply to `prompt off` follows the line
+/// it prints first.
+pub const WINDOW_MS: i64 = 2_000;
+
+/// A reply line from your log.
+#[derive(Debug, Clone, Copy)]
+pub struct Logged<'a> {
+    pub text: &'a str,
+    /// The line as the game sent it, when the log kept it.
+    pub raw: Option<&'a [u8]>,
+    /// Milliseconds since the epoch.
+    pub ts_ms: i64,
+}
+
+/// The settings a session of your log shows last.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Found {
+    pub prompt: String,
+    /// The newest fight prompt the session shows, if any.
+    pub fprompt: Option<String>,
+    /// When the game showed the prompt.
+    pub at_ms: i64,
+}
+
+/// The newest PROMPT setting among one session's reply lines, newest
+/// first, with the newest fight prompt of the session. A `Prompt set
+/// to` right after "You will no longer see prompts." is the reply to
+/// `prompt off` on the older builds and sets nothing.
+pub fn latest(lines: &[Logged<'_>]) -> Option<Found> {
+    let fight = |line: &Logged<'_>| {
+        let found = reply(line.text)?;
+        matches!(found.kind, ReplyKind::Fight | ReplyKind::NoFight)
+            .then(|| setting(found, line.raw.unwrap_or(line.text.as_bytes())))
+    };
+    let mut fprompt = None;
+    for (i, line) in lines.iter().enumerate() {
+        let Some(found) = reply(line.text) else {
+            continue;
+        };
+        match found.kind {
+            ReplyKind::Fight | ReplyKind::NoFight => {
+                if fprompt.is_none() {
+                    fprompt = fight(line);
+                }
+            }
+            ReplyKind::Off => {}
+            ReplyKind::Prompt => {
+                let off = lines.get(i + 1).is_some_and(|older| {
+                    reply(older.text).is_some_and(|r| r.kind == ReplyKind::Off)
+                        && line.ts_ms - older.ts_ms <= WINDOW_MS
+                });
+                if off {
+                    continue;
+                }
+                let fprompt = fprompt.or_else(|| lines[i + 1..].iter().find_map(fight));
+                return Some(Found {
+                    prompt: setting(found, line.raw.unwrap_or(line.text.as_bytes())),
+                    fprompt,
+                    at_ms: line.ts_ms,
+                });
+            }
+        }
+    }
+    None
+}
+
 /// True when a line you sent is `prompt off`, abbreviated or not, in any
 /// case.
 pub fn turns_prompts_off(sent: &str) -> bool {
@@ -169,6 +236,55 @@ mod tests {
             }
         }
         out
+    }
+
+    fn logged(text: &str, ts_ms: i64) -> Logged<'_> {
+        Logged {
+            text,
+            raw: None,
+            ts_ms,
+        }
+    }
+
+    #[test]
+    fn the_newest_setting_in_a_session_wins() {
+        let lines = [
+            logged("Current prompt: %h %m ", 500),
+            logged("Fight prompt set to %h> ", 400),
+            logged("Prompt set to %h ", 300),
+        ];
+        assert_eq!(
+            latest(&lines),
+            Some(Found {
+                prompt: "%h %m ".into(),
+                fprompt: Some("%h> ".into()),
+                at_ms: 500,
+            })
+        );
+        // The fight prompt may be newer than the prompt.
+        let lines = [
+            logged("Fight prompt cleared.", 600),
+            logged("Current prompt: %h ", 500),
+        ];
+        assert_eq!(latest(&lines).and_then(|f| f.fprompt), Some(String::new()));
+        assert_eq!(latest(&[logged("Fight prompt set to %h ", 1)]), None);
+        assert_eq!(latest(&[]), None);
+    }
+
+    #[test]
+    fn the_reply_to_prompt_off_in_the_log_sets_nothing() {
+        let lines = [
+            logged("Prompt set to \u{1}garbage", 1_010),
+            logged("You will no longer see prompts.", 1_000),
+            logged("Prompt set to %h ", 500),
+        ];
+        assert_eq!(latest(&lines).map(|f| f.prompt), Some("%h ".into()));
+        // Long after it, a Prompt set to is your own.
+        let lines = [
+            logged("Prompt set to %m ", 9_000),
+            logged("You will no longer see prompts.", 1_000),
+        ];
+        assert_eq!(latest(&lines).map(|f| f.prompt), Some("%m ".into()));
     }
 
     #[test]

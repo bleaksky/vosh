@@ -458,6 +458,26 @@ export async function onGamePromptSeen(
   });
 }
 
+/** Your prompt settings and where Vosh last saw them: `gmcp` for the
+ *  latest Char.Prompt, `session` for the game's reply to your own
+ *  `prompt` this session, `log` for the newest such reply in your log
+ *  that belongs to one of this profile's characters. `at` is RFC 3339
+ *  local time. */
+export interface PromptLastSeen {
+  prompt: string | null;
+  fprompt: string | null;
+  enabled: boolean | null;
+  at: string | null;
+  at_login: boolean;
+  source: 'gmcp' | 'session' | 'log';
+  character: string | null;
+}
+
+/** Where Vosh last saw your prompt settings, or null when it has not. */
+export async function promptLastSeen(): Promise<PromptLastSeen | null> {
+  return invoke('prompt_last_seen');
+}
+
 /** What the backend last reported on session://hidden, for a window
  *  that opens or reloads after the report. */
 export async function hiddenGet(): Promise<HiddenPayload> {
