@@ -7,8 +7,10 @@ import { AFFECTS_TWO_COLUMNS_W } from './affectsGrid';
 // Chips pack into lines 20 tall, 4 apart inside a group and 8 apart
 // between groups, from x 18 to 12 from the right, the group's name in
 // a 56 px gutter or, under 360 px, run in at the start of its first
-// line. The pane draws exactly the lines this packs, so the pane, its
-// minimum, and the tests agree. CSS flex wrap never decides.
+// line. A run in name whose first chip would not fit whole after it
+// takes that line alone, so the chip gets the whole next line. The
+// pane draws exactly the lines this packs, so the pane, its minimum,
+// and the tests agree. CSS flex wrap never decides.
 //
 // A page is as tall as the body and holds whole lines. A page that
 // cannot hold everything left ends with the count of what follows on
@@ -109,6 +111,8 @@ export interface ChipLine {
   /** The group's name shows on this line: the group's first line, or
    *  the first line of a page that starts inside the group. */
   labelled: boolean;
+  /** The chips on the line. None on a line that holds only a run in
+   *  name, whose first chip starts the next line. */
   rows: AffectRow[];
   /** Top of the line from the top of its page. */
   top: number;
@@ -125,8 +129,11 @@ export interface ChipPage {
  *  hours. A page that cannot hold everything left ends with the count
  *  on its last line: while that line has no room for 8 px and the
  *  count, its last chip moves to the next page, keeping at least one
- *  chip on the page. A chip never grows past its line, and its name
- *  ellipsizes instead. */
+ *  chip on the page, and a run in name left alone moves with it. A
+ *  chip never grows past its line, and its name ellipsizes instead.
+ *  A run in name whose first chip would not fit whole after it takes a
+ *  line of its own, and the next page starts with the group when this
+ *  one has no room for that line and the next. */
 export function chipPages(
   groups: readonly ChipGroup[],
   width: number,
@@ -176,21 +183,43 @@ export function chipPages(
         full = true;
         break;
       }
-      line = {
-        group,
-        labelled: labels !== 'none' && (newGroup || lines.length === 0),
-        rows: [row],
-        top,
-      };
+      const labelled: boolean = labels !== 'none' && (newGroup || lines.length === 0);
+      if (labels === 'runin' && labelled) {
+        const alone: ChipLine = { group, labelled, rows: [], top };
+        const next = top + CHIP_H + CHIP_GAP;
+        if (lead(alone) + natural(row) > inner) {
+          if (next + CHIP_H <= bodyH) {
+            // The name alone, and its first chip from the text edge.
+            lines.push(alone);
+            line = { group, labelled: false, rows: [row], top: next };
+            lines.push(line);
+            i += 1;
+            continue;
+          }
+          // No room for both here: the group starts the next page. A
+          // body with room for one line keeps them on it together.
+          if (lines.length > 0) {
+            full = true;
+            break;
+          }
+        }
+      }
+      line = { group, labelled, rows: [row], top };
       lines.push(line);
       i += 1;
     }
     if (full) {
       const countW = (n: number) => GUTTER_GAP + Math.ceil(measure.count(`${n} more`));
+      const chips = () => lines.reduce((n, l) => n + l.rows.length, 0);
       for (;;) {
         const last = lines[lines.length - 1];
+        if (last.rows.length === 0) {
+          // A name never ends a page. It goes on with its first chip.
+          lines.pop();
+          continue;
+        }
         if (inner - used(last) >= countW(queue.length - i)) break;
-        if (lines.length === 1 && last.rows.length === 1) break;
+        if (chips() === 1) break;
         last.rows.pop();
         i -= 1;
         if (last.rows.length === 0) lines.pop();

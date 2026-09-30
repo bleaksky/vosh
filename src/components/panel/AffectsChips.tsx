@@ -128,6 +128,19 @@ function ChipPages({
         >
           {page.lines.map((line, l) => {
             const last = l === page.lines.length - 1;
+            if (line.rows.length === 0) {
+              // A run in name alone. The lines under it name the group.
+              return (
+                <div
+                  key={`${line.group}-${line.top}`}
+                  className="pane-chips-line"
+                  aria-hidden="true"
+                  style={{ top: line.top }}
+                >
+                  <span className="pane-chips-label pane-chips-runin">{labelOf(line.group)}</span>
+                </div>
+              );
+            }
             return (
               <ul
                 key={`${line.group}-${line.top}`}
