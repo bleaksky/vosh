@@ -254,7 +254,7 @@ pub struct Candidate {
 }
 
 /// A line the ring may record.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct Seen {
     raw: Vec<u8>,
     plain: String,
@@ -407,9 +407,7 @@ impl Stage {
             bytes.extend_from_slice(display);
             bytes.extend_from_slice(block.final_line().end.terminator());
         }
-        let fresh = !bytes.is_empty();
-        put(out, painted, bytes, fresh);
-        self.open = None;
+        write(out, &mut self.open, painted, bytes);
         self.note_recognized(block);
     }
 
@@ -425,16 +423,15 @@ impl Stage {
         bytes: &[u8],
     ) {
         self.sync(out);
-        let fresh = !bytes.is_empty();
-        put(out, painted, bytes.to_vec(), fresh);
-        self.open = None;
+        write(out, &mut self.open, painted, bytes.to_vec());
         self.unrecorded = true;
         if !plain.trim().is_empty() {
-            self.last_line = Some(Seen {
-                raw: raw.to_vec(),
-                plain: plain.to_string(),
-                recognized: false,
-            });
+            // Reuse the buffers, since this runs for every line.
+            let seen = self.last_line.get_or_insert_with(Seen::default);
+            seen.raw.clear();
+            seen.raw.extend_from_slice(raw);
+            seen.plain.clear();
+            seen.plain.push_str(plain);
         }
     }
 
@@ -483,8 +480,8 @@ impl Stage {
     ) {
         self.sync(out);
         self.unrecorded = true;
-        self.open = None;
         if painted.is_some() && before.is_empty() && display == Some(raw) {
+            self.open = None;
             // Already on screen as it is. Only the row ends.
             out.new_row();
             out.closed = true;
@@ -495,8 +492,7 @@ impl Stage {
             bytes.extend_from_slice(display);
             bytes.extend_from_slice(b"\r\n");
         }
-        let fresh = !bytes.is_empty();
-        put(out, painted, bytes, fresh);
+        write(out, &mut self.open, painted, bytes);
     }
 
     /// Repaint the open row as the `[prompt]` table now says: `rendered`
@@ -625,6 +621,18 @@ fn put(out: &mut Output, painted: Option<u64>, bytes: Vec<u8>, fresh: bool) {
         Some(gen) => out.replace(gen, bytes, fresh),
         None => out.text(&bytes),
     }
+}
+
+/// Write what is not a region: over the region `painted`, or as it is.
+/// It closes the open row, unless it writes nothing at all, as a hidden
+/// line that was never painted does.
+fn write(out: &mut Output, open: &mut Option<OpenRow>, painted: Option<u64>, bytes: Vec<u8>) {
+    if bytes.is_empty() && painted.is_none() {
+        return;
+    }
+    let fresh = !bytes.is_empty();
+    put(out, painted, bytes, fresh);
+    *open = None;
 }
 
 #[cfg(test)]
@@ -1004,6 +1012,13 @@ mod tests {
         stage.draw(&mut out, block_of(&stage), None, b"", "DRAWN");
         let _ = stage.paint_partial(&mut out, b"more", None);
         assert_eq!(stage.open_row(), None);
+
+        // A hidden line writes nothing, so the row stays open.
+        let mut out = Output::new(false);
+        stage.draw(&mut out, block_of(&stage), None, b"", "DRAWN");
+        stage.line(&mut out, b"spam", "spam", None, b"");
+        stage.finish(&out);
+        assert!(stage.open_row().is_some());
 
         // A prompt drawn after other output in the same read stays open.
         let mut out = Output::new(true);

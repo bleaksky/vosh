@@ -1,27 +1,31 @@
-//! Buffer incoming server bytes and emit a sequence of operations for the
-//! session loop. Complete lines (terminated by `\n`) flow through trigger
-//! processing. Partial bytes after the last `\n` (typically a prompt waiting
-//! for input) display immediately so the user sees them without waiting for
-//! a newline that may never come.
+//! Buffer incoming server bytes into complete lines for the session loop.
+//! A line ends at `\n`. The bytes after the last `\n`, the partial, stay
+//! here until a later read completes them, a GA or EOR ends them, or you
+//! send a line.
 //!
-//! When a partial that has already been displayed later completes into a
-//! full line, the resulting [`ChunkOp::LineComplete`] carries `clear_first`
-//! so the session loop can wipe the on-screen partial before drawing the
-//! trigger-processed line.
-//!
-//! Phase 4 will add prompt detection via the telnet GA and EOR commands so
-//! prompts can flow through trigger processing too.
+//! The partial never paints on its own. At the end of each read the
+//! session decides: a partial the prompt capture settles on is your
+//! prompt at once, and any other paints as a region (see
+//! `vosh_prompt::stage`), so a partial that becomes a prompt in the same
+//! read never flashes. The accumulator remembers the region the partial
+//! was painted as, and the line that completes it carries that region so
+//! the session replaces it with the processed line.
 
+/// A complete line from the server, without its line end.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ChunkOp {
-    /// A complete line ready for trigger processing. `clear_first` is true
-    /// when the partial portion of this line was already shown raw and the
-    /// session loop must clear the current terminal line before writing the
-    /// processed result.
-    LineComplete { bytes: Vec<u8>, clear_first: bool },
-    /// New partial bytes to render directly to the terminal without trigger
-    /// processing.
-    RawDisplay(Vec<u8>),
+pub(crate) struct Line {
+    pub(crate) bytes: Vec<u8>,
+    /// The region an earlier read painted this line's start as, which the
+    /// processed line replaces.
+    pub(crate) painted: Option<u64>,
+}
+
+/// The partial a GA or EOR ended, or a send took.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Partial {
+    pub(crate) bytes: Vec<u8>,
+    /// The region it was painted as, when an earlier read painted it.
+    pub(crate) painted: Option<u64>,
 }
 
 #[derive(Debug, Default)]
@@ -29,13 +33,8 @@ pub(crate) struct LineAccumulator {
     /// Bytes since the last `\n`. The next chunk extends this until a
     /// newline arrives.
     buffer: Vec<u8>,
-    /// How many bytes of `buffer` have already been emitted as `RawDisplay`.
-    displayed_len: usize,
-    /// Wall-clock instant of the last byte appended to `buffer`. The
-    /// session loop polls this on each tick; when the partial has been
-    /// idle past a threshold, it gets flushed as a prompt even if the
-    /// server never sent EOR or GA.
-    last_byte_at: Option<tokio::time::Instant>,
+    /// The region the partial was painted as, and how many of its bytes.
+    painted: Option<(u64, usize)>,
 }
 
 impl LineAccumulator {
@@ -43,18 +42,14 @@ impl LineAccumulator {
         Self::default()
     }
 
-    /// Append new bytes and return the operations the session loop should
-    /// perform in order.
-    pub(crate) fn feed(&mut self, bytes: &[u8]) -> Vec<ChunkOp> {
-        if !bytes.is_empty() {
-            self.last_byte_at = Some(tokio::time::Instant::now());
-        }
-        let prev_displayed = self.displayed_len;
+    /// Append new bytes and return the lines they completed, in order.
+    /// The first carries the region the partial it completed was painted
+    /// as.
+    pub(crate) fn feed(&mut self, bytes: &[u8]) -> Vec<Line> {
         self.buffer.extend_from_slice(bytes);
 
-        let mut ops = Vec::new();
+        let mut lines = Vec::new();
         let mut start = 0;
-        let mut first_complete = true;
         let mut last_consumed = None;
 
         for i in 0..self.buffer.len() {
@@ -75,76 +70,73 @@ impl LineAccumulator {
             if line_start < line_end && self.buffer[line_start] == b'\r' {
                 line_start += 1;
             }
-            let line_bytes = self.buffer[line_start..line_end].to_vec();
-            let clear_first = first_complete && prev_displayed > 0;
-            ops.push(ChunkOp::LineComplete {
-                bytes: line_bytes,
-                clear_first,
+            lines.push(Line {
+                bytes: self.buffer[line_start..line_end].to_vec(),
+                painted: self.painted.take().map(|(gen, _)| gen),
             });
-            first_complete = false;
             start = i + 1;
             last_consumed = Some(start);
         }
 
         if let Some(consumed) = last_consumed {
             self.buffer.drain(..consumed);
-            self.displayed_len = 0;
         }
 
         // ROM `\n\r` debris: when the remainder starts a brand-new line
-        // (none of it displayed yet) with the `\r` that belongs to the
+        // (none of it painted yet) with the `\r` that belongs to the
         // previous line's terminator, drop it from the buffer. Left alone
-        // it flows out as a RawDisplay and slams the cursor back to column
-        // zero right after whatever the line pipeline just rendered — the
-        // custom prompt, for one — so the next echo overwrites that row.
-        // A `\r` inside a partial (deliberate overwrite) is untouched.
-        if self.displayed_len == 0 && self.buffer.first() == Some(&b'\r') {
+        // it paints at the end of the read and slams the cursor back to
+        // column zero right after whatever the read drew, the custom
+        // prompt for one, so the next echo overwrites that row. A `\r`
+        // inside a partial (deliberate overwrite) is untouched.
+        if self.painted.is_none() && self.buffer.first() == Some(&b'\r') {
             self.buffer.remove(0);
         }
 
-        if self.buffer.len() > self.displayed_len {
-            let new_to_show = self.buffer[self.displayed_len..].to_vec();
-            ops.push(ChunkOp::RawDisplay(new_to_show));
-            self.displayed_len = self.buffer.len();
-        }
-
-        ops
+        lines
     }
 
-    /// Drop any buffered partial line. Call on disconnect.
-    pub(crate) fn reset(&mut self) {
-        self.buffer.clear();
-        self.displayed_len = 0;
-        self.last_byte_at = None;
+    /// The partial, the bytes after the last line end. None when there is
+    /// none.
+    pub(crate) fn partial(&self) -> Option<&[u8]> {
+        (!self.buffer.is_empty()).then_some(&self.buffer[..])
     }
 
-    /// Take the current partial out of the buffer and return it as bytes.
-    /// Used when the telnet GA or EOR command arrives, telling us the
-    /// partial is in fact a complete prompt that should sit on its own
-    /// line. Returns None when no partial is buffered.
-    ///
-    /// `displayed` reports how many bytes had already been shown raw, so
-    /// the caller knows whether the line needs the clear-and-rewrite
-    /// treatment when re-emitting through trigger processing.
-    pub(crate) fn flush_partial(&mut self) -> Option<(Vec<u8>, bool)> {
+    /// The region the partial was painted as, and how many of its bytes.
+    pub(crate) fn painted(&self) -> Option<(u64, usize)> {
+        self.painted
+    }
+
+    /// Note the region the partial is painted as now.
+    pub(crate) fn set_painted(&mut self, painted: Option<(u64, usize)>) {
+        self.painted = painted;
+    }
+
+    /// Take the partial out, as a GA or EOR does when it ends it, or the
+    /// session does when it reads a partial as your prompt. None when
+    /// there is none.
+    pub(crate) fn take_partial(&mut self) -> Option<Partial> {
+        let painted = self.painted.take().map(|(gen, _)| gen);
         if self.buffer.is_empty() {
             return None;
         }
-        let already_shown = self.displayed_len > 0;
-        let bytes = std::mem::take(&mut self.buffer);
-        self.displayed_len = 0;
-        self.last_byte_at = None;
-        Some((bytes, already_shown))
+        Some(Partial {
+            bytes: std::mem::take(&mut self.buffer),
+            painted,
+        })
     }
 
-    /// Drop the buffered partial without redrawing. Use when the caller
-    /// has already advanced the on-screen cursor past it (for example, by
-    /// echoing typed input locally inline with the prompt) so the next
-    /// chunk from the server does not merge with the displayed prompt.
+    /// Drop the partial without drawing it again, as a send does. Your
+    /// typed echo already moved the cursor past it, so the next chunk from
+    /// the server starts fresh instead of merging with it.
     pub(crate) fn forget_partial(&mut self) {
         self.buffer.clear();
-        self.displayed_len = 0;
-        self.last_byte_at = None;
+        self.painted = None;
+    }
+
+    /// Drop the partial. Call on disconnect.
+    pub(crate) fn reset(&mut self) {
+        self.forget_partial();
     }
 }
 
@@ -152,90 +144,115 @@ impl LineAccumulator {
 mod tests {
     use super::*;
 
-    fn line(bytes: &[u8], clear_first: bool) -> ChunkOp {
-        ChunkOp::LineComplete {
+    fn line(bytes: &[u8]) -> Line {
+        Line {
             bytes: bytes.to_vec(),
-            clear_first,
+            painted: None,
         }
-    }
-
-    fn raw(bytes: &[u8]) -> ChunkOp {
-        ChunkOp::RawDisplay(bytes.to_vec())
     }
 
     #[test]
     fn one_complete_line_no_partial() {
         let mut a = LineAccumulator::new();
-        let ops = a.feed(b"hello\n");
-        assert_eq!(ops, vec![line(b"hello", false)]);
+        assert_eq!(a.feed(b"hello\n"), vec![line(b"hello")]);
+        assert_eq!(a.partial(), None);
     }
 
     #[test]
     fn crlf_stripped() {
         let mut a = LineAccumulator::new();
-        let ops = a.feed(b"hello\r\nworld\r\n");
-        assert_eq!(ops, vec![line(b"hello", false), line(b"world", false)]);
+        let lines = a.feed(b"hello\r\nworld\r\n");
+        assert_eq!(lines, vec![line(b"hello"), line(b"world")]);
     }
 
     #[test]
-    fn partial_emits_raw_immediately() {
+    fn a_partial_waits_without_painting() {
         let mut a = LineAccumulator::new();
-        let ops = a.feed(b"Login: ");
-        assert_eq!(ops, vec![raw(b"Login: ")]);
+        assert!(a.feed(b"Login: ").is_empty());
+        assert_eq!(a.partial(), Some(&b"Login: "[..]));
+        assert_eq!(a.painted(), None);
     }
 
     #[test]
-    fn partial_then_completion_carries_clear_first() {
+    fn the_line_completing_a_painted_partial_carries_its_region() {
         let mut a = LineAccumulator::new();
         let _ = a.feed(b"Login: ");
-        let ops = a.feed(b"Bob\n");
-        assert_eq!(ops, vec![line(b"Login: Bob", true)]);
-    }
-
-    #[test]
-    fn line_then_new_partial_in_one_chunk() {
-        let mut a = LineAccumulator::new();
-        let ops = a.feed(b"first line\nLogin: ");
-        assert_eq!(ops, vec![line(b"first line", false), raw(b"Login: ")]);
-    }
-
-    #[test]
-    fn multiple_complete_lines_only_first_clears() {
-        let mut a = LineAccumulator::new();
-        let _ = a.feed(b"part");
-        let ops = a.feed(b"ial\nmore\nlast\n");
+        a.set_painted(Some((7, 7)));
+        let lines = a.feed(b"Bob\nnext\n");
         assert_eq!(
-            ops,
+            lines,
             vec![
-                line(b"partial", true),
-                line(b"more", false),
-                line(b"last", false),
+                Line {
+                    bytes: b"Login: Bob".to_vec(),
+                    painted: Some(7),
+                },
+                line(b"next"),
             ]
         );
+        assert_eq!(a.painted(), None);
     }
 
     #[test]
-    fn extending_partial_emits_only_new_bytes() {
+    fn a_line_then_a_new_partial_in_one_chunk() {
+        let mut a = LineAccumulator::new();
+        assert_eq!(a.feed(b"first line\nLogin: "), vec![line(b"first line")]);
+        assert_eq!(a.partial(), Some(&b"Login: "[..]));
+    }
+
+    #[test]
+    fn a_partial_grows_and_keeps_its_region() {
         let mut a = LineAccumulator::new();
         let _ = a.feed(b"Wel");
-        let ops = a.feed(b"come ");
-        assert_eq!(ops, vec![raw(b"come ")]);
+        a.set_painted(Some((3, 3)));
+        assert!(a.feed(b"come ").is_empty());
+        assert_eq!(a.partial(), Some(&b"Welcome "[..]));
+        assert_eq!(a.painted(), Some((3, 3)));
     }
 
     #[test]
     fn empty_line_kept() {
         let mut a = LineAccumulator::new();
-        let ops = a.feed(b"\n");
-        assert_eq!(ops, vec![line(b"", false)]);
+        assert_eq!(a.feed(b"\n"), vec![line(b"")]);
     }
 
     #[test]
-    fn reset_drops_buffered_partial() {
+    fn taking_the_partial_hands_over_its_region() {
+        let mut a = LineAccumulator::new();
+        assert_eq!(a.take_partial(), None);
+        let _ = a.feed(b"<10hp> ");
+        assert_eq!(
+            a.take_partial(),
+            Some(Partial {
+                bytes: b"<10hp> ".to_vec(),
+                painted: None,
+            })
+        );
+        let _ = a.feed(b"<10hp> ");
+        a.set_painted(Some((4, 7)));
+        assert_eq!(
+            a.take_partial(),
+            Some(Partial {
+                bytes: b"<10hp> ".to_vec(),
+                painted: Some(4),
+            })
+        );
+        assert_eq!(a.partial(), None);
+        assert_eq!(a.painted(), None);
+    }
+
+    #[test]
+    fn forget_and_reset_drop_the_partial_and_its_region() {
         let mut a = LineAccumulator::new();
         let _ = a.feed(b"Login: ");
+        a.set_painted(Some((1, 7)));
+        a.forget_partial();
+        assert_eq!(a.partial(), None);
+        assert_eq!(a.feed(b"new\n"), vec![line(b"new")]);
+
+        let _ = a.feed(b"Login: ");
+        a.set_painted(Some((2, 7)));
         a.reset();
-        let ops = a.feed(b"new\n");
-        assert_eq!(ops, vec![line(b"new", false)]);
+        assert_eq!(a.feed(b"new\n"), vec![line(b"new")]);
     }
 
     #[test]
@@ -244,19 +261,14 @@ mod tests {
         // standard `\r\n`. Splitting on `\n` leaves a `\r` glued to the
         // start of the next line, which used to break `^`-anchored
         // trigger patterns. The accumulator strips it from line text AND
-        // from the trailing partial: as a RawDisplay it would slam the
-        // cursor to column zero right after in-batch renders like the
-        // custom prompt, and the next echo would overwrite that row.
+        // from the trailing partial: painted at the end of the read it
+        // would slam the cursor to column zero right after in-batch
+        // renders like the custom prompt, and the next echo would
+        // overwrite that row.
         let mut a = LineAccumulator::new();
-        let ops = a.feed(b"first\n\rsecond\n\rthird\n\r");
-        assert_eq!(
-            ops,
-            vec![
-                line(b"first", false),
-                line(b"second", false),
-                line(b"third", false),
-            ]
-        );
+        let lines = a.feed(b"first\n\rsecond\n\rthird\n\r");
+        assert_eq!(lines, vec![line(b"first"), line(b"second"), line(b"third")]);
+        assert_eq!(a.partial(), None);
     }
 
     #[test]
@@ -265,8 +277,8 @@ mod tests {
         // network chunk. The accumulator should still strip it.
         let mut a = LineAccumulator::new();
         let _ = a.feed(b"first\n");
-        let ops = a.feed(b"\rsecond\n\r");
-        assert_eq!(ops, vec![line(b"second", false)]);
+        assert_eq!(a.feed(b"\rsecond\n\r"), vec![line(b"second")]);
+        assert_eq!(a.partial(), None);
     }
 
     #[test]
@@ -274,7 +286,14 @@ mod tests {
         // Only line-terminator debris is stripped: a server overwriting a
         // partial line with `\r` mid-stream keeps its carriage return.
         let mut a = LineAccumulator::new();
-        let ops = a.feed(b"loading 1%\rloading 2%");
-        assert_eq!(ops, vec![raw(b"loading 1%\rloading 2%")]);
+        assert!(a.feed(b"loading 1%\rloading 2%").is_empty());
+        assert_eq!(a.partial(), Some(&b"loading 1%\rloading 2%"[..]));
+        // And a painted partial that the next read continues with a `\r`
+        // keeps it too.
+        let mut a = LineAccumulator::new();
+        let _ = a.feed(b"loading 1%");
+        a.set_painted(Some((1, 10)));
+        let _ = a.feed(b"\rloading 2%");
+        assert_eq!(a.partial(), Some(&b"loading 1%\rloading 2%"[..]));
     }
 }

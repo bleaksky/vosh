@@ -12,16 +12,17 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
+use vosh_prompt::stage::{Block, End, Output};
 use vosh_telnet::{
     codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator, Parser,
 };
-use vosh_trigger::LineResult;
+use vosh_trigger::{LineResult, MatchScope};
 
 use crate::connection::{self, ConnectionError, Stream};
 use crate::gmcp_bind;
 use crate::hidden_input::{self, ServerEcho};
 use crate::input;
-use crate::line_accumulator::{ChunkOp, LineAccumulator};
+use crate::line_accumulator::{Line, LineAccumulator, Partial};
 use crate::list_events::{broadcast_list_changes, ListChanges, ListRevisions};
 use crate::map_state::{self, SharedMap};
 use crate::profile::Profile;
@@ -116,6 +117,23 @@ pub(crate) struct OutputPayload {
     /// byte, plus an N-element JS array to walk on the other side);
     /// base64 is a single compact string the webview decodes in one pass.
     pub b64: String,
+    /// Replace a region an earlier payload marked, applied before `b64`.
+    /// See `vosh_prompt::stage::Replace`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replace: Option<ReplacePayload>,
+    /// The live render for the region this payload leaves open, as
+    /// base64, written back before anything else lands on the renderer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restore: Option<String>,
+}
+
+/// `OutputPayload.replace`: region `gen`, its new bytes as base64, and
+/// whether they are written on a new row when the region is closed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct ReplacePayload {
+    pub gen: u64,
+    pub b64: String,
+    pub fresh: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -200,14 +218,31 @@ pub(crate) enum OutgoingMsg {
 /// in stream order and sent once at the end of the read, so a prompt
 /// that arrives in one read never flashes. The Line pass, the GMCP
 /// handler's echoes and the GA path all write here.
-#[derive(Default)]
 struct ReadBatch {
-    /// The terminal output.
-    out: Vec<u8>,
+    /// The terminal output, with the regions the prompt stage marks.
+    out: Output,
     /// Log rows, flushed in one transaction.
     log: Vec<vosh_log::LogEntry>,
-    /// A prompt var changed, so the prompt vars go out after the output.
+    /// A prompt var changed or a prompt was read, so the prompt vars go
+    /// out after the output even when they read the same.
     prompt_vars: bool,
+    /// Triggers that hid a prompt while nothing reads it, each named
+    /// once a session.
+    gag_without_reader: Vec<String>,
+}
+
+impl ReadBatch {
+    /// A batch for the next read. `seen` is the output count after the
+    /// session last wrote, so output from elsewhere since then closes the
+    /// open row.
+    fn new(seen: u64) -> Self {
+        Self {
+            out: Output::new(output_count() != seen),
+            log: Vec::new(),
+            prompt_vars: false,
+            gag_without_reader: Vec::new(),
+        }
+    }
 }
 
 /// Where a step writes to the terminal: the batch of the read it runs
@@ -221,7 +256,7 @@ impl OutputSink<'_> {
     /// Write `bytes` to the terminal.
     fn write(&mut self, app: &AppHandle, bytes: Vec<u8>) {
         match self {
-            OutputSink::Batch(batch) => batch.out.extend(bytes),
+            OutputSink::Batch(batch) => batch.out.text(&bytes),
             OutputSink::Direct => emit_output(app, bytes),
         }
     }
@@ -231,7 +266,7 @@ impl OutputSink<'_> {
     async fn prompt_vars(&mut self, app: &AppHandle, profile: &Arc<Mutex<Profile>>) {
         match self {
             OutputSink::Batch(batch) => batch.prompt_vars = true,
-            OutputSink::Direct => emit_prompt_vars(app, profile).await,
+            OutputSink::Direct => emit_prompt_vars(app, profile, true).await,
         }
     }
 }
@@ -428,6 +463,10 @@ async fn io_loop(
     // each connection starts its timers fresh.
     let mut timer_next: HashMap<u32, Instant> = HashMap::new();
 
+    // The output count after this session last wrote. Output from
+    // elsewhere moves it, which closes the open row.
+    let mut seen_output = output_count();
+
     // Phase 1 audit instrumentation. See `PerfCounters` doc.
     let mut perf = PerfCounters::default();
     let mut perf_report_interval = tokio::time::interval(PERF_REPORT_INTERVAL);
@@ -438,16 +477,22 @@ async fn io_loop(
             biased;
             outgoing = rx_outgoing.recv() => match outgoing {
                 Some(OutgoingMsg::Send { bytes, masked }) => {
+                    // The send records a prompt candidate and closes the
+                    // open row. On a server that sends no Char.Vitals it
+                    // also starts the next pulse, after which the values
+                    // the last prompt set go stale.
+                    let pulse = {
+                        let mut p = profile.lock().await;
+                        send_step(&mut p, &accumulator, now_ms())
+                    };
                     // The frontend already echoed the typed line inline
                     // with the on-screen prompt. Drop the buffered partial
                     // so the next chunk from the server starts fresh on a
                     // new row instead of merging with the displayed prompt.
                     accumulator.forget_partial();
-                    // On a server that sends no Char.Vitals your send
-                    // starts the next pulse, after which the values the
-                    // last prompt set go stale.
-                    if profile.lock().await.prompt.vars.on_send() {
+                    if pulse {
                         emit_hidden_change(&app, &profile).await;
+                        emit_prompt_vars(&app, &profile, false).await;
                     }
                     // Append the input line(s) to the same log session
                     // as server output so transcripts include both
@@ -476,6 +521,10 @@ async fn io_loop(
                     }
                 }
                 Some(OutgoingMsg::WindowSize { cols, rows }) => {
+                    // Each renderer wraps the open row again at its new
+                    // width, so it closes, and nothing repaints until the
+                    // next prompt (D21).
+                    profile.lock().await.prompt.stage.close();
                     negotiator.set_window_size(cols, rows);
                     if naws_active {
                         let bytes = negotiator.naws_subnegotiation();
@@ -503,7 +552,7 @@ async fn io_loop(
                     perf.socket_reads += 1;
                     perf.bytes_in += n as u64;
                     let events = parser.feed(&buf[..n]);
-                    let mut batch = ReadBatch::default();
+                    let mut batch = ReadBatch::new(seen_output);
                     for event in events {
                         // Once the server sends DO NAWS we know NAWS is
                         // active and future window-size changes can push
@@ -532,7 +581,20 @@ async fn io_loop(
                             break;
                         }
                     }
-                    finish_read(&app, &profile, &logs, batch, &mut perf).await;
+                    if let Err(e) = end_read(
+                        &app,
+                        &mut stream,
+                        &mut accumulator,
+                        &profile,
+                        &timers,
+                        log_session_id,
+                        &scrollback,
+                        &mut batch,
+                        &mut perf,
+                    ).await {
+                        warn!(error = %e, "prompt handling at the end of a read failed");
+                    }
+                    finish_read(&app, &profile, &logs, batch, &mut seen_output, &mut perf).await;
                 }
                 Err(e) => {
                     error!(error = %e, "read failed");
@@ -554,7 +616,7 @@ async fn io_loop(
                                 perf.bytes_in += n as u64;
                                 drained_bytes += n;
                                 let events = parser.feed(&buf[..n]);
-                                let mut batch = ReadBatch::default();
+                                let mut batch = ReadBatch::new(seen_output);
                                 for event in events {
                                     if let Err(handle_err) = handle_event(
                                         &app,
@@ -580,7 +642,30 @@ async fn io_loop(
                                         break;
                                     }
                                 }
-                                finish_read(&app, &profile, &logs, batch, &mut perf).await;
+                                if let Err(e) = end_read(
+                                    &app,
+                                    &mut stream,
+                                    &mut accumulator,
+                                    &profile,
+                                    &timers,
+                                    log_session_id,
+                                    &scrollback,
+                                    &mut batch,
+                                    &mut perf,
+                                )
+                                .await
+                                {
+                                    warn!(error = %e, "prompt handling during drain failed");
+                                }
+                                finish_read(
+                                    &app,
+                                    &profile,
+                                    &logs,
+                                    batch,
+                                    &mut seen_output,
+                                    &mut perf,
+                                )
+                                .await;
                             }
                             Err(drain_err)
                                 if drain_err.kind() == std::io::ErrorKind::WouldBlock =>
@@ -619,8 +704,9 @@ async fn io_loop(
 
     // Capture the MUD's final partial line before teardown drops it. A
     // `quit` logout banner usually arrives without a trailing newline,
-    // so it sits in the accumulator as a partial: painted live but never
-    // run through the per-line path that logs and scrollback-records it.
+    // so it sits in the accumulator as a partial: painted at the end of
+    // its read but never run through the per-line path that logs and
+    // scrollback-records it.
     // Flush it now, ahead of the scrollback dump and log close below, so
     // the goodbye is captured like every other client captures it.
     capture_pending_line(&app, &logs, log_session_id, &scrollback, &mut accumulator).await;
@@ -928,108 +1014,34 @@ async fn handle_event(
             // instead of one per line. Tauri events serialize through the
             // bridge and xterm renders each write on its own frame, so
             // without batching a 50-line response paints line by line
-            // ("typewriter") at the speed of event delivery.
+            // ("typewriter") at the speed of event delivery. The partial
+            // after the last line end waits for the end of the read.
             //
             // Triggers, Lua callbacks, route emissions, log writes,
             // and tick-reset bookkeeping still run per-line because
             // they have ordering semantics (a `gag` action mutates the
             // line's display before it lands in the batch). Log rows
             // flush in one transaction at the end of the read.
-            for op in accumulator.feed(&bytes) {
-                match op {
-                    ChunkOp::RawDisplay(b) => {
-                        batch.out.extend_from_slice(&b);
-                    }
-                    ChunkOp::LineComplete { bytes, clear_first } => {
-                        perf.lines_processed += 1;
-                        let plain = vosh_ansi::plain_text(&bytes);
-                        let trigger_t0 = std::time::Instant::now();
-                        // Phase 5 perf fix: take the tick step for a line
-                        // that matches the Reset on pattern under the same
-                        // lock as trigger/Lua matching so we never
-                        // reacquire `profile` later just to read the tick.
-                        // The line is the game's tick, so the step fires
-                        // once per tick and carries the Send each tick
-                        // command to run after the lock drops.
-                        let LinePass {
-                            result,
-                            tick_step,
-                            apply: script_apply,
-                            rendered_prompt,
-                        } = {
-                            let lock_t0 = std::time::Instant::now();
-                            let mut p = profile.lock().await;
-                            perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
-                            perf.mutex_acquires += 1;
-                            line_pass(&mut p, &bytes, &plain, Instant::now())
-                        };
-                        perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
-                        // In-place echo replacement. When a trigger gags the
-                        // line AND its Script action emits one or more
-                        // `mud.echo(...)` outputs, drain those echoes into
-                        // the display batch right where the gagged line
-                        // would have rendered. Without this, the echoes
-                        // fall through to `apply_script_result` which
-                        // frames each echo with leading and trailing
-                        // `\r\n` for non-trigger contexts (timers, async
-                        // scripts) — and against a gagged prompt that
-                        // reads as a blank row followed by the echo on a
-                        // new line. Replacement makes the echo land at
-                        // the exact row of the gagged content, which is
-                        // what users mean by "the trigger replaced the
-                        // prompt with my echo."
-                        let mut script_apply = script_apply;
-                        if result.display.is_none() && !script_apply.echoes.is_empty() {
-                            for line in script_apply.echoes.drain(..) {
-                                batch.out.extend_from_slice(line.as_bytes());
-                                batch.out.extend_from_slice(b"\r\n");
-                            }
-                        }
-                        append_line_result(&mut batch.out, &result, clear_first);
-                        // The custom prompt renders on the gagged prompt's
-                        // row, in the same batch — no erased-row flash. No
-                        // trailing newline: the cursor sits after the prompt
-                        // like a real MUD prompt (and the typed-command echo
-                        // lands beside it), matching the old frontend render.
-                        // Placed after append_line_result so a clear_first
-                        // wipe cannot erase it.
-                        if let Some(rendered) = &rendered_prompt {
-                            batch.out.extend_from_slice(rendered.as_bytes());
-                        }
-                        if !result.routes.is_empty() {
-                            perf.routed_emits += result.routes.len() as u64;
-                        }
-                        emit_line_routes(app, &result);
-                        if let Some(text) = &result.display {
-                            // Collect the searchable SQLite log row (flushed
-                            // in one transaction after the loop) and push the
-                            // ring buffer that becomes scrollback on next
-                            // launch. The raw bytes carry ANSI; the plain
-                            // text column drives the regex search. `plain`
-                            // and `bytes` are not used past this point, so
-                            // they move into the entry instead of cloning.
-                            if let Some(sid) = log_session_id {
-                                batch.log.push(vosh_log::LogEntry {
-                                    session_id: sid,
-                                    ts_ms: now_ms(),
-                                    text: plain,
-                                    raw: Some(bytes),
-                                });
-                            }
-                            let sb_t0 = std::time::Instant::now();
-                            scrollback.lock().await.push(text.as_bytes().to_vec());
-                            perf.scrollback_push_ns += sb_t0.elapsed().as_nanos() as u64;
-                            perf.scrollback_pushes += 1;
-                        }
-                        send_trigger_outputs(stream, &result.sends).await?;
-                        let mut sink = OutputSink::Batch(batch);
-                        apply_script_result(app, stream, profile, timers, script_apply, &mut sink)
-                            .await?;
-                        if let Some(step) = tick_step {
-                            deliver_tick_step(app, stream, profile, step, &mut sink).await?;
-                        }
-                    }
-                }
+            for line in accumulator.feed(&bytes) {
+                perf.lines_processed += 1;
+                let plain = vosh_ansi::plain_text(&line.bytes);
+                let trigger_t0 = std::time::Instant::now();
+                // Phase 5 perf fix: take the tick step for a line that
+                // matches the Reset on pattern under the same lock as
+                // trigger/Lua matching so we never reacquire `profile`
+                // later just to read the tick. The line is the game's
+                // tick, so the step fires once per tick and carries the
+                // Send each tick command to run after the lock drops.
+                let step = {
+                    let lock_t0 = std::time::Instant::now();
+                    let mut p = profile.lock().await;
+                    perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
+                    perf.mutex_acquires += 1;
+                    line_step(&mut p, batch, line, plain, Instant::now(), log_session_id)
+                };
+                perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
+                deliver_line_step(app, stream, profile, timers, scrollback, batch, step, perf)
+                    .await?;
             }
             Ok(())
         }
@@ -1039,21 +1051,21 @@ async fn handle_event(
             Ok(())
         }
         TelnetEvent::Command(byte) if byte == telnet_codes::EOR || byte == telnet_codes::GA => {
-            // The server marked the end of a prompt. Two jobs:
-            //
-            // 1. Run any `target=prompt` triggers against the partial
-            //    buffer so `#prompt`-style triggers can gag the
-            //    prompt and capture vars via `mud.set_prompt_var`.
-            // 2. Drop the cursor onto its own line so the next
-            //    complete line lands cleanly below the prompt
-            //    instead of merging into it.
-            //
-            // The trigger pass uses the same `process_scoped` engine
-            // as the line pass, so all action kinds (Gag, Replace,
-            // Highlight, Send, Route, Script) work identically.
-            // Gag here means the on-screen partial is erased with
-            // `ESC[2K\r` before the trailing newline ends the row.
-            dispatch_prompt_buffer(app, profile, stream, timers, accumulator, batch).await?;
+            // The server marked the end of a prompt. The partial it ends
+            // is your prompt when the capture reads it, and otherwise
+            // runs through Prompts triggers and ends its row, so the next
+            // line lands below it. A GA or EOR never makes a line a
+            // prompt on its own, since the pager and editor prompts end
+            // with one too. Either way the candidates ring records one
+            // entry.
+            let step = {
+                let mut p = profile.lock().await;
+                marker_step(&mut p, accumulator, batch, Instant::now(), log_session_id)
+            };
+            if let Some(step) = step {
+                deliver_line_step(app, stream, profile, timers, scrollback, batch, step, perf)
+                    .await?;
+            }
             Ok(())
         }
         TelnetEvent::Will(opt) if opt == telnet_option::GMCP => {
@@ -1077,14 +1089,12 @@ async fn handle_event(
     }
 }
 
-/// What the line pass decided for one complete line.
+/// What the Line pass decided for one line that is not your prompt.
 struct LinePass {
     result: LineResult,
     /// The tick the line reset, with its Send each tick command.
     tick_step: Option<TickStep>,
     apply: ApplyResult,
-    /// The custom prompt to draw where the gagged line was.
-    rendered_prompt: Option<String>,
 }
 
 /// Run one complete line through Line triggers, the tick reset pattern,
@@ -1092,20 +1102,9 @@ struct LinePass {
 /// profile lock the caller holds. `plain` is the line without ANSI, so
 /// no pattern has to allow for escape bytes and the line is stripped
 /// once.
-///
-/// A gagged line whose script set prompt vars is the prompt. The custom
-/// template renders here, under the same lock, so the replacement lands
-/// in the same display batch exactly where the gagged prompt was.
-/// Rendering used to happen in the frontend off the prompt-vars event,
-/// which flashed a blank row on every prompt.
 fn line_pass(p: &mut Profile, bytes: &[u8], plain: &str, now: Instant) -> LinePass {
-    let result =
-        vosh_trigger::process_with_plain(&p.triggers, bytes, plain, vosh_trigger::MatchScope::Line);
-    let tick_step = if p.tick.check_reset_match(plain) {
-        p.tick.on_game_tick(now)
-    } else {
-        None
-    };
+    let result = vosh_trigger::process_with_plain(&p.triggers, bytes, plain, MatchScope::Line);
+    let tick_step = tick_reset(p, plain, now);
     script_state::snapshot_vars(&p.script, &p.vars);
     let mut outcome = match p.script.match_line(plain) {
         Ok(o) => o,
@@ -1116,116 +1115,446 @@ fn line_pass(p: &mut Profile, bytes: &[u8], plain: &str, now: Instant) -> LinePa
     };
     // The Lua bodies of this line's Script actions join the outcome the
     // Lua registered triggers wrote, so one apply takes both.
-    for call in &result.scripts {
-        match script_state::eval_with_captures(
-            &mut p.script,
-            &call.body,
-            &call.captures,
-            "trigger-script",
-        ) {
-            Ok(o) => outcome.actions.extend(o.actions),
-            Err(err) => {
-                warn!(error = %err, "trigger script eval failed");
-            }
-        }
-    }
+    outcome
+        .actions
+        .extend(run_trigger_scripts(p, &result, "trigger-script"));
     let apply = script_state::apply_actions(p, outcome);
-    let rendered_prompt = if result.display.is_none() && apply.prompt_vars_changed {
-        render_custom_prompt(p)
-    } else {
-        None
-    };
     LinePass {
         result,
         tick_step,
         apply,
-        rendered_prompt,
     }
 }
 
-/// What Prompt triggers did to the partial a GA or EOR ended.
-struct PromptPass {
-    result: LineResult,
-    apply: ApplyResult,
-    /// The custom prompt to draw in place of the gagged partial.
-    rendered_prompt: Option<String>,
+/// The tick step when `plain` matches the tick's Reset on pattern.
+fn tick_reset(p: &mut Profile, plain: &str, now: Instant) -> Option<TickStep> {
+    if p.tick.check_reset_match(plain) {
+        p.tick.on_game_tick(now)
+    } else {
+        None
+    }
 }
 
-/// Run Prompt triggers over the partial a GA or EOR ended, under the
-/// profile lock the caller holds. None when no trigger changed the
-/// output, sent, routed or ran a script. The engine hands back the line
-/// as it was when nothing matched, so a byte for byte check tells no
-/// effect from a highlight or a replace. Without it every GA would erase
-/// and paint the prompt again, one extra row per prompt.
-fn prompt_pass(p: &mut Profile, bytes: &[u8], already_shown: bool) -> Option<PromptPass> {
-    let result = vosh_trigger::process_scoped(&p.triggers, bytes, vosh_trigger::MatchScope::Prompt);
-    let changed_output = match &result.display {
-        None => true,
-        Some(text) => text.as_bytes() != bytes,
-    };
-    if !changed_output
-        && result.sends.is_empty()
-        && result.routes.is_empty()
-        && result.scripts.is_empty()
-    {
-        return None;
-    }
-    // A trigger fired. Its Script bodies run the way the line pass runs
-    // them, so `mud.set_prompt_var` lands before the render.
-    script_state::snapshot_vars(&p.script, &p.vars);
-    let mut outcome = vosh_script::ScriptOutcome::default();
+/// Run the Lua bodies of the Script actions in `result`, with their
+/// captures, and return the actions they produced.
+fn run_trigger_scripts(
+    p: &mut Profile,
+    result: &LineResult,
+    chunk: &str,
+) -> Vec<vosh_script::Action> {
+    let mut actions = Vec::new();
     for call in &result.scripts {
-        match script_state::eval_with_captures(
-            &mut p.script,
-            &call.body,
-            &call.captures,
-            "prompt-trigger-script",
-        ) {
-            Ok(o) => outcome.actions.extend(o.actions),
+        match script_state::eval_with_captures(&mut p.script, &call.body, &call.captures, chunk) {
+            Ok(o) => actions.extend(o.actions),
             Err(err) => {
-                warn!(error = %err, "prompt-trigger script eval failed");
+                warn!(error = %err, chunk, "trigger script eval failed");
             }
         }
     }
-    let apply = script_state::apply_actions(p, outcome);
-    // Render while the lock is held, so the erase and the replacement
-    // leave in one output batch. An IPC round trip between them showed
-    // the blank erased row for a frame on every prompt.
-    let rendered_prompt = if result.display.is_none() {
-        let rendered = render_custom_prompt(p);
-        tracing::debug!(
-            template_len = p.prompt.config().template.len(),
-            rendered_len = rendered.as_ref().map_or(0, String::len),
-            already_shown,
-            "prompt: template render"
-        );
-        rendered
-    } else {
-        None
-    };
-    Some(PromptPass {
-        result,
-        apply,
-        rendered_prompt,
-    })
+    actions
 }
 
-/// The custom prompt drawn from the live values, or None while drawing
-/// is off or the template draws nothing. The vosh-prompt resolver reads
-/// the values triggers set, then the latest GMCP packets, then what Vosh
-/// itself knows, and draws `?` for a value the game hides.
-fn render_custom_prompt(p: &Profile) -> Option<String> {
-    let config = p.prompt.config();
-    if !config.draw {
-        return None;
+/// What one line, prompt or partial left for the session to do once the
+/// profile lock drops: routes, sends, the Lua actions' IO, the tick
+/// command, and the scrollback push.
+struct LineStep {
+    result: LineResult,
+    apply: ApplyResult,
+    tick_step: Option<TickStep>,
+    /// The text to keep in the scrollback ring, for a line that shows.
+    scrollback: Option<Vec<u8>>,
+}
+
+/// Handle one complete line under the profile lock. A line the capture
+/// reads is your prompt and goes through [`prompt_block`]. Any other runs
+/// the Line pass and lands in the batch as its triggers left it,
+/// replacing the start an earlier read painted.
+fn line_step(
+    p: &mut Profile,
+    batch: &mut ReadBatch,
+    line: Line,
+    plain: String,
+    now: Instant,
+    log_session_id: Option<i64>,
+) -> LineStep {
+    if let Some(block) = p.prompt.stage.recognize(&line.bytes, &plain, End::Line) {
+        return prompt_block(p, batch, block, line.painted, now, log_session_id);
     }
-    let vosh = prompt_supplies(p, Instant::now());
-    let rendered = vosh_prompt::render_str(
-        &config.template,
+    let LinePass {
+        result,
+        tick_step,
+        mut apply,
+    } = line_pass(p, &line.bytes, &plain, now);
+    if result.display.is_none() {
+        note_gag_without_reader(p, batch, &plain, MatchScope::Line);
+    }
+    // In-place echo replacement. When a trigger gags the line AND its
+    // Script action emits one or more `mud.echo(...)` outputs, those
+    // echoes land right where the gagged line would have rendered.
+    // Without this they fall through to `apply_script_result`, which
+    // frames each echo with a line end before and after, and against a
+    // gagged line that reads as a blank row followed by the echo.
+    let mut shown = Vec::new();
+    if result.display.is_none() {
+        for echo in apply.echoes.drain(..) {
+            shown.extend_from_slice(echo.as_bytes());
+            shown.extend_from_slice(b"\r\n");
+        }
+    }
+    if let Some(text) = &result.display {
+        shown.extend_from_slice(text.as_bytes());
+        shown.extend_from_slice(b"\r\n");
+    }
+    p.prompt
+        .stage
+        .line(&mut batch.out, &line.bytes, &plain, line.painted, &shown);
+    // A line that shows is logged, in one transaction at the end of the
+    // read, and kept in the ring buffer that becomes scrollback on the
+    // next launch. The raw bytes carry ANSI, and the plain text drives
+    // the regex search.
+    let scrollback = result.display.as_ref().map(|text| {
+        if let Some(sid) = log_session_id {
+            batch.log.push(vosh_log::LogEntry {
+                session_id: sid,
+                ts_ms: now_ms(),
+                text: plain,
+                raw: Some(line.bytes),
+            });
+        }
+        text.as_bytes().to_vec()
+    });
+    LineStep {
+        result,
+        apply,
+        tick_step,
+        scrollback,
+    }
+}
+
+/// Your prompt, recognized. Under the profile lock the Line pass takes,
+/// in this order: the capture's values merge and the hidden state
+/// follows them, Prompts triggers run on its final line so Lua
+/// `mud.set_prompt_var` lands before the render, and then the design
+/// draws in its place, or with drawing off it shows as sent. Line
+/// triggers and Lua `match_line` never see it (D6), and the tick reset
+/// pattern still does. A drawn prompt is neither logged nor kept for
+/// scrollback. The prompt vars go out after the batch.
+fn prompt_block(
+    p: &mut Profile,
+    batch: &mut ReadBatch,
+    block: Block,
+    painted: Option<u64>,
+    now: Instant,
+    log_session_id: Option<i64>,
+) -> LineStep {
+    let disagree = p.prompt.vars.capture(vosh_prompt::Capture {
+        values: block.values.clone(),
+        raw: Some(block.raw_text()),
+    });
+    if !disagree.is_empty() {
+        debug!(target: "vosh::prompt", fields = ?disagree, "the prompt and GMCP disagree");
+    }
+    let mut tick_step = None;
+    for line in &block.lines {
+        if let Some(step) = tick_reset(p, &line.plain, now) {
+            tick_step.get_or_insert(step);
+        }
+    }
+
+    let last = block.final_line().clone();
+    let result =
+        vosh_trigger::process_with_plain(&p.triggers, &last.raw, &last.plain, MatchScope::Prompt);
+    if !result.scripts.is_empty() {
+        script_state::snapshot_vars(&p.script, &p.vars);
+    }
+    let outcome = vosh_script::ScriptOutcome {
+        actions: run_trigger_scripts(p, &result, "prompt-trigger-script"),
+    };
+    let mut apply = script_state::apply_actions(p, outcome);
+    batch.prompt_vars = true;
+
+    let mut before = Vec::new();
+    let mut scrollback = None;
+    if p.prompt.draws() {
+        // Echoes land where the prompt was, above the drawn prompt.
+        for echo in apply.echoes.drain(..) {
+            before.extend_from_slice(echo.as_bytes());
+            before.extend_from_slice(b"\r\n");
+        }
+        let rendered = render_prompt(p, now);
+        p.prompt
+            .stage
+            .draw(&mut batch.out, block, painted, &before, &rendered);
+    } else {
+        if result.display.is_none() {
+            for echo in apply.echoes.drain(..) {
+                before.extend_from_slice(echo.as_bytes());
+                before.extend_from_slice(b"\r\n");
+            }
+        }
+        let display = result.display.as_deref().map(str::as_bytes);
+        p.prompt
+            .stage
+            .show(&mut batch.out, block, painted, &before, display);
+        if let Some(text) = &result.display {
+            if let Some(sid) = log_session_id {
+                batch.log.push(vosh_log::LogEntry {
+                    session_id: sid,
+                    ts_ms: now_ms(),
+                    text: last.plain,
+                    raw: Some(last.raw),
+                });
+            }
+            scrollback = Some(text.as_bytes().to_vec());
+        }
+    }
+    LineStep {
+        result,
+        apply,
+        tick_step,
+        scrollback,
+    }
+}
+
+/// A partial Vosh does not read as your prompt, ended by a GA or EOR. It
+/// runs through Prompts triggers as it always did and ends its row. A
+/// trigger that hides it and sets prompt values while nothing reads your
+/// prompt is named once a session.
+fn unread_partial(
+    p: &mut Profile,
+    batch: &mut ReadBatch,
+    partial: &Partial,
+    plain: &str,
+) -> LineStep {
+    let result =
+        vosh_trigger::process_with_plain(&p.triggers, &partial.bytes, plain, MatchScope::Prompt);
+    let effect = match &result.display {
+        None => true,
+        Some(text) => text.as_bytes() != partial.bytes,
+    } || !result.sends.is_empty()
+        || !result.routes.is_empty()
+        || !result.scripts.is_empty();
+    let mut apply = ApplyResult::default();
+    if effect {
+        script_state::snapshot_vars(&p.script, &p.vars);
+        let outcome = vosh_script::ScriptOutcome {
+            actions: run_trigger_scripts(p, &result, "prompt-trigger-script"),
+        };
+        apply = script_state::apply_actions(p, outcome);
+        // The webview hears every prompt a Prompts trigger acted on.
+        batch.prompt_vars = true;
+    }
+    if result.display.is_none() {
+        note_gag_without_reader(p, batch, plain, MatchScope::Prompt);
+    }
+    let mut before = Vec::new();
+    if result.display.is_none() {
+        for echo in apply.echoes.drain(..) {
+            before.extend_from_slice(echo.as_bytes());
+            before.extend_from_slice(b"\r\n");
+        }
+    }
+    p.prompt.stage.end_partial(
+        &mut batch.out,
+        &partial.bytes,
+        partial.painted,
+        &before,
+        result.display.as_deref().map(str::as_bytes),
+    );
+    LineStep {
+        result,
+        apply,
+        tick_step: None,
+        scrollback: None,
+    }
+}
+
+/// A GA or EOR arrived. The partial it ends is your prompt when the
+/// capture reads it, and otherwise goes through [`unread_partial`]. The
+/// candidates ring records one entry either way.
+fn marker_step(
+    p: &mut Profile,
+    accumulator: &mut LineAccumulator,
+    batch: &mut ReadBatch,
+    now: Instant,
+    log_session_id: Option<i64>,
+) -> Option<LineStep> {
+    let Some(partial) = accumulator.take_partial() else {
+        p.prompt.record(None, now_ms());
+        return None;
+    };
+    let plain = vosh_ansi::plain_text(&partial.bytes);
+    let step = match p
+        .prompt
+        .stage
+        .recognize(&partial.bytes, &plain, End::Marker)
+    {
+        Some(block) => {
+            let step = prompt_block(p, batch, block, partial.painted, now, log_session_id);
+            p.prompt.record(None, now_ms());
+            step
+        }
+        None => {
+            let step = unread_partial(p, batch, &partial, &plain);
+            p.prompt.record(Some((&partial.bytes, &plain)), now_ms());
+            step
+        }
+    };
+    Some(step)
+}
+
+/// The end of a read. A partial the capture settles on is your prompt
+/// now, so it draws in this read and never flashes. Any other partial
+/// paints as a region a later read replaces. Then the stage catches up
+/// with everything the read wrote.
+fn partial_step(
+    p: &mut Profile,
+    accumulator: &mut LineAccumulator,
+    batch: &mut ReadBatch,
+    now: Instant,
+    log_session_id: Option<i64>,
+) -> Option<LineStep> {
+    let mut step = None;
+    if let Some(bytes) = accumulator.partial().map(<[u8]>::to_vec) {
+        let plain = vosh_ansi::plain_text(&bytes);
+        match p.prompt.stage.recognize(&bytes, &plain, End::Settled) {
+            Some(block) => {
+                let painted = accumulator.take_partial().and_then(|t| t.painted);
+                step = Some(prompt_block(p, batch, block, painted, now, log_session_id));
+            }
+            None => {
+                let painted =
+                    p.prompt
+                        .stage
+                        .paint_partial(&mut batch.out, &bytes, accumulator.painted());
+                accumulator.set_painted(painted);
+            }
+        }
+    }
+    p.prompt.stage.finish(&batch.out);
+    step
+}
+
+/// A line you sent. The candidates ring records the prompt it answers,
+/// before the partial goes, and the open row closes, since your typed
+/// echo follows it. Returns true when the send started a pulse, on a
+/// server that sends no Char.Vitals.
+fn send_step(p: &mut Profile, accumulator: &LineAccumulator, at_ms: i64) -> bool {
+    let partial = accumulator
+        .partial()
+        .map(|bytes| (bytes.to_vec(), vosh_ansi::plain_text(bytes)));
+    p.prompt.record(
+        partial
+            .as_ref()
+            .map(|(bytes, plain)| (&bytes[..], plain.as_str())),
+        at_ms,
+    );
+    p.prompt.stage.close();
+    p.prompt.vars.on_send()
+}
+
+/// A trigger hid a line or partial. When nothing reads your prompt in
+/// this profile and the trigger also sets prompt values, it hides your
+/// prompt with nothing drawn in its place, so the webview hears its name
+/// once a session.
+fn note_gag_without_reader(p: &mut Profile, batch: &mut ReadBatch, plain: &str, scope: MatchScope) {
+    if p.prompt.stage.has_recognizer() {
+        return;
+    }
+    for trigger in vosh_trigger::matching(&p.triggers, plain, scope) {
+        if hides_and_reads_prompt(trigger) && p.prompt.stage.gag_without_reader(&trigger.name) {
+            batch.gag_without_reader.push(trigger.name.clone());
+        }
+    }
+}
+
+/// The trigger hides what it matches and its script sets prompt values,
+/// the shape of a capture trigger.
+fn hides_and_reads_prompt(trigger: &vosh_trigger::Trigger) -> bool {
+    use vosh_trigger::TriggerAction;
+    trigger
+        .actions
+        .iter()
+        .any(|a| matches!(a, TriggerAction::Gag))
+        && trigger
+            .actions
+            .iter()
+            .any(|a| matches!(a, TriggerAction::Script { body } if body.contains("set_prompt_var")))
+}
+
+/// Your design drawn from the live values. The vosh-prompt resolver reads
+/// the values the capture and scripts set, then the latest GMCP packets,
+/// then what Vosh itself knows, and draws `?` for a value the game hides.
+fn render_prompt(p: &Profile, now: Instant) -> String {
+    let vosh = prompt_supplies(p, now);
+    vosh_prompt::render_str(
+        &p.prompt.config().template,
         &p.prompt.vars.resolver(&vosh),
         vosh_prompt::RenderOptions::default(),
-    );
-    (!rendered.ansi.is_empty()).then_some(rendered.ansi)
+    )
+    .ansi
+}
+
+/// Do what a line step left for after the profile lock: emit its routes,
+/// keep it for scrollback, send what its triggers send, apply its Lua
+/// actions' IO into the batch, and run the tick command it fired.
+#[allow(clippy::too_many_arguments)]
+async fn deliver_line_step(
+    app: &AppHandle,
+    stream: &mut Stream,
+    profile: &Arc<Mutex<Profile>>,
+    timers: &SharedTimers,
+    scrollback: &crate::log_state::SharedScrollback,
+    batch: &mut ReadBatch,
+    step: LineStep,
+    perf: &mut PerfCounters,
+) -> std::io::Result<()> {
+    let LineStep {
+        result,
+        apply,
+        tick_step,
+        scrollback: kept,
+    } = step;
+    if !result.routes.is_empty() {
+        perf.routed_emits += result.routes.len() as u64;
+    }
+    emit_line_routes(app, &result);
+    if let Some(text) = kept {
+        let sb_t0 = std::time::Instant::now();
+        scrollback.lock().await.push(text);
+        perf.scrollback_push_ns += sb_t0.elapsed().as_nanos() as u64;
+        perf.scrollback_pushes += 1;
+    }
+    send_trigger_outputs(stream, &result.sends).await?;
+    let mut sink = OutputSink::Batch(batch);
+    apply_script_result(app, stream, profile, timers, apply, &mut sink).await?;
+    if let Some(step) = tick_step {
+        deliver_tick_step(app, stream, profile, step, &mut sink).await?;
+    }
+    Ok(())
+}
+
+/// The end of a read, see [`partial_step`], and the IO its prompt left.
+#[allow(clippy::too_many_arguments)]
+async fn end_read(
+    app: &AppHandle,
+    stream: &mut Stream,
+    accumulator: &mut LineAccumulator,
+    profile: &Arc<Mutex<Profile>>,
+    timers: &SharedTimers,
+    log_session_id: Option<i64>,
+    scrollback: &crate::log_state::SharedScrollback,
+    batch: &mut ReadBatch,
+    perf: &mut PerfCounters,
+) -> std::io::Result<()> {
+    let step = {
+        let mut p = profile.lock().await;
+        partial_step(&mut p, accumulator, batch, Instant::now(), log_session_id)
+    };
+    if let Some(step) = step {
+        deliver_line_step(app, stream, profile, timers, scrollback, batch, step, perf).await?;
+    }
+    Ok(())
 }
 
 /// What Vosh itself supplies to the custom prompt: the tick timer, your
@@ -1288,25 +1617,39 @@ async fn emit_hidden_change(app: &AppHandle, profile: &Arc<Mutex<Profile>>) {
 }
 
 /// Send what one socket read gathered: its output, its log rows in one
-/// transaction, then the prompt vars and the hidden state when they
-/// changed, once per read so the packets of one pulse never show the
-/// panes a state between them.
+/// transaction, the triggers that hid a prompt with nothing to draw in
+/// its place, then the prompt vars when a prompt was read or they
+/// changed, and the hidden state when it changed. Once per read, so the
+/// packets of one pulse never show the panes a state between them.
+/// `seen` becomes the output count after this read's output.
 async fn finish_read(
     app: &AppHandle,
     profile: &Arc<Mutex<Profile>>,
     logs: &crate::log_state::SharedLogStore,
     batch: ReadBatch,
+    seen: &mut u64,
     perf: &mut PerfCounters,
 ) {
     let ReadBatch {
         out,
         log,
         prompt_vars,
+        gag_without_reader,
     } = batch;
+    let (vars, hidden) = {
+        let mut p = profile.lock().await;
+        // Echoes the end of the read wrote close the open row.
+        p.prompt.stage.finish(&out);
+        (
+            p.prompt.take_prompt_vars(prompt_vars),
+            p.prompt.vars.take_hidden_change(),
+        )
+    };
     if !out.is_empty() {
         perf.output_emits += 1;
-        perf.output_emit_bytes += out.len() as u64;
-        emit_output(app, out);
+        perf.output_emit_bytes +=
+            (out.bytes.len() + out.replace.as_ref().map_or(0, |r| r.bytes.len())) as u64;
+        *seen = emit_session_output(app, &out);
     }
     if !log.is_empty() {
         let lock_t0 = std::time::Instant::now();
@@ -1322,10 +1665,30 @@ async fn finish_read(
             perf.log_append_ns += append_t0.elapsed().as_nanos() as u64;
         }
     }
-    if prompt_vars {
-        emit_prompt_vars(app, profile).await;
+    for trigger in gag_without_reader {
+        if let Err(e) = app.emit(
+            "session://prompt-gag-without-reader",
+            GagWithoutReaderPayload { trigger },
+        ) {
+            warn!(error = %e, "failed to emit a trigger that hides the prompt");
+        }
     }
-    emit_hidden_change(app, profile).await;
+    if let Some(vars) = vars {
+        send_prompt_vars(app, &vars);
+    }
+    if let Some(hidden) = hidden {
+        if let Err(e) = app.emit("session://hidden", hidden) {
+            warn!(error = %e, "failed to emit the hidden state");
+        }
+    }
+}
+
+/// `session://prompt-gag-without-reader`: a trigger hid your prompt and
+/// set prompt values while this profile reads no prompt, so Vosh drew
+/// nothing in its place.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct GagWithoutReaderPayload {
+    pub trigger: String,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1525,22 +1888,6 @@ fn supports_subnegotiation() -> Vec<u8> {
     Negotiator::build_gmcp_subnegotiation(&body)
 }
 
-/// Append this line's display bytes to a per-Data-event batch. The
-/// caller drains the batch with a single `emit_output` at the end of
-/// the for loop so a multi-line response paints in one xterm.write.
-fn append_line_result(batch: &mut Vec<u8>, result: &LineResult, clear_first: bool) {
-    if clear_first {
-        // Wipe the partial that was already shown raw so the trigger-
-        // processed line replaces it cleanly. ESC [ 2 K clears the entire
-        // line, then \r returns the cursor to column zero.
-        batch.extend_from_slice(b"\x1b[2K\r");
-    }
-    if let Some(text) = &result.display {
-        batch.extend_from_slice(text.as_bytes());
-        batch.extend_from_slice(b"\r\n");
-    }
-}
-
 /// Route emissions stay per-line because consumers (chat panel etc.)
 /// expect one event per routed line. The volume here is tiny relative
 /// to the display stream so per-event cost does not show up as lag.
@@ -1628,14 +1975,22 @@ async fn apply_script_result(
     Ok(())
 }
 
-/// Push the prompt vars to the frontend as a single snapshot, the values
-/// triggers set this pulse and those only scripts supply, with a value
-/// the game hides as `?`. Re-emitted whenever a Lua action sets one and
-/// after every prompt trigger. The vitals store replaces its copy with
-/// the payload, so a value that went stale or was unset drops out.
-async fn emit_prompt_vars(app: &AppHandle, profile: &Arc<Mutex<Profile>>) {
-    let snapshot: BTreeMap<String, String> = profile.lock().await.prompt.vars.prompt_vars();
-    if let Err(e) = app.emit("session://prompt-vars", &snapshot) {
+/// Push the prompt vars to the frontend as a single snapshot, the fresh
+/// values the capture and scripts set, with a value the game hides as
+/// `?`. `always` sends them even when they read as the webview last heard
+/// them, as a Lua action that set one asks. Otherwise they go only when
+/// they changed, such as when a pulse left the capture's values stale.
+/// The vitals store replaces its copy with the payload, so a value that
+/// went stale or was unset drops out.
+async fn emit_prompt_vars(app: &AppHandle, profile: &Arc<Mutex<Profile>>, always: bool) {
+    let vars = profile.lock().await.prompt.take_prompt_vars(always);
+    if let Some(vars) = vars {
+        send_prompt_vars(app, &vars);
+    }
+}
+
+fn send_prompt_vars(app: &AppHandle, vars: &BTreeMap<String, String>) {
+    if let Err(e) = app.emit("session://prompt-vars", vars) {
         warn!(error = %e, "failed to emit prompt vars");
     }
 }
@@ -1673,26 +2028,12 @@ async fn fire_due_script_timers(
     apply_script_result(app, stream, profile, timers, apply, &mut OutputSink::Direct).await
 }
 
-/// Run `target=prompt` triggers against the partial-prompt buffer the
-/// telnet parser just flushed (GA / EOR / idle timeout). Handles:
-///   * Gag — erases the on-screen partial with `ESC[2K\r` so the
-///     prompt does not stay visible after the trigger consumes it.
-///   * Replace — re-emits the substituted text in place of the
-///     original partial.
-///   * Script — evaluates Lua bodies with the regex captures, the
-///     primary mechanism for `mud.set_prompt_var(...)` to populate
-///     vitals from a parsed prompt.
-///   * Send / Route — same semantics as the line pass.
-///
-/// When no prompt trigger fires (display matches original), the only
-/// observable effect is the trailing `\r\n` that drops the cursor
-/// onto the next line — same as the legacy partial-flush behavior.
 /// Flush a partial line still buffered when the session ends so the MUD's
 /// final output (a logout banner on `quit`, most often) is captured rather
-/// than discarded by the disconnect `accumulator.reset()`. The partial was
-/// already painted live as it streamed in, so display only needs the
-/// terminating newline; the value of this pass is logging it and pushing it
-/// into the scrollback ring that the dump persists.
+/// than discarded by the disconnect `accumulator.reset()`. The end of its
+/// read painted it, so display only needs the terminating newline. The
+/// value of this pass is logging it and pushing it into the scrollback
+/// ring that the dump persists.
 async fn capture_pending_line(
     app: &AppHandle,
     logs: &crate::log_state::SharedLogStore,
@@ -1700,14 +2041,15 @@ async fn capture_pending_line(
     scrollback: &crate::log_state::SharedScrollback,
     accumulator: &mut LineAccumulator,
 ) {
-    let Some((bytes, already_shown)) = accumulator.flush_partial() else {
+    let Some(Partial { bytes, painted }) = accumulator.take_partial() else {
         return;
     };
     let plain = vosh_ansi::plain_text(&bytes);
-    // Terminate the line on screen. Re-emit the bytes only in the unlikely
-    // case they were never shown raw, to avoid printing the goodbye twice.
+    // Terminate the line on screen. Write the bytes too only in the
+    // unlikely case they were never painted, to avoid printing the
+    // goodbye twice.
     let mut out = Vec::with_capacity(bytes.len() + 2);
-    if !already_shown {
+    if painted.is_none() {
         out.extend_from_slice(&bytes);
     }
     out.extend_from_slice(b"\r\n");
@@ -1726,83 +2068,6 @@ async fn capture_pending_line(
             }
         }
     }
-}
-
-async fn dispatch_prompt_buffer(
-    app: &AppHandle,
-    profile: &Arc<Mutex<Profile>>,
-    stream: &mut Stream,
-    timers: &SharedTimers,
-    accumulator: &mut LineAccumulator,
-    batch: &mut ReadBatch,
-) -> std::io::Result<()> {
-    let Some((bytes, already_shown)) = accumulator.flush_partial() else {
-        return Ok(());
-    };
-    let pass = {
-        let mut p = profile.lock().await;
-        prompt_pass(&mut p, &bytes, already_shown)
-    };
-    let Some(PromptPass {
-        result,
-        apply: script_apply,
-        rendered_prompt,
-    }) = pass
-    else {
-        // No prompt trigger changed anything. End the row the partial
-        // was painted on, as the legacy partial flush did.
-        if already_shown {
-            batch.out.extend_from_slice(b"\r\n");
-        }
-        return Ok(());
-    };
-    // Repaint the visible partial in the read's one output batch: erase,
-    // then the replacement. Splitting these across emits (or rendering
-    // the prompt in the frontend, as before) shows the blank erased row
-    // for a frame.
-    let mut script_apply = script_apply;
-    let out = &mut batch.out;
-    if already_shown {
-        out.extend_from_slice(b"\x1b[2K\r");
-    }
-    if let Some(text) = &result.display {
-        // No `\r\n` before the text — the line was just cleared.
-        out.extend_from_slice(text.as_bytes());
-        out.extend_from_slice(b"\r\n");
-    } else {
-        // Gagged. Script echoes render where the prompt was (matching the
-        // line-pipeline replacement semantics; drained so
-        // `apply_script_result` does not also frame them with newlines),
-        // then the custom prompt lands as a partial on the erased row —
-        // the cursor stays after it, like a real MUD prompt.
-        let echoed = !script_apply.echoes.is_empty();
-        for line in script_apply.echoes.drain(..) {
-            out.extend_from_slice(line.as_bytes());
-            out.extend_from_slice(b"\r\n");
-        }
-        if let Some(rendered) = &rendered_prompt {
-            out.extend_from_slice(rendered.as_bytes());
-        } else if already_shown && !echoed {
-            // Gag with no replacement at all: just terminate the
-            // (now-blank) line so the next chunk does not paint into the
-            // cleared row.
-            out.extend_from_slice(b"\r\n");
-        }
-    }
-    send_trigger_outputs(stream, &result.sends).await?;
-    // Always send prompt-vars after a prompt-scope trigger has had
-    // effect, even when none of the captured values changed, so the
-    // webview hears every prompt. The read sends them once.
-    batch.prompt_vars = true;
-    apply_script_result(
-        app,
-        stream,
-        profile,
-        timers,
-        script_apply,
-        &mut OutputSink::Batch(batch),
-    )
-    .await
 }
 
 async fn send_trigger_outputs(stream: &mut Stream, sends: &[String]) -> std::io::Result<()> {
@@ -1865,10 +2130,16 @@ fn base64_encode(input: &[u8]) -> String {
 }
 
 impl OutputPayload {
-    /// Build the wire payload from raw output bytes (base64-encoded).
-    pub(crate) fn from_bytes(bytes: &[u8]) -> Self {
+    /// Build the wire payload for an output, its bytes as base64.
+    pub(crate) fn from_output(out: &Output) -> Self {
         Self {
-            b64: base64_encode(bytes),
+            b64: base64_encode(&out.bytes),
+            replace: out.replace.as_ref().map(|r| ReplacePayload {
+                gen: r.gen,
+                b64: base64_encode(&r.bytes),
+                fresh: r.fresh,
+            }),
+            restore: out.restore.as_deref().map(base64_encode),
         }
     }
 }
@@ -1877,31 +2148,69 @@ impl OutputPayload {
 /// xterm take the output of every caller in the same order.
 static OUTPUT_ORDER: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+/// How many outputs reached the terminal, repaints aside. The session
+/// notes it after each of its writes, and a count that moved since means
+/// output from elsewhere, such as a slash command's echo, landed after
+/// the open row and closed it.
+static OUTPUT_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The output count now, see [`OUTPUT_COUNT`].
+fn output_count() -> u64 {
+    OUTPUT_COUNT.load(std::sync::atomic::Ordering::Acquire)
+}
+
 /// Print `bytes` in the terminal. Every write to the terminal pane goes
-/// through here: the session loop, a slash command's echo, the `#logs`
-/// reply, and the rest. Nothing else emits `session://output`.
+/// through here or through the session's own batch: a slash command's
+/// echo, the `#logs` reply, a timer's echo, and the rest. Nothing else
+/// emits `session://output`. It moves the output count, so it closes
+/// the open row.
 pub(crate) fn emit_output<R: tauri::Runtime>(app: &AppHandle<R>, bytes: Vec<u8>) {
-    let payload = OutputPayload::from_bytes(&bytes);
+    let mut out = Output::new(false);
+    out.text(&bytes);
+    emit_counted(app, &out, true);
+}
+
+/// Send one read's output. Returns the output count after it.
+fn emit_session_output(app: &AppHandle, out: &Output) -> u64 {
+    emit_counted(app, out, true)
+}
+
+/// Send `out` to both renderers under [`OUTPUT_ORDER`]. `count` moves the
+/// output count, which a repaint of the open row never does. Returns the
+/// count after it.
+fn emit_counted<R: tauri::Runtime>(app: &AppHandle<R>, out: &Output, count: bool) -> u64 {
+    let payload = OutputPayload::from_output(out);
     // The session loop and the command handlers write from different
     // tasks. Without the lock, two writes could reach the grid in one
     // order and xterm in the other.
     let _order = OUTPUT_ORDER
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let seen = if count {
+        OUTPUT_COUNT.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1
+    } else {
+        output_count()
+    };
     // Tier 3: feed the native terminal grid the same bytes xterm receives,
-    // for every output path (line pipeline AND the prompt pipeline's gag
-    // clearing / replaced text / echoes), then repaint. This is the single
-    // choke point so nothing reaches xterm without also reaching the grid.
+    // for every output path, then repaint. This is the single choke point
+    // so nothing reaches xterm without also reaching the grid.
     #[cfg(native_surface)]
     {
         // Word-wrapped at the grid width, matching the frontend WordWrapper
-        // that xterm receives this same stream through.
-        crate::term_grid::feed_session_bytes(&bytes);
+        // that xterm receives this same stream through. The grid does not
+        // find regions yet, so it takes a replace as a rewrite of the row
+        // the cursor is on, which is right for a region of one row.
+        if let Some(replace) = &out.replace {
+            crate::term_grid::feed_session_bytes(b"\x1b[2K\r");
+            crate::term_grid::feed_session_bytes(&replace.bytes);
+        }
+        crate::term_grid::feed_session_bytes(&out.bytes);
         crate::native_surface::request_redraw();
     }
     if let Err(e) = app.emit("session://output", payload) {
         warn!(error = %e, "failed to emit session output");
     }
+    seen
 }
 
 fn emit_state(app: &AppHandle, payload: StatePayload) {
@@ -2101,44 +2410,151 @@ mod tests {
     /// The game prompt `%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c` at full.
     const PROMPT_LINE: &str = "[1020/1020hp 800/800mn 930/930mv]";
 
-    /// A profile with the prompt capture `#prompt` writes, a Line
-    /// trigger that gags the prompt and hands each group to
-    /// `mud.set_prompt_var`, and the custom prompt drawn from `template`.
+    /// The capture the migration writes from the trigger `#prompt` used
+    /// to write, unanchored as the trigger was.
+    const CAPTURE: &str = r"\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)/(?<maxmana>\d+)mn (?<move>\d+)/(?<maxmove>\d+)mv\]";
+
+    /// A regex capture of `pattern`, as `[prompt.capture]` holds it.
+    fn regex_capture(pattern: &str, settle: bool) -> vosh_prompt::CaptureConfig {
+        vosh_prompt::CaptureConfig::Regex(vosh_prompt::config::RegexCapture {
+            lines: vec![pattern.to_string()],
+            settle,
+            ..vosh_prompt::config::RegexCapture::default()
+        })
+    }
+
+    /// A profile that reads the prompt with the migrated capture and
+    /// draws `template` in its place.
     fn capture_profile(template: &str) -> Profile {
         let mut p = Profile::default();
-        let ran = crate::input::run_line(
-            &mut p,
-            r"#prompt {\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)/(?<maxmana>\d+)mn (?<move>\d+)/(?<maxmove>\d+)mv\]}",
-        );
-        assert!(
-            ran.result.echo[0].starts_with("prompt-capture trigger set"),
-            "{:?}",
-            ran.result.echo
-        );
-        p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, template));
+        p.set_prompt_config(vosh_prompt::PromptConfig {
+            draw: true,
+            template: template.to_string(),
+            capture: regex_capture(CAPTURE, false),
+            ..vosh_prompt::PromptConfig::default()
+        });
         p
     }
 
-    fn pass_line(p: &mut Profile, line: &str) -> super::LinePass {
-        super::line_pass(
+    /// Run one complete line through the session's line step and return
+    /// the drawn prompt, the bytes after its region mark, when it drew.
+    fn draw_line(p: &mut Profile, line: &str) -> Option<String> {
+        let mut batch = super::ReadBatch::new(super::output_count());
+        let _ = super::line_step(
             p,
-            line.as_bytes(),
-            &vosh_ansi::plain_text(line.as_bytes()),
+            &mut batch,
+            super::Line {
+                bytes: line.as_bytes().to_vec(),
+                painted: None,
+            },
+            vosh_ansi::plain_text(line.as_bytes()),
             tokio::time::Instant::now(),
-        )
+            None,
+        );
+        p.prompt.stage.open_row()?;
+        drawn_in(&batch.out.bytes)
+    }
+
+    /// The bytes after the last region mark, as text.
+    fn drawn_in(bytes: &[u8]) -> Option<String> {
+        let text = String::from_utf8_lossy(bytes);
+        let at = text.rfind("\x1b]7717;o;")?;
+        let rest = &text[at..];
+        let end = rest.find('\x07')?;
+        Some(rest[end + 1..].to_string())
     }
 
     fn plain(ansi: &str) -> String {
         vosh_ansi::plain_text(ansi.as_bytes())
     }
 
+    fn mark(gen: u64) -> Vec<u8> {
+        vosh_prompt::stage::mark(gen)
+    }
+
+    /// A terminal's worth of the session: the profile and the line
+    /// accumulator, fed one read at a time through the same steps the
+    /// session runs.
+    struct Wire {
+        p: Profile,
+        acc: super::LineAccumulator,
+        /// The first generation this wire hands out, so tests can name
+        /// the marks by number.
+        gen0: u64,
+    }
+
+    impl Wire {
+        fn new(p: Profile) -> Self {
+            let mut wire = Self {
+                p,
+                acc: super::LineAccumulator::new(),
+                gen0: 0,
+            };
+            wire.gen0 = wire.p.prompt.stage.next_gen();
+            wire
+        }
+
+        /// The mark for the nth region this wire hands out, from 1.
+        fn mark(&self, n: u64) -> Vec<u8> {
+            mark(self.gen0 + n)
+        }
+
+        /// One socket read: `data`, then `ga` when the read ends in a GA,
+        /// then the end of the read. Returns what the terminal gets.
+        fn read_with(&mut self, data: &[u8], ga: bool, other: bool) -> super::ReadBatch {
+            let mut batch = super::ReadBatch::new(super::output_count());
+            batch.out = vosh_prompt::stage::Output::new(other);
+            let now = tokio::time::Instant::now();
+            for line in self.acc.feed(data) {
+                let plain = vosh_ansi::plain_text(&line.bytes);
+                let _ = super::line_step(&mut self.p, &mut batch, line, plain, now, None);
+            }
+            if ga {
+                let _ = super::marker_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+            }
+            let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+            batch
+        }
+
+        fn read(&mut self, data: &[u8]) -> vosh_prompt::stage::Output {
+            self.read_with(data, false, false).out
+        }
+
+        fn read_ga(&mut self, data: &[u8]) -> vosh_prompt::stage::Output {
+            self.read_with(data, true, false).out
+        }
+
+        /// You send a line.
+        fn send(&mut self) {
+            let _ = super::send_step(&mut self.p, &self.acc, 0);
+            self.acc.forget_partial();
+        }
+    }
+
+    fn with(parts: &[&[u8]]) -> Vec<u8> {
+        parts.concat()
+    }
+
+    /// Draws the hp read by the capture, so each byte of a draw is known.
+    const HP: &str = "<%hp>";
+
     #[test]
-    fn the_line_pass_draws_the_custom_prompt_in_place_of_the_capture() {
+    fn a_line_prompt_draws_in_place_with_no_line_end() {
+        let mut wire = Wire::new(capture_profile(HP));
+        let out = wire.read(b"You are hungry.\n\r[1020/1020hp 800/800mn 930/930mv]\n\r");
+        assert_eq!(
+            out.bytes,
+            with(&[b"You are hungry.\r\n", &wire.mark(1), b"<1020>\x1b[0m"])
+        );
+        assert_eq!(out.replace, None);
+        let open = wire.p.prompt.stage.open_row().expect("the open row");
+        assert_eq!(open.gen, wire.gen0 + 1);
+    }
+
+    #[test]
+    fn the_prompt_draws_the_template_byte_for_byte() {
         let mut p = capture_profile(TEMPLATE);
-        let pass = pass_line(&mut p, PROMPT_LINE);
-        assert!(pass.result.display.is_none(), "the capture gags the prompt");
-        assert!(pass.apply.prompt_vars_changed);
-        let drawn = pass.rendered_prompt.expect("the prompt draws");
+        let drawn = draw_line(&mut p, PROMPT_LINE).expect("the prompt draws");
         assert_eq!(plain(&drawn), "[1020(100%)h 800(100%)m 930(100%)v] ");
         // Health at full in the theme's green, where the first renderer
         // drew 256 color 42. Every other byte is as it drew them.
@@ -2151,34 +2567,339 @@ mod tests {
         assert!(drawn.ends_with("\x1b[0m"));
 
         // Any other line shows as sent and draws nothing.
-        let pass = pass_line(&mut p, "You are hungry.");
-        assert_eq!(pass.result.display.as_deref(), Some("You are hungry."));
-        assert!(pass.rendered_prompt.is_none());
-
-        // With drawing off the capture still gags, and nothing draws.
-        p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(false, TEMPLATE));
-        let pass = pass_line(&mut p, PROMPT_LINE);
-        assert!(pass.result.display.is_none());
-        assert!(pass.rendered_prompt.is_none());
+        assert_eq!(draw_line(&mut p, "You are hungry."), None);
     }
 
     #[test]
-    fn the_prompt_pass_draws_over_a_partial_a_prompt_trigger_gags() {
-        let mut p = capture_profile(TEMPLATE);
-        // A partial no Prompt trigger reads has no effect.
-        assert!(super::prompt_pass(&mut p, PROMPT_LINE.as_bytes(), true).is_none());
-        // The same capture aimed at the partial a GA ends.
-        let mut capture = p
-            .triggers
-            .get("prompt-capture")
-            .expect("the capture")
-            .clone();
-        capture.target = vosh_trigger::TriggerTarget::Prompt;
-        p.triggers.set(capture).expect("the capture compiles");
-        let pass = super::prompt_pass(&mut p, PROMPT_LINE.as_bytes(), true).expect("it fires");
-        assert!(pass.result.display.is_none());
-        let drawn = pass.rendered_prompt.expect("the prompt draws");
-        assert_eq!(plain(&drawn), "[1020(100%)h 800(100%)m 930(100%)v] ");
+    fn with_drawing_off_the_prompt_shows_as_sent_and_is_logged() {
+        let mut p = capture_profile(HP);
+        p.set_prompt_config(vosh_prompt::PromptConfig {
+            draw: false,
+            ..p.prompt.config().clone()
+        });
+        let mut wire = Wire::new(p);
+        let out = wire.read(b"[1020/1020hp 800/800mn 930/930mv]\n\r");
+        assert_eq!(out.bytes, b"[1020/1020hp 800/800mn 930/930mv]\r\n");
+        assert_eq!(wire.p.prompt.stage.open_row(), None);
+        // The capture still read it.
+        let vars = wire.p.prompt.vars.prompt_vars();
+        assert_eq!(vars.get("hp").map(String::as_str), Some("1020"));
+
+        let mut batch = super::ReadBatch::new(super::output_count());
+        let step = super::line_step(
+            &mut wire.p,
+            &mut batch,
+            super::Line {
+                bytes: PROMPT_LINE.as_bytes().to_vec(),
+                painted: None,
+            },
+            PROMPT_LINE.to_string(),
+            tokio::time::Instant::now(),
+            Some(7),
+        );
+        assert_eq!(batch.log.len(), 1, "a prompt that shows is logged");
+        assert_eq!(step.scrollback.as_deref(), Some(PROMPT_LINE.as_bytes()));
+        // A drawn prompt is neither logged nor kept for scrollback.
+        let mut p = capture_profile(HP);
+        let mut batch = super::ReadBatch::new(super::output_count());
+        let step = super::line_step(
+            &mut p,
+            &mut batch,
+            super::Line {
+                bytes: PROMPT_LINE.as_bytes().to_vec(),
+                painted: None,
+            },
+            PROMPT_LINE.to_string(),
+            tokio::time::Instant::now(),
+            Some(7),
+        );
+        assert!(batch.log.is_empty());
+        assert_eq!(step.scrollback, None);
+        assert!(batch.prompt_vars, "the prompt vars follow a prompt");
+    }
+
+    #[test]
+    fn a_profile_without_a_capture_shows_the_game_prompt() {
+        let mut p = Profile::default();
+        p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, HP));
+        let mut wire = Wire::new(p);
+        let out = wire.read(b"[1020/1020hp 800/800mn 930/930mv]\n\r");
+        assert_eq!(out.bytes, b"[1020/1020hp 800/800mn 930/930mv]\r\n");
+        assert_eq!(wire.p.prompt.stage.open_row(), None);
+    }
+
+    #[test]
+    fn a_prompt_split_across_reads_replaces_its_painted_start() {
+        let mut wire = Wire::new(capture_profile(HP));
+        let first = wire.read(b"You are hungry.\n\r[1020/1020hp 80");
+        assert_eq!(
+            first.bytes,
+            with(&[b"You are hungry.\r\n", &wire.mark(1), b"[1020/1020hp 80"])
+        );
+        let second = wire.read(b"0/800mn 930/930mv]\n\r");
+        assert_eq!(
+            second.replace,
+            Some(vosh_prompt::stage::Replace {
+                gen: wire.gen0 + 1,
+                bytes: with(&[&wire.mark(2), b"<1020>\x1b[0m"]),
+                fresh: true,
+            })
+        );
+        assert!(second.bytes.is_empty());
+    }
+
+    #[test]
+    fn a_line_split_across_reads_replaces_its_painted_start() {
+        let mut wire = Wire::new(capture_profile(HP));
+        let first = wire.read(b"You are hun");
+        assert_eq!(first.bytes, with(&[&wire.mark(1), b"You are hun"]));
+        // The partial grew, so it paints again whole.
+        let second = wire.read(b"gry");
+        assert_eq!(
+            second.replace,
+            Some(vosh_prompt::stage::Replace {
+                gen: wire.gen0 + 1,
+                bytes: with(&[&wire.mark(2), b"You are hungry"]),
+                fresh: true,
+            })
+        );
+        let third = wire.read(b".\n\rNext.\n\r");
+        assert_eq!(
+            third.replace,
+            Some(vosh_prompt::stage::Replace {
+                gen: wire.gen0 + 2,
+                bytes: b"You are hungry.\r\n".to_vec(),
+                fresh: true,
+            })
+        );
+        assert_eq!(third.bytes, b"Next.\r\n");
+    }
+
+    #[test]
+    fn a_partial_the_capture_settles_on_draws_in_the_same_read() {
+        let mut p = capture_profile(HP);
+        p.set_prompt_config(vosh_prompt::PromptConfig {
+            capture: regex_capture(r"^<(?<hp>\d+)hp (?<mana>\d+)m> $", true),
+            ..p.prompt.config().clone()
+        });
+        let mut wire = Wire::new(p);
+        let out = wire.read(b"You are hungry.\n\r<100hp 50m> ");
+        assert_eq!(
+            out.bytes,
+            with(&[b"You are hungry.\r\n", &wire.mark(1), b"<100>\x1b[0m"])
+        );
+        assert_eq!(wire.acc.partial(), None, "a drawn partial is gone");
+
+        // Split before the final space, it paints and waits, then draws
+        // over the painted start.
+        let first = wire.read(b"\n\r<90hp 50m>");
+        assert_eq!(first.bytes, with(&[b"\r\n", &wire.mark(2), b"<90hp 50m>"]));
+        let second = wire.read(b" ");
+        assert_eq!(
+            second.replace,
+            Some(vosh_prompt::stage::Replace {
+                gen: wire.gen0 + 2,
+                bytes: with(&[&wire.mark(3), b"<90>\x1b[0m"]),
+                fresh: true,
+            })
+        );
+    }
+
+    #[test]
+    fn an_unanchored_capture_waits_for_the_line_end() {
+        let mut wire = Wire::new(capture_profile(HP));
+        let out = wire.read(b"[1020/1020hp 800/800mn 930/930mv]");
+        assert_eq!(
+            out.bytes,
+            with(&[&wire.mark(1), b"[1020/1020hp 800/800mn 930/930mv]"])
+        );
+        assert_eq!(wire.p.prompt.stage.open_row(), None);
+    }
+
+    #[test]
+    fn a_ga_in_the_same_read_draws_with_no_flash() {
+        let mut wire = Wire::new(capture_profile(HP));
+        let out = wire.read_ga(b"[1020/1020hp 800/800mn 930/930mv]");
+        assert_eq!(out.bytes, with(&[&wire.mark(1), b"<1020>\x1b[0m"]));
+        assert_eq!(out.replace, None);
+        assert_eq!(wire.acc.partial(), None);
+    }
+
+    #[test]
+    fn a_ga_in_the_next_read_draws_over_the_painted_prompt() {
+        let mut wire = Wire::new(capture_profile(HP));
+        let first = wire.read(b"[1020/1020hp 800/800mn 930/930mv]");
+        assert_eq!(
+            first.bytes,
+            with(&[&wire.mark(1), b"[1020/1020hp 800/800mn 930/930mv]"])
+        );
+        let second = wire.read_ga(b"");
+        assert_eq!(
+            second.replace,
+            Some(vosh_prompt::stage::Replace {
+                gen: wire.gen0 + 1,
+                bytes: with(&[&wire.mark(2), b"<1020>\x1b[0m"]),
+                fresh: true,
+            })
+        );
+        assert!(second.bytes.is_empty());
+    }
+
+    #[test]
+    fn a_ga_on_a_partial_nothing_reads_ends_its_row() {
+        let mut wire = Wire::new(Profile::default());
+        let out = wire.read_ga(b"<100hp> ");
+        assert_eq!(out.bytes, b"<100hp> \r\n");
+        let first = wire.read(b"<90hp> ");
+        assert_eq!(first.bytes, with(&[&wire.mark(1), b"<90hp> "]));
+        let second = wire.read_ga(b"");
+        assert_eq!(second.bytes, b"\r\n");
+        assert_eq!(second.replace, None);
+    }
+
+    #[test]
+    fn the_open_row_closes_on_a_send_and_on_other_output() {
+        let mut wire = Wire::new(capture_profile(HP));
+        let _ = wire.read(PROMPT_ROW);
+        assert!(wire.p.prompt.stage.open_row().is_some());
+        wire.send();
+        assert_eq!(wire.p.prompt.stage.open_row(), None);
+
+        let _ = wire.read(PROMPT_ROW);
+        assert!(wire.p.prompt.stage.open_row().is_some());
+        let _ = wire.read_with(b"", false, true);
+        assert_eq!(
+            wire.p.prompt.stage.open_row(),
+            None,
+            "output from elsewhere"
+        );
+
+        let _ = wire.read(PROMPT_ROW);
+        let _ = wire.read(b"You flee!\n\r");
+        assert_eq!(wire.p.prompt.stage.open_row(), None, "a line after it");
+    }
+
+    const PROMPT_ROW: &[u8] = b"[1020/1020hp 800/800mn 930/930mv]\n\r";
+
+    #[test]
+    fn a_capture_trigger_with_no_reader_hides_the_prompt_and_is_named_once() {
+        let mut p = Profile::default();
+        let ran = crate::input::run_line(
+            &mut p,
+            r"#prompt {\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)/(?<maxmana>\d+)mn (?<move>\d+)/(?<maxmove>\d+)mv\]}",
+        );
+        assert!(!ran.result.echo.is_empty());
+        p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, HP));
+        let mut wire = Wire::new(p);
+        let batch = wire.read_with(PROMPT_ROW, false, false);
+        // The trigger hid the prompt, and nothing draws in its place.
+        assert!(batch.out.is_empty());
+        assert_eq!(batch.gag_without_reader, ["prompt-capture"]);
+        let batch = wire.read_with(PROMPT_ROW, false, false);
+        assert!(batch.gag_without_reader.is_empty(), "once a session");
+
+        // With a capture in the profile, the capture reads the prompt
+        // and the trigger never sees it (D6).
+        let config = vosh_prompt::PromptConfig {
+            capture: regex_capture(CAPTURE, false),
+            ..wire.p.prompt.config().clone()
+        };
+        wire.p.set_prompt_config(config);
+        let batch = wire.read_with(PROMPT_ROW, false, false);
+        assert_eq!(drawn_in(&batch.out.bytes).as_deref(), Some("<1020>\x1b[0m"));
+        assert!(batch.gag_without_reader.is_empty());
+    }
+
+    #[test]
+    fn a_prompts_trigger_acts_on_the_recognized_prompt() {
+        let mut p = capture_profile(HP);
+        p.set_prompt_config(vosh_prompt::PromptConfig {
+            draw: false,
+            ..p.prompt.config().clone()
+        });
+        p.triggers
+            .set(vosh_trigger::Trigger {
+                name: "mark".into(),
+                patterns: vec![vosh_trigger::TriggerPattern {
+                    pattern: "hp".into(),
+                    enabled: true,
+                }],
+                priority: 0,
+                enabled: true,
+                actions: vec![vosh_trigger::TriggerAction::Replace {
+                    template: "HP".into(),
+                }],
+                preset: None,
+                group: None,
+                target: vosh_trigger::TriggerTarget::Prompt,
+            })
+            .expect("the trigger compiles");
+        let mut wire = Wire::new(p);
+        let out = wire.read(PROMPT_ROW);
+        assert_eq!(out.bytes, b"[1020/1020HP 800/800mn 930/930mv]\r\n");
+    }
+
+    #[test]
+    fn the_ring_records_a_candidate_on_every_send_and_ga() {
+        // Drawing on.
+        let mut wire = Wire::new(capture_profile(HP));
+        let _ = wire.read(PROMPT_ROW);
+        wire.send();
+        let _ = wire.read_ga(b"You say hi.\n\r[1000/1020hp 800/800mn 930/930mv]\n\r");
+        let ring: Vec<(String, bool, bool, bool)> = wire
+            .p
+            .prompt
+            .stage
+            .ring()
+            .map(|c| (c.plain.clone(), c.recognized, c.draw, c.capture))
+            .collect();
+        assert_eq!(
+            ring,
+            [
+                (PROMPT_LINE.to_string(), true, true, true),
+                (
+                    "[1000/1020hp 800/800mn 930/930mv]".to_string(),
+                    true,
+                    true,
+                    true
+                ),
+            ]
+        );
+
+        // Drawing off.
+        let mut p = capture_profile(HP);
+        p.set_prompt_config(vosh_prompt::PromptConfig {
+            draw: false,
+            ..p.prompt.config().clone()
+        });
+        let mut wire = Wire::new(p);
+        let _ = wire.read(PROMPT_ROW);
+        wire.send();
+        let entry = wire.p.prompt.stage.ring().next().expect("an entry");
+        assert!(entry.recognized && !entry.draw && entry.capture);
+
+        // No capture: the prompt line, and a partial at a send.
+        let mut wire = Wire::new(Profile::default());
+        let _ = wire.read(b"You are hungry.\n\r<100hp> ");
+        wire.send();
+        let _ = wire.read_ga(b"<90hp> ");
+        let _ = wire.read(PROMPT_ROW);
+        wire.send();
+        let ring: Vec<(String, bool, bool)> = wire
+            .p
+            .prompt
+            .stage
+            .ring()
+            .map(|c| (c.plain.clone(), c.recognized, c.capture))
+            .collect();
+        assert_eq!(
+            ring,
+            [
+                ("<100hp> ".to_string(), false, false),
+                ("<90hp> ".to_string(), false, false),
+                (PROMPT_LINE.to_string(), false, false),
+            ]
+        );
     }
 
     /// A profile that draws `template` over the capture on The Forsaken
@@ -2231,9 +2952,7 @@ mod tests {
                 feed(&mut p, file.as_str().expect("a file name"));
             }
             // The game prints zeros for every vital under the song.
-            let pass = pass_line(&mut p, "[0/0hp 0/0mn 0/0mv]");
-            assert!(pass.result.display.is_none(), "{name}");
-            let drawn = pass.rendered_prompt.expect("the prompt draws");
+            let drawn = draw_line(&mut p, "[0/0hp 0/0mn 0/0mv]").expect("the prompt draws");
             assert_eq!(plain(&drawn), "[?(?%)h ?(?%)m ?(?%)v] ", "{name}");
             // Each mark in bright black, then the look before it.
             assert!(
@@ -2274,8 +2993,7 @@ mod tests {
         feed(&mut p, "char-affects.gmcp");
         feed(&mut p, "char-vitals.gmcp");
         feed(&mut p, "group-info-own-row.gmcp");
-        let pass = pass_line(&mut p, "[850/900hp 760/820mn 250/250mv]");
-        let drawn = pass.rendered_prompt.expect("the prompt draws");
+        let drawn = draw_line(&mut p, "[850/900hp 760/820mn 250/250mv]").expect("the prompt draws");
         assert_eq!(plain(&drawn), "[850(94%)h 760(93%)m 250(100%)v] ");
         let hidden = p
             .prompt
@@ -2295,8 +3013,7 @@ mod tests {
         // true values. Only the prompt the capture reads shows the song.
         let mut p = forsaken_profile(TEMPLATE);
         feed(&mut p, "char-vitals.gmcp");
-        let pass = pass_line(&mut p, "[0/0hp 0/0mn 0/0mv]");
-        let drawn = pass.rendered_prompt.expect("the prompt draws");
+        let drawn = draw_line(&mut p, "[0/0hp 0/0mn 0/0mv]").expect("the prompt draws");
         assert_eq!(plain(&drawn), "[?(?%)h ?(?%)m ?(?%)v] ");
         let hidden = p
             .prompt
@@ -2324,9 +3041,8 @@ mod tests {
         ] {
             feed(&mut p, file);
         }
-        let pass = pass_line(&mut p, PROMPT_LINE);
         assert_eq!(
-            plain(&pass.rendered_prompt.expect("the prompt draws")),
+            plain(&draw_line(&mut p, PROMPT_LINE).expect("the prompt draws")),
             "1020/1020 a Blackwatch guard 41"
         );
         assert!(p.prompt.vars.take_hidden_change().is_none());
@@ -2369,9 +3085,8 @@ mod tests {
     fn the_session_draws_the_gate_pieces_from_the_new_build_packets() {
         let mut p = forsaken_profile(GATE);
         new_build_fight(&mut p);
-        let pass = pass_line(&mut p, PROMPT_LINE);
         assert_eq!(
-            plain(&pass.rendered_prompt.expect("the prompt draws")),
+            plain(&draw_line(&mut p, PROMPT_LINE).expect("the prompt draws")),
             "1250 a Blackwatch guard|FUL waning crescent|sit common rainy 60°F Coastal North|Tester [===|===|===|=--]|S"
         );
         // Nothing is hidden, so nothing is reported.
@@ -2384,11 +3099,15 @@ mod tests {
         feed(&mut p, "char-vitals.gmcp");
         feed(&mut p, "room-info.gmcp");
         // No Char.Prompt this session, so Room.Info feeds no exits.
-        let pass = pass_line(&mut p, PROMPT_LINE);
-        assert_eq!(plain(&pass.rendered_prompt.expect("it draws")), "[]");
+        assert_eq!(
+            plain(&draw_line(&mut p, PROMPT_LINE).expect("it draws")),
+            "[]"
+        );
         feed(&mut p, "char-prompt.gmcp");
-        let pass = pass_line(&mut p, PROMPT_LINE);
-        assert_eq!(plain(&pass.rendered_prompt.expect("it draws")), "[S]");
+        assert_eq!(
+            plain(&draw_line(&mut p, PROMPT_LINE).expect("it draws")),
+            "[S]"
+        );
     }
 
     #[test]
@@ -2412,8 +3131,7 @@ mod tests {
             })
         );
         feed(&mut p, "char-affects.gmcp");
-        let pass = pass_line(&mut p, PROMPT_LINE);
-        let drawn = plain(&pass.rendered_prompt.expect("it draws"));
+        let drawn = plain(&draw_line(&mut p, PROMPT_LINE).expect("it draws"));
         let parts: Vec<&str> = drawn.split('|').collect();
         assert!(
             parts[0]
@@ -2430,7 +3148,7 @@ mod tests {
         let mut p = forsaken_profile(GATE);
         new_build_fight(&mut p);
         assert!(p.prompt.vars.new_build());
-        let _ = pass_line(&mut p, PROMPT_LINE);
+        let _ = draw_line(&mut p, PROMPT_LINE);
         assert!(!p.prompt.vars.prompt_vars().is_empty());
 
         super::end_prompt(&mut p);
