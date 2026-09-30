@@ -1,7 +1,15 @@
 import { isTrackedRow, type AffectRow } from '../../lib/affectsView';
 import type { AffectsStyle } from '../../lib/session';
 import { AFFECTS_RULE_PX, affectsColumns, affectsRestMinRows } from './affectsGrid';
+import {
+  chipGroups,
+  chipLabelMode,
+  chipsMinBody,
+  FIXED_MEASURE,
+  type ChipMeasure,
+} from './chipsGrid';
 import { COUNTDOWN_ROW_PX, countdownMinRows } from './countdownGrid';
+import { affectHours } from './paneText';
 import {
   PANE_HEADER_PX,
   PANE_MIN_H,
@@ -119,28 +127,53 @@ export function countdownMinH(rows: readonly AffectRow[], columns = 2): number {
   return Math.max(PANE_MIN_H.affects, PANE_HEADER_PX + need);
 }
 
+/** The Grouped chips pane's minimum `width` wide: every Recast and
+ *  Tracked chip and every harmful one on the first page, and the count
+ *  after them when more follow, packed as the pane packs them with the
+ *  same `measure`. Never under the stock minimum, and never over a
+ *  dozen rows' worth. */
+export function chipsMinH(
+  rows: readonly AffectRow[],
+  width: number,
+  measure: ChipMeasure = FIXED_MEASURE,
+): number {
+  const body = chipsMinBody(
+    chipGroups(rows),
+    width,
+    (r) => affectHours(r.state, r.ticks),
+    measure,
+    chipLabelMode(rows, width),
+    LIST_MIN_ROWS * PANE_ROW_PX,
+  );
+  return Math.max(PANE_MIN_H.affects, PANE_HEADER_PX + body);
+}
+
 /** The Affects pane's minimum in `root` laid out `width` wide, for the
  *  style it draws. The pane draws one column or two by its own width,
  *  which a Split right halves, so the minimum counts the columns the
- *  pane draws. A tree without the pane reads the panel's width. */
+ *  pane draws, and the chips pack to it. A tree without the pane reads
+ *  the panel's width. */
 export function affectsMinIn(
   root: PaneSplit,
   width: number,
   rows: readonly AffectRow[],
   style: AffectsStyle = 'timers',
+  measure: ChipMeasure = FIXED_MEASURE,
 ): number {
-  const columns = affectsColumns(paneWidth(root, width, 'affects') ?? width);
-  return affectsStyleMinH(rows, columns, style);
+  return affectsStyleMinH(rows, paneWidth(root, width, 'affects') ?? width, style, measure);
 }
 
-/** The Affects pane's minimum in `columns` columns for the style it
- *  draws. */
+/** The Affects pane's minimum `paneW` wide for the style it draws. */
 export function affectsStyleMinH(
   rows: readonly AffectRow[],
-  columns: number,
+  paneW: number,
   style: AffectsStyle,
+  measure: ChipMeasure = FIXED_MEASURE,
 ): number {
-  return style === 'countdown' ? countdownMinH(rows, columns) : affectsMinH(rows, columns);
+  const columns = affectsColumns(paneW);
+  if (style === 'countdown') return countdownMinH(rows, columns);
+  if (style === 'chips') return chipsMinH(rows, paneW, measure);
+  return affectsMinH(rows, columns);
 }
 
 /** The Group pane's minimum for `members` rows: every member up to

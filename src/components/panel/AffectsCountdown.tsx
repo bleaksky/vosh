@@ -10,9 +10,9 @@ import {
 } from '../../lib/affectsView';
 import type { AffectsMarker } from '../../lib/session';
 import { useBoxSize, usePagedWindow, type Box } from './affectsHooks';
-import { AffectMark, AffectsHeader, affectsEmpty, MoreButton } from './affectsParts';
+import { AffectMark, AffectsEmpty, AffectsHeader, MoreButton } from './affectsParts';
 import { COUNTDOWN_ROW_PX, countdownGrid, type CountdownGrid } from './countdownGrid';
-import { affectHours, affectWords } from './paneText';
+import { affectHours, affectsEmptyText, affectWords } from './paneText';
 
 // Board Affects B, Countdown. One run by the hours left, missing first
 // and permanent last, down the left column and on down the right, on
@@ -52,6 +52,7 @@ export function CountdownView({
   const measured = useBoxSize(bodyRef);
   const size = box ?? measured;
   const grid = useMemo(() => countdownGrid(rows, size), [rows, size]);
+  const empty = affectsEmptyText(current, hidden, rows);
   return (
     <>
       <AffectsHeader rows={rows} />
@@ -60,7 +61,11 @@ export function CountdownView({
         className="pane-body"
         data-affects-marker={marker === 'dot' ? undefined : marker}
       >
-        {affectsEmpty(current, hidden, rows) ?? <CountdownPages grid={grid} full={full} />}
+        {empty !== null ? (
+          <AffectsEmpty text={empty} />
+        ) : (
+          <CountdownPages grid={grid} full={full} />
+        )}
       </div>
     </>
   );

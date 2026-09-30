@@ -10,6 +10,7 @@ import {
   affectsMinH,
   affectsMinIn,
   allocate,
+  chipsMinH,
   countdownMinH,
   distribute,
   dragSizes,
@@ -145,65 +146,65 @@ describe('affectsMinIn', () => {
   });
 });
 
-describe('countdownMinH', () => {
-  // The boards' scenes by what the game sends, Erelei's eight tracked.
-  const tracked = [
-    'mounted',
-    'sanctuary',
-    'bless',
-    'armor',
-    'shield',
-    'stone skin',
-    'fly',
-    'levitate',
-  ].map((name) => ({ name }));
-  const aff = (name: string, duration: number): AffectInput => ({ name, duration });
-  const five = [
-    aff('sanctuary', 9),
-    aff('armor', 44),
-    aff('shield', 44),
-    aff('fly', 50),
-    aff('mounted', -1),
-  ];
-  const fourteen = [
-    aff('pass door', 8),
-    aff('levitate', 44),
-    aff('detect invis', 47),
-    aff('sanctuary', 1),
-    aff('haste', 14),
-    aff('stone skin', 38),
-    aff('shield', 31),
-    aff('armor', 31),
-    aff('fly', 2),
-    aff('the Triumph of One God', 188),
-    aff('mounted', -1),
-    aff('virtues', -1),
-    aff('totems canticle', 22),
-    aff('bagatelle of bravado', 19),
-  ];
-  const twenty = [
-    ...fourteen,
-    aff('frenzy', 9),
-    aff('protective shield', 6),
-    aff('giant strength', 40),
-    aff('detect magic', 45),
-    aff('faerie fire', 3),
-  ];
-  const thirty = [
-    ...twenty,
-    aff('infravision', 50),
-    aff('barkskin', 30),
-    aff('regeneration', 25),
-    aff('camouflage', 12),
-    aff('steel wall', 16),
-    aff('protection evil', 24),
-    aff('holy touch', 33),
-    aff('Battle Hymn', 7),
-    aff('poison', 4),
-    aff('detect hidden', 50),
-  ];
-  const rows = (list: AffectInput[]) => affectsPaneRows(list, tracked, false);
+// The boards' scenes by what the game sends, Erelei's eight tracked.
+const tracked = [
+  'mounted',
+  'sanctuary',
+  'bless',
+  'armor',
+  'shield',
+  'stone skin',
+  'fly',
+  'levitate',
+].map((name) => ({ name }));
+const aff = (name: string, duration: number): AffectInput => ({ name, duration });
+const five = [
+  aff('sanctuary', 9),
+  aff('armor', 44),
+  aff('shield', 44),
+  aff('fly', 50),
+  aff('mounted', -1),
+];
+const fourteen = [
+  aff('pass door', 8),
+  aff('levitate', 44),
+  aff('detect invis', 47),
+  aff('sanctuary', 1),
+  aff('haste', 14),
+  aff('stone skin', 38),
+  aff('shield', 31),
+  aff('armor', 31),
+  aff('fly', 2),
+  aff('the Triumph of One God', 188),
+  aff('mounted', -1),
+  aff('virtues', -1),
+  aff('totems canticle', 22),
+  aff('bagatelle of bravado', 19),
+];
+const twenty = [
+  ...fourteen,
+  aff('frenzy', 9),
+  aff('protective shield', 6),
+  aff('giant strength', 40),
+  aff('detect magic', 45),
+  aff('faerie fire', 3),
+];
+const thirty = [
+  ...twenty,
+  aff('infravision', 50),
+  aff('barkskin', 30),
+  aff('regeneration', 25),
+  aff('camouflage', 12),
+  aff('steel wall', 16),
+  aff('protection evil', 24),
+  aff('holy touch', 33),
+  aff('Battle Hymn', 7),
+  aff('poison', 4),
+  aff('detect hidden', 50),
+];
+const rows = (list: AffectInput[]) => affectsPaneRows(list, tracked, false);
 
+describe('countdownMinH', () => {
   it('holds every row that asks something of you, as SPEC 1.8 counts it', () => {
     const table = [
       [five, 2, 160],
@@ -234,6 +235,32 @@ describe('countdownMinH', () => {
     const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
     expect(affectsMinIn(tree, 494, rows(thirty), 'countdown')).toBe(28 + 6 * 23);
     expect(affectsMinIn(tree, 494, rows(thirty), 'timers')).toBe(affectsMinH(rows(thirty), 1));
+  });
+});
+
+describe('chipsMinH', () => {
+  it('holds every Recast, Tracked, and harmful chip, as SPEC 1.8 counts it', () => {
+    const table = [
+      [five, 494, 160],
+      [five, 247, 160],
+      [fourteen, 494, 160],
+      [fourteen, 247, 160],
+      [twenty, 494, 160],
+      // Down to faerie fire run in after Other, and the count.
+      [twenty, 247, 180],
+      [thirty, 494, 160],
+      // Poison wraps under faerie fire.
+      [thirty, 247, 204],
+    ] as const;
+    for (const [list, width, want] of table) {
+      expect(chipsMinH(rows([...list]), width), `${list.length} at ${width}`).toBe(want);
+    }
+  });
+
+  it('follows the style the pane draws, packed to its own width', () => {
+    const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    expect(affectsMinIn(tree, 494, rows(thirty), 'chips')).toBe(204);
+    expect(affectsMinIn(defaultLayout().root, 494, rows(thirty), 'chips')).toBe(160);
   });
 });
 

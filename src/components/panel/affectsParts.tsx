@@ -1,10 +1,4 @@
-import type { ReactNode } from 'react';
-import {
-  affectMark,
-  affectsSummary,
-  type AffectInput,
-  type AffectRow,
-} from '../../lib/affectsView';
+import { affectMark, affectsSummary, type AffectRow } from '../../lib/affectsView';
 import { PaneHeader, PaneMeta } from './PaneHeader';
 
 // The pieces every Affects pane style draws the same way: the header
@@ -30,19 +24,9 @@ export function AffectsHeader({ rows }: { rows: readonly AffectRow[] }) {
   );
 }
 
-/** The sentence a pane shows in place of its rows, or null when it has
- *  rows to draw: before the first list since you connected, while the
- *  game hides your affects, and with nothing on you and nothing
- *  tracked. */
-export function affectsEmpty(
-  current: readonly AffectInput[] | null,
-  hidden: boolean,
-  rows: readonly AffectRow[],
-): ReactNode | null {
-  if (hidden) return <p className="pane-empty">The game hides your affects right now.</p>;
-  if (current === null) return <p className="pane-empty">Affects appear when you log in.</p>;
-  if (rows.length === 0) return <p className="pane-empty">Nothing affects you right now.</p>;
-  return null;
+/** The sentence a pane shows in place of its rows. */
+export function AffectsEmpty({ text }: { text: string }) {
+  return <p className="pane-empty">{text}</p>;
 }
 
 /** The mark before an affect: a tracked affect's state, or the harmful

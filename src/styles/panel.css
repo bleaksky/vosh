@@ -692,6 +692,194 @@
   left: 0;
 }
 
+/* Board Affects C, Grouped chips. chipsGrid packs the lines, and each
+   sits at its own top in a page as tall as the body. Pages stack and
+   scroll a page at a time, as the other styles do. Lines run from x 18
+   to 12 from the right, chips 4 apart. */
+.pane-chips {
+  overflow: hidden;
+}
+
+.pane-chips.is-paged {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+
+.pane-chips.is-paged::-webkit-scrollbar {
+  display: none;
+}
+
+.pane-chips-page {
+  position: relative;
+  scroll-snap-align: start;
+}
+
+.pane-chips-line {
+  position: absolute;
+  left: 18px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The group's name in the board's 56 px gutter, 8 px before the chips,
+   on the group's first line. Under 360 px it runs in at the start of
+   that line instead. */
+.pane-chips-label {
+  flex: none;
+  width: 56px;
+  margin: 0 4px 0 0;
+  font-size: 11px;
+  line-height: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--tertiary);
+}
+
+.pane-chips-runin {
+  width: auto;
+}
+
+/* The count of what waits on the next page, 8 px after the last chip. */
+.pane-chips-more {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 20px;
+  margin-left: 4px;
+}
+
+.pane-chips-more .pane-affects-more {
+  height: 20px;
+  margin: 0;
+}
+
+/* A chip: 20 tall, 7 px each side, radius 4, the name and 6 px after
+   it the hours, in the terminal face. Its ground is the track, and
+   while its gauge drains, the gauge over it from the left, as wide as
+   --gauge of the chip. A 1 px inset ring shows the edge. Every tone
+   mixes a theme token. */
+.pane-chip {
+  --chip-track: transparent;
+  --chip-gauge: transparent;
+  --chip-edge: transparent;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 4px;
+  font-family: var(--font-mud, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  background: var(--chip-track);
+  box-shadow: inset 0 0 0 1px var(--chip-edge);
+}
+
+.pane-chip.is-draining {
+  background:
+    linear-gradient(to right, var(--chip-gauge) calc(var(--gauge, 1) * 100%), transparent 0),
+    var(--chip-track);
+}
+
+.pane-chip-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.pane-chip-hours {
+  flex: none;
+  margin-left: 6px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--secondary);
+}
+
+.pane-chip-hours.is-warn {
+  color: var(--warn);
+}
+
+.pane-chip-hours.is-danger {
+  font-weight: 700;
+  color: var(--danger-text);
+}
+
+.pane-chip-other .pane-chip-name {
+  color: var(--secondary);
+}
+
+.pane-chip-missing .pane-chip-name,
+.pane-chip-harmful .pane-chip-name {
+  color: var(--danger-text);
+}
+
+/* A tracked chip is filled, as board C draws it, and the fill drains
+   from the left as the hours run down. While it drains, a hairline
+   shows the chip's full width. */
+.pane-chip-tracked {
+  --chip-track: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.pane-chip-tracked.is-draining {
+  --chip-track: transparent;
+  --chip-gauge: color-mix(in srgb, var(--text) 8%, transparent);
+  --chip-edge: var(--sep);
+}
+
+/* Running out, the whole chip takes board C's tint, yellow at two hours
+   and red at one or none, and the chip's extent needs no hairline. At
+   full it is exactly the board. While it drains, the gauge shows in the
+   same hue over the tint. */
+.pane-chip-tracked.is-warn {
+  --chip-track: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
+.pane-chip-tracked.is-danger {
+  --chip-track: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.pane-chip-tracked.is-warn.is-draining {
+  --chip-track: color-mix(in srgb, var(--warn) 14%, transparent);
+  --chip-gauge: color-mix(in srgb, var(--warn) 20%, transparent);
+  --chip-edge: transparent;
+}
+
+.pane-chip-tracked.is-danger.is-draining {
+  --chip-track: color-mix(in srgb, var(--danger) 16%, transparent);
+  --chip-gauge: color-mix(in srgb, var(--danger) 22%, transparent);
+  --chip-edge: transparent;
+}
+
+/* Missing: a dashed red edge and no ground. */
+.pane-chip-missing {
+  padding: 0 6px;
+  border: 1px dashed var(--danger);
+  background: none;
+  box-shadow: none;
+}
+
+/* The rest keep the board's hairline ring, and a harmful affect a
+   danger ring. Their hours count down, and they carry no gauge. */
+.pane-chip-other {
+  --chip-edge: var(--sep);
+}
+
+.pane-chip-harmful {
+  --chip-edge: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
 /* ── Map ─────────────────────────────────────────────────────────── */
 
 .pane-map {

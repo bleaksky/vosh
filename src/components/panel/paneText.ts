@@ -55,6 +55,21 @@ export function affectWords(state: string, ticks: number | null): string {
   return words.map((w) => `, ${w}`).join('');
 }
 
+/** The sentence the Affects pane shows in place of its rows, or null
+ *  when it has rows to draw: before the first list since you
+ *  connected, while the game hides your affects, and with nothing on
+ *  you and nothing tracked. */
+export function affectsEmptyText(
+  current: readonly unknown[] | null,
+  hidden: boolean,
+  rows: readonly unknown[],
+): string | null {
+  if (hidden) return 'The game hides your affects right now.';
+  if (current === null) return 'Affects appear when you log in.';
+  if (rows.length === 0) return 'Nothing affects you right now.';
+  return null;
+}
+
 /** Exits in the Map pane's room row, `north east south`. */
 export function exitsLabel(exits: readonly string[]): string {
   return exits.join(' ');
