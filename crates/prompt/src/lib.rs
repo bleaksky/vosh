@@ -24,7 +24,7 @@
 //!   per socket read, with the regions a later output replaces.
 //! - [`wrap`] is the word wrap both renderers share.
 //! - `testkit`, behind the `testkit` feature, prints prompts the way the
-//!   game does, for tests.
+//!   game does and plays a fake Aabahran for tests and scripted runs.
 
 pub mod aabahran;
 pub mod capture;
