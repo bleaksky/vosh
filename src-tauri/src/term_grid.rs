@@ -22,7 +22,7 @@ use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::cell::Flags;
-use alacritty_terminal::term::{Config, Term};
+use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
 use regex::RegexBuilder;
 use vosh_prompt::stage::{Output, MARK_OSC};
@@ -400,17 +400,54 @@ impl TermGrid {
     }
 
     /// Resize the grid to fit the surface; reflows existing content.
+    ///
+    /// Narrower, alacritty keeps the cursor on its row and pushes the rows
+    /// the reflow adds over it into history, even with empty rows below
+    /// the cursor. So the grid first takes the empty rows off, narrows,
+    /// and then grows back, which pulls those rows out of history again.
+    /// A nearly empty screen keeps what it shows, as xterm does, and a
+    /// region near its top stays within reach of a replace (D22).
     pub(crate) fn resize(&mut self, columns: usize, screen_lines: usize) {
         let columns = columns.max(1);
         let screen_lines = screen_lines.max(1);
         if columns == self.size.columns && screen_lines == self.size.screen_lines {
             return;
         }
+        if columns < self.size.columns {
+            if let Some(used) = self.rows_to_cursor() {
+                self.term.resize(GridSize {
+                    columns: self.size.columns,
+                    screen_lines: used,
+                });
+                self.term.resize(GridSize {
+                    columns,
+                    screen_lines: used,
+                });
+            }
+        }
         self.size = GridSize {
             columns,
             screen_lines,
         };
         self.term.resize(self.size);
+    }
+
+    /// The rows from the top of the screen to the cursor, when every row
+    /// below the cursor is empty. None when there are none below, when a
+    /// row below holds anything, when you scrolled back, or on the
+    /// alternate screen, which does not reflow.
+    fn rows_to_cursor(&self) -> Option<usize> {
+        if self.term.mode().contains(TermMode::ALT_SCREEN) {
+            return None;
+        }
+        let grid = self.term.grid();
+        if grid.display_offset() != 0 {
+            return None;
+        }
+        let used = usize::try_from(grid.cursor.point.line.0).ok()? + 1;
+        let lines = self.size.screen_lines;
+        let empty_below = (used..lines).all(|line| grid[Line(line as i32)].is_clear());
+        (used < lines && empty_below).then_some(used)
     }
 }
 
@@ -1249,14 +1286,42 @@ mod tests {
     }
 
     #[test]
-    fn a_region_a_resize_pushes_above_the_screen_counts_as_closed() {
-        // A nearly empty screen: the narrower grid pushes the rows over
-        // the cursor into history, where the region's start is out of
-        // reach, so a replace for it is dropped and a fresh one writes on
-        // a new row.
+    fn a_nearly_empty_screen_keeps_its_rows_when_the_grid_narrows() {
+        // A partial painted near the top of the screen, a narrower grid,
+        // then the line that completes it. The rows over the partial stay
+        // on screen, so the grid erases the partial whole, as xterm does.
+        let line = b"Some long line of text that wraps a few times at twelve.\r\n";
+        for before in [&b""[..], b"one\r\ntwo\r\n"] {
+            for (wide, narrow) in [(40, 12), (40, 20), (20, 7)] {
+                let mut g = TermGrid::new(wide, 10);
+                g.session_output(&text(before));
+                g.session_output(&text(&marked(1, b"Some long line of te")));
+                g.resize(narrow, 10);
+                g.session_output(&replace(1, line, true));
+                let mut expect = TermGrid::new(narrow, 10);
+                expect.session_output(&text(&[before, line].concat()));
+                let case = format!("{wide} to {narrow} wide after {before:?}");
+                assert_eq!(screen(&g), screen(&expect), "{case}");
+                assert_eq!(g.scrollback_len(), expect.scrollback_len(), "{case}");
+            }
+        }
+        // The drawn prompt alone on the screen stays within reach too.
         let mut g = TermGrid::new(40, 10);
         g.session_output(&text(&marked(1, b"[1020/1020hp 800/800mn 930/930mv]")));
         g.resize(12, 10);
+        g.session_output(&replace(1, &marked(2, b"NEW"), false));
+        assert_eq!(screen(&g), ["NEW"]);
+    }
+
+    #[test]
+    fn a_region_a_resize_pushes_above_the_screen_counts_as_closed() {
+        // A full screen of three rows, where the narrower prompt takes
+        // five, so its start is in history, out of reach. A replace for
+        // it is dropped, and a fresh one writes on a new row.
+        let mut g = TermGrid::new(40, 3);
+        g.session_output(&text(b"one\r\ntwo\r\n"));
+        g.session_output(&text(&marked(1, b"[1020/1020hp 800/800mn 930/930mv]")));
+        g.resize(8, 3);
         let before = screen(&g);
         g.session_output(&replace(1, b"dropped", false));
         assert_eq!(screen(&g), before);
