@@ -5,6 +5,7 @@ import {
   BAND_X,
   BAND_Y,
   BAND_Y_ADJACENT,
+  dividerCut,
   LIFTED_ATTR,
   layoutBands,
   LiftTracker,
@@ -203,5 +204,22 @@ describe('the clear ground under lifted bands', () => {
       expect(promptCss).toContain(`.terminal-area[${LIFTED_ATTR}] .terminal-pane-live ${part}`);
     }
     expect(promptCss).not.toMatch(/\.prompt-lifted\b/);
+  });
+});
+
+describe('dividerCut', () => {
+  // The scrollback split lays the history pane over the live one. Its
+  // text hides the live rows under it, but a band reaches 4 px past the
+  // text and 2 px past its rows, so the layer is cut at the divider, as
+  // the native grid cuts the live region there.
+  it('cuts the layer at the history pane bottom while the split is open', () => {
+    // The layer starts 2 px above the first row at 38, and the history
+    // pane ends at 278.
+    expect(dividerCut(36, 278)).toBe(242);
+  });
+
+  it('cuts nothing with the split closed or a pane above the layer', () => {
+    expect(dividerCut(36, null)).toBe(0);
+    expect(dividerCut(36, 20)).toBe(0);
   });
 });
