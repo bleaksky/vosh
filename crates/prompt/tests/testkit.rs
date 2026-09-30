@@ -567,3 +567,51 @@ fn reads_split_a_pulse_anywhere() {
         assert_eq!(parts.concat(), raw);
     }
 }
+
+#[test]
+fn an_immortal_with_wizi_and_incog_sees_the_prefix_before_each_prompt() {
+    let mut mud = Mud::new(Options {
+        wizi: 60,
+        incog: 60,
+        ..Options::new(Build::New)
+    });
+    let login: Vec<u8> = mud
+        .receive(&[telnet::IAC, telnet::DO, telnet::GMCP])
+        .into_iter()
+        .flat_map(|w| w.bytes)
+        .collect();
+    assert_eq!(
+        packet(&login, "Char.Status").expect("status")["level"],
+        mud::IMMORTAL_LEVEL
+    );
+    assert_eq!(
+        prompt_lines(&login),
+        ["(Wizi 60) (Incog 60) [1020/1020hp 800/800mn 930/930mv]"]
+    );
+    // In the game's 256 color 240, as row 410133 shows it.
+    let wizi = b"\x1b[38;5;240m(Wizi 60)";
+    assert!(login.windows(wizi.len()).any(|w| w == wizi));
+    let values = read_back(PROMPT, &login);
+    assert_eq!(values.get("wizi").map(String::as_str), Some("60"));
+    assert_eq!(values.get("incog").map(String::as_str), Some("60"));
+
+    // Every prompt after it carries the prefix too.
+    let raw = run(&mut mud, "prompt [%h/%Hhp (%K hp) %s [%S]>");
+    assert_eq!(
+        prompt_lines(&raw),
+        ["(Wizi 60) (Incog 60) [1020/1020hp (100 hp) common [std]> "]
+    );
+
+    // A mortal logs in with neither.
+    let mut mud = Mud::new(Options::new(Build::New));
+    let login: Vec<u8> = mud
+        .receive(&[telnet::IAC, telnet::DO, telnet::GMCP])
+        .into_iter()
+        .flat_map(|w| w.bytes)
+        .collect();
+    assert_eq!(
+        packet(&login, "Char.Status").expect("status")["level"],
+        mud::MORTAL_LEVEL
+    );
+    assert_eq!(prompt_lines(&login), ["[1020/1020hp 800/800mn 930/930mv]"]);
+}

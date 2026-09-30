@@ -21,6 +21,8 @@
 //! - `--reconnect` plays a link dead reconnect, with no Char.Status and
 //!   no Char.Prompt.
 //! - `--no-ga` turns telnet GA off, and `--compact` turns compact on.
+//! - `--wizi N` and `--incog N` log you in as an immortal at those
+//!   levels, so `(Wizi N) ` and `(Incog N) ` come before each prompt.
 //!
 //! In the game, `prompt`, `fprompt`, `look`, `afk`, `compact`,
 //! `telnetga` and `quit` work as the game's own commands. `fight`,
@@ -35,7 +37,7 @@ use tokio::net::{TcpListener, TcpStream};
 use vosh_prompt::testkit::mud::{self, stored};
 use vosh_prompt::testkit::{Build, Mud, Options};
 
-const USAGE: &str = "usage: fake_mud [--port N] [--build new|243cac5c|older] [--name NAME] [--prompt TEXT] [--fprompt TEXT] [--reconnect] [--no-ga] [--compact]";
+const USAGE: &str = "usage: fake_mud [--port N] [--build new|243cac5c|older] [--name NAME] [--prompt TEXT] [--fprompt TEXT] [--reconnect] [--no-ga] [--compact] [--wizi N] [--incog N]";
 
 /// What the command line asked for.
 struct Args {
@@ -78,6 +80,16 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
             "--reconnect" => options.reconnect = true,
             "--no-ga" => options.ga = false,
             "--compact" => options.compact = true,
+            "--wizi" => {
+                options.wizi = value("--wizi")?
+                    .parse()
+                    .map_err(|_| "--wizi needs a number".to_string())?;
+            }
+            "--incog" => {
+                options.incog = value("--incog")?
+                    .parse()
+                    .map_err(|_| "--incog needs a number".to_string())?;
+            }
             "--help" | "-h" => return Err(USAGE.to_string()),
             other => return Err(format!("{other} is no option\n{USAGE}")),
         }
