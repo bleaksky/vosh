@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { onGmcpPackage, onState } from '../session';
+import { getHidden, subscribeHidden, type HiddenState } from './hiddenStore';
 import { asNumber, asText, createStore, isHiddenFlag } from './store';
 
 // The opponent you are fighting, from Char.Combat. Aabahran sends
@@ -15,6 +16,11 @@ import { asNumber, asText, createStore, isHiddenFlag } from './store';
 // group, the prompt's %n and %p, and drops the tank's hp_pct under
 // lamented tears. Nothing shows the tank yet. The prompt editor reads
 // it later.
+//
+// An older server build sends the opponent's health and condition
+// under the song, with no flag. The backend works out that they are
+// hidden, and hiddenStore's `opponent` and `tank` hide them here the
+// same way the flag and a tank without health do.
 
 /** The groupmate your opponent hits. */
 export interface CombatTank {
@@ -83,20 +89,49 @@ function sameOpponent(a: CombatOpponent | null, b: CombatOpponent | null): boole
   );
 }
 
+/** The fight with what the backend worked out laid over it. A hidden
+ *  opponent loses its health and condition, and a hidden tank loses
+ *  its health. Returns `opponent` itself when that hides nothing new. */
+export function withHidden(
+  opponent: CombatOpponent | null,
+  hidden: HiddenState,
+): CombatOpponent | null {
+  if (opponent === null) return null;
+  const hideOpponent = hidden.opponent && !opponent.hidden;
+  const hideTank = hidden.tank && opponent.tank !== null && opponent.tank.hp_pct !== null;
+  if (!hideOpponent && !hideTank) return opponent;
+  const next: CombatOpponent = hideOpponent
+    ? { ...opponent, hp_pct: null, condition: null, hidden: true }
+    : { ...opponent };
+  if (hideTank && opponent.tank) next.tank = { ...opponent.tank, hp_pct: null };
+  return next;
+}
+
 const store = createStore<CombatOpponent | null>(null);
+// The last fight as Char.Combat sent it, before the hidden state.
+let sent: CombatOpponent | null = null;
 let started = false;
+
+function publish(): void {
+  const next = withHidden(sent, getHidden());
+  // Char.Combat rides every prompt, so skip the ones that repeat.
+  if (!sameOpponent(store.get(), next)) store.set(next);
+}
 
 export function startCombatStore(): void {
   if (started) return;
   started = true;
   void onGmcpPackage<unknown>('Char.Combat', (data) => {
-    const next = parseCombat(data);
-    // Char.Combat rides every prompt, so skip the ones that repeat.
-    if (!sameOpponent(store.get(), next)) store.set(next);
+    sent = parseCombat(data);
+    publish();
   });
   void onState((payload) => {
-    if (payload.kind === 'disconnected') store.set(null);
+    if (payload.kind === 'disconnected') {
+      sent = null;
+      store.set(null);
+    }
   });
+  subscribeHidden(publish);
 }
 
 export function getCombat(): CombatOpponent | null {

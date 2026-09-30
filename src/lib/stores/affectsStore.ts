@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { AffectModifier } from '../affects';
 import { affectsSnapshotGet, onGmcpPackage, onState } from '../session';
+import { getHidden, subscribeHidden } from './hiddenStore';
 import { asNumber, asText, createStore, isHiddenFlag } from './store';
 
 // Your current affects from Char.Affects, one row per affect name.
@@ -13,7 +14,9 @@ import { asNumber, asText, createStore, isHiddenFlag } from './store';
 // Under lamented tears the list comes empty with `"hidden": true`. The
 // store is then hidden until a list without the flag arrives, so the
 // Affects pane says the game hides them instead of marking every
-// tracked affect missing.
+// tracked affect missing. An older server build sends the list with
+// the song in it and no flag, and hiddenStore's `affects` hides the
+// pane the same way.
 
 export type AffectKind = 'spell' | 'song';
 
@@ -135,14 +138,20 @@ export function getAffects(): CurrentAffect[] | null {
   return store.get().list;
 }
 
-/** True while the game hides your affects. */
+/** True while the game hides your affects, by the packet's own flag
+ *  or by what the backend worked out. */
 export function getAffectsHidden(): boolean {
-  return store.get().hidden;
+  return store.get().hidden || getHidden().affects;
 }
 
 export function subscribeAffects(cb: () => void): () => void {
   startAffectsStore();
-  return store.subscribe(cb);
+  const lists = store.subscribe(cb);
+  const hidden = subscribeHidden(cb);
+  return () => {
+    lists();
+    hidden();
+  };
 }
 
 /** Current affects, or null until the server has sent the list. */

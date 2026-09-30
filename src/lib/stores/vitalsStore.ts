@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { onGmcpPackage, onPromptVars, onState, type PromptVarsPayload } from '../session';
 import { LEDGER_LOW_ENTER, LEDGER_LOW_EXIT } from '../vitalsLayouts';
+import { getHidden, subscribeHidden } from './hiddenStore';
 import { asNumber, createStore, isHiddenFlag } from './store';
 
 // Your hp, mana and moves for the pinned vitals and the compact status
@@ -21,6 +22,12 @@ import { asNumber, createStore, isHiddenFlag } from './store';
 // sets that var to a new value. The capture stops when you go AFK or
 // turn your prompt off, and the game still sends Char.Vitals, so a
 // held var can stay held for a long time.
+//
+// An older server build sends true values under the song, with no
+// flag. The backend works out that they are hidden and says so on
+// session://hidden, and hiddenStore's `vitals` hides the snapshot the
+// same way the flag does. Its values then read as zeros, so no view
+// can show the true ones.
 
 export interface VitalValues {
   hp: number;
@@ -51,6 +58,7 @@ export interface VitalsPacket {
 }
 
 const KEYS: readonly (keyof VitalValues)[] = ['hp', 'maxhp', 'mana', 'maxmana', 'move', 'maxmove'];
+const ZERO: VitalValues = { hp: 0, maxhp: 0, mana: 0, maxmana: 0, move: 0, maxmove: 0 };
 const MAX_OF: Record<VitalKey, keyof VitalValues> = {
   hp: 'maxhp',
   mana: 'maxmana',
@@ -179,12 +187,17 @@ let promptVars: PromptVarsPayload = {};
 let held: PromptVarsPayload = {};
 let started = false;
 
+/** True while the game hides your vitals, by the packet's own flag or
+ *  by what the backend worked out. */
+function hiddenNow(): boolean {
+  return gmcp?.hidden === true || getHidden().vitals;
+}
+
 function publish(): void {
-  // A hidden packet stands alone. Prompt vars never fill it in.
-  const next =
-    gmcp?.hidden === true
-      ? nextVitals(store.get(), gmcp.values, true)
-      : nextVitals(store.get(), mergeVitals(gmcp?.values ?? null, withoutHeld(promptVars, held)));
+  // Hidden vitals stand alone. Prompt vars and GMCP never fill them in.
+  const next = hiddenNow()
+    ? nextVitals(store.get(), ZERO, true)
+    : nextVitals(store.get(), mergeVitals(gmcp?.values ?? null, withoutHeld(promptVars, held)));
   store.set(next);
 }
 
@@ -193,13 +206,20 @@ export function startVitalsStore(): void {
   started = true;
   void onGmcpPackage<unknown>('Char.Vitals', (data) => {
     gmcp = parseVitalsPacket(data);
-    if (gmcp.hidden) held = holdPromptVitals(promptVars);
+    if (hiddenNow()) held = holdPromptVitals(promptVars);
     publish();
   });
   void onPromptVars((payload) => {
     promptVars = payload && typeof payload === 'object' ? payload : {};
-    held =
-      gmcp?.hidden === true ? holdPromptVitals(promptVars) : releasePromptVitals(held, promptVars);
+    held = hiddenNow() ? holdPromptVitals(promptVars) : releasePromptVitals(held, promptVars);
+    publish();
+  });
+  let hiddenByBackend = getHidden().vitals;
+  subscribeHidden(() => {
+    const now = getHidden().vitals;
+    if (now === hiddenByBackend) return;
+    hiddenByBackend = now;
+    if (now) held = holdPromptVitals(promptVars);
     publish();
   });
   void onState((payload) => {

@@ -385,6 +385,26 @@ export async function onPromptVars(cb: (payload: PromptVarsPayload) => void): Pr
   });
 }
 
+/** Which values the game hides right now, on session://hidden. The
+ *  prompt engine works it out from the latest packets and your prompt
+ *  on every server build, and sends it once per read when it changes.
+ *  `vitals` covers your health, mana and moves, `tank` the health of
+ *  the groupmate your opponent hits, and `opponent` your opponent's
+ *  health and condition. */
+export interface HiddenPayload {
+  vitals: boolean;
+  tank: boolean;
+  opponent: boolean;
+  affects: boolean;
+  group: boolean;
+}
+
+export async function onHidden(cb: (payload: HiddenPayload) => void): Promise<UnlistenFn> {
+  return listen<HiddenPayload>('session://hidden', (event) => {
+    cb(event.payload);
+  });
+}
+
 // Keyboard macro bindings. A Macro maps a canonical key string
 // (produced by canonicalKeyFromEvent below) to a command line that
 // the input layer will fire when that key combo is pressed.
