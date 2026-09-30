@@ -357,13 +357,15 @@ Tileset mode adds a bar with `load tileset` and `clear` buttons for your own til
 
 ### 4.3 Use the chat pane
 
-The chat pane collects channel talk in its own buffer with a tab per channel. It ships hidden and its home is the bottom strip.
+The chat pane collects channel talk in its own buffer, one line per message. Add it with `Add a pane` in the title band, or pick `Show here instead` in any pane's menu.
 
-- Show it from the palette. Press `⌘K` and run `show chat pane`.
-- Lines arrive on their own. `Comm.Channel` GMCP feeds the pane automatically. Each line renders as `[pane] text` in its channel color, with the speaker shown as `Name: `.
-- Click a tab in the header to filter. `all` sits first, then one tab per channel name seen in the buffer. The count beside them reads `visible`, or `visible/total` while filtered.
-- Route trigger output in. Add a `route` effect to a trigger in the `triggers` tab and enter a pane name. Those lines land in the chat pane under their own tab.
-- Drag the pane's handle to resize it. Click the `×` labeled `hide chat` to put it away.
+- Lines arrive on their own. `Comm.Channel` GMCP feeds the pane automatically.
+- Read a line as `[tell] Selune: meet at the bank`. The tag names the channel and the speaker is bold, even a name of several words like `a Blackwatch villager`. Wrapped lines hang two cells in, so the tags run down the left edge.
+- Each line takes the color the game prints that channel in, from your theme's terminal colors. Say is bright yellow, tell green, gtell bright magenta, yell cyan, pray bright white, cabal bright blue, clan bright cyan, faction yellow, newbie bright green, immortal bright red, and imp bright cyan. Switch themes and the chat follows.
+- Point at a message to see when it arrived.
+- Filter with the channel select beside the pane's name. `All` shows every channel. Each chat pane keeps its own filter, so you can split one off for tells alone.
+- Route trigger output in. Add a `route` effect to a trigger under Automation, then Triggers, and enter a pane name. Those lines land in the chat pane under that name, in their own words.
+- See the tells you send. The game sends no GMCP for them, so route the terminal line in. A trigger on `^You tell ` with a route to `tell` makes each one read `[tell] to Selune: text`.
 
 The buffer holds a rolling 500 lines, survives closing and reopening the pane, and clears only on disconnect. The pane sticks to its tail. Scroll up to read back, and it sticks again once you come within 24px of the bottom.
 
