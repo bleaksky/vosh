@@ -41,3 +41,17 @@ Three server builds send different packets under lamented tears. The new build (
 `views.json` records what each packet means with no hidden model: the vitals, the affects one row per name, the fight with a flagged opponent's health and condition left out, the group with a flagged roster left out, position and language, the weather, the prompt settings, and the room. The prompt engine keeps its own copy of the packages to draw your prompt, and the panes read the webview stores, so `crates/prompt/tests/views.rs` and `src/test/aabahranViews.test.ts` both check their reading of every packet against this one record.
 
 A room view reads Room.Info as the prompt engine reads it on the new build, with the exits as direction words in the game's door order. Its `map` holds what the room strip under the Map pane reads where that differs on purpose, and only the webview test reads it. The made up rhapsody room names all six exits with room 0 behind each. The Exits piece shows all six, as `%e` prints them under the song, while the strip lists only exits with a room behind them. The engine prints the game's sector of -1, while the strip colors a sector only when the map has one.
+
+## Chat packets
+
+The `chat` folder holds Comm.Channel packets, written by hand from `gmcp_send_channel_ext` in `gmcp.c` and its callers in `act_comm.c` and `languages.c`. Only the chat store in the webview reads them, in `src/lib/chatStore.test.ts`, so they sit apart from the packets the prompt engine keeps a view of. The messages are made up.
+
+| File | What the server sends it for |
+| --- | --- |
+| `chat/say.gmcp` | Someone in the room says something in common. |
+| `chat/tell.gmcp` | A tell you receive in common, marked `received`. |
+| `chat/tell-foreign.gmcp` | A tell in a language you do not know. The text is the garble you saw, the language reads `foreign` and `understood` is false. |
+| `chat/yell.gmcp` | A yell from a mob, whose name runs to several words. |
+| `chat/gtell-disguised.gmcp` | A group tell from a disguised player, as an immortal sees the name. |
+| `chat/cabal.gmcp` | Cabal talk. The channel carries no language. |
+| `chat/immortal.gmcp` | Immortal talk. |

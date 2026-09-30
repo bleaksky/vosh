@@ -1,10 +1,27 @@
 import { onGmcpPackage, onRouted, onState, type RoutedPayload } from './session';
 
+/** Which way a tell went. Aabahran marks a tell you receive
+ *  `received`. It sends nothing for a tell you send, so a `sent` line
+ *  comes from a trigger that routes the terminal line (parseRoutedLine). */
+export type ChatDirection = 'sent' | 'received';
+
 export interface ChatLine {
+  /** The channel, or the pane a trigger route names. */
   pane: string;
+  /** Who spoke, as the game names them to you: `Selune`, `someone`,
+   *  `a Blackwatch villager`. On a tell you send, who it went to.
+   *  Null on a routed line, which keeps its own wording. */
+  speaker: string | null;
+  /** The message alone, or the whole routed line. */
   text: string;
-  /** Arrival time (ms epoch). The well's chat pane renders it as a
-   *  dim HH:MM column, per the canvas. */
+  /** The language the message was spoken in, `foreign` when you did
+   *  not know it. Only say, tell, yell, and gtell carry one. */
+  language: string | null;
+  /** False when the message reached you garbled or foreign. */
+  understood: boolean | null;
+  /** Set on tells only. */
+  direction: ChatDirection | null;
+  /** Arrival time (ms epoch). */
   ts: number;
 }
 
@@ -17,18 +34,67 @@ function stripAnsi(text: string): string {
   return text.replace(ANSI_RE, '');
 }
 
-// Convert a Comm.Channel(.Text) GMCP payload to a ChatLine. Field
-// names vary across ROM derivatives; fall back through the common
-// alternates so as many servers as possible route here automatically.
-function commToChatLine(data: unknown): ChatLine | null {
+function fieldText(value: unknown): string {
+  return value === undefined || value === null ? '' : stripAnsi(String(value));
+}
+
+/** A Comm.Channel(.Text) payload as a chat line, or null when it carries
+ *  no message. Field names vary across ROM derivatives, so it falls back
+ *  through the common alternates and as many servers as possible route
+ *  here on their own. */
+export function parseCommChannel(data: unknown, ts: number = Date.now()): ChatLine | null {
   if (!data || typeof data !== 'object') return null;
   const obj = data as Record<string, unknown>;
-  const pane = String(obj.channel ?? obj.chan ?? 'chat');
-  const speaker = obj.speaker ? String(obj.speaker) : obj.talker ? String(obj.talker) : '';
-  const raw = String(obj.text ?? obj.msg ?? obj.message ?? '');
-  if (!raw) return null;
-  const cleaned = stripAnsi(raw);
-  return { pane, text: speaker ? `${speaker}: ${cleaned}` : cleaned, ts: Date.now() };
+  const text = fieldText(obj.text ?? obj.msg ?? obj.message);
+  if (!text) return null;
+  const speaker = fieldText(obj.speaker ?? obj.talker);
+  const language = typeof obj.language === 'string' ? obj.language : null;
+  const understood = typeof obj.understood === 'boolean' ? obj.understood : null;
+  const direction = obj.direction === 'sent' || obj.direction === 'received' ? obj.direction : null;
+  return {
+    pane: String(obj.channel ?? obj.chan ?? 'chat'),
+    speaker: speaker || null,
+    text,
+    language,
+    understood,
+    direction,
+    ts,
+  };
+}
+
+// The line the game prints for a tell you send (languages.c
+// compose_tell): `You tell Selune 'text'`, with ` in Elvish` before the
+// quote when you spoke anything but common, and `You project to` for a
+// telepath. The recipient can run to several words, `a city guard`.
+const SENT_TELL_RE = /^You (?:tell|project to) (.+?)(?: in ([A-Z][\w']*))? '([\s\S]*)'$/;
+
+/** A line a trigger routed to a pane. The line keeps its own wording,
+ *  except the game's line for a tell you send, which reads as your side
+ *  of the tell. */
+export function parseRoutedLine(payload: RoutedPayload, ts: number = Date.now()): ChatLine {
+  const text = stripAnsi(payload.text).trimEnd();
+  const sent = SENT_TELL_RE.exec(text);
+  if (sent && sent[1] !== 'your group') {
+    return {
+      pane: payload.pane,
+      speaker: sent[1],
+      text: sent[3],
+      // The game leaves the language out for common.
+      language: sent[2] ?? 'common',
+      understood: true,
+      direction: 'sent',
+      ts,
+    };
+  }
+  return {
+    pane: payload.pane,
+    speaker: null,
+    text,
+    language: null,
+    understood: null,
+    direction: null,
+    ts,
+  };
 }
 
 // Module-level chat buffer. Subscribes to GMCP / routed / state on
@@ -54,13 +120,13 @@ export function startChatStore(): void {
   if (started) return;
   started = true;
   const handleComm = (data: unknown) => {
-    const line = commToChatLine(data);
+    const line = parseCommChannel(data);
     if (line) append(line);
   };
   void onGmcpPackage<unknown>('Comm.Channel', handleComm);
   void onGmcpPackage<unknown>('Comm.Channel.Text', handleComm);
   void onRouted((payload: RoutedPayload) => {
-    append({ pane: payload.pane, text: stripAnsi(payload.text), ts: Date.now() });
+    append(parseRoutedLine(payload));
   });
   void onState((payload) => {
     if (payload.kind === 'disconnected') {
