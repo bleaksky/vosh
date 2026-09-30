@@ -10,6 +10,7 @@ import {
   layoutBands,
   LiftTracker,
   markLifted,
+  notchedPath,
   type LiftExtent,
 } from './promptBands';
 import { RegionWriter } from './terminalRegion';
@@ -51,7 +52,10 @@ describe('LiftTracker', () => {
     });
     writer.local('look\r\n');
     await parsed(writer);
-    expect(extents(term, lifts)).toEqual([{ id: 1, top: 2, bottom: 3, left: 0, right: 13 }]);
+    // Your echo follows the shorter last row, so the band steps in there.
+    expect(extents(term, lifts)).toEqual([
+      { id: 1, top: 2, bottom: 3, left: 0, right: 13, notch: 8 },
+    ]);
   });
 
   it('stops at the end mark, before the space and your echo after it', async () => {
@@ -149,6 +153,51 @@ describe('LiftTracker on a change of where your prompt shows', () => {
   });
 });
 
+describe('LiftTracker with your echo after a prompt of several rows', () => {
+  const tank = 'Tester: [===|---]';
+  const guard = 'a Blackwatch guard 54% quite a few wounds';
+  const fight = `${start(1)}${tank}\r\n${mark(2)}${guard}\r\n<765hp>${end(1)} `;
+
+  it('notes where the last row ends when your echo follows it', async () => {
+    const { term, writer, lifts } = setup(60);
+    writer.output({ text: fight });
+    writer.local('\x1b[93mflee\x1b[0m\r\n');
+    await parsed(writer);
+    expect(extents(term, lifts)).toEqual([
+      { id: 1, top: 0, bottom: 2, left: 0, right: guard.length, notch: 7 },
+    ]);
+  });
+
+  it('keeps one rectangle while nothing follows on the last row', async () => {
+    const { term, writer, lifts } = setup(60);
+    writer.output({ text: `${fight}\r\nTarvik tells you 'hi'\r\n` });
+    await parsed(writer);
+    expect(extents(term, lifts)).toEqual([
+      { id: 1, top: 0, bottom: 2, left: 0, right: guard.length },
+    ]);
+  });
+
+  it('keeps one rectangle when the last row is the widest', async () => {
+    const { term, writer, lifts } = setup(60);
+    writer.output({ text: `${start(1)}${tank}\r\n${mark(2)}${guard}${end(1)} ` });
+    writer.local('flee\r\n');
+    await parsed(writer);
+    expect(extents(term, lifts)).toEqual([
+      { id: 1, top: 0, bottom: 1, left: 0, right: guard.length },
+    ]);
+  });
+
+  it('notches a one row prompt a narrow terminal wrapped', async () => {
+    const { term, writer, lifts } = setup(20);
+    writer.output({ text: `${start(1)}${mark(2)}1020/1020hp 800/800mn 930/930mv${end(1)} ` });
+    writer.local('flee\r\n');
+    await parsed(writer);
+    expect(extents(term, lifts)).toEqual([
+      { id: 1, top: 0, bottom: 1, left: 0, right: 20, notch: 11 },
+    ]);
+  });
+});
+
 describe('layoutBands', () => {
   const cell = { w: 7.8, h: 17.5 };
 
@@ -197,6 +246,34 @@ describe('layoutBands', () => {
     // The outer edges keep the full reach.
     expect(a.top).toBe(4 * cell.h - BAND_Y);
     expect(b.top + b.height).toBe(6 * cell.h + BAND_Y);
+  });
+
+  it('steps in around your echo on the last row', () => {
+    const [band] = layoutBands(
+      [{ id: 1, top: 2, bottom: 4, left: 0, right: 52, notch: 42 }],
+      0,
+      cell.w,
+      cell.h,
+    );
+    expect(band.width).toBeCloseTo(52 * cell.w + 2 * BAND_X, 6);
+    expect(band.height).toBe(3 * cell.h + 2 * BAND_Y);
+    // The last row's band ends 4 px past its last glyph, and the rows
+    // above keep the full width down to the last row's top.
+    expect(band.notch?.x).toBeCloseTo(42 * cell.w + 2 * BAND_X, 6);
+    expect(band.notch?.y).toBe(2 * cell.h + BAND_Y);
+    const [plain] = layoutBands([{ id: 1, top: 2, bottom: 4, left: 0, right: 52 }], 0, 7.8, 17.5);
+    expect(plain.notch).toBeUndefined();
+  });
+
+  it('draws a notched band as one outline with rounded outer corners', () => {
+    const path = notchedPath(100, 60, 40, 20, 4, 0);
+    expect(path).toBe(
+      'M4 0H96A4 4 0 0 1 100 4V16A4 4 0 0 1 96 20H40V56A4 4 0 0 1 36 60H4A4 4 0 0 1 0 56V4A4 4 0 0 1 4 0Z',
+    );
+    // The light ring runs half a pixel inside it.
+    expect(notchedPath(100, 60, 40, 20, 4, 0.5)).toBe(
+      'M4 0.5H96A3.5 3.5 0 0 1 99.5 4V16A3.5 3.5 0 0 1 96 19.5H39.5V56A3.5 3.5 0 0 1 36 59.5H4A3.5 3.5 0 0 1 0.5 56V4A3.5 3.5 0 0 1 4 0.5Z',
+    );
   });
 
   it('places lifts against the viewport, cut ones partly above it', () => {
