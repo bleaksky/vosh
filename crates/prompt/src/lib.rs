@@ -6,7 +6,11 @@
 //!
 //! - [`template`] parses a prompt template into tokens and the pieces the
 //!   editor shows.
+//! - [`format`] holds the values a template draws and the plain text of
+//!   each format.
 
+pub mod format;
 pub mod template;
 
+pub use format::{Position, Resolved, Value};
 pub use template::{FieldRef, Format, Template};
