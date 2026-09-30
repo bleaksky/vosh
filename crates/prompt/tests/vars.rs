@@ -11,7 +11,7 @@ use common::{
 };
 use serde_json::json;
 use vosh_prompt::format::Position;
-use vosh_prompt::vars::{Tick, CATALOG};
+use vosh_prompt::vars::{is_sourced, Tick, CATALOG};
 use vosh_prompt::{
     render_str, FieldRef, MapValues, RenderOptions, Resolved, Value, Values, Vars, Vosh,
 };
@@ -64,6 +64,55 @@ fn a_name_only_scripts_supply_keeps_its_value() {
     vars.set_script("mood", "grim");
     vars.disconnect();
     assert_eq!(resolve(&vars, "mood"), Resolved::Unknown);
+}
+
+#[test]
+fn a_script_value_for_a_name_only_vosh_supplies_keeps_its_value() {
+    // Neither the capture nor GMCP supplies these, so a script value
+    // lasts until a script changes it.
+    let mut vars = Vars::new(true);
+    feed(&mut vars, "char-vitals.gmcp");
+    for (name, value) in [
+        ("target", "orc"),
+        ("profile", "Healer"),
+        ("tick", "14"),
+        ("mood", "grim"),
+    ] {
+        vars.set_script(name, value);
+    }
+    for _ in 0..3 {
+        feed(&mut vars, "char-vitals.gmcp");
+    }
+    assert_eq!(
+        draw(&vars, "%target|%profile|%tick|%mood"),
+        "orc|Healer|14|grim"
+    );
+    let pv = vars.prompt_vars();
+    let keys: Vec<&str> = pv.keys().map(String::as_str).collect();
+    assert_eq!(keys, vec!["mood", "profile", "target", "tick"]);
+    // A name the capture or GMCP supplies lasts one pulse, the raw
+    // prompt and the immortal prefix among them.
+    vars.set_script("raw", "<1020hp>");
+    vars.set_script("wizi", "60");
+    vars.set_script("hp", "700");
+    assert_eq!(draw(&vars, "%raw %wizi %hp"), "<1020hp> 60 700");
+    feed(&mut vars, "char-vitals.gmcp");
+    assert_eq!(resolve(&vars, "raw"), Resolved::Missing);
+    assert_eq!(resolve(&vars, "wizi"), Resolved::Missing);
+    assert_eq!(draw(&vars, "%hp"), "850");
+    // A profile switch clears them all.
+    vars.switch_profile(true);
+    assert_eq!(resolve(&vars, "target"), Resolved::Absent);
+    assert!(vars.prompt_vars().is_empty());
+
+    for name in ["target", "tar", "profile", "tick", "time", "date", "mood"] {
+        assert!(!is_sourced(name), "{name}");
+    }
+    for name in [
+        "hp", "mhp", "raw", "wizi", "afk", "tank_pct", "exits", "gold",
+    ] {
+        assert!(is_sourced(name), "{name}");
+    }
 }
 
 #[test]
