@@ -1,0 +1,37 @@
+{
+  "cases": [
+    {
+      "name": "the new build flags each hidden packet",
+      "packets": [
+        "char-prompt.gmcp",
+        "char-affects-hidden.gmcp",
+        "char-vitals-hidden.gmcp",
+        "char-combat-tank-hidden.gmcp",
+        "group-info-hidden.gmcp",
+        "char-state.gmcp",
+        "room-weather.gmcp"
+      ],
+      "hidden": { "vitals": true, "tank": true, "opponent": true, "affects": true, "group": true }
+    },
+    {
+      "name": "243cac5c sends empty and zero packets with no flag",
+      "packets": [
+        "char-affects-empty.gmcp",
+        "char-vitals-zero.gmcp",
+        "char-combat-withheld.gmcp",
+        "group-info-empty.gmcp"
+      ],
+      "hidden": { "vitals": true, "tank": false, "opponent": true, "affects": true, "group": true }
+    },
+    {
+      "name": "the older build sends true values and names the song",
+      "packets": [
+        "char-affects-lament.gmcp",
+        "char-vitals.gmcp",
+        "char-combat-lament-older.gmcp",
+        "group-info-own-row.gmcp"
+      ],
+      "hidden": { "vitals": true, "tank": true, "opponent": true, "affects": true, "group": true }
+    }
+  ]
+}

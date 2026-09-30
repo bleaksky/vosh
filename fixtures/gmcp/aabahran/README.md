@@ -35,3 +35,5 @@ Three server builds send different packets under lamented tears. The new build (
 | `group-info-hidden.gmcp` | Your group under lamented tears. |
 | `group-info-empty.gmcp` | Your group under lamented tears on 243cac5c. It is the same `{}` a solo player gets. |
 | `group-info-own-row.gmcp` | Your group under lamented tears on the older build. The roster comes whole, your own row included. |
+
+`lament.json` lists the three lamented tears cases, one per server build. Each names the packets in the order that build sends them and the hidden state the backend works out from them, in the `{vitals, tank, opponent, affects, group}` shape of `session://hidden`. The TypeScript store tests feed those packets with that state and check that the Vitals, Affects and Group panes read hidden.

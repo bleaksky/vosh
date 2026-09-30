@@ -1,4 +1,5 @@
 import { onGmcpPackage, onState } from './session';
+import { getHidden, subscribeHidden } from './stores/hiddenStore';
 import { isHiddenFlag } from './stores/store';
 
 export interface GroupMember {
@@ -47,14 +48,30 @@ export interface GroupState {
 // so the ChatGroupPane can close and reopen without losing the
 // last-pushed roster / worth snapshot. Subscribes to GMCP once on
 // first read and keeps the latest state per package.
+//
+// An older server build sends the whole roster under lamented tears,
+// your own row with its health included, and no flag. The backend
+// works out that it is hidden, and while hiddenStore's `group` holds,
+// the store reads as the hidden Group.Info the new build sends, so no
+// roster shows.
 let group: GroupInfo = {};
 let worth: Worth = {};
 let self: string | undefined;
 let listeners: Array<(state: GroupState) => void> = [];
 let started = false;
+let hiddenByBackend = false;
+
+/** The Group.Info a hidden group reads as. One object, so a pane that
+ *  compares snapshots sees no change while the group stays hidden. */
+const HIDDEN_GROUP: GroupInfo = { hidden: true };
+
+/** The group the panes see, hidden while the backend says so. */
+function shownGroup(): GroupInfo {
+  return hiddenByBackend && group.hidden !== true ? HIDDEN_GROUP : group;
+}
 
 function notify() {
-  const snapshot = { group, worth, self };
+  const snapshot = { group: shownGroup(), worth, self };
   for (const l of listeners) l(snapshot);
 }
 
@@ -124,11 +141,18 @@ export function startGroupStore(): void {
       notify();
     }
   });
+  hiddenByBackend = getHidden().group;
+  subscribeHidden(() => {
+    const now = getHidden().group;
+    if (now === hiddenByBackend) return;
+    hiddenByBackend = now;
+    notify();
+  });
 }
 
 export function getGroupState(): GroupState {
   startGroupStore();
-  return { group, worth, self };
+  return { group: shownGroup(), worth, self };
 }
 
 export function subscribeGroupState(cb: (state: GroupState) => void): () => void {

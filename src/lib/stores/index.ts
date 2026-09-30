@@ -6,6 +6,7 @@ import { startCharStateStore } from './charStateStore';
 import { startChipStyleStore } from './chipStyleStore';
 import { startCombatStore } from './combatStore';
 import { startGamePromptStore } from './gamePromptStore';
+import { startHiddenStore } from './hiddenStore';
 import { startRoomStore } from './roomStore';
 import { startTargetStore } from './targetStore';
 import { startTickCountStore } from './tickCountStore';
@@ -24,6 +25,9 @@ import { startWorldStore } from './worldStore';
 // Each start is idempotent, and each store also starts itself on its
 // first subscribe as a fallback.
 export function startStores(): void {
+  // First, so every store that ORs in the hidden state finds it
+  // listening.
+  startHiddenStore();
   startChatStore();
   startGroupStore();
   startImmStore();
