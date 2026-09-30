@@ -1398,4 +1398,222 @@ mod tests {
         // With whole-word, only the standalone "cat".
         assert_eq!(collect_matches(&g, "cat", false, false, true).len(), 1);
     }
+
+    /// The stage's output driven into the grid, as the session and the
+    /// native renderer pass it along (section 9, stage into `TermGrid`).
+    mod stage_into_grid {
+        use super::*;
+        use vosh_prompt::config::RegexCapture;
+        use vosh_prompt::stage::{End, Stage};
+        use vosh_prompt::CaptureConfig;
+
+        const CAPTURE: &str = r"\[(?<hp>\d+)/(?<maxhp>\d+)hp\]";
+        const GAME: &str = "[1020/1020hp]";
+        /// A design of one row at 40 wide and three rows at 12 wide.
+        const ONE_ROW: &str = "[1020/1020hp 800/800mn 930/930mv]";
+        /// A design of two rows, as `%nl` draws it.
+        const TWO_ROWS: &str = "Tank 100%\r\n[1020/1020hp]";
+
+        fn stage() -> Stage {
+            let mut stage = Stage::default();
+            stage.set_capture(&CaptureConfig::Regex(RegexCapture {
+                lines: vec![CAPTURE.to_string()],
+                ..RegexCapture::default()
+            }));
+            stage
+        }
+
+        /// A read that brings `before`, then the game's prompt, which the
+        /// stage draws as `drawn`.
+        fn prompt_read(stage: &mut Stage, before: &[u8], drawn: &str) -> Output {
+            let mut out = Output::new(false);
+            out.text(before);
+            let block = stage
+                .recognize(GAME.as_bytes(), GAME, End::Line)
+                .expect("the capture reads the game's prompt");
+            stage.draw(&mut out, block, None, b"", drawn);
+            stage.finish(&out);
+            out
+        }
+
+        /// A repaint of the open row as `drawn`, or as the game sent it.
+        fn repaint(stage: &mut Stage, drawn: Option<&str>) -> Output {
+            let mut out = Output::new(false);
+            stage.repaint(&mut out, drawn);
+            out
+        }
+
+        /// How many rows of `rows` hold `text`.
+        fn count(rows: &[String], text: &str) -> usize {
+            rows.iter().filter(|row| row.contains(text)).count()
+        }
+
+        #[test]
+        fn a_repaint_after_your_echo_is_dropped_at_either_width() {
+            for (columns, design, expect) in [
+                (
+                    40,
+                    ONE_ROW,
+                    vec!["You are hungry.", "[1020/1020hp 800/800mn 930/930mv]look"],
+                ),
+                (
+                    12,
+                    ONE_ROW,
+                    vec![
+                        "You are",
+                        "hungry.",
+                        "[1020/1020hp",
+                        "800/800mn",
+                        "930/930mv]lo",
+                        "ok",
+                    ],
+                ),
+                (
+                    40,
+                    TWO_ROWS,
+                    vec!["You are hungry.", "Tank 100%", "[1020/1020hp]look"],
+                ),
+                (
+                    12,
+                    TWO_ROWS,
+                    vec!["You are", "hungry.", "Tank 100%", "[1020/1020hp", "]look"],
+                ),
+            ] {
+                let mut stage = stage();
+                let mut g = TermGrid::new(columns, 12);
+                g.session_output(&prompt_read(&mut stage, b"You are hungry.\r\n", design));
+                // Your echo lands before the session hears of it, so the
+                // stage still holds the row open and repaints it.
+                g.local_write(b"look\r\n");
+                let out = repaint(&mut stage, Some("NEW"));
+                assert!(out.replace.is_some());
+                g.session_output(&out);
+                let rows = screen(&g);
+                assert_eq!(rows, expect, "{columns} wide");
+                // The echo shows once, even where it wraps, and the
+                // prompt shows once.
+                assert_eq!(rows.concat().matches("look").count(), 1);
+                assert_eq!(rows.concat().matches("1020hp").count(), 1);
+                assert_eq!(count(&rows, "NEW"), 0);
+            }
+        }
+
+        #[test]
+        fn your_echo_after_a_repaint_follows_the_new_prompt_at_either_width() {
+            for (columns, design) in [(40, ONE_ROW), (12, ONE_ROW), (40, TWO_ROWS), (12, TWO_ROWS)]
+            {
+                let mut stage = stage();
+                let mut g = TermGrid::new(columns, 12);
+                g.session_output(&prompt_read(&mut stage, b"You are hungry.\r\n", design));
+                g.session_output(&repaint(&mut stage, Some("NEW> ")));
+                g.local_write(b"look\r\n");
+                let rows = screen(&g);
+                let hungry = if columns == 40 {
+                    vec!["You are hungry."]
+                } else {
+                    vec!["You are", "hungry."]
+                };
+                assert_eq!(
+                    rows,
+                    [hungry, vec!["NEW> look"]].concat(),
+                    "{columns} wide, {design:?}"
+                );
+                assert_eq!(count(&rows, "1020"), 0, "the old design is gone whole");
+            }
+        }
+
+        #[test]
+        fn drawing_off_shows_the_game_prompt_where_the_design_was() {
+            let mut stage = stage();
+            let mut g = TermGrid::new(40, 12);
+            g.session_output(&prompt_read(&mut stage, b"You are hungry.\r\n", TWO_ROWS));
+            g.session_output(&repaint(&mut stage, None));
+            g.local_write(b"look\r\n");
+            assert_eq!(screen(&g), ["You are hungry.", GAME, "look"]);
+        }
+
+        #[test]
+        fn a_prompt_split_across_reads_replaces_its_painted_start() {
+            let mut stage = stage();
+            let mut g = TermGrid::new(12, 12);
+            let mut first = Output::new(false);
+            first.text(b"You are hungry.\r\n");
+            let painted = stage.paint_partial(&mut first, b"[1020/10", None);
+            stage.finish(&first);
+            g.session_output(&first);
+            assert_eq!(screen(&g), ["You are", "hungry.", "[1020/10"]);
+            let mut second = Output::new(false);
+            let block = stage
+                .recognize(GAME.as_bytes(), GAME, End::Line)
+                .expect("the prompt");
+            stage.draw(
+                &mut second,
+                block,
+                painted.map(|(gen, _)| gen),
+                b"",
+                ONE_ROW,
+            );
+            g.session_output(&second);
+            assert_eq!(
+                screen(&g),
+                [
+                    "You are",
+                    "hungry.",
+                    "[1020/1020hp",
+                    "800/800mn",
+                    "930/930mv]"
+                ]
+            );
+            // The drawn prompt is the open row now.
+            g.session_output(&repaint(&mut stage, Some("NEW")));
+            assert_eq!(screen(&g), ["You are", "hungry.", "NEW"]);
+        }
+
+        #[test]
+        fn a_repaint_after_a_resize_while_the_row_stays_open() {
+            // With the card open the session keeps the row open through a
+            // resize, and the grid finds the region at its new width.
+            let mut stage = stage();
+            let mut g = TermGrid::new(40, 4);
+            g.session_output(&prompt_read(
+                &mut stage,
+                b"one\r\ntwo\r\nYou are hungry.\r\n",
+                ONE_ROW,
+            ));
+            g.resize(12, 4);
+            g.session_output(&repaint(&mut stage, Some("NEW")));
+            // The rows over the prompt reflow at 12 wide, and the narrower
+            // grid keeps the cursor row, so the first ones move into
+            // history. The row just over the prompt stays whole.
+            assert_eq!(screen(&g), ["ry.", "NEW"]);
+        }
+
+        #[test]
+        fn a_preview_goes_back_to_the_live_render_before_your_echo() {
+            let mut stage = stage();
+            let mut g = TermGrid::new(40, 12);
+            g.session_output(&prompt_read(&mut stage, b"You are hungry.\r\n", "LIVE> "));
+            let mut preview = repaint(&mut stage, Some("PREVIEW> "));
+            preview.restore = Some(b"LIVE> ".to_vec());
+            g.session_output(&preview);
+            assert_eq!(screen(&g), ["You are hungry.", "PREVIEW>"]);
+            g.local_write(b"look\r\n");
+            assert_eq!(screen(&g), ["You are hungry.", "LIVE> look"]);
+        }
+
+        #[test]
+        fn a_repaint_that_crosses_later_output_is_dropped() {
+            let mut stage = stage();
+            let mut g = TermGrid::new(40, 12);
+            g.session_output(&prompt_read(&mut stage, b"", "DRAWN> "));
+            // A repaint the session sent before the next read reached the
+            // renderer, which then finds output after the region.
+            let stale = repaint(&mut stage.clone(), Some("NEW> "));
+            let mut next = Output::new(false);
+            next.text(b"\r\nYou flee!\r\n");
+            g.session_output(&next);
+            g.session_output(&stale);
+            assert_eq!(screen(&g), ["DRAWN>", "You flee!"]);
+        }
+    }
 }
