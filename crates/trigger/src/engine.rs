@@ -5,7 +5,7 @@ use regex::Regex;
 use vosh_ansi::plain_text;
 
 use crate::action::{HighlightStyle, TriggerAction};
-use crate::store::{TriggerStore, TriggerTarget};
+use crate::store::{Trigger, TriggerStore, TriggerTarget};
 
 /// Which dispatch lane the engine is running. Mirrors
 /// [`TriggerTarget`]: a `Line` pass only fires triggers with
@@ -243,6 +243,20 @@ pub fn process_with_plain(
     }
 }
 
+/// The triggers that would fire on `plain` in `scope`, in priority order,
+/// without running any of their actions. A trigger counts when it is on,
+/// its group is on, and any of its enabled patterns matches. The session
+/// uses it to name triggers, such as a Line trigger that matched a line
+/// Vosh read as your prompt.
+pub fn matching<'a>(store: &'a TriggerStore, plain: &str, scope: MatchScope) -> Vec<&'a Trigger> {
+    store
+        .iter_compiled()
+        .filter(|c| c.trigger.enabled && scope.matches(c.trigger.target))
+        .filter(|c| c.regexes.iter().any(|r| r.is_match(plain)))
+        .map(|c| &c.trigger)
+        .collect()
+}
+
 /// Apply every highlight in a single pass. Match spans are collected
 /// against the text BEFORE any escapes are injected, so a later
 /// pattern can never match inside an earlier highlight's escape
@@ -337,7 +351,6 @@ mod tests {
     use super::*;
     use crate::action::HighlightStyle;
     use crate::color::NamedColor;
-    use crate::store::Trigger;
 
     fn store(triggers: Vec<Trigger>) -> TriggerStore {
         let mut s = TriggerStore::new();
@@ -408,6 +421,44 @@ mod tests {
         assert!(s.import_json(&bad_json).is_err());
         assert_eq!(s.len(), 1);
         assert_eq!(s.disabled_groups(), vec!["combat".to_string()]);
+    }
+
+    #[test]
+    fn matching_names_the_triggers_a_line_would_fire_in_its_scope() {
+        let mut prompt = highlight("prompt-look", "hp", NamedColor::Blue);
+        prompt.target = TriggerTarget::Prompt;
+        let mut off = highlight("off", "hp", NamedColor::Red);
+        off.enabled = false;
+        let mut grouped = highlight("grouped", "hp", NamedColor::Red);
+        grouped.group = Some("combat".to_string());
+        let mut two = highlight("two", "^nothing", NamedColor::Red);
+        two.patterns.push(crate::store::TriggerPattern {
+            pattern: r"\d+hp".to_string(),
+            enabled: true,
+        });
+        let mut s = store(vec![
+            highlight("low", "hp", NamedColor::Red),
+            prompt,
+            off,
+            grouped,
+            two,
+            highlight("other", "^You", NamedColor::Red),
+        ]);
+        s.set_disabled_groups(vec!["combat".to_string()]);
+
+        let names = |scope| -> Vec<String> {
+            matching(&s, "[850/900hp]", scope)
+                .into_iter()
+                .map(|t| t.name.clone())
+                .collect()
+        };
+        // A turned off trigger, one in a turned off group and one whose
+        // patterns all miss are left out. Any pattern that hits counts.
+        let mut line = names(MatchScope::Line);
+        line.sort();
+        assert_eq!(line, ["low", "two"]);
+        assert_eq!(names(MatchScope::Prompt), ["prompt-look"]);
+        assert!(matching(&TriggerStore::new(), "hp", MatchScope::Line).is_empty());
     }
 
     #[test]
