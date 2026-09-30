@@ -121,6 +121,9 @@ describe('searchSettingsRows', () => {
     expect(settingsRowKey(marker)).toBe('layout:affects#affects-marker');
     expect(labels('square')).toContain('Marker');
     expect(labels('plus minus')).toContain('Marker');
+    const [tint] = searchSettingsRows('tint recast', mac);
+    expect(tint.label).toBe('Tint what to recast');
+    expect(settingsRowKey(tint)).toBe('layout:affects#affects-tint');
   });
 
   it('finds the tick and time style under Layout', () => {

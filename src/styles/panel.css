@@ -692,6 +692,46 @@
   left: 0;
 }
 
+/* Tint what to recast, in Timers first and Countdown: a missing affect
+   sits on a red wash, and one about to drop on board C's yellow at two
+   hours or red at one or none. The wash sits behind the row, 6 px past
+   it each side at radius 4, 20 tall in Timers first like a chip, and
+   22 tall over the text and the meter in Countdown. The missing wash is
+   8 percent, so a red name keeps 4.5 to 1 on Vellum. */
+[data-affects-tint] .pane-affect,
+[data-affects-tint] .pane-countdown-cell {
+  isolation: isolate;
+}
+
+[data-affects-tint]
+  :is(.pane-affect, .pane-countdown-cell):is(.pane-affect-missing, .pane-affect-expiring)::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: -6px;
+  right: -6px;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 4px;
+  background: var(--recast-wash);
+}
+
+[data-affects-tint] .pane-countdown-cell::before {
+  top: 0;
+}
+
+[data-affects-tint] .pane-affect-missing {
+  --recast-wash: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+[data-affects-tint] .pane-affect-expiring {
+  --recast-wash: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
+[data-affects-tint] .pane-affect-expiring:has(.is-danger) {
+  --recast-wash: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
 /* Board Affects C, Grouped chips. chipsGrid packs the lines, and each
    sits at its own top in a page as tall as the body. Pages stack and
    scroll a page at a time, as the other styles do. Lines run from x 18

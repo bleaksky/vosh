@@ -33,6 +33,8 @@ export interface CountdownViewProps {
   /** The body's size. The pane measures its own when left out. */
   box?: Box | undefined;
   marker?: AffectsMarker | undefined;
+  /** Wash the rows to recast, missing and running out. */
+  tint?: boolean | undefined;
   /** Hours at full for each affect, from the affect full store. */
   full: AffectFulls;
 }
@@ -45,6 +47,7 @@ export function CountdownView({
   hidden,
   box,
   marker = 'dot',
+  tint = false,
   full,
 }: CountdownViewProps) {
   const rows = useMemo(() => affectsPaneRows(current, tracked, hidden), [current, tracked, hidden]);
@@ -60,6 +63,7 @@ export function CountdownView({
         ref={bodyRef}
         className="pane-body"
         data-affects-marker={marker === 'dot' ? undefined : marker}
+        data-affects-tint={tint ? '' : undefined}
       >
         {empty !== null ? (
           <AffectsEmpty text={empty} />

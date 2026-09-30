@@ -163,6 +163,27 @@ describe('CountdownView', () => {
     expect(html).toContain('aria-label="7 more affects, scroll to them"');
   });
 
+  it('marks the body for the recast tint only while it is on', () => {
+    const tinted = renderToStaticMarkup(
+      <PaneLeafContext.Provider value={LEAF}>
+        <CountdownView
+          current={FOURTEEN}
+          tracked={TRACKED}
+          hidden={false}
+          box={BOARD_BOX}
+          full={FULL}
+          tint
+        />
+      </PaneLeafContext.Provider>,
+    );
+    expect(tinted).toContain('<div class="pane-body" data-affects-tint="">');
+    expect(draw(FOURTEEN)).not.toContain('data-affects-tint');
+    // Over the text and the meter, 22 tall.
+    const cell = panelCss.indexOf('[data-affects-tint] .pane-countdown-cell::before {');
+    expect(cell).toBeGreaterThan(0);
+    expect(panelCss.slice(cell, panelCss.indexOf('}', cell))).toContain('top: 0');
+  });
+
   it('names the marker on the body only when it is not the dot', () => {
     expect(draw(FOURTEEN)).toContain('<div class="pane-body">');
     expect(draw(FOURTEEN, { marker: 'none' })).toContain(

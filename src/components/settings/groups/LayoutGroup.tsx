@@ -224,9 +224,10 @@ const MARKER_OPTIONS: readonly SegmentedOption<AffectsMarker>[] = AFFECTS_MARKER
 );
 
 /** How the Affects pane draws (AffectsStyles SPEC 4.1): one of the
- *  three approved boards, and the mark beside each tracked affect.
- *  Grouped chips show the state on each chip, so the Marker row goes
- *  quiet while they are chosen and keeps your pick for the other two.
+ *  three approved boards, the mark beside each tracked affect, and the
+ *  wash behind what to recast. Grouped chips show the state on each
+ *  chip and always mark what to recast, so Marker and Tint go quiet
+ *  while they are chosen and keep your picks for the other two.
  *  Exported for its test. */
 export function AffectsSection({
   config,
@@ -265,6 +266,21 @@ export function AffectsSection({
           options={markers}
           value={config.affects_marker}
           onChange={(marker) => update({ affects_marker: marker })}
+        />
+      </Row>
+      <Row
+        label="Tint what to recast"
+        description={
+          chips
+            ? 'Grouped chips always mark what to recast.'
+            : 'A missing affect sits on a red wash, and one about to drop sits on yellow or red.'
+        }
+        anchor="affects-tint"
+      >
+        <Toggle
+          checked={config.affects_tint}
+          disabled={chips}
+          onChange={(on) => update({ affects_tint: on })}
         />
       </Row>
     </Section>

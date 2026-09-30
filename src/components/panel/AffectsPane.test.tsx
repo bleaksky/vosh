@@ -278,6 +278,44 @@ describe('AffectsPaneView', () => {
     );
   });
 
+  it('marks the body for the recast tint only while it is on', () => {
+    const drawTint = (tint: boolean) =>
+      renderToStaticMarkup(
+        <PaneLeafContext.Provider value={LEAF}>
+          <AffectsPaneView
+            current={ERELEI}
+            tracked={ERELEI_TRACKED}
+            hidden={false}
+            box={BOARD_BOX}
+            tint={tint}
+          />
+        </PaneLeafContext.Provider>,
+      );
+    expect(drawTint(false)).toBe(draw(ERELEI, false, ERELEI_TRACKED, BOARD_BOX));
+    expect(drawTint(true)).toContain(
+      '<div class="pane-body" style="--affect-hours-ch:3" data-affects-tint="">',
+    );
+  });
+
+  it('washes a missing row red and one about to drop in the tone of its hours', () => {
+    // The selector wraps after [data-affects-tint].
+    const wash = rule(
+      ':is(.pane-affect, .pane-countdown-cell):is(.pane-affect-missing, .pane-affect-expiring)::before',
+    );
+    expect(wash).toContain('left: -6px');
+    expect(wash).toContain('right: -6px');
+    expect(wash).toContain('top: 1px');
+    expect(wash).toContain('z-index: -1');
+    expect(wash).toContain('background: var(--recast-wash)');
+    // Missing at 8 percent keeps a red name at 4.5 to 1 on Vellum.
+    expect(rule('[data-affects-tint] .pane-affect-missing')).toContain('var(--danger) 8%');
+    // Running out takes board C's own tints.
+    expect(rule('[data-affects-tint] .pane-affect-expiring')).toContain('var(--warn) 14%');
+    expect(rule('[data-affects-tint] .pane-affect-expiring:has(.is-danger)')).toContain(
+      'var(--danger) 16%',
+    );
+  });
+
   it('sets the names and the hours in the terminal face', () => {
     expect(rule('.pane-affect-name')).toContain('font-family: var(--font-mud');
     expect(rule('.pane-affect-hours')).toContain('font-family: var(--font-mud');
