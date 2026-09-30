@@ -2076,49 +2076,7 @@ async fn handle_gmcp<R: tauri::Runtime>(
         let mut p = profile.lock().await;
         perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
         perf.mutex_acquires += 1;
-        gmcp_bind::apply(&mut p.vars, &msg);
-        // Before Lua, so a value a GMCP handler sets with
-        // `mud.set_prompt_var` belongs to the pulse this packet starts.
-        observe_prompt_gmcp(&mut p, &msg);
-        // Cache the latest Room.Chars snapshot in the profile so
-        // bare `tar <index>` / `tarn` / `tarp` commands can resolve
-        // against the current room without round-tripping to the
-        // frontend.
-        if msg.package == "Room.Chars" {
-            if let Some(arr) = msg.data.as_array() {
-                let chars: Vec<crate::profile::RoomChar> = arr
-                    .iter()
-                    .filter_map(|v| {
-                        let obj = v.as_object()?;
-                        let name = obj.get("name").and_then(|n| n.as_str())?.to_string();
-                        if name.is_empty() {
-                            return None;
-                        }
-                        let npc = match obj.get("npc") {
-                            Some(serde_json::Value::Bool(b)) => *b,
-                            Some(serde_json::Value::String(s)) => s == "1" || s == "true",
-                            Some(serde_json::Value::Number(n)) => {
-                                n.as_i64().is_some_and(|x| x != 0)
-                            }
-                            _ => false,
-                        };
-                        Some(crate::profile::RoomChar { name, npc })
-                    })
-                    .collect();
-                crate::input::set_room_chars(&mut p, chars);
-            }
-        }
-        let tick_step = observe_world_time_for_tick(&mut p.tick, &msg, Instant::now());
-        script_state::snapshot_vars(&p.script, &p.vars);
-        let outcome = match p.script.dispatch_gmcp(&msg.package, &msg.data) {
-            Ok(o) => o,
-            Err(err) => {
-                warn!(error = %err, "lua dispatch_gmcp failed");
-                vosh_script::ScriptOutcome::default()
-            }
-        };
-        let apply = script_state::apply_actions(&mut p, outcome);
-        (tick_step, apply)
+        gmcp_step(&mut p, &msg, Instant::now())
     };
 
     // Char.Status / Char.Name carry the logged-in character name on
@@ -2174,6 +2132,59 @@ async fn handle_gmcp<R: tauri::Runtime>(
     // we ran. This `emit` count would otherwise duplicate that, so
     // we leave gmcp_packets as the single source.
     Ok(())
+}
+
+/// What a GMCP packet does to the profile, under the profile lock the
+/// caller holds: the variables and the custom prompt take it, Room.Chars
+/// is kept for the target commands, a World.Time hour change is the
+/// tick, and Lua GMCP handlers run. Returns the tick step and what the
+/// handlers asked for, which the caller delivers once the lock drops.
+fn gmcp_step(
+    p: &mut Profile,
+    msg: &vosh_gmcp::Message,
+    now: Instant,
+) -> (Option<TickStep>, ApplyResult) {
+    gmcp_bind::apply(&mut p.vars, msg);
+    // Before Lua, so a value a GMCP handler sets with
+    // `mud.set_prompt_var` belongs to the pulse this packet starts.
+    observe_prompt_gmcp(p, msg);
+    // Cache the latest Room.Chars snapshot in the profile so
+    // bare `tar <index>` / `tarn` / `tarp` commands can resolve
+    // against the current room without round-tripping to the
+    // frontend.
+    if msg.package == "Room.Chars" {
+        if let Some(arr) = msg.data.as_array() {
+            let chars: Vec<crate::profile::RoomChar> = arr
+                .iter()
+                .filter_map(|v| {
+                    let obj = v.as_object()?;
+                    let name = obj.get("name").and_then(|n| n.as_str())?.to_string();
+                    if name.is_empty() {
+                        return None;
+                    }
+                    let npc = match obj.get("npc") {
+                        Some(serde_json::Value::Bool(b)) => *b,
+                        Some(serde_json::Value::String(s)) => s == "1" || s == "true",
+                        Some(serde_json::Value::Number(n)) => n.as_i64().is_some_and(|x| x != 0),
+                        _ => false,
+                    };
+                    Some(crate::profile::RoomChar { name, npc })
+                })
+                .collect();
+            crate::input::set_room_chars(p, chars);
+        }
+    }
+    let tick_step = observe_world_time_for_tick(&mut p.tick, msg, now);
+    script_state::snapshot_vars(&p.script, &p.vars);
+    let outcome = match p.script.dispatch_gmcp(&msg.package, &msg.data) {
+        Ok(o) => o,
+        Err(err) => {
+            warn!(error = %err, "lua dispatch_gmcp failed");
+            vosh_script::ScriptOutcome::default()
+        }
+    };
+    let apply = script_state::apply_actions(p, outcome);
+    (tick_step, apply)
 }
 
 /// Lazily-started single-consumer task that applies `Room.Info` map
