@@ -1088,11 +1088,12 @@ function App() {
     };
   }, []);
 
-  // The custom prompt renders in the BACKEND (prompt_template.rs) so the
-  // gag-erase and the replacement land in one output batch — rendering it
-  // here off the prompt-vars event put an IPC round trip between the two
-  // and every prompt flashed a blank row. The rendered prompt reaches both
-  // renderers through the normal session output stream.
+  // The custom prompt renders in the backend, where the session runs the
+  // vosh-prompt engine, so the gag erase and the replacement land in one
+  // output batch. Rendering it here off the prompt-vars event put an IPC
+  // round trip between the two, and every prompt flashed a blank row. The
+  // rendered prompt reaches both renderers through the normal session
+  // output stream.
 
   useEffect(() => {
     // Live-flip the terminal palette mode when the user toggles the
