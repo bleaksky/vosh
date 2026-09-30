@@ -48,6 +48,56 @@ pub struct PromptConfig {
         deserialize_with = "lenient_capture"
     )]
     pub capture: CaptureConfig,
+    /// Where your prompt shows: in the text as the game sends it, lifted
+    /// on a band in the text, or pinned above the command line. A table
+    /// that keeps the text leaves the key out.
+    #[serde(
+        default,
+        skip_serializing_if = "PromptShow::is_text",
+        deserialize_with = "lenient_show"
+    )]
+    pub show: PromptShow,
+}
+
+/// `[prompt] show`, where your prompt shows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PromptShow {
+    /// In the text, where the game sends it. Today's behavior.
+    #[default]
+    Text,
+    /// Every prompt stays in the text on a raised band.
+    Lifted,
+    /// Prompts leave the text, and the latest shows on a band above the
+    /// command line. They are still logged and still reach Prompts
+    /// triggers.
+    Pinned,
+}
+
+impl PromptShow {
+    pub fn is_text(&self) -> bool {
+        *self == Self::Text
+    }
+
+    /// The name the table and the Settings bridge use.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Lifted => "lifted",
+            Self::Pinned => "pinned",
+        }
+    }
+
+    /// The value `name` stands for, or None for a name this build does
+    /// not know.
+    pub fn parse(name: &str) -> Option<Self> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "text" => Some(Self::Text),
+            "lifted" => Some(Self::Lifted),
+            "pinned" => Some(Self::Pinned),
+            _ => None,
+        }
+    }
 }
 
 impl PromptConfig {
@@ -95,6 +145,19 @@ impl PromptConfig {
             changed = true;
         }
         changed
+    }
+
+    /// Take where your prompt shows from a Settings save, when it differs
+    /// from what this table holds. A name this build does not know
+    /// changes nothing. Returns whether it changed.
+    pub fn take_show(&mut self, show: &str) -> bool {
+        match PromptShow::parse(show) {
+            Some(show) if show != self.show => {
+                self.show = show;
+                true
+            }
+            _ => false,
+        }
     }
 }
 
@@ -215,6 +278,16 @@ where
     Ok(serde_json::from_value(raw).unwrap_or_default())
 }
 
+/// Read `[prompt] show`, or the text for a value this build does not
+/// know, so a newer file never fails to load.
+fn lenient_show<'de, D>(deserializer: D) -> Result<PromptShow, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = serde_json::Value::deserialize(deserializer)?;
+    Ok(raw.as_str().and_then(PromptShow::parse).unwrap_or_default())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,6 +327,7 @@ mod tests {
                 seen_at: None,
                 source: Some(CaptureSource::Migrated),
             }),
+            show: PromptShow::Text,
         };
         let json = serde_json::to_value(&config).unwrap();
         assert_eq!(json["capture"]["kind"], "regex");
@@ -368,6 +442,7 @@ mod tests {
             template: "%hp".into(),
             previous_templates: vec![JAMES.into()],
             capture: capture.clone(),
+            show: PromptShow::Pinned,
         };
         let mut config = newer.clone();
         assert!(!config.take_switch_and_template(true, "%hp"));
@@ -382,5 +457,65 @@ mod tests {
         assert!(config.take_switch_and_template(false, "%mana"));
         assert_eq!(config.template, "%mana");
         assert_eq!(config.capture, capture);
+    }
+
+    #[test]
+    fn where_your_prompt_shows_defaults_to_the_text_and_writes_nothing() {
+        let config: PromptConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(config.show, PromptShow::Text);
+        let json = serde_json::to_value(PromptConfig::from_legacy(true, "%hp")).unwrap();
+        assert!(json.get("show").is_none(), "{json}");
+        // A table that holds only the default stays out of the file.
+        assert!(PromptConfig::default().is_default());
+    }
+
+    #[test]
+    fn each_place_your_prompt_shows_round_trips() {
+        for show in [PromptShow::Text, PromptShow::Lifted, PromptShow::Pinned] {
+            let config = PromptConfig {
+                show,
+                ..PromptConfig::from_legacy(true, "%hp")
+            };
+            let json = serde_json::to_value(&config).unwrap();
+            if show.is_text() {
+                assert!(json.get("show").is_none());
+            } else {
+                assert_eq!(json["show"], show.name());
+            }
+            let back: PromptConfig = serde_json::from_value(json).unwrap();
+            assert_eq!(back, config);
+            assert!(!back.is_default());
+        }
+        let lifted = PromptConfig {
+            show: PromptShow::Lifted,
+            ..PromptConfig::default()
+        };
+        assert!(!lifted.is_default());
+    }
+
+    #[test]
+    fn a_place_this_build_does_not_know_reads_as_the_text() {
+        for show in [r#""floating""#, "3", "true", r#"{"where":"up"}"#] {
+            let text = format!(r#"{{"draw":true,"template":"%hp","show":{show}}}"#);
+            let config: PromptConfig = serde_json::from_str(&text).unwrap();
+            assert_eq!(config.show, PromptShow::Text, "{show}");
+            assert_eq!(config.template, "%hp", "{show}");
+        }
+        let config: PromptConfig = serde_json::from_str(r#"{"show":"Pinned"}"#).unwrap();
+        assert_eq!(config.show, PromptShow::Pinned);
+    }
+
+    #[test]
+    fn a_settings_save_takes_where_your_prompt_shows_only_when_it_differs() {
+        let mut config = PromptConfig::from_legacy(true, "%hp");
+        assert!(!config.take_show("text"));
+        assert!(config.take_show("pinned"));
+        assert_eq!(config.show, PromptShow::Pinned);
+        assert!(!config.take_show("pinned"));
+        assert!(!config.take_show("sideways"));
+        assert_eq!(config.show, PromptShow::Pinned);
+        assert!(config.take_show("lifted"));
+        assert_eq!(config.show, PromptShow::Lifted);
+        assert_eq!(config.template, "%hp");
     }
 }

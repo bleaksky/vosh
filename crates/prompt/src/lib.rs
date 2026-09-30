@@ -40,7 +40,7 @@ pub mod testkit;
 pub mod vars;
 pub mod wrap;
 
-pub use config::{CaptureConfig, PromptConfig};
+pub use config::{CaptureConfig, PromptConfig, PromptShow};
 pub use engine::{GamePromptSeen, PromptEngine, SeenKind, Status, StatusReport};
 pub use format::{Position, Resolved, Value};
 pub use render::{render, render_str, MapValues, RenderOptions, Rendered, Span, SpanColor, Values};

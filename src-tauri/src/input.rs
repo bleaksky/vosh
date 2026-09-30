@@ -42,6 +42,7 @@ slash commands:
   #prompt                              say how Vosh reads your prompt
   #prompt game {setting}               read your prompt from its PROMPT codes
   #prompt fight {setting}              read your fight prompt from its codes
+  #prompt show text|lifted|pinned      choose where your prompt shows
   #prompt {regex}                      read your prompt with a pattern, each
                                        named group like (?<hp>...) a value
   #unprompt                            stop reading your prompt here
@@ -820,6 +821,7 @@ fn slash_prompt(profile: &mut Profile, args: &str) -> InputResult {
         ("", _) => return prompt_status(profile, chrono::Local::now().fixed_offset()),
         ("game", rest) => return slash_prompt_codes(profile, rest, false),
         ("fight", rest) => return slash_prompt_codes(profile, rest, true),
+        ("show", rest) => return slash_prompt_show(profile, rest),
         _ => {}
     }
     let Some((pattern, _rest)) = parse_braced_pattern(args) else {
@@ -931,6 +933,34 @@ fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputRe
     }
 }
 
+/// `#prompt show text|lifted|pinned`: where your prompt shows. In the
+/// text as the game sends it, lifted on a band in the text, or pinned on
+/// a band above the command line with earlier prompts out of the text.
+/// It needs a capture, since Vosh finds your prompt only through one.
+fn slash_prompt_show(profile: &mut Profile, args: &str) -> InputResult {
+    use vosh_prompt::PromptShow;
+    let Some(show) = PromptShow::parse(args) else {
+        return error_echo("usage #prompt show text | lifted | pinned".to_string());
+    };
+    if profile.prompt.config().capture.is_none() {
+        return echo_one(PROMPT_NONE.to_string());
+    }
+    let mut config = profile.prompt.config().clone();
+    config.show = show;
+    profile.set_prompt_config(config);
+    echo_one(show_sentence(show).to_string())
+}
+
+/// What `#prompt show` says once your prompt shows at `show`.
+fn show_sentence(show: vosh_prompt::PromptShow) -> &'static str {
+    use vosh_prompt::PromptShow;
+    match show {
+        PromptShow::Text => "Your prompt shows in the text.",
+        PromptShow::Lifted => "Each prompt shows on a raised band in the text.",
+        PromptShow::Pinned => "Your latest prompt shows pinned above the command line.",
+    }
+}
+
 /// What `#prompt` says when nothing reads your prompt in this profile.
 const PROMPT_NONE: &str = "Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start.";
 /// What `#prompt` says while you have prompts off in the game.
@@ -969,7 +999,12 @@ fn prompt_status(profile: &Profile, now: chrono::DateTime<chrono::FixedOffset>) 
             } else {
                 "Drawing is off."
             };
-            echo.push(format!("{reads} {matched} {drawing}"));
+            let shows = match engine.config().show {
+                vosh_prompt::PromptShow::Text => "It shows in the text.",
+                vosh_prompt::PromptShow::Lifted => "It shows lifted in the text.",
+                vosh_prompt::PromptShow::Pinned => "It shows pinned above the command line.",
+            };
+            echo.push(format!("{reads} {matched} {drawing} {shows}"));
             // The game showed a PROMPT that the moved pattern could not
             // switch to.
             if let Some(kept) = engine.kept_pattern() {
@@ -2099,14 +2134,14 @@ mod tests {
         let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
         assert_eq!(
             status(&p),
-            ["Vosh reads your prompt from the codes %n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c. No prompt has matched since you connected. Drawing is on."]
+            ["Vosh reads your prompt from the codes %n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c. No prompt has matched since you connected. Drawing is on. It shows in the text."]
         );
         p.prompt.connect(true);
         let matched = chrono::DateTime::parse_from_rfc3339("2026-09-29T05:04:00-05:00").unwrap();
         p.prompt.note_prompt(matched);
         assert_eq!(
             status(&p),
-            ["Vosh reads your prompt from the codes %n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c. It last matched at 5:04. Drawing is on."]
+            ["Vosh reads your prompt from the codes %n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c. It last matched at 5:04. Drawing is on. It shows in the text."]
         );
         // Three pulses with no prompt.
         for _ in 0..4 {
@@ -2130,10 +2165,71 @@ mod tests {
         assert_eq!(
             status(&p),
             [
-                "Vosh reads your prompt with a pattern you pointed at. It last matched at 5:04. Drawing is off.",
+                "Vosh reads your prompt with a pattern you pointed at. It last matched at 5:04. Drawing is off. It shows in the text.",
                 "You turned prompts off in the game. Type prompt in the game to turn them back on."
             ]
         );
+    }
+
+    #[test]
+    fn prompt_show_picks_where_your_prompt_shows_and_the_status_says_it() {
+        use vosh_prompt::PromptShow;
+        let now = chrono::DateTime::parse_from_rfc3339("2026-09-30T09:00:00-05:00").unwrap();
+        let mut p = Profile::default();
+        // With nothing reading your prompt there is nothing to show.
+        let ran = run_line(&mut p, "#prompt show pinned");
+        assert_eq!(
+            ran.result.echo,
+            ["Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start."]
+        );
+        assert_eq!(p.prompt.config().show, PromptShow::Text);
+
+        p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
+        let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
+        for (line, show, echo, status) in [
+            (
+                "#prompt show pinned",
+                PromptShow::Pinned,
+                "Your latest prompt shows pinned above the command line.",
+                "It shows pinned above the command line.",
+            ),
+            (
+                "#prompt show Lifted",
+                PromptShow::Lifted,
+                "Each prompt shows on a raised band in the text.",
+                "It shows lifted in the text.",
+            ),
+            (
+                "#prompt show text",
+                PromptShow::Text,
+                "Your prompt shows in the text.",
+                "It shows in the text.",
+            ),
+        ] {
+            let ran = run_line(&mut p, line);
+            assert_eq!(ran.result.echo, [echo], "{line}");
+            assert_eq!(p.prompt.config().show, show, "{line}");
+            let said = super::prompt_status(&p, now).echo;
+            assert!(
+                said[0].ends_with(&format!("Drawing is on. {status}")),
+                "{said:?}"
+            );
+        }
+        // The design and the capture stay.
+        assert_eq!(p.prompt.config().template, "%hp");
+        assert!(p.prompt.config().capture.is_aabahran());
+
+        for line in ["#prompt show", "#prompt show sideways"] {
+            let ran = run_line(&mut p, line);
+            assert_eq!(
+                ran.result.echo,
+                ["[usage #prompt show text | lifted | pinned]"],
+                "{line}"
+            );
+        }
+        assert_eq!(p.prompt.config().show, PromptShow::Text);
+        // The help names it.
+        assert!(super::HELP_TEXT.contains("#prompt show text|lifted|pinned"));
     }
 
     /// A table with the pattern the move from a capture trigger wrote.
@@ -2163,7 +2259,7 @@ mod tests {
         assert_eq!(
             super::prompt_status(&p, now).echo,
             [
-                "Vosh reads your prompt with a pattern you pointed at. No prompt has matched since you connected. Drawing is on.",
+                "Vosh reads your prompt with a pattern you pointed at. No prompt has matched since you connected. Drawing is on. It shows in the text.",
                 "Vosh kept the pattern from your old capture trigger because a color code runs into %h in the prompt the game sent.",
             ]
         );
@@ -2176,7 +2272,7 @@ mod tests {
         );
         assert_eq!(
             super::prompt_status(&p, now).echo,
-            ["Vosh reads your prompt from the codes <%hhp>. No prompt has matched since you connected. Drawing is on."]
+            ["Vosh reads your prompt from the codes <%hhp>. No prompt has matched since you connected. Drawing is on. It shows in the text."]
         );
     }
 

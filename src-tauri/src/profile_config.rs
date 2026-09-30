@@ -4122,6 +4122,7 @@ mod prompt_tests {
                 seen_at: None,
                 source: Some(CaptureSource::Migrated),
             }),
+            ..PromptConfig::default()
         }
     }
 

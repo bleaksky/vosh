@@ -1010,6 +1010,20 @@ export function seedDarkTheme(theme: string, customThemes: CustomTheme[]): strin
   return found && themeTokens(found).appearance === 'dark' ? theme : DEFAULT_THEME_ID;
 }
 
+/** Where your prompt shows: in the text, lifted on a band in the text,
+ *  or pinned on a band above the command line. */
+export type PromptShow = 'text' | 'lifted' | 'pinned';
+
+export const PROMPT_SHOWS: readonly PromptShow[] = ['text', 'lifted', 'pinned'];
+
+/** A known place, or the text for anything else, so a value a newer
+ *  build wrote never breaks this one. */
+export function normalizePromptShow(value: unknown): PromptShow {
+  return typeof value === 'string' && (PROMPT_SHOWS as readonly string[]).includes(value)
+    ? (value as PromptShow)
+    : 'text';
+}
+
 export interface UiConfig {
   /** The theme you picked. Vosh shows it while follow_system_appearance
    *  is off. */
@@ -1072,6 +1086,10 @@ export interface UiConfig {
    *  vitals template. Empty string means no rendering even when
    *  enabled. */
   prompt_template: string;
+  /** Where your prompt shows, a copy of the profile's `[prompt] show`.
+   *  In the text (the default), lifted on a band in the text, or pinned
+   *  on a band above the command line. */
+  prompt_show: PromptShow;
   /** Vitals panel appearance. Toggles which columns render and lets
    *  the user pick their own bar glyphs and width. */
   vitals: VitalsConfig;
@@ -1291,6 +1309,7 @@ export interface RawUiConfig {
   input_cursor_style?: string;
   prompt_template_enabled?: boolean;
   prompt_template?: string;
+  prompt_show?: string;
   vitals?: Partial<VitalsConfig>;
   vitals_density?: string;
   vitals_values?: string;
@@ -1363,6 +1382,7 @@ export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
     input_cursor_style: normalizeInputCursorStyle(cfg.input_cursor_style),
     prompt_template_enabled: Boolean(cfg.prompt_template_enabled),
     prompt_template: typeof cfg.prompt_template === 'string' ? cfg.prompt_template : '',
+    prompt_show: normalizePromptShow(cfg.prompt_show),
     vitals: normalizeVitalsConfig(cfg.vitals),
     vitals_density: normalizeVitalsDensity(cfg.vitals_density),
     vitals_values: normalizeVitalsValues(cfg.vitals_values),
@@ -1721,12 +1741,16 @@ export async function subscribePromptConfigChanged(cb: () => void): Promise<Unli
 
 /** The prompt switch and design, which Settings still holds in its
  *  UiConfig until the Prompt section replaces PromptBlock. */
-export type PromptFields = Pick<UiConfig, 'prompt_template_enabled' | 'prompt_template'>;
+export type PromptFields = Pick<
+  UiConfig,
+  'prompt_template_enabled' | 'prompt_template' | 'prompt_show'
+>;
 
 export function promptFieldsOf(config: UiConfig): PromptFields {
   return {
     prompt_template_enabled: config.prompt_template_enabled,
     prompt_template: config.prompt_template,
+    prompt_show: config.prompt_show,
   };
 }
 
@@ -1744,6 +1768,9 @@ export function changedPromptFields(
   }
   if (!known || known.prompt_template !== fresh.prompt_template) {
     patch.prompt_template = fresh.prompt_template;
+  }
+  if (!known || known.prompt_show !== fresh.prompt_show) {
+    patch.prompt_show = fresh.prompt_show;
   }
   return patch;
 }
@@ -1878,6 +1905,7 @@ export async function setUiConfig(config: UiConfig): Promise<boolean> {
       input_cursor_style: config.input_cursor_style,
       prompt_template_enabled: config.prompt_template_enabled,
       prompt_template: config.prompt_template,
+      prompt_show: config.prompt_show,
       vitals: config.vitals,
       vitals_density: config.vitals_density,
       vitals_values: config.vitals_values,
