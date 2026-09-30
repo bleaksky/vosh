@@ -132,6 +132,11 @@ pub struct Options {
     pub ga: bool,
     /// `compact` is on, so no blank line comes before a prompt.
     pub compact: bool,
+    /// Your wizi and incog levels, 0 for none. Either one makes you an
+    /// immortal of level [`IMMORTAL_LEVEL`], and above 1 the game prints
+    /// `(Wizi N) ` and `(Incog N) ` before each prompt.
+    pub wizi: i64,
+    pub incog: i64,
 }
 
 impl Options {
@@ -145,9 +150,17 @@ impl Options {
             reconnect: false,
             ga: true,
             compact: false,
+            wizi: 0,
+            incog: 0,
         }
     }
 }
+
+/// The level Char.Status names for a mortal.
+pub const MORTAL_LEVEL: i64 = 50;
+
+/// The level Char.Status names for an immortal with wizi or incog.
+pub const IMMORTAL_LEVEL: i64 = 60;
 
 /// Bytes to write, after a wait.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -210,6 +223,9 @@ impl Mud {
             region: "Temperate".into(),
             lang: "common".into(),
             fallback_hides: options.build == Build::New,
+            invis: options.wizi,
+            incog: options.incog,
+            immortal: options.wizi > 0 || options.incog > 0,
             ..State::default()
         };
         Self {
@@ -630,10 +646,15 @@ impl Mud {
     }
 
     fn status(&self) -> Vec<u8> {
+        let level = if self.state.immortal {
+            IMMORTAL_LEVEL
+        } else {
+            MORTAL_LEVEL
+        };
         self.packet(
             "Char.Status",
             &format!(
-                r#"{{"name":{},"level":50,"race":"human","class":"dark-knight"}}"#,
+                r#"{{"name":{},"level":{level},"race":"human","class":"dark-knight"}}"#,
                 quote(&self.name)
             ),
         )
