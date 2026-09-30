@@ -387,14 +387,18 @@ When the game hides your vitals, as it does under lamented tears, every value re
 
 ### 4.5 Watch your group and affects
 
-The group pane shows member health while grouped and your worth while solo. The affects pane counts down spell durations. The group pane sits at the top of the right column, and its header shows `group` plus a member count, or `solo`.
+The group pane shows member health while grouped and your worth while solo. The affects pane shows what affects you and the hours each has left. The group pane sits at the top of the right column, and its header shows `group` plus a member count, or `solo`.
 
 - Read the group rows. While grouped, each member gets a row with a mono name, a 44px hp mini bar, and the percent. The row tone drops through three tiers, healthy at 67% and up, warning down to 34%, danger below.
 - While solo, the pane shows your worth instead. The fields are tnl, exp, gold, bank, trains, and prac.
-- Configure affects in the `panels` tab under `tracked affects`. Enter the server's affect name, add an optional label, and press `add`. Matching is case insensitive, and the affects pane renders nothing until you list at least one name.
-- Place `affects` in a side zone for full rows, each with a mono name, a duration mini bar filled by the fraction of a day remaining, and a countdown. In the top or bottom strip it compresses to pills, and absent tracked affects render dim with `—`.
+- Pick the affects you track in Settings under Characters, then Tracked affects. Choose `Add affect…` and pick one of the affects on you now, or type its name. Matching ignores case and extra spaces. Under Advanced you can give a tracked affect a short label like `sanc` to show in its place, and set the order of your slots.
+- Read the affects pane in two columns. Each entry shows the hours left, then the name exactly as the game sends it. `+` means permanent and `-` means you do not have it, the same marks the game uses in its own affects bar. A pane narrower than about 360 pt shows one column.
+- Your tracked affects fill the top rows in your order and keep their places as the hours change. The dot beside each agrees with its hours. Green is up, yellow has two hours left, and red has one hour or none. A hollow red ring and a red name mean you are missing it.
+- Everything else sits under a thin line. Harmful affects like `faerie fire` come first, with a red diamond and a red name. The rest follow by hours left, down the left column and then down the right.
+- The hours follow the game. One hour or none reads in bold red, and two in yellow. The header counts the tracked affects you are missing and the ones running out.
+- The pane shows whole rows only. When some do not fit, the last entry says how many more there are, like `5 more`. Click it to scroll to them, and point away to scroll back.
 
-Group data arrives from `Group.Info` and worth from `Char.Worth`. Affects come from `Char.Affects`, and duration color shifts with urgency. With no group the pane says so and suggests `follow <name>` to start one.
+Group data arrives from `Group.Info` and worth from `Char.Worth`. Affects come from `Char.Affects`, which the game sends when you log in, whenever an affect changes, and every tick. With no group the pane says so and suggests `follow <name>` to start one.
 
 When the game hides your affects or your group, as it does under lamented tears, the pane says so in place of its rows. The affects pane marks no tracked affect missing, and the group pane shows no member health from before. Each fills in again with the next update the game sends.
 
