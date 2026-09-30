@@ -311,7 +311,6 @@ fn setting(
             })
             .cloned()
             .collect();
-        let pieces = lex::pass_two(&kept, which, who)?;
         let optional =
             |code: Code| code.is_tank() && (kind == ShapeKind::Either || code != Code::Tank);
         let edges = |code: Code| {
@@ -322,6 +321,7 @@ fn setting(
                 edges
             }
         };
+        let pieces = lex::pass_two(&kept, which, &edges)?;
         let lines = split(&pieces);
         let mut unread = BTreeSet::new();
         for line in &lines {

@@ -761,6 +761,32 @@ fn a_color_that_runs_into_a_code_does_not_compile() {
 }
 
 #[test]
+fn a_backtick_that_takes_a_bracket_prints_nothing() {
+    // An immortal keeps the backtick in `<`%e> `. The game prints
+    // `<[Exits: N (E) S]> ` in every state, as with no backtick.
+    let compiled = stored("<`%e> ", "");
+    let either = shape(&compiled, Which::Prompt, ShapeKind::Either);
+    assert_eq!(
+        values(either.read_partial(&["<[Exits: N (E) S]> "])),
+        map(&[("exits", " N (E) S")])
+    );
+    // %P prints nothing without a tank and under lament, and then the
+    // backtick takes the ] after it, which prints as it is.
+    let compiled = stored("%n%C[`%P] <%hhp> ", "");
+    let tank = shape(&compiled, Which::Prompt, ShapeKind::Tank);
+    assert_eq!(
+        values(tank.read_partial(&["Tester: ", "[[===|===|---|---]] <159hp> "]))["tank_bar"],
+        "===|===|---|---"
+    );
+    assert!(tank.read_partial(&["Tester: ", "[] <159hp> "]).is_some());
+    let normal = shape(&compiled, Which::Prompt, ShapeKind::Normal);
+    assert!(normal.read_partial(&["[] <1020hp> "]).is_some());
+    // Under lament the backtick would take the 1 after %P as a color.
+    let err = compile("%n%C`%P1 <%hhp> ", "", Origin::Stored, Who::default()).unwrap_err();
+    assert_eq!(err.code, "%P");
+}
+
+#[test]
 fn other_lines_are_no_prompt() {
     let compiled = stored(JAMES, "");
     let all = stored(PROMPT_ALL, "");
