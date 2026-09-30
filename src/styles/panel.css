@@ -543,6 +543,155 @@
   border-radius: var(--r-key);
 }
 
+/* Board Affects B, Countdown. One run on 23 px rows, two columns 24
+   apart from 360 px, 18 in from the left and 12 from the right. Each
+   cell holds the mark at x 0, y 5, the name from x 14, the hours at the
+   right edge, and a 2 px meter under the text from x 14 to the edge.
+   The line is 17 tall with 1 px above the text, as the board draws it
+   under the app's border-box reset. */
+.pane-countdown-window {
+  overflow: hidden;
+}
+
+.pane-countdown-window.is-paged {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+
+.pane-countdown-window.is-paged::-webkit-scrollbar {
+  display: none;
+}
+
+.pane-countdown-window .is-page-start {
+  scroll-snap-align: start;
+}
+
+.pane-countdown {
+  display: grid;
+  column-gap: 24px;
+  margin: 0;
+  padding: 0 12px 0 18px;
+  list-style: none;
+}
+
+.pane-countdown-cell {
+  position: relative;
+  min-width: 0;
+  height: 23px;
+}
+
+.pane-countdown-cell .pane-affect-mark {
+  top: 5px;
+}
+
+.pane-countdown-cell .pane-affect-mark.is-harmful {
+  top: 6px;
+}
+
+.pane-countdown-line {
+  display: flex;
+  align-items: center;
+  height: 17px;
+  padding: 1px 0 0 14px;
+  font-family: var(--font-mud, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.pane-countdown-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.pane-affect-untracked .pane-countdown-name {
+  color: var(--secondary);
+}
+
+.pane-affect-missing .pane-countdown-name,
+.pane-affect-harmful .pane-countdown-name {
+  color: var(--danger-text);
+}
+
+/* The hours follow the same rule as Timers first. */
+.pane-countdown-hours {
+  flex: none;
+  margin-left: auto;
+  padding-left: 8px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--secondary);
+}
+
+.pane-countdown-hours.is-warn {
+  color: var(--warn);
+}
+
+.pane-countdown-hours.is-danger {
+  font-weight: 700;
+  color: var(--danger-text);
+}
+
+/* The meter drains over the affect's own cast. Full for a permanent
+   affect, empty for a missing one, and gone when the server sent no
+   hours. */
+.pane-countdown-meter {
+  position: absolute;
+  left: 14px;
+  right: 0;
+  top: 19px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--divider);
+  overflow: hidden;
+}
+
+.pane-countdown-fill {
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--tertiary);
+}
+
+.pane-countdown-cell.is-warn .pane-countdown-fill {
+  background: var(--warn);
+}
+
+.pane-countdown-cell.is-danger .pane-countdown-fill {
+  background: var(--danger);
+}
+
+/* The count of what waits on the next page, in the last cell of a page
+   where the names start. */
+.pane-countdown-more-cell {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  height: 23px;
+  padding: 1px 0 0 14px;
+}
+
+.pane-countdown-more-cell .pane-affects-more {
+  height: 16px;
+  margin: 0;
+}
+
+/* No mark: the names, the meters, and the count start at the text
+   edge. */
+[data-affects-marker='none'] .pane-countdown-line,
+[data-affects-marker='none'] .pane-countdown-more-cell {
+  padding-left: 0;
+}
+
+[data-affects-marker='none'] .pane-countdown-meter {
+  left: 0;
+}
+
 /* ── Map ─────────────────────────────────────────────────────────── */
 
 .pane-map {

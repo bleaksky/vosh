@@ -1,8 +1,6 @@
 import { useMemo, useRef, type CSSProperties } from 'react';
 import {
-  affectMark,
   affectsPaneRows,
-  affectsSummary,
   hoursTone,
   type AffectInput,
   type AffectRow,
@@ -10,12 +8,14 @@ import {
 } from '../../lib/affectsView';
 import { PANE_ROW_PX } from '../../lib/paneLayout';
 import type { AffectsMarker } from '../../lib/session';
+import { useAffectFull } from '../../lib/stores/affectFullStore';
 import { useAffectsDisplay } from '../../lib/stores/affectsDisplayStore';
 import { useAffects, useAffectsHidden } from '../../lib/stores/affectsStore';
 import { useTrackedAffects } from '../../lib/stores/trackedAffectsStore';
+import { CountdownView } from './AffectsCountdown';
 import { affectsGrid, type AffectsCell } from './affectsGrid';
 import { useBoxSize, usePagedWindow, type Box } from './affectsHooks';
-import { PaneHeader, PaneMeta } from './PaneHeader';
+import { AffectMark, AffectsHeader, affectsEmpty, MoreButton } from './affectsParts';
 import { affectHours, affectWords } from './paneText';
 
 // The at a glance checklist, board Affects A, timers first. Two columns
@@ -41,12 +41,27 @@ import { affectHours, affectWords } from './paneText';
 // Layout, Affects or the pane menu: the dot, a square, plus and minus,
 // or none. The body names any but the dot in data-affects-marker, and
 // panel.css draws the shape in the color of the state.
+//
+// Timers first is one of three styles you pick there. Countdown
+// (AffectsCountdown.tsx) lists every affect by the hours it has left.
 
 export function AffectsPane() {
   const current = useAffects();
   const tracked = useTrackedAffects();
   const hidden = useAffectsHidden();
   const display = useAffectsDisplay();
+  const full = useAffectFull();
+  if (display.style === 'countdown') {
+    return (
+      <CountdownView
+        current={current}
+        tracked={tracked}
+        hidden={hidden}
+        marker={display.marker}
+        full={full}
+      />
+    );
+  }
   return (
     <AffectsPaneView current={current} tracked={tracked} hidden={hidden} marker={display.marker} />
   );
@@ -62,7 +77,7 @@ export interface AffectsPaneViewProps {
    *  test passes one to draw what fits. */
   box?: Box | undefined;
   /** The mark beside each tracked affect. The dot when left out. */
-  marker?: AffectsMarker;
+  marker?: AffectsMarker | undefined;
 }
 
 /** The pane drawn from plain values, so each state renders in a test. */
@@ -78,7 +93,6 @@ export function AffectsPaneView({
   const measured = useBoxSize(bodyRef);
   const size = box ?? measured;
   const grid = useMemo(() => affectsGrid(rows, size), [rows, size]);
-  const { missing, runningOut } = affectsSummary(rows);
   // Every cell's hours column fits the longest count, three cells or
   // more, so the names stay in line and a 1200 hour psalm never runs
   // into its name.
@@ -88,14 +102,8 @@ export function AffectsPaneView({
   );
   const hoursColumn: CSSProperties = { ['--affect-hours-ch' as string]: hoursCh };
 
-  let body: React.ReactNode;
-  if (hidden) {
-    body = <p className="pane-empty">The game hides your affects right now.</p>;
-  } else if (current === null) {
-    body = <p className="pane-empty">Affects appear when you log in.</p>;
-  } else if (rows.length === 0) {
-    body = <p className="pane-empty">Nothing affects you right now.</p>;
-  } else {
+  let body = affectsEmpty(current, hidden, rows);
+  if (body === null) {
     const columns: CSSProperties = {
       gridTemplateColumns: `repeat(${grid.columns}, minmax(0, 1fr))`,
     };
@@ -123,16 +131,7 @@ export function AffectsPaneView({
 
   return (
     <>
-      <PaneHeader
-        meta={
-          missing > 0 || runningOut > 0 ? (
-            <>
-              {missing > 0 && <PaneMeta tone="danger">{missing} missing</PaneMeta>}
-              {runningOut > 0 && <PaneMeta tone="warn">{runningOut} running out</PaneMeta>}
-            </>
-          ) : null
-        }
-      />
+      <AffectsHeader rows={rows} />
       <div
         ref={bodyRef}
         className="pane-body"
@@ -191,14 +190,7 @@ function RestPages({
           return (
             <li key={`more-${cell.page}`} className="pane-affects-more-cell" style={place}>
               <span className="pane-affect-hours" aria-hidden="true" />
-              <button
-                type="button"
-                className="pane-affects-more"
-                aria-label={`${cell.count} more affects, scroll to them`}
-                onClick={() => paged.toPage(cell.page + 1)}
-              >
-                {cell.count} more
-              </button>
+              <MoreButton count={cell.count} onClick={() => paged.toPage(cell.page + 1)} />
             </li>
           );
         })}
@@ -216,7 +208,6 @@ function AffectCell({
   pageStart?: boolean;
   style?: CSSProperties;
 }) {
-  const mark = affectMark(row);
   const tone = hoursTone(row.ticks);
   // The hours and the mark show only as glyphs and color, so a screen
   // reader hears them as words after the name.
@@ -226,7 +217,7 @@ function AffectCell({
       className={`pane-affect pane-affect-${row.state}${pageStart ? ' is-page-start' : ''}`}
       style={style}
     >
-      {mark && <span className={`pane-affect-mark is-${mark}`} aria-hidden="true" />}
+      <AffectMark row={row} />
       <span className={`pane-affect-hours${tone ? ` is-${tone}` : ''}`} aria-hidden="true">
         {affectHours(row.state, row.ticks)}
       </span>
