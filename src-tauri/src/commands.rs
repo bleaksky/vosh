@@ -3274,34 +3274,58 @@ pub(crate) async fn ui_set_config(
     state: State<'_, SharedState>,
     config: UiConfigPayload,
 ) -> Result<bool, String> {
-    let applied = {
+    let saved = {
         let mut p = state.profile.lock().await;
         apply_ui_save(&mut p, config, ui_config_generation())
     };
-    if !applied {
+    let UiSave::Applied { prompt } = saved else {
         return Ok(false);
+    };
+    if prompt {
+        // The prompt on screen follows the switch and the design, so
+        // turning drawing off shows the game's prompt at once.
+        request_prompt_repaint(state.inner()).await;
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
     Ok(true)
 }
 
+/// What a whole config save did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UiSave {
+    /// It was read before the live config was last replaced, so it was
+    /// turned away.
+    Refused,
+    /// It applied. `prompt` says the prompt switch or design changed.
+    Applied { prompt: bool },
+}
+
 /// Write a whole config save onto the live profile `p`, unless it was
-/// read at a generation other than `current`. Returns whether it applied.
-/// The prompt switch and template go through to the `[prompt]` table,
-/// each only when it differs from what the table holds, so a save that
-/// carries them unchanged leaves a newer table alone, its capture and
-/// earlier designs included. The `[ui]` copy then follows the table.
-fn apply_ui_save(p: &mut crate::profile::Profile, config: UiConfigPayload, current: u64) -> bool {
+/// read at a generation other than `current`. The prompt switch and
+/// template go through to the `[prompt]` table, each only when it
+/// differs from what the table holds, so a save that carries them
+/// unchanged leaves a newer table alone, its capture and earlier designs
+/// included. The `[ui]` copy then follows the table.
+fn apply_ui_save(p: &mut crate::profile::Profile, config: UiConfigPayload, current: u64) -> UiSave {
     let draw = config.prompt_template_enabled;
     let template = config.prompt_template.clone();
     if !apply_ui_config(&mut p.ui, config, current) {
-        return false;
+        return UiSave::Refused;
     }
     let mut prompt = p.prompt.config().clone();
-    prompt.take_switch_and_template(draw, &template);
+    let changed = prompt.take_switch_and_template(draw, &template);
     p.set_prompt_config(prompt);
-    true
+    UiSave::Applied { prompt: changed }
+}
+
+/// Ask the session to repaint the open row as the `[prompt]` table now
+/// says. Nothing happens with no connection, or when no drawn prompt is
+/// the last thing on screen.
+async fn request_prompt_repaint(state: &SharedState) {
+    if let Some(handle) = state.session.lock().await.as_ref() {
+        let _ = handle.prompt_repaint();
+    }
 }
 
 /// Write a whole config save onto `ui`, unless it was read at a
@@ -4576,7 +4600,10 @@ mod tests {
         let newer = p.prompt.config().clone();
         let mut save = super::ui_config_of(&p, 4);
         save.font_size = 16;
-        assert!(super::apply_ui_save(&mut p, save, 4));
+        assert_eq!(
+            super::apply_ui_save(&mut p, save, 4),
+            super::UiSave::Applied { prompt: false }
+        );
         assert_eq!(p.ui.font_size, 16);
         assert_eq!(*p.prompt.config(), newer);
         assert!(p.ui.prompt_template_enabled);
@@ -4588,7 +4615,10 @@ mod tests {
         let mut p = prompt_profile();
         let mut save = super::ui_config_of(&p, 4);
         save.prompt_template_enabled = false;
-        assert!(super::apply_ui_save(&mut p, save, 4));
+        assert_eq!(
+            super::apply_ui_save(&mut p, save, 4),
+            super::UiSave::Applied { prompt: true }
+        );
         let prompt = p.prompt.config();
         assert!(!prompt.draw);
         assert_eq!(prompt.template, "%hp");
@@ -4598,7 +4628,10 @@ mod tests {
 
         let mut save = super::ui_config_of(&p, 4);
         save.prompt_template = "[%hp/%maxhp]".into();
-        assert!(super::apply_ui_save(&mut p, save, 4));
+        assert_eq!(
+            super::apply_ui_save(&mut p, save, 4),
+            super::UiSave::Applied { prompt: true }
+        );
         let prompt = p.prompt.config();
         assert_eq!(prompt.template, "[%hp/%maxhp]");
         assert!(!prompt.draw);
@@ -4618,7 +4651,10 @@ mod tests {
         let before = p.prompt.config().clone();
         let mut save = super::ui_config_of(&p, 3);
         save.prompt_template = "old profile".into();
-        assert!(!super::apply_ui_save(&mut p, save, 4));
+        assert_eq!(
+            super::apply_ui_save(&mut p, save, 4),
+            super::UiSave::Refused
+        );
         assert_eq!(*p.prompt.config(), before);
         assert_eq!(p.ui.prompt_template, "%hp");
     }
