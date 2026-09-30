@@ -1308,3 +1308,78 @@ fn leaving_pinned_with_drawing_off_keeps_what_prompts_triggers_did() {
         }
     }
 }
+
+/// Each lift on `grid`, as its rows' text, top first.
+fn lifted_rows(grid: &crate::term_grid::TermGrid) -> Vec<Vec<String>> {
+    let mut lifts: Vec<(u64, Vec<String>)> = Vec::new();
+    for span in grid.lift_spans(-1000, 1000) {
+        let row: String = grid
+            .row_string(usize::try_from(span.line).expect("on screen"))
+            .chars()
+            .skip(span.first)
+            .take(span.end - span.first)
+            .collect();
+        match lifts.iter_mut().find(|(id, _)| *id == span.id) {
+            Some((_, rows)) => rows.push(row),
+            None => lifts.push((span.id, vec![row])),
+        }
+    }
+    lifts.into_iter().map(|(_, rows)| rows).collect()
+}
+
+#[test]
+fn changing_where_your_prompt_shows_mid_fight_moves_the_tank_line_with_it() {
+    use vosh_prompt::testkit::{Build, Mud, Options};
+    use vosh_prompt::PromptShow;
+    for (draw, columns) in [(true, 80), (false, 80), (true, 12)] {
+        for (from, to) in [
+            (PromptShow::Text, PromptShow::Pinned),
+            (PromptShow::Lifted, PromptShow::Pinned),
+            (PromptShow::Text, PromptShow::Lifted),
+            (PromptShow::Pinned, PromptShow::Text),
+            (PromptShow::Pinned, PromptShow::Lifted),
+        ] {
+            let mut mud = Mud::playing(Options::new(Build::New));
+            let fight = wire_fixture("fight-tank");
+            let tell = mud.pulse_later("Tarvik tells you 'back soon'");
+            // The whole play shown as `to`, or started as `from` and
+            // switched right after the fight's prompt.
+            let play = |switch: bool| {
+                let start = if switch { from } else { to };
+                let mut session = Session::new(showing(profile(CODES, HP, draw), start));
+                let mut grid = crate::term_grid::TermGrid::new(columns, 40);
+                grid.session_output(&session.read(&fight).out);
+                let mut band = None;
+                if switch {
+                    session.p = showing(std::mem::take(&mut session.p), to);
+                    let out = session.repaint();
+                    band = out.pin.clone();
+                    grid.session_output(&out);
+                }
+                let at_switch = (rows_of(&grid), lifted_rows(&grid));
+                grid.session_output(&session.read(&tell).out);
+                grid.local_write(b"look\r\n");
+                session.local_write();
+                (at_switch, rows_of(&grid), band)
+            };
+            let label = format!("draw {draw} {columns} wide {from:?} to {to:?}");
+            let (want_at, want, _) = play(false);
+            let (got_at, got, band) = play(true);
+            if to == PromptShow::Pinned && draw {
+                // The band holds the tank line, and the text does not.
+                let band = band.expect("the band");
+                assert_eq!(
+                    vosh_ansi::plain_text(&band),
+                    "Tester: [===|===|===|---]\r\n<765>",
+                    "{label}"
+                );
+            }
+            // Drawing off, a prompt in the text leaves no open row, so it
+            // stays as it shows and the next prompt goes where you chose.
+            if draw || from == PromptShow::Pinned {
+                assert_eq!(got_at, want_at, "{label}");
+                assert_eq!(got, want, "{label}");
+            }
+        }
+    }
+}

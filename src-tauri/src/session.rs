@@ -150,6 +150,19 @@ pub(crate) struct ReplacePayload {
     pub gen: u64,
     pub b64: String,
     pub fresh: bool,
+    /// The lines the region's prompt shows right above it, which a change
+    /// of where your prompt shows moves with it. See
+    /// `vosh_prompt::stage::Above`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub above: Option<AbovePayload>,
+}
+
+/// `ReplacePayload.above`: the lines' plain text, and what to write from
+/// their first row, as base64, when a renderer finds them there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct AbovePayload {
+    pub plain: String,
+    pub b64: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2789,6 +2802,10 @@ impl OutputPayload {
                 gen: r.gen,
                 b64: base64_encode(&r.bytes),
                 fresh: r.fresh,
+                above: r.above.as_ref().map(|a| AbovePayload {
+                    plain: a.plain.clone(),
+                    b64: base64_encode(&a.bytes),
+                }),
             }),
             restore: out.restore.as_deref().map(base64_encode),
             pin: out.pin.as_deref().map(base64_encode),
@@ -3510,6 +3527,7 @@ mod tests {
                 gen: wire.gen0 + 1,
                 bytes: with(&[&wire.mark(2), b"<1020>\x1b[0m"]),
                 fresh: true,
+                above: None,
             })
         );
         assert!(second.bytes.is_empty());
@@ -3528,6 +3546,7 @@ mod tests {
                 gen: wire.gen0 + 1,
                 bytes: with(&[&wire.mark(2), b"You are hungry"]),
                 fresh: true,
+                above: None,
             })
         );
         let third = wire.read(b".\n\rNext.\n\r");
@@ -3537,6 +3556,7 @@ mod tests {
                 gen: wire.gen0 + 2,
                 bytes: b"You are hungry.\r\n".to_vec(),
                 fresh: true,
+                above: None,
             })
         );
         assert_eq!(third.bytes, b"Next.\r\n");
@@ -3568,6 +3588,7 @@ mod tests {
                 gen: wire.gen0 + 2,
                 bytes: with(&[&wire.mark(3), b"<90>\x1b[0m"]),
                 fresh: true,
+                above: None,
             })
         );
     }
@@ -3607,6 +3628,7 @@ mod tests {
                 gen: wire.gen0 + 1,
                 bytes: with(&[&wire.mark(2), b"<1020>\x1b[0m"]),
                 fresh: true,
+                above: None,
             })
         );
         assert!(second.bytes.is_empty());
@@ -3641,6 +3663,7 @@ mod tests {
                 gen: wire.gen0 + 1,
                 bytes: b"<100hp 50m 30mv> \r\n".to_vec(),
                 fresh: true,
+                above: None,
             })
         );
         assert!(second.bytes.is_empty());
@@ -3880,6 +3903,7 @@ mod tests {
                 gen: wire.gen0 + 1,
                 bytes: with(&[&wire.mark(2), PROMPT_ROW_SHOWN]),
                 fresh: false,
+                above: None,
             })
         );
         assert!(off.bytes.is_empty());
@@ -4396,6 +4420,7 @@ mod tests {
                     b"<159>\x1b[0m"
                 ]),
                 fresh: true,
+                above: None,
             })
         );
         // A send forgets a painted tank line, which stays as it shows,
@@ -4530,6 +4555,7 @@ mod tests {
                 gen: wire.gen0 + 1,
                 bytes: with(&[&wire.mark(2), FIGHT_LINE.as_bytes(), b"\r\n"]),
                 fresh: false,
+                above: None,
             })
         );
     }
@@ -4862,6 +4888,7 @@ mod tests {
                 gen: wire.gen0 + 1,
                 bytes: with(&[&wire.mark(2), b"<10>\x1b[0m"]),
                 fresh: true,
+                above: None,
             })
         );
     }

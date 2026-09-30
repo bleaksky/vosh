@@ -117,6 +117,38 @@ describe('LiftTracker', () => {
   });
 });
 
+describe('LiftTracker on a change of where your prompt shows', () => {
+  const tank = 'Tester: [===|---]';
+
+  it('keeps a lift that starts above its region through a repaint that starts it again', async () => {
+    const { term, writer, lifts } = setup();
+    // Lifted when you chose it: the lift starts at the tank line.
+    writer.output({ text: `room\r\n\r\n${start(1)}${tank}\r\n${mark(2)}<765>${end(1)} ` });
+    // A later repaint starts it again inside the region.
+    writer.output({
+      text: '',
+      replace: { gen: 2, text: `${mark(3)}${start(1)}<700>${end(1)} `, fresh: false },
+    });
+    await parsed(writer);
+    expect(extents(term, lifts)).toEqual([{ id: 1, top: 2, bottom: 3, left: 0, right: 17 }]);
+  });
+
+  it('forgets the lifts a replace that writes nothing erased', async () => {
+    const { term, writer, lifts } = setup();
+    writer.onErase((row, col) => lifts.dropFrom(row, col));
+    writer.output({ text: `room\r\n${start(1)}${tank}\r\n${mark(2)}<765>${end(1)} ` });
+    writer.output({
+      text: '',
+      replace: { gen: 2, text: '', fresh: false, above: { plain: tank, text: '' } },
+    });
+    // Text that lands where the prompt was never takes its band.
+    writer.output({ text: 'Tarvik tells you something\r\nand more\r\n' });
+    await parsed(writer);
+    expect(lifts.size).toBe(0);
+    expect(extents(term, lifts)).toEqual([]);
+  });
+});
+
 describe('layoutBands', () => {
   const cell = { w: 7.8, h: 17.5 };
 

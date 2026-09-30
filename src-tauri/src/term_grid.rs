@@ -188,9 +188,24 @@ impl TermGrid {
             self.pending_utf8.clear();
             let text = self.wrap(&String::from_utf8_lossy(&replace.bytes));
             if let Some(to_start) = self.locate(replace.gen) {
+                // The lines above the region go with it when they are
+                // there, such as the tank line on a change of where your
+                // prompt shows.
+                let above = replace.above.as_ref().and_then(|above| {
+                    let to_first = self.locate_above(replace.gen, &above.plain)?;
+                    Some((to_first, self.wrap(&String::from_utf8_lossy(&above.bytes))))
+                });
                 self.region = None;
-                self.feed(&to_start);
-                self.feed_marked(text.as_bytes());
+                match above {
+                    Some((to_first, above)) => {
+                        self.feed(&to_first);
+                        self.feed_marked(above.as_bytes());
+                    }
+                    None => {
+                        self.feed(&to_start);
+                        self.feed_marked(text.as_bytes());
+                    }
+                }
             } else if replace.fresh && !replace.bytes.is_empty() {
                 self.restore_first();
                 self.write_hold();
@@ -321,6 +336,41 @@ impl TermGrid {
                 Some(erase_back(above, col))
             }
         }
+    }
+
+    /// The bytes that move the cursor to the first row of the lines
+    /// `plain` holds and erase from there to the end of the screen, when
+    /// those lines sit on the screen right above open region `gen`. None
+    /// when they do not.
+    fn locate_above(&self, gen: u64, plain: &str) -> Option<Vec<u8>> {
+        let region = self.region.as_ref().filter(|r| r.gen == gen)?;
+        let cursor = self.term.grid().cursor.point.line.0;
+        let start = match region_extent(self.columns(), region)? {
+            Extent::Nothing if !region.wrap_pending && region.col == 0 => cursor,
+            Extent::Rows { above, col: 0 } => cursor - i32::try_from(above).ok()?,
+            _ => return None,
+        };
+        let want: usize = plain.chars().filter(|c| !c.is_whitespace()).count();
+        let mut rows: Vec<String> = Vec::new();
+        let mut line = start - 1;
+        while line >= 0 && start - line <= ABOVE_ROWS {
+            let row = self.row_string(usize::try_from(line).ok()?);
+            rows.insert(0, row.replace('\0', " "));
+            if vosh_prompt::stage::shows_lines(&rows, plain) {
+                let up = usize::try_from(cursor - line).ok()?;
+                return Some(erase_back(up, 0));
+            }
+            let got: usize = rows
+                .iter()
+                .flat_map(|r| r.chars())
+                .filter(|c| !c.is_whitespace())
+                .count();
+            if got > want {
+                return None;
+            }
+            line -= 1;
+        }
+        None
     }
 
     /// The cursor sits at the start of a row with nothing held.
@@ -714,6 +764,9 @@ enum Extent {
 /// The most rows a region's layout is worked out for. A region taller
 /// than any screen has its start above it anyway.
 const EXTENT_ROWS: usize = 1024;
+
+/// The most rows the lines above a region are looked for in.
+const ABOVE_ROWS: i32 = 64;
 
 /// Lay `region` out again at `columns` wide, the way this grid laid it
 /// out, and say where it starts. The count comes from the region's own

@@ -52,6 +52,7 @@ export interface RegionTerminal {
       readonly cursorX: number;
       readonly cursorY: number;
       readonly baseY: number;
+      getLine(y: number): { translateToString(trimRight?: boolean): string } | undefined;
     };
   };
   readonly parser: {
@@ -65,12 +66,33 @@ export interface RegionTerminal {
 }
 
 /** Replace region `gen` with `text`. When the region is closed, a
- *  `fresh` replace writes `text` on a new row and any other is dropped. */
+ *  `fresh` replace writes `text` on a new row and any other is dropped.
+ *  `above` carries the lines the region's prompt shows right above it,
+ *  such as a tank line shown as sent: when the rows right above the open
+ *  region show `plain`, the writer erases from their first row and writes
+ *  its `text` there instead. */
 export interface RegionReplace {
   gen: number;
   text: string;
   fresh: boolean;
+  above?: { plain: string; text: string };
 }
+
+/** True when rows reading `rows`, top first, show the lines `plain`
+ *  holds, however xterm or the word wrap broke them. Blanks do not count,
+ *  since a word wrap drops the one it breaks at. The same rule as
+ *  shows_lines in crates/prompt/src/stage.rs. */
+export function showsLines(rows: string[], plain: string): boolean {
+  const want = squeeze(plain);
+  return want.length > 0 && squeeze(rows.join('')) === want;
+}
+
+function squeeze(text: string): string {
+  return text.replace(/\s+/g, '');
+}
+
+/** The most rows the lines above a region are looked for in. */
+const ABOVE_ROWS = 64;
 
 /** One session output, decoded and wrapped: the replace goes first, then
  *  the text. `restore` is the live render for the region the output
@@ -180,6 +202,8 @@ export class RegionWriter {
   private pendingHold = '';
   /** The row a pinned prompt left is where the next write lands. */
   private pinRow = false;
+  /** Told where a replace that writes nothing erased from. */
+  private erased: ((row: number, col: number) => void) | null = null;
   /** A write waits for xterm to parse what came before it. */
   private busy = false;
   private readonly queue: Item[] = [];
@@ -203,6 +227,13 @@ export class RegionWriter {
    *  lands after the open region, so it closes it. */
   local(text: string): void {
     if (text.length > 0) this.push({ kind: 'local', text });
+  }
+
+  /** Call `then` with the buffer row and column each replace that writes
+   *  nothing erases from, such as your prompt leaving the text for the
+   *  band, so what was drawn there can go with it. */
+  onErase(then: (row: number, col: number) => void): void {
+    this.erased = then;
   }
 
   /** How many rows the held line ends take once they are written, so
@@ -321,9 +352,14 @@ export class RegionWriter {
     const { replace } = out;
     let wrote = false;
     if (replace && parsed) {
-      const back = replace.gen === this.openGen ? this.locate(replace.gen) : null;
+      const back = replace.gen === this.openGen ? this.locateAt(replace.gen) : null;
       if (back !== null) {
-        this.write(back + replace.text);
+        // The lines above the region go with it when they are there.
+        const above = replace.above ? this.locateAbove(back, replace.above.plain) : null;
+        const from = above ?? back;
+        const text = above && replace.above ? replace.above.text : replace.text;
+        this.write(from.escape + text);
+        if (text.length === 0) this.erased?.(from.row, from.col);
       } else if (replace.fresh && replace.text.length > 0) {
         // Held line ends end their row, which xterm has not parsed yet.
         const held = this.writeHold();
@@ -387,6 +423,11 @@ export class RegionWriter {
    *  nothing past its mark. Null when xterm no longer holds its start on
    *  the screen. Call it only once xterm has parsed every earlier write. */
   private locate(gen: number): string | null {
+    return this.locateAt(gen)?.escape ?? null;
+  }
+
+  /** [`locate`], with the buffer row and column the region starts at. */
+  private locateAt(gen: number): { escape: string; row: number; col: number } | null {
     const mark = this.mark;
     if (!mark || mark.gen !== gen || mark.marker.isDisposed || mark.marker.line < 0) {
       return null;
@@ -394,8 +435,31 @@ export class RegionWriter {
     const buffer = this.term.buffer.active;
     const cursor = buffer.baseY + buffer.cursorY;
     const start = mark.held ? mark.marker.line + 1 : mark.marker.line;
-    if (start > cursor) return '';
+    const col = mark.held ? 0 : mark.col;
+    if (start > cursor) return { escape: '', row: start, col };
     if (start < buffer.baseY) return null;
-    return eraseBack(cursor - start, mark.held ? 0 : mark.col);
+    return { escape: eraseBack(cursor - start, col), row: start, col };
+  }
+
+  /** The escape back to the first row of the lines `plain` holds, when
+   *  they sit on the screen right above the region that starts at
+   *  `region`, erasing to the end of the screen. Null when they are not
+   *  there. */
+  private locateAbove(
+    region: { row: number; col: number },
+    plain: string,
+  ): { escape: string; row: number; col: number } | null {
+    if (region.col !== 0) return null;
+    const buffer = this.term.buffer.active;
+    const cursor = buffer.baseY + buffer.cursorY;
+    if (region.row > cursor) return null;
+    const want = squeeze(plain).length;
+    const rows: string[] = [];
+    for (let row = region.row - 1; row >= buffer.baseY && region.row - row <= ABOVE_ROWS; row--) {
+      rows.unshift(buffer.getLine(row)?.translateToString(true) ?? '');
+      if (showsLines(rows, plain)) return { escape: eraseBack(cursor - row, 0), row, col: 0 };
+      if (squeeze(rows.join('')).length > want) return null;
+    }
+    return null;
   }
 }

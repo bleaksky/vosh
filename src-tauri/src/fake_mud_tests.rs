@@ -347,6 +347,12 @@ fn output(payload: &str) -> vosh_prompt::stage::Output {
             gen: replace["gen"].as_u64().expect("a generation"),
             bytes: base64_decode(replace["b64"].as_str().unwrap_or_default()),
             fresh: replace["fresh"].as_bool().unwrap_or(false),
+            above: replace.get("above").filter(|a| !a.is_null()).map(|above| {
+                vosh_prompt::stage::Above {
+                    plain: above["plain"].as_str().unwrap_or_default().to_string(),
+                    bytes: base64_decode(above["b64"].as_str().unwrap_or_default()),
+                }
+            }),
         });
     }
     if let Some(restore) = json.get("restore").and_then(Json::as_str) {

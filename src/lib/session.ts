@@ -73,7 +73,14 @@ export interface OutputPayload {
   b64: string;
   /** Replace a region an earlier payload marked, applied before `b64`
    *  (see src/lib/terminalRegion.ts). */
-  replace?: { gen: number; b64: string; fresh: boolean };
+  replace?: {
+    gen: number;
+    b64: string;
+    fresh: boolean;
+    /** The lines the region's prompt shows right above it, as plain
+     *  text, and what goes in their place when they are there. */
+    above?: { plain: string; b64: string };
+  };
   /** The live render for the region this payload leaves open, as
    *  base64, written back before anything else lands. */
   restore?: string;
@@ -93,7 +100,12 @@ export interface OutputPayload {
  *  and `hold` waits for the next write. */
 export interface SessionOutput {
   bytes: Uint8Array;
-  replace?: { gen: number; bytes: Uint8Array; fresh: boolean };
+  replace?: {
+    gen: number;
+    bytes: Uint8Array;
+    fresh: boolean;
+    above?: { plain: string; bytes: Uint8Array };
+  };
   restore?: Uint8Array;
   pin?: Uint8Array;
   hold?: Uint8Array;
@@ -116,6 +128,9 @@ export function decodeOutputPayload(payload: OutputPayload): SessionOutput {
   const replace = payload.replace;
   if (replace) {
     out.replace = { gen: replace.gen, bytes: base64Bytes(replace.b64), fresh: replace.fresh };
+    if (replace.above) {
+      out.replace.above = { plain: replace.above.plain, bytes: base64Bytes(replace.above.b64) };
+    }
   }
   if (typeof payload.restore === 'string') out.restore = base64Bytes(payload.restore);
   if (typeof payload.pin === 'string') out.pin = base64Bytes(payload.pin);

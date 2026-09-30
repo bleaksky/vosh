@@ -126,6 +126,32 @@ pub struct Replace {
     pub gen: u64,
     pub bytes: Vec<u8>,
     pub fresh: bool,
+    /// Lines the region's prompt shows right above the region, which a
+    /// change of where your prompt shows moves with it.
+    pub above: Option<Above>,
+}
+
+/// The lines a drawn prompt shows as sent right above its region, such as
+/// a tank line your design does not read (D7). A text prompt carries no
+/// mark before them, so a renderer finds them by their text: when the
+/// rows right above the open region show `plain`, it erases from their
+/// first row and writes `bytes` there in place of the replace's own
+/// bytes. Otherwise the replace goes as it would without them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Above {
+    /// The lines' plain text, joined by `\n`.
+    pub plain: String,
+    /// What to write from their first row.
+    pub bytes: Vec<u8>,
+}
+
+/// True when rows reading `rows`, top first and trailing blanks trimmed,
+/// show the lines `plain` holds, however a renderer wrapped them. Blanks
+/// do not count, since a word wrap drops the one it breaks at.
+pub fn shows_lines(rows: &[String], plain: &str) -> bool {
+    let squeeze = |text: &str| -> String { text.chars().filter(|c| !c.is_whitespace()).collect() };
+    let want = squeeze(plain);
+    !want.is_empty() && squeeze(&rows.concat()) == want
 }
 
 /// What Vosh writes to the terminal for one socket read, or for one
@@ -282,7 +308,12 @@ impl Output {
             if shows_anything(&bytes) {
                 self.visible += 1;
             }
-            self.replace = Some(Replace { gen, bytes, fresh });
+            self.replace = Some(Replace {
+                gen,
+                bytes,
+                fresh,
+                above: None,
+            });
         } else if fresh && !bytes.is_empty() {
             self.new_row();
             self.push(&bytes);
@@ -290,6 +321,15 @@ impl Output {
             return;
         }
         self.closed = true;
+    }
+
+    /// Replace the open region `gen` with `bytes`, as a repaint does, and
+    /// with it the lines `above` it when a renderer finds them there.
+    fn replace_above(&mut self, gen: u64, bytes: Vec<u8>, above: Option<Above>) {
+        self.replace(gen, bytes, false);
+        if let Some(replace) = self.replace.as_mut().filter(|r| r.gen == gen) {
+            replace.above = above;
+        }
     }
 
     /// End the row the cursor sits on, unless this output already left it
@@ -539,6 +579,25 @@ impl Block {
         out
     }
 
+    /// The lines [`Block::heads_shown`] shows, with their plain text, or
+    /// None when it shows none.
+    fn heads_shown_with_text(&self) -> Option<(Vec<u8>, String)> {
+        let bytes = self.heads_shown();
+        if bytes.is_empty() {
+            return None;
+        }
+        let last = self.lines.len().saturating_sub(1);
+        let plain: Vec<&str> = self
+            .lines
+            .iter()
+            .enumerate()
+            .take(last)
+            .filter(|(index, _)| !self.replaced.contains(index))
+            .map(|(_, line)| line.plain.as_str())
+            .collect();
+        Some((bytes, plain.join("\n")))
+    }
+
     /// Every line above the final one, as the game sent it, each with its
     /// line end, for a block that shows as sent.
     fn heads(&self) -> Vec<u8> {
@@ -774,6 +833,9 @@ pub struct Stage {
     swallow: Option<Swallow>,
     /// The lift the open row carries, set with every open row.
     open_lift: Option<OpenLift>,
+    /// The lines the open row's prompt shows as sent right above its
+    /// region, and their plain text, set with every open row.
+    open_heads: Option<(Vec<u8>, String)>,
 }
 
 impl Stage {
@@ -1205,6 +1267,7 @@ impl Stage {
             id,
             start_inside: false,
         });
+        self.open_heads = block.heads_shown_with_text();
         self.shown_as = self.show;
         self.note_recognized(block);
     }
@@ -1477,7 +1540,22 @@ impl Stage {
             }
             None => bytes.extend_from_slice(&body),
         }
-        out.replace(old, bytes, false);
+        // Choosing Lifted lifts the lines above the region with it, from
+        // the first of them, where a renderer finds them.
+        let above = match (lifting, lift, &self.open_heads) {
+            (true, Some(lift), Some((heads, plain))) => {
+                let mut whole = lift_start(lift.id);
+                whole.extend_from_slice(heads);
+                whole.extend(mark(gen));
+                whole.extend(with_lift_end(&body, lift.id));
+                Some(Above {
+                    plain: plain.clone(),
+                    bytes: whole,
+                })
+            }
+            _ => None,
+        };
+        out.replace_above(old, bytes, above);
         out.closed = false;
         self.open = Some(OpenRow { gen, body });
         self.open_lift = lift;
@@ -1516,7 +1594,12 @@ impl Stage {
         let rendered = rendered.filter(|_| !block.afk);
         let body = pin_body(block, rendered);
         let settled_line = block.final_line().end == End::SettledLine;
-        out.replace(open.gen, Vec::new(), false);
+        // The lines above the region leave the text with it.
+        let above = self.open_heads.take().map(|(_, plain)| Above {
+            plain,
+            bytes: Vec::new(),
+        });
+        out.replace_above(open.gen, Vec::new(), above);
         self.open_lift = None;
         self.swallow = (!settled_line).then(|| Swallow::at(out));
         out.row_open = self.swallow.is_some();
@@ -1562,6 +1645,7 @@ impl Stage {
                     id,
                     start_inside: false,
                 });
+                self.open_heads = block.heads_shown_with_text();
             }
             None => {
                 // As Prompts triggers left it, when it pinned drawing off.
@@ -1838,6 +1922,7 @@ mod tests {
                 gen: 1,
                 bytes: with(&[&mark(2), b"DRAWN"]),
                 fresh: true,
+                above: None,
             })
         );
         assert!(second.bytes.is_empty());
@@ -1890,6 +1975,7 @@ mod tests {
                 gen: 1,
                 bytes: b"You are hungry.\r\n".to_vec(),
                 fresh: true,
+                above: None,
             })
         );
         assert_eq!(second.bytes, b"next\r\n");
@@ -1906,6 +1992,7 @@ mod tests {
                 gen: 2,
                 bytes: Vec::new(),
                 fresh: false,
+                above: None,
             })
         );
     }
@@ -1924,6 +2011,7 @@ mod tests {
                 gen: 1,
                 bytes: with(&[&mark(2), b"<10hp> "]),
                 fresh: true,
+                above: None,
             })
         );
         // A read that adds nothing to it writes nothing.
@@ -1982,6 +2070,7 @@ mod tests {
                 gen: 1,
                 bytes: with(&[&mark(2), b"NEW\r\n"]),
                 fresh: false,
+                above: None,
             })
         );
         let mut off = Output::new(false);
@@ -2033,6 +2122,7 @@ mod tests {
                 gen: 2,
                 bytes: with(&[&mark(3), b"DRAWN"]),
                 fresh: true,
+                above: None,
             })
         );
 
@@ -2071,6 +2161,7 @@ mod tests {
                 gen: 4,
                 bytes: b"<100hp 50m 30mv> \r\n".to_vec(),
                 fresh: true,
+                above: None,
             })
         );
         assert!(out.bytes.is_empty());
@@ -2089,6 +2180,7 @@ mod tests {
                 gen: 4,
                 bytes: b"\x1b[31m> \x1b[0m\r\n".to_vec(),
                 fresh: true,
+                above: None,
             })
         );
         // A trigger hid it: the painted one is erased, and an unpainted
@@ -2101,6 +2193,7 @@ mod tests {
                 gen: 4,
                 bytes: Vec::new(),
                 fresh: false,
+                above: None,
             })
         );
         let mut out = Output::new(false);
@@ -2123,6 +2216,7 @@ mod tests {
                 gen: 1,
                 bytes: with(&[&mark(2), PROMPT.as_bytes(), b"\r\n"]),
                 fresh: false,
+                above: None,
             })
         );
         assert!(off.bytes.is_empty());
@@ -2136,6 +2230,7 @@ mod tests {
                 gen: 2,
                 bytes: with(&[&mark(3), b"DRAWN"]),
                 fresh: false,
+                above: None,
             })
         );
         // A repaint that changes nothing writes nothing.
@@ -2558,6 +2653,7 @@ mod tests {
                 gen: 1,
                 bytes: Vec::new(),
                 fresh: false,
+                above: None,
             })
         );
         assert!(second.bytes.is_empty());
@@ -2580,6 +2676,7 @@ mod tests {
                 gen: 2,
                 bytes: b"low on mana\r\n".to_vec(),
                 fresh: true,
+                above: None,
             })
         );
         // After other output the painted start is closed, so it stays.
@@ -2688,6 +2785,7 @@ mod tests {
                 gen: 1,
                 bytes: Vec::new(),
                 fresh: false,
+                above: None,
             })
         );
         assert_eq!(moved.pin.as_deref(), Some(&b"DRAWN"[..]));
@@ -3031,6 +3129,105 @@ mod tests {
         let mut same = Output::new(false);
         stage.repaint(&mut same, Some("NEW"));
         assert!(same.is_empty());
+    }
+
+    /// A block with a tank line above the prompt, which the design does
+    /// not read, so it shows as sent.
+    fn tank_block() -> Block {
+        Block {
+            lines: vec![
+                BlockLine {
+                    raw: b"Tester: [===|---]".to_vec(),
+                    plain: "Tester: [===|---]".into(),
+                    end: End::Line,
+                },
+                BlockLine {
+                    raw: PROMPT.as_bytes().to_vec(),
+                    plain: PROMPT.into(),
+                    end: End::Line,
+                },
+            ],
+            replaced: vec![1],
+            values: BTreeMap::new(),
+            afk: false,
+        }
+    }
+
+    #[test]
+    fn a_change_of_place_takes_the_tank_line_above_the_region_along() {
+        assert!(shows_lines(
+            &["Tester: [===|".into(), "---]".into()],
+            "Tester: [===|---]"
+        ));
+        assert!(!shows_lines(&["Tester: [===|".into()], "Tester: [===|---]"));
+        assert!(!shows_lines(&[], ""));
+
+        // In the text, then Pinned: the tank line goes with the region.
+        let mut stage = self::stage(JAMES, false);
+        let mut out = Output::new(false);
+        stage.draw(&mut out, tank_block(), None, b"", "DRAWN");
+        assert_eq!(
+            out.bytes,
+            with(&[b"Tester: [===|---]\r\n", &mark(1), b"DRAWN"])
+        );
+        stage.set_show(PromptShow::Pinned);
+        let mut pin = Output::new(false);
+        stage.repaint(&mut pin, Some("DRAWN"));
+        assert_eq!(
+            pin.replace,
+            Some(Replace {
+                gen: 1,
+                bytes: Vec::new(),
+                fresh: false,
+                above: Some(Above {
+                    plain: "Tester: [===|---]".into(),
+                    bytes: Vec::new(),
+                }),
+            })
+        );
+        assert_eq!(pin.pin.as_deref(), Some(&b"Tester: [===|---]\r\nDRAWN"[..]));
+
+        // In the text, then Lifted: the lift starts at the tank line when
+        // a renderer finds it, and at the region otherwise.
+        let mut stage = self::stage(JAMES, false);
+        let mut out = Output::new(false);
+        stage.draw(&mut out, tank_block(), None, b"", "DRAWN");
+        stage.set_show(PromptShow::Lifted);
+        let mut lift = Output::new(false);
+        stage.repaint(&mut lift, Some("DRAWN"));
+        let replace = lift.replace.expect("the repaint");
+        assert_eq!(
+            replace.bytes,
+            with(&[&mark(3), &lift_start(2), b"DRAWN", &lift_end(2), b" "])
+        );
+        assert_eq!(
+            replace.above,
+            Some(Above {
+                plain: "Tester: [===|---]".into(),
+                bytes: with(&[
+                    &lift_start(2),
+                    b"Tester: [===|---]\r\n",
+                    &mark(3),
+                    b"DRAWN",
+                    &lift_end(2),
+                    b" "
+                ]),
+            })
+        );
+        // A later repaint rewrites only the region.
+        let mut again = Output::new(false);
+        stage.repaint(&mut again, Some("NEW"));
+        assert_eq!(again.replace.and_then(|r| r.above), None);
+        // With no lines above, nothing rides along.
+        let mut stage = stage_settling_pinned();
+        stage.set_show(PromptShow::Text);
+        let block = read(&stage, "<10hp> ", End::Line);
+        let mut out = Output::new(false);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        stage.set_show(PromptShow::Pinned);
+        let mut pin = Output::new(false);
+        stage.repaint(&mut pin, Some("DRAWN"));
+        assert_eq!(pin.replace.and_then(|r| r.above), None);
     }
 
     #[test]
