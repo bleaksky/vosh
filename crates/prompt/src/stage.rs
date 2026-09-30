@@ -20,6 +20,14 @@
 //! Only it is ever repainted. Any other output, a send, a local write, a
 //! window size change and a disconnect close it.
 //!
+//! A prompt may span lines (D7). The stage holds a line that starts one
+//! until the rest arrives, within the read, and paints held lines as a
+//! region at the end of a read, so the prompt that finishes them replaces
+//! it. A line that does not finish them releases them to the Line pass.
+//! A line above the last one shows as sent unless the design reads a
+//! value it carries. A partial that can still become your prompt waits up
+//! to [`HOLD_MS`] for the next read before it paints raw.
+//!
 //! The stage also keeps the candidates ring, one entry per send and per GA
 //! or EOR, which the prompt card reads to show and check your prompt.
 
