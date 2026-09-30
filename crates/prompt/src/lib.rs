@@ -8,10 +8,13 @@
 //!   editor shows.
 //! - [`format`] holds the values a template draws and the plain text of
 //!   each format.
+//! - [`gmcp`] keeps the latest packet of each package, the pulse and the
+//!   latest Char.Prompt.
 //! - [`render`] draws a template as ANSI text with a span per piece.
 //! - [`wrap`] is the word wrap both renderers share.
 
 pub mod format;
+pub mod gmcp;
 pub mod render;
 pub mod template;
 pub mod wrap;

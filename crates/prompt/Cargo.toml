@@ -4,16 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "The custom prompt engine for Vosh. Template, renderer and word wrap, with no Tauri."
+description = "The custom prompt engine for Vosh. Template, renderer, variables, GMCP snapshot and word wrap, with no Tauri."
 rust-version.workspace = true
 
 [dependencies]
 serde = { workspace = true }
+serde_json = { workspace = true }
 # Local time for the clock pieces (clock only, no default features).
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-
-[dev-dependencies]
-serde_json = { workspace = true }
 
 [lints]
 workspace = true
