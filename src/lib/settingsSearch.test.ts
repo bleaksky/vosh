@@ -110,6 +110,19 @@ describe('searchSettingsRows', () => {
     ]);
   });
 
+  it('finds the affects style and marker under Layout', () => {
+    const [style] = searchSettingsRows('grouped chips', mac);
+    expect(style.label).toBe('Style');
+    expect(settingsRowKey(style)).toBe('layout:affects#affects-style');
+    expect(labels('countdown')).toContain('Style');
+    expect(labels('timers first')).toEqual(['Style']);
+    const [marker] = searchSettingsRows('affects dot', mac);
+    expect(marker.label).toBe('Marker');
+    expect(settingsRowKey(marker)).toBe('layout:affects#affects-marker');
+    expect(labels('square')).toContain('Marker');
+    expect(labels('plus minus')).toContain('Marker');
+  });
+
   it('finds the tick and time style under Layout', () => {
     const [row] = searchSettingsRows('chip style', mac);
     expect(row.label).toBe('Tick and time');
@@ -123,7 +136,8 @@ describe('searchSettingsRows', () => {
     const [row] = searchSettingsRows('tick count', mac);
     expect(row.label).toBe('Tick counts');
     expect(settingsRowKey(row)).toBe('layout:status#tick-counts');
-    expect(labels('countdown')).toEqual(['Tick counts']);
+    // The Countdown affects style matches too, after the tick.
+    expect(labels('countdown')).toEqual(['Tick counts', 'Style']);
     expect(labels('below zero')).toEqual(['Tick counts']);
     expect(labels('tick')).toEqual(expect.arrayContaining(['Tick and time', 'Tick counts']));
   });

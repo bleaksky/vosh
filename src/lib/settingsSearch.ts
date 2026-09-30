@@ -218,6 +218,23 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'tick count countdown count down up direction reverse late negative minus below zero',
     target: at('layout', 'status', 'tick-counts'),
   },
+  // The Affects card sits above Vitals on the page. Its rows come last
+  // here, since search breaks a tie by this order and `chip style`
+  // should still find Tick and time, whose saved name it is.
+  {
+    label: 'Style',
+    description:
+      'Timers first keeps your slots, Countdown sorts by hours left, and Grouped chips puts what to recast first.',
+    keywords: 'affects pane layout timers first countdown grouped chips list order',
+    target: at('layout', 'affects', 'affects-style'),
+  },
+  {
+    label: 'Marker',
+    description:
+      'It sits beside each affect you track, and its color shows whether the affect is up, running out, or missing.',
+    keywords: 'affects dot circle square plus minus none mark indicator',
+    target: at('layout', 'affects', 'affects-marker'),
+  },
 
   // Input, from the approved board.
   {

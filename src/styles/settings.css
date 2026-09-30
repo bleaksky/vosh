@@ -1876,6 +1876,29 @@
   width: 3px;
 }
 
+/* The Affects Marker pictures: the mark of an affect you have and of
+   one you are missing, the pane's own 8 px shapes 4 px apart, painted
+   in the segment's text color and the accent while pressed. */
+.st-marker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 16px;
+}
+
+.st-marker .pane-affect-mark:is(.is-up, .is-missing) {
+  --mark: currentColor;
+  position: relative;
+  left: 0;
+  top: 0;
+  flex: none;
+}
+
+.st-seg-item[aria-pressed='true'] .st-marker {
+  color: var(--accent);
+}
+
 /* The prompt template, 12 under its label line, and the preview 8
    under it: the template drawn on the terminal ground in the terminal
    font with a hairline ring. */
