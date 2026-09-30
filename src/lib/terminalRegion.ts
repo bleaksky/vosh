@@ -106,6 +106,7 @@ export class RegionWriter {
   private busy = false;
   private readonly queue: Item[] = [];
   private readonly osc: { dispose(): void };
+  private disposed = false;
 
   constructor(term: RegionTerminal) {
     this.term = term;
@@ -132,6 +133,7 @@ export class RegionWriter {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.osc.dispose();
     this.mark?.marker.dispose();
     this.mark = null;
@@ -149,6 +151,7 @@ export class RegionWriter {
   }
 
   private push(item: Item): void {
+    if (this.disposed) return;
     if (this.busy) this.queue.push(item);
     else this.run(item);
   }
@@ -166,6 +169,8 @@ export class RegionWriter {
     this.busy = true;
     this.term.write('', () => {
       this.busy = false;
+      // The terminal went away while the write waited.
+      if (this.disposed) return;
       then();
       this.drain();
     });

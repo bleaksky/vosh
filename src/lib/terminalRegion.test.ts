@@ -202,6 +202,17 @@ describe('RegionWriter', () => {
     expect(screen(term)).toEqual(['PLAIN> look']);
   });
 
+  it('writes nothing more once disposed, even a replace that waited', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: `${mark(1)}PROMPT> ` });
+    writer.output(replace(1, `${mark(2)}NEW> `));
+    writer.local('look\r\n');
+    writer.dispose();
+    writer.local('after\r\n');
+    await new Promise((resolve) => term.write('', () => resolve(undefined)));
+    expect(screen(term)).toEqual(['PROMPT> ']);
+  });
+
   it('keeps the order of writes that arrive while a replace waits', async () => {
     const { term, writer } = setup();
     writer.output({ text: `${mark(1)}PROMPT> ` });
