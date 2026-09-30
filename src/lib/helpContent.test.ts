@@ -49,6 +49,21 @@ describe('the help on the affects pane', () => {
     expect(text).not.toContain('renders nothing until you list');
   });
 
+  it('describes the three styles, the markers, the gauge, and the tint', () => {
+    const text = topic().body;
+    expect(text).toContain(
+      'Pick how the affects pane draws in Settings under Layout, then Affects',
+    );
+    expect(text).toContain('`Countdown` lists every affect by the hours it has left.');
+    expect(text).toContain('`Grouped chips` puts what to recast first.');
+    expect(text).toContain('the fill drains from the left as its hours run down');
+    expect(text).toContain('the most hours Vosh has seen for it since you last cast it');
+    expect(text).toContain('Pick a dot, a square, plus and minus, or none.');
+    expect(text).toContain('Turn on `Tint what to recast`');
+    // The writing style keeps colons and semicolons out of the prose.
+    expect(text).not.toMatch(/[;:] /);
+  });
+
   it('reads the same in HELP.md', () => {
     const { number, title, body: text } = topic();
     expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
