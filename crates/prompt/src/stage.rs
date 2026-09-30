@@ -158,20 +158,27 @@ fn find_last(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 /// How a line of a recognized prompt ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum End {
-    /// A line end.
+    /// A line end the prompt waits for, as one ending in `%c` does.
     Line,
     /// A GA or EOR ended the partial.
     Marker,
-    /// The partial settled at the end of a read, with nothing after it.
+    /// The partial settled at the end of a read, with nothing after it,
+    /// or a GA or EOR came after a prompt that settles.
     Settled,
+    /// The prompt settles, so it was whole before the line end that came
+    /// after it. The line end starts the game's next row, so it follows
+    /// the prompt as it would had the prompt settled at the end of a
+    /// read.
+    SettledLine,
 }
 
 impl End {
     /// What ends the line when it shows as sent. A GA ends the row, as it
-    /// always did.
+    /// always did, unless the prompt settles and so keeps the cursor after
+    /// it.
     fn terminator(self) -> &'static [u8] {
         match self {
-            End::Line | End::Marker => b"\r\n",
+            End::Line | End::Marker | End::SettledLine => b"\r\n",
             End::Settled => b"",
         }
     }
@@ -346,12 +353,19 @@ impl Stage {
 
     /// Read a line, or a partial, as your prompt. `end` says how it ended.
     /// A partial with nothing after it is the prompt only when the
-    /// capture settles.
+    /// capture settles. A prompt that settles ends the same wherever the
+    /// reads split: a GA after it leaves the cursor after it, as when it
+    /// settled at the end of a read, and a line end after it follows it.
     pub fn recognize(&self, raw: &[u8], plain: &str, end: End) -> Option<Block> {
         let recognizer = self.recognizer.as_ref()?;
         let read = match end {
             End::Settled => recognizer.partial(plain)?,
-            End::Line | End::Marker => recognizer.line(plain)?,
+            End::Line | End::Marker | End::SettledLine => recognizer.line(plain)?,
+        };
+        let end = match end {
+            End::Marker if recognizer.settles() => End::Settled,
+            End::Line if recognizer.settles() => End::SettledLine,
+            end => end,
         };
         Some(Block {
             lines: vec![BlockLine {
@@ -365,10 +379,11 @@ impl Stage {
     }
 
     /// Draw `rendered` in place of `block`, as the open row with no line
-    /// end, so the cursor sits after it like a game's prompt. `painted` is
-    /// the region an earlier read painted the block's partial as, which
-    /// the drawn prompt replaces. `before` goes first, such as lines a
-    /// Prompts trigger's script echoed.
+    /// end, so the cursor sits after it like a game's prompt. A prompt
+    /// whole before the line end that came after it keeps that line end
+    /// in the row. `painted` is the region an earlier read painted the
+    /// block's partial as, which the drawn prompt replaces. `before` goes
+    /// first, such as lines a Prompts trigger's script echoed.
     pub fn draw(
         &mut self,
         out: &mut Output,
@@ -379,15 +394,13 @@ impl Stage {
     ) {
         self.sync(out);
         let gen = self.next_gen();
+        let body = drawn(&block, rendered);
         let mut bytes = before.to_vec();
         bytes.extend(mark(gen));
-        bytes.extend_from_slice(rendered.as_bytes());
+        bytes.extend_from_slice(&body);
         put(out, painted, bytes, true);
         out.closed = false;
-        self.open = Some(OpenRow {
-            gen,
-            body: rendered.as_bytes().to_vec(),
-        });
+        self.open = Some(OpenRow { gen, body });
         self.note_recognized(block);
     }
 
@@ -509,12 +522,12 @@ impl Stage {
         let Some(open) = &self.open else {
             return;
         };
+        let Some(block) = &self.last_raw else {
+            return;
+        };
         let body = match rendered {
-            Some(rendered) => rendered.as_bytes().to_vec(),
-            None => match &self.last_raw {
-                Some(block) => block.shown(),
-                None => return,
-            },
+            Some(rendered) => drawn(block, rendered),
+            None => block.shown(),
         };
         if body == open.body {
             return;
@@ -617,6 +630,16 @@ impl Stage {
     pub fn line_trigger_notice(&self) -> Option<Vec<String>> {
         (self.recognized > 0).then(|| self.line_triggers.iter().cloned().collect())
     }
+}
+
+/// What the open row holds for `block` drawn as `rendered`: the design,
+/// and the line end that came after a prompt that was whole before it.
+fn drawn(block: &Block, rendered: &str) -> Vec<u8> {
+    let mut body = rendered.as_bytes().to_vec();
+    if block.final_line().end == End::SettledLine {
+        body.extend_from_slice(b"\r\n");
+    }
+    body
 }
 
 /// Write `bytes` over the region `painted`, or as they are.
@@ -867,6 +890,58 @@ mod tests {
         assert!(waits
             .recognize(PROMPT.as_bytes(), PROMPT, End::Settled)
             .is_none());
+    }
+
+    #[test]
+    fn a_prompt_whole_before_its_line_end_draws_the_line_end_after_it() {
+        let mut stage = stage(SETTLES, true);
+        let block = read(&stage, "<10hp> ", End::Line);
+        assert_eq!(block.final_line().end, End::SettledLine);
+        let mut out = Output::new(false);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        assert_eq!(out.bytes, with(&[&mark(1), b"DRAWN\r\n"]));
+        // The row stays open with its line end, and a repaint keeps it.
+        assert_eq!(
+            stage.open_row(),
+            Some(&OpenRow {
+                gen: 1,
+                body: b"DRAWN\r\n".to_vec()
+            })
+        );
+        let mut new = Output::new(false);
+        stage.repaint(&mut new, Some("NEW"));
+        assert_eq!(
+            new.replace,
+            Some(Replace {
+                gen: 1,
+                bytes: with(&[&mark(2), b"NEW\r\n"]),
+                fresh: false,
+            })
+        );
+        let mut off = Output::new(false);
+        stage.repaint(&mut off, None);
+        assert_eq!(
+            off.replace.map(|r| r.bytes),
+            Some(with(&[&mark(3), b"<10hp> \r\n"]))
+        );
+        // A capture that waits for its line end reads the line end as
+        // part of the prompt, so the drawn prompt keeps the cursor.
+        let mut waits = self::stage(JAMES, false);
+        let block = read(&waits, PROMPT, End::Line);
+        assert_eq!(block.final_line().end, End::Line);
+        let mut out = Output::new(false);
+        waits.draw(&mut out, block, None, b"", "DRAWN");
+        assert_eq!(out.bytes, with(&[&mark(1), b"DRAWN"]));
+    }
+
+    #[test]
+    fn a_ga_after_a_prompt_that_settles_leaves_the_cursor_after_it() {
+        let mut stage = stage(SETTLES, true);
+        let block = read(&stage, "<10hp> ", End::Marker);
+        assert_eq!(block.final_line().end, End::Settled);
+        let mut out = Output::new(false);
+        stage.show(&mut out, block, None, b"", Some(b"<10hp> "));
+        assert_eq!(out.bytes, b"<10hp> ");
     }
 
     #[test]
