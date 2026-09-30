@@ -22,7 +22,7 @@ use std::sync::Mutex;
 
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
 
-use crate::term_grid::CellFlags;
+use crate::term_grid::{CellFlags, LiftSpan};
 
 /// Linear-ish rgba in 0..1, ready for a wgpu vertex/instance buffer.
 pub(crate) type Rgba = [f32; 4];
@@ -179,6 +179,11 @@ pub(crate) struct Placement {
     /// underlay, where the page shows both from the scroll and copy events
     /// and can place them around its own find bar.
     pub indicators: bool,
+    /// Device pixels per CSS pixel, which the prompt bands scale by.
+    pub scale: f32,
+    /// The render target's size in device pixels. A prompt band reaches
+    /// past the pane into it, as far as the target allows.
+    pub target: [u32; 2],
 }
 
 fn theme_fg() -> Rgb {
@@ -263,6 +268,10 @@ pub(crate) struct ChromeTokens {
     pub link: Option<Paint>,
     /// The overlay scrollbar thumb. The track is the same color, fainter.
     pub scrollbar: Option<Paint>,
+    /// The selected row fill, which a lifted prompt's band takes.
+    pub selrow: Option<Paint>,
+    /// The page's theme is light, so a band carries its inset ring.
+    pub light: bool,
 }
 
 impl ChromeTokens {
@@ -273,6 +282,8 @@ impl ChromeTokens {
         current_match: None,
         link: None,
         scrollbar: None,
+        selrow: None,
+        light: false,
     };
 }
 
@@ -297,6 +308,9 @@ const SELECTION_FALLBACK_ALPHA: f32 = 0.25;
 const FIND_MATCH_FALLBACK_ALPHA: f32 = 0.35;
 const CURRENT_MATCH_FALLBACK_ALPHA: f32 = 0.65;
 const SCROLLBAR_FALLBACK_ALPHA: f32 = 0.45;
+// A band before the page reports its row fill: the foreground washed into
+// the ground.
+const SELROW_FALLBACK_ALPHA: f32 = 0.08;
 // The scrollbar track is the thumb color at this share of its alpha.
 const SCROLLBAR_TRACK_SHARE: f32 = 0.2;
 
@@ -310,6 +324,10 @@ struct ChromePaint {
     current_match: Paint,
     link: Paint,
     scrollbar: Paint,
+    /// A lifted prompt's band.
+    selrow: Paint,
+    /// The band's inset ring, on light themes only.
+    ring: Option<Paint>,
 }
 
 fn chrome_paint() -> ChromePaint {
@@ -354,6 +372,10 @@ fn resolve_chrome(
         scrollbar: t
             .scrollbar
             .unwrap_or_else(|| Paint::tint(fg, SCROLLBAR_FALLBACK_ALPHA)),
+        selrow: t
+            .selrow
+            .unwrap_or_else(|| Paint::tint(fg, SELROW_FALLBACK_ALPHA)),
+        ring: t.light.then_some(LIGHT_RING),
     }
 }
 
@@ -423,6 +445,19 @@ static BRIGHT_BOLD: AtomicBool = AtomicBool::new(false);
 /// frontend from the `bright_bold` setting.
 pub(crate) fn set_bright_bold(on: bool) {
     BRIGHT_BOLD.store(on, Ordering::Release);
+}
+
+// When set, your prompt shows lifted and each lift draws on a band.
+static PROMPT_BANDS: AtomicBool = AtomicBool::new(false);
+
+/// Draw a band under each lifted prompt, reported by the page from where
+/// your prompt shows.
+pub(crate) fn set_prompt_bands(on: bool) {
+    PROMPT_BANDS.store(on, Ordering::Release);
+}
+
+fn prompt_bands() -> bool {
+    PROMPT_BANDS.load(Ordering::Acquire)
 }
 
 /// True when `fg` is a bright ANSI color (8-15), named or indexed.
@@ -1263,6 +1298,190 @@ fn cell_in_selection(bounds: Option<(i32, usize, i32, usize)>, line: i32, col: u
 }
 
 // ---------------------------------------------------------------------------
+// Prompt bands
+// ---------------------------------------------------------------------------
+
+// The band under a lifted prompt in CSS px, as the prompt boards measure it
+// and src/lib/promptBands.ts draws it on xterm. It reaches 4 past the text
+// on each side and 2 above and below, at radius 4. Lifts on adjacent rows
+// stop 1 inside their shared row edge, so 2 of ground stays between them.
+const BAND_X: f32 = 4.0;
+const BAND_Y: f32 = 2.0;
+const BAND_Y_ADJACENT: f32 = -1.0;
+const BAND_RADIUS: f32 = 4.0;
+// Light themes draw a 1 px inset ring on the band, as a box shadow does.
+const BAND_RING: f32 = 1.0;
+const LIGHT_RING: Paint = Paint {
+    r: 0,
+    g: 0,
+    b: 0,
+    a: 0.14,
+};
+// A prompt is never this tall, so a lift that starts this far past a
+// region never reaches into it. src/lib/promptBands.ts uses the same bound.
+const MAX_LIFT_ROWS: i32 = 64;
+
+/// A lift as one region shows it. Its rows count from the region's first
+/// row, below zero or past the region's last when the region cuts it. Its
+/// columns run from its leftmost start to one past its rightmost glyph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LiftBox {
+    id: u64,
+    top: i32,
+    bottom: i32,
+    left: usize,
+    right: usize,
+}
+
+/// Gather `spans` into one box per lift, top first, keeping the lifts that
+/// meet the `vis` rows of a region whose first row is grid line `line0`.
+fn lift_boxes(spans: &[LiftSpan], line0: i32, vis: usize) -> Vec<LiftBox> {
+    let mut boxes: Vec<LiftBox> = Vec::new();
+    for s in spans {
+        let row = s.line - line0;
+        match boxes.iter_mut().find(|b| b.id == s.id) {
+            Some(b) => {
+                b.top = b.top.min(row);
+                b.bottom = b.bottom.max(row);
+                b.left = b.left.min(s.first);
+                b.right = b.right.max(s.end);
+            }
+            None => boxes.push(LiftBox {
+                id: s.id,
+                top: row,
+                bottom: row,
+                left: s.first,
+                right: s.end,
+            }),
+        }
+    }
+    let vis = i32::try_from(vis).unwrap_or(i32::MAX);
+    boxes.retain(|b| b.bottom >= 0 && b.top < vis);
+    boxes.sort_by_key(|b| (b.top, b.bottom));
+    boxes
+}
+
+/// A band's rectangle in pane pixels.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct BandRect {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+}
+
+/// Each box's band, placed as `layoutBands` places it on xterm, in device
+/// pixels at `scale`, for cells `cell_w` by `cell_h` in a region whose
+/// first row sits at `y0`.
+fn band_rects(boxes: &[LiftBox], y0: f32, cell_w: f32, cell_h: f32, scale: f32) -> Vec<BandRect> {
+    boxes
+        .iter()
+        .enumerate()
+        .map(|(i, b)| {
+            let above = i.checked_sub(1).map(|j| boxes[j]);
+            let below = boxes.get(i + 1);
+            let top_out = if above.is_some_and(|a| a.bottom + 1 == b.top) {
+                BAND_Y_ADJACENT
+            } else {
+                BAND_Y
+            };
+            let bottom_out = if below.is_some_and(|n| b.bottom + 1 == n.top) {
+                BAND_Y_ADJACENT
+            } else {
+                BAND_Y
+            };
+            let top = y0 + b.top as f32 * cell_h - top_out * scale;
+            let bottom = y0 + (b.bottom + 1) as f32 * cell_h + bottom_out * scale;
+            let left = b.left as f32 * cell_w - BAND_X * scale;
+            let right = b.right as f32 * cell_w + BAND_X * scale;
+            BandRect {
+                x: left,
+                y: top,
+                w: right - left,
+                h: bottom - top,
+            }
+        })
+        .collect()
+}
+
+/// The quads that draw `rects` through the band shader, moved by `shift`
+/// into the band pass's viewport: a rounded fill in `fill`, then an inset
+/// ring in `ring` when the theme is light. The shader reads the corner
+/// radius and the ring width from `uv_min`.
+fn band_instances(
+    rects: &[BandRect],
+    shift: [f32; 2],
+    fill: Paint,
+    ring: Option<Paint>,
+    scale: f32,
+) -> Vec<CellInstance> {
+    let radius = BAND_RADIUS * scale;
+    let mut out = Vec::with_capacity(rects.len() * 2);
+    for r in rects {
+        let quad = |color: Paint, ring_w: f32| CellInstance {
+            offset: [r.x + shift[0], r.y + shift[1]],
+            size: [r.w, r.h],
+            color: paint_to_rgba(color),
+            uv_min: [radius, ring_w],
+            uv_max: [0.0, 0.0],
+        };
+        out.push(quad(fill, 0.0));
+        if let Some(ring) = ring {
+            out.push(quad(ring, BAND_RING * scale));
+        }
+    }
+    out
+}
+
+/// The band pass's viewport, `[x, y, width, height]` in the target: the
+/// pane grown by a band's reach on every side, kept inside the target.
+fn band_viewport(pane: [u32; 4], target: [u32; 2], scale: f32) -> [u32; 4] {
+    let [x, y, w, h] = pane;
+    let pad_x = (BAND_X * scale).ceil() as u32;
+    let pad_y = (BAND_Y * scale).ceil() as u32;
+    let left = x.saturating_sub(pad_x);
+    let top = y.saturating_sub(pad_y);
+    let right = (x + w + pad_x).min(target[0].max(x + w));
+    let bottom = (y + h + pad_y).min(target[1].max(y + h));
+    [left, top, right - left, bottom - top]
+}
+
+/// A pipeline, its bind group, and the viewport it draws into, as
+/// `[x, y, width, height]` in the target.
+type Stage<'a> = (&'a wgpu::RenderPipeline, &'a wgpu::BindGroup, [u32; 4]);
+
+/// Point `rpass` at `stage`.
+fn set_stage<'a>(rpass: &mut wgpu::RenderPass<'a>, stage: Stage<'a>) {
+    let (pipeline, bind_group, [x, y, w, h]) = stage;
+    rpass.set_pipeline(pipeline);
+    rpass.set_bind_group(0, bind_group, &[]);
+    rpass.set_viewport(x as f32, y as f32, w as f32, h as f32, 0.0, 1.0);
+}
+
+/// Draw `range` of the band quads through `bands`, clipped to `clip`, then
+/// point the pass back at `cells`, whose own clip the caller sets next.
+fn draw_bands<'a>(
+    rpass: &mut wgpu::RenderPass<'a>,
+    bands: Stage<'a>,
+    cells: Stage<'a>,
+    clip: [u32; 4],
+    range: std::ops::Range<u32>,
+) {
+    set_stage(rpass, bands);
+    let [x, y, w, h] = clip;
+    rpass.set_scissor_rect(x, y, w, h);
+    rpass.draw(0..6, range);
+    set_stage(rpass, cells);
+}
+
+/// Whether grid line `line` column `col` lies in a lift, from the rows
+/// `lift_spans` read.
+fn in_lift(rows: &HashMap<i32, Vec<(usize, usize)>>, line: i32, col: usize) -> bool {
+    rows.get(&line)
+        .is_some_and(|spans| spans.iter().any(|&(first, end)| col >= first && col < end))
+}
+
+// ---------------------------------------------------------------------------
 // wgpu cell renderer
 // ---------------------------------------------------------------------------
 
@@ -1330,6 +1549,72 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
 }
 ";
 
+/// The prompt band: a rounded rectangle, or its inset ring, covered by
+/// its signed distance the way a browser antialiases a border radius. The
+/// instance's `uv_min` carries the radius and the ring width, zero for a
+/// fill. The output is premultiplied and sRGB encoded like the cells.
+const BAND_SHADER: &str = r"
+struct Uniforms { surface_size: vec2<f32>, cell_size: vec2<f32> };
+@group(0) @binding(0) var<uniform> u: Uniforms;
+
+struct BandOut {
+    @builtin(position) pos: vec4<f32>,
+    @location(0) local: vec2<f32>,
+    @location(1) size: vec2<f32>,
+    @location(2) color: vec4<f32>,
+    @location(3) shape: vec2<f32>,
+};
+
+@vertex
+fn vs(
+    @builtin(vertex_index) vi: u32,
+    @location(0) offset: vec2<f32>,
+    @location(1) size: vec2<f32>,
+    @location(2) color: vec4<f32>,
+    @location(3) uv_min: vec2<f32>,
+    @location(4) uv_max: vec2<f32>,
+) -> BandOut {
+    var corners = array<vec2<f32>, 6>(
+        vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
+        vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0),
+    );
+    let corner = corners[vi];
+    let px = offset + corner * size;
+    var out: BandOut;
+    out.pos = vec4<f32>(
+        px.x / u.surface_size.x * 2.0 - 1.0,
+        1.0 - px.y / u.surface_size.y * 2.0,
+        0.0,
+        1.0,
+    );
+    out.local = corner * size;
+    out.size = size;
+    out.color = color;
+    out.shape = uv_min;
+    return out;
+}
+
+fn lin_to_srgb(c: vec3<f32>) -> vec3<f32> {
+    let lo = c * 12.92;
+    let hi = 1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - 0.055;
+    return select(hi, lo, c <= vec3<f32>(0.0031308));
+}
+
+@fragment
+fn fs(in: BandOut) -> @location(0) vec4<f32> {
+    let half = in.size * 0.5;
+    let r = min(in.shape.x, min(half.x, half.y));
+    let q = abs(in.local - half) - half + vec2<f32>(r, r);
+    let d = length(max(q, vec2<f32>(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - r;
+    var cov = clamp(0.5 - d, 0.0, 1.0);
+    if (in.shape.y > 0.0) {
+        cov = cov - clamp(0.5 - (d + in.shape.y), 0.0, 1.0);
+    }
+    let a = cov * in.color.a;
+    return vec4<f32>(lin_to_srgb(in.color.rgb) * a, a);
+}
+";
+
 /// Owns the glyph atlas texture and the instanced pipeline that draws the
 /// terminal grid. One quad per cell; the fragment shader composites the
 /// glyph over the cell background by atlas coverage.
@@ -1342,6 +1627,11 @@ pub(crate) struct CellRenderer {
     uniform_buffer: wgpu::Buffer,
     instance_buffer: wgpu::Buffer,
     instance_capacity: usize,
+    /// The prompt bands: their own shader, and their own uniforms for the
+    /// viewport that reaches past the pane.
+    band_pipeline: wgpu::RenderPipeline,
+    band_bind_group: wgpu::BindGroup,
+    band_uniform_buffer: wgpu::Buffer,
 }
 
 impl CellRenderer {
@@ -1439,6 +1729,30 @@ impl CellRenderer {
                 },
             ],
         });
+        let band_uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("band-uniforms"),
+            size: std::mem::size_of::<Uniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let band_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("band-bg"),
+            layout: &bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: band_uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&tex_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("cell-bg"),
             layout: &bgl,
@@ -1503,43 +1817,52 @@ impl CellRenderer {
                 },
             ],
         };
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("cell-pipeline"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: "vs",
-                buffers: &[instance_layout],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
+        // Premultiplied-alpha over: the shader already multiplies
+        // color by coverage, so src factor is One.
+        let premultiplied = wgpu::BlendState {
+            color: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                operation: wgpu::BlendOperation::Add,
             },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: "fs",
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    // Premultiplied-alpha over: the shader already multiplies
-                    // color by coverage, so src factor is One.
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        alpha: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                    }),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            alpha: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                operation: wgpu::BlendOperation::Add,
+            },
+        };
+        let pipeline_for = |label: &str, module: &wgpu::ShaderModule| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module,
+                    entry_point: "vs",
+                    buffers: std::slice::from_ref(&instance_layout),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module,
+                    entry_point: "fs",
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend: Some(premultiplied),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+            })
+        };
+        let pipeline = pipeline_for("cell-pipeline", &shader);
+        let band_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("band-shader"),
+            source: wgpu::ShaderSource::Wgsl(BAND_SHADER.into()),
         });
+        let band_pipeline = pipeline_for("band-pipeline", &band_shader);
 
         let instance_capacity = 4096;
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -1558,6 +1881,9 @@ impl CellRenderer {
             uniform_buffer,
             instance_buffer,
             instance_capacity,
+            band_pipeline,
+            band_bind_group,
+            band_uniform_buffer,
         })
     }
 
@@ -1786,6 +2112,27 @@ impl CellRenderer {
                 }
             }
         }
+        // Your prompt shows lifted: each region reads the lifts that meet
+        // it, and the cells of the ground the text sits on go clear so
+        // the bands drawn under them show.
+        let bands_on = prompt_bands();
+        let mut region_boxes: Vec<Vec<LiftBox>> = Vec::new();
+        let mut lift_rows: HashMap<i32, Vec<(usize, usize)>> = HashMap::new();
+        if bands_on {
+            for reg in &regions {
+                let last = reg.line0 + reg.vis as i32 - 1;
+                let spans = grid.lift_spans(reg.line0 - MAX_LIFT_ROWS, last + MAX_LIFT_ROWS);
+                region_boxes.push(lift_boxes(&spans, reg.line0, reg.vis));
+                for s in spans {
+                    if s.line >= reg.line0 && s.line <= last {
+                        lift_rows.entry(s.line).or_default().push((s.first, s.end));
+                    }
+                }
+            }
+        }
+        // The ground under a band: the band over the terminal ground, which
+        // a selection or a find match over a lifted cell blends onto.
+        let band_ground = blend_over(chrome.selrow, rgb_to_rgba(theme_bg()));
         let style_cell = |grid_line: i32,
                           col: usize,
                           y_top: f32,
@@ -1809,8 +2156,19 @@ impl CellRenderer {
                     bg_rgba = field;
                 }
             }
+            // The plain ground, which a band may lie under.
+            let ground = bands_on
+                && matches!(bg, Color::Named(NamedColor::Background))
+                && !flags.inverse
+                && !signal
+                && field.is_none();
+            if ground && in_lift(&lift_rows, grid_line, col) {
+                bg_rgba = band_ground;
+            }
+            let mut tinted = false;
             if cell_in_selection(selection, grid_line, col) {
                 bg_rgba = blend_over(chrome.selection, bg_rgba);
+                tinted = true;
             }
             if let Some(ranges) = find_by_line.get(&grid_line) {
                 for &(start, end, active) in ranges {
@@ -1821,9 +2179,13 @@ impl CellRenderer {
                             chrome.find_match
                         };
                         bg_rgba = blend_over(paint, bg_rgba);
+                        tinted = true;
                         break;
                     }
                 }
+            }
+            if ground && !tinted {
+                bg_rgba[3] = 0.0;
             }
             let hovered =
                 hover.is_some_and(|(hl, hs, he)| grid_line == hl && col >= hs && col < he);
@@ -2051,11 +2413,44 @@ impl CellRenderer {
         }
         let overlay_range = overlay_start..instances.len() as u32;
 
+        // The bands, one range per region, drawn under that region's cells
+        // in a viewport that reaches past the pane by a band's reach.
+        let pane = [placement.x, placement.y, surface_w, surface_h];
+        let band_view = band_viewport(pane, placement.target, placement.scale);
+        let shift = [
+            (placement.x - band_view[0]) as f32,
+            (placement.y - band_view[1]) as f32,
+        ];
+        let mut band_ranges: Vec<std::ops::Range<u32>> = Vec::new();
+        for (reg, boxes) in regions.iter().zip(&region_boxes) {
+            let start = instances.len() as u32;
+            let rects = band_rects(boxes, reg.y0, cell_w, cell_h, placement.scale);
+            instances.extend(band_instances(
+                &rects,
+                shift,
+                chrome.selrow,
+                chrome.ring,
+                placement.scale,
+            ));
+            band_ranges.push(start..instances.len() as u32);
+        }
+
         let uniforms = Uniforms {
             surface_size: [surface_w as f32, surface_h as f32],
             cell_size: [cell_w, cell_h],
         };
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
+        if band_ranges.iter().any(|r| !r.is_empty()) {
+            let band_uniforms = Uniforms {
+                surface_size: [band_view[2] as f32, band_view[3] as f32],
+                cell_size: [cell_w, cell_h],
+            };
+            queue.write_buffer(
+                &self.band_uniform_buffer,
+                0,
+                bytemuck::bytes_of(&band_uniforms),
+            );
+        }
 
         if instances.len() > self.instance_capacity {
             self.instance_capacity = instances.len().next_power_of_two();
@@ -2096,33 +2491,48 @@ impl CellRenderer {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-        rpass.set_pipeline(&self.pipeline);
-        rpass.set_bind_group(0, &self.bind_group, &[]);
         rpass.set_vertex_buffer(0, self.instance_buffer.slice(..));
         // Map the pane-local instance space onto the pane's rect in the
         // target. The clear above already painted the whole target, so the
         // area outside the pane shows the terminal background.
         let (ox, oy) = (placement.x, placement.y);
-        rpass.set_viewport(
-            ox as f32,
-            oy as f32,
-            surface_w as f32,
-            surface_h as f32,
-            0.0,
-            1.0,
+        let cells = (
+            &self.pipeline,
+            &self.bind_group,
+            [ox, oy, surface_w, surface_h],
         );
+        let bands = (&self.band_pipeline, &self.band_bind_group, band_view);
+        // A region's bands, clipped to its rows grown by a band's reach,
+        // from `from` to `to` in the target.
+        let [bx, by, bw, bh] = band_view;
+        let band_clip = |i: usize, from: u32, to: u32| {
+            band_ranges
+                .get(i)
+                .filter(|r| !r.is_empty())
+                .map(|r| (r.clone(), [bx, from, bw, to.saturating_sub(from).max(1)]))
+        };
+        set_stage(&mut rpass, cells);
         match divider_px {
             Some(divider_px) => {
                 // Each region clips its overhanging edge row at the divider.
                 let div = (divider_px as u32).min(surface_h.saturating_sub(1)).max(1);
+                if let Some((range, clip)) = band_clip(0, by, oy + div) {
+                    draw_bands(&mut rpass, bands, cells, clip, range);
+                }
                 rpass.set_scissor_rect(ox, oy, surface_w, div);
                 rpass.draw(0..6, region_ranges[0].clone());
+                if let Some((range, clip)) = band_clip(1, oy + div, by + bh) {
+                    draw_bands(&mut rpass, bands, cells, clip, range);
+                }
                 rpass.set_scissor_rect(ox, oy + div, surface_w, surface_h - div);
                 rpass.draw(0..6, region_ranges[1].clone());
                 rpass.set_scissor_rect(ox, oy, surface_w, surface_h);
                 rpass.draw(0..6, overlay_range);
             }
             None => {
+                if let Some((range, clip)) = band_clip(0, by, by + bh) {
+                    draw_bands(&mut rpass, bands, cells, clip, range);
+                }
                 rpass.set_scissor_rect(ox, oy, surface_w, surface_h);
                 rpass.draw(0..6, region_ranges[0].start..overlay_range.end);
             }
@@ -2400,6 +2810,8 @@ mod tests {
         );
         assert_eq!(chrome.link, Paint::opaque(blue));
         assert_eq!(chrome.scrollbar, Paint::tint(fg, SCROLLBAR_FALLBACK_ALPHA));
+        assert_eq!(chrome.selrow, Paint::tint(fg, SELROW_FALLBACK_ALPHA));
+        assert_eq!(chrome.ring, None);
     }
 
     #[test]
@@ -2423,6 +2835,8 @@ mod tests {
             current_match: Some(token),
             link: Some(token),
             scrollbar: Some(token),
+            selrow: Some(token),
+            light: true,
         };
         let chrome = resolve_chrome(tokens, Some(setting), Some(theme_sel), grey, grey, grey);
         assert_eq!(chrome.divider, setting);
@@ -2431,6 +2845,8 @@ mod tests {
         assert_eq!(chrome.current_match, token);
         assert_eq!(chrome.link, token);
         assert_eq!(chrome.scrollbar, token);
+        assert_eq!(chrome.selrow, token);
+        assert_eq!(chrome.ring, Some(LIGHT_RING));
         // Without the setting the divider takes its token. Without a token
         // the selection takes the theme's opaque one before the fallback.
         let chrome = resolve_chrome(
@@ -2446,6 +2862,140 @@ mod tests {
         );
         assert_eq!(chrome.divider, token);
         assert_eq!(chrome.selection, Paint::opaque(theme_sel));
+    }
+
+    fn span(id: u64, line: i32, first: usize, end: usize) -> LiftSpan {
+        LiftSpan {
+            id,
+            line,
+            first,
+            end,
+        }
+    }
+
+    #[test]
+    fn lift_boxes_gather_each_lift_across_its_rows() {
+        let spans = [
+            span(1, 3, 0, 13),
+            span(1, 4, 0, 35),
+            span(2, 6, 4, 9),
+            span(3, 40, 0, 8),
+        ];
+        let boxes = lift_boxes(&spans, 2, 10);
+        assert_eq!(
+            boxes,
+            [
+                LiftBox {
+                    id: 1,
+                    top: 1,
+                    bottom: 2,
+                    left: 0,
+                    right: 35
+                },
+                LiftBox {
+                    id: 2,
+                    top: 4,
+                    bottom: 4,
+                    left: 4,
+                    right: 9
+                },
+            ]
+        );
+        // A lift the region cuts keeps its rows past the region's edge.
+        let cut = lift_boxes(&[span(1, -1, 0, 5), span(1, 0, 0, 7)], 0, 3);
+        assert_eq!((cut[0].top, cut[0].bottom, cut[0].right), (-1, 0, 7));
+    }
+
+    #[test]
+    fn a_band_reaches_as_far_as_the_boards_measure() {
+        // P4 at 1x: 35 cells of 7.8 by 17.5 draw 281 by 21.5.
+        let boxes = [LiftBox {
+            id: 1,
+            top: 3,
+            bottom: 3,
+            left: 0,
+            right: 35,
+        }];
+        let [band] = band_rects(&boxes, 0.0, 7.8, 17.5, 1.0)[..] else {
+            panic!("one band");
+        };
+        assert_eq!(band.x, -4.0);
+        assert_eq!(band.y, 3.0 * 17.5 - 2.0);
+        assert!((band.w - 281.0).abs() < 1e-3);
+        assert_eq!(band.h, 21.5);
+        // At 2x every reach doubles, cells included.
+        let [band] = band_rects(&boxes, 10.0, 15.6, 35.0, 2.0)[..] else {
+            panic!("one band");
+        };
+        assert_eq!(band.x, -8.0);
+        assert_eq!(band.y, 10.0 + 3.0 * 35.0 - 4.0);
+        assert_eq!(band.h, 43.0);
+    }
+
+    #[test]
+    fn lifts_on_adjacent_rows_keep_two_pixels_of_ground_between_them() {
+        let lift = |id, row| LiftBox {
+            id,
+            top: row,
+            bottom: row,
+            left: 0,
+            right: 10,
+        };
+        let rects = band_rects(&[lift(1, 4), lift(2, 5)], 0.0, 10.0, 20.0, 1.0);
+        assert_eq!(rects[0].y + rects[0].h, 5.0 * 20.0 - 1.0);
+        assert_eq!(rects[1].y, 5.0 * 20.0 + 1.0);
+        assert_eq!(rects[1].y - (rects[0].y + rects[0].h), 2.0);
+        // Outer edges keep the full reach.
+        assert_eq!(rects[0].y, 4.0 * 20.0 - 2.0);
+        assert_eq!(rects[1].y + rects[1].h, 6.0 * 20.0 + 2.0);
+        // A row of ground between them keeps the full reach too.
+        let rects = band_rects(&[lift(1, 4), lift(2, 6)], 0.0, 10.0, 20.0, 1.0);
+        assert_eq!(rects[0].y + rects[0].h, 5.0 * 20.0 + 2.0);
+    }
+
+    #[test]
+    fn band_quads_carry_the_radius_and_a_ring_only_when_light() {
+        let rect = BandRect {
+            x: -8.0,
+            y: 4.0,
+            w: 100.0,
+            h: 43.0,
+        };
+        let fill = paint(0x3b, 0x42, 0x52, 1.0);
+        let dark = band_instances(&[rect], [8.0, 4.0], fill, None, 2.0);
+        assert_eq!(dark.len(), 1);
+        assert_eq!(dark[0].offset, [0.0, 8.0]);
+        assert_eq!(dark[0].size, [100.0, 43.0]);
+        assert_eq!(dark[0].uv_min, [8.0, 0.0]);
+        assert_eq!(dark[0].color, paint_to_rgba(fill));
+        let light = band_instances(&[rect], [0.0, 0.0], fill, Some(LIGHT_RING), 2.0);
+        assert_eq!(light.len(), 2);
+        assert_eq!(light[1].uv_min, [8.0, 2.0]);
+        assert_eq!(light[1].color, paint_to_rgba(LIGHT_RING));
+    }
+
+    #[test]
+    fn the_band_viewport_reaches_past_the_pane_inside_the_target() {
+        // Under the underlay the pane sits inside the window.
+        assert_eq!(
+            band_viewport([32, 12, 800, 600], [1000, 800], 2.0),
+            [24, 8, 816, 608]
+        );
+        // A pane that fills its target stays the target.
+        assert_eq!(
+            band_viewport([0, 0, 800, 600], [800, 600], 2.0),
+            [0, 0, 800, 600]
+        );
+    }
+
+    #[test]
+    fn in_lift_reads_the_rows_a_lift_covers() {
+        let mut rows = HashMap::new();
+        rows.insert(3, vec![(2, 6)]);
+        assert!(in_lift(&rows, 3, 2));
+        assert!(in_lift(&rows, 3, 5));
+        assert!(!in_lift(&rows, 3, 6));
+        assert!(!in_lift(&rows, 4, 3));
     }
 
     #[test]

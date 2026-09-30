@@ -1012,6 +1012,8 @@ fn render(state: &mut GpuState) {
         y: pane_y,
         vignette: !UNDERLAY,
         indicators: !UNDERLAY,
+        scale: load_f32(&DPR, 2.0),
+        target: [state.config.width, state.config.height],
     };
     let cell_renderer = &mut state.cell_renderer;
     let drew = crate::term_grid::with_grid(|grid| {
