@@ -4,6 +4,7 @@
 //! no Tauri, so each one is testable on its own. The session task feeds it
 //! and emits what it returns.
 //!
+//! - [`config`] is the `[prompt]` table of a profile file.
 //! - [`template`] parses a prompt template into tokens and the pieces the
 //!   editor shows.
 //! - [`format`] holds the values a template draws and the plain text of
@@ -17,6 +18,7 @@
 //! - [`wrap`] is the word wrap both renderers share.
 
 pub mod aabahran;
+pub mod config;
 pub mod format;
 pub mod gmcp;
 pub mod render;
@@ -24,6 +26,7 @@ pub mod template;
 pub mod vars;
 pub mod wrap;
 
+pub use config::{CaptureConfig, PromptConfig};
 pub use format::{Position, Resolved, Value};
 pub use render::{render, render_str, MapValues, RenderOptions, Rendered, Span, SpanColor, Values};
 pub use template::{FieldRef, Format, Template};
