@@ -6,9 +6,13 @@
 //!   three server builds, in the game's wire order. The session tests in
 //!   `src-tauri` drive the real session against it, and
 //!   `examples/fake_mud.rs` serves it over TCP for scripted runs.
+//! - [`wire`] names the synthetic pulses in
+//!   `fixtures/prompt/aabahran/wire` and plays each one again, so a test
+//!   holds every fixture to the fake that wrote it.
 
 pub mod game;
 pub mod mud;
+pub mod wire;
 
 pub use mud::{Build, Mud, Options, Write};
 

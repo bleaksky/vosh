@@ -1,0 +1,6 @@
+ÿúÉChar.Affects {"affects":[{"kind":"spell","name":"bless","duration":6,"level":50,"location":"hitroll","modifier":4},{"kind":"song","name":"lamented tears","duration":5,"level":42,"location":"none","modifier":0}]}ÿðÿúÉChar.Vitals {"hp":765,"maxhp":1020,"mana":800,"maxmana":800,"move":930,"maxmove":930}ÿðÿúÉChar.Worth {"gold":1250,"bank":5000,"exp":123456,"tnl":2345,"trains":3,"practices":12,"cps":12,"rps":3,"cabal":"none"}ÿðÿúÉChar.Combat {"target":"a Blackwatch guard","condition":"quite a few wounds","hp_pct":54}ÿðÿúÉGroup.Info {"leader":"Tester","members":[{"id":1769388810,"name":"Tester","level":50,"class":"dark-knight","hp_pct":75,"mana_pct":100,"move_pct":100,"tnl":2345},{"id":1769401002,"name":"a loyal wolf","level":32,"class":"mob","hp_pct":91,"mana_pct":100,"move_pct":88,"tnl":0}]}ÿðTears fall as the lament takes you.
+A Blackwatch guard has quite a few wounds. 
+
+Tester: 
+[0/0hp 0/0mn 0/0mv]
+ÿù

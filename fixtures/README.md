@@ -17,6 +17,9 @@ fixtures/
   prompt/
     aabahran/  Aabahran prompt lines as the game sends them, raw and plain,
                and PROMPT settings for the compiler in crates/prompt.
+      wire/    Synthetic socket reads the fake Aabahran in the test kit
+               plays, one .bin of raw telnet bytes per case with a
+               .notes.md that says what it holds and marks it synthetic.
   themes/    One theme file per format the Appearance import reads (Ghostty,
              iTerm2, Kitty, Alacritty TOML, legacy Alacritty YAML).
   wrap/      Word wrap cases shared by the Rust wrap in crates/prompt and the
