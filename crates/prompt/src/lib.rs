@@ -10,6 +10,8 @@
 //!   each format.
 //! - [`gmcp`] keeps the latest packet of each package, the pulse and the
 //!   latest Char.Prompt.
+//! - [`vars`] holds the catalog of fields, the session's sources and the
+//!   resolver that answers the renderer.
 //! - [`render`] draws a template as ANSI text with a span per piece.
 //! - [`wrap`] is the word wrap both renderers share.
 
@@ -17,8 +19,10 @@ pub mod format;
 pub mod gmcp;
 pub mod render;
 pub mod template;
+pub mod vars;
 pub mod wrap;
 
 pub use format::{Position, Resolved, Value};
 pub use render::{render, render_str, MapValues, RenderOptions, Rendered, Span, SpanColor, Values};
 pub use template::{FieldRef, Format, Template};
+pub use vars::{Capture, Resolver, Vars, Vosh};
