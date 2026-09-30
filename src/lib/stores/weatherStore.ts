@@ -6,8 +6,9 @@ import { asNumber, asText, createStore } from './store';
 // `{sky, temp, unit, region}` each time a prompt would print, what the
 // prompt's %W, %w and %G show. The sky reads indoors when you are not
 // outside, and the unit follows your celsius setting. World.Time
-// carries the sky of the world at large (worldStore). Nothing shows
-// this yet. The prompt editor reads it later.
+// carries the sky of the world at large (worldStore). The prompt
+// engine in the backend keeps its own copy to draw your prompt, so
+// nothing here shows it yet. The store is ready for a pane that does.
 
 export interface RoomWeather {
   /** cloudless, cloudy, rainy, snowing, lightning and the like, or

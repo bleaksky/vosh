@@ -6,7 +6,9 @@ import { asText, createStore } from './store';
 // `{position, language}` each time a prompt would print, the prompt's
 // %S and %s. Positions are dead, mortally wounded, incapacitated,
 // stunned, meditate, sleeping, resting, sitting, fighting and standing.
-// Nothing shows it yet. The prompt editor reads it later.
+// The prompt engine in the backend keeps its own copy to draw your
+// prompt, so nothing here shows it yet. The store is ready for a pane
+// that does.
 
 export interface CharState {
   position: string | null;
