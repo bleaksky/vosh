@@ -9,6 +9,8 @@ import {
   type TrackedInput,
 } from '../../lib/affectsView';
 import { PANE_ROW_PX } from '../../lib/paneLayout';
+import type { AffectsMarker } from '../../lib/session';
+import { useAffectsDisplay } from '../../lib/stores/affectsDisplayStore';
 import { useAffects, useAffectsHidden } from '../../lib/stores/affectsStore';
 import { useTrackedAffects } from '../../lib/stores/trackedAffectsStore';
 import { affectsGrid, holdsPage, type AffectsCell } from './affectsGrid';
@@ -33,12 +35,20 @@ import { affectHours, affectWords } from './paneText';
 // While the game hides your affects (Char.Affects with the hidden flag,
 // under lamented tears) the pane says so in place of the rows, and no
 // tracked affect reads missing.
+//
+// The mark beside each tracked affect is the one you pick in Settings,
+// Layout, Affects or the pane menu: the dot, a square, plus and minus,
+// or none. The body names any but the dot in data-affects-marker, and
+// panel.css draws the shape in the color of the state.
 
 export function AffectsPane() {
   const current = useAffects();
   const tracked = useTrackedAffects();
   const hidden = useAffectsHidden();
-  return <AffectsPaneView current={current} tracked={tracked} hidden={hidden} />;
+  const display = useAffectsDisplay();
+  return (
+    <AffectsPaneView current={current} tracked={tracked} hidden={hidden} marker={display.marker} />
+  );
 }
 
 type Box = { width: number; height: number };
@@ -52,10 +62,18 @@ export interface AffectsPaneViewProps {
   /** The body's size. The pane measures its own when left out, so a
    *  test passes one to draw what fits. */
   box?: Box | undefined;
+  /** The mark beside each tracked affect. The dot when left out. */
+  marker?: AffectsMarker;
 }
 
 /** The pane drawn from plain values, so each state renders in a test. */
-export function AffectsPaneView({ current, tracked, hidden, box }: AffectsPaneViewProps) {
+export function AffectsPaneView({
+  current,
+  tracked,
+  hidden,
+  box,
+  marker = 'dot',
+}: AffectsPaneViewProps) {
   const rows = useMemo(() => affectsPaneRows(current, tracked, hidden), [current, tracked, hidden]);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const measured = useBoxSize(bodyRef);
@@ -116,7 +134,12 @@ export function AffectsPaneView({ current, tracked, hidden, box }: AffectsPaneVi
           ) : null
         }
       />
-      <div ref={bodyRef} className="pane-body" style={hoursColumn}>
+      <div
+        ref={bodyRef}
+        className="pane-body"
+        style={hoursColumn}
+        data-affects-marker={marker === 'dot' ? undefined : marker}
+      >
         {body}
       </div>
     </>

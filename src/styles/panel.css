@@ -337,6 +337,7 @@
 }
 
 .pane-affect-mark {
+  --mark: var(--success);
   position: absolute;
   left: 0;
   top: 7px;
@@ -346,32 +347,37 @@
   box-sizing: border-box;
 }
 
-/* A tracked slot's dot agrees with its hours. */
+/* A tracked slot's mark agrees with its hours. Every marker shape
+   paints with --mark, so the color carries the state in each. */
 .pane-affect-mark.is-up {
-  background: var(--success);
+  background: var(--mark);
 }
 
 .pane-affect-mark.is-warn {
-  background: var(--warn);
+  --mark: var(--warn);
+  background: var(--mark);
 }
 
 .pane-affect-mark.is-danger {
-  background: var(--danger);
+  --mark: var(--danger);
+  background: var(--mark);
 }
 
 .pane-affect-mark.is-missing {
-  border: 1.25px solid var(--danger);
+  --mark: var(--danger);
+  border: 1.25px solid var(--mark);
   background: transparent;
 }
 
 /* Something harmful on you takes a 6 px diamond, never a dot. */
 .pane-affect-mark.is-harmful {
+  --mark: var(--danger);
   left: 1px;
   top: 8px;
   width: 6px;
   height: 6px;
   border-radius: 1px;
-  background: var(--danger);
+  background: var(--mark);
   transform: rotate(45deg);
 }
 
@@ -421,6 +427,56 @@
 .pane-affect-missing .pane-affect-name,
 .pane-affect-harmful .pane-affect-name {
   color: var(--danger-text);
+}
+
+/* The marker you pick in Settings, Layout, Affects. The pane body
+   names it, and the dot, the default, needs no rule. Harmful keeps its
+   diamond under every shape but none.
+
+   Square: the dot's 8 px box at radius 1.5, hollow while missing. */
+[data-affects-marker='square'] .pane-affect-mark:not(.is-harmful) {
+  border-radius: 1.5px;
+}
+
+/* Plus and minus: 8 px strokes 1.5 thick, a plus while you have it and
+   a minus while you miss it. */
+[data-affects-marker='plus_minus'] .pane-affect-mark:not(.is-harmful) {
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+[data-affects-marker='plus_minus'] .pane-affect-mark:not(.is-harmful)::before,
+[data-affects-marker='plus_minus'] .pane-affect-mark:not(.is-harmful):not(.is-missing)::after {
+  content: '';
+  position: absolute;
+  border-radius: 0.75px;
+  background: var(--mark);
+}
+
+[data-affects-marker='plus_minus'] .pane-affect-mark:not(.is-harmful)::before {
+  left: 0;
+  top: 3.25px;
+  width: 8px;
+  height: 1.5px;
+}
+
+[data-affects-marker='plus_minus'] .pane-affect-mark:not(.is-harmful):not(.is-missing)::after {
+  left: 3.25px;
+  top: 0;
+  width: 1.5px;
+  height: 8px;
+}
+
+/* None: no mark at all, and the hours start at the pane's text edge.
+   The hours, the game's own + and -, and the red names still carry
+   the state. */
+[data-affects-marker='none'] .pane-affect-mark {
+  display: none;
+}
+
+[data-affects-marker='none'] .pane-affect-hours {
+  margin-left: 0;
 }
 
 /* The hairline between your tracked slots and the rest. */
