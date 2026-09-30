@@ -11,6 +11,7 @@ use chrono::{DateTime, FixedOffset, SecondsFormat};
 use serde::Serialize;
 use serde_json::Value as Json;
 
+use crate::aabahran::observer::{self, ReplyKind};
 use crate::aabahran::Who;
 use crate::config::{CaptureConfig, CaptureSource, PromptConfig};
 use crate::gmcp::{CharPrompt, Observed, CHAR_STATE, CHAR_STATUS};
@@ -43,6 +44,33 @@ pub struct GamePromptSeen {
     pub applied: bool,
 }
 
+/// How long after one of your own sends the game's reply to `prompt` or
+/// `fprompt` counts, in milliseconds.
+pub const OBSERVE_MS: i64 = 2_000;
+
+/// The settings the game showed after one of your own sends this
+/// session, without Char.Prompt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionSetting {
+    pub prompt: Option<String>,
+    pub fprompt: Option<String>,
+    /// When the last of them came.
+    pub at: DateTime<FixedOffset>,
+}
+
+/// What the observer keeps between lines (section 3).
+#[derive(Debug, Clone, Default)]
+struct Observer {
+    /// When you last sent a line, in milliseconds since the epoch.
+    sent_at: Option<i64>,
+    /// Your last send was `prompt off`.
+    sent_off: bool,
+    /// "You will no longer see prompts." came since your last send or
+    /// the last pulse.
+    off_line: bool,
+    seen: Option<SessionSetting>,
+}
+
 /// The live profile's custom prompt.
 #[derive(Debug, Clone, Default)]
 pub struct PromptEngine {
@@ -68,6 +96,7 @@ pub struct PromptEngine {
     /// What the game said of your prompt settings since the session
     /// last took it.
     seen: Vec<GamePromptSeen>,
+    observer: Observer,
 }
 
 impl PromptEngine {
@@ -102,6 +131,9 @@ impl PromptEngine {
     /// capture follows (D10).
     pub fn observe(&mut self, package: &str, data: Json, at: DateTime<FixedOffset>) -> Observed {
         let observed = self.vars.observe(package, data, at);
+        if observed.pulse {
+            self.observer.off_line = false;
+        }
         if package.eq_ignore_ascii_case(CHAR_STATUS) || package.eq_ignore_ascii_case(CHAR_STATE) {
             self.follow_who();
         }
@@ -122,29 +154,149 @@ impl PromptEngine {
     ) -> GamePromptSeen {
         self.prompts_off = !prompt.enabled;
         let mut text = prompt.prompt.clone();
-        let mut applied = false;
         if let CaptureConfig::Aabahran(codes) = &self.config.capture {
-            let differs = codes.prompt != prompt.prompt || codes.fprompt != prompt.fprompt;
-            if codes.follow_game && differs {
-                if codes.prompt == prompt.prompt {
-                    text.clone_from(&prompt.fprompt);
-                }
-                let mut config = self.config.clone();
-                if let CaptureConfig::Aabahran(codes) = &mut config.capture {
-                    codes.prompt.clone_from(&prompt.prompt);
-                    codes.fprompt.clone_from(&prompt.fprompt);
-                    codes.source = Some(CaptureSource::Gmcp);
-                    codes.seen_at = Some(stamp(at));
-                }
-                self.set_config(config);
-                applied = true;
+            if codes.prompt == prompt.prompt && codes.fprompt != prompt.fprompt {
+                text.clone_from(&prompt.fprompt);
             }
         }
+        let applied = self.take_settings(
+            Some(&prompt.prompt),
+            Some(&prompt.fprompt),
+            CaptureSource::Gmcp,
+            at,
+        );
         GamePromptSeen {
             kind: SeenKind::Gmcp,
             text,
             applied,
         }
+    }
+
+    /// Hand settings the game showed to an aabahran capture that follows
+    /// the game, when they differ from the ones it holds. Returns whether
+    /// it took them.
+    fn take_settings(
+        &mut self,
+        prompt: Option<&str>,
+        fprompt: Option<&str>,
+        source: CaptureSource,
+        at: DateTime<FixedOffset>,
+    ) -> bool {
+        let CaptureConfig::Aabahran(codes) = &self.config.capture else {
+            return false;
+        };
+        let differs = prompt.is_some_and(|p| p != codes.prompt)
+            || fprompt.is_some_and(|f| f != codes.fprompt);
+        if !codes.follow_game || !differs {
+            return false;
+        }
+        let mut config = self.config.clone();
+        if let CaptureConfig::Aabahran(codes) = &mut config.capture {
+            if let Some(prompt) = prompt {
+                codes.prompt = prompt.to_string();
+            }
+            if let Some(fprompt) = fprompt {
+                codes.fprompt = fprompt.to_string();
+            }
+            codes.source = Some(source);
+            codes.seen_at = Some(stamp(at));
+        }
+        self.set_config(config);
+        true
+    }
+
+    /// Note a line you sent: the observer's window opens, and `prompt
+    /// off` in it means the reply sets nothing. `text` is what went to
+    /// the game, aliases expanded. `at_ms` is milliseconds since the
+    /// epoch.
+    pub fn note_send(&mut self, text: &str, at_ms: i64) {
+        self.observer.sent_at = Some(at_ms);
+        self.observer.sent_off = text.lines().any(observer::turns_prompts_off);
+        self.observer.off_line = false;
+    }
+
+    /// The observer reads lines now: the Forsaken Lands rules hold, no
+    /// Char.Prompt came this session, and you sent a line within
+    /// [`OBSERVE_MS`].
+    pub fn observing(&self, at_ms: i64) -> bool {
+        self.forsaken()
+            && !self.vars.gmcp().prompt_seen()
+            && self
+                .observer
+                .sent_at
+                .is_some_and(|sent| (0..=OBSERVE_MS).contains(&(at_ms - sent)))
+    }
+
+    /// Read a complete line the game printed as a reply to `prompt` or
+    /// `fprompt`, while [`PromptEngine::observing`]. A setting it shows
+    /// goes to an aabahran capture that follows the game. The reply to
+    /// `prompt off` never does, and raises prompts off instead.
+    pub fn observe_line(&mut self, raw: &[u8], plain: &str, at: DateTime<FixedOffset>) {
+        if !self.observing(at.timestamp_millis()) {
+            return;
+        }
+        let Some(reply) = observer::reply(plain) else {
+            return;
+        };
+        let text = observer::setting(reply, raw);
+        let (kind, applied) = match reply.kind {
+            ReplyKind::Off => {
+                self.observer.off_line = true;
+                self.prompts_off = true;
+                (SeenKind::Off, false)
+            }
+            ReplyKind::Prompt => {
+                if self.observer.sent_off || self.observer.off_line {
+                    self.prompts_off = true;
+                    return;
+                }
+                // Any `prompt` but `prompt off` turns prompts on.
+                self.prompts_off = false;
+                self.note_session_setting(Some(&text), None, at);
+                let applied = self.take_settings(Some(&text), None, CaptureSource::Session, at);
+                (SeenKind::Prompt, applied)
+            }
+            ReplyKind::Fight | ReplyKind::NoFight => {
+                self.note_session_setting(None, Some(&text), at);
+                let applied = self.take_settings(None, Some(&text), CaptureSource::Session, at);
+                (SeenKind::Fprompt, applied)
+            }
+        };
+        self.seen.push(GamePromptSeen {
+            kind,
+            text,
+            applied,
+        });
+    }
+
+    fn note_session_setting(
+        &mut self,
+        prompt: Option<&str>,
+        fprompt: Option<&str>,
+        at: DateTime<FixedOffset>,
+    ) {
+        let seen = self.observer.seen.get_or_insert(SessionSetting {
+            prompt: None,
+            fprompt: None,
+            at,
+        });
+        if let Some(prompt) = prompt {
+            seen.prompt = Some(prompt.to_string());
+        }
+        if let Some(fprompt) = fprompt {
+            seen.fprompt = Some(fprompt.to_string());
+        }
+        seen.at = at;
+    }
+
+    /// The settings the game showed after your own sends this session.
+    pub fn session_setting(&self) -> Option<&SessionSetting> {
+        self.observer.seen.as_ref()
+    }
+
+    /// Vosh read your prompt, so your text prompt is on.
+    pub fn note_prompt(&mut self) {
+        self.prompts_off = false;
     }
 
     /// Apply the latest Char.Prompt to the table a profile switch just
@@ -245,6 +397,7 @@ impl PromptEngine {
         self.forget_who();
         self.prompts_off = false;
         self.seen.clear();
+        self.observer = Observer::default();
         self.apply_rules();
     }
 
@@ -267,6 +420,7 @@ impl PromptEngine {
         self.forget_who();
         self.prompts_off = false;
         self.seen.clear();
+        self.observer = Observer::default();
         self.apply_rules();
     }
 
@@ -700,6 +854,138 @@ mod tests {
                 "{file}"
             );
         }
+    }
+
+    /// A Forsaken Lands connection that follows the game with `prompt`,
+    /// without Char.Prompt.
+    fn older_build(prompt: &str) -> PromptEngine {
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.set_config(following(prompt));
+        engine
+    }
+
+    fn at_ms(ms: i64) -> chrono::DateTime<chrono::FixedOffset> {
+        chrono::DateTime::from_timestamp_millis(ms)
+            .unwrap()
+            .fixed_offset()
+    }
+
+    const SENT: i64 = 1_759_000_000_000;
+
+    fn line(engine: &mut PromptEngine, text: &str, after_ms: i64) {
+        engine.observe_line(text.as_bytes(), text, at_ms(SENT + after_ms));
+    }
+
+    #[test]
+    fn a_reply_after_your_send_updates_the_capture() {
+        for sent in ["prompt %h %m ", "prom %h %m ", "p %h %m "] {
+            let mut engine = older_build("<%hhp> ");
+            engine.note_send(&format!("{sent}\r\n"), SENT);
+            line(&mut engine, "Prompt set to %h %m ", 40);
+            let got = codes(&engine);
+            assert_eq!(got.prompt, "%h %m ", "{sent}");
+            assert_eq!(got.source, Some(CaptureSource::Session));
+            assert!(got.seen_at.is_some());
+            assert_eq!(
+                engine.take_seen(),
+                [GamePromptSeen {
+                    kind: SeenKind::Prompt,
+                    text: "%h %m ".into(),
+                    applied: true,
+                }]
+            );
+            let seen = engine.session_setting().expect("noted for the card");
+            assert_eq!(seen.prompt.as_deref(), Some("%h %m "));
+        }
+        // An alias that sends it counts the same, since the session hands
+        // over what went to the game.
+        let mut engine = older_build("<%hhp> ");
+        engine.note_send("say hi\r\nfprompt %h>\r\n", SENT);
+        line(&mut engine, "Fight prompt set to %h> ", 10);
+        assert_eq!(codes(&engine).fprompt, "%h> ");
+        assert_eq!(engine.take_seen()[0].kind, SeenKind::Fprompt);
+        line(&mut engine, "Fight prompt cleared.", 20);
+        assert_eq!(codes(&engine).fprompt, "");
+    }
+
+    #[test]
+    fn a_reply_after_two_seconds_or_with_no_send_is_ignored() {
+        let mut engine = older_build("<%hhp> ");
+        line(&mut engine, "Prompt set to %h ", 0);
+        assert_eq!(codes(&engine).prompt, "<%hhp> ", "no send yet");
+        engine.note_send("prompt %h\r\n", SENT);
+        line(&mut engine, "Prompt set to %h ", OBSERVE_MS + 1);
+        assert_eq!(codes(&engine).prompt, "<%hhp> ");
+        assert!(engine.take_seen().is_empty());
+        line(&mut engine, "Prompt set to %h ", OBSERVE_MS);
+        assert_eq!(codes(&engine).prompt, "%h ");
+    }
+
+    #[test]
+    fn prompt_off_saves_nothing_and_raises_prompts_off_in_either_order() {
+        // Your own send said prompt off.
+        let mut engine = older_build("<%hhp> ");
+        engine.note_send("prompt off\r\n", SENT);
+        line(&mut engine, "Prompt set to garbage", 5);
+        assert_eq!(codes(&engine).prompt, "<%hhp> ");
+        assert!(engine.prompts_off());
+
+        // An alias sent it under another name, and the reply comes after
+        // the line the older builds print first.
+        let mut engine = older_build("<%hhp> ");
+        engine.note_send("quiet\r\n", SENT);
+        line(&mut engine, "You will no longer see prompts.", 5);
+        assert!(engine.prompts_off());
+        line(&mut engine, "Prompt set to garbage", 6);
+        assert_eq!(codes(&engine).prompt, "<%hhp> ");
+        let seen = engine.take_seen();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].kind, SeenKind::Off);
+
+        // prompt turns them on again with Current prompt, and a
+        // recognized prompt clears them too.
+        engine.note_send("prompt\r\n", SENT + 3_000);
+        line(&mut engine, "Current prompt: <%hhp> ", 3_010);
+        assert!(!engine.prompts_off());
+        engine.note_send("prompt off\r\n", SENT + 4_000);
+        line(&mut engine, "You will no longer see prompts.", 4_010);
+        assert!(engine.prompts_off());
+        engine.note_prompt();
+        assert!(!engine.prompts_off());
+    }
+
+    #[test]
+    fn with_char_prompt_this_session_the_observer_does_nothing() {
+        let mut engine = older_build("<%hhp> ");
+        engine.observe("Char.Prompt", char_prompt(true, "%h ", ""), at());
+        let _ = engine.take_seen();
+        engine.note_send("prompt %m\r\n", SENT);
+        assert!(!engine.observing(SENT + 10));
+        line(&mut engine, "Prompt set to %m ", 10);
+        assert_eq!(codes(&engine).prompt, "%h ");
+        assert!(engine.take_seen().is_empty());
+        assert!(engine.session_setting().is_none());
+    }
+
+    #[test]
+    fn the_observer_keeps_to_the_forsaken_lands() {
+        let mut engine = PromptEngine::default();
+        engine.connect(false);
+        engine.note_send("prompt %h\r\n", SENT);
+        assert!(!engine.observing(SENT));
+        // A profile without a capture still notes the setting for the
+        // card on The Forsaken Lands.
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.note_send("prompt %h\r\n", SENT);
+        line(&mut engine, "Prompt set to %h ", 1);
+        assert!(engine.config().capture.is_none());
+        assert_eq!(
+            engine.session_setting().and_then(|s| s.prompt.as_deref()),
+            Some("%h ")
+        );
+        assert!(!engine.take_seen()[0].applied);
     }
 
     #[test]
