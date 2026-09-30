@@ -836,9 +836,6 @@ body {
 /* Card identity tints. Consumed only by the card recipe above, so
    these are inert everywhere outside a side zone. Hues follow the
    chat-channel pastels in chatColors.ts. */
-.chat-pane {
-  --zone-card-tint: #cba6dd;
-}
 .group-pane,
 .group-pane-pinned {
   --zone-card-tint: #8fdaa8;
@@ -6356,33 +6353,8 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   text-align: center;
 }
 
-/* Chat pane — embedded bottom region for routed channel text. */
-
-/* Chat panel always gets a bounded height so its body's
-   overflow-y: auto can do its job. Without this the chat-pane
-   ends up inside a fixed-size substack (top or bottom panel zone
-   parent, or a side-zone substack-fixed), nothing constrains it
-   vertically, the body has no overflow target, and chat just keeps
-   pushing the panel taller as messages arrive until it eats the
-   whole window.
-
-   240px is a reasonable default chat-strip height. The 50vh cap
-   keeps the panel sensible on short windows. The body inside
-   scrolls; auto-scroll-to-bottom in ChatColumn kicks the view to
-   the latest line as new messages arrive, which only works once
-   there is an overflow region to scroll. */
-.chat-pane {
-  /* Wrapped in <Resizable> at the call site (App.tsx). The Resizable
-     wrapper carries the actual pixel height; .chat-pane fills it.
-     Without a fixed height here the .chat-pane-body's overflow
-     region resolves against the parent .resizable-content. */
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: var(--c-surface);
-}
+/* Header and body chrome from the May chat pane, which is gone. The
+   old GroupPane and ImmPane in src/components still borrow it. */
 
 .chat-pane-header {
   flex: 0 0 auto;
@@ -6405,33 +6377,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
   letter-spacing: 0.14em;
 }
 
-.chat-pane-filter {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.chat-pane-tab {
-  background: transparent;
-  color: var(--c-text-muted);
-  border: 1px solid var(--c-border-strong);
-  border-radius: 2px;
-  padding: 0 6px;
-  font: inherit;
-  cursor: pointer;
-}
-
-.chat-pane-tab:hover {
-  color: var(--c-text-strong);
-  border-color: var(--c-accent);
-}
-
-.chat-pane-tab-active {
-  background: var(--c-accent);
-  color: var(--c-surface-deep);
-  border-color: var(--c-accent);
-}
-
 .chat-pane-count {
   margin-left: auto;
   color: var(--c-text-faint);
@@ -6449,45 +6394,6 @@ html[data-underlay] .terminal-pane-live .terminal-sizer {
 .chat-pane-empty {
   color: var(--c-text-dim);
   padding: 8px 0;
-}
-
-.chat-pane-line {
-  display: block;
-}
-
-/* Chat lines carry their channel's pastel color inline (see
-   chatColors.ts); tag and text both inherit it, the tag slightly
-   dimmed so the message stays the louder half. */
-.chat-pane-tag {
-  color: inherit;
-  opacity: 0.7;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  margin-right: 6px;
-}
-
-.chat-pane-text {
-  color: inherit;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.chat-pane-half {
-  flex: 1 1 0;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Chat absorbs remaining horizontal space; group column width is
-   pinned by the Resizable wrapper (with its own drag handle). */
-.chat-pane-chat {
-  flex: 1 1 auto;
-}
-
-.chat-pane-group-resizable {
-  border-left: 1px solid var(--c-border-soft);
 }
 
 /* Group roster — one Ember row per party member: mono name, 44px hp
