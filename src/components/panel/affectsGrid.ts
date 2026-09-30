@@ -113,3 +113,18 @@ export function affectsRestMinRows(rows: readonly AffectRow[], columns: number):
   const cells = Math.max(harmful, 1) + 1;
   return Math.min(Math.ceil(others / columns), Math.ceil(cells / columns));
 }
+
+/** What holdsPage reads of the window the rest scroll in. */
+export interface PageWindow {
+  matches(selector: string): boolean;
+  querySelector(selector: string): unknown;
+}
+
+/** True while the rest keep the page you scrolled them to: while you
+ *  point at them, or while you tab through the counts. A click on a
+ *  count leaves focus on it in Chromium, as on Windows, but no focus
+ *  ring, so pointing away after a click scrolls back to the first
+ *  page there too. */
+export function holdsPage(el: PageWindow): boolean {
+  return el.matches(':hover') || el.querySelector(':focus-visible') !== null;
+}

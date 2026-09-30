@@ -5,6 +5,7 @@ import {
   AFFECTS_TWO_COLUMNS_W,
   affectsColumns,
   affectsGrid,
+  holdsPage,
   type AffectsGrid,
 } from './affectsGrid';
 
@@ -200,5 +201,34 @@ describe('affectsGrid', () => {
     const grid = affectsGrid(many, { width: 494, height: 22 });
     expect(cells(grid)).toEqual(['a0@1,1', '2 more@1,2', 'a1@2,1', 'a2@2,2']);
     expect(grid.rest.map((c) => c.pageStart)).toEqual([true, false, true, false]);
+  });
+});
+
+describe('holdsPage', () => {
+  // The window of the rest as a browser sees it. A click on the count
+  // leaves focus on it in Chromium, as on Windows, with no focus ring.
+  // Tabbing to it gives it a ring.
+  const rest = (pointed: boolean, focus: 'none' | 'click' | 'keyboard') => ({
+    matches: (selector: string) =>
+      (selector === ':hover' && pointed) || (selector === ':focus-within' && focus !== 'none'),
+    querySelector: (selector: string) =>
+      (selector === ':focus' && focus !== 'none') ||
+      (selector === ':focus-visible' && focus === 'keyboard')
+        ? ({} as Element)
+        : null,
+  });
+
+  it('keeps the page while you point at it', () => {
+    expect(holdsPage(rest(true, 'none'))).toBe(true);
+    expect(holdsPage(rest(true, 'click'))).toBe(true);
+  });
+
+  it('keeps the page while you tab through the counts', () => {
+    expect(holdsPage(rest(false, 'keyboard'))).toBe(true);
+  });
+
+  it('lets go once you point away after a click on the count', () => {
+    expect(holdsPage(rest(false, 'click'))).toBe(false);
+    expect(holdsPage(rest(false, 'none'))).toBe(false);
   });
 });
