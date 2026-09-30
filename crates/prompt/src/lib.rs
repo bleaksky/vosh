@@ -29,6 +29,8 @@
 //!   per socket read, with the regions a later output replaces.
 //! - [`candidates`] groups the candidates ring by shape and checks a
 //!   capture against it and your scrollback.
+//! - [`overrides`] draws a preview's values in place of the live ones.
+//! - [`state`] reports each field's live state and source for the card.
 //! - [`wrap`] is the word wrap both renderers share.
 //! - `testkit`, behind the `testkit` feature, prints prompts the way the
 //!   game does and plays a fake Aabahran for tests and scripted runs.
@@ -41,10 +43,12 @@ pub mod edit;
 pub mod engine;
 pub mod format;
 pub mod gmcp;
+pub mod overrides;
 pub mod presets;
 pub mod render;
 pub mod report;
 pub mod stage;
+pub mod state;
 pub mod template;
 #[cfg(feature = "testkit")]
 pub mod testkit;

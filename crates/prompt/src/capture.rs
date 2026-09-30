@@ -335,6 +335,28 @@ impl Recognizer {
         }
     }
 
+    /// Every value a prompt this capture reads can fill, each once, the
+    /// immortal prefix's among them.
+    pub fn reads(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        let mut add = |name: &str| {
+            if !out.iter().any(|n| n == name) {
+                out.push(name.to_string());
+            }
+        };
+        match &self.reader {
+            Reader::Regex { groups, .. } => groups.iter().for_each(|(_, var)| add(var)),
+            Reader::Codes(compiled) => {
+                for shape in &compiled.shapes {
+                    for line in &shape.lines {
+                        line.line.capture_names().flatten().for_each(&mut add);
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// True when a partial some shape reads is the prompt at once.
     pub fn settles(&self) -> bool {
         match &self.reader {

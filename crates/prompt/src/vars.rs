@@ -144,6 +144,8 @@ pub enum Group {
     Room,
     TimeAndSky,
     Vosh,
+    /// Names only your scripts set.
+    Scripts,
     Building,
     More,
 }
@@ -1100,6 +1102,46 @@ pub fn known(name: &str) -> bool {
     CAPTURE_KEYS.contains(&name) || entry(name).is_some()
 }
 
+/// Where a field's value comes from now, for the picker's source line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Source {
+    /// `mud.set_prompt_var`.
+    Script,
+    /// Your prompt as Vosh read it.
+    Capture,
+    /// The latest packet of its package.
+    Gmcp,
+    /// Vosh itself: the tick, the clock, your target, the profile.
+    Vosh,
+}
+
+/// The names a prompt value for `e` may sit under: its own, its aliases,
+/// and for a vital its max and percent, for the tank's health what `%p`
+/// and `%P` fill.
+fn capture_keys(e: &Entry) -> Vec<&'static str> {
+    let mut keys = vec![e.name];
+    keys.extend(e.aliases.iter().copied());
+    if let Some(pair) = Pair::of(e.name).filter(|p| p.cur() == e.name) {
+        keys.push(pair.pct());
+    }
+    if e.name == "tank_hp" {
+        keys.extend(["tank_pct", "tank_bar"]);
+    }
+    keys
+}
+
+/// The field a name the capture fills feeds, `hp` for `hp_pct`.
+pub fn feeds(name: &str) -> &str {
+    match name {
+        "hp_pct" => "hp",
+        "mana_pct" => "mana",
+        "move_pct" => "move",
+        "tank_pct" | "tank_bar" => "tank_hp",
+        other => other,
+    }
+}
+
 /// A vital pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pair {
@@ -1222,64 +1264,73 @@ impl Entry {
     /// The sample as a value, for previews with no live data. `now` fills
     /// the clock and date.
     pub fn sample_value(&self, now: NaiveDateTime) -> Resolved {
-        let s = self.sample;
-        let num = |t: &str| t.trim().parse::<i64>().ok();
-        let value = match self.kind {
-            Kind::Clock | Kind::Date => Value::Clock {
-                at: now,
-                date: self.kind == Kind::Date,
-            },
-            _ if s.is_empty() => return Resolved::Absent,
-            Kind::Gauge => {
-                let (cur, max) = s.split_once('/').unwrap_or((s, ""));
-                Value::Gauge {
-                    cur: num(cur).unwrap_or(0),
-                    max: num(max),
-                    pct: None,
-                }
-            }
-            Kind::Seconds => {
-                let (secs, max) = s.split_once('/').unwrap_or((s, ""));
-                Value::Seconds {
-                    secs: num(secs).unwrap_or(0),
-                    max: num(max),
-                }
-            }
-            Kind::Num => Value::Num(num(s).unwrap_or(0)),
-            Kind::Pct => Value::Pct(num(s).unwrap_or(0)),
-            Kind::TankPct => Value::TankHp(num(s).unwrap_or(0)),
-            Kind::Text => Value::Text(s.to_string()),
-            Kind::Raw => Value::Styled(s.to_string()),
-            Kind::Flag => Value::Flag,
-            Kind::Count => Value::List(s.split(',').map(str::to_string).collect()),
-            Kind::Position => return Position::from_word(s).map_or(Resolved::Absent, pos_value),
-            Kind::Lang => Value::Lang(s.to_string()),
-            Kind::Moon => return moon_code_value(MOON_CODES[num(s).unwrap_or(0) as usize % 8]),
-            Kind::Exits => exits_value(s),
-            Kind::Level => Value::Level {
-                word: self.label.to_string(),
-                level: num(s).unwrap_or(0),
-            },
-            Kind::Slot => Value::Slot(s.to_string()),
-            Kind::Hour => Value::Hour(num(s).unwrap_or(0).clamp(0, 23) as u8),
-            Kind::Temp => {
-                let digits = s.trim_end_matches(|c: char| c.is_ascii_alphabetic());
-                Value::Temp {
-                    degrees: num(digits).unwrap_or(0),
-                    unit: s[digits.len()..].chars().next(),
-                }
-            }
-            Kind::Ticks => Value::Ticks(num(s).unwrap_or(0)),
-            Kind::Member => {
-                let (name, pct) = s.rsplit_once(' ').unwrap_or((s, "0"));
-                Value::Member {
-                    name: name.to_string(),
-                    pct: num(pct).unwrap_or(0),
-                }
-            }
-        };
-        Resolved::Value(value)
+        value_of(self.kind, self.label, self.sample, now)
     }
+}
+
+/// A value of `kind` from text in the form the catalog's samples take:
+/// `1020/1020` for a gauge, `14/60` for the tick, a word for a position,
+/// a phase number for a moon, names joined by commas for a count. Empty
+/// text is Absent, but a clock reads `now`. `label` names an immortal
+/// level, `Wizi` or `Incog`.
+pub fn value_of(kind: Kind, label: &str, text: &str, now: NaiveDateTime) -> Resolved {
+    let s = text;
+    let num = |t: &str| t.trim().parse::<i64>().ok();
+    let value = match kind {
+        Kind::Clock | Kind::Date => Value::Clock {
+            at: now,
+            date: kind == Kind::Date,
+        },
+        _ if s.is_empty() => return Resolved::Absent,
+        Kind::Gauge => {
+            let (cur, max) = s.split_once('/').unwrap_or((s, ""));
+            Value::Gauge {
+                cur: num(cur).unwrap_or(0),
+                max: num(max),
+                pct: None,
+            }
+        }
+        Kind::Seconds => {
+            let (secs, max) = s.split_once('/').unwrap_or((s, ""));
+            Value::Seconds {
+                secs: num(secs).unwrap_or(0),
+                max: num(max),
+            }
+        }
+        Kind::Num => Value::Num(num(s).unwrap_or(0)),
+        Kind::Pct => Value::Pct(num(s).unwrap_or(0)),
+        Kind::TankPct => Value::TankHp(num(s).unwrap_or(0)),
+        Kind::Text => Value::Text(s.to_string()),
+        Kind::Raw => Value::Styled(s.to_string()),
+        Kind::Flag => Value::Flag,
+        Kind::Count => Value::List(s.split(',').map(str::to_string).collect()),
+        Kind::Position => return Position::from_word(s).map_or(Resolved::Absent, pos_value),
+        Kind::Lang => Value::Lang(s.to_string()),
+        Kind::Moon => return moon_code_value(MOON_CODES[num(s).unwrap_or(0) as usize % 8]),
+        Kind::Exits => exits_value(s),
+        Kind::Level => Value::Level {
+            word: label.to_string(),
+            level: num(s).unwrap_or(0),
+        },
+        Kind::Slot => Value::Slot(s.to_string()),
+        Kind::Hour => Value::Hour(num(s).unwrap_or(0).clamp(0, 23) as u8),
+        Kind::Temp => {
+            let digits = s.trim_end_matches(|c: char| c.is_ascii_alphabetic());
+            Value::Temp {
+                degrees: num(digits).unwrap_or(0),
+                unit: s[digits.len()..].chars().next(),
+            }
+        }
+        Kind::Ticks => Value::Ticks(num(s).unwrap_or(0)),
+        Kind::Member => {
+            let (name, pct) = s.rsplit_once(' ').unwrap_or((s, "0"));
+            Value::Member {
+                name: name.to_string(),
+                pct: num(pct).unwrap_or(0),
+            }
+        }
+    };
+    Resolved::Value(value)
 }
 
 /// Every field drawn from the catalog's samples, for previews with no
@@ -1586,6 +1637,53 @@ impl Vars {
     /// A resolver over these variables and what Vosh supplies.
     pub fn resolver<'a>(&'a self, vosh: &'a Vosh) -> Resolver<'a> {
         Resolver { vars: self, vosh }
+    }
+
+    /// Which source a field reads from now, in the order the resolver
+    /// tries them: a fresh script value, the fresh capture, the latest
+    /// packet of its package, then Vosh. None when none has it yet.
+    pub fn source(&self, e: &Entry, vosh: &Vosh) -> Option<Source> {
+        let keys = capture_keys(e);
+        let fresh_script = |key: &str| self.script.get(key).is_some_and(|s| self.script_fresh(s));
+        if keys.iter().any(|k| fresh_script(k)) {
+            return Some(Source::Script);
+        }
+        let captured = self.fresh_capture().is_some_and(|c| {
+            keys.iter()
+                .any(|k| c.values.get(*k).is_some_and(|v| !v.trim().is_empty()))
+        });
+        if captured {
+            return Some(Source::Capture);
+        }
+        let sent = match e.name {
+            "region" => self.gmcp.has(ROOM_WEATHER) || self.gmcp.has(ROOM_INFO),
+            "exits" => self.new_build() && self.gmcp.has(ROOM_INFO),
+            _ => e.package.is_some_and(|p| self.gmcp.has(p)),
+        };
+        if sent {
+            return Some(Source::Gmcp);
+        }
+        let vosh_has = match e.name {
+            "tick" => vosh.tick.is_some(),
+            "time" | "date" => true,
+            "target" => vosh.target.as_deref().is_some_and(|t| !t.trim().is_empty()),
+            "profile" => vosh
+                .profile
+                .as_deref()
+                .is_some_and(|p| !p.trim().is_empty()),
+            _ => false,
+        };
+        vosh_has.then_some(Source::Vosh)
+    }
+
+    /// The names a script set that no catalog field has, each with a
+    /// fresh value, for the picker's Your scripts group.
+    pub fn script_names(&self) -> Vec<&str> {
+        self.script
+            .iter()
+            .filter(|(name, scripted)| self.script_fresh(scripted) && !known(name))
+            .map(|(name, _)| name.as_str())
+            .collect()
     }
 
     fn recompute(&mut self) {

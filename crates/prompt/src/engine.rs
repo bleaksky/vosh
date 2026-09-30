@@ -17,8 +17,9 @@ use crate::capture;
 use crate::config::{AabahranCapture, CaptureConfig, CaptureSource, PromptConfig};
 use crate::gmcp::{CharPrompt, Observed, CHAR_STATE, CHAR_STATUS};
 use crate::stage::Stage;
+use crate::state::{OpenRowState, PromptState};
 use crate::template::Template;
-use crate::vars::{self, forsaken_lands, Vars};
+use crate::vars::{self, forsaken_lands, Vars, Vosh};
 
 /// What told Vosh your prompt settings, in `session://game-prompt-seen`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -438,13 +439,41 @@ impl PromptEngine {
         self.misses.last_match_at
     }
 
+    /// The status and when Vosh last read your prompt, as
+    /// `session://prompt-status` carries them.
+    pub fn status_report(&self) -> StatusReport {
+        StatusReport {
+            status: self.status(),
+            last_match_at: self.misses.last_match_at.map(stamp),
+        }
+    }
+
+    /// Everything the card reads about your prompt now, for
+    /// `prompt_state_get` and `session://prompt-state`: each field with its
+    /// state and source, the status, the new build sign and the open row
+    /// with where each piece of the design landed in it.
+    pub fn state(&self, vosh: &Vosh) -> PromptState {
+        let reads = self
+            .stage
+            .recognizer()
+            .map(crate::capture::Recognizer::reads)
+            .unwrap_or_default();
+        PromptState {
+            catalog: crate::state::catalog(&self.vars, vosh, &reads),
+            status: self.status_report(),
+            new_build: self.vars.new_build(),
+            open_row: self.stage.open_row().map(|open| OpenRowState {
+                gen: open.gen,
+                spans: open.spans.clone(),
+            }),
+            packages: self.vars.gmcp().packages().map(str::to_string).collect(),
+        }
+    }
+
     /// The status when it changed since the last call, for one
     /// `session://prompt-status` per socket read.
     pub fn take_status_change(&mut self) -> Option<StatusReport> {
-        let report = StatusReport {
-            status: self.status(),
-            last_match_at: self.misses.last_match_at.map(stamp),
-        };
+        let report = self.status_report();
         if self.misses.reported.as_ref() == Some(&report) {
             return None;
         }
@@ -844,6 +873,33 @@ mod tests {
         assert!(engine.vars.prompt_vars().is_empty());
         assert_eq!(engine.config().template, "%hp");
         assert!(engine.config().draw);
+    }
+
+    #[test]
+    fn the_state_reports_the_fields_the_status_and_the_packages() {
+        let mut engine = playing();
+        engine.set_config(PromptConfig {
+            capture: CaptureConfig::Aabahran(AabahranCapture {
+                prompt: "<%hhp %mm> ".into(),
+                ..AabahranCapture::default()
+            }),
+            ..PromptConfig::from_legacy(true, "%hp")
+        });
+        let state = engine.state(&Vosh::default());
+        assert!(state.new_build);
+        assert_eq!(state.status, engine.status_report());
+        assert_eq!(state.packages, ["Char.Prompt", "Char.Vitals"]);
+        assert_eq!(state.open_row, None);
+        let hp = state.catalog.iter().find(|f| f.name == "hp").expect("hp");
+        assert!(hp.in_prompt);
+        let mood = state.catalog.iter().find(|f| f.name == "mood");
+        assert!(mood.is_some(), "a script name lists too");
+        let gold = state
+            .catalog
+            .iter()
+            .find(|f| f.name == "gold")
+            .expect("gold");
+        assert!(!gold.in_prompt);
     }
 
     #[test]
