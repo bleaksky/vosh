@@ -1,9 +1,13 @@
 //! What Vosh knows about Aabahran alone.
 //!
-//! The PROMPT code compiler lands here in a later phase. For now it holds
-//! the lamented tears rule (H7 in section 1.2 of the build spec). The
-//! older server build sends true values under the song, and only
-//! Char.Affects naming it tells Vosh the game means to hide them.
+//! The lamented tears rule (H7 in section 1.2 of the build spec) lives
+//! here. The older server build sends true values under the song, and
+//! only Char.Affects naming it tells Vosh the game means to hide them.
+//!
+//! The PROMPT line compiler (section 3) grows here too. [`colors`] holds
+//! the backtick colors the game sends and rebuilds your codes from them.
+
+pub mod colors;
 
 use crate::gmcp::Affects;
 
