@@ -1,5 +1,5 @@
 {
-  "notes": "Prompt lines as the Aabahran game sends them. Each case is one prompt, the lines it prints from the top, the raw bytes of each as hex with no line end, and their plain text. Rows name the log rows the design notes quote. The bytes follow those quotes and were not read from any log, and the character name reads Tester. The state is what the game held, which the test expander in crates/prompt/tests/aabahran_lines.rs turns into the same bytes. A case with whole set holds every line of the prompt, and the shape reads them all. A case with no shape is a line no shape may read.",
+  "notes": "Prompt lines as the Aabahran game sends them. Each case is one prompt, the lines it prints from the top, the raw bytes of each as hex with no line end, and their plain text. Rows name the log rows the design notes quote. The bytes follow those quotes and were not read from any log, and the character name reads Tester. The state is what the game held, which the prompt printer of the test kit in crates/prompt/src/testkit/game.rs turns into the same bytes. A case with whole set holds every line of the prompt, and the shape reads them all. A case with no shape is a line no shape may read.",
   "cases": [
     {
       "row": 410133,
