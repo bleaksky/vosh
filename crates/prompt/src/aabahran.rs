@@ -4,7 +4,8 @@
 //! here. The older server build sends true values under the song, and
 //! only Char.Affects naming it tells Vosh the game means to hide them.
 //!
-//! The PROMPT line compiler (section 3) grows here too.
+//! The PROMPT line compiler (section 3) lives here too. It is pure. The
+//! session feeds it your settings and matches lines with what it returns.
 //!
 //! - [`lex`] stores a setting you typed as `do_prompt` does, and reads
 //!   it in the two passes the game prints it in.

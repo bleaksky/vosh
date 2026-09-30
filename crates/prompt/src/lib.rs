@@ -17,7 +17,8 @@
 //!   latest Char.Prompt.
 //! - [`vars`] holds the catalog of fields, the session's sources and the
 //!   resolver that answers the renderer, with the hidden model.
-//! - [`aabahran`] holds what Vosh knows about Aabahran alone.
+//! - [`aabahran`] holds what Vosh knows about Aabahran alone, the PROMPT
+//!   compiler among it.
 //! - [`render`] draws a template as ANSI text with a span per piece.
 //! - [`stage`] decides what Vosh writes around your prompt, in one output
 //!   per socket read, with the regions a later output replaces.
