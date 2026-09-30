@@ -24,15 +24,25 @@ pub(crate) struct Launch {
 
 /// Everything launch loads, in order. A shared catalog wizard run that
 /// stopped partway finishes first, so nothing loads a file it had yet to
-/// write. Then the profiles load, see [`load_profiles`], and loadout mode
-/// starts when catalog.toml is on disk, see [`load_loadout_mode`]. While
-/// the run stays unfinished, loadout mode waits, since a profile file may
-/// still hold its items under their old group names and would lay them
-/// over the catalog for every character. The session runs on the active
-/// profile file alone.
+/// write. Then the prompt capture triggers move into the profiles, once,
+/// see [`crate::prompt_migration`]. Then the profiles load, see
+/// [`load_profiles`], and loadout mode starts when catalog.toml is on
+/// disk, see [`load_loadout_mode`]. While the run stays unfinished, the
+/// move and loadout mode wait, since a profile file may still hold its
+/// items under their old group names and would lay them over the catalog
+/// for every character. The session runs on the active profile file
+/// alone.
 pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
     let run = loadout_store::finish_wizard_run(app_data);
     state.add_launch_notices(run.notices());
+    let relaunch_pending =
+        crate::commands::MIGRATION_RELAUNCH_PENDING.load(std::sync::atomic::Ordering::Acquire);
+    if run != WizardRun::Unfinished && !relaunch_pending {
+        // Before any profile loads, so the live profile reads the files
+        // as the move left them. It writes inactive profile files too.
+        let _persist = crate::commands::PERSIST_LOCK.lock().await;
+        state.add_launch_notices(crate::prompt_migration::run(app_data));
+    }
     load_profiles(state, app_data).await;
     if run == WizardRun::Unfinished {
         return Launch {

@@ -238,6 +238,12 @@ pub(crate) struct ProfilesIndex {
     /// global, everything else profile-scoped.
     #[serde(default)]
     pub scope: ScopeConfig,
+    /// One-time moves across every profile that already ran, such as
+    /// `prompt-capture-to-profile`, so none runs twice. An older build
+    /// drops the list on its next save, and a move then runs again on
+    /// return, which each one allows for.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub migrations: Vec<String>,
 }
 
 /// Per-category scope choice. Per-profile fields move with the
@@ -381,6 +387,7 @@ impl ProfileSet {
                 auto_match: None,
             }],
             scope: ScopeConfig::default(),
+            migrations: Vec::new(),
         };
         let set = Self { root, index };
         set.save_index()?;
@@ -789,6 +796,26 @@ impl ProfileSet {
         let previous = std::mem::replace(&mut self.index.active, name.to_string());
         if let Err(e) = self.save_index() {
             self.index.active = previous;
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// True when the one-time move `id` already ran.
+    pub(crate) fn migrated(&self, id: &str) -> bool {
+        self.index.migrations.iter().any(|m| m == id)
+    }
+
+    /// Record that the one-time move `id` ran, and save the index. An
+    /// index that does not save forgets it again, so the move runs at the
+    /// next launch.
+    pub(crate) fn record_migration(&mut self, id: &str) -> Result<(), ProfileSetError> {
+        if self.migrated(id) {
+            return Ok(());
+        }
+        self.index.migrations.push(id.to_string());
+        if let Err(e) = self.save_index() {
+            self.index.migrations.retain(|m| m != id);
             return Err(e);
         }
         Ok(())
