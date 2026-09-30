@@ -5,6 +5,8 @@
 //! and emits what it returns.
 //!
 //! - [`config`] is the `[prompt]` table of a profile file.
+//! - [`capture`] reads patterns you point at, and the capture triggers
+//!   older builds used, into a capture.
 //! - [`template`] parses a prompt template into tokens and the pieces the
 //!   editor shows.
 //! - [`format`] holds the values a template draws and the plain text of
@@ -18,6 +20,7 @@
 //! - [`wrap`] is the word wrap both renderers share.
 
 pub mod aabahran;
+pub mod capture;
 pub mod config;
 pub mod format;
 pub mod gmcp;

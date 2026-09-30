@@ -10,6 +10,10 @@ rust-version.workspace = true
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+# Capture patterns: compiling them, and reading their shape for the settle
+# rule.
+regex = "1"
+regex-syntax = "0.8"
 # Local time for the clock pieces (clock only, no default features).
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
