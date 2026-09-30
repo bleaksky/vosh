@@ -1,6 +1,8 @@
+import { listen } from '@tauri-apps/api/event';
 import { describe, expect, it, vi } from 'vitest';
 import { aabahranChatFixtureNames, aabahranChatPacket } from '../test/aabahranGmcp';
-import { parseCommChannel, parseRoutedLine, type ChatLine } from './chatStore';
+import { getChatLines, parseCommChannel, parseRoutedLine, type ChatLine } from './chatStore';
+import type { RoutedPayload } from './session';
 
 // The store reaches the Tauri bridge when it starts. The parsers under
 // test never do.
@@ -127,7 +129,7 @@ describe('parseRoutedLine', () => {
   });
 
   it('strips color codes', () => {
-    expect(parseRoutedLine({ pane: 'loot', text: '\x1b[33mgold\x1b[0m' }, TS).text).toBe('gold');
+    expect(parseRoutedLine({ pane: 'loot', text: '\x1b[33mgold\x1b[0m' }, TS)?.text).toBe('gold');
   });
 
   // The game sends no Comm.Channel for a tell you send, so a trigger that
@@ -172,12 +174,41 @@ describe('parseRoutedLine', () => {
   it('leaves other lines about tells whole', () => {
     for (const text of [
       "Selune tells you 'are you still at the bank?'",
-      "You tell your group 'one tick'",
       "You try to tell Selune in Elvish 'omw'",
     ]) {
       const line = parseRoutedLine({ pane: 'tell', text }, TS);
-      expect(line.speaker, text).toBeNull();
-      expect(line.text, text).toBe(text);
+      expect(line?.speaker, text).toBeNull();
+      expect(line?.text, text).toBe(text);
     }
+  });
+
+  // The game echoes a group tell you send back to you as a gtell packet
+  // (act_comm.c do_gtell), so the terminal line would print it twice.
+  it('drops the line for a group tell you send, whatever pane it routes to', () => {
+    for (const pane of ['tell', 'gtell', 'loot']) {
+      for (const text of [
+        "You tell your group '\x1b[36mone tick, waiting on mana\x1b[0m'",
+        "You tell your group in Elvish 'one tick'",
+      ]) {
+        expect(parseRoutedLine({ pane, text }, TS), `${pane}: ${text}`).toBeNull();
+      }
+    }
+  });
+});
+
+describe('the chat store', () => {
+  it('prints a tell you send once and leaves a routed group tell to its gtell packet', () => {
+    expect(getChatLines()).toEqual([]);
+    const call = vi.mocked(listen).mock.calls.find(([event]) => event === 'session://routed');
+    if (!call) throw new Error('the store never listened for routed lines');
+    const handler = call[1] as unknown as (event: { payload: RoutedPayload }) => void;
+    const route = (text: string) => handler({ payload: { pane: 'tell', text } });
+
+    route("You tell your group 'one tick, waiting on mana'");
+    route("You tell Selune 'omw'");
+
+    expect(getChatLines().map((l) => [l.pane, l.direction, l.speaker, l.text])).toEqual([
+      ['tell', 'sent', 'Selune', 'omw'],
+    ]);
   });
 });
