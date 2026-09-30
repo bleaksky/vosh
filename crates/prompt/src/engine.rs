@@ -12,8 +12,8 @@ use serde::Serialize;
 use serde_json::Value as Json;
 
 use crate::aabahran::observer::{self, ReplyKind};
-use crate::aabahran::Who;
-use crate::config::{CaptureConfig, CaptureSource, PromptConfig};
+use crate::aabahran::{CompileError, Origin, Which, Who};
+use crate::config::{AabahranCapture, CaptureConfig, CaptureSource, PromptConfig};
 use crate::gmcp::{CharPrompt, Observed, CHAR_STATE, CHAR_STATUS};
 use crate::stage::Stage;
 use crate::template::Template;
@@ -139,6 +139,9 @@ pub struct PromptEngine {
     seen: Vec<GamePromptSeen>,
     observer: Observer,
     misses: Misses,
+    /// Why the migrated capture kept its pattern when the game last
+    /// showed your PROMPT this session.
+    kept_pattern: Option<CompileError>,
 }
 
 impl PromptEngine {
@@ -155,8 +158,10 @@ impl PromptEngine {
             self.revision += 1;
         }
         if self.config.capture != config.capture {
-            // A new capture starts with no misses.
+            // A new capture starts with no misses, and a reason the old
+            // one kept its pattern no longer holds.
             self.misses.count = 0;
+            self.kept_pattern = None;
         }
         self.config = config;
         self.compile();
@@ -174,7 +179,7 @@ impl PromptEngine {
     /// Keep a GMCP packet. Char.Status and Char.State say who the prompt
     /// is for, and a change compiles the capture again. Char.Prompt is
     /// the game's own word on your prompt settings, which an aabahran
-    /// capture follows (D10).
+    /// capture follows and a migrated capture switches to (D10).
     pub fn observe(&mut self, package: &str, data: Json, at: DateTime<FixedOffset>) -> Observed {
         let observed = self.vars.observe(package, data, at);
         if observed.pulse {
@@ -193,7 +198,8 @@ impl PromptEngine {
 
     /// Follow a Char.Prompt. `enabled` says whether your text prompt is
     /// on. An aabahran capture that follows the game takes settings that
-    /// differ from the ones it holds, with the source and the time.
+    /// differ from the ones it holds, with the source and the time, and a
+    /// migrated capture switches to them, prompts off or on.
     fn follow_char_prompt(
         &mut self,
         prompt: &CharPrompt,
@@ -219,9 +225,11 @@ impl PromptEngine {
         }
     }
 
-    /// Hand settings the game showed to an aabahran capture that follows
-    /// the game, when they differ from the ones it holds. Returns whether
-    /// it took them.
+    /// Hand settings the game showed to the capture. An aabahran capture
+    /// that follows the game takes them when they differ from the ones it
+    /// holds. A migrated capture switches to them (see
+    /// [`PromptEngine::switch_migrated`]). Any other capture takes
+    /// nothing. Returns whether the capture took them.
     fn take_settings(
         &mut self,
         prompt: Option<&str>,
@@ -229,6 +237,9 @@ impl PromptEngine {
         source: CaptureSource,
         at: DateTime<FixedOffset>,
     ) -> bool {
+        if self.config.capture.is_migrated() {
+            return self.switch_migrated(prompt, fprompt, source, at);
+        }
         let CaptureConfig::Aabahran(codes) = &self.config.capture else {
             return false;
         };
@@ -250,6 +261,66 @@ impl PromptEngine {
         }
         self.set_config(config);
         true
+    }
+
+    /// Switch the pattern the move from a capture trigger wrote to
+    /// Aabahran's codes, which follow the game from then on (D10, James
+    /// on 2026-09-30). The first PROMPT the game shows under the
+    /// Forsaken Lands rules does it, from Char.Prompt or from the reply
+    /// the observer reads. A fight prompt alone says too little. Without
+    /// one from the game, the fight prompt is the one the game showed
+    /// this session, or none. The design and the drawing switch stay as
+    /// they are. When the settings do not compile, the pattern stays and
+    /// [`PromptEngine::kept_pattern`] says why. Returns whether it
+    /// switched.
+    fn switch_migrated(
+        &mut self,
+        prompt: Option<&str>,
+        fprompt: Option<&str>,
+        source: CaptureSource,
+        at: DateTime<FixedOffset>,
+    ) -> bool {
+        let Some(prompt) = prompt else {
+            return false;
+        };
+        if !self.forsaken() {
+            return false;
+        }
+        let fprompt = fprompt
+            .map(str::to_string)
+            .or_else(|| {
+                self.observer
+                    .seen
+                    .as_ref()
+                    .and_then(|seen| seen.fprompt.clone())
+            })
+            .unwrap_or_default();
+        match codes_from_game(prompt, &fprompt, source, at, self.who) {
+            Ok(codes) => {
+                let mut config = self.config.clone();
+                config.capture = CaptureConfig::Aabahran(codes);
+                self.set_config(config);
+                true
+            }
+            Err(error) => {
+                self.kept_pattern = Some(error);
+                false
+            }
+        }
+    }
+
+    /// Why the migrated capture kept its pattern when the game last
+    /// showed your PROMPT this session, as one sentence for `#prompt`.
+    pub fn kept_pattern(&self) -> Option<String> {
+        let error = self.kept_pattern.as_ref()?;
+        let setting = match error.which {
+            Which::Prompt => "prompt",
+            Which::Fight => "fight prompt",
+        };
+        Some(format!(
+            "Vosh kept the pattern from your old capture trigger because a color code runs into {} in the {setting} the game sent.",
+            error.code
+        ))
     }
 
     /// Note a line you sent: the observer's window opens, and `prompt
@@ -345,8 +416,9 @@ impl PromptEngine {
 
     /// Read a complete line the game printed as a reply to `prompt` or
     /// `fprompt`, while [`PromptEngine::observing`]. A setting it shows
-    /// goes to an aabahran capture that follows the game. The reply to
-    /// `prompt off` never does, and raises prompts off instead.
+    /// goes to an aabahran capture that follows the game, and a PROMPT it
+    /// shows switches a migrated capture. The reply to `prompt off` never
+    /// does either, and raises prompts off instead.
     pub fn observe_line(&mut self, raw: &[u8], plain: &str, at: DateTime<FixedOffset>) {
         if !self.observing(at.timestamp_millis()) {
             return;
@@ -533,6 +605,7 @@ impl PromptEngine {
             reported: self.misses.reported.take(),
             ..Misses::default()
         };
+        self.kept_pattern = None;
         self.apply_rules();
     }
 
@@ -560,6 +633,7 @@ impl PromptEngine {
             reported: self.misses.reported.take(),
             ..Misses::default()
         };
+        self.kept_pattern = None;
         self.apply_rules();
     }
 
@@ -570,6 +644,7 @@ impl PromptEngine {
     pub fn switch_profile(&mut self) {
         let forsaken = self.rules();
         self.vars.switch_profile(forsaken);
+        self.kept_pattern = None;
     }
 
     fn rules(&self) -> bool {
@@ -589,10 +664,31 @@ fn stamp(at: DateTime<FixedOffset>) -> String {
     at.to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 
+/// The capture a migrated one becomes when the game shows your settings:
+/// Aabahran's codes as the game stores them, following the game, learned
+/// from `source` at `at`. An error when they do not compile for `who`.
+pub fn codes_from_game(
+    prompt: &str,
+    fprompt: &str,
+    source: CaptureSource,
+    at: DateTime<FixedOffset>,
+    who: Who,
+) -> Result<AabahranCapture, CompileError> {
+    crate::aabahran::compile(prompt, fprompt, Origin::Stored, who)?;
+    Ok(AabahranCapture {
+        prompt: prompt.to_string(),
+        fprompt: fprompt.to_string(),
+        follow_game: true,
+        seen_at: Some(stamp(at)),
+        source: Some(source),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::{AabahranCapture, CaptureConfig, RegexCapture};
+    use crate::stage::End;
     use crate::vars::Capture;
     use serde_json::json;
 
@@ -1259,5 +1355,320 @@ mod tests {
         engine.set_config(PromptConfig::from_legacy(false, "%mana"));
         assert_eq!(engine.vars.prompt_vars().len(), 2);
         assert!(engine.vars.new_build());
+    }
+
+    /// The pattern the old capture trigger held.
+    const OLD_PATTERN: &str = r"\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)/(?<maxmana>\d+)mn (?<move>\d+)/(?<maxmove>\d+)mv\]";
+    /// The PROMPT that pattern was written for, as the game stores it.
+    const OLD: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c";
+    /// The PROMPT James set after the move, as the game stores it.
+    const NEW: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv (%K hp) %s [%S]> ";
+    /// A design that draws in place of the prompt.
+    const DESIGN: &str = "%{c:100,100,100}[%c_reset%s_italic%hp]";
+
+    /// A table as the move from the capture trigger wrote it.
+    fn migrated() -> PromptConfig {
+        PromptConfig {
+            draw: true,
+            template: DESIGN.into(),
+            previous_templates: vec!["%hp".into()],
+            capture: CaptureConfig::Regex(RegexCapture {
+                lines: vec![OLD_PATTERN.into()],
+                settle: false,
+                source: Some(CaptureSource::Migrated),
+                ..RegexCapture::default()
+            }),
+        }
+    }
+
+    /// A Forsaken Lands connection whose profile holds the migrated
+    /// capture.
+    fn moved() -> PromptEngine {
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.set_config(migrated());
+        engine
+    }
+
+    /// The table stays as it was apart from the capture.
+    fn keeps_the_rest(engine: &PromptEngine) {
+        let config = engine.config();
+        assert!(config.draw);
+        assert_eq!(config.template, DESIGN);
+        assert_eq!(config.previous_templates, ["%hp"]);
+    }
+
+    #[test]
+    fn the_first_char_prompt_switches_a_migrated_capture_to_the_codes() {
+        let mut engine = moved();
+        let revision = engine.revision();
+        engine.observe("Char.Prompt", char_prompt(true, OLD, "`1%h``> "), at());
+        assert_eq!(
+            codes(&engine),
+            AabahranCapture {
+                prompt: OLD.into(),
+                fprompt: "`1%h``> ".into(),
+                follow_game: true,
+                seen_at: Some("2026-09-29T12:58:02-05:00".into()),
+                source: Some(CaptureSource::Gmcp),
+            }
+        );
+        keeps_the_rest(&engine);
+        assert!(engine.revision() > revision, "Settings reads it again");
+        assert_eq!(
+            engine.take_seen(),
+            [GamePromptSeen {
+                kind: SeenKind::Gmcp,
+                text: OLD.into(),
+                applied: true,
+            }],
+            "the toast follows"
+        );
+        assert!(engine.forsaken());
+        assert_eq!(engine.kept_pattern(), None);
+        // The codes compile at once, so the next prompt draws.
+        let block = engine
+            .stage
+            .recognize(b"", "[1020/1020hp 800/800mn 930/930mv]", End::Line)
+            .expect("the prompt");
+        assert_eq!(block.values.get("maxmove").map(String::as_str), Some("930"));
+
+        // From here it follows the game as any aabahran capture does.
+        engine.observe("Char.Prompt", char_prompt(true, NEW, ""), at());
+        assert_eq!(codes(&engine).prompt, NEW);
+        assert!(engine.take_seen()[0].applied);
+        let line = "(Wizi 60) (Incog 60) [1020/1020hp 800/800mn 930/930mv (100 hp) common [std]> ";
+        let block = engine
+            .stage
+            .recognize(b"", line, End::Settled)
+            .expect("the new prompt");
+        assert_eq!(block.values.get("wizi").map(String::as_str), Some("60"));
+        assert_eq!(block.values.get("hp_pct").map(String::as_str), Some("100"));
+        keeps_the_rest(&engine);
+    }
+
+    #[test]
+    fn the_codes_from_the_game_keep_the_settings_as_sent_and_follow_the_game() {
+        let got = codes_from_game(
+            NEW,
+            "`1%h``hp> ",
+            CaptureSource::Session,
+            at(),
+            Who::default(),
+        )
+        .expect("they compile");
+        assert_eq!(
+            got,
+            AabahranCapture {
+                prompt: NEW.into(),
+                fprompt: "`1%h``hp> ".into(),
+                follow_game: true,
+                seen_at: Some("2026-09-29T12:58:02-05:00".into()),
+                source: Some(CaptureSource::Session),
+            }
+        );
+        let error = codes_from_game("<`%h> ", "", CaptureSource::Gmcp, at(), Who::default())
+            .expect_err("a color runs into %h");
+        assert_eq!(error.code, "%h");
+        assert_eq!(error.which, Which::Prompt);
+    }
+
+    #[test]
+    fn prompts_off_still_switches_a_migrated_capture() {
+        let mut engine = moved();
+        engine.observe("Char.Prompt", char_prompt(false, OLD, ""), at());
+        assert_eq!(codes(&engine).prompt, OLD);
+        assert!(engine.prompts_off());
+        assert_eq!(engine.status(), Status::PromptsOff);
+        assert!(engine.take_seen()[0].applied);
+    }
+
+    #[test]
+    fn only_the_migrated_capture_switches() {
+        let typed = PromptConfig {
+            capture: CaptureConfig::Regex(RegexCapture {
+                lines: vec![OLD_PATTERN.into()],
+                source: Some(CaptureSource::Typed),
+                ..RegexCapture::default()
+            }),
+            ..migrated()
+        };
+        let unsourced = PromptConfig {
+            capture: CaptureConfig::Regex(RegexCapture {
+                lines: vec![OLD_PATTERN.into()],
+                ..RegexCapture::default()
+            }),
+            ..migrated()
+        };
+        let none = PromptConfig {
+            capture: CaptureConfig::None,
+            ..migrated()
+        };
+        for config in [typed, unsourced, none] {
+            let mut engine = PromptEngine::default();
+            engine.connect(true);
+            engine.set_config(config.clone());
+            engine.observe("Char.Prompt", char_prompt(true, NEW, ""), at());
+            assert_eq!(*engine.config(), config);
+            assert!(!engine.take_seen()[0].applied);
+            engine.note_send("prompt x\r\n", SENT);
+            line(&mut engine, "Prompt set to x ", 5);
+            assert_eq!(*engine.config(), config);
+        }
+    }
+
+    #[test]
+    fn a_migrated_capture_switches_only_under_the_forsaken_lands_rules() {
+        let mut engine = PromptEngine::default();
+        engine.connect(false);
+        engine.set_config(migrated());
+        assert!(!engine.forsaken());
+        engine.observe("Char.Prompt", char_prompt(true, OLD, ""), at());
+        assert_eq!(*engine.config(), migrated());
+        assert!(!engine.take_seen()[0].applied);
+    }
+
+    #[test]
+    fn a_prompt_that_does_not_compile_keeps_the_pattern_and_says_why() {
+        let mut engine = moved();
+        engine.observe("Char.Prompt", char_prompt(true, "<`%h> ", ""), at());
+        assert_eq!(*engine.config(), migrated());
+        assert!(engine.stage.has_recognizer(), "the pattern still reads");
+        assert!(!engine.take_seen()[0].applied, "no toast");
+        assert_eq!(
+            engine.kept_pattern().as_deref(),
+            Some("Vosh kept the pattern from your old capture trigger because a color code runs into %h in the prompt the game sent.")
+        );
+        // A fight prompt that does not compile says so.
+        engine.observe("Char.Prompt", char_prompt(true, OLD, "`(2%f1 "), at());
+        assert_eq!(*engine.config(), migrated());
+        assert_eq!(
+            engine.kept_pattern().as_deref(),
+            Some("Vosh kept the pattern from your old capture trigger because a color code runs into %f1 in the fight prompt the game sent.")
+        );
+        // The next prompt that compiles switches it, and the reason goes.
+        engine.observe("Char.Prompt", char_prompt(true, OLD, ""), at());
+        assert_eq!(codes(&engine).prompt, OLD);
+        assert_eq!(engine.kept_pattern(), None);
+
+        // A new connection starts with no reason.
+        let mut engine = moved();
+        engine.observe("Char.Prompt", char_prompt(true, "<`%h> ", ""), at());
+        assert!(engine.kept_pattern().is_some());
+        engine.disconnect();
+        assert_eq!(engine.kept_pattern(), None);
+        assert_eq!(*engine.config(), migrated());
+    }
+
+    #[test]
+    fn the_reply_to_your_prompt_switches_a_migrated_capture_without_char_prompt() {
+        let mut engine = moved();
+        // A fight prompt alone says nothing of your PROMPT.
+        engine.note_send("fprompt\r\n", SENT);
+        line(&mut engine, "Current fight prompt: <%hhp fight> ", 5);
+        assert_eq!(*engine.config(), migrated());
+        assert!(!engine.take_seen()[0].applied);
+
+        engine.note_send("prom x\r\n", SENT + 3_000);
+        line(&mut engine, "Prompt set to <%hhp %mm> ", 3_010);
+        let got = codes(&engine);
+        assert_eq!(got.prompt, "<%hhp %mm> ");
+        assert_eq!(got.fprompt, "<%hhp fight> ", "the fight prompt it showed");
+        assert!(got.follow_game);
+        assert_eq!(got.source, Some(CaptureSource::Session));
+        assert!(got.seen_at.is_some());
+        keeps_the_rest(&engine);
+        assert_eq!(
+            engine.take_seen(),
+            [GamePromptSeen {
+                kind: SeenKind::Prompt,
+                text: "<%hhp %mm> ".into(),
+                applied: true,
+            }]
+        );
+
+        // What channels shows switches it too.
+        let mut engine = moved();
+        engine.note_send("channels\r\n", SENT);
+        line(&mut engine, "Your current prompt is: <%hhp> ", 5);
+        assert_eq!(codes(&engine).prompt, "<%hhp> ");
+        assert_eq!(codes(&engine).fprompt, "");
+    }
+
+    #[test]
+    fn the_reply_to_prompt_off_switches_nothing() {
+        // Your own send said prompt off.
+        let mut engine = moved();
+        engine.note_send("prompt off\r\n", SENT);
+        line(&mut engine, "Prompt set to \u{1}\u{2}", 5);
+        assert_eq!(*engine.config(), migrated());
+        assert!(engine.prompts_off());
+        // An alias sent it, and the reply follows the line it prints first.
+        let mut engine = moved();
+        engine.note_send("quiet\r\n", SENT);
+        line(&mut engine, "You will no longer see prompts.", 5);
+        line(&mut engine, "Prompt set to \u{1}\u{2}", 6);
+        assert_eq!(*engine.config(), migrated());
+        // channels while prompts are off shows no setting of yours.
+        engine.note_send("channels\r\n", SENT + 3_000);
+        line(&mut engine, "Your current prompt is: \u{1}\u{2}", 3_010);
+        assert_eq!(*engine.config(), migrated());
+        // A reply after two seconds counts for nothing either.
+        engine.note_send("prompt x\r\n", SENT + 4_000);
+        line(&mut engine, "Prompt set to <%hhp> ", 4_000 + OBSERVE_MS + 1);
+        assert_eq!(*engine.config(), migrated());
+        assert!(engine.take_seen().iter().all(|s| !s.applied));
+    }
+
+    #[test]
+    fn a_switch_applies_the_latest_char_prompt_to_a_migrated_capture() {
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.set_config(PromptConfig::from_legacy(true, "%hp"));
+        engine.observe("Char.Prompt", char_prompt(true, NEW, ""), at());
+        assert!(!engine.take_seen()[0].applied, "default reads nothing");
+
+        engine.switch_profile();
+        engine.set_config(migrated());
+        engine.follow_latest(at());
+        assert_eq!(codes(&engine).prompt, NEW);
+        assert_eq!(codes(&engine).source, Some(CaptureSource::Gmcp));
+        keeps_the_rest(&engine);
+        assert_eq!(engine.take_seen().len(), 1);
+
+        // The reason a switch kept the pattern is the new profile's.
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.set_config(migrated());
+        engine.observe("Char.Prompt", char_prompt(true, "<`%h> ", ""), at());
+        assert!(engine.kept_pattern().is_some());
+        assert!(!engine.take_seen()[0].applied);
+        engine.switch_profile();
+        engine.set_config(PromptConfig::from_legacy(true, "%hp"));
+        engine.follow_latest(at());
+        assert_eq!(engine.kept_pattern(), None);
+        assert!(engine.config().capture.is_none());
+        engine.switch_profile();
+        engine.set_config(migrated());
+        engine.follow_latest(at());
+        assert_eq!(*engine.config(), migrated());
+        assert!(engine.kept_pattern().is_some());
+        assert!(engine.take_seen().is_empty());
+    }
+
+    #[test]
+    fn a_reconnect_keeps_the_pattern_until_the_game_shows_your_prompt() {
+        let mut engine = moved();
+        // A link dead reconnect sends no Char.Prompt, and the pattern
+        // reads the prompt as before.
+        vitals(&mut engine);
+        assert_eq!(*engine.config(), migrated());
+        assert!(engine
+            .stage
+            .recognize(b"", "[1020/1020hp 800/800mn 930/930mv]", End::Line)
+            .is_some());
+        // prompt in the game sends it.
+        engine.observe("Char.Prompt", char_prompt(true, OLD, ""), at());
+        assert_eq!(codes(&engine).prompt, OLD);
     }
 }

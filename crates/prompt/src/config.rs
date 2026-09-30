@@ -123,6 +123,15 @@ impl CaptureConfig {
     pub fn is_aabahran(&self) -> bool {
         matches!(self, Self::Aabahran(_))
     }
+
+    /// The capture is still the pattern the move from a capture trigger
+    /// wrote, `kind = "regex"` with `source = "migrated"`. A pattern you
+    /// set with `#prompt {regex}` has source typed, and `#unprompt` leaves
+    /// none, so neither counts. The first PROMPT the game shows under the
+    /// Forsaken Lands rules switches it to Aabahran's codes (D10).
+    pub fn is_migrated(&self) -> bool {
+        matches!(self, Self::Regex(capture) if capture.source == Some(CaptureSource::Migrated))
+    }
 }
 
 /// The game's PROMPT and fight prompt settings, as the game stores them.
@@ -267,6 +276,35 @@ mod tests {
         assert_eq!(capture.fprompt, "");
         assert_eq!(capture.source, Some(CaptureSource::Gmcp));
         assert!(config.capture.is_aabahran());
+    }
+
+    #[test]
+    fn only_the_pattern_the_move_wrote_counts_as_migrated() {
+        // As the move writes it into a profile file.
+        let config: PromptConfig = serde_json::from_str(
+            r#"{"draw":true,"template":"%hp","capture":{"kind":"regex","lines":["\\[(?<hp>\\d+)/(?<maxhp>\\d+)hp\\]"],"settle":false,"source":"migrated"}}"#,
+        )
+        .unwrap();
+        assert!(config.capture.is_migrated());
+
+        let regex = |source| {
+            CaptureConfig::Regex(RegexCapture {
+                lines: vec![r"\[(?<hp>\d+)hp\]".into()],
+                source,
+                ..RegexCapture::default()
+            })
+        };
+        // #prompt {regex} writes source typed.
+        assert!(!regex(Some(CaptureSource::Typed)).is_migrated());
+        assert!(!regex(Some(CaptureSource::Gmcp)).is_migrated());
+        assert!(!regex(None).is_migrated());
+        // #unprompt leaves none.
+        assert!(!CaptureConfig::None.is_migrated());
+        assert!(!CaptureConfig::Aabahran(AabahranCapture {
+            source: Some(CaptureSource::Migrated),
+            ..AabahranCapture::default()
+        })
+        .is_migrated());
     }
 
     #[test]
