@@ -439,6 +439,25 @@ export async function onHidden(cb: (payload: HiddenPayload) => void): Promise<Un
   });
 }
 
+/** The game told Vosh your prompt settings, on
+ *  session://game-prompt-seen. `kind` is `gmcp` for Char.Prompt,
+ *  `prompt` or `fprompt` for a line that shows a setting, and `off` when
+ *  you turned prompts off. `text` is the setting as the game stores it.
+ *  `applied` says the active profile's capture took it. */
+export interface GamePromptSeenPayload {
+  kind: 'gmcp' | 'prompt' | 'fprompt' | 'off';
+  text: string;
+  applied: boolean;
+}
+
+export async function onGamePromptSeen(
+  cb: (payload: GamePromptSeenPayload) => void,
+): Promise<UnlistenFn> {
+  return listen<GamePromptSeenPayload>('session://game-prompt-seen', (event) => {
+    cb(event.payload);
+  });
+}
+
 /** What the backend last reported on session://hidden, for a window
  *  that opens or reloads after the report. */
 export async function hiddenGet(): Promise<HiddenPayload> {
