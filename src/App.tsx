@@ -44,6 +44,7 @@ import {
   subscribeSplitDividerChanged,
   subscribeTerminalLineHeightChanged,
   normalizeTerminalLineHeight,
+  terminalLocalWrite,
   TERMINAL_LINE_HEIGHTS,
   type StatePayload,
   type TerminalLineHeight,
@@ -241,15 +242,13 @@ function App() {
   const termRef = useRef<TerminalHandle | null>(null);
   const historyTermRef = useRef<TerminalHandle | null>(null);
   const inputRef = useRef<InputHandle | null>(null);
-  // Write frontend-generated terminal content (custom prompt, local echo,
-  // error notices) to xterm AND mirror it into the native grid. The native
-  // surface renders only the backend display stream, so frontend-only
-  // writes are invisible there unless we feed them in too.
+  // Write text the page draws itself (your typed echo, error notices) to
+  // xterm, and through terminal_local_write to the native grid and the
+  // session on either renderer. The session closes the open row, since
+  // the text now follows it, so it never repaints over your echo.
   const writeLive = (text: string) => {
     termRef.current?.write(text);
-    if (nativeSurfaceEnabled()) {
-      void invoke('native_surface_echo', { text }).catch(() => {});
-    }
+    void terminalLocalWrite(text).catch(() => {});
   };
   const handleError = (message: string) => {
     setStatus({ kind: 'error', message });

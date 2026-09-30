@@ -644,6 +644,13 @@ export async function onOutput(cb: (out: SessionOutput) => void): Promise<Unlist
   });
 }
 
+/** Write text the webview drew itself, such as your typed echo or an
+ *  error notice, into the native grid too, and tell the session, which
+ *  closes the open row, since the text now follows it. */
+export async function terminalLocalWrite(text: string): Promise<void> {
+  await invoke('terminal_local_write', { text });
+}
+
 export async function onState(cb: (state: StatePayload) => void): Promise<UnlistenFn> {
   return listen<StatePayload>('session://state', (event) => {
     cb(event.payload);
