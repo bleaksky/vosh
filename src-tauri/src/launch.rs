@@ -62,13 +62,15 @@ pub(crate) async fn load(state: &SharedState, app_data: &Path) -> Launch {
 /// (theme, font, dock layout, keep last, auto update) so those UI prefs
 /// stay the same across every profile.
 pub(crate) async fn load_profiles(state: &SharedState, app_data: &Path) {
-    let set = match profile_set::ProfileSet::load_or_migrate(app_data.to_path_buf()) {
+    let mut set = match profile_set::ProfileSet::load_or_migrate(app_data.to_path_buf()) {
         Ok(set) => set,
         Err(e) => {
             error!(error = %e, "failed to load profile set; using in-memory defaults");
             return;
         }
     };
+    // What an earlier session left to tell you, once.
+    state.add_launch_notices(set.take_notices());
     // Before any profile loads, move the custom themes older profile
     // files still hold into global.toml, which owns the list from here
     // on. It writes only files it read, so a file that does not read
