@@ -250,6 +250,53 @@ fn percent_only_prompts_feed_pct_with_no_max() {
 }
 
 #[test]
+fn numbers_with_a_decimal_point_draw_as_gauges() {
+    // Some games write health with a decimal point, and the first
+    // renderer drew a percent, a bar and a color by how full from it.
+    let mut vars = Vars::new(false);
+    vars.set_script("hp", "1.5");
+    vars.set_script("maxhp", "3");
+    let vosh = vosh();
+    let template = "%pct_hp %c_hp%hp%c_default %hp_bar:4 %hp/%{maxhp}";
+    let drawn = render_str(template, &vars.resolver(&vosh), RenderOptions::default());
+    assert_eq!(drawn.plain, "50 1.5 ██░░ 1.5/3");
+    // Half full is yellow, in the text and in the bar.
+    assert!(
+        drawn.ansi.contains("\x1b[33m1.5\x1b[39m"),
+        "{:?}",
+        drawn.ansi
+    );
+    assert!(drawn.ansi.contains("\x1b[33m██"), "{:?}", drawn.ansi);
+    // The first renderer's reading of the same values agrees.
+    let first: BTreeMap<String, String> = [("hp", "1.5"), ("maxhp", "3")]
+        .iter()
+        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+        .collect();
+    let legacy = render_str(
+        template,
+        &MapValues::new(&first, now()),
+        RenderOptions::default(),
+    );
+    assert_eq!(drawn.ansi, legacy.ansi);
+    // A decimal max, the game's bands, and a name no catalog entry has.
+    vars.set_script("maxhp", "2.5");
+    vars.set_script("sp", "12.5");
+    vars.set_script("maxsp", "50");
+    assert_eq!(
+        draw(&vars, "%pct_hp %{hp:max} %{maxhp} %pct_sp%% %sp_bar:4"),
+        "60 2.5 2.5 25% █░░░"
+    );
+    let banded = render_str(
+        "%{c:hp:game}%hp",
+        &vars.resolver(&vosh),
+        RenderOptions::default(),
+    );
+    assert_eq!(banded.ansi, "\x1b[39m1.5\x1b[0m");
+    // Formats for whole numbers leave a decimal alone.
+    assert_eq!(draw(&vars, "%{hp:grouped}"), "%{hp:grouped}");
+}
+
+#[test]
 fn the_game_bands_divide_as_the_server_does() {
     let mut vars = Vars::new(true);
     packet(

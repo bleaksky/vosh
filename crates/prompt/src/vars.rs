@@ -1940,14 +1940,13 @@ impl<'a> Resolver<'a> {
         &self.vars.gmcp
     }
 
-    /// A prompt value read as a number, text when it is not one.
+    /// A prompt value read as a number, whole or with a decimal point,
+    /// and text when it is no number.
     fn var_num(&self, name: &str) -> Got {
         match self.vars.var(name).map(str::trim) {
             None => Got::Nothing,
             Some("") => Got::Blank,
-            Some(t) => is(t
-                .parse::<i64>()
-                .map_or_else(|_| Value::Text(t.to_string()), Value::Num)),
+            Some(t) => is(Value::parse_number(t).unwrap_or_else(|| Value::Text(t.to_string()))),
         }
     }
 
@@ -2041,7 +2040,7 @@ impl<'a> Resolver<'a> {
 
     fn gauge(&self, pair: Pair, want_max: bool) -> Resolved {
         let max = match self.max(pair) {
-            Resolved::Value(Value::Num(n)) => Some(n),
+            Resolved::Value(v) if v.number().is_some() => Some(v),
             _ => None,
         };
         // A max of 0 means the pair does not apply, as for a class with
@@ -2049,7 +2048,7 @@ impl<'a> Resolver<'a> {
         // of 0 hides the pair first (H1, H3), so this is reached there
         // only on the new build, whose flags alone decide, and it draws
         // nothing rather than a percent with no max.
-        if max == Some(0) {
+        if max.as_ref().is_some_and(Value::is_zero) {
             return Resolved::Absent;
         }
         if want_max {
@@ -2069,9 +2068,16 @@ impl<'a> Resolver<'a> {
             .vars
             .var(pair.pct())
             .and_then(|p| p.trim().parse::<i64>().ok());
-        match cur {
-            Resolved::Value(Value::Num(cur)) => Resolved::Value(Value::Gauge { cur, max, pct }),
-            other => other,
+        match (cur, max) {
+            (Resolved::Value(Value::Num(cur)), None) => Resolved::Value(Value::Gauge {
+                cur,
+                max: None,
+                pct,
+            }),
+            (Resolved::Value(cur), Some(max)) => {
+                Resolved::Value(cur.over(&max, pct).unwrap_or(cur))
+            }
+            (other, _) => other,
         }
     }
 
@@ -2681,28 +2687,15 @@ impl<'a> Resolver<'a> {
         if raw.is_empty() {
             return Resolved::Absent;
         }
-        let Ok(cur) = raw.parse::<i64>() else {
+        let Some(cur) = Value::parse_number(raw) else {
             return Resolved::Value(Value::Text(raw.to_string()));
         };
-        let max = [
-            format!("m{name}"),
-            format!("{name}_max"),
-            format!("max_{name}"),
-            format!("max{name}"),
-        ]
-        .iter()
-        .find_map(|key| {
-            self.vars
-                .var(key)
-                .and_then(|v| v.trim().parse::<i64>().ok())
-        });
+        let max = crate::render::max_spellings(name)
+            .iter()
+            .find_map(|key| self.vars.var(key).and_then(Value::parse_number));
         Resolved::Value(match max {
-            Some(max) => Value::Gauge {
-                cur,
-                max: Some(max),
-                pct: None,
-            },
-            None => Value::Num(cur),
+            Some(max) => cur.over(&max, None).unwrap_or(cur),
+            None => cur,
         })
     }
 }

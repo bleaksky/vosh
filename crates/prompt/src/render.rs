@@ -763,20 +763,24 @@ impl<'a> MapValues<'a> {
         Self::new(vars, chrono::Local::now().naive_local())
     }
 
-    fn number(&self, key: &str) -> Option<i64> {
-        self.vars.get(key)?.trim().parse::<i64>().ok()
+    fn number(&self, key: &str) -> Option<Value> {
+        Value::parse_number(self.vars.get(key)?)
     }
 
-    fn max_of(&self, name: &str) -> Option<i64> {
-        [
-            format!("m{name}"),
-            format!("{name}_max"),
-            format!("max_{name}"),
-            format!("max{name}"),
-        ]
-        .iter()
-        .find_map(|key| self.number(key))
+    fn max_of(&self, name: &str) -> Option<Value> {
+        max_spellings(name).iter().find_map(|key| self.number(key))
     }
+}
+
+/// The names a prompt var's max goes by, in the order the first renderer
+/// tried them: `mhp`, `hp_max`, `max_hp`, `maxhp`.
+pub(crate) fn max_spellings(name: &str) -> [String; 4] {
+    [
+        format!("m{name}"),
+        format!("{name}_max"),
+        format!("max_{name}"),
+        format!("max{name}"),
+    ]
 }
 
 impl Values for MapValues<'_> {
@@ -797,16 +801,12 @@ impl Values for MapValues<'_> {
         let Some(raw) = self.vars.get(name) else {
             return Resolved::Unknown;
         };
-        Resolved::Value(match raw.trim().parse::<i64>() {
-            Ok(cur) => match self.max_of(name) {
-                Some(max) => Value::Gauge {
-                    cur,
-                    max: Some(max),
-                    pct: None,
-                },
-                None => Value::Num(cur),
+        Resolved::Value(match Value::parse_number(raw) {
+            Some(cur) => match self.max_of(name) {
+                Some(max) => cur.over(&max, None).unwrap_or(cur),
+                None => cur,
             },
-            Err(_) => Value::Text(raw.clone()),
+            None => Value::Text(raw.clone()),
         })
     }
 }
