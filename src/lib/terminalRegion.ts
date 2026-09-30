@@ -21,6 +21,10 @@
 // echo. A replace of the open region lies before them, so it goes first.
 // An output that writes nothing at the cursor keeps the longer of its
 // hold and the one waiting, so hidden pulses never stack empty rows.
+// The row the pinned prompt held is still where the next thing lands, so
+// the line end that would end it, the first thing a framed echo or an
+// error notice writes, writes nothing (closePinRow). Each output says
+// whether that row is open after it.
 //
 // The wait is a write of nothing with a callback. It has to be an empty
 // byte array, never an empty string. xterm 6.1 parses everything it
@@ -77,6 +81,53 @@ export interface RegionOutput {
   replace?: RegionReplace;
   restore?: string;
   hold?: string;
+  /** Whether a pinned prompt's row is open after this output. Absent,
+   *  whatever lands closes it. */
+  pinRow?: boolean;
+}
+
+/** What `text` does to the row a pinned prompt left open. The prompt is
+ *  not in the text, so the line end that would end its row writes
+ *  nothing: the first one, when only escape sequences and carriage
+ *  returns come before it. `closed` says the row is closed, by that line
+ *  end or by anything else that lands first. Escape sequences alone leave
+ *  it open. The same rule as close_pin_row in crates/prompt/src/stage.rs. */
+export function closePinRow(text: string): { text: string; closed: boolean } {
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (c === '\x1b') {
+      i = escapeEnd(text, i);
+    } else if (c === '\r') {
+      i++;
+    } else if (c === '\n') {
+      const start = i > 0 && text[i - 1] === '\r' ? i - 1 : i;
+      return { text: text.slice(0, start) + text.slice(i + 1), closed: true };
+    } else {
+      return { text, closed: true };
+    }
+  }
+  return { text, closed: false };
+}
+
+/** Where the escape sequence that starts at `at` ends: after a CSI's
+ *  final byte, after an OSC's BEL or ST, after the next character
+ *  otherwise. */
+function escapeEnd(text: string, at: number): number {
+  const kind = text[at + 1];
+  if (kind === '[') {
+    let i = at + 2;
+    while (i < text.length && !(text.charCodeAt(i) >= 0x40 && text.charCodeAt(i) <= 0x7e)) i++;
+    return Math.min(i + 1, text.length);
+  }
+  if (kind === ']') {
+    for (let i = at + 2; i < text.length; i++) {
+      if (text[i] === '\x07') return i + 1;
+      if (text[i] === '\x1b' && text[i + 1] === '\\') return i + 2;
+    }
+    return text.length;
+  }
+  return kind === undefined ? text.length : at + 2;
 }
 
 /** A write of nothing that xterm's flush before a resize still parses
@@ -127,6 +178,8 @@ export class RegionWriter {
   /** Line ends an output held back, written before the next write lands
    *  at the cursor. */
   private pendingHold = '';
+  /** The row a pinned prompt left is where the next write lands. */
+  private pinRow = false;
   /** A write waits for xterm to parse what came before it. */
   private busy = false;
   private readonly queue: Item[] = [];
@@ -240,7 +293,7 @@ export class RegionWriter {
     }
     if (item.kind === 'local') {
       this.writeHold();
-      this.write(item.text);
+      this.write(this.land(item.text));
       return;
     }
     const { replace } = item.out;
@@ -275,20 +328,30 @@ export class RegionWriter {
         // Held line ends end their row, which xterm has not parsed yet.
         const held = this.writeHold();
         const lead = held || this.term.buffer.active.cursorX === 0 ? '' : '\r\n';
-        this.write(lead + replace.text);
+        this.write(this.land(lead + replace.text));
         wrote = true;
       }
     }
     if (out.text.length > 0) {
       this.writeHold();
-      this.write(out.text);
+      this.write(this.land(out.text));
       wrote = true;
     }
     const hold = out.hold ?? '';
     if (wrote || hold.length > this.pendingHold.length) this.pendingHold = hold;
+    if (out.pinRow !== undefined) this.pinRow = out.pinRow;
     if (out.restore !== undefined && this.openGen !== null) {
       this.restore = { gen: this.openGen, text: out.restore };
     }
+  }
+
+  /** `text` as it lands at the cursor: without the line end that would
+   *  end the row a pinned prompt left, while that row is open. */
+  private land(text: string): string {
+    if (!this.pinRow) return text;
+    const landed = closePinRow(text);
+    if (landed.closed) this.pinRow = false;
+    return landed.text;
   }
 
   /** Write the held line ends, which close the open region, since they

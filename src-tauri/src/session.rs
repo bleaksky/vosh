@@ -135,6 +135,12 @@ pub(crate) struct OutputPayload {
     /// `vosh_prompt::stage::Output::hold`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hold: Option<String>,
+    /// While your prompt shows pinned, whether the pinned prompt's row is
+    /// still where the next thing lands after this payload, so each
+    /// renderer drops the line end that would end that row. See
+    /// `vosh_prompt::stage::close_pin_row`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pin_row: Option<bool>,
 }
 
 /// `OutputPayload.replace`: region `gen`, its new bytes as base64, and
@@ -1867,7 +1873,7 @@ fn partial_step(
     } else {
         p.prompt.stage.end_read(&mut batch.out);
     }
-    p.prompt.stage.finish(&batch.out);
+    p.prompt.stage.finish(&mut batch.out);
     step
 }
 
@@ -2192,7 +2198,7 @@ async fn finish_read<R: tauri::Runtime>(
     perf: &mut PerfCounters,
 ) {
     let ReadBatch {
-        out,
+        mut out,
         log,
         prompt_vars,
         gag_without_reader,
@@ -2202,7 +2208,7 @@ async fn finish_read<R: tauri::Runtime>(
     let (vars, hidden, prompt_seen, status) = {
         let mut p = profile.lock().await;
         // Echoes the end of the read wrote close the open row.
-        p.prompt.stage.finish(&out);
+        p.prompt.stage.finish(&mut out);
         (
             p.prompt.take_prompt_vars(prompt_vars),
             p.prompt.vars.take_hidden_change(),
@@ -2787,6 +2793,7 @@ impl OutputPayload {
             restore: out.restore.as_deref().map(base64_encode),
             pin: out.pin.as_deref().map(base64_encode),
             hold: (!out.hold.is_empty()).then(|| base64_encode(&out.hold)),
+            pin_row: out.pin_row,
         }
     }
 }

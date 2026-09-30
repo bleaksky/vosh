@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Terminal } from '@xterm/xterm';
 import {
+  closePinRow,
   eraseBack,
   lastMark,
   RegionWriter,
@@ -374,5 +375,64 @@ describe('RegionWriter held line ends', () => {
     writer.output(replace(9, 'fresh\r\n', true));
     await parsed(writer);
     expect(screen(term)).toEqual(['WHOLE', 'and more', '', 'fresh']);
+  });
+});
+
+describe('the row a pinned prompt leaves open', () => {
+  // A pinned prompt left the text, but the row it held is still where
+  // the next thing lands. Whatever would have ended that row first, a
+  // framed echo from outside a read or an error notice the page writes,
+  // ends a row that is not there, so that line end writes nothing.
+  it('finds the line end that ends it past escapes, and only before text', () => {
+    expect(closePinRow('\r\nTICK\r\n')).toEqual({ text: 'TICK\r\n', closed: true });
+    expect(closePinRow('\x1b[33m\r\nTICK')).toEqual({ text: '\x1b[33mTICK', closed: true });
+    expect(closePinRow('look\r\n')).toEqual({ text: 'look\r\n', closed: true });
+    expect(closePinRow('\n')).toEqual({ text: '', closed: true });
+    expect(closePinRow('\x1b[0m')).toEqual({ text: '\x1b[0m', closed: false });
+    expect(closePinRow('')).toEqual({ text: '', closed: false });
+  });
+
+  it('lets a framed echo and a notice take the prompt row', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: 'room\r\n[Exits: south]', hold: '\r\n\r\n', pinRow: true });
+    // The tick warning, from outside a read.
+    writer.output({ text: '\r\n\x1b[33mTICK IN 5s\x1b[0m\r\n' });
+    // The next pulse, which the session starts with a line end since the
+    // warning closed the row.
+    writer.output({ text: '\r\ntell\r\n', hold: '\r\n', pinRow: true });
+    writer.local('\r\n\x1b[31m[Not connected]\x1b[0m\r\n');
+    await parsed(writer);
+    expect(screen(term)).toEqual([
+      'room',
+      '[Exits: south]',
+      '',
+      'TICK IN 5s',
+      '',
+      'tell',
+      '',
+      '[Not connected]',
+    ]);
+  });
+
+  it('keeps every line end once the row closed, or with no row open', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: 'room', hold: '\r\n\r\n', pinRow: true });
+    writer.local('look\r\n');
+    writer.output({ text: '\r\nreply\r\n' });
+    // A prompt that took its line end leaves no row open.
+    writer.output({ text: '', hold: '\r\n', pinRow: false });
+    writer.local('\r\n[notice]\r\n');
+    await parsed(writer);
+    expect(screen(term)).toEqual(['room', '', 'look', '', 'reply', '', '', '[notice]']);
+  });
+
+  it('stays open through an output that writes nothing', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: 'room', hold: '\r\n\r\n', pinRow: true });
+    writer.output({ text: '', pinRow: true });
+    writer.output({ text: '\x1b[0m' });
+    writer.output({ text: '\r\nTICK\r\n' });
+    await parsed(writer);
+    expect(screen(term)).toEqual(['room', '', 'TICK']);
   });
 });

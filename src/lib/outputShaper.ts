@@ -53,13 +53,22 @@ export class OutputShaper {
       : undefined;
     // Held line ends follow the text in the stream, so they wrap after it.
     const hold = out.hold ? this.wrapChunk(this.decoder.decode(out.hold, { stream: true })) : '';
-    if (wrapped.length === 0 && replace === undefined && restore === undefined && hold === '') {
+    // Whether a pinned prompt's row is open reaches the writer even when
+    // the output writes nothing else.
+    if (
+      wrapped.length === 0 &&
+      replace === undefined &&
+      restore === undefined &&
+      hold === '' &&
+      out.pinRow === undefined
+    ) {
       return { output: null, text };
     }
     const output: RegionOutput = { text: wrapped };
     if (replace) output.replace = replace;
     if (restore !== undefined) output.restore = restore;
     if (hold.length > 0) output.hold = hold;
+    if (out.pinRow !== undefined) output.pinRow = out.pinRow;
     return { output, text };
   }
 }

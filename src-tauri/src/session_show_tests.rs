@@ -81,6 +81,8 @@ struct Session {
     p: Profile,
     acc: LineAccumulator,
     parser: vosh_telnet::Parser,
+    /// Output from elsewhere reached the terminal since the last read.
+    other: bool,
 }
 
 impl Session {
@@ -89,7 +91,18 @@ impl Session {
             p,
             acc: LineAccumulator::new(),
             parser: vosh_telnet::Parser::new(),
+            other: false,
         }
+    }
+
+    /// Output from outside a read, as `emit_output` writes it: a tick
+    /// warning, a timer's echo, a slash command's reply. The next read
+    /// sees it landed.
+    fn emitted(&mut self, bytes: &[u8]) -> Output {
+        self.other = true;
+        let mut out = Output::new(false);
+        out.text(bytes);
+        out
     }
 
     /// A new connection on the same profile, which starts the prompt over
@@ -105,7 +118,7 @@ impl Session {
     /// the hold's deadline before the next one.
     fn read(&mut self, data: &[u8]) -> Read {
         let mut batch = ReadBatch::new(0);
-        batch.out = Output::new(false);
+        batch.out = Output::new(std::mem::take(&mut self.other));
         let now = Instant::now();
         let mut kept = Vec::new();
         let mut sends = Vec::new();
@@ -145,7 +158,7 @@ impl Session {
         if batch.hold {
             hold_step(&mut self.p, &mut self.acc, &mut batch.out);
         }
-        self.p.prompt.stage.finish(&batch.out);
+        self.p.prompt.stage.finish(&mut batch.out);
         Read {
             out: batch.out,
             log: batch.log.into_iter().map(|row| row.text).collect(),
@@ -1105,5 +1118,68 @@ fn lifted_prompts_stay_in_the_text_with_marks_that_take_no_room() {
                 assert!(starts >= 1, "{name} draw {draw}");
             }
         }
+    }
+}
+
+/// The rows a grid shows, trimmed, up to the last row that shows anything.
+fn rows_of(grid: &crate::term_grid::TermGrid) -> Vec<String> {
+    let mut rows: Vec<String> = (0..grid.screen_lines())
+        .map(|line| grid.row_string(line).trim_end().to_string())
+        .collect();
+    while rows.last().is_some_and(String::is_empty) {
+        rows.pop();
+    }
+    rows
+}
+
+#[test]
+fn an_echo_that_ends_the_prompt_row_takes_the_row_a_pinned_prompt_left() {
+    use vosh_prompt::testkit::{Build, Mud, Options};
+    use vosh_prompt::PromptShow;
+    const ROOM: [&str; 3] = [
+        "The Bank of Aabahran",
+        "  Marble counters line the hall, and a clerk nods at you.",
+        "[Exits: south]",
+    ];
+    let mut mud = Mud::playing(Options::new(Build::New));
+    let login = mud.login();
+    let tell = mud.pulse_later("Tarvik tells you 'back soon'");
+    let play = |show, draw| {
+        let mut session = Session::new(showing(profile(CODES, HP, draw), show));
+        let mut grid = crate::term_grid::TermGrid::new(80, 40);
+        grid.session_output(&session.read(&login).out);
+        // The tick warning, framed to end the prompt's row first.
+        let warn = session.emitted(b"\r\n\x1b[33mTICK IN 5s\x1b[0m\r\n");
+        grid.session_output(&warn);
+        grid.session_output(&session.read(&tell).out);
+        // An error notice the page writes, framed the same way.
+        grid.local_write(b"\r\n\x1b[31m[Not connected]\x1b[0m\r\n");
+        session.local_write();
+        rows_of(&grid)
+    };
+    // In the text each echo ends the drawn prompt's row.
+    let text = play(PromptShow::Text, true);
+    assert_eq!(
+        text,
+        [
+            "Welcome to the fake Aabahran, Tester.",
+            ROOM[0],
+            ROOM[1],
+            ROOM[2],
+            "",
+            "<1020>",
+            "TICK IN 5s",
+            "",
+            "Tarvik tells you 'back soon'",
+            "",
+            "<1020>",
+            "[Not connected]"
+        ]
+    );
+    // Pinned shows those rows without the prompts' own, drawing on or
+    // off.
+    let want: Vec<String> = text.into_iter().filter(|r| r != "<1020>").collect();
+    for draw in [true, false] {
+        assert_eq!(play(PromptShow::Pinned, draw), want, "draw {draw}");
     }
 }
