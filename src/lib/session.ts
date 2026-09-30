@@ -77,13 +77,22 @@ export interface OutputPayload {
   /** The live render for the region this payload leaves open, as
    *  base64, written back before anything else lands. */
   restore?: string;
+  /** What the band above the command line shows from now on, as base64,
+   *  while your prompt shows pinned. An empty string clears it. */
+  pin?: string;
+  /** Line ends at the end of this payload that each renderer keeps back
+   *  until the next write lands, as base64. */
+  hold?: string;
 }
 
-/** One session write, decoded: the replace goes first, then `bytes`. */
+/** One session write, decoded: the replace goes first, then `bytes`,
+ *  and `hold` waits for the next write. */
 export interface SessionOutput {
   bytes: Uint8Array;
   replace?: { gen: number; bytes: Uint8Array; fresh: boolean };
   restore?: Uint8Array;
+  pin?: Uint8Array;
+  hold?: Uint8Array;
 }
 
 /** Standard base64 to bytes. `atob` yields a binary string, one char per
@@ -104,6 +113,8 @@ export function decodeOutputPayload(payload: OutputPayload): SessionOutput {
     out.replace = { gen: replace.gen, bytes: base64Bytes(replace.b64), fresh: replace.fresh };
   }
   if (typeof payload.restore === 'string') out.restore = base64Bytes(payload.restore);
+  if (typeof payload.pin === 'string') out.pin = base64Bytes(payload.pin);
+  if (typeof payload.hold === 'string') out.hold = base64Bytes(payload.hold);
   return out;
 }
 

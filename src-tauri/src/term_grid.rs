@@ -77,6 +77,9 @@ pub(crate) struct TermGrid {
     /// The start of a character the last session write split, held
     /// until the rest arrives so it decodes whole before wrapping.
     pending_utf8: Vec<u8>,
+    /// Line ends the session asked the grid to keep back, written before
+    /// the next write lands, while your prompt shows pinned.
+    pending_hold: Vec<u8>,
 }
 
 /// A region Vosh may replace later, such as the drawn prompt, as this
@@ -116,6 +119,7 @@ impl TermGrid {
             size,
             region: None,
             pending_utf8: Vec::new(),
+            pending_hold: Vec::new(),
         }
     }
 
@@ -130,7 +134,15 @@ impl TermGrid {
     /// region the output leaves open, and goes back over it before
     /// anything else lands. Text is word wrapped at the grid width, as
     /// xterm's is by the webview.
+    ///
+    /// Line ends the last output held back go out before anything this
+    /// one writes at the cursor, and after a replace of the open region,
+    /// which lies before them. This output's own hold then waits. An
+    /// output that writes nothing at the cursor keeps the longer of the
+    /// two holds, so a pulse that pinned a prompt and wrote nothing never
+    /// stacks empty rows.
     pub(crate) fn session_output(&mut self, out: &Output) {
+        let mut wrote = false;
         if let Some(replace) = &out.replace {
             // Half a character the last write held back belongs to the
             // region the replace rewrites whole.
@@ -142,21 +154,28 @@ impl TermGrid {
                 self.feed_marked(text.as_bytes());
             } else if replace.fresh && !replace.bytes.is_empty() {
                 self.restore_first();
+                self.write_hold();
                 self.region = None;
                 if !self.at_row_start() {
                     self.feed(b"\r\n");
                 }
                 self.feed_marked(text.as_bytes());
+                wrote = true;
             }
         }
         if !out.bytes.is_empty() {
             self.restore_first();
+            self.write_hold();
             self.region = None;
             let text = self.decode(&out.bytes);
             if !text.is_empty() {
                 let text = self.wrap(&text);
                 self.feed_marked(text.as_bytes());
             }
+            wrote = true;
+        }
+        if wrote || out.hold.len() > self.pending_hold.len() {
+            self.pending_hold.clone_from(&out.hold);
         }
         if let (Some(restore), Some(region)) = (&out.restore, self.region.as_mut()) {
             region.restore = Some(restore.clone());
@@ -165,14 +184,40 @@ impl TermGrid {
 
     /// Write text the webview wrote itself, such as your typed echo. It
     /// lands after the open region, so it closes it, and a preview the
-    /// region shows goes back to the live render first.
+    /// region shows goes back to the live render first. Held line ends go
+    /// out before it.
     pub(crate) fn local_write(&mut self, bytes: &[u8]) {
         if bytes.is_empty() {
             return;
         }
         self.restore_first();
+        self.write_hold();
         self.region = None;
         self.feed(bytes);
+    }
+
+    /// Write the line ends the session held back, which closes the open
+    /// region, since they come after it.
+    fn write_hold(&mut self) {
+        if self.pending_hold.is_empty() {
+            return;
+        }
+        let hold = std::mem::take(&mut self.pending_hold);
+        self.region = None;
+        self.feed(&hold);
+    }
+
+    /// The line ends held back now, for a test.
+    #[cfg(test)]
+    pub(crate) fn pending_hold(&self) -> &[u8] {
+        &self.pending_hold
+    }
+
+    /// The cursor's row and column, for a test.
+    #[cfg(test)]
+    pub(crate) fn cursor(&self) -> (i32, usize) {
+        let point = self.term.grid().cursor.point;
+        (point.line.0, point.column.0)
     }
 
     /// Put the live render back over the open region when it holds one.
@@ -1167,6 +1212,80 @@ mod tests {
             rows.pop();
         }
         rows
+    }
+
+    /// An output that writes `bytes` and holds `hold` back.
+    fn held(bytes: &[u8], hold: &[u8]) -> Output {
+        let mut out = Output::new(false);
+        out.bytes = bytes.to_vec();
+        out.hold = hold.to_vec();
+        out
+    }
+
+    fn cursor(g: &TermGrid) -> (i32, usize) {
+        g.cursor()
+    }
+
+    #[test]
+    fn held_line_ends_wait_until_the_next_write_lands() {
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&held(b"room\r\n[Exits: south]", b"\r\n\r\n"));
+        assert_eq!(screen(&g), ["room", "[Exits: south]"]);
+        assert_eq!(cursor(&g), (1, 14), "the text ends on its last line");
+        assert_eq!(g.pending_hold(), b"\r\n\r\n");
+        // The next output writes them first, then holds its own.
+        g.session_output(&held(b"tell", b"\r\n\r\n"));
+        assert_eq!(screen(&g), ["room", "[Exits: south]", "", "tell"]);
+        // Your echo takes them first too, once.
+        g.local_write(b"look\r\n");
+        g.local_write(b"x");
+        assert_eq!(
+            screen(&g),
+            ["room", "[Exits: south]", "", "tell", "", "look", "x"]
+        );
+        assert!(g.pending_hold().is_empty());
+    }
+
+    #[test]
+    fn an_output_that_writes_nothing_keeps_the_longer_hold() {
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&held(b"room", b"\r\n\r\n"));
+        // A pulse whose lines were all swallowed or hidden.
+        let mut band = held(b"", b"");
+        band.pin = Some(b"<1020>".to_vec());
+        g.session_output(&band);
+        assert_eq!(g.pending_hold(), b"\r\n\r\n");
+        // A shorter hold from such an output never shortens it, and a
+        // longer one never stacks with it.
+        g.session_output(&held(b"", b"\r\n"));
+        assert_eq!(g.pending_hold(), b"\r\n\r\n");
+        g.session_output(&held(b"", b"\r\n\r\n\r\n"));
+        assert_eq!(g.pending_hold(), b"\r\n\r\n\r\n");
+        assert_eq!(screen(&g), ["room"]);
+        // Text in a later output replaces it with its own.
+        g.session_output(&held(b"tell", b"\r\n"));
+        assert_eq!(screen(&g), ["room", "", "", "tell"]);
+        assert_eq!(g.pending_hold(), b"\r\n");
+    }
+
+    #[test]
+    fn a_replace_of_the_open_region_goes_before_the_hold_and_a_fresh_one_after() {
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(&marked(1, b"partial")));
+        // Held line ends after an open region, as a later pulse with
+        // nothing but line ends would leave them.
+        g.session_output(&held(b"", b"\r\n"));
+        g.session_output(&replace(1, &marked(2, b"WHOLE"), false));
+        assert_eq!(screen(&g), ["WHOLE"]);
+        assert_eq!(g.pending_hold(), b"\r\n");
+        // A fresh replace of a closed region writes at the cursor, after
+        // the held line ends.
+        // Text lands after the held line end.
+        g.session_output(&text(b"and more"));
+        assert_eq!(screen(&g), ["WHOLE", "and more"]);
+        g.session_output(&held(b"", b"\r\n\r\n"));
+        g.session_output(&replace(9, b"fresh\r\n", true));
+        assert_eq!(screen(&g), ["WHOLE", "and more", "", "fresh"]);
     }
 
     #[test]

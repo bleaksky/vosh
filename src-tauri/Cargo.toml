@@ -122,6 +122,9 @@ vosh-prompt = { path = "../crates/prompt", features = ["testkit"] }
 # The mock runtime lets a test open windows and count what each event
 # reaches. The feature adds no new crate.
 tauri = { version = "2", features = ["test"] }
+# The pinned splits the webview test replays are stored gzipped. Tauri
+# already depends on flate2, so this adds no new crate.
+flate2 = "1"
 
 # The menu bar test parses every accelerator with the parser Tauri uses,
 # because Tauri drops one that fails without a word. Tauri already

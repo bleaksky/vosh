@@ -713,3 +713,338 @@ fn drawn_after_mark(bytes: &[u8]) -> Option<String> {
     let end = rest.find('\x07')?;
     Some(rest[end + 1..].to_string())
 }
+
+/// The screen a native grid `columns` wide shows after `reads`, rows
+/// trimmed, up to the last row that shows anything, and where its cursor
+/// sits.
+fn grid_screen(reads: &[Read], columns: usize) -> (Vec<String>, (i32, usize)) {
+    let mut grid = crate::term_grid::TermGrid::new(columns, 60);
+    for read in reads {
+        grid.session_output(&read.out);
+    }
+    let mut rows: Vec<String> = (0..grid.screen_lines())
+        .map(|line| grid.row_string(line).trim_end().to_string())
+        .collect();
+    while rows.last().is_some_and(String::is_empty) {
+        rows.pop();
+    }
+    (rows, grid.cursor())
+}
+
+/// The streams the pinned screens are checked on: every wire fixture,
+/// and pulses the fake game writes back to back into one read, so two
+/// prompts pin in one read at many of the cuts.
+fn pinned_streams() -> Vec<(String, Vec<u8>, &'static str)> {
+    use vosh_prompt::testkit::{Build, Mud, Options};
+    let mut streams: Vec<(String, Vec<u8>, &'static str)> = vosh_prompt::testkit::wire::CASES
+        .iter()
+        .map(|case| {
+            let prompt = if case.prompt == CODES_ALL {
+                CODES_ALL
+            } else {
+                CODES
+            };
+            (case.name.to_string(), wire_fixture(case.name), prompt)
+        })
+        .collect();
+    let mut mud = Mud::playing(Options::new(Build::New));
+    let mut quiet_tell = mud.login();
+    quiet_tell.extend(mud.pulse_later("Tarvik tells you 'back soon'"));
+    streams.push(("login-then-tell".into(), quiet_tell, CODES));
+    let mut fight = Vec::new();
+    for write in mud.command("fight") {
+        fight.extend(write.bytes);
+    }
+    fight.extend(mud.pulse_later("Your slash hits a Blackwatch guard."));
+    fight.extend(mud.pulse_later("A Blackwatch guard's pierce misses you."));
+    streams.push(("three-fight-pulses".into(), fight, CODES));
+    let mut compact = Mud::playing(Options {
+        compact: true,
+        ..Options::new(Build::New)
+    });
+    let mut bytes = compact.login();
+    bytes.extend(compact.pulse_later("Tarvik tells you 'back soon'"));
+    streams.push(("compact".into(), bytes, CODES));
+    streams
+}
+
+/// The pinned screen of each stream in one read, drawing on, 80 wide.
+fn pinned_screen_of(name: &str) -> Vec<String> {
+    let (_, bytes, prompt) = pinned_streams()
+        .into_iter()
+        .find(|(n, _, _)| n == name)
+        .expect("the stream");
+    let make = || showing(profile(prompt, HP, true), vosh_prompt::PromptShow::Pinned);
+    grid_screen(&play_reads(&make, &bytes, &[]), 80).0
+}
+
+#[test]
+fn pinned_screens_are_the_same_at_every_split_on_the_native_grid() {
+    use vosh_prompt::PromptShow;
+    for (name, bytes, prompt) in pinned_streams() {
+        for draw in [true, false] {
+            let mut session = Session::new(showing(profile(prompt, HP, draw), PromptShow::Pinned));
+            // The rows match. A read that ends partway through a prompt
+            // paints that part, and the next read erases it, so while you
+            // wait the cursor can sit a row lower than after one read.
+            for columns in [40, 12] {
+                let whole = grid_screen(&replay(&mut session, &bytes, &[]), columns).0;
+                for at in cuts(&bytes) {
+                    let split = grid_screen(&replay(&mut session, &bytes, &[at]), columns).0;
+                    assert_eq!(
+                        split, whole,
+                        "{name} draw {draw} {columns} wide, cut after {at}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn pinned_screens_keep_every_row_but_the_prompts() {
+    const ROOM: [&str; 3] = [
+        "The Bank of Aabahran",
+        "  Marble counters line the hall, and a clerk nods at you.",
+        "[Exits: south]",
+    ];
+    // The room, and the blank before the prompt waits with the prompt's
+    // own line end, so the text ends on the room.
+    assert_eq!(pinned_screen_of("quiet"), ROOM);
+    // The battle line stays, and the tank line goes with the prompt.
+    assert_eq!(
+        pinned_screen_of("fight-tank"),
+        [
+            "A Blackwatch guard attacks you!",
+            "A Blackwatch guard has quite a few wounds."
+        ]
+    );
+    // Two prompts in one read: the one the next pulse completes took its
+    // line end, and the text you did not ask for follows the blank.
+    assert_eq!(
+        pinned_screen_of("prompt-all-next"),
+        [
+            ROOM[0],
+            ROOM[1],
+            ROOM[2],
+            "",
+            "A Blackwatch guard arrives from the south."
+        ]
+    );
+    assert_eq!(
+        pinned_screen_of("login-then-tell"),
+        [
+            "Welcome to the fake Aabahran, Tester.",
+            ROOM[0],
+            ROOM[1],
+            ROOM[2],
+            "",
+            "Tarvik tells you 'back soon'"
+        ]
+    );
+    assert_eq!(
+        pinned_screen_of("three-fight-pulses"),
+        [
+            "A Blackwatch guard attacks you!",
+            "A Blackwatch guard has quite a few wounds.",
+            "",
+            "Your slash hits a Blackwatch guard.",
+            "A Blackwatch guard has quite a few wounds.",
+            "",
+            "A Blackwatch guard's pierce misses you.",
+            "A Blackwatch guard has quite a few wounds."
+        ]
+    );
+    // Compact prints no blank before a prompt, so none appears.
+    assert_eq!(
+        pinned_screen_of("compact"),
+        [
+            "Welcome to the fake Aabahran, Tester.",
+            ROOM[0],
+            ROOM[1],
+            ROOM[2],
+            "Tarvik tells you 'back soon'"
+        ]
+    );
+    // No prompts at all: the same as the text.
+    assert_eq!(
+        pinned_screen_of("prompts-off-new")[..4],
+        ["You will no longer see prompts.", "", "", "Pulse 1 of 3."]
+    );
+}
+
+#[test]
+fn while_you_wait_the_text_ends_on_its_last_line() {
+    use vosh_prompt::PromptShow;
+    let make = || showing(profile(CODES, HP, true), PromptShow::Pinned);
+    let reads = play_reads(&make, &wire_fixture("quiet"), &[]);
+    let (rows, cursor) = grid_screen(&reads, 80);
+    assert_eq!(cursor, (2, rows[2].len()));
+}
+
+#[test]
+fn your_echo_takes_the_row_the_prompt_held() {
+    use vosh_prompt::testkit::{Build, Mud, Options};
+    use vosh_prompt::PromptShow;
+    let mut mud = Mud::playing(Options::new(Build::New));
+    let mut session = Session::new(showing(profile(CODES, HP, true), PromptShow::Pinned));
+    let mut grid = crate::term_grid::TermGrid::new(60, 30);
+    grid.session_output(&session.read(&mud.login()).out);
+    // You type look: the echo lands after the held line ends, and the
+    // reply follows it.
+    let _ = session.send("look");
+    grid.local_write(b"look\r\n");
+    session.local_write();
+    for write in mud.command("look") {
+        grid.session_output(&session.read(&write.bytes).out);
+    }
+    // Enter on an empty line echoes nothing and moves nothing.
+    let _ = session.send("");
+    for write in mud.command("") {
+        grid.session_output(&session.read(&write.bytes).out);
+    }
+    let tell = mud.pulse_later("Tarvik tells you 'back soon'");
+    grid.session_output(&session.read(&tell).out);
+    let mut rows: Vec<String> = (0..grid.screen_lines())
+        .map(|line| grid.row_string(line).trim_end().to_string())
+        .collect();
+    while rows.last().is_some_and(String::is_empty) {
+        rows.pop();
+    }
+    assert_eq!(
+        rows,
+        [
+            "Welcome to the fake Aabahran, Tester.",
+            "The Bank of Aabahran",
+            "  Marble counters line the hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "look",
+            "The Bank of Aabahran",
+            "  Marble counters line the hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "Tarvik tells you 'back soon'"
+        ]
+    );
+}
+
+/// The pinned payloads of every stream in [`pinned_streams`], as one read
+/// and as two cut at every place [`cuts`] names, with the native grid's
+/// screen of one read at 40 and 12 wide. The webview test replays them
+/// into xterm and holds its screens to the grid's.
+fn pinned_splits() -> serde_json::Value {
+    use vosh_prompt::PromptShow;
+    let mut streams = Vec::new();
+    for (name, bytes, prompt) in pinned_streams() {
+        for draw in [true, false] {
+            let mut session = Session::new(showing(profile(prompt, HP, draw), PromptShow::Pinned));
+            let mut splits = vec![Vec::new()];
+            splits.extend(cuts(&bytes).into_iter().map(|at| vec![at]));
+            let payloads: Vec<Vec<serde_json::Value>> = splits
+                .iter()
+                .map(|at| {
+                    replay(&mut session, &bytes, at)
+                        .iter()
+                        .filter(|read| !read.out.is_empty())
+                        .map(|read| {
+                            serde_json::to_value(OutputPayload::from_output(&read.out))
+                                .expect("it serializes")
+                        })
+                        .collect()
+                })
+                .collect();
+            let whole = replay(&mut session, &bytes, &[]);
+            let screens: serde_json::Map<String, serde_json::Value> = [40, 12]
+                .into_iter()
+                .map(|columns| {
+                    (
+                        columns.to_string(),
+                        serde_json::json!(grid_screen(&whole, columns).0),
+                    )
+                })
+                .collect();
+            streams.push(serde_json::json!({
+                "name": name,
+                "draw": draw,
+                "screens": screens,
+                "splits": payloads,
+            }));
+        }
+    }
+    serde_json::json!({ "streams": streams })
+}
+
+/// The file the webview test reads: the JSON of [`pinned_splits`],
+/// gzipped, as base64 text, since the webview test can import text only.
+fn pinned_splits_path() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../fixtures/prompt/aabahran/pinned/splits.b64")
+}
+
+/// Standard base64 back to bytes, for the stored splits.
+fn base64_decode(text: &str) -> Vec<u8> {
+    let value = |c: u8| -> u32 {
+        match c {
+            b'A'..=b'Z' => u32::from(c - b'A'),
+            b'a'..=b'z' => u32::from(c - b'a') + 26,
+            b'0'..=b'9' => u32::from(c - b'0') + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => 0,
+        }
+    };
+    let clean: Vec<u8> = text.bytes().filter(|c| !c.is_ascii_whitespace()).collect();
+    let mut out = Vec::with_capacity(clean.len() / 4 * 3);
+    for chunk in clean.chunks(4) {
+        let pad = chunk.iter().rev().take_while(|&&c| c == b'=').count();
+        let n = chunk.iter().fold(0u32, |n, &c| {
+            (n << 6) | if c == b'=' { 0 } else { value(c) }
+        });
+        let n = n << (6 * (4 - chunk.len()));
+        let bytes = [(n >> 16) as u8, (n >> 8) as u8, n as u8];
+        out.extend_from_slice(&bytes[..3 - pad]);
+    }
+    out
+}
+
+/// Write [`pinned_splits`] for the webview test when
+/// `VOSH_WRITE_PINNED_SPLITS` is set. Nothing otherwise.
+#[test]
+fn write_the_pinned_splits_for_the_webview() {
+    use std::io::Write as _;
+    if std::env::var("VOSH_WRITE_PINNED_SPLITS").is_err() {
+        return;
+    }
+    let text = serde_json::to_string(&pinned_splits()).expect("json");
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::best());
+    gz.write_all(text.as_bytes()).expect("gzip");
+    let encoded = base64_encode(&gz.finish().expect("gzip"));
+    let mut lines: Vec<&str> = encoded
+        .as_bytes()
+        .chunks(100)
+        .map(|c| std::str::from_utf8(c).expect("ascii"))
+        .collect();
+    lines.push("");
+    let path = pinned_splits_path();
+    std::fs::create_dir_all(path.parent().expect("a folder")).expect("the folder");
+    std::fs::write(&path, lines.join("\n")).expect("the file");
+}
+
+#[test]
+fn the_pinned_splits_the_webview_replays_are_what_the_session_sends() {
+    use std::io::Read as _;
+    let stored = std::fs::read_to_string(pinned_splits_path()).expect(
+        "fixtures/prompt/aabahran/pinned/splits.b64, written with VOSH_WRITE_PINNED_SPLITS=1",
+    );
+    let bytes = base64_decode(&stored);
+    let mut text = String::new();
+    flate2::read::GzDecoder::new(&bytes[..])
+        .read_to_string(&mut text)
+        .expect("gzip");
+    let stored: serde_json::Value = serde_json::from_str(&text).expect("json");
+    assert!(
+        stored == pinned_splits(),
+        "the session changed, so write the file again with VOSH_WRITE_PINNED_SPLITS=1"
+    );
+}
