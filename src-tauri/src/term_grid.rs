@@ -787,6 +787,60 @@ mod tests {
         assert!(row3.starts_with("[329(100%)hwho"), "got: {row3:?}");
     }
 
+    /// Values for a drawn prompt test. Health reads 1020 of 1020 and mana
+    /// is hidden.
+    struct PromptValues;
+
+    impl vosh_prompt::Values for PromptValues {
+        fn resolve(&self, field: &vosh_prompt::FieldRef) -> vosh_prompt::Resolved {
+            use vosh_prompt::{Resolved, Value};
+            match field.name.as_str() {
+                "hp" => Resolved::Value(Value::Gauge {
+                    cur: 1020,
+                    max: Some(1020),
+                    pct: None,
+                }),
+                "maxhp" => Resolved::Value(Value::Num(1020)),
+                "mana" => Resolved::Hidden,
+                _ => Resolved::Unknown,
+            }
+        }
+    }
+
+    #[test]
+    fn a_drawn_prompt_keeps_italic_across_c_default() {
+        let out = vosh_prompt::render_str(
+            "%s_italic%c_red%hp%c_default/%c_hp%{maxhp} %c_blue%mana!",
+            &PromptValues,
+            vosh_prompt::RenderOptions::default(),
+        );
+        let mut g = TermGrid::new(80, 24);
+        g.feed(out.ansi.as_bytes());
+        let cell = |col| g.cell_at_line(0, col);
+        // 1020 in red, then the slash back in the text color, still italic.
+        let (c, fg, _, flags) = cell(0);
+        assert_eq!((c, fg), ('1', Color::Named(NamedColor::Red)));
+        assert!(flags.italic);
+        let (c, fg, _, flags) = cell(4);
+        assert_eq!((c, fg), ('/', Color::Named(NamedColor::Foreground)));
+        assert!(flags.italic);
+        // Color by how full is the theme green at full health.
+        let (c, fg, _, flags) = cell(5);
+        assert_eq!((c, fg), ('1', Color::Named(NamedColor::Green)));
+        assert!(flags.italic);
+        // The hidden mark is bright black, and the blue before it comes back.
+        let (c, fg, _, flags) = cell(10);
+        assert_eq!((c, fg), ('?', Color::Named(NamedColor::BrightBlack)));
+        assert!(flags.italic);
+        let (c, fg, _, _) = cell(11);
+        assert_eq!((c, fg), ('!', Color::Named(NamedColor::Blue)));
+        // The render ends in a reset, so what follows is plain.
+        g.feed(b"x");
+        let (c, fg, _, flags) = g.cell_at_line(0, 12);
+        assert_eq!((c, fg), ('x', Color::Named(NamedColor::Foreground)));
+        assert!(!flags.italic);
+    }
+
     // The wrap itself runs fixtures/wrap/cases.json in crates/prompt and in
     // src/lib/wordWrap.test.ts.
     #[test]
