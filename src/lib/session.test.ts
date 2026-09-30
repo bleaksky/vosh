@@ -19,6 +19,7 @@ import {
   normalizeAffectsMarker,
   normalizeAffectsStyle,
   normalizeChipStyle,
+  normalizePromptShow,
   normalizeTerminalLineHeight,
   normalizeTickCount,
   normalizeUiConfig,
@@ -35,6 +36,7 @@ import {
   TERMINAL_LINE_HEIGHTS,
   TICK_COUNTS,
   type CustomTheme,
+  type PromptShow,
   type RawUiConfig,
   type UiConfig,
 } from './session';
@@ -755,9 +757,17 @@ describe('a session output payload', () => {
 });
 
 describe('the prompt fields a command changed', () => {
-  const fields = (on: boolean, template: string) => ({
+  const fields = (on: boolean, template: string, show: PromptShow = 'text') => ({
     prompt_template_enabled: on,
     prompt_template: template,
+    prompt_show: show,
+  });
+
+  it('takes where your prompt shows when #prompt show moved it', () => {
+    const known = fields(true, '%hp');
+    expect(changedPromptFields(known, fields(true, '%hp', 'pinned'))).toEqual({
+      prompt_show: 'pinned',
+    });
   });
 
   it('takes only what changed since the window read or saved it', () => {
@@ -773,5 +783,21 @@ describe('the prompt fields a command changed', () => {
 
   it('takes both when the window knows neither', () => {
     expect(changedPromptFields(null, fields(false, '%mana'))).toEqual(fields(false, '%mana'));
+  });
+});
+
+describe('where your prompt shows', () => {
+  it('reads the three places and the text for anything else', () => {
+    expect(normalizePromptShow('text')).toBe('text');
+    expect(normalizePromptShow('lifted')).toBe('lifted');
+    expect(normalizePromptShow('pinned')).toBe('pinned');
+    expect(normalizePromptShow('floating')).toBe('text');
+    expect(normalizePromptShow(undefined)).toBe('text');
+    expect(normalizePromptShow(3)).toBe('text');
+  });
+
+  it('defaults to the text in a config that does not say', () => {
+    expect(normalizeUiConfig(raw({})).prompt_show).toBe('text');
+    expect(normalizeUiConfig(raw({ prompt_show: 'lifted' })).prompt_show).toBe('lifted');
   });
 });

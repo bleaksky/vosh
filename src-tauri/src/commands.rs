@@ -753,9 +753,10 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
     } else {
         None
     };
-    let (mut result, target_after, script_apply, lists) = {
+    let (mut result, target_after, script_apply, lists, show_changed) = {
         let mut profile = state.profile.lock().await;
         let lists_before = ListRevisions::of(&profile);
+        let show_before = profile.prompt.config().show;
         let before_name = profile.target.name.clone();
         let before_idx = profile.target.room_idx;
         let before_keys = profile.target.quick_keys.clone();
@@ -810,11 +811,16 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
             Some(script_state::apply_actions(&mut profile, combined))
         };
         let lists = ListChanges::since(lists_before, &profile);
-        (result, payload, script_apply, lists)
+        let show_changed = profile.prompt.config().show != show_before;
+        (result, payload, script_apply, lists, show_changed)
     };
     // #trigger, #alias, and the Lua they run change the lists an open
     // Settings page shows, so tell it.
     broadcast_list_changes(&app, lists);
+    // `#prompt show` moves the prompt on screen at once.
+    if show_changed {
+        request_prompt_repaint(state.inner()).await;
+    }
 
     effects.note_script(script_apply.as_ref().is_some_and(|a| a.durable_changed));
     settle_line_effects(&app, effects).await;
@@ -3056,6 +3062,12 @@ pub(crate) struct UiConfigPayload {
     pub input_cursor_style: String,
     pub prompt_template_enabled: bool,
     pub prompt_template: String,
+    /// Where your prompt shows, a copy of `[prompt] show`. It lives in
+    /// the `[prompt]` table alone, never in `[ui]`, and a save takes it
+    /// only when it differs, as it takes the switch and the design. A
+    /// save that leaves it out changes nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_show: Option<String>,
     pub vitals: crate::profile_config::VitalsConfig,
     pub vitals_density: String,
     pub vitals_values: String,
@@ -3102,6 +3114,7 @@ impl UiConfigPayload {
             input_cursor_style: ui.input_cursor_style.clone(),
             prompt_template_enabled: ui.prompt_template_enabled,
             prompt_template: ui.prompt_template.clone(),
+            prompt_show: None,
             vitals: ui.vitals.clone(),
             vitals_density: ui.vitals_density.clone(),
             vitals_values: ui.vitals_values.clone(),
@@ -3148,6 +3161,7 @@ impl UiConfigPayload {
             input_cursor_style,
             prompt_template_enabled,
             prompt_template,
+            prompt_show: _,
             vitals,
             vitals_density,
             vitals_values,
@@ -3303,6 +3317,7 @@ fn ui_config_of(p: &crate::profile::Profile, generation: u64) -> UiConfigPayload
     let prompt = p.prompt.config();
     payload.prompt_template_enabled = prompt.draw;
     payload.prompt_template.clone_from(&prompt.template);
+    payload.prompt_show = Some(prompt.show.name().to_string());
     payload.generation = Some(generation);
     payload
 }
@@ -3320,13 +3335,17 @@ pub(crate) async fn ui_set_config(
         let mut p = state.profile.lock().await;
         apply_ui_save(&mut p, config, ui_config_generation())
     };
-    let UiSave::Applied { prompt } = saved else {
+    let UiSave::Applied { prompt, show } = saved else {
         return Ok(false);
     };
     if prompt {
         // The prompt on screen follows the switch and the design, so
         // turning drawing off shows the game's prompt at once.
         request_prompt_repaint(state.inner()).await;
+    }
+    if show {
+        // The main window lays its dock out for the new place.
+        broadcast_list_changes(&app, ListChanges::PROMPT);
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
@@ -3339,8 +3358,9 @@ enum UiSave {
     /// It was read before the live config was last replaced, so it was
     /// turned away.
     Refused,
-    /// It applied. `prompt` says the prompt switch or design changed.
-    Applied { prompt: bool },
+    /// It applied. `prompt` says the prompt switch, the design or where
+    /// your prompt shows changed, and `show` says the last one did.
+    Applied { prompt: bool, show: bool },
 }
 
 /// Write a whole config save onto the live profile `p`, unless it was
@@ -3352,13 +3372,18 @@ enum UiSave {
 fn apply_ui_save(p: &mut crate::profile::Profile, config: UiConfigPayload, current: u64) -> UiSave {
     let draw = config.prompt_template_enabled;
     let template = config.prompt_template.clone();
+    let show = config.prompt_show.clone();
     if !apply_ui_config(&mut p.ui, config, current) {
         return UiSave::Refused;
     }
     let mut prompt = p.prompt.config().clone();
     let changed = prompt.take_switch_and_template(draw, &template);
+    let show = show.is_some_and(|show| prompt.take_show(&show));
     p.set_prompt_config(prompt);
-    UiSave::Applied { prompt: changed }
+    UiSave::Applied {
+        prompt: changed || show,
+        show,
+    }
 }
 
 /// Ask the session to repaint the open row as the `[prompt]` table now
@@ -4694,6 +4719,7 @@ mod tests {
                 lines: vec![r"\[(?<hp>\d+)hp\]".into()],
                 ..vosh_prompt::config::RegexCapture::default()
             }),
+            ..vosh_prompt::PromptConfig::default()
         });
         p
     }
@@ -4718,7 +4744,10 @@ mod tests {
         save.font_size = 16;
         assert_eq!(
             super::apply_ui_save(&mut p, save, 4),
-            super::UiSave::Applied { prompt: false }
+            super::UiSave::Applied {
+                prompt: false,
+                show: false
+            }
         );
         assert_eq!(p.ui.font_size, 16);
         assert_eq!(*p.prompt.config(), newer);
@@ -4733,7 +4762,10 @@ mod tests {
         save.prompt_template_enabled = false;
         assert_eq!(
             super::apply_ui_save(&mut p, save, 4),
-            super::UiSave::Applied { prompt: true }
+            super::UiSave::Applied {
+                prompt: true,
+                show: false
+            }
         );
         let prompt = p.prompt.config();
         assert!(!prompt.draw);
@@ -4746,7 +4778,10 @@ mod tests {
         save.prompt_template = "[%hp/%maxhp]".into();
         assert_eq!(
             super::apply_ui_save(&mut p, save, 4),
-            super::UiSave::Applied { prompt: true }
+            super::UiSave::Applied {
+                prompt: true,
+                show: false
+            }
         );
         let prompt = p.prompt.config();
         assert_eq!(prompt.template, "[%hp/%maxhp]");
@@ -4759,6 +4794,76 @@ mod tests {
         let file = crate::profile_config::ProfileConfig::from_profile(&p);
         assert_eq!(file.prompt_config(), *p.prompt.config());
         assert_eq!(file.ui.prompt_template, "[%hp/%maxhp]");
+    }
+
+    #[test]
+    fn settings_reads_and_writes_where_your_prompt_shows_through_the_table() {
+        let mut p = prompt_profile();
+        let payload = super::ui_config_of(&p, 4);
+        assert_eq!(payload.prompt_show.as_deref(), Some("text"));
+        let mut save = payload;
+        save.prompt_show = Some("pinned".into());
+        assert_eq!(
+            super::apply_ui_save(&mut p, save, 4),
+            super::UiSave::Applied {
+                prompt: true,
+                show: true
+            }
+        );
+        let prompt = p.prompt.config();
+        assert_eq!(prompt.show, vosh_prompt::PromptShow::Pinned);
+        assert_eq!(prompt.template, "%hp");
+        assert!(!prompt.capture.is_none(), "the capture stays");
+        assert_eq!(
+            super::ui_config_of(&p, 4).prompt_show.as_deref(),
+            Some("pinned")
+        );
+
+        // A save that carries it unchanged leaves it.
+        let mut save = super::ui_config_of(&p, 4);
+        save.font_size = 15;
+        assert_eq!(
+            super::apply_ui_save(&mut p, save, 4),
+            super::UiSave::Applied {
+                prompt: false,
+                show: false
+            }
+        );
+        assert_eq!(p.prompt.config().show, vosh_prompt::PromptShow::Pinned);
+
+        // A name this build does not know changes nothing.
+        let mut save = super::ui_config_of(&p, 4);
+        save.prompt_show = Some("floating".into());
+        assert_eq!(
+            super::apply_ui_save(&mut p, save, 4),
+            super::UiSave::Applied {
+                prompt: false,
+                show: false
+            }
+        );
+        assert_eq!(p.prompt.config().show, vosh_prompt::PromptShow::Pinned);
+
+        // A save that leaves it out, as an older window would, changes
+        // nothing.
+        let mut json = serde_json::to_value(super::ui_config_of(&p, 4)).unwrap();
+        json.as_object_mut().unwrap().remove("prompt_show");
+        let back: UiConfigPayload = serde_json::from_value(json).unwrap();
+        assert_eq!(back.prompt_show, None);
+        assert_eq!(
+            super::apply_ui_save(&mut p, back, 4),
+            super::UiSave::Applied {
+                prompt: false,
+                show: false
+            }
+        );
+        assert_eq!(p.prompt.config().show, vosh_prompt::PromptShow::Pinned);
+
+        // The file keeps it in [prompt] and nowhere in [ui].
+        let file = crate::profile_config::ProfileConfig::from_profile(&p);
+        assert_eq!(file.prompt_config().show, vosh_prompt::PromptShow::Pinned);
+        let text = toml::to_string(&file).unwrap();
+        assert!(text.contains("show = \"pinned\""), "{text}");
+        assert!(!text.contains("prompt_show"), "{text}");
     }
 
     #[test]
@@ -5234,6 +5339,8 @@ mod tests {
                 prompt: "<%h%m %vmv> ".into(),
                 ..vosh_prompt::config::AabahranCapture::default()
             }),
+            // Each profile keeps its own place, through its file.
+            show: vosh_prompt::PromptShow::Pinned,
         };
         let mut file = ProfileConfig::default();
         file.set_prompt(healer.clone());

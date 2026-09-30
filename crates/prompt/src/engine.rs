@@ -608,6 +608,11 @@ impl PromptEngine {
         self.config.draw && !self.config.template.is_empty()
     }
 
+    /// Where your prompt shows, `[prompt] show`.
+    pub fn show(&self) -> crate::config::PromptShow {
+        self.config.show
+    }
+
     /// Record a candidate in the ring, on a send or a GA or EOR, with
     /// whether drawing is on and whether the profile has a capture. See
     /// [`Stage::record`].
@@ -1427,6 +1432,7 @@ mod tests {
                 source: Some(CaptureSource::Migrated),
                 ..RegexCapture::default()
             }),
+            ..PromptConfig::default()
         }
     }
 
@@ -1721,6 +1727,7 @@ mod tests {
                 source: Some(CaptureSource::Migrated),
                 ..RegexCapture::default()
             }),
+            ..PromptConfig::default()
         }
     }
 
