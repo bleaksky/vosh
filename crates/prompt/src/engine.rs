@@ -25,6 +25,9 @@ pub struct PromptEngine {
     known_host: bool,
     /// The prompt vars the webview last heard.
     reported_vars: Option<BTreeMap<String, String>>,
+    /// Moves each time the table changes, so a step can tell whether it
+    /// changed the table and an open Settings window reads it again.
+    revision: u64,
 }
 
 impl PromptEngine {
@@ -37,9 +40,17 @@ impl PromptEngine {
     /// Settings save or an edit hands it over. The session's values stay,
     /// the capture compiles, and the Forsaken Lands rules follow it.
     pub fn set_config(&mut self, config: PromptConfig) {
+        if self.config != config {
+            self.revision += 1;
+        }
         self.config = config;
         self.stage.set_capture(&self.config.capture);
         self.apply_rules();
+    }
+
+    /// A count that moves each time the table changes.
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
     /// Vosh draws your design over a prompt it reads: drawing is on and
@@ -158,6 +169,22 @@ mod tests {
         });
         engine.vars.set_script("mood", "grim");
         engine
+    }
+
+    #[test]
+    fn the_revision_moves_only_when_the_table_changes() {
+        let mut engine = PromptEngine::default();
+        assert_eq!(engine.revision(), 0);
+        engine.set_config(PromptConfig::default());
+        assert_eq!(engine.revision(), 0, "the same table");
+        engine.set_config(aabahran());
+        assert_eq!(engine.revision(), 1);
+        engine.set_config(aabahran());
+        assert_eq!(engine.revision(), 1);
+        // A session event leaves the table alone.
+        engine.connect(true);
+        engine.disconnect();
+        assert_eq!(engine.revision(), 1);
     }
 
     #[test]

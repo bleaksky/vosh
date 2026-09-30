@@ -161,7 +161,10 @@ export function InputGroup({ target, navSeq, config, setConfig, onError }: Setti
 
 /** Draw your own prompt: the toggle on the label line, then the
  *  template in the terminal font, then the template drawn the way the
- *  terminal would with your vitals full. */
+ *  terminal would with your vitals full. Interim until the Prompt
+ *  section replaces it. The switch and the design save to the profile's
+ *  [prompt] table, and SettingsApp reads them again when a command such
+ *  as #prompt changes the table. */
 function PromptBlock({
   enabled,
   template,
@@ -180,7 +183,7 @@ function PromptBlock({
   const vitals = useVitals();
   const chunks = promptPreviewChunks(template, vitals);
   return (
-    <div className="st-block" data-st-anchor="prompt" data-st-flash="">
+    <div className="st-block" data-st-anchor="prompt" data-st-flash="" data-interim="">
       <Row
         label="Draw your own prompt"
         description="It takes the place of your MUD's prompt. Capture the prompt with #prompt first."
