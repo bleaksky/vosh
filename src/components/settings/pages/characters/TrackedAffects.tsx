@@ -58,7 +58,7 @@ export function TrackedAffects({ tracked, onEdit }: Props) {
     <Section id="tracked" title="Tracked affects" card={false}>
       <Card className="st-tracked">
         <p className="st-tracked-note">
-          The Affects pane lists these first and marks any you are missing.
+          The Affects pane marks these and shows any you are missing.
         </p>
         <ul ref={listRef} className="st-chips">
           {tracked.map((entry, index) => {

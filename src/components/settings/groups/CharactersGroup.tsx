@@ -71,7 +71,7 @@ export function CharactersGroup({ config, setConfig, onError }: SettingsPageProp
         </LegacyIsland>
       </Section>
       <Section id="tracked" title="Tracked affects">
-        <p className="st-note">The Affects pane lists these first and marks any you are missing.</p>
+        <p className="st-note">The Affects pane marks these and shows any you are missing.</p>
         <LegacyIsland>
           {config ? (
             <TrackedAffectsEditor config={config} update={update} />

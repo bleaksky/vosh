@@ -348,7 +348,7 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
   },
   {
     label: 'Tracked affects',
-    description: 'The Affects pane lists these first and marks any you are missing.',
+    description: 'The Affects pane marks these and shows any you are missing.',
     keywords: 'affects spells missing',
     target: at('characters', undefined, 'tracked'),
   },

@@ -1,5 +1,7 @@
 import { isTrackedRow, type AffectRow } from '../../lib/affectsView';
+import type { AffectsStyle } from '../../lib/session';
 import { AFFECTS_RULE_PX, affectsColumns, affectsRestMinRows } from './affectsGrid';
+import { COUNTDOWN_ROW_PX, countdownMinRows } from './countdownGrid';
 import {
   PANE_HEADER_PX,
   PANE_MIN_H,
@@ -108,12 +110,37 @@ export function affectsMinH(rows: readonly AffectRow[], columns = 2): number {
   return Math.max(PANE_MIN_H.affects, need + rule);
 }
 
-/** The Affects pane's minimum in `root` laid out `width` wide. The
- *  pane draws one column or two by its own width, which a Split right
- *  halves, so the minimum counts the columns the pane draws. A tree
- *  without the pane reads the panel's width. */
-export function affectsMinIn(root: PaneSplit, width: number, rows: readonly AffectRow[]): number {
-  return affectsMinH(rows, affectsColumns(paneWidth(root, width, 'affects') ?? width));
+/** The Countdown pane's minimum for the rows it shows in `columns`
+ *  columns: every row down to the last one missing, running out, or
+ *  harmful, and the count after it when more follow. Never under the
+ *  stock minimum, and never over a dozen rows. */
+export function countdownMinH(rows: readonly AffectRow[], columns = 2): number {
+  const need = Math.min(LIST_MIN_ROWS, countdownMinRows(rows, columns)) * COUNTDOWN_ROW_PX;
+  return Math.max(PANE_MIN_H.affects, PANE_HEADER_PX + need);
+}
+
+/** The Affects pane's minimum in `root` laid out `width` wide, for the
+ *  style it draws. The pane draws one column or two by its own width,
+ *  which a Split right halves, so the minimum counts the columns the
+ *  pane draws. A tree without the pane reads the panel's width. */
+export function affectsMinIn(
+  root: PaneSplit,
+  width: number,
+  rows: readonly AffectRow[],
+  style: AffectsStyle = 'timers',
+): number {
+  const columns = affectsColumns(paneWidth(root, width, 'affects') ?? width);
+  return affectsStyleMinH(rows, columns, style);
+}
+
+/** The Affects pane's minimum in `columns` columns for the style it
+ *  draws. */
+export function affectsStyleMinH(
+  rows: readonly AffectRow[],
+  columns: number,
+  style: AffectsStyle,
+): number {
+  return style === 'countdown' ? countdownMinH(rows, columns) : affectsMinH(rows, columns);
 }
 
 /** The Group pane's minimum for `members` rows: every member up to
