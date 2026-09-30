@@ -157,7 +157,7 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                 result.durable_changed = true;
             }
             Action::SetPromptVar { name, value } => {
-                profile.prompt_vars.insert(name, value);
+                profile.prompt.set_script(&name, &value);
                 // Always flag as changed. The previous "only fire on
                 // value change" semantics suppressed every emit after
                 // the first one when the player was at full vitals
@@ -169,7 +169,7 @@ pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> Ap
                 result.prompt_vars_changed = true;
             }
             Action::RemovePromptVar(name) => {
-                if profile.prompt_vars.remove(&name).is_some() {
+                if profile.prompt.remove_script(&name) {
                     result.prompt_vars_changed = true;
                 }
             }

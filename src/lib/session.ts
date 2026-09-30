@@ -370,13 +370,13 @@ export async function onTick(cb: (payload: TickPayload) => void): Promise<Unlist
   });
 }
 
-// Prompt vars — session-scoped key/value pairs the backend writes
-// when a `prompt`-targeted trigger fires `mud.set_prompt_var(...)`.
-// The vitals template resolver reads these with priority over
-// GMCP, so a tintin-style #prompt regex can feed hp/mn/mv etc.
-// directly from parsed prompt text. The payload is the full
-// snapshot map; the frontend replaces its local state so
-// deletions are reflected naturally.
+// Prompt vars, the values a trigger writes with
+// `mud.set_prompt_var(...)`. The vitals store reads them with priority
+// over GMCP, so a #prompt capture can feed hp, mana and moves from the
+// prompt text. The payload is the full snapshot, and the frontend
+// replaces its copy. A value for a name GMCP also supplies, such as
+// hp, drops out at the next Char.Vitals, or at your next send on a
+// server without it. A value the game hides comes as `?`.
 export type PromptVarsPayload = Record<string, string>;
 
 export async function onPromptVars(cb: (payload: PromptVarsPayload) => void): Promise<UnlistenFn> {

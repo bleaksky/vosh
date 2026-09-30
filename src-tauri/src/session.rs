@@ -322,6 +322,7 @@ pub(crate) async fn spawn(
         scrollback,
         scrollback_path,
         initial_window_size,
+        crate::profile_set::is_forsaken_lands(&host),
     ));
 
     Ok(SessionHandle { tx_outgoing, task })
@@ -347,6 +348,7 @@ async fn io_loop(
     scrollback: crate::log_state::SharedScrollback,
     scrollback_path: Option<std::path::PathBuf>,
     initial_window_size: (u16, u16),
+    forsaken: bool,
 ) {
     let mut parser = Parser::new();
     let mut negotiator = Negotiator::new();
@@ -372,9 +374,11 @@ async fn io_loop(
 
     // Activate the tick timer for this session, unsynced until the game's
     // first tick. The user can disable it later through the slash command.
+    // The prompt engine starts with no packets and the host's rules.
     {
         let mut p = profile.lock().await;
         p.tick.start_session(Instant::now());
+        start_prompt(&mut p, forsaken);
     }
 
     let mut tick_interval = tokio::time::interval(TICK_EMIT_INTERVAL);
@@ -399,6 +403,12 @@ async fn io_loop(
                     // so the next chunk from the server starts fresh on a
                     // new row instead of merging with the displayed prompt.
                     accumulator.forget_partial();
+                    // On a server that sends no Char.Vitals your send
+                    // starts the next pulse, after which the values the
+                    // last prompt set go stale.
+                    if profile.lock().await.prompt.on_send() {
+                        emit_hidden_change(&app, &profile).await;
+                    }
                     // Append the input line(s) to the same log session
                     // as server output so transcripts include both
                     // directions. While the server holds echo (a
@@ -481,6 +491,9 @@ async fn io_loop(
                             break;
                         }
                     }
+                    // Once per read, so the packets of one pulse never
+                    // show the panes a state between them.
+                    emit_hidden_change(&app, &profile).await;
                 }
                 Err(e) => {
                     error!(error = %e, "read failed");
@@ -527,6 +540,7 @@ async fn io_loop(
                                         break;
                                     }
                                 }
+                                emit_hidden_change(&app, &profile).await;
                             }
                             Err(drain_err)
                                 if drain_err.kind() == std::io::ErrorKind::WouldBlock =>
@@ -605,6 +619,7 @@ async fn io_loop(
         p.target.room_idx = None;
         p.room_chars.clear();
         p.vars.remove("target");
+        end_prompt(&mut p);
         had.then(|| p.target.quick_keys.clone())
     };
     if let Some(quick_keys) = target_after {
@@ -1172,14 +1187,78 @@ fn prompt_pass(p: &mut Profile, bytes: &[u8], already_shown: bool) -> Option<Pro
 }
 
 /// The custom prompt drawn from the live values, or None while drawing
-/// is off or the template draws nothing.
+/// is off or the template draws nothing. The vosh-prompt resolver reads
+/// the values triggers set, then the latest GMCP packets, then what Vosh
+/// itself knows, and draws `?` for a value the game hides.
 fn render_custom_prompt(p: &Profile) -> Option<String> {
     if !p.ui.prompt_template_enabled {
         return None;
     }
-    let rendered =
-        crate::prompt_template::render_prompt_template(&p.ui.prompt_template, &p.prompt_vars);
-    (!rendered.is_empty()).then_some(rendered)
+    let vosh = prompt_supplies(p, Instant::now());
+    let rendered = vosh_prompt::render_str(
+        &p.ui.prompt_template,
+        &p.prompt.resolver(&vosh),
+        vosh_prompt::RenderOptions::default(),
+    );
+    (!rendered.ansi.is_empty()).then_some(rendered.ansi)
+}
+
+/// What Vosh itself supplies to the custom prompt: the tick timer, your
+/// target and the affects you track. The clock reads the local time.
+fn prompt_supplies(p: &Profile, now: Instant) -> vosh_prompt::Vosh {
+    let tick = p.tick.remaining(now).map(|left| vosh_prompt::vars::Tick {
+        remaining: i64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(i64::MAX),
+        interval: i64::try_from(p.tick.config.interval.as_secs()).ok(),
+    });
+    vosh_prompt::Vosh {
+        tick,
+        target: p.target.name.clone(),
+        profile: None,
+        now: None,
+        tracked: p
+            .ui
+            .tracked_affects
+            .iter()
+            .map(|t| t.name.clone())
+            .collect(),
+    }
+}
+
+/// Start the custom prompt's session with no packets and no values,
+/// under the Forsaken Lands rules when `forsaken` holds.
+fn start_prompt(p: &mut Profile, forsaken: bool) {
+    p.prompt.disconnect();
+    p.prompt.set_forsaken(forsaken);
+}
+
+/// The custom prompt's packets, values and hidden state go with the
+/// connection. The webview stores clear on the disconnected state, so
+/// the hidden state that ends here is never reported.
+fn end_prompt(p: &mut Profile) {
+    p.prompt.disconnect();
+    let _ = p.prompt.take_hidden_change();
+}
+
+/// Keep a GMCP packet for the custom prompt, stamped with the local
+/// time it arrived.
+fn observe_prompt_gmcp(p: &mut Profile, msg: &vosh_gmcp::Message) {
+    p.prompt.observe(
+        &msg.package,
+        msg.data.clone(),
+        chrono::Local::now().fixed_offset(),
+    );
+}
+
+/// Tell the webview which values the game hides, when that changed
+/// since the last report. The session calls it once per socket read and
+/// after a send that starts a pulse.
+async fn emit_hidden_change(app: &AppHandle, profile: &Arc<Mutex<Profile>>) {
+    let change = profile.lock().await.prompt.take_hidden_change();
+    if let Some(hidden) = change {
+        if let Err(e) = app.emit("session://hidden", hidden) {
+            warn!(error = %e, "failed to emit the hidden state");
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1215,6 +1294,9 @@ async fn handle_gmcp(
         perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
         perf.mutex_acquires += 1;
         gmcp_bind::apply(&mut p.vars, &msg);
+        // Before Lua, so a value a GMCP handler sets with
+        // `mud.set_prompt_var` belongs to the pulse this packet starts.
+        observe_prompt_gmcp(&mut p, &msg);
         // Cache the latest Room.Chars snapshot in the profile so
         // bare `tar <index>` / `tarn` / `tarp` commands can resolve
         // against the current room without round-tripping to the
@@ -1488,15 +1570,13 @@ async fn apply_script_result(
     Ok(())
 }
 
-/// Push the current `Profile::prompt_vars` map to the frontend as a
-/// single snapshot. Re-emitted whenever a Lua action mutates the
-/// map. The frontend's `usePromptVars()` hook replaces its local
-/// state with the payload, so deletions are reflected naturally.
+/// Push the prompt vars to the frontend as a single snapshot, the values
+/// triggers set this pulse and those only scripts supply, with a value
+/// the game hides as `?`. Re-emitted whenever a Lua action sets one and
+/// after every prompt trigger. The vitals store replaces its copy with
+/// the payload, so a value that went stale or was unset drops out.
 async fn emit_prompt_vars(app: &AppHandle, profile: &Arc<Mutex<Profile>>) {
-    let snapshot: BTreeMap<String, String> = {
-        let p = profile.lock().await;
-        p.prompt_vars.clone()
-    };
+    let snapshot: BTreeMap<String, String> = profile.lock().await.prompt.prompt_vars();
     if let Err(e) = app.emit("session://prompt-vars", &snapshot) {
         warn!(error = %e, "failed to emit prompt vars");
     }
@@ -2002,8 +2082,14 @@ mod tests {
         assert!(pass.apply.prompt_vars_changed);
         let drawn = pass.rendered_prompt.expect("the prompt draws");
         assert_eq!(plain(&drawn), "[1020(100%)h 800(100%)m 930(100%)v] ");
-        // Health at full in the green of the first renderer.
-        assert!(drawn.contains("\x1b[38;5;42m100"), "{drawn:?}");
+        // Health at full in the theme's green, where the first renderer
+        // drew 256 color 42. Every other byte is as it drew them.
+        assert!(drawn.contains("\x1b[32m100"), "{drawn:?}");
+        let first = drawn.replace("\x1b[32m100", "\x1b[38;5;42m100");
+        assert_eq!(
+            first,
+            "\x1b[38;2;100;100;100m[\x1b[0m\x1b[3m1020(\x1b[38;5;42m100\x1b[0m\x1b[3m%)h 800(\x1b[38;2;128;200;255m100\x1b[0m\x1b[3m%)m 930(\x1b[38;2;200;255;23m100\x1b[0m\x1b[3m%)v\x1b[0m\x1b[38;2;100;100;100m] \x1b[0m\x1b[0m"
+        );
         assert!(drawn.ends_with("\x1b[0m"));
 
         // Any other line shows as sent and draws nothing.
@@ -2035,6 +2121,236 @@ mod tests {
         assert!(pass.result.display.is_none());
         let drawn = pass.rendered_prompt.expect("the prompt draws");
         assert_eq!(plain(&drawn), "[1020(100%)h 800(100%)m 930(100%)v] ");
+    }
+
+    /// A profile that draws `template` over the capture on The Forsaken
+    /// Lands, started the way the session starts it.
+    fn forsaken_profile(template: &str) -> Profile {
+        let mut p = capture_profile(template);
+        super::start_prompt(
+            &mut p,
+            crate::profile_set::is_forsaken_lands("play.theforsakenlands.com"),
+        );
+        p
+    }
+
+    /// Hand a packet from fixtures/gmcp/aabahran to the session the way
+    /// a socket read does.
+    fn feed(p: &mut Profile, file: &str) {
+        let path = format!(
+            "{}/../fixtures/gmcp/aabahran/{file}",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+        let msg = vosh_gmcp::parse(&bytes).unwrap_or_else(|e| panic!("{file}: {e}"));
+        super::observe_prompt_gmcp(p, &msg);
+    }
+
+    fn feed_inline(p: &mut Profile, package: &str, data: serde_json::Value) {
+        super::observe_prompt_gmcp(
+            p,
+            &vosh_gmcp::Message {
+                package: package.into(),
+                data,
+            },
+        );
+    }
+
+    /// The lamented tears cases each server build sends, shared with the
+    /// store tests in the webview.
+    fn lament_cases() -> Vec<serde_json::Value> {
+        let text = include_str!("../../fixtures/gmcp/aabahran/lament.json");
+        let doc: serde_json::Value = serde_json::from_str(text).expect("lament.json reads");
+        doc["cases"].as_array().expect("a list of cases").clone()
+    }
+
+    #[test]
+    fn the_three_lament_cases_draw_hidden_vitals_and_report_them() {
+        for case in lament_cases() {
+            let name = case["name"].as_str().unwrap_or_default();
+            let mut p = forsaken_profile(TEMPLATE);
+            for file in case["packets"].as_array().expect("packets") {
+                feed(&mut p, file.as_str().expect("a file name"));
+            }
+            // The game prints zeros for every vital under the song.
+            let pass = pass_line(&mut p, "[0/0hp 0/0mn 0/0mv]");
+            assert!(pass.result.display.is_none(), "{name}");
+            let drawn = pass.rendered_prompt.expect("the prompt draws");
+            assert_eq!(plain(&drawn), "[?(?%)h ?(?%)m ?(?%)v] ", "{name}");
+            // Each mark in bright black, then the look before it.
+            assert!(
+                drawn.contains("\x1b[3m\x1b[90m?\x1b[39m("),
+                "{name}: {drawn:?}"
+            );
+            // The report the panes read, once.
+            let hidden = p.prompt.take_hidden_change().expect("a change to report");
+            assert_eq!(
+                serde_json::to_value(hidden).expect("it serializes"),
+                case["hidden"],
+                "{name}"
+            );
+            assert!(p.prompt.take_hidden_change().is_none(), "{name}");
+            // The vitals store never reads a hidden value from the vars.
+            let vars = p.prompt.prompt_vars();
+            for key in ["hp", "maxhp", "mana", "maxmana", "move", "maxmove"] {
+                assert_eq!(vars.get(key).map(String::as_str), Some("?"), "{name} {key}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_prompt_draws_again_once_the_song_ends() {
+        let cases = lament_cases();
+        let older = &cases[2];
+        let mut p = forsaken_profile(TEMPLATE);
+        for file in older["packets"].as_array().expect("packets") {
+            feed(&mut p, file.as_str().expect("a file name"));
+        }
+        assert!(p.prompt.take_hidden_change().is_some());
+        // The song ends. Char.Affects comes at once, the rest at the next
+        // prompt.
+        feed(&mut p, "char-affects.gmcp");
+        feed(&mut p, "char-vitals.gmcp");
+        feed(&mut p, "group-info-own-row.gmcp");
+        let pass = pass_line(&mut p, "[850/900hp 760/820mn 250/250mv]");
+        let drawn = pass.rendered_prompt.expect("the prompt draws");
+        assert_eq!(plain(&drawn), "[850(94%)h 760(93%)m 250(100%)v] ");
+        let hidden = p.prompt.take_hidden_change().expect("a change to report");
+        assert_eq!(
+            serde_json::to_value(hidden).expect("it serializes"),
+            serde_json::json!({"vitals":false,"tank":false,"opponent":false,"affects":false,"group":false})
+        );
+    }
+
+    #[test]
+    fn other_hosts_hide_nothing() {
+        let mut p = capture_profile("%hp/%maxhp %opponent %{opponent_hp:pct}");
+        super::start_prompt(&mut p, crate::profile_set::is_forsaken_lands("127.0.0.1"));
+        for file in [
+            "char-affects-lament.gmcp",
+            "char-vitals.gmcp",
+            "char-combat-lament-older.gmcp",
+        ] {
+            feed(&mut p, file);
+        }
+        let pass = pass_line(&mut p, PROMPT_LINE);
+        assert_eq!(
+            plain(&pass.rendered_prompt.expect("the prompt draws")),
+            "1020/1020 a Blackwatch guard 41"
+        );
+        assert!(p.prompt.take_hidden_change().is_none());
+    }
+
+    /// The pieces the phase 1 gate draws from GMCP, with a separator
+    /// between groups.
+    const GATE: &str = "%gold %opponent|%{moon1:game} %{moon3:word}|%pos %lang %weather %{temp:unit} %region|%tank %{tank_hp:game}|%exits";
+
+    /// The packets the new build sends at login and in a fight, plus
+    /// Char.Worth and World.Moons.
+    fn new_build_fight(p: &mut Profile) {
+        for file in [
+            "char-prompt.gmcp",
+            "char-vitals.gmcp",
+            "char-combat-tank.gmcp",
+            "char-state.gmcp",
+            "room-weather.gmcp",
+            "room-info.gmcp",
+        ] {
+            feed(p, file);
+        }
+        feed_inline(
+            p,
+            "Char.Worth",
+            serde_json::json!({"gold":1250,"bank":5000,"exp":125_000,"tnl":1250,"trains":3,"practices":12,"cps":40,"rps":7,"cabal":"none"}),
+        );
+        feed_inline(
+            p,
+            "World.Moons",
+            serde_json::json!({"moons":[
+                {"name":"Lysenties","active":true,"phase":4,"phase_name":"full and whole"},
+                {"name":"Nercuros","active":false,"phase":2,"phase_name":"half-lit and growing"},
+                {"name":"Dyphrities","active":true,"phase":7,"phase_name":"a thin crescent, fading"}
+            ],"eclipse":false,"triad":false,"near_alignment":true}),
+        );
+    }
+
+    #[test]
+    fn the_session_draws_the_gate_pieces_from_the_new_build_packets() {
+        let mut p = forsaken_profile(GATE);
+        new_build_fight(&mut p);
+        let pass = pass_line(&mut p, PROMPT_LINE);
+        assert_eq!(
+            plain(&pass.rendered_prompt.expect("the prompt draws")),
+            "1250 a Blackwatch guard|FUL waning crescent|sit common rainy 60°F Coastal North|Tester [===|===|===|=--]|S"
+        );
+        // Nothing is hidden, so nothing is reported.
+        assert!(p.prompt.take_hidden_change().is_none());
+    }
+
+    #[test]
+    fn exits_draw_from_room_info_only_on_the_new_build() {
+        let mut p = forsaken_profile("[%exits]");
+        feed(&mut p, "char-vitals.gmcp");
+        feed(&mut p, "room-info.gmcp");
+        // No Char.Prompt this session, so Room.Info feeds no exits.
+        let pass = pass_line(&mut p, PROMPT_LINE);
+        assert_eq!(plain(&pass.rendered_prompt.expect("it draws")), "[]");
+        feed(&mut p, "char-prompt.gmcp");
+        let pass = pass_line(&mut p, PROMPT_LINE);
+        assert_eq!(plain(&pass.rendered_prompt.expect("it draws")), "[S]");
+    }
+
+    #[test]
+    fn vosh_supplies_the_tick_target_and_tracked_affects() {
+        let mut p = forsaken_profile("%tick|%{tick:unit}|%target|%{missing:names}");
+        let now = tokio::time::Instant::now();
+        p.tick.enable(now);
+        p.target.name = Some("guard".into());
+        p.ui.tracked_affects = vec![crate::profile_config::TrackedAffect {
+            name: "sanctuary".into(),
+            label: None,
+        }];
+        let supplied = super::prompt_supplies(&p, now);
+        let interval = i64::try_from(p.tick.config.interval.as_secs()).expect("seconds");
+        assert_eq!(
+            supplied.tick,
+            Some(vosh_prompt::vars::Tick {
+                remaining: interval,
+                interval: Some(interval),
+            })
+        );
+        feed(&mut p, "char-affects.gmcp");
+        let pass = pass_line(&mut p, PROMPT_LINE);
+        let drawn = plain(&pass.rendered_prompt.expect("it draws"));
+        let parts: Vec<&str> = drawn.split('|').collect();
+        assert!(
+            parts[0]
+                .parse::<i64>()
+                .is_ok_and(|s| s > 0 && s <= interval),
+            "{drawn}"
+        );
+        assert!(parts[1].ends_with('s'), "{drawn}");
+        assert_eq!(&parts[2..], ["guard", "sanctuary"]);
+    }
+
+    #[test]
+    fn a_new_connection_starts_the_prompt_over() {
+        let mut p = forsaken_profile(GATE);
+        new_build_fight(&mut p);
+        assert!(p.prompt.new_build());
+        let _ = pass_line(&mut p, PROMPT_LINE);
+        assert!(!p.prompt.prompt_vars().is_empty());
+
+        super::end_prompt(&mut p);
+        assert!(!p.prompt.new_build());
+        assert!(p.prompt.prompt_vars().is_empty());
+        assert!(p.prompt.gmcp().get("Char.Worth").is_none());
+        // The hidden state that ended with the connection is never
+        // reported, since the stores clear on the disconnect.
+        assert!(p.prompt.take_hidden_change().is_none());
+
+        super::start_prompt(&mut p, false);
+        assert!(!p.prompt.forsaken());
     }
 
     #[test]
