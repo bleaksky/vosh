@@ -469,24 +469,28 @@ impl Stage {
 
     /// A GA or EOR ended a partial Vosh does not read as your prompt. It
     /// shows as Prompts triggers left it and the row ends, as a GA always
-    /// ended it. `display` is None when a trigger hid it.
+    /// ended it. `display` is None when a trigger hid it. `painted` is the
+    /// region and length an earlier read painted it as. A partial that
+    /// grew in the read the GA came in replaces that region whole.
     pub fn end_partial(
         &mut self,
         out: &mut Output,
         raw: &[u8],
-        painted: Option<u64>,
+        painted: Option<(u64, usize)>,
         before: &[u8],
         display: Option<&[u8]>,
     ) {
         self.sync(out);
         self.unrecorded = true;
-        if painted.is_some() && before.is_empty() && display == Some(raw) {
+        let whole = painted.is_some_and(|(_, len)| len == raw.len());
+        if whole && before.is_empty() && display == Some(raw) {
             self.open = None;
             // Already on screen as it is. Only the row ends.
             out.new_row();
             out.closed = true;
             return;
         }
+        let painted = painted.map(|(gen, _)| gen);
         let mut bytes = before.to_vec();
         if let Some(display) = display {
             bytes.extend_from_slice(display);
@@ -907,12 +911,37 @@ mod tests {
         assert_eq!(out.bytes, b"[Hit Return]\r\n");
         // Painted as it is, so only the row ends.
         let mut out = Output::new(false);
-        stage.end_partial(&mut out, b"> ", Some(4), b"", Some(b"> "));
+        stage.end_partial(&mut out, b"> ", Some((4, 2)), b"", Some(b"> "));
         assert_eq!(out.bytes, b"\r\n");
         assert_eq!(out.replace, None);
+        // It grew in the read the GA came in, so the painted start is
+        // replaced by the whole of it.
+        let mut out = Output::new(false);
+        stage.end_partial(
+            &mut out,
+            b"<100hp 50m 30mv> ",
+            Some((4, 9)),
+            b"",
+            Some(b"<100hp 50m 30mv> "),
+        );
+        assert_eq!(
+            out.replace,
+            Some(Replace {
+                gen: 4,
+                bytes: b"<100hp 50m 30mv> \r\n".to_vec(),
+                fresh: true,
+            })
+        );
+        assert!(out.bytes.is_empty());
         // A Prompts trigger changed it, so it replaces the painted one.
         let mut out = Output::new(false);
-        stage.end_partial(&mut out, b"> ", Some(4), b"", Some(b"\x1b[31m> \x1b[0m"));
+        stage.end_partial(
+            &mut out,
+            b"> ",
+            Some((4, 2)),
+            b"",
+            Some(b"\x1b[31m> \x1b[0m"),
+        );
         assert_eq!(
             out.replace,
             Some(Replace {
@@ -924,7 +953,7 @@ mod tests {
         // A trigger hid it: the painted one is erased, and an unpainted
         // one writes nothing.
         let mut out = Output::new(false);
-        stage.end_partial(&mut out, b"> ", Some(4), b"", None);
+        stage.end_partial(&mut out, b"> ", Some((4, 2)), b"", None);
         assert_eq!(
             out.replace,
             Some(Replace {
