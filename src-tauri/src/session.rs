@@ -2223,6 +2223,27 @@ mod tests {
     }
 
     #[test]
+    fn a_reconnect_in_the_song_hides_the_vitals_from_the_prompt_alone() {
+        // The older build after a link dead reconnect sends no
+        // Char.Affects until the next tick, and Char.Vitals carries the
+        // true values. Only the prompt the capture reads shows the song.
+        let mut p = forsaken_profile(TEMPLATE);
+        feed(&mut p, "char-vitals.gmcp");
+        let pass = pass_line(&mut p, "[0/0hp 0/0mn 0/0mv]");
+        let drawn = pass.rendered_prompt.expect("the prompt draws");
+        assert_eq!(plain(&drawn), "[?(?%)h ?(?%)m ?(?%)v] ");
+        let hidden = p.prompt.take_hidden_change().expect("a change to report");
+        assert_eq!(
+            serde_json::to_value(hidden).expect("it serializes"),
+            serde_json::json!({"vitals":true,"tank":false,"opponent":false,"affects":false,"group":false})
+        );
+        let vars = p.prompt.prompt_vars();
+        for key in ["hp", "maxhp", "mana", "maxmana", "move", "maxmove"] {
+            assert_eq!(vars.get(key).map(String::as_str), Some("?"), "{key}");
+        }
+    }
+
+    #[test]
     fn other_hosts_hide_nothing() {
         let mut p = capture_profile("%hp/%maxhp %opponent %{opponent_hp:pct}");
         super::start_prompt(&mut p, crate::profile_set::is_forsaken_lands("127.0.0.1"));

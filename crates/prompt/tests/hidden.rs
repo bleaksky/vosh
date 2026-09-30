@@ -324,6 +324,59 @@ fn a_blank_tank_health_under_a_named_tank_is_hidden_by_the_capture() {
     assert!(!vars.hidden().tank);
 }
 
+/// The values a prompt trigger hands to `mud.set_prompt_var`, which is
+/// how the capture reaches the engine until it moves into the profile.
+fn script_capture(vars: &mut Vars, pairs: &[(&str, &str)]) {
+    for (name, value) in pairs {
+        vars.set_script(name, value);
+    }
+}
+
+#[test]
+fn a_prompt_trigger_that_reads_zero_maxes_hides_the_vitals() {
+    // The older build after a link dead reconnect in the middle of the
+    // song. No Char.Affects comes until the next tick, Char.Vitals sends
+    // the true values, and the prompt reads `[0/0hp 0/0mn 0/0mv]`.
+    let mut vars = Vars::new(true);
+    feed(&mut vars, "char-vitals.gmcp");
+    let zeros = [
+        ("hp", "0"),
+        ("maxhp", "0"),
+        ("mana", "0"),
+        ("maxmana", "0"),
+        ("move", "0"),
+        ("maxmove", "0"),
+    ];
+    script_capture(&mut vars, &zeros);
+    let hidden = vars.hidden();
+    assert!(hidden.hp && hidden.mana && hidden.moves, "{hidden:?}");
+    assert!(!hidden.affects && !hidden.group && !hidden.tank);
+    assert_eq!(draw(&vars, JAMES), "[?(?%)h ?(?%)m ?(?%)v] ");
+    assert_eq!(resolve(&vars, "maxmana"), Resolved::Hidden);
+    let pv = vars.prompt_vars();
+    assert_eq!(pv.len(), 6);
+    assert!(pv.values().all(|v| v == "?"), "{pv:?}");
+    // The values last one pulse, as a capture does.
+    feed(&mut vars, "char-vitals.gmcp");
+    assert!(vars.hidden().none());
+    script_capture(&mut vars, &zeros);
+    assert!(vars.hidden().vitals());
+    // Clearing one max takes its pair out of the rule.
+    assert!(vars.remove_script("maxhp"));
+    assert!(!vars.hidden().hp);
+    assert!(vars.hidden().mana);
+}
+
+#[test]
+fn a_prompt_trigger_that_reads_a_blank_tank_health_hides_it() {
+    // H2 from a prompt trigger, on a build with no tank object.
+    let mut vars = Vars::new(true);
+    feed(&mut vars, "char-vitals.gmcp");
+    script_capture(&mut vars, &[("tank", "Tester"), ("tank_pct", "")]);
+    assert!(vars.hidden().tank);
+    assert_eq!(draw(&vars, "%tank: %tank_hp"), "Tester: ?");
+}
+
 #[test]
 fn one_hidden_change_per_read() {
     let mut vars = Vars::new(true);
@@ -395,4 +448,9 @@ fn other_games_hide_nothing() {
     assert!(vars.hidden().none());
     assert_eq!(resolve(&vars, "hp"), Resolved::Absent);
     assert_eq!(resolve(&vars, "opponent_hp"), Resolved::Absent);
+    // A prompt trigger that reads a max of 0 there means no such pool.
+    let mut other = Vars::new(false);
+    script_capture(&mut other, &[("mana", "0"), ("maxmana", "0")]);
+    assert!(other.hidden().none());
+    assert_eq!(resolve(&other, "mana"), Resolved::Absent);
 }
