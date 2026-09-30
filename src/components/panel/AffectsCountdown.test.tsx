@@ -95,6 +95,93 @@ function cellsOf(html: string): string[] {
   return out;
 }
 
+/** A selector's specificity as [ids, classes, types]. `:is()`, `:not()`
+ *  and `:has()` count their most specific argument, `:where()` none. */
+function specificity(selector: string): number[] {
+  const out = [0, 0, 0];
+  const ident = (at: number) => {
+    let j = at;
+    while (j < selector.length && /[\w-]/.test(selector[j])) j += 1;
+    return j;
+  };
+  let i = 0;
+  while (i < selector.length) {
+    const ch = selector[i];
+    if (ch === '#') {
+      out[0] += 1;
+      i = ident(i + 1);
+    } else if (ch === '.') {
+      out[1] += 1;
+      i = ident(i + 1);
+    } else if (ch === '[') {
+      out[1] += 1;
+      i = selector.indexOf(']', i) + 1;
+    } else if (ch === ':' && selector[i + 1] === ':') {
+      out[2] += 1;
+      i = ident(i + 2);
+    } else if (ch === ':') {
+      const end = ident(i + 1);
+      const name = selector.slice(i + 1, end);
+      i = end;
+      if (selector[i] !== '(') {
+        out[1] += 1;
+        continue;
+      }
+      let depth = 0;
+      let close = i;
+      for (; close < selector.length; close += 1) {
+        if (selector[close] === '(') depth += 1;
+        if (selector[close] === ')' && --depth === 0) break;
+      }
+      const args = selector.slice(i + 1, close).split(',');
+      i = close + 1;
+      if (name === 'where') continue;
+      if (!['is', 'not', 'has'].includes(name)) {
+        out[1] += 1;
+        continue;
+      }
+      const best = args.map(specificity).sort(compare).at(-1) ?? [0, 0, 0];
+      best.forEach((n, k) => (out[k] += n));
+    } else if (/[a-z]/i.test(ch)) {
+      out[2] += 1;
+      i = ident(i);
+    } else {
+      i += 1;
+    }
+  }
+  return out;
+}
+
+const compare = (x: number[], y: number[]) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+
+/** The top level rules of panel.css that set `property`, each selector
+ *  on its own with where the rule sits. */
+function rulesSetting(property: string): { selector: string; value: string; at: number }[] {
+  const css = panelCss.replace(/\/\*[\s\S]*?\*\//g, '');
+  const out: { selector: string; value: string; at: number }[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < css.length; i += 1) {
+    if (css[i] === '{') {
+      if (depth === 0) {
+        const selectors = css.slice(start, i).trim();
+        const body = css.slice(i + 1, css.indexOf('}', i));
+        const value = new RegExp(`(?:^|[;\\s])${property}:\\s*([^;]+);`).exec(body)?.[1];
+        if (!selectors.startsWith('@') && value !== undefined) {
+          for (const selector of selectors.split(/,(?![^(]*\))/)) {
+            out.push({ selector: selector.replace(/\s+/g, ' ').trim(), value, at: i });
+          }
+        }
+      }
+      depth += 1;
+    } else if (css[i] === '}') {
+      depth -= 1;
+      if (depth === 0) start = i + 1;
+    }
+  }
+  return out;
+}
+
 /** The declarations of one rule in panel.css. */
 function rule(selector: string): string {
   const at = panelCss.indexOf(`${selector} {`);
@@ -178,10 +265,25 @@ describe('CountdownView', () => {
     );
     expect(tinted).toContain('<div class="pane-body" data-affects-tint="">');
     expect(draw(FOURTEEN)).not.toContain('data-affects-tint');
-    // Over the text and the meter, 22 tall.
-    const cell = panelCss.indexOf('[data-affects-tint] .pane-countdown-cell::before {');
-    expect(cell).toBeGreaterThan(0);
-    expect(panelCss.slice(cell, panelCss.indexOf('}', cell))).toContain('top: 0');
+    // Over the text and the meter, 22 tall: of the rules that set the
+    // wash's top on a Countdown cell, the one that wins says 0.
+    const tops = rulesSetting('top').filter(
+      (r) =>
+        r.selector.startsWith('[data-affects-tint]') &&
+        r.selector.includes('.pane-countdown-cell') &&
+        r.selector.endsWith('::before'),
+    );
+    expect(tops.length).toBeGreaterThan(1);
+    const wins = tops.sort(
+      (x, y) => compare(specificity(x.selector), specificity(y.selector)) || x.at - y.at,
+    );
+    expect(wins.at(-1)?.value).toBe('0');
+    expect(specificity('[data-affects-tint] .pane-countdown-cell::before')).toEqual([0, 2, 1]);
+    expect(
+      specificity(
+        '[data-affects-tint] :is(.pane-affect, .pane-countdown-cell):is(.pane-affect-missing, .pane-affect-expiring)::before',
+      ),
+    ).toEqual([0, 3, 1]);
   });
 
   it('names the marker on the body only when it is not the dot', () => {
