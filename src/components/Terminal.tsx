@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Terminal as XTerm, type ITheme } from '@xterm/xterm';
+import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
@@ -14,14 +14,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 import '@xterm/xterm/css/xterm.css';
-import { baseAnsiRecord, subscribeBaseAnsi } from '../lib/baseAnsi';
+import { subscribeBaseAnsi } from '../lib/baseAnsi';
 import { loadScrollback, onOutput, setWindowSize, terminalLocalWrite } from '../lib/session';
-import { findTheme, type AppTheme } from '../lib/themes';
+import { findTheme } from '../lib/themes';
+import { ansi16Of, xtermThemeFor } from '../lib/terminalTheme';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 import { OutputShaper } from '../lib/outputShaper';
 import { RegionWriter } from '../lib/terminalRegion';
 import { ingestRecentNames } from '../lib/recentNames';
-import { hexToRgba } from '../lib/mapPalette';
 
 /** Session flag set when the native surface never came up, so the page
  *  falls back to xterm instead of leaving a transparent hole. */
@@ -71,24 +71,7 @@ export function nativeUnderlay(): boolean {
 function reportNativeTheme(themeId: string, themeTerminalColors: boolean): void {
   if (!nativeSurfaceEnabled()) return;
   const resolved = xtermThemeFor(findTheme(themeId), themeTerminalColors);
-  const ansi = [
-    resolved.black,
-    resolved.red,
-    resolved.green,
-    resolved.yellow,
-    resolved.blue,
-    resolved.magenta,
-    resolved.cyan,
-    resolved.white,
-    resolved.brightBlack,
-    resolved.brightRed,
-    resolved.brightGreen,
-    resolved.brightYellow,
-    resolved.brightBlue,
-    resolved.brightMagenta,
-    resolved.brightCyan,
-    resolved.brightWhite,
-  ].map((c) => c ?? '#000000');
+  const ansi = ansi16Of(resolved);
   void invoke('native_surface_set_theme', {
     background: resolved.background ?? '#101218',
     foreground: resolved.foreground ?? '#cccccc',
@@ -204,34 +187,15 @@ interface Props {
   /// the active match plus the total result count. Use to drive a
   /// "3 / 12" badge in a find toolbar.
   onResultsChanged?: (event: ISearchResultChangeEvent) => void;
+  /// Fires when the cell the text sits in changes size, in CSS px, or
+  /// the column count changes: the size the renderer in use draws a cell
+  /// at, so a band outside the grid can put its characters on the same
+  /// columns.
+  onCellSize?: (size: { width: number; height: number; cols: number }) => void;
 }
 
-// Canonical xterm-256 palette for ANSI codes 0-15. Used when the
-// terminal renders in "independent palette" mode (the default) so
-// the server's 16-color and 256-color output looks the same
-// regardless of which chrome theme the user picked. The 6x6x6
-// cube (codes 16-231) and 24-step grayscale ramp (232-255) are
-// already theme-independent inside xterm.js; this fixes the 0-15
-// slice that the theme used to tint.
-function xtermThemeFor(theme: AppTheme, themeTerminalColors: boolean): ITheme {
-  // Tinted mode lets the chrome theme color server output; otherwise
-  // the BASE palette applies — the canonical xterm-256 chart unless
-  // the user replaced slots in the themes tab (lib/baseAnsi). Either
-  // way the chrome theme owns the surfaces (background, foreground,
-  // cursor, selection).
-  const base: ITheme = themeTerminalColors
-    ? { ...theme.xterm }
-    : { ...theme.xterm, ...baseAnsiRecord() };
-  // Make the selection translucent. Some themes ship a solid (and light)
-  // selectionBackground; the search addon selects every active match, so
-  // a washed-out selection means an unreadable search hit. Blending over
-  // the dark terminal surface keeps the cell dark enough that the line's
-  // own text stays legible, while still marking the selection.
-  if (theme.xterm.selectionBackground) {
-    base.selectionBackground = hexToRgba(theme.xterm.selectionBackground, 0.4);
-  }
-  return base;
-}
+// The terminal's palette lives in src/lib/terminalTheme.ts, which the
+// pinned prompt band reads too.
 
 // TEMPORARY: count live xterm instances to catch a mount/dispose leak
 // across split-scrollback open/close cycles (the history pane mounts and
@@ -248,6 +212,7 @@ export function Terminal({
   onScrollbackLoaded,
   onScrollPosition,
   onResultsChanged,
+  onCellSize,
 }: Props) {
   const quietRef = useRef(quiet);
   quietRef.current = quiet;
@@ -257,6 +222,8 @@ export function Terminal({
   onScrollPositionRef.current = onScrollPosition;
   const onResultsChangedRef = useRef(onResultsChanged);
   onResultsChangedRef.current = onResultsChanged;
+  const onCellSizeRef = useRef(onCellSize);
+  onCellSizeRef.current = onCellSize;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -521,10 +488,29 @@ export function Terminal({
     };
     reportCellMetricsRef.current = reportCellMetrics;
 
+    // The cell size a band outside the grid lays its characters out on.
+    // The native grid draws xterm's device cell rounded to whole pixels
+    // (reportCellMetrics above), and xterm draws its own.
+    let lastCellSize = '';
+    const reportCellSize = () => {
+      if (!onCellSizeRef.current) return;
+      const cell = term.dimensions?.device?.cell;
+      if (!cell?.width || !cell?.height) return;
+      const dpr = window.devicePixelRatio || 1;
+      const native = !quietRef.current && nativeSurfaceEnabled();
+      const width = (native ? Math.round(cell.width) : cell.width) / dpr;
+      const height = (native ? Math.round(cell.height) : cell.height) / dpr;
+      const key = `${width},${height},${term.cols}`;
+      if (key === lastCellSize) return;
+      lastCellSize = key;
+      onCellSizeRef.current({ width, height, cols: term.cols });
+    };
+
     const sync = () => {
       if (!sizer || !host) return;
       reportNativeBounds();
       reportCellMetrics();
+      reportCellSize();
       const rect = sizer.getBoundingClientRect();
       const w = Math.floor(rect.width);
       const h = Math.floor(rect.height);
@@ -536,6 +522,7 @@ export function Terminal({
       safeFit();
       // Fit may have just established or changed the cell dimensions.
       reportCellMetrics();
+      reportCellSize();
     };
 
     // Resizable broadcasts `vosh:resize-progress` { size } from
@@ -841,6 +828,7 @@ export function Terminal({
     const shaper = new OutputShaper(term.cols);
     term.onResize(({ cols }) => {
       shaper.setCols(cols);
+      reportCellSize();
       // Same tail-anchor rationale as in onOutput below: a resize
       // shifts baseY without moving viewportY, which can land the
       // live pane above its tail. Snap on resize so the freeze

@@ -46,7 +46,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use crate::aabahran::Who;
 use crate::capture::{Recognized, Recognizer};
 use crate::config::{CaptureConfig, PromptShow};
-use crate::template::FieldRef;
+use crate::template::{FieldRef, Template, TokenKind};
 
 /// The private OSC Vosh marks regions with.
 pub const MARK_OSC: u32 = 7717;
@@ -57,6 +57,9 @@ pub const RING: usize = 32;
 /// How long a partial that can still become your prompt waits for the
 /// next read before it paints raw, in milliseconds.
 pub const HOLD_MS: u64 = 20;
+
+/// The most rows the band above the command line keeps for your prompt.
+pub const ZONE_MAX: usize = 6;
 
 /// The mark that starts region `gen`, `ESC ] 7717 ; o ; G BEL`.
 pub fn mark(gen: u64) -> Vec<u8> {
@@ -702,6 +705,46 @@ impl Stage {
     /// The next empty line writes nothing.
     pub fn swallows(&self) -> bool {
         self.swallow.is_some()
+    }
+
+    /// The most rows the band above the command line can show for any
+    /// prompt this capture reads, so the band keeps one height while the
+    /// capture, the design and the switch stay the same. Drawing, a way
+    /// the game prints your prompt takes the lines above its last that
+    /// show as sent, plus a row for the design and one for every line
+    /// break in it, conditions or not. A design that reads the whole
+    /// prompt as sent takes that prompt's lines in its place. Not
+    /// drawing, and for the away prompt, it takes its own lines. At least
+    /// 1 and at most [`ZONE_MAX`].
+    pub fn zone(&self, draw: bool, template: &Template) -> usize {
+        let Some(recognizer) = &self.recognizer else {
+            return 1;
+        };
+        let breaks = template
+            .tokens()
+            .iter()
+            .filter(|t| t.kind == TokenKind::Nl)
+            .count();
+        let most = recognizer
+            .shapes()
+            .iter()
+            .map(|(lines, afk)| {
+                if !draw || *afk {
+                    return lines.len();
+                }
+                if self.hides.all {
+                    return breaks + lines.len();
+                }
+                let last = lines.len().saturating_sub(1);
+                let heads = lines[..last]
+                    .iter()
+                    .filter(|groups| !self.hides.line(groups))
+                    .count();
+                heads + 1 + breaks
+            })
+            .max()
+            .unwrap_or(1);
+        most.clamp(1, ZONE_MAX)
     }
 
     /// A new generation for a region.

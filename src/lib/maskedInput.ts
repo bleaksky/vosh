@@ -39,6 +39,9 @@ export interface SubmitContext {
   quickKey: boolean;
   /** The echo color from Settings, or null for the terminal default. */
   echoColor: string | null;
+  /** Your prompt shows pinned above the command line, so the text holds
+   *  no prompt row for an empty line's echo to end. */
+  pinned?: boolean;
 }
 
 /** Whether a key press or a submitted line belongs to the masked field.
@@ -82,13 +85,16 @@ export function draftAfterMaskChange(wasMasked: boolean, masked: boolean, draft:
 /** Plan a submitted line. A line from the masked field echoes only a line
  *  break, stays out of history, and goes to the server as typed, past
  *  aliases, variables, and `#` commands. Every other line echoes in your
- *  echo color, unless a quick key echoes it, and joins history. */
+ *  echo color, unless a quick key echoes it, and joins history. While
+ *  your prompt shows pinned, an empty line echoes nothing, so Enter on an
+ *  empty line moves nothing in the text. */
 export function planSubmit(line: string, context: SubmitContext): SubmitPlan {
   if (context.masked) {
     return { echo: '\r\n', remember: false, local: false, masked: true };
   }
+  const silent = context.quickKey || (context.pinned === true && line.length === 0);
   return {
-    echo: context.quickKey ? null : `${colorizeEcho(line, context.echoColor)}\r\n`,
+    echo: silent ? null : `${colorizeEcho(line, context.echoColor)}\r\n`,
     remember: line.length > 0,
     local: /^#nativesurface\b/i.test(line),
     masked: false,

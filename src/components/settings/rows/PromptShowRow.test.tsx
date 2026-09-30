@@ -17,7 +17,13 @@ vi.mock('@tauri-apps/api/event', () => ({
 // subscribe to. None have come, as before you log in.
 vi.mock('../../../lib/stores/vitalsStore', () => ({ useVitals: () => null }));
 
-const reads: PromptShowState = { show: 'text', capture: true, gameSent: true };
+const reads: PromptShowState = {
+  show: 'text',
+  capture: true,
+  gameSent: true,
+  zone: 1,
+  promptsOff: false,
+};
 
 function draw(value: PromptShow, state: PromptShowState | null = reads): string {
   return renderToStaticMarkup(
@@ -58,11 +64,11 @@ describe('PromptShowField', () => {
   });
 
   it('turns off while the profile reads no prompt, with the Draw row sentence', () => {
-    const sent = draw('text', { show: 'text', capture: false, gameSent: true });
+    const sent = draw('text', { ...reads, capture: false, gameSent: true });
     expect(sent).toContain('class="st-row is-disabled"');
     expect(sent).toContain('Customize your prompt first.');
     expect(disabled(sent)).toBe(3);
-    const older = draw('text', { show: 'text', capture: false, gameSent: false });
+    const older = draw('text', { ...reads, capture: false, gameSent: false });
     expect(older).toContain('Tell Vosh your game&#x27;s prompt first.');
   });
 
@@ -101,16 +107,23 @@ describe('where your prompt shows, found and read', () => {
   });
 
   it('reads the state prompt_show_get returns', () => {
-    expect(normalizePromptShowState({ show: 'pinned', capture: true, game_sent: false })).toEqual({
-      show: 'pinned',
-      capture: true,
-      gameSent: false,
-    });
+    expect(
+      normalizePromptShowState({
+        show: 'pinned',
+        capture: true,
+        game_sent: false,
+        zone: 3,
+        prompts_off: true,
+      }),
+    ).toEqual({ show: 'pinned', capture: true, gameSent: false, zone: 3, promptsOff: true });
     expect(normalizePromptShowState(null)).toEqual({
       show: 'text',
       capture: false,
       gameSent: false,
+      zone: 1,
+      promptsOff: false,
     });
+    expect(normalizePromptShowState({ zone: 40 }).zone).toBe(6);
     expect(normalizePromptShowState({ show: 'floating' }).show).toBe('text');
   });
 });
