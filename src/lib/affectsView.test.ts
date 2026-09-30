@@ -27,25 +27,25 @@ describe('affectsView', () => {
       track('sanctuary', 'haste', 'giant strength', 'fly', 'protection evil', 'detect invisible'),
     );
     expect(brief(rows)).toEqual([
-      ['Protection evil', 'missing', null],
-      ['Detect invisible', 'missing', null],
-      ['Fly', 'expiring', 2],
-      ['Haste', 'present', 8],
-      ['Sanctuary', 'present', 12],
-      ['Giant strength', 'present', 18],
-      ['Poison', 'harmful', 3],
-      ['Bless', 'untracked', 6],
-      ['Armor', 'untracked', 24],
+      ['protection evil', 'missing', null],
+      ['detect invisible', 'missing', null],
+      ['fly', 'expiring', 2],
+      ['haste', 'present', 8],
+      ['sanctuary', 'present', 12],
+      ['giant strength', 'present', 18],
+      ['poison', 'harmful', 3],
+      ['bless', 'untracked', 6],
+      ['armor', 'untracked', 24],
     ]);
   });
 
   it('lists missing tracked affects first, in tracked order', () => {
     const rows = affectsView([aff('haste', 5)], track('sanctuary', 'haste', 'armor', 'bless'));
     expect(brief(rows)).toEqual([
-      ['Sanctuary', 'missing', null],
-      ['Armor', 'missing', null],
-      ['Bless', 'missing', null],
-      ['Haste', 'present', 5],
+      ['sanctuary', 'missing', null],
+      ['armor', 'missing', null],
+      ['bless', 'missing', null],
+      ['haste', 'present', 5],
     ]);
   });
 
@@ -54,7 +54,7 @@ describe('affectsView', () => {
       [aff('a', null), aff('b', -1), aff('c', 30), aff('d', 4), aff('e', 11)],
       track('a', 'b', 'c', 'd', 'e'),
     );
-    expect(rows.map((r) => r.name)).toEqual(['D', 'E', 'C', 'B', 'A']);
+    expect(rows.map((r) => r.name)).toEqual(['d', 'e', 'c', 'b', 'a']);
     expect(rows.find((r) => r.key === 'b')?.ticks).toBe(-1);
     expect(rows.find((r) => r.key === 'a')?.ticks).toBeNull();
   });
@@ -94,12 +94,12 @@ describe('affectsView', () => {
       [],
     );
     expect(brief(rows)).toEqual([
-      ['Poison', 'harmful', 5],
-      ['Curse', 'harmful', 20],
-      ['Plague', 'harmful', -1],
-      ['Armor', 'untracked', 3],
-      ['Bless', 'untracked', 12],
-      ['Detect magic', 'untracked', -1],
+      ['poison', 'harmful', 5],
+      ['curse', 'harmful', 20],
+      ['plague', 'harmful', -1],
+      ['armor', 'untracked', 3],
+      ['bless', 'untracked', 12],
+      ['detect magic', 'untracked', -1],
     ]);
   });
 
@@ -115,7 +115,7 @@ describe('affectsView', () => {
 
   it('matches tracked names without regard to case or spacing', () => {
     const rows = affectsView([aff('giant  strength', 9)], track('Giant Strength'));
-    expect(brief(rows)).toEqual([['Giant strength', 'present', 9]]);
+    expect(brief(rows)).toEqual([['giant  strength', 'present', 9]]);
   });
 
   it('shows your label in place of the name', () => {
@@ -129,21 +129,29 @@ describe('affectsView', () => {
     );
     expect(brief(rows)).toEqual([
       ['Sanc', 'missing', null],
-      ['Haste', 'missing', null],
+      ['haste', 'missing', null],
       ['Shroud', 'present', 4],
     ]);
   });
 
-  it('leaves names that already carry capitals as written', () => {
-    const rows = affectsView([aff('Detect Invisible', 9)], track('Protection EVIL'));
-    expect(rows.map((r) => r.name)).toEqual(['Protection EVIL', 'Detect Invisible']);
+  it('shows every name exactly as the game sends it or you track it', () => {
+    const rows = affectsView(
+      [aff('stone skin', 9), aff('Battle Hymn', 4), aff('weapon: soul reaver', -1)],
+      track('Protection EVIL', 'stone skin'),
+    );
+    expect(rows.map((r) => r.name)).toEqual([
+      'Protection EVIL',
+      'stone skin',
+      'Battle Hymn',
+      'weapon: soul reaver',
+    ]);
   });
 
   it('collapses duplicate tracked entries', () => {
     const rows = affectsView([aff('haste', 3)], track('haste', 'Haste', 'fly', 'fly'));
     expect(brief(rows)).toEqual([
-      ['Fly', 'missing', null],
-      ['Haste', 'present', 3],
+      ['fly', 'missing', null],
+      ['haste', 'present', 3],
     ]);
   });
 
@@ -156,22 +164,22 @@ describe('affectsView', () => {
   it('floors fractional ticks and folds every negative into permanent', () => {
     const rows = affectsView([aff('armor', 2.7), aff('bless', -5)], []);
     expect(brief(rows)).toEqual([
-      ['Armor', 'untracked', 2],
-      ['Bless', 'untracked', -1],
+      ['armor', 'untracked', 2],
+      ['bless', 'untracked', -1],
     ]);
   });
 
   it('reads the harmful list you pass in place of the default', () => {
     const rows = affectsView([aff('poison', 5), aff('bless', 3)], [], ['Bless']);
     expect(brief(rows)).toEqual([
-      ['Bless', 'harmful', 3],
-      ['Poison', 'untracked', 5],
+      ['bless', 'harmful', 3],
+      ['poison', 'untracked', 5],
     ]);
   });
 
   it('keeps a tracked harmful affect in the tracked run', () => {
     const rows = affectsView([aff('poison', 1)], track('poison'));
-    expect(brief(rows)).toEqual([['Poison', 'expiring', 1]]);
+    expect(brief(rows)).toEqual([['poison', 'expiring', 1]]);
   });
 
   it('skips blank names and returns nothing for empty input', () => {

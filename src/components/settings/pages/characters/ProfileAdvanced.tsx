@@ -1,6 +1,5 @@
 import { useId, useState } from 'react';
 import { normalizeAffectName } from '../../../../lib/affects';
-import { sentenceCase } from '../../../../lib/affectsView';
 import type { TrackedAffect } from '../../../../lib/session';
 import {
   moveTrackedAffect,
@@ -52,7 +51,7 @@ export function ProfileAdvanced({ tracked, onTracked }: Props) {
                     value={affect.label ?? ''}
                     width={140}
                     aria-label={`Label for ${affect.name}`}
-                    placeholder={sentenceCase(affect.name)}
+                    placeholder={affect.name}
                     onCommit={(text) =>
                       onTracked((list) => setTrackedAffectLabel(list, at(list), text))
                     }

@@ -191,7 +191,7 @@ function AddAffectField({ tracked, onAdd, onClose }: AddAffectFieldProps) {
             onMouseMove={() => setActive(i)}
             onClick={() => add(s.name)}
           >
-            {s.label}
+            {s.name}
           </li>
         ))}
       </ul>
