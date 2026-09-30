@@ -48,11 +48,13 @@ pub(crate) struct Profile {
     /// The catalog groups each of this profile's folders became in the
     /// shared catalog, which `#group` follows. See [`GroupFolders`].
     pub(crate) group_folders: GroupFolders,
-    /// What the custom prompt reads: the values triggers write with
+    /// The custom prompt: the profile's `[prompt]` table, and what the
+    /// session feeds it, the values triggers write with
     /// `mud.set_prompt_var(name, value)`, the latest packet of each GMCP
-    /// package, and the hidden state worked out from them. Session only.
-    /// A profile switch keeps the packets and a disconnect clears them.
-    pub(crate) prompt: vosh_prompt::Vars,
+    /// package, and the hidden state worked out from them. The table lasts
+    /// with the profile. A profile switch keeps the packets and drops the
+    /// values, and a disconnect clears both.
+    pub(crate) prompt: vosh_prompt::PromptEngine,
     /// The active profile's name as Vosh shows it, `Default` for the
     /// reserved default, which the custom prompt draws for `%profile`.
     /// Set at launch, on a switch and on a rename, so the session reads
