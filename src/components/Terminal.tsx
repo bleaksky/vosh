@@ -15,7 +15,7 @@ import { listen } from '@tauri-apps/api/event';
 
 import '@xterm/xterm/css/xterm.css';
 import { baseAnsiRecord, subscribeBaseAnsi } from '../lib/baseAnsi';
-import { loadScrollback, onOutput, setWindowSize } from '../lib/session';
+import { loadScrollback, onOutput, setWindowSize, terminalLocalWrite } from '../lib/session';
 import { findTheme, type AppTheme } from '../lib/themes';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 import { WordWrapper } from '../lib/wordWrap';
@@ -793,7 +793,7 @@ export function Terminal({
             // seeded the grid: after a reload the grid already holds the
             // history and its first banner, and another would stack.
             if (seededNative) {
-              void invoke('native_surface_echo', { text: banner }).catch(() => {});
+              void terminalLocalWrite(banner).catch(() => {});
             }
           }
         }

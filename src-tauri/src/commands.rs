@@ -1616,26 +1616,11 @@ pub(crate) fn native_surface_set_visible(visible: bool) {
     }
 }
 
-/// Tier 3 native renderer (macOS): echo locally-sent input into the grid so
-/// the user sees their own commands (xterm gets the same bytes via
-/// onLocalEcho). `text` is the already-styled echo line. A no-op elsewhere.
-#[tauri::command]
-pub(crate) fn native_surface_echo(text: String) {
-    #[cfg(native_surface)]
-    {
-        crate::term_grid::feed_local(text.as_bytes());
-        crate::native_surface::request_redraw();
-    }
-    #[cfg(not(native_surface))]
-    {
-        let _ = text;
-    }
-}
-
 /// Write text the webview drew itself, such as your typed echo or an
 /// error notice. The native grid takes it too, as it takes every session
 /// write, so it keeps the same content as xterm whichever renderer shows,
 /// and the session closes the open row, since that text now follows it.
+/// The webview calls it for every such write, on either renderer.
 #[tauri::command]
 pub(crate) async fn terminal_local_write(
     state: State<'_, SharedState>,

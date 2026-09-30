@@ -211,7 +211,8 @@ The frontend reports state to the surface through commands:
 (Cmd+C), `native_surface_set_theme` (bg/fg/selection + ANSI palette),
 `native_surface_set_font` (family + size), `native_surface_set_bright_bold`
 (weight toggle), `native_surface_set_visible` (overlay suppression),
-`native_surface_echo` (sent input), `native_surface_find` /
+`terminal_local_write` (text the page writes itself, such as your sent
+input), `native_surface_find` /
 `native_surface_find_clear` (search). The backend feeds the grid from
 `session.rs`, redraws via `request_redraw`, advertises the surface grid
 size as NAWS, and emits `vosh://native-grid-size` so the live pane can
