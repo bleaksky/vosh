@@ -25,6 +25,8 @@
 //!   and is turned off there.
 //! - A profile that already has a capture keeps it. `prompt-prefix`, which
 //!   only hides a line, is left alone.
+//! - Nothing moves while a profile file does not read, since Vosh cannot
+//!   tell whether it draws. The move waits for the next launch.
 //!
 //! The move is recorded in `profiles.toml` as `prompt-capture-to-profile`
 //! and runs once. Launch runs it before any profile loads, under the
@@ -267,15 +269,10 @@ pub(crate) fn migrate(set: &ProfileSet, app_data: &Path, loadout: bool) -> Resul
     for entry in set.list() {
         let path = set.profile_path(&entry.name);
         let config = if path.exists() {
-            match ProfileConfig::load(&path) {
-                Ok(config) => config,
-                Err(e) => {
-                    // Launch holds a file that does not read, and the move
-                    // never writes over it.
-                    tracing::warn!(error = %e, path = %path.display(), "prompt capture move: profile file does not read, left out");
-                    continue;
-                }
-            }
+            // A file that does not read may be the one that draws, so the
+            // whole move waits. Launch holds the file, and the move never
+            // writes over it.
+            ProfileConfig::load(&path).map_err(|e| format!("{}: {e}", path.display()))?
         } else {
             ProfileConfig::default()
         };
@@ -938,13 +935,30 @@ mud.set_prompt_var('move', captures[4])"""
     }
 
     #[test]
-    fn a_profile_file_that_does_not_read_is_left_as_it_is() {
-        let dir = james_like(CAPTURE_TRIGGER);
-        let root = dir.path();
-        std::fs::write(root.join("profiles/Test-Prompt.toml"), "not [ toml").unwrap();
-        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
-        assert_eq!(text(root, "profiles/Test-Prompt.toml"), "not [ toml");
-        assert!(!catalog_trigger(root, "prompt-capture").enabled);
+    fn a_profile_file_that_does_not_read_leaves_the_move_for_the_next_launch() {
+        for name in ["default", "Test-Prompt"] {
+            let dir = james_like(CAPTURE_TRIGGER);
+            let root = dir.path();
+            let path = root.join("profiles").join(format!("{name}.toml"));
+            let good = std::fs::read_to_string(&path).unwrap();
+            std::fs::write(&path, format!("{good}\nnot [ toml")).unwrap();
+            let before = snapshot(root);
+            // Vosh cannot tell whether the file draws, so nothing moves
+            // and nothing is written.
+            assert!(run(root).is_empty(), "{name}");
+            assert_eq!(snapshot(root), before, "{name}");
+            assert!(catalog_trigger(root, "prompt-capture").enabled, "{name}");
+
+            // Fixed, the next launch moves the capture where it belongs.
+            std::fs::write(&path, good).unwrap();
+            assert_eq!(run(root), [MOVED_INTO_DEFAULT], "{name}");
+            assert_eq!(
+                moved_capture(&profile(root, "default").prompt_config()).lines,
+                [PATTERN]
+            );
+            assert_eq!(text(root, "profiles/Healer.toml"), HEALER_FILE);
+            assert_eq!(text(root, "profiles/Test-Prompt.toml"), TEST_PROMPT_FILE);
+        }
     }
 
     #[test]
