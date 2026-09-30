@@ -31,6 +31,30 @@ describe('the help on values the game hides', () => {
   });
 });
 
+describe('the help on the affects pane', () => {
+  const topic = () => {
+    const found = HELP_TOPICS.find((t) => t.id === 'shape.group-affects');
+    if (!found) throw new Error('no affects topic');
+    return found;
+  };
+
+  it('describes the timers first pane with the exact names', () => {
+    const text = topic().body;
+    expect(text).toContain('then the name exactly as the game sends it');
+    expect(text).toContain('`+` means permanent and `-` means you do not have it');
+    expect(text).toContain('keep their places as the hours change');
+    expect(text).toContain('Harmful affects like `faerie fire` come first');
+    expect(text).toContain('the last entry says how many more there are, like `5 more`');
+    expect(text).not.toContain('duration mini bar');
+    expect(text).not.toContain('renders nothing until you list');
+  });
+
+  it('reads the same in HELP.md', () => {
+    const { number, title, body: text } = topic();
+    expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
+  });
+});
+
 describe('the help on password prompts', () => {
   const kept =
     'Lines you type at a password prompt are not saved. Each one shows as `> (hidden)` in its place.';
