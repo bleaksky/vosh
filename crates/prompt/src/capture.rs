@@ -830,6 +830,7 @@ mod tests {
             Who {
                 immortal: true,
                 mobile: false,
+                keeps_backticks: false,
             },
         )
         .expect("it compiles");

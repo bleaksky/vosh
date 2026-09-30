@@ -1,8 +1,9 @@
 //! A PROMPT setting as the game stores it, and the two passes the game
 //! prints it in.
 //!
-//! [`normalize`] does what `do_prompt` and `do_fprompt`
-//! (`act_info.c:2083-2146`) do to a setting you type. A setting the game
+//! [`normalize`] does what the game does to a setting you type:
+//! `read_from_buffer` reads the line, and `do_prompt` and `do_fprompt`
+//! (`act_info.c:2083-2146`) store what it read. A setting the game
 //! sends in Char.Prompt, or shows after `Current prompt:`, is already
 //! stored that way, so Vosh reads it as it came and skips this step.
 //!
@@ -45,29 +46,24 @@ pub struct Normalized {
 }
 
 /// Store a setting you typed as the game does. Vosh trims the ends of
-/// every command it sends. The game reads the first 253 characters of
-/// the line, which leaves [`keeps`] for the setting, and skips the
-/// spaces after the command word (`one_argument`, `interp.c:1704-1727`),
-/// so no space before or after the setting reaches `do_prompt`. That
-/// turns each `~` into `-` (`smash_tilde`) and adds one space unless the
-/// setting ends in `%c` in any case (`str_suffix`). `prompt all` is the
-/// stock prompt and `fprompt off` clears the fight prompt. A setting that
-/// is empty or only spaces stays empty, which the game draws as its
-/// fallback prompt.
+/// every command it sends. The game reads the line through
+/// [`read_line`], and skips the spaces after the command word
+/// (`one_argument`, `interp.c:1704-1727`), so no space before the
+/// setting reaches `do_prompt`. That turns each `~` into `-`
+/// (`smash_tilde`) and adds one space unless the setting ends in `%c` in
+/// any case (`str_suffix`). `prompt all` is the stock prompt and
+/// `fprompt off` clears the fight prompt. A setting that is empty or
+/// only spaces stays empty, which the game draws as its fallback prompt.
 ///
 /// `prompt off` turns prompts off and sets nothing, so the caller
 /// handles it before it gets here.
-pub fn normalize(typed: &str, which: Which) -> Normalized {
+pub fn normalize(typed: &str, which: Which, who: Who) -> Normalized {
     let empty = || Normalized {
         text: String::new(),
         warnings: Vec::new(),
     };
     let keeps = keeps(which);
-    let trimmed = typed.trim();
-    let (read, cut) = match trimmed.char_indices().nth(keeps) {
-        Some((at, _)) => (&trimmed[..at], true),
-        None => (trimmed, false),
-    };
+    let (read, cut) = read_line(typed.trim(), keeps, who);
     let argument = read.trim_start_matches(' ');
     match which {
         Which::Prompt if argument == "all" => {
@@ -99,6 +95,29 @@ pub fn normalize(typed: &str, which: Which) -> Normalized {
         text.push(' ');
     }
     Normalized { text, warnings }
+}
+
+/// What the game reads of a setting you type, as `read_from_buffer`
+/// (`comm.c:1474-1500`) reads the line, and whether the line ran out of
+/// room. It keeps printable ASCII alone and at most `room` characters of
+/// it. For anyone it does not keep backticks for, it drops each backtick
+/// and the character after it, and those take no room.
+fn read_line(typed: &str, room: usize, who: Who) -> (String, bool) {
+    let mut read = String::new();
+    let mut count = 0;
+    let mut chars = typed.chars();
+    while let Some(c) = chars.next() {
+        if count >= room {
+            return (read, true);
+        }
+        if c == '`' && !who.keeps_backticks {
+            chars.next();
+        } else if c == ' ' || c.is_ascii_graphic() {
+            read.push(c);
+            count += 1;
+        }
+    }
+    (read, false)
 }
 
 /// True when a setting ends in `%c` or `%C`, as `str_suffix("%c", …)`
@@ -359,8 +378,22 @@ fn run(
 mod tests {
     use super::*;
 
+    /// A mortal, whose backticks the game drops.
+    const MORTAL: Who = Who {
+        immortal: false,
+        mobile: false,
+        keeps_backticks: false,
+    };
+
+    /// An immortal with trust 55 or more, whose backticks the game keeps.
+    const TRUSTED: Who = Who {
+        immortal: true,
+        mobile: false,
+        keeps_backticks: true,
+    };
+
     fn stored(typed: &str) -> String {
-        normalize(typed, Which::Prompt).text
+        normalize(typed, Which::Prompt, MORTAL).text
     }
 
     #[test]
@@ -403,15 +436,15 @@ mod tests {
         assert_eq!(stored("all  "), PROMPT_ALL);
         // The game compares exactly, so anything else is a setting.
         assert_eq!(stored("All"), "All ");
-        assert_eq!(normalize("all", Which::Fight).text, "all ");
+        assert_eq!(normalize("all", Which::Fight, MORTAL).text, "all ");
     }
 
     #[test]
     fn fprompt_off_clears_the_fight_prompt() {
-        assert_eq!(normalize("off", Which::Fight).text, "");
-        assert_eq!(normalize("OFF", Which::Fight).text, "");
-        assert_eq!(normalize(" off ", Which::Fight).text, "");
-        assert_eq!(normalize("off!", Which::Fight).text, "off! ");
+        assert_eq!(normalize("off", Which::Fight, MORTAL).text, "");
+        assert_eq!(normalize("OFF", Which::Fight, MORTAL).text, "");
+        assert_eq!(normalize(" off ", Which::Fight, MORTAL).text, "");
+        assert_eq!(normalize("off!", Which::Fight, MORTAL).text, "off! ");
     }
 
     #[test]
@@ -422,19 +455,19 @@ mod tests {
     #[test]
     fn an_empty_setting_stays_empty() {
         assert_eq!(
-            normalize("", Which::Prompt),
-            normalize("   ", Which::Prompt)
+            normalize("", Which::Prompt, MORTAL),
+            normalize("   ", Which::Prompt, MORTAL)
         );
         assert_eq!(stored(""), "");
         assert_eq!(stored("   "), "");
-        assert_eq!(normalize("", Which::Fight).text, "");
+        assert_eq!(normalize("", Which::Fight, MORTAL).text, "");
     }
 
     #[test]
     fn the_game_reads_the_first_253_characters_of_the_line() {
         // `prompt ` takes 7 of them, so 246 are left for the setting.
         let typed = format!("{}%h", "x".repeat(300));
-        let got = normalize(&typed, Which::Prompt);
+        let got = normalize(&typed, Which::Prompt, MORTAL);
         assert_eq!(got.text, format!("{} ", "x".repeat(246)));
         assert_eq!(
             got.warnings,
@@ -448,35 +481,76 @@ mod tests {
         );
         // A setting of 250 is cut too, where the game cuts it.
         let typed = format!("<%hhp>{}", "y".repeat(244));
-        let got = normalize(&typed, Which::Prompt);
+        let got = normalize(&typed, Which::Prompt, MORTAL);
         assert_eq!(got.text, format!("<%hhp>{} ", "y".repeat(240)));
         assert_eq!(got.warnings.len(), 1);
         // Exactly 246 is kept whole.
         let typed = "y".repeat(246);
-        let got = normalize(&typed, Which::Prompt);
+        let got = normalize(&typed, Which::Prompt, MORTAL);
         assert_eq!(got.text, format!("{typed} "));
         assert!(got.warnings.is_empty());
         // `fprompt ` takes 8, which leaves 245.
         let typed = "y".repeat(246);
-        let got = normalize(&typed, Which::Fight);
+        let got = normalize(&typed, Which::Fight, MORTAL);
         assert_eq!(got.text, format!("{} ", "y".repeat(245)));
         assert_eq!(
             got.warnings[0].text,
             "The game keeps the first 245 characters of your prompt. Vosh reads the same 245."
         );
-        assert!(normalize(&"y".repeat(245), Which::Fight)
+        assert!(normalize(&"y".repeat(245), Which::Fight, MORTAL)
             .warnings
             .is_empty());
         // A cut that ends in spaces keeps them as the game does, and the
         // game adds its own.
         let typed = format!("{}{}zz", "w".repeat(240), " ".repeat(10));
-        let got = normalize(&typed, Which::Prompt);
+        let got = normalize(&typed, Which::Prompt, MORTAL);
         assert_eq!(got.text, format!("{}{}", "w".repeat(240), " ".repeat(7)));
         assert_eq!(got.warnings[0].span, 246..246);
     }
 
+    #[test]
+    fn a_mortal_loses_each_backtick_and_the_character_after_it() {
+        let mortal = |typed: &str| normalize(typed, Which::Prompt, MORTAL).text;
+        let trusted = |typed: &str| normalize(typed, Which::Prompt, TRUSTED).text;
+        // What the game prints for a mortal is what Vosh reads.
+        assert_eq!(mortal("`(240)[%h/%Hhp]"), "240)[%h/%Hhp] ");
+        assert_eq!(mortal("`1%h``hp [%p] >"), "%hhp [%p] > ");
+        assert_eq!(mortal("[`-%h`=]"), "[%h] ");
+        // A backtick at the end goes alone.
+        assert_eq!(mortal("<%h>`"), "<%h> ");
+        // What it leaves before the setting counts as the spaces there.
+        assert_eq!(mortal("`x <%h>"), "<%h> ");
+        // %l is how a mortal writes a color, and it stays.
+        assert_eq!(mortal("%l1%h%L"), "%l1%h%L ");
+        // Trust 55 keeps them.
+        assert_eq!(trusted("`(240)[%h/%Hhp]"), "`(240)[%h/%Hhp] ");
+        assert_eq!(trusted("`1%h``hp [%p] >"), "`1%h``hp [%p] > ");
+    }
+
+    #[test]
+    fn the_game_reads_only_printable_ascii() {
+        let mortal = |typed: &str| normalize(typed, Which::Prompt, MORTAL).text;
+        assert_eq!(mortal("<%h>\t<%m>"), "<%h><%m> ");
+        assert_eq!(mortal("<%h é>"), "<%h > ");
+        assert_eq!(mortal("é<%h>"), "<%h> ");
+    }
+
+    #[test]
+    fn the_line_counts_only_what_the_game_keeps() {
+        // Ten backtick pairs a mortal loses take no room on the line.
+        let typed = format!("{}{}", "`1".repeat(10), "x".repeat(246));
+        let got = normalize(&typed, Which::Prompt, MORTAL);
+        assert_eq!(got.text, format!("{} ", "x".repeat(246)));
+        assert!(got.warnings.is_empty());
+        // The same line from someone who keeps them runs out of room.
+        let got = normalize(&typed, Which::Prompt, TRUSTED);
+        assert_eq!(got.text, format!("{}{} ", "`1".repeat(10), "x".repeat(226)));
+        assert_eq!(got.warnings.len(), 1);
+    }
+
     /// The Char.Prompt fixtures, which carry settings as the game stores
-    /// them.
+    /// them. The fight prompt's backticks mean an immortal with trust 55
+    /// or more set it, since the game drops them for anyone else.
     const CHAR_PROMPT: [&str; 3] = [
         include_str!("../../../../fixtures/gmcp/aabahran/char-prompt.gmcp"),
         include_str!("../../../../fixtures/gmcp/aabahran/char-prompt-off.gmcp"),
@@ -491,7 +565,7 @@ mod tests {
             let data: serde_json::Value = serde_json::from_str(json).expect("JSON");
             for (key, which) in [("prompt", Which::Prompt), ("fprompt", Which::Fight)] {
                 let setting = data[key].as_str().expect("a string");
-                let got = normalize(setting, which);
+                let got = normalize(setting, which, TRUSTED);
                 assert_eq!(got.text, setting, "{key} in {file}");
                 assert!(got.warnings.is_empty(), "{key} in {file}");
             }

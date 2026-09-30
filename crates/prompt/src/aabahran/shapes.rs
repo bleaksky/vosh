@@ -200,8 +200,8 @@ pub fn compile(
     let (prompt, fprompt) = match origin {
         Origin::Stored => (prompt.to_string(), fprompt.to_string()),
         Origin::Typed => {
-            let p = lex::normalize(prompt, Which::Prompt);
-            let f = lex::normalize(fprompt, Which::Fight);
+            let p = lex::normalize(prompt, Which::Prompt, who);
+            let f = lex::normalize(fprompt, Which::Fight, who);
             warnings.extend(p.warnings);
             warnings.extend(f.warnings);
             (p.text, f.text)

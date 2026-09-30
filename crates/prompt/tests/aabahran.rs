@@ -29,6 +29,7 @@ const TANK: [&str; 2] = [
 const IMMORTAL: Who = Who {
     immortal: true,
     mobile: false,
+    keeps_backticks: false,
 };
 
 fn stored(prompt: &str, fprompt: &str) -> Compiled {
@@ -217,6 +218,28 @@ fn a_typed_prompt_with_spaces_around_it_reads_what_the_game_prints() {
         (compiled.prompt.as_str(), compiled.fprompt.as_str()),
         (PROMPT_ALL, "")
     );
+}
+
+#[test]
+fn a_mortal_typing_backticks_reads_what_the_game_prints() {
+    // A mortal types `prompt `(240)[%h/%Hhp]`. The game drops `( on the
+    // line, stores `240)[%h/%Hhp] ` and prints `240)[1020/1020hp] `.
+    let compiled = compile("`(240)[%h/%Hhp]", "", Origin::Typed, Who::default()).unwrap();
+    assert_eq!(compiled.prompt, "240)[%h/%Hhp] ");
+    let either = shape(&compiled, Which::Prompt, ShapeKind::Either);
+    assert_eq!(
+        values(either.read_partial(&["240)[1020/1020hp] "])),
+        map(&[("hp", "1020"), ("maxhp", "1020")])
+    );
+    // Trust 55 keeps the color, which prints nothing.
+    let trusted = Who {
+        keeps_backticks: true,
+        ..Who::default()
+    };
+    let compiled = compile("`(240)[%h/%Hhp]", "", Origin::Typed, trusted).unwrap();
+    assert_eq!(compiled.prompt, "`(240)[%h/%Hhp] ");
+    let either = shape(&compiled, Which::Prompt, ShapeKind::Either);
+    assert!(either.read_partial(&["[1020/1020hp] "]).is_some());
 }
 
 #[test]
@@ -653,8 +676,8 @@ fn stale_codes_warn_and_read_nothing() {
     assert!(mortal.shapes[0].read_partial(&["<159> 159 "]).is_some());
 
     let mobile = Who {
-        immortal: false,
         mobile: true,
+        ..Who::default()
     };
     let compiled = compile("<lang %s> ", "", Origin::Stored, mobile).unwrap();
     assert_eq!(
@@ -789,8 +812,13 @@ fn every_char_prompt_fixture_compiles_as_sent() {
             "{file}: {:?}",
             compiled.warnings
         );
-        // Stored as sent, a typed copy stores the same.
-        let typed = compile(prompt, fprompt, Origin::Typed, Who::default()).unwrap();
+        // Stored as sent, a typed copy stores the same. The fight
+        // prompt's backticks mean someone the game keeps them for set it.
+        let trusted = Who {
+            keeps_backticks: true,
+            ..Who::default()
+        };
+        let typed = compile(prompt, fprompt, Origin::Typed, trusted).unwrap();
         assert_eq!(
             (typed.prompt, typed.fprompt),
             (compiled.prompt, compiled.fprompt)
