@@ -7,6 +7,8 @@
 //! The PROMPT line compiler (section 3) grows here too.
 //!
 //! - [`lex`] stores a setting you typed as `do_prompt` does.
+//! - [`codes`] holds every value code, the field it fills and the
+//!   pattern Vosh reads it with.
 //! - [`colors`] holds the backtick colors the game sends and rebuilds
 //!   your codes from them.
 //!
@@ -14,6 +16,7 @@
 //! game stores it, and a sentence the card and `#prompt` show as they
 //! are.
 
+pub mod codes;
 pub mod colors;
 pub mod lex;
 
@@ -22,6 +25,16 @@ use std::ops::Range;
 use serde::Serialize;
 
 use crate::gmcp::Affects;
+
+/// Who the prompt is for, which decides what `%u` and `%s` print.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Who {
+    /// An immortal, for whom `%u` prints `pacified` or `not pacified`.
+    pub immortal: bool,
+    /// You control a mobile, which leaves `%s` repeating the text of the
+    /// code before it.
+    pub mobile: bool,
+}
 
 /// Which of your two settings a warning or a shape comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
