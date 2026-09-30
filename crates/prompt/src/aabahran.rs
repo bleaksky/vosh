@@ -4,12 +4,79 @@
 //! here. The older server build sends true values under the song, and
 //! only Char.Affects naming it tells Vosh the game means to hide them.
 //!
-//! The PROMPT line compiler (section 3) grows here too. [`colors`] holds
-//! the backtick colors the game sends and rebuilds your codes from them.
+//! The PROMPT line compiler (section 3) grows here too.
+//!
+//! - [`lex`] stores a setting you typed as `do_prompt` does.
+//! - [`colors`] holds the backtick colors the game sends and rebuilds
+//!   your codes from them.
+//!
+//! Every warning carries the span of the setting it is about, as the
+//! game stores it, and a sentence the card and `#prompt` show as they
+//! are.
 
 pub mod colors;
+pub mod lex;
+
+use std::ops::Range;
+
+use serde::Serialize;
 
 use crate::gmcp::Affects;
+
+/// Which of your two settings a warning or a shape comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+pub enum Which {
+    /// `prompt`, the setting the game draws out of a fight.
+    #[serde(rename = "prompt")]
+    Prompt,
+    /// `fprompt`, the setting it draws in a fight when one is set.
+    #[serde(rename = "fprompt")]
+    Fight,
+}
+
+/// Something about your setting that keeps Vosh from reading all of it,
+/// or that the game changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WarningKind {
+    /// Two codes with nothing between them that tells where one ends.
+    RunTogether,
+    /// A shape too short to tell from other lines.
+    Short,
+    /// `%u` for a mortal.
+    PacifyMortal,
+    /// `%s` while you control a mobile.
+    LangMobile,
+    /// The game kept the first 255 characters.
+    Cut,
+    /// A `%` at the end eats the space the game adds.
+    LonePercent,
+    /// A code shows twice, and Vosh reads the first.
+    Twice,
+}
+
+/// A warning with the span of the setting it is about and its sentence.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Warning {
+    pub kind: WarningKind,
+    pub which: Which,
+    /// Byte range in the setting as the game stores it. The cut is an
+    /// empty range where the game cut.
+    pub span: Range<usize>,
+    /// The sentence to show, final copy.
+    pub text: String,
+}
+
+impl Warning {
+    pub(crate) fn new(kind: WarningKind, which: Which, span: Range<usize>, text: String) -> Self {
+        Self {
+            kind,
+            which,
+            span,
+            text,
+        }
+    }
+}
 
 /// The song that hides your vitals, affects, group and your opponent's
 /// condition while it is on you.
