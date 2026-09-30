@@ -1791,6 +1791,7 @@ pub(crate) struct ProfileUiEvents {
     pub(crate) tracked: Vec<crate::profile_config::TrackedAffect>,
     pub(crate) tick_count: String,
     pub(crate) chip_style: String,
+    pub(crate) affects_display: AffectsDisplay,
     pub(crate) tick: TickConfigPayload,
 }
 
@@ -1804,6 +1805,7 @@ impl ProfileUiEvents {
             event_json("vosh://tracked-affects-changed", &self.tracked),
             event_json("vosh://tick-count-changed", &self.tick_count),
             event_json("vosh://chip-style-changed", &self.chip_style),
+            event_json(AFFECTS_DISPLAY_CHANGED_EVENT, &self.affects_display),
             event_json(TICK_CONFIG_CHANGED_EVENT, &self.tick),
             Some((UI_CONFIG_REPLACED_EVENT, serde_json::Value::Null)),
         ]
@@ -1836,12 +1838,14 @@ pub(crate) fn profile_ui_events(p: &Profile) -> ProfileUiEvents {
         tracked: p.ui.tracked_affects.clone(),
         tick_count: p.ui.tick_count.clone(),
         chip_style: p.ui.chip_style.clone(),
+        affects_display: AffectsDisplay::of(&p.ui),
         tick: tick_config_payload(&p.tick.config),
     }
 }
 
 /// Hand every window the active profile's panes, tracked affects, tick
-/// settings, and chip style, then say the UI config was replaced. For
+/// settings, chip style, and affects display, then say the UI config
+/// was replaced. For
 /// the paths that replace the live UI config wholesale (a profile
 /// switch, an import, `#profile load` and `reset`), which must also bump
 /// the pane generation under the profile lock as they swap. Only a
@@ -3053,6 +3057,9 @@ pub(crate) struct UiConfigPayload {
     pub moons_position: String,
     pub chip_style: String,
     pub tick_count: String,
+    pub affects_style: String,
+    pub affects_marker: String,
+    pub affects_tint: bool,
     /// The [`UI_CONFIG_GENERATION`] this copy was read at. Never reaches
     /// disk. A save without one (a config that never came from the
     /// backend) applies.
@@ -3096,6 +3103,9 @@ impl UiConfigPayload {
             moons_position: ui.moons_position.clone(),
             chip_style: ui.chip_style.clone(),
             tick_count: ui.tick_count.clone(),
+            affects_style: ui.affects_style.clone(),
+            affects_marker: ui.affects_marker.clone(),
+            affects_tint: ui.affects_tint,
             generation: None,
         }
     }
@@ -3139,6 +3149,9 @@ impl UiConfigPayload {
             moons_position,
             chip_style,
             tick_count,
+            affects_style,
+            affects_marker,
+            affects_tint,
             generation: _,
         } = self;
         ui.theme = theme;
@@ -3259,6 +3272,9 @@ impl UiConfigPayload {
             _ => "value_only".to_string(),
         };
         ui.tick_count = crate::profile_config::coerce_tick_count(tick_count);
+        ui.affects_style = crate::profile_config::coerce_affects_style(affects_style);
+        ui.affects_marker = crate::profile_config::coerce_affects_marker(affects_marker);
+        ui.affects_tint = affects_tint;
     }
 }
 
@@ -3468,6 +3484,80 @@ fn apply_theme_pick(
         set(&mut ui.dark_theme, v);
     }
     changed
+}
+
+/// Sent to every window with the Affects pane's style, marker, and tint
+/// whenever they change: a pick from the pane menu, a Settings save
+/// (which the frontend sends itself), or a replace.
+pub(crate) const AFFECTS_DISPLAY_CHANGED_EVENT: &str = "vosh://affects-display-changed";
+
+/// How the Affects pane draws, as every window hears it. Read from the
+/// live profile's `[ui]`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct AffectsDisplay {
+    pub(crate) style: String,
+    pub(crate) marker: String,
+    pub(crate) tint: bool,
+}
+
+impl AffectsDisplay {
+    pub(crate) fn of(ui: &crate::profile_config::UiConfig) -> Self {
+        Self {
+            style: ui.affects_style.clone(),
+            marker: ui.affects_marker.clone(),
+            tint: ui.affects_tint,
+        }
+    }
+}
+
+/// Change the Affects pane's style, marker, or tint without touching the
+/// rest of the UI config, for the picks in the pane's own menu. The
+/// main window holds no whole config to save, and Settings may hold one
+/// with newer fields, so a whole config write from either would put
+/// stale values back. Only what is given changes. Nothing is saved or
+/// sent when the pick changes nothing.
+#[tauri::command]
+pub(crate) async fn ui_set_affects_display(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    style: Option<String>,
+    marker: Option<String>,
+    tint: Option<bool>,
+) -> Result<(), String> {
+    let changed = {
+        let mut p = state.profile.lock().await;
+        apply_affects_display(&mut p.ui, style, marker, tint)
+    };
+    let Some(display) = changed else {
+        return Ok(());
+    };
+    let shared: SharedState = state.inner().clone();
+    persist_profile(&app, &shared).await;
+    broadcast(&app, AFFECTS_DISPLAY_CHANGED_EVENT, &display);
+    Ok(())
+}
+
+/// Write an affects display pick onto the live UI config, coercing an
+/// unknown style or marker to the default. Returns the new display when
+/// anything changed, so an unchanged pick saves and sends nothing.
+fn apply_affects_display(
+    ui: &mut crate::profile_config::UiConfig,
+    style: Option<String>,
+    marker: Option<String>,
+    tint: Option<bool>,
+) -> Option<AffectsDisplay> {
+    let before = AffectsDisplay::of(ui);
+    if let Some(style) = style {
+        ui.affects_style = crate::profile_config::coerce_affects_style(style);
+    }
+    if let Some(marker) = marker {
+        ui.affects_marker = crate::profile_config::coerce_affects_marker(marker);
+    }
+    if let Some(tint) = tint {
+        ui.affects_tint = tint;
+    }
+    let after = AffectsDisplay::of(ui);
+    (after != before).then_some(after)
 }
 
 /// Bulk-install a set of preset triggers. Each trigger should already
@@ -4857,6 +4947,133 @@ mod tests {
     }
 
     #[test]
+    fn affects_style_round_trips() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.affects_style, "timers");
+        for id in ["timers", "countdown", "chips"] {
+            ui.affects_style = id.into();
+            assert_eq!(through_payload(&ui).affects_style, id);
+            assert_eq!(through_toml(&ui).affects_style, id);
+        }
+        // An unknown layout saves as Timers first.
+        ui.affects_style = "grid".into();
+        assert_eq!(through_payload(&ui).affects_style, "timers");
+    }
+
+    #[test]
+    fn affects_marker_round_trips() {
+        let mut ui = UiConfig::default();
+        assert_eq!(ui.affects_marker, "dot");
+        for id in ["dot", "square", "plus_minus", "none"] {
+            ui.affects_marker = id.into();
+            assert_eq!(through_payload(&ui).affects_marker, id);
+            assert_eq!(through_toml(&ui).affects_marker, id);
+        }
+        // An unknown mark saves as the dot.
+        ui.affects_marker = "check".into();
+        assert_eq!(through_payload(&ui).affects_marker, "dot");
+    }
+
+    #[test]
+    fn affects_tint_round_trips() {
+        let mut ui = UiConfig::default();
+        assert!(!ui.affects_tint);
+        assert!(!through_payload(&ui).affects_tint);
+        ui.affects_tint = true;
+        assert!(through_payload(&ui).affects_tint);
+        assert!(through_toml(&ui).affects_tint);
+    }
+
+    #[test]
+    fn a_profile_without_the_affects_display_loads_the_defaults() {
+        let ui = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
+            .unwrap()
+            .ui;
+        assert_eq!(ui.affects_style, "timers");
+        assert_eq!(ui.affects_marker, "dot");
+        assert!(!ui.affects_tint);
+    }
+
+    #[test]
+    fn the_affects_display_stays_with_each_character() {
+        let ui = UiConfig {
+            affects_style: "chips".into(),
+            affects_marker: "square".into(),
+            affects_tint: true,
+            ..UiConfig::default()
+        };
+        let toml = ProfileConfig {
+            ui,
+            ..ProfileConfig::default()
+        }
+        .to_toml()
+        .unwrap();
+        assert!(toml.contains("affects_style = \"chips\""));
+        assert!(toml.contains("affects_marker = \"square\""));
+        assert!(toml.contains("affects_tint = true"));
+    }
+
+    #[test]
+    fn an_affects_display_pick_writes_only_what_it_names() {
+        let mut ui = UiConfig {
+            affects_marker: "square".into(),
+            affects_tint: true,
+            ..UiConfig::default()
+        };
+        let display = super::apply_affects_display(&mut ui, Some("countdown".into()), None, None)
+            .expect("a new style changes the display");
+        assert_eq!(display.style, "countdown");
+        assert_eq!(display.marker, "square");
+        assert!(display.tint);
+        assert_eq!(ui.affects_style, "countdown");
+        assert_eq!(ui.affects_marker, "square");
+        assert!(ui.affects_tint);
+
+        // The same pick again changes nothing, so nothing is saved or sent.
+        assert_eq!(
+            super::apply_affects_display(&mut ui, Some("countdown".into()), None, Some(true)),
+            None
+        );
+
+        // An unknown value coerces to the default before it compares.
+        let display =
+            super::apply_affects_display(&mut ui, None, Some("sparkle".into()), Some(false))
+                .expect("the marker and the tint change");
+        assert_eq!(display.marker, "dot");
+        assert!(!display.tint);
+        assert_eq!(ui.affects_style, "countdown");
+        assert_eq!(
+            super::apply_affects_display(&mut ui, None, Some("dot".into()), None),
+            None
+        );
+    }
+
+    #[test]
+    fn a_profile_load_hands_every_window_the_affects_display() {
+        let mut profile = crate::profile::Profile::default();
+        let mut file = crate::profile_config::ProfileConfig::default();
+        file.ui.affects_style = "chips".into();
+        file.ui.affects_marker = "plus_minus".into();
+        file.ui.affects_tint = true;
+        let _ = file.apply_to(&mut profile);
+        let events = super::profile_ui_events(&profile);
+        assert_eq!(
+            event_payload(&events, "vosh://affects-display-changed"),
+            serde_json::json!({ "style": "chips", "marker": "plus_minus", "tint": true })
+        );
+
+        let ran = crate::input::run_line(&mut profile, "#profile reset");
+        assert!(ran.replaced);
+        assert_eq!(
+            event_payload(
+                &super::profile_ui_events(&profile),
+                "vosh://affects-display-changed"
+            ),
+            serde_json::json!({ "style": "timers", "marker": "dot", "tint": false })
+        );
+    }
+
+    #[test]
     fn a_profile_without_the_vitals_options_loads_the_defaults() {
         let ui = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
             .unwrap()
@@ -5488,6 +5705,7 @@ mod tests {
                 "vosh://tracked-affects-changed",
                 "vosh://tick-count-changed",
                 "vosh://chip-style-changed",
+                "vosh://affects-display-changed",
                 "vosh://tick-config-changed",
                 super::UI_CONFIG_REPLACED_EVENT,
             ]
@@ -6822,6 +7040,9 @@ mod tests {
             ui.vitals_meter = pick(&["line", "bar", "none"]);
             ui.vitals_density = pick(&["rows", "line"]);
             ui.vitals_warn_thirds = n % 2 == 1;
+            ui.affects_style = pick(&["timers", "countdown", "chips"]);
+            ui.affects_marker = pick(&["dot", "square", "plus_minus", "none"]);
+            ui.affects_tint = n % 2 == 0;
             ui.vitals.show_delta = n % 2 == 0;
             ui.tracked_affects = vec![
                 TrackedAffect {

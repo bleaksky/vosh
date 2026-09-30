@@ -922,6 +922,69 @@ export function normalizeVitalsOptions(raw: unknown): VitalsOptions {
   };
 }
 
+/** The layouts the Affects pane draws. `timers` is Timers first, the
+ *  default, with your tracked affects in their slots. `countdown` lists
+ *  every affect by the hours it has left. `chips` groups them as chips,
+ *  what to recast first. */
+export const AFFECTS_STYLES = ['timers', 'countdown', 'chips'] as const;
+
+export type AffectsStyle = (typeof AFFECTS_STYLES)[number];
+
+/** Coerce an unknown affects layout back to Timers first. */
+export function normalizeAffectsStyle(value: unknown): AffectsStyle {
+  return AFFECTS_STYLES.find((style) => style === value) ?? 'timers';
+}
+
+/** The mark beside each tracked affect in the timers and countdown
+ *  layouts. `dot` is the default. `none` draws no mark. */
+export const AFFECTS_MARKERS = ['dot', 'square', 'plus_minus', 'none'] as const;
+
+export type AffectsMarker = (typeof AFFECTS_MARKERS)[number];
+
+/** Coerce an unknown affects marker back to the dot. */
+export function normalizeAffectsMarker(value: unknown): AffectsMarker {
+  return AFFECTS_MARKERS.find((marker) => marker === value) ?? 'dot';
+}
+
+/** How the Affects pane draws, as one event payload. Style and Marker
+ *  from Settings, Layout, Affects or the pane's own menu, and Tint what
+ *  to recast from Settings. */
+export interface AffectsDisplay {
+  style: AffectsStyle;
+  marker: AffectsMarker;
+  /** Tint the missing and running out rows in the timers and countdown
+   *  layouts. Grouped chips always do. */
+  tint: boolean;
+}
+
+export const DEFAULT_AFFECTS_DISPLAY: AffectsDisplay = {
+  style: 'timers',
+  marker: 'dot',
+  tint: false,
+};
+
+/** The affects display a config holds. */
+export function affectsDisplayOf(
+  config: Pick<UiConfig, 'affects_style' | 'affects_marker' | 'affects_tint'>,
+): AffectsDisplay {
+  return {
+    style: config.affects_style,
+    marker: config.affects_marker,
+    tint: config.affects_tint,
+  };
+}
+
+/** Read an affects display off the bus, filling anything missing or
+ *  unknown with the defaults. */
+export function normalizeAffectsDisplay(raw: unknown): AffectsDisplay {
+  const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return {
+    style: normalizeAffectsStyle(o.style),
+    marker: normalizeAffectsMarker(o.marker),
+    tint: o.tint === true,
+  };
+}
+
 /** The light theme a profile starts with. */
 export const DEFAULT_LIGHT_THEME_ID = 'vellum';
 
@@ -1018,6 +1081,12 @@ export interface UiConfig {
   chip_style: ChipStyle;
   /** Which way the status line tick counts, one of TICK_COUNTS. */
   tick_count: TickCount;
+  /** The Affects pane's layout, one of AFFECTS_STYLES. */
+  affects_style: AffectsStyle;
+  /** The mark beside each tracked affect, one of AFFECTS_MARKERS. */
+  affects_marker: AffectsMarker;
+  /** Tint what to recast in the timers and countdown layouts. */
+  affects_tint: boolean;
   /** How many times the backend had replaced the live config when this
    *  copy was read. setUiConfig sends it back, and the backend turns
    *  away a save from a copy read before a later replace. Absent on a
@@ -1216,6 +1285,9 @@ export interface RawUiConfig {
   moons_position?: string;
   chip_style?: string;
   tick_count?: string;
+  affects_style?: string;
+  affects_marker?: string;
+  affects_tint?: boolean;
   generation?: number;
 }
 
@@ -1288,6 +1360,9 @@ export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
         : 'right-edge',
     chip_style: normalizeChipStyle(cfg.chip_style),
     tick_count: normalizeTickCount(cfg.tick_count),
+    affects_style: normalizeAffectsStyle(cfg.affects_style),
+    affects_marker: normalizeAffectsMarker(cfg.affects_marker),
+    affects_tint: cfg.affects_tint === true,
     ...(typeof cfg.generation === 'number' ? { generation: cfg.generation } : {}),
   };
 }
@@ -1405,6 +1480,7 @@ let lastSentConfig: UiConfig | null = null;
 const TERMINAL_LINE_HEIGHT_EVENT = 'vosh://terminal-line-height-changed';
 const VITALS_DENSITY_EVENT = 'vosh://vitals-density-changed';
 const VITALS_OPTIONS_EVENT = 'vosh://vitals-options-changed';
+const AFFECTS_DISPLAY_EVENT = 'vosh://affects-display-changed';
 
 async function emitChanged<T>(
   event: string,
@@ -1531,6 +1607,10 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
   await emitChanged('vosh://moons-position-changed', config.moons_position, prev?.moons_position);
   await emitChanged('vosh://chip-style-changed', config.chip_style, prev?.chip_style);
   await emitChanged('vosh://tick-count-changed', config.tick_count, prev?.tick_count);
+  const display = affectsDisplayOf(config);
+  const prevDisplay = prev ? affectsDisplayOf(prev) : undefined;
+  if (!prevDisplay || !deepEqual(display, prevDisplay)) noteAffectsDisplayEcho(display);
+  await emitChanged(AFFECTS_DISPLAY_EVENT, display, prevDisplay, deepEqual);
   await emitChanged(
     TRACKED_AFFECTS_EVENT,
     config.tracked_affects,
@@ -1673,6 +1753,38 @@ export function primeUiConfigThemePrefs(prefs: ThemePrefs): void {
   if (lastSentConfig) lastSentConfig = { ...lastSentConfig, ...themePrefsOf(prefs) };
 }
 
+// Adopt an affects display the pane menu saved, the same way, so this
+// window's next save does not send it on as its own change.
+export function primeUiConfigAffectsDisplay(display: AffectsDisplay): void {
+  if (!lastSentConfig) return;
+  lastSentConfig = {
+    ...lastSentConfig,
+    affects_style: display.style,
+    affects_marker: display.marker,
+    affects_tint: display.tint,
+  };
+}
+
+// Every window hears its own affects display broadcast too. One this
+// window sent in the last second is its own echo, and adopting it could
+// undo a newer pick made while that save was in flight.
+const AFFECTS_DISPLAY_ECHO_MS = 1000;
+let affectsDisplayEchoes: { key: string; at: number }[] = [];
+
+function noteAffectsDisplayEcho(display: AffectsDisplay): void {
+  const now = Date.now();
+  affectsDisplayEchoes = affectsDisplayEchoes.filter((e) => now - e.at < AFFECTS_DISPLAY_ECHO_MS);
+  affectsDisplayEchoes.push({ key: JSON.stringify(normalizeAffectsDisplay(display)), at: now });
+}
+
+/** Whether an affects display heard on the bus is this window's own
+ *  broadcast coming back. */
+export function isOwnAffectsDisplayEcho(display: AffectsDisplay): boolean {
+  const now = Date.now();
+  const key = JSON.stringify(normalizeAffectsDisplay(display));
+  return affectsDisplayEchoes.some((e) => e.key === key && now - e.at < AFFECTS_DISPLAY_ECHO_MS);
+}
+
 // Every window hears its own broadcast. A theme id or theme fields
 // this window sent in the last second are its own echo, and adopting
 // one could undo a newer pick made while that save was in flight.
@@ -1760,6 +1872,9 @@ export async function setUiConfig(config: UiConfig): Promise<boolean> {
       moons_position: config.moons_position,
       chip_style: config.chip_style,
       tick_count: config.tick_count,
+      affects_style: config.affects_style,
+      affects_marker: config.affects_marker,
+      affects_tint: config.affects_tint,
       generation: config.generation ?? null,
     },
   });
@@ -1821,6 +1936,27 @@ export async function subscribeVitalsDensityChanged(
 ): Promise<UnlistenFn> {
   return listen<unknown>(VITALS_DENSITY_EVENT, (event) => {
     cb(normalizeVitalsDensity(event.payload));
+  });
+}
+
+/** Hear a new affects display, saved from Settings or picked in the
+ *  pane menu, or the one a profile switch brings. */
+export async function subscribeAffectsDisplayChanged(
+  cb: (value: AffectsDisplay) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>(AFFECTS_DISPLAY_EVENT, (event) => {
+    cb(normalizeAffectsDisplay(event.payload));
+  });
+}
+
+/** Save an affects display pick alone, for the pane menu. A full
+ *  setUiConfig from the main window would write its stale copy of every
+ *  other field. The backend tells every window. */
+export async function setAffectsDisplay(patch: Partial<AffectsDisplay>): Promise<void> {
+  await invoke('ui_set_affects_display', {
+    style: patch.style ?? null,
+    marker: patch.marker ?? null,
+    tint: patch.tint ?? null,
   });
 }
 

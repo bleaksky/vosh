@@ -1,6 +1,7 @@
 import { startChatStore } from '../chatStore';
 import { startGroupStore } from '../groupStore';
 import { startImmStore } from '../immStore';
+import { startAffectsDisplayStore } from './affectsDisplayStore';
 import { startAffectsStore } from './affectsStore';
 import { startCharStateStore } from './charStateStore';
 import { startChipStyleStore } from './chipStyleStore';
@@ -35,6 +36,7 @@ export function startStores(): void {
   startVitalsDensityStore();
   startVitalsOptionsStore();
   startAffectsStore();
+  startAffectsDisplayStore();
   startTrackedAffectsStore();
   startCombatStore();
   startGamePromptStore();

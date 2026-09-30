@@ -2,15 +2,22 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type EventCallback } from '@tauri-apps/api/event';
 import {
+  AFFECTS_MARKERS,
+  AFFECTS_STYLES,
+  affectsDisplayOf,
   broadcastUiConfigChanges,
   changedPromptFields,
   decodeOutputPayload,
   followReplacedUiConfig,
   getUiConfig,
+  isOwnAffectsDisplayEcho,
   isOwnThemeEcho,
   migrationAnalyze,
   migrationApply,
   subscribeMigrationApplied,
+  normalizeAffectsDisplay,
+  normalizeAffectsMarker,
+  normalizeAffectsStyle,
   normalizeChipStyle,
   normalizeTerminalLineHeight,
   normalizeTickCount,
@@ -23,6 +30,7 @@ import {
   seedDarkTheme,
   sendInput,
   sendMaskedInput,
+  setAffectsDisplay,
   setUiConfig,
   TERMINAL_LINE_HEIGHTS,
   TICK_COUNTS,
@@ -321,6 +329,88 @@ describe('tick count', () => {
     sent.mockClear();
     await broadcastUiConfigChanges({ ...base, tick_count: 'down' });
     expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://tick-count-changed');
+  });
+});
+
+describe('affects display', () => {
+  it('reads the defaults for a config saved before it existed', () => {
+    const ui = normalizeUiConfig(raw());
+    expect(ui.affects_style).toBe('timers');
+    expect(ui.affects_marker).toBe('dot');
+    expect(ui.affects_tint).toBe(false);
+    expect(affectsDisplayOf(ui)).toEqual({ style: 'timers', marker: 'dot', tint: false });
+  });
+
+  it('keeps every saved choice and coerces anything else to the default', () => {
+    expect(AFFECTS_STYLES).toEqual(['timers', 'countdown', 'chips']);
+    expect(AFFECTS_MARKERS).toEqual(['dot', 'square', 'plus_minus', 'none']);
+    for (const style of AFFECTS_STYLES) expect(normalizeAffectsStyle(style)).toBe(style);
+    for (const marker of AFFECTS_MARKERS) expect(normalizeAffectsMarker(marker)).toBe(marker);
+    expect(normalizeAffectsStyle('grid')).toBe('timers');
+    expect(normalizeAffectsStyle(undefined)).toBe('timers');
+    expect(normalizeAffectsMarker('check')).toBe('dot');
+    expect(normalizeAffectsMarker(3)).toBe('dot');
+    const ui = normalizeUiConfig(
+      raw({ affects_style: 'chips', affects_marker: 'plus_minus', affects_tint: true }),
+    );
+    expect(affectsDisplayOf(ui)).toEqual({ style: 'chips', marker: 'plus_minus', tint: true });
+    expect(normalizeUiConfig(raw({ affects_style: 'bogus' })).affects_style).toBe('timers');
+    expect(normalizeAffectsDisplay(null)).toEqual({ style: 'timers', marker: 'dot', tint: false });
+    expect(normalizeAffectsDisplay({ style: 'countdown', marker: 'none', tint: 'yes' })).toEqual({
+      style: 'countdown',
+      marker: 'none',
+      tint: false,
+    });
+  });
+
+  it('saves all three with the rest of the config', async () => {
+    const sent = vi.mocked(invoke);
+    sent.mockClear();
+    await setUiConfig(
+      normalizeUiConfig(
+        raw({ affects_style: 'countdown', affects_marker: 'square', affects_tint: true }),
+      ),
+    );
+    const [command, args] = sent.mock.calls[0] as [string, { config: Record<string, unknown> }];
+    expect(command).toBe('ui_set_config');
+    expect(args.config).toMatchObject({
+      affects_style: 'countdown',
+      affects_marker: 'square',
+      affects_tint: true,
+    });
+  });
+
+  it('saves a pick from the pane menu alone, never the whole config', async () => {
+    const sent = vi.mocked(invoke);
+    sent.mockClear();
+    await setAffectsDisplay({ marker: 'none' });
+    expect(sent).toHaveBeenCalledWith('ui_set_affects_display', {
+      style: null,
+      marker: 'none',
+      tint: null,
+    });
+    expect(sent.mock.calls.map(([command]) => command)).not.toContain('ui_set_config');
+  });
+
+  it('tells every window when a save changes it, and knows its own echo', async () => {
+    const sent = vi.mocked(emit);
+    const base = normalizeUiConfig(raw());
+    await broadcastUiConfigChanges(base);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, affects_style: 'chips' });
+    const display = { style: 'chips', marker: 'dot', tint: false };
+    expect(sent).toHaveBeenCalledWith('vosh://affects-display-changed', display);
+    expect(isOwnAffectsDisplayEcho({ style: 'chips', marker: 'dot', tint: false })).toBe(true);
+    expect(isOwnAffectsDisplayEcho({ style: 'countdown', marker: 'dot', tint: false })).toBe(false);
+    sent.mockClear();
+    await broadcastUiConfigChanges({ ...base, affects_style: 'chips' });
+    expect(sent.mock.calls.map(([event]) => event)).not.toContain('vosh://affects-display-changed');
+    await broadcastUiConfigChanges({ ...base, affects_style: 'chips', affects_tint: true });
+    expect(sent).toHaveBeenCalledWith('vosh://affects-display-changed', {
+      style: 'chips',
+      marker: 'dot',
+      tint: true,
+    });
   });
 });
 

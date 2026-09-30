@@ -4,10 +4,13 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   followReplacedUiConfig,
   getUiConfig,
+  isOwnAffectsDisplayEcho,
   isOwnThemeEcho,
   loadoutsGetState,
+  primeUiConfigAffectsDisplay,
   primeUiConfigTheme,
   primeUiConfigThemePrefs,
+  subscribeAffectsDisplayChanged,
   subscribeLoadoutsChanged,
   subscribeProfilesChanged,
   subscribePromptConfigChanged,
@@ -334,6 +337,41 @@ export function SettingsApp() {
       primeUiConfigThemePrefs(prefs);
       applyThemePrefs(prefs);
       setConfig((prev) => (prev ? { ...prev, ...prefs } : prev));
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unsub = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+
+  // The Affects pane menu picks a style or a marker in the main window.
+  // The config copy takes it, the way it takes a palette theme pick, so
+  // the next full save from any page carries it instead of writing the
+  // old one back. This window's own save comes back too, and is skipped.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void subscribeAffectsDisplayChanged((display) => {
+      if (isOwnAffectsDisplayEcho(display)) return;
+      primeUiConfigAffectsDisplay(display);
+      setConfig((prev) =>
+        prev &&
+        (prev.affects_style !== display.style ||
+          prev.affects_marker !== display.marker ||
+          prev.affects_tint !== display.tint)
+          ? {
+              ...prev,
+              affects_style: display.style,
+              affects_marker: display.marker,
+              affects_tint: display.tint,
+            }
+          : prev,
+      );
     })
       .then((fn) => {
         if (cancelled) fn();

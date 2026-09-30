@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { createDebouncedWrite, pendingWrites } from '../../../lib/pendingWrites';
 import {
   changedPromptFields,
+  isOwnAffectsDisplayEcho,
   isOwnThemeEcho,
   primeUiConfigPrompt,
   promptFieldsOf,
   setUiConfig,
+  subscribeAffectsDisplayChanged,
   subscribeUiConfigReplaced,
   type PromptFields,
   type UiConfig,
@@ -158,6 +160,34 @@ export function useSettingsAutoSave(setConfig: SetUiConfig, onError: (e: string 
     void subscribeThemePrefs((prefs) => {
       if (isOwnThemeEcho(prefs)) return;
       autoSave.patch((job) => ({ ...job, cfg: { ...job.cfg, ...prefs } }));
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unsub = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+  // An affects style or marker picked in the pane menu while a save
+  // waits patches it the same way, so the save does not put the old
+  // pick back.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    void subscribeAffectsDisplayChanged((display) => {
+      if (isOwnAffectsDisplayEcho(display)) return;
+      autoSave.patch((job) => ({
+        ...job,
+        cfg: {
+          ...job.cfg,
+          affects_style: display.style,
+          affects_marker: display.marker,
+          affects_tint: display.tint,
+        },
+      }));
     })
       .then((fn) => {
         if (cancelled) fn();
