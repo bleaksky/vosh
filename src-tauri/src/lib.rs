@@ -70,6 +70,8 @@ mod characters;
 mod commands;
 mod connection;
 mod exit_flush;
+#[cfg(test)]
+mod fake_mud_tests;
 mod fonts;
 mod forget_passwords;
 mod gmcp_bind;
