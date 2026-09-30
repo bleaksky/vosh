@@ -189,6 +189,35 @@
     "position": "sitting",
     "language": "common"
   },
+  "room-info.gmcp": {
+    "name": "The Bank of Aabahran",
+    "num": 5279,
+    "area": "Fort Blackwatch",
+    "terrain": "inside",
+    "sector": 0,
+    "exits": [
+      "south"
+    ]
+  },
+  "room-info-rhapsody.gmcp": {
+    "name": "A Wondrous Place",
+    "num": 0,
+    "area": "Unknown",
+    "terrain": "unknown",
+    "sector": -1,
+    "exits": [
+      "north",
+      "east",
+      "south",
+      "west",
+      "up",
+      "down"
+    ],
+    "map": {
+      "sector": null,
+      "exits": []
+    }
+  },
   "room-weather-indoors.gmcp": {
     "sky": "indoors",
     "temp": 18,

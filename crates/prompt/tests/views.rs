@@ -8,8 +8,9 @@
 //! no hidden model: the vitals, the affects one row per name, the fight
 //! with a flagged opponent's health and condition left out, the group
 //! with a flagged roster left out, position and language, the weather,
-//! and the prompt settings. Room.Info has no view here, since the engine
-//! reads its fields through the resolver.
+//! the prompt settings, and the room. A view's `map` holds what the Map
+//! pane's room strip reads where it differs from the engine on purpose,
+//! and only the webview test reads it.
 
 mod common;
 
@@ -20,13 +21,62 @@ use vosh_prompt::{FieldRef, Resolved, Value, Values, Vars, Vosh};
 
 const VIEWS: &str = include_str!("../../../fixtures/gmcp/aabahran/views.json");
 
-/// The fixture files with no view, since both sides read them through
-/// other paths.
-const NO_VIEW: &[&str] = &["room-info.gmcp", "room-info-rhapsody.gmcp"];
+/// What a resolved field reads as in the record.
+fn field_json(resolved: Resolved) -> Json {
+    match resolved {
+        Resolved::Value(Value::Num(n)) => json!(n),
+        Resolved::Value(Value::Text(t)) => json!(t),
+        Resolved::Absent | Resolved::Missing => Json::Null,
+        other => panic!("no record reading for {other:?}"),
+    }
+}
+
+/// The room as the prompt engine reads it on the new build, the only
+/// build whose Room.Info feeds Exits (D26). Exits read as direction
+/// words in the game's door order.
+fn room_view(msg: &vosh_gmcp::Message) -> Json {
+    let mut vars = Vars::new(true);
+    vars.observe(
+        "Char.Prompt",
+        json!({"enabled": true, "prompt": "", "fprompt": ""}),
+        at(),
+    );
+    vars.observe(&msg.package, msg.data.clone(), at());
+    let vosh = Vosh::default();
+    let resolver = vars.resolver(&vosh);
+    let get = |name: &str| resolver.resolve(&FieldRef::new(name));
+    let exits: Vec<&str> = match get("exits") {
+        Resolved::Value(Value::Exits { letters, .. }) if letters != "none" => letters
+            .split(' ')
+            .map(|letter| match letter {
+                "N" => "north",
+                "E" => "east",
+                "S" => "south",
+                "W" => "west",
+                "U" => "up",
+                "D" => "down",
+                other => panic!("no door {other}"),
+            })
+            .collect(),
+        Resolved::Value(Value::Exits { .. }) => Vec::new(),
+        other => panic!("exits read {other:?}"),
+    };
+    json!({
+        "name": field_json(get("room")),
+        "num": field_json(get("room_num")),
+        "area": field_json(get("area")),
+        "terrain": field_json(get("terrain")),
+        "sector": field_json(get("sector")),
+        "exits": exits,
+    })
+}
 
 /// The engine's view of one packet.
 fn view(file: &str, text: &str) -> Json {
     let msg = vosh_gmcp::parse(text.as_bytes()).unwrap_or_else(|e| panic!("{file}: {e}"));
+    if msg.package == "Room.Info" {
+        return room_view(&msg);
+    }
     let mut snapshot = Snapshot::new();
     let observed = snapshot.observe(&msg.package, msg.data.clone(), at());
     // Off the Forsaken Lands rules nothing is hidden, so the resolver
@@ -124,13 +174,15 @@ fn the_engine_reads_every_packet_as_the_record_says() {
     let views: Map<String, Json> = serde_json::from_str(VIEWS).expect("views.json reads");
     let mut seen = Vec::new();
     for (file, text) in FIXTURES {
-        if NO_VIEW.contains(file) {
-            assert!(!views.contains_key(*file), "{file} has a view");
-            continue;
-        }
-        let want = views
+        let mut want = views
             .get(*file)
-            .unwrap_or_else(|| panic!("views.json has no view of {file}"));
+            .unwrap_or_else(|| panic!("views.json has no view of {file}"))
+            .clone();
+        // The Map pane's own reading is for the webview test.
+        if let Some(view) = want.as_object_mut() {
+            view.remove("map");
+        }
+        let want = &want;
         let got = view(file, text);
         assert_eq!(
             &got,

@@ -7,6 +7,7 @@ import { parseCharState } from '../lib/stores/charStateStore';
 import { parseCombat } from '../lib/stores/combatStore';
 import { parseGamePrompt } from '../lib/stores/gamePromptStore';
 import { parseVitalsPacket } from '../lib/stores/vitalsStore';
+import { parseRoomInfo } from '../lib/stores/roomStore';
 import { parseRoomWeather } from '../lib/stores/weatherStore';
 import { aabahranFixtureNames, aabahranPacket } from './aabahranGmcp';
 
@@ -14,8 +15,14 @@ import { aabahranFixtureNames, aabahranPacket } from './aabahranGmcp';
 // fixtures/gmcp/aabahran/views.json, which the prompt engine's tests in
 // crates/prompt/tests/views.rs read too (D29). The engine keeps its own
 // copy of the packages to draw your prompt, and the panes read these
-// stores, so both readings are held to one record. Room.Info has no
-// view, since the engine reads its fields through the resolver.
+// stores, so both readings are held to one record.
+//
+// A view's `map` holds what the Map pane's room strip reads where it
+// differs from the prompt engine on purpose. Under rhapsody of delusion
+// the game sends a made up room with all six exits and room 0 behind
+// each. The Exits piece shows the six, as %e prints them, and the strip
+// lists only exits with a room behind them. The strip colors a sector
+// only when it has one, and the engine prints the game's -1.
 
 // The stores reach the Tauri bridge when they start. The parsers under
 // test never do.
@@ -24,8 +31,6 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(() => Promise.resolve()),
   listen: vi.fn(() => Promise.resolve(() => undefined)),
 }));
-
-const NO_VIEW = ['room-info.gmcp', 'room-info-rhapsody.gmcp'];
 
 /** The stores' view of one packet, in the record's shape. */
 function view(name: string): unknown {
@@ -76,6 +81,18 @@ function view(name: string): unknown {
       return parseRoomWeather(data);
     case 'Char.Prompt':
       return parseGamePrompt(data);
+    case 'Room.Info': {
+      const info = parseRoomInfo(data);
+      if (info === null) return null;
+      return {
+        name: info.name,
+        num: info.vnum,
+        area: info.area,
+        terrain: info.terrain,
+        sector: info.sector,
+        exits: info.exits,
+      };
+    }
     default:
       throw new Error(`${name}: no view for ${pkg}`);
   }
@@ -83,16 +100,21 @@ function view(name: string): unknown {
 
 const record = views as Record<string, unknown>;
 
+/** The record's view as the stores read it, with the Map pane's own
+ *  readings laid over the engine's. */
+function storeView(name: string): unknown {
+  const want = record[name];
+  if (!want || typeof want !== 'object' || !('map' in want)) return want;
+  const { map, ...rest } = want as Record<string, unknown>;
+  return { ...rest, ...(map as Record<string, unknown>) };
+}
+
 describe('the Aabahran packets', () => {
   it('read in the stores as the record says, the same as in the prompt engine', () => {
     const names = aabahranFixtureNames();
     for (const name of names) {
-      if (NO_VIEW.includes(name)) {
-        expect(record, name).not.toHaveProperty([name]);
-        continue;
-      }
       expect(record, `views.json has no view of ${name}`).toHaveProperty([name]);
-      expect(view(name), name).toEqual(record[name]);
+      expect(view(name), name).toEqual(storeView(name));
     }
     // Every view names a fixture.
     for (const name of Object.keys(record)) expect(names).toContain(name);
