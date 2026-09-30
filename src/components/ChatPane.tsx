@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { chatChannelColor } from '../lib/chatColors';
 import { getChatLines, subscribeChatLines, type ChatLine } from '../lib/chatStore';
+import { useActiveTheme } from '../lib/useActiveTheme';
 
 interface Props {
   /** Hide the chat panel. The host re-renders with the panel in
@@ -31,6 +32,7 @@ export function ChatPane({ onClose }: Props) {
 function ChatColumn({ onClose }: { onClose?: () => void }) {
   const [lines, setLines] = useState<ChatLine[]>(() => getChatLines());
   const [filter, setFilter] = useState<string | null>(null);
+  const palette = useActiveTheme().xterm;
   const bodyRef = useRef<HTMLDivElement | null>(null);
   // Stick-to-bottom flag. Starts `true` so the first batch of lines to
   // arrive after mount snaps to the bottom; only flips to false once
@@ -127,7 +129,11 @@ function ChatColumn({ onClose }: { onClose?: () => void }) {
           </div>
         ) : (
           visible.map((l, i) => (
-            <div key={i} className="chat-pane-line" style={{ color: chatChannelColor(l.pane) }}>
+            <div
+              key={i}
+              className="chat-pane-line"
+              style={{ color: chatChannelColor(l.pane, palette) }}
+            >
               <span className="chat-pane-tag">[{l.pane}]</span>
               <span className="chat-pane-text">{l.text}</span>
             </div>

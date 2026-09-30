@@ -1,45 +1,56 @@
-// Per-channel pastel colors for the chat pane, from the Ember palette.
-// Known channel names get a fixed color so tells are always the same
-// hue across sessions. Unknown pane names (custom trigger routes, MUD
-// channels not listed here) hash onto the same pastel set, so every
-// channel still gets a stable color of its own.
+// Per channel colors for the chat pane, from the active theme's ANSI
+// slots. Each Aabahran channel takes the slot the game prints its
+// messages in (comm.c color codes, act_comm.c and languages.c), so a
+// line in the pane matches the same message in the terminal. The game
+// sends bold in the bright slot, so a bold code maps to its bright slot.
+// Pane names the game does not send (trigger routes, other games'
+// channels) hash onto the colored slots, so every channel still gets a
+// stable color of its own.
 
-const PASTELS = [
-  '#cba6dd', // magenta
-  '#8fdaa8', // jade
-  '#97dde8', // cyan
-  '#ecc985', // gold
-  '#9bbdf0', // blue
-  '#ea8f80', // coral
-  '#b8e0a0', // moss
-  '#e8b8d0', // rose
-];
+import type { AnsiSlot } from './baseAnsi';
+import type { XtermPalette } from './themes';
 
 // A Map rather than an object literal: pane names come straight from
 // server data and user-defined routes, and keys like "constructor"
 // must not walk the prototype chain.
-const FIXED = new Map<string, string>([
-  ['tell', '#cba6dd'],
-  ['tells', '#cba6dd'],
-  ['group', '#b48ec9'],
-  ['gtell', '#b48ec9'],
-  ['say', '#97dde8'],
-  ['says', '#97dde8'],
-  ['gossip', '#8fdaa8'],
-  ['chat', '#8fdaa8'],
-  ['auction', '#ecc985'],
-  ['shout', '#ea8f80'],
-  ['yell', '#ea8f80'],
-  ['ooc', '#9bbdf0'],
-  ['quote', '#9bbdf0'],
-  ['clan', '#b8e0a0'],
-  ['cabal', '#b8e0a0'],
-  ['pray', '#e8b8d0'],
+const CHANNEL_SLOTS = new Map<string, AnsiSlot>([
+  ['say', 'brightYellow'], // `# bold yellow
+  ['tell', 'green'], // `2 green
+  ['gtell', 'brightMagenta'], // `9 bold magenta
+  ['yell', 'cyan'], // `6 cyan
+  ['pray', 'brightWhite'], // `& bold white
+  ['cabal', 'brightBlue'], // `0 bold blue
+  ['clan', 'brightCyan'], // `^ bold cyan
+  ['faction', 'yellow'], // `3 yellow
+  ['newbie', 'brightGreen'], // `@ bold green
+  ['immortal', 'brightRed'], // `! bold red
+  ['imp', 'brightCyan'], // the message in `^ bold cyan
+  // Other games name the same channels in their own words.
+  ['tells', 'green'],
+  ['says', 'brightYellow'],
+  ['group', 'brightMagenta'],
+  ['shout', 'cyan'],
 ]);
 
-export function chatChannelColor(pane: string): string {
+// The slots a pane the game does not send can land on. The grays read
+// as plain text and red reads as a warning, so neither is offered.
+const HASHED_SLOTS: readonly AnsiSlot[] = [
+  'green',
+  'yellow',
+  'blue',
+  'magenta',
+  'cyan',
+  'brightGreen',
+  'brightYellow',
+  'brightBlue',
+  'brightMagenta',
+  'brightCyan',
+];
+
+/** The ANSI slot a channel's line takes in the chat pane. */
+export function chatChannelSlot(pane: string): AnsiSlot {
   const key = pane.trim().toLowerCase();
-  const fixed = FIXED.get(key);
+  const fixed = CHANNEL_SLOTS.get(key);
   if (fixed) return fixed;
   // FNV-1a over the pane name; stable across sessions and windows.
   let hash = 0x811c9dc5;
@@ -47,5 +58,10 @@ export function chatChannelColor(pane: string): string {
     hash ^= key.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193);
   }
-  return PASTELS[(hash >>> 0) % PASTELS.length];
+  return HASHED_SLOTS[(hash >>> 0) % HASHED_SLOTS.length];
+}
+
+/** A channel's color on the theme whose terminal palette is given. */
+export function chatChannelColor(pane: string, palette: XtermPalette): string {
+  return palette[chatChannelSlot(pane)];
 }
