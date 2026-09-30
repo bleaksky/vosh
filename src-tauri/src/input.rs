@@ -970,6 +970,11 @@ fn prompt_status(profile: &Profile, now: chrono::DateTime<chrono::FixedOffset>) 
                 "Drawing is off."
             };
             echo.push(format!("{reads} {matched} {drawing}"));
+            // The game showed a PROMPT that the moved pattern could not
+            // switch to.
+            if let Some(kept) = engine.kept_pattern() {
+                echo.push(kept);
+            }
             if engine.status() == Status::NotMatching {
                 let since = engine
                     .last_match_at()
@@ -2129,6 +2134,79 @@ mod tests {
                 "You turned prompts off in the game. Type prompt in the game to turn them back on."
             ]
         );
+    }
+
+    /// A table with the pattern the move from a capture trigger wrote.
+    fn migrated() -> vosh_prompt::PromptConfig {
+        vosh_prompt::PromptConfig {
+            capture: vosh_prompt::CaptureConfig::Regex(vosh_prompt::config::RegexCapture {
+                lines: vec![r"\[(?<hp>\d+)/(?<maxhp>\d+)hp\]".into()],
+                source: Some(vosh_prompt::config::CaptureSource::Migrated),
+                ..vosh_prompt::config::RegexCapture::default()
+            }),
+            ..vosh_prompt::PromptConfig::from_legacy(true, "%hp")
+        }
+    }
+
+    #[test]
+    fn prompt_says_in_one_sentence_why_the_moved_pattern_stayed() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-09-30T09:00:00-05:00").unwrap();
+        let mut p = Profile::default();
+        p.set_prompt_config(migrated());
+        p.prompt.connect(true);
+        p.prompt.observe(
+            "Char.Prompt",
+            serde_json::json!({"enabled": true, "prompt": "<`%h> ", "fprompt": ""}),
+            now,
+        );
+        assert_eq!(*p.prompt.config(), migrated(), "the pattern stays");
+        assert_eq!(
+            super::prompt_status(&p, now).echo,
+            [
+                "Vosh reads your prompt with a pattern you pointed at. No prompt has matched since you connected. Drawing is on.",
+                "Vosh kept the pattern from your old capture trigger because a color code runs into %h in the prompt the game sent.",
+            ]
+        );
+        // Once the game sends a prompt Vosh reads, the pattern switches
+        // and the reason goes.
+        p.prompt.observe(
+            "Char.Prompt",
+            serde_json::json!({"enabled": true, "prompt": "<%hhp> ", "fprompt": ""}),
+            now,
+        );
+        assert_eq!(
+            super::prompt_status(&p, now).echo,
+            ["Vosh reads your prompt from the codes <%hhp>. No prompt has matched since you connected. Drawing is on."]
+        );
+    }
+
+    #[test]
+    fn a_pattern_you_set_never_switches_to_the_codes_the_game_sends() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-09-30T09:00:00-05:00").unwrap();
+        let mut p = Profile::default();
+        p.set_prompt_config(migrated());
+        p.prompt.connect(true);
+        let _ = run_line(&mut p, r"#prompt {\[(?<hp>\d+)/(?<maxhp>\d+)hp\]}");
+        let typed = p.prompt.config().clone();
+        assert!(!typed.capture.is_migrated());
+        p.prompt.observe(
+            "Char.Prompt",
+            serde_json::json!({"enabled": true, "prompt": "<%hhp> ", "fprompt": ""}),
+            now,
+        );
+        assert_eq!(*p.prompt.config(), typed);
+
+        // #unprompt leaves nothing to switch.
+        let mut p = Profile::default();
+        p.set_prompt_config(migrated());
+        p.prompt.connect(true);
+        let _ = run_line(&mut p, "#unprompt");
+        p.prompt.observe(
+            "Char.Prompt",
+            serde_json::json!({"enabled": true, "prompt": "<%hhp> ", "fprompt": ""}),
+            now,
+        );
+        assert!(p.prompt.config().capture.is_none());
     }
 
     #[test]
