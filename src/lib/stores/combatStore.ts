@@ -14,8 +14,8 @@ import { asNumber, asText, createStore, isHiddenFlag } from './store';
 // packet leaves out condition and hp_pct and adds `"hidden": true`. It
 // adds `tank: {name, hp_pct}` while your opponent hits someone in your
 // group, the prompt's %n and %p, and drops the tank's hp_pct under
-// lamented tears. Nothing shows the tank yet. The prompt editor reads
-// it later.
+// lamented tears. The prompt engine in the backend keeps its own copy
+// to draw the tank in your prompt, so no pane shows the tank yet.
 //
 // An older server build sends the opponent's health and condition
 // under the song, with no flag. The backend works out that they are
