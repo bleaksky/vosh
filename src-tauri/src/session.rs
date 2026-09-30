@@ -893,80 +893,17 @@ async fn handle_event(
                         // The line is the game's tick, so the step fires
                         // once per tick and carries the Send each tick
                         // command to run after the lock drops.
-                        let (result, tick_step, script_apply, rendered_prompt) = {
+                        let LinePass {
+                            result,
+                            tick_step,
+                            apply: script_apply,
+                            rendered_prompt,
+                        } = {
                             let lock_t0 = std::time::Instant::now();
                             let mut p = profile.lock().await;
                             perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
                             perf.mutex_acquires += 1;
-                            // Reuse the `plain` strip computed above
-                            // instead of letting the engine strip the
-                            // same bytes a second time (one ANSI pass
-                            // per line, not two).
-                            let result = vosh_trigger::process_with_plain(
-                                &p.triggers,
-                                &bytes,
-                                &plain,
-                                vosh_trigger::MatchScope::Line,
-                            );
-                            let tick_step = if p.tick.check_reset_match(&plain) {
-                                p.tick.on_game_tick(Instant::now())
-                            } else {
-                                None
-                            };
-                            // Run Lua triggers on the same plain text so
-                            // patterns can match without worrying about
-                            // ANSI escape bytes.
-                            script_state::snapshot_vars(&p.script, &p.vars);
-                            let mut outcome = match p.script.match_line(&plain) {
-                                Ok(o) => o,
-                                Err(err) => {
-                                    warn!(error = %err, "lua match_line failed");
-                                    vosh_script::ScriptOutcome::default()
-                                }
-                            };
-                            // Execute Lua bodies queued by
-                            // `TriggerAction::Script` actions on this
-                            // line. The trigger engine collects the
-                            // body + capture vector per fire; we run
-                            // each here and merge the produced
-                            // actions into the same outcome the Lua-
-                            // registered triggers wrote, so a single
-                            // apply_actions call below picks them
-                            // both up.
-                            for call in &result.scripts {
-                                match script_state::eval_with_captures(
-                                    &mut p.script,
-                                    &call.body,
-                                    &call.captures,
-                                    "trigger-script",
-                                ) {
-                                    Ok(o) => outcome.actions.extend(o.actions),
-                                    Err(err) => {
-                                        warn!(error = %err, "trigger script eval failed");
-                                    }
-                                }
-                            }
-                            let apply = script_state::apply_actions(&mut p, outcome);
-                            // A gagged line whose script set prompt vars IS
-                            // the prompt: render the custom template while
-                            // the lock is held so the replacement lands in
-                            // the same display batch, exactly where the
-                            // gagged prompt was. (Rendering used to happen
-                            // in the frontend off the prompt-vars event,
-                            // which flashed a blank row on every prompt.)
-                            let rendered_prompt = if result.display.is_none()
-                                && apply.prompt_vars_changed
-                                && p.ui.prompt_template_enabled
-                            {
-                                let rendered = crate::prompt_template::render_prompt_template(
-                                    &p.ui.prompt_template,
-                                    &p.prompt_vars,
-                                );
-                                (!rendered.is_empty()).then_some(rendered)
-                            } else {
-                                None
-                            };
-                            (result, tick_step, apply, rendered_prompt)
+                            line_pass(&mut p, &bytes, &plain, Instant::now())
                         };
                         perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
                         // In-place echo replacement. When a trigger gags the
@@ -1099,6 +1036,150 @@ async fn handle_event(
             Ok(())
         }
     }
+}
+
+/// What the line pass decided for one complete line.
+struct LinePass {
+    result: LineResult,
+    /// The tick the line reset, with its Send each tick command.
+    tick_step: Option<TickStep>,
+    apply: ApplyResult,
+    /// The custom prompt to draw where the gagged line was.
+    rendered_prompt: Option<String>,
+}
+
+/// Run one complete line through Line triggers, the tick reset pattern,
+/// Lua triggers and the Script bodies the triggers queued, all under the
+/// profile lock the caller holds. `plain` is the line without ANSI, so
+/// no pattern has to allow for escape bytes and the line is stripped
+/// once.
+///
+/// A gagged line whose script set prompt vars is the prompt. The custom
+/// template renders here, under the same lock, so the replacement lands
+/// in the same display batch exactly where the gagged prompt was.
+/// Rendering used to happen in the frontend off the prompt-vars event,
+/// which flashed a blank row on every prompt.
+fn line_pass(p: &mut Profile, bytes: &[u8], plain: &str, now: Instant) -> LinePass {
+    let result =
+        vosh_trigger::process_with_plain(&p.triggers, bytes, plain, vosh_trigger::MatchScope::Line);
+    let tick_step = if p.tick.check_reset_match(plain) {
+        p.tick.on_game_tick(now)
+    } else {
+        None
+    };
+    script_state::snapshot_vars(&p.script, &p.vars);
+    let mut outcome = match p.script.match_line(plain) {
+        Ok(o) => o,
+        Err(err) => {
+            warn!(error = %err, "lua match_line failed");
+            vosh_script::ScriptOutcome::default()
+        }
+    };
+    // The Lua bodies of this line's Script actions join the outcome the
+    // Lua registered triggers wrote, so one apply takes both.
+    for call in &result.scripts {
+        match script_state::eval_with_captures(
+            &mut p.script,
+            &call.body,
+            &call.captures,
+            "trigger-script",
+        ) {
+            Ok(o) => outcome.actions.extend(o.actions),
+            Err(err) => {
+                warn!(error = %err, "trigger script eval failed");
+            }
+        }
+    }
+    let apply = script_state::apply_actions(p, outcome);
+    let rendered_prompt = if result.display.is_none() && apply.prompt_vars_changed {
+        render_custom_prompt(p)
+    } else {
+        None
+    };
+    LinePass {
+        result,
+        tick_step,
+        apply,
+        rendered_prompt,
+    }
+}
+
+/// What Prompt triggers did to the partial a GA or EOR ended.
+struct PromptPass {
+    result: LineResult,
+    apply: ApplyResult,
+    /// The custom prompt to draw in place of the gagged partial.
+    rendered_prompt: Option<String>,
+}
+
+/// Run Prompt triggers over the partial a GA or EOR ended, under the
+/// profile lock the caller holds. None when no trigger changed the
+/// output, sent, routed or ran a script. The engine hands back the line
+/// as it was when nothing matched, so a byte for byte check tells no
+/// effect from a highlight or a replace. Without it every GA would erase
+/// and paint the prompt again, one extra row per prompt.
+fn prompt_pass(p: &mut Profile, bytes: &[u8], already_shown: bool) -> Option<PromptPass> {
+    let result = vosh_trigger::process_scoped(&p.triggers, bytes, vosh_trigger::MatchScope::Prompt);
+    let changed_output = match &result.display {
+        None => true,
+        Some(text) => text.as_bytes() != bytes,
+    };
+    if !changed_output
+        && result.sends.is_empty()
+        && result.routes.is_empty()
+        && result.scripts.is_empty()
+    {
+        return None;
+    }
+    // A trigger fired. Its Script bodies run the way the line pass runs
+    // them, so `mud.set_prompt_var` lands before the render.
+    script_state::snapshot_vars(&p.script, &p.vars);
+    let mut outcome = vosh_script::ScriptOutcome::default();
+    for call in &result.scripts {
+        match script_state::eval_with_captures(
+            &mut p.script,
+            &call.body,
+            &call.captures,
+            "prompt-trigger-script",
+        ) {
+            Ok(o) => outcome.actions.extend(o.actions),
+            Err(err) => {
+                warn!(error = %err, "prompt-trigger script eval failed");
+            }
+        }
+    }
+    let apply = script_state::apply_actions(p, outcome);
+    // Render while the lock is held, so the erase and the replacement
+    // leave in one output batch. An IPC round trip between them showed
+    // the blank erased row for a frame on every prompt.
+    let rendered_prompt = if result.display.is_none() {
+        let rendered = render_custom_prompt(p);
+        tracing::debug!(
+            template_len = p.ui.prompt_template.len(),
+            rendered_len = rendered.as_ref().map_or(0, String::len),
+            already_shown,
+            "prompt: template render"
+        );
+        rendered
+    } else {
+        None
+    };
+    Some(PromptPass {
+        result,
+        apply,
+        rendered_prompt,
+    })
+}
+
+/// The custom prompt drawn from the live values, or None while drawing
+/// is off or the template draws nothing.
+fn render_custom_prompt(p: &Profile) -> Option<String> {
+    if !p.ui.prompt_template_enabled {
+        return None;
+    }
+    let rendered =
+        crate::prompt_template::render_prompt_template(&p.ui.prompt_template, &p.prompt_vars);
+    (!rendered.is_empty()).then_some(rendered)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1519,72 +1600,22 @@ async fn dispatch_prompt_buffer(
     let Some((bytes, already_shown)) = accumulator.flush_partial() else {
         return Ok(());
     };
-    let (result, script_apply, rendered_prompt) = {
+    let pass = {
         let mut p = profile.lock().await;
-        let r = vosh_trigger::process_scoped(&p.triggers, &bytes, vosh_trigger::MatchScope::Prompt);
-        // Fast path: no prompt-target trigger affected the output.
-        // The trigger engine returns `display = lossy(original)`
-        // when nothing matched, so a byte-for-byte equality check
-        // here distinguishes "no effect" from "highlight / replace
-        // rewrote the line." Without this check we would erase and
-        // re-emit the prompt on every GA/EOR, stacking an extra
-        // row per server prompt.
-        let trigger_changed_output = match &r.display {
-            None => true, // gagged
-            Some(text) => text.as_bytes() != bytes.as_slice(),
-        };
-        let any_effect = trigger_changed_output
-            || !r.sends.is_empty()
-            || !r.routes.is_empty()
-            || !r.scripts.is_empty();
-        if !any_effect {
-            drop(p);
-            if already_shown {
-                emit_output(app, b"\r\n".to_vec());
-            }
-            return Ok(());
+        prompt_pass(&mut p, &bytes, already_shown)
+    };
+    let Some(PromptPass {
+        result,
+        apply: script_apply,
+        rendered_prompt,
+    }) = pass
+    else {
+        // No prompt trigger changed anything. End the row the partial
+        // was painted on, as the legacy partial flush did.
+        if already_shown {
+            emit_output(app, b"\r\n".to_vec());
         }
-        // A trigger fired. Evaluate any Script bodies the same way
-        // the line pass does so `mud.set_prompt_var` lands.
-        script_state::snapshot_vars(&p.script, &p.vars);
-        let mut outcome = vosh_script::ScriptOutcome::default();
-        for call in &r.scripts {
-            match script_state::eval_with_captures(
-                &mut p.script,
-                &call.body,
-                &call.captures,
-                "prompt-trigger-script",
-            ) {
-                Ok(o) => outcome.actions.extend(o.actions),
-                Err(err) => {
-                    warn!(error = %err, "prompt-trigger script eval failed");
-                }
-            }
-        }
-        let apply = script_state::apply_actions(&mut p, outcome);
-        // Render the custom prompt template (if enabled) while the lock is
-        // held, so the gag-erase and the replacement leave in the SAME
-        // output batch below. Rendering used to happen in the frontend off
-        // the prompt-vars event, which put an IPC round trip between the
-        // erase and the redraw: a blank row flashed and content shifted up
-        // for a frame on every prompt.
-        let rendered_prompt = if p.ui.prompt_template_enabled && r.display.is_none() {
-            let rendered = crate::prompt_template::render_prompt_template(
-                &p.ui.prompt_template,
-                &p.prompt_vars,
-            );
-            tracing::debug!(
-                template_len = p.ui.prompt_template.len(),
-                vars = p.prompt_vars.len(),
-                rendered_len = rendered.len(),
-                already_shown,
-                "prompt: template render"
-            );
-            (!rendered.is_empty()).then_some(rendered)
-        } else {
-            None
-        };
-        (r, apply, rendered_prompt)
+        return Ok(());
     };
     // Repaint the visible partial in ONE output batch: erase, then the
     // replacement. Splitting these across emits (or rendering the prompt in
@@ -1922,6 +1953,88 @@ mod tests {
             data: serde_json::json!({ "sunlight": "light" }),
         };
         assert!(super::observe_world_time_for_tick(&mut tick, &no_hour, at(80)).is_none());
+    }
+
+    /// A prompt template in the style of the one in the fixtures, with
+    /// colors by how full and the `%)h` trick that prints a percent sign.
+    const TEMPLATE: &str = "%{c:100,100,100}[%c_reset%s_italic%hp(%c_hp%pct_hp%c_reset%s_italic%)h %mana(%{c:128,200,255}%pct_mana%c_reset%s_italic%)m %move(%{c:200,255,23}%pct_move%c_reset%s_italic%)v%c_reset%{c:100,100,100}] %c_reset";
+
+    /// The game prompt `%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c` at full.
+    const PROMPT_LINE: &str = "[1020/1020hp 800/800mn 930/930mv]";
+
+    /// A profile with the prompt capture `#prompt` writes, a Line
+    /// trigger that gags the prompt and hands each group to
+    /// `mud.set_prompt_var`, and the custom prompt drawn from `template`.
+    fn capture_profile(template: &str) -> Profile {
+        let mut p = Profile::default();
+        let ran = crate::input::run_line(
+            &mut p,
+            r"#prompt {\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)/(?<maxmana>\d+)mn (?<move>\d+)/(?<maxmove>\d+)mv\]}",
+        );
+        assert!(
+            ran.result.echo[0].starts_with("prompt-capture trigger set"),
+            "{:?}",
+            ran.result.echo
+        );
+        p.ui.prompt_template_enabled = true;
+        p.ui.prompt_template = template.to_string();
+        p
+    }
+
+    fn pass_line(p: &mut Profile, line: &str) -> super::LinePass {
+        super::line_pass(
+            p,
+            line.as_bytes(),
+            &vosh_ansi::plain_text(line.as_bytes()),
+            tokio::time::Instant::now(),
+        )
+    }
+
+    fn plain(ansi: &str) -> String {
+        vosh_ansi::plain_text(ansi.as_bytes())
+    }
+
+    #[test]
+    fn the_line_pass_draws_the_custom_prompt_in_place_of_the_capture() {
+        let mut p = capture_profile(TEMPLATE);
+        let pass = pass_line(&mut p, PROMPT_LINE);
+        assert!(pass.result.display.is_none(), "the capture gags the prompt");
+        assert!(pass.apply.prompt_vars_changed);
+        let drawn = pass.rendered_prompt.expect("the prompt draws");
+        assert_eq!(plain(&drawn), "[1020(100%)h 800(100%)m 930(100%)v] ");
+        // Health at full in the green of the first renderer.
+        assert!(drawn.contains("\x1b[38;5;42m100"), "{drawn:?}");
+        assert!(drawn.ends_with("\x1b[0m"));
+
+        // Any other line shows as sent and draws nothing.
+        let pass = pass_line(&mut p, "You are hungry.");
+        assert_eq!(pass.result.display.as_deref(), Some("You are hungry."));
+        assert!(pass.rendered_prompt.is_none());
+
+        // With drawing off the capture still gags, and nothing draws.
+        p.ui.prompt_template_enabled = false;
+        let pass = pass_line(&mut p, PROMPT_LINE);
+        assert!(pass.result.display.is_none());
+        assert!(pass.rendered_prompt.is_none());
+    }
+
+    #[test]
+    fn the_prompt_pass_draws_over_a_partial_a_prompt_trigger_gags() {
+        let mut p = capture_profile(TEMPLATE);
+        // A partial no Prompt trigger reads has no effect.
+        assert!(super::prompt_pass(&mut p, PROMPT_LINE.as_bytes(), true).is_none());
+        // The same capture aimed at the partial a GA ends.
+        let mut capture = p
+            .triggers
+            .get("prompt-capture")
+            .expect("the capture")
+            .clone();
+        capture.target = vosh_trigger::TriggerTarget::Prompt;
+        p.triggers.set(capture).expect("the capture compiles");
+        let pass = super::prompt_pass(&mut p, PROMPT_LINE.as_bytes(), true).expect("it fires");
+        assert!(pass.result.display.is_none());
+        let drawn = pass.rendered_prompt.expect("the prompt draws");
+        assert_eq!(plain(&drawn), "[1020(100%)h 800(100%)m 930(100%)v] ");
     }
 
     #[test]
