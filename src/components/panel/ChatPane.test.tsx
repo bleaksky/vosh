@@ -25,6 +25,11 @@ const comm = (data: Record<string, unknown>): ChatLine => {
   return line;
 };
 const packet = (name: string): ChatLine => comm(aabahranChatPacket(name).data as never);
+const routed = (pane: string, text: string): ChatLine => {
+  const line = parseRoutedLine({ pane, text }, TS);
+  if (!line) throw new Error('no line');
+  return line;
+};
 
 // The sixteen messages on the approved board, as the store reads them.
 const BOARD: ChatLine[] = [
@@ -45,10 +50,7 @@ const BOARD: ChatLine[] = [
     text: 'fine by me, let me finish this note first',
   }),
   packet('tell.gmcp'),
-  parseRoutedLine(
-    { pane: 'tell', text: "You tell Selune 'yes, inside. north from the square'" },
-    TS,
-  ),
+  routed('tell', "You tell Selune 'yes, inside. north from the square'"),
   packet('say.gmcp'),
   comm({ channel: 'say', speaker: 'Erelei', text: 'take your time', language: 'common' }),
   comm({ channel: 'gtell', speaker: 'Tarvik', text: 'sanc is down, can someone recast?' }),
@@ -162,7 +164,7 @@ describe('ChatLog', () => {
   });
 
   it('keeps a routed line in its own words', () => {
-    const [loot] = drawn([parseRoutedLine({ pane: 'loot', text: 'You get a gold coin.' }, TS)]);
+    const [loot] = drawn([routed('loot', 'You get a gold coin.')]);
     expect(loot).toMatchObject({
       tag: '[loot]',
       speaker: null,

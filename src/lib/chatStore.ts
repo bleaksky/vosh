@@ -65,16 +65,22 @@ export function parseCommChannel(data: unknown, ts: number = Date.now()): ChatLi
 // The line the game prints for a tell you send (languages.c
 // compose_tell): `You tell Selune 'text'`, with ` in Elvish` before the
 // quote when you spoke anything but common, and `You project to` for a
-// telepath. The recipient can run to several words, `a city guard`.
+// telepath. The recipient can run to several words, `a city guard`. A
+// group tell you send prints the same way to `your group`
+// (compose_grouptell_open).
 const SENT_TELL_RE = /^You (?:tell|project to) (.+?)(?: in ([A-Z][\w']*))? '([\s\S]*)'$/;
 
-/** A line a trigger routed to a pane. The line keeps its own wording,
- *  except the game's line for a tell you send, which reads as your side
- *  of the tell. */
-export function parseRoutedLine(payload: RoutedPayload, ts: number = Date.now()): ChatLine {
+/** A line a trigger routed to a pane, or null for one the pane skips.
+ *  The line keeps its own wording, except the game's line for a tell you
+ *  send, which reads as your side of the tell. The line for a group tell
+ *  you send is skipped, because the game echoes that message back to you
+ *  as a gtell packet (act_comm.c do_gtell) and the pane already has it.
+ *  The trigger the chat help gives for sent tells catches both lines. */
+export function parseRoutedLine(payload: RoutedPayload, ts: number = Date.now()): ChatLine | null {
   const text = stripAnsi(payload.text).trimEnd();
   const sent = SENT_TELL_RE.exec(text);
-  if (sent && sent[1] !== 'your group') {
+  if (sent?.[1] === 'your group') return null;
+  if (sent) {
     return {
       pane: payload.pane,
       speaker: sent[1],
@@ -126,7 +132,8 @@ export function startChatStore(): void {
   void onGmcpPackage<unknown>('Comm.Channel', handleComm);
   void onGmcpPackage<unknown>('Comm.Channel.Text', handleComm);
   void onRouted((payload: RoutedPayload) => {
-    append(parseRoutedLine(payload));
+    const line = parseRoutedLine(payload);
+    if (line) append(line);
   });
   void onState((payload) => {
     if (payload.kind === 'disconnected') {
