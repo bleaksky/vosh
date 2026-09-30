@@ -54,7 +54,9 @@
    the terminal well, since the well and xterm clip at the text's edge and
    a band reaches 4 px past it. promptBands.ts sizes the layer to the text
    plus that reach and places each band. While your prompt shows lifted,
-   xterm's own ground is clear, so the text draws over the bands. */
+   xterm's own ground is clear, so the text draws over the bands. The
+   area carries data-prompt-lifted then, an attribute React never writes,
+   so opening the scrollback split keeps it. */
 .prompt-lift-layer {
   position: absolute;
   overflow: hidden;
@@ -73,9 +75,9 @@
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
 }
 
-.terminal-area.prompt-lifted .terminal-pane-live .terminal-host,
-.terminal-area.prompt-lifted .terminal-pane-live .xterm .xterm-viewport,
-.terminal-area.prompt-lifted .terminal-pane-live .xterm .xterm-screen {
+.terminal-area[data-prompt-lifted] .terminal-pane-live .terminal-host,
+.terminal-area[data-prompt-lifted] .terminal-pane-live .xterm .xterm-viewport,
+.terminal-area[data-prompt-lifted] .terminal-pane-live .xterm .xterm-screen {
   background: transparent;
 }
 

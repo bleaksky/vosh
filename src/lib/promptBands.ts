@@ -200,6 +200,20 @@ export class LiftTracker implements IDisposable {
   }
 }
 
+/** The attribute on the terminal area that clears xterm's ground so the
+ *  bands show under the text. An attribute and not a class, since App.tsx
+ *  writes the area's className whole whenever the scrollback split opens
+ *  or closes, and React never writes this attribute. */
+export const LIFTED_ATTR = 'data-prompt-lifted';
+
+/** Clear xterm's ground in `area` for the bands, or give it back. */
+export function markLifted(
+  area: { toggleAttribute(name: string, force: boolean): boolean },
+  on: boolean,
+): void {
+  area.toggleAttribute(LIFTED_ATTR, on);
+}
+
 /** The band outsets the prompt boards measure. */
 export const BAND_X = 4;
 export const BAND_Y = 2;

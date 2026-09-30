@@ -21,7 +21,7 @@ import { ansi16Of, xtermThemeFor } from '../lib/terminalTheme';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 import { OutputShaper } from '../lib/outputShaper';
 import { RegionWriter } from '../lib/terminalRegion';
-import { BandLayer, LiftTracker } from '../lib/promptBands';
+import { BandLayer, LiftTracker, markLifted } from '../lib/promptBands';
 import { ingestRecentNames } from '../lib/recentNames';
 
 /** Session flag set when the native surface never came up, so the page
@@ -284,7 +284,8 @@ export function Terminal({
     appliedLiftRef.current = on;
     term.options.allowTransparency = on;
     term.options.theme = themeFor(getCurrentThemeId(), themeTerminalColorsRef.current, on);
-    containerRef.current?.closest('.terminal-area')?.classList.toggle('prompt-lifted', on);
+    const area = containerRef.current?.closest('.terminal-area');
+    if (area) markLifted(area, on);
     bandsRef.current?.setEnabled(on);
   };
 
