@@ -4,7 +4,7 @@ import { MenuItem, MenuSurface } from './MenuSurface';
 import { returnToCommandLine, updateLeafProps, usePaneLeaf } from './paneActions';
 import { PaneHeader } from './PaneHeader';
 import { CheckIcon, ChevronDownIcon } from './paneIcons';
-import { chatTime, splitSpeaker } from './paneText';
+import { chatTime } from './paneText';
 
 // Channel chat (SPEC 9). Messages sit at the bottom like the terminal:
 // a quiet time and channel line, then the message with the speaker in
@@ -107,7 +107,6 @@ function lineKey(line: ChatLine): number {
 }
 
 function ChatMessage({ line }: { line: ChatLine }) {
-  const { speaker, text } = splitSpeaker(line.text);
   return (
     <li className="pane-chat-msg">
       <div className="pane-chat-when">
@@ -115,8 +114,8 @@ function ChatMessage({ line }: { line: ChatLine }) {
         <span className="pane-chat-channel">{line.pane}</span>
       </div>
       <p className="pane-chat-text">
-        {speaker && <span className="pane-chat-speaker">{speaker}</span>}
-        {speaker ? ` ${text}` : text}
+        {line.speaker !== null && <span className="pane-chat-speaker">{line.speaker}</span>}
+        {line.speaker !== null ? ` ${line.text}` : line.text}
       </p>
     </li>
   );

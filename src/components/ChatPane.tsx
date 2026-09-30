@@ -135,7 +135,9 @@ function ChatColumn({ onClose }: { onClose?: () => void }) {
               style={{ color: chatChannelColor(l.pane, palette) }}
             >
               <span className="chat-pane-tag">[{l.pane}]</span>
-              <span className="chat-pane-text">{l.text}</span>
+              <span className="chat-pane-text">
+                {l.speaker !== null ? `${l.speaker}: ${l.text}` : l.text}
+              </span>
             </div>
           ))
         )}

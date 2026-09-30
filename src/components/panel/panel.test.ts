@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { defaultLayout, splitPane } from '../../lib/paneLayout';
 import type { ImmQueues } from '../../lib/immStore';
 import { immRows, immSummary } from './immRows';
-import { affectStateWord, chatTime, exitsLabel, splitSpeaker, ticksLabel } from './paneText';
+import { affectStateWord, chatTime, exitsLabel, ticksLabel } from './paneText';
 
 // paneActions pulls in the Tauri bridge through the layout store, so
 // stub it. The pure tree helper under test never calls it.
@@ -13,32 +13,6 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 const { setLeafProps } = await import('./paneActions');
-
-describe('splitSpeaker', () => {
-  it('splits a one word speaker off a channel line', () => {
-    expect(splitSpeaker('Tarvik: anyone up for a Temple run tonight')).toEqual({
-      speaker: 'Tarvik',
-      text: 'anyone up for a Temple run tonight',
-    });
-  });
-
-  it('keeps colons inside the message', () => {
-    expect(splitSpeaker('Selune: meet at 8:42: the bank')).toEqual({
-      speaker: 'Selune',
-      text: 'meet at 8:42: the bank',
-    });
-  });
-
-  it('leaves routed lines whole', () => {
-    for (const line of [
-      '[OOC] Selune: anyone seen the gate open today?',
-      "Tarvik tells you 'back soon'",
-      'no speaker here',
-    ]) {
-      expect(splitSpeaker(line)).toEqual({ speaker: null, text: line });
-    }
-  });
-});
 
 describe('chatTime', () => {
   const at = (h: number, m: number) => new Date(2026, 8, 28, h, m).getTime();

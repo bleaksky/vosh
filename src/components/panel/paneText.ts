@@ -1,14 +1,5 @@
 // Small text helpers for the panes, kept pure for the unit tests.
 
-/** chatStore joins a Comm.Channel speaker onto the text as
- *  `Speaker: text`. Split one leading single word name back off so the
- *  Chat pane can set it in bold. Lines that triggers route keep their
- *  own wording, since their first word rarely ends in a colon. */
-export function splitSpeaker(text: string): { speaker: string | null; text: string } {
-  const m = /^([^\s:]{1,32}): ([\s\S]*)$/.exec(text);
-  return m ? { speaker: m[1], text: m[2] } : { speaker: null, text };
-}
-
 const clocks = new Map<string, Intl.DateTimeFormat>();
 
 function clockFor(locale: string | undefined): Intl.DateTimeFormat {
