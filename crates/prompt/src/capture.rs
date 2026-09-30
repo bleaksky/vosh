@@ -13,6 +13,7 @@ use std::sync::OnceLock;
 use regex::Regex;
 use regex_syntax::hir::{HirKind, Look};
 
+use crate::aabahran::{Compiled, Origin, Shape, ShapeKind, Which, Who};
 use crate::config::{CaptureConfig, CaptureSource, RegexCapture};
 
 /// True when a partial line `pattern` matches is the prompt at once. That
@@ -134,21 +135,29 @@ pub fn from_trigger(patterns: &[&str], body: &str) -> Result<RegexCapture, NotAC
     })
 }
 
-/// A capture compiled for the stage. It reads a line, or a partial the
-/// game has not ended yet, as your prompt, and hands each group to the
-/// variable it feeds.
+/// A capture compiled for the stage. It reads a line, a partial the game
+/// has not ended yet, or a block of lines, as your prompt, and hands each
+/// group to the variable it feeds.
 ///
-/// This build reads one line prompts from a `kind = "regex"` capture.
-/// Prompts that span lines and Aabahran's codes compile in a later build,
-/// and until then those captures recognize nothing, so the game's prompt
-/// shows as sent.
+/// A `kind = "regex"` capture reads one line. Aabahran's codes compile
+/// into the shapes of [`crate::aabahran::shapes`], and a shape may span
+/// lines, so the stage holds the lines that start one until the rest
+/// arrives (D7).
 #[derive(Debug, Clone)]
 pub struct Recognizer {
-    line: Regex,
-    /// Group number and the variable it feeds, in group order.
-    groups: Vec<(usize, String)>,
-    /// A partial the pattern matches is the prompt at once.
-    settle: bool,
+    reader: Reader,
+}
+
+#[derive(Debug, Clone)]
+enum Reader {
+    Regex {
+        line: Regex,
+        /// Group number and the variable it feeds, in group order.
+        groups: Vec<(usize, String)>,
+        /// A partial the pattern matches is the prompt at once.
+        settle: bool,
+    },
+    Codes(Box<Compiled>),
 }
 
 /// A prompt the recognizer read.
@@ -157,75 +166,212 @@ pub struct Recognized {
     /// Each group the shape has, by variable. A group that printed
     /// nothing reads as an empty string.
     pub values: BTreeMap<String, String>,
+    /// A partial the last line reads is the whole prompt, and a line end
+    /// after it follows the prompt rather than ending it.
+    pub settle: bool,
+    /// The game's away prompt, which shows as sent.
+    pub afk: bool,
+    /// The groups each line reads, top line first, so the stage knows
+    /// what a line above the last one carries (D7).
+    pub lines: Vec<Vec<String>>,
 }
 
 impl Recognizer {
-    /// Compile a capture. None when it recognizes nothing in this build:
-    /// no capture, Aabahran's codes, a regex capture with no line or more
-    /// than one, or a pattern that does not compile.
+    /// Compile a capture for a mortal. See [`Recognizer::compile_for`].
     pub fn compile(capture: &CaptureConfig) -> Option<Self> {
-        let CaptureConfig::Regex(capture) = capture else {
-            return None;
-        };
-        let [pattern] = capture.lines.as_slice() else {
-            return None;
-        };
-        if pattern.is_empty() {
-            return None;
-        }
-        let line = Regex::new(pattern).ok()?;
-        let groups = line
-            .capture_names()
-            .enumerate()
-            .skip(1)
-            .filter_map(|(index, name)| {
-                let key = name.map_or_else(|| index.to_string(), str::to_string);
-                let var = match capture.names.get(&key) {
-                    Some(var) => var.clone(),
-                    None => name?.to_string(),
-                };
-                (!var.is_empty()).then_some((index, var))
-            })
-            .collect();
-        // A stored flag holds only for a pattern that can settle, so an
-        // unanchored pattern never settles on a prefix plus more text.
-        let settle = capture.settle && settle(pattern);
-        Some(Self {
-            line,
-            groups,
-            settle,
-        })
+        Self::compile_for(capture, Who::default())
     }
 
-    /// True when a partial this recognizer reads is the prompt at once.
+    /// Compile a capture. `who` decides what `%u` and `%s` print. None
+    /// when it recognizes nothing: no capture, a regex capture with no
+    /// line or more than one, a pattern that does not compile, or codes
+    /// the game cannot print in a way Vosh can follow.
+    pub fn compile_for(capture: &CaptureConfig, who: Who) -> Option<Self> {
+        let reader = match capture {
+            CaptureConfig::None => return None,
+            CaptureConfig::Aabahran(codes) => {
+                let compiled =
+                    crate::aabahran::compile(&codes.prompt, &codes.fprompt, Origin::Stored, who)
+                        .ok()?;
+                Reader::Codes(Box::new(compiled))
+            }
+            CaptureConfig::Regex(capture) => regex_reader(capture)?,
+        };
+        Some(Self { reader })
+    }
+
+    /// The compiled codes, for a capture that reads them.
+    pub fn codes(&self) -> Option<&Compiled> {
+        match &self.reader {
+            Reader::Codes(compiled) => Some(compiled),
+            Reader::Regex { .. } => None,
+        }
+    }
+
+    /// True when a partial some shape reads is the prompt at once.
     pub fn settles(&self) -> bool {
-        self.settle
+        match &self.reader {
+            Reader::Regex { settle, .. } => *settle,
+            Reader::Codes(compiled) => compiled.shapes.iter().any(|s| s.settle),
+        }
     }
 
     /// Read a complete line, or a partial a GA or EOR ended, as your
     /// prompt.
     pub fn line(&self, plain: &str) -> Option<Recognized> {
-        let found = self.line.captures(plain)?;
-        let mut values = BTreeMap::new();
-        for (index, var) in &self.groups {
-            let value = found.get(*index).map_or("", |m| m.as_str());
-            let known = values.get(var).is_some_and(|v: &String| !v.is_empty());
-            if !known {
-                values.insert(var.clone(), value.to_string());
-            }
-        }
-        Some(Recognized { values })
+        self.read(&[plain])
     }
 
     /// Read a partial the game has not ended as your prompt, which only a
     /// capture that settles does. A partial split before its last
     /// character fails the anchored match and waits for the next read.
     pub fn partial(&self, plain: &str) -> Option<Recognized> {
-        if !self.settle {
-            return None;
-        }
-        self.line(plain)
+        self.read_partial(&[plain])
     }
+
+    /// Read `lines` as one whole prompt, top line first. The last line
+    /// ended with a line end, a GA or an EOR.
+    pub fn read(&self, lines: &[&str]) -> Option<Recognized> {
+        match &self.reader {
+            Reader::Regex {
+                line,
+                groups,
+                settle,
+            } => {
+                let [plain] = lines else {
+                    return None;
+                };
+                regex_read(line, groups, *settle, plain)
+            }
+            Reader::Codes(compiled) => {
+                shapes_in_order(compiled).find_map(|shape| Some(found(shape, shape.read(lines)?)))
+            }
+        }
+    }
+
+    /// Read `lines` as one whole prompt whose last line is a partial the
+    /// game has not ended. Only a shape that settles reads one.
+    pub fn read_partial(&self, lines: &[&str]) -> Option<Recognized> {
+        match &self.reader {
+            Reader::Regex {
+                line,
+                groups,
+                settle,
+            } => {
+                let [plain] = lines else {
+                    return None;
+                };
+                if !*settle {
+                    return None;
+                }
+                regex_read(line, groups, true, plain)
+            }
+            Reader::Codes(compiled) => shapes_in_order(compiled)
+                .find_map(|shape| Some(found(shape, shape.read_partial(lines)?))),
+        }
+    }
+
+    /// True when `lines` are the top lines of a shape with more lines,
+    /// so the stage holds them for the rest.
+    pub fn starts(&self, lines: &[&str]) -> bool {
+        let Reader::Codes(compiled) = &self.reader else {
+            return false;
+        };
+        compiled.shapes.iter().any(|shape| {
+            shape.lines.len() > lines.len()
+                && lines
+                    .iter()
+                    .zip(&shape.lines)
+                    .all(|(text, line)| line.line.is_match(text))
+        })
+    }
+}
+
+/// The shapes to try, the away prompt first, since the game prints it in
+/// place of every other while you are away.
+fn shapes_in_order(compiled: &Compiled) -> impl Iterator<Item = &Shape> {
+    let afk = compiled.shapes.iter().filter(|s| s.kind == ShapeKind::Afk);
+    let rest = compiled.shapes.iter().filter(|s| s.kind != ShapeKind::Afk);
+    afk.chain(rest)
+}
+
+/// What a shape read, with what the shape itself says: whether it
+/// settles, whether it is the away prompt, the groups on each line, and
+/// `fight` when the game prints it only in a fight.
+fn found(shape: &Shape, mut read: Recognized) -> Recognized {
+    let tank_named = read.values.get("tank").is_some_and(|t| !t.is_empty());
+    if shape.kind == ShapeKind::Tank || shape.which == Which::Fight || tank_named {
+        read.values.insert("fight".to_string(), "1".to_string());
+    }
+    read.settle = shape.settle;
+    read.afk = shape.kind == ShapeKind::Afk;
+    read.lines = shape
+        .lines
+        .iter()
+        .map(|line| {
+            line.line
+                .capture_names()
+                .flatten()
+                .map(str::to_string)
+                .collect()
+        })
+        .collect();
+    read
+}
+
+fn regex_reader(capture: &RegexCapture) -> Option<Reader> {
+    let [pattern] = capture.lines.as_slice() else {
+        return None;
+    };
+    if pattern.is_empty() {
+        return None;
+    }
+    let line = Regex::new(pattern).ok()?;
+    let groups = line
+        .capture_names()
+        .enumerate()
+        .skip(1)
+        .filter_map(|(index, name)| {
+            let key = name.map_or_else(|| index.to_string(), str::to_string);
+            let var = match capture.names.get(&key) {
+                Some(var) => var.clone(),
+                None => name?.to_string(),
+            };
+            (!var.is_empty()).then_some((index, var))
+        })
+        .collect();
+    // A stored flag holds only for a pattern that can settle, so an
+    // unanchored pattern never settles on a prefix plus more text.
+    let settle = capture.settle && settle(pattern);
+    Some(Reader::Regex {
+        line,
+        groups,
+        settle,
+    })
+}
+
+fn regex_read(
+    line: &Regex,
+    groups: &[(usize, String)],
+    settle: bool,
+    plain: &str,
+) -> Option<Recognized> {
+    let found = line.captures(plain)?;
+    let mut values = BTreeMap::new();
+    for (index, var) in groups {
+        let value = found.get(*index).map_or("", |m| m.as_str());
+        let known = values.get(var).is_some_and(|v: &String| !v.is_empty());
+        if !known {
+            values.insert(var.clone(), value.to_string());
+        }
+    }
+    let names = groups.iter().map(|(_, var)| var.clone()).collect();
+    Some(Recognized {
+        values,
+        settle,
+        afk: false,
+        lines: vec![names],
+    })
 }
 
 #[cfg(test)]
@@ -442,16 +588,153 @@ mod tests {
     }
 
     #[test]
-    fn only_a_one_line_regex_capture_recognizes_in_this_build() {
+    fn a_regex_capture_reads_one_line() {
         assert!(Recognizer::compile(&CaptureConfig::None).is_none());
-        assert!(
-            Recognizer::compile(&CaptureConfig::Aabahran(AabahranCapture::default())).is_none(),
-            "the codes compile in a later build"
-        );
         assert!(Recognizer::compile(&regex(&[], false, &[])).is_none());
         assert!(Recognizer::compile(&regex(&["^a$", "^b$"], false, &[])).is_none());
         assert!(Recognizer::compile(&regex(&[r"\[(?<hp>\d+"], false, &[])).is_none());
         assert!(Recognizer::compile(&regex(&[""], false, &[])).is_none());
+        let reader = Recognizer::compile(&regex(&["^a$"], false, &[])).expect("it compiles");
+        assert!(reader.read(&["a", "a"]).is_none());
+        assert!(!reader.starts(&["a"]));
+        assert!(reader.codes().is_none());
+    }
+
+    /// An Aabahran capture of `prompt` and `fprompt` as the game stores
+    /// them.
+    fn codes(prompt: &str, fprompt: &str) -> CaptureConfig {
+        CaptureConfig::Aabahran(AabahranCapture {
+            prompt: prompt.to_string(),
+            fprompt: fprompt.to_string(),
+            ..AabahranCapture::default()
+        })
+    }
+
+    /// James's PROMPT, as Char.Prompt sends it.
+    const JAMES: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c";
+
+    #[test]
+    fn codes_read_a_one_line_prompt() {
+        let reader = Recognizer::compile(&codes(JAMES, "")).expect("it compiles");
+        assert!(reader.codes().is_some());
+        let read = reader
+            .line("(Wizi 60) [1020/1020hp 800/800mn 930/930mv]")
+            .expect("the prompt");
+        assert_eq!(read.values["hp"], "1020");
+        assert_eq!(read.values["wizi"], "60");
+        assert_eq!(read.values["incog"], "");
+        assert!(!read.values.contains_key("fight"), "out of a fight");
+        assert!(!read.afk);
+        assert!(!read.settle, "it ends in %c, so it waits for its line end");
+        assert!(reader.line("You are hungry.").is_none());
+    }
+
+    #[test]
+    fn codes_read_a_prompt_that_spans_lines_as_one_block() {
+        let reader = Recognizer::compile(&codes(JAMES, "")).expect("it compiles");
+        let head = "Tester: [===|===|---|---]";
+        let last = "[159/1020hp 310/800mn 489/930mv]";
+        // The tank line starts a longer shape and is no prompt alone.
+        assert!(reader.starts(&[head]));
+        assert!(reader.line(head).is_none());
+        assert!(!reader.starts(&[last]), "the normal prompt is whole");
+        assert!(!reader.starts(&["You are hungry."]));
+
+        let read = reader.read(&[head, last]).expect("the tank block");
+        assert_eq!(read.values["tank"], "Tester");
+        assert_eq!(read.values["tank_bar"], "===|===|---|---");
+        assert_eq!(read.values["hp"], "159");
+        assert_eq!(
+            read.values["fight"], "1",
+            "the tank shape prints in a fight"
+        );
+        // The groups each line carries, the immortal prefix on the top one.
+        assert_eq!(read.lines.len(), 2);
+        assert!(read.lines[0].contains(&"tank".to_string()));
+        assert!(read.lines[0].contains(&"wizi".to_string()));
+        assert!(read.lines[1].contains(&"hp".to_string()));
+        assert!(!read.lines[1].contains(&"tank".to_string()));
+        assert!(reader.read(&["You are hungry.", last]).is_none());
+    }
+
+    #[test]
+    fn prompt_all_settles_and_its_tank_line_holds() {
+        let reader =
+            Recognizer::compile(&codes("%n%P%C<%hhp %mm %vmv> ", "")).expect("it compiles");
+        assert!(reader.settles());
+        let read = reader
+            .partial("<159hp 310m 489mv> ")
+            .expect("a whole partial");
+        assert!(read.settle);
+        assert_eq!(read.values["move"], "489");
+        assert!(
+            reader.partial("<159hp 310m 48").is_none(),
+            "split, it waits"
+        );
+        let read = reader
+            .read_partial(&["Tester: [===|===|===|---]", "<159hp 310m 489mv> "])
+            .expect("tanking");
+        assert_eq!(read.values["tank"], "Tester");
+        assert_eq!(read.values["fight"], "1");
+    }
+
+    #[test]
+    fn the_away_prompt_reads_first_and_shows_as_sent() {
+        let reader = Recognizer::compile(&codes("%s> ", "")).expect("it compiles");
+        // `<AFK> ` could read as a language, but while you are away the
+        // game prints it in place of your prompt.
+        let read = reader.partial("<AFK> ").expect("away");
+        assert!(read.afk);
+        assert_eq!(read.values["afk"], "1");
+        assert!(reader.line("(Incog 55) <AFK>").is_some_and(|r| r.afk));
+        let read = reader.partial("common> ").expect("your prompt");
+        assert!(!read.afk);
+    }
+
+    #[test]
+    fn a_fight_prompt_marks_the_fight() {
+        let reader =
+            Recognizer::compile(&codes("<%hhp> ", "`1%h``hp [%p] > ")).expect("it compiles");
+        let read = reader.partial("<50hp> ").expect("out of a fight");
+        assert!(!read.values.contains_key("fight"));
+        // %p prints its own brackets inside the ones you wrote.
+        let read = reader.partial("50hp [[45]] > ").expect("the fight prompt");
+        assert_eq!(read.values["fight"], "1");
+        assert_eq!(read.values["tank_pct"], "45");
+    }
+
+    #[test]
+    fn an_empty_setting_reads_the_fallback() {
+        let reader = Recognizer::compile(&codes("", "")).expect("it compiles");
+        let read = reader.partial("<20hp 100m 110mv> ").expect("the fallback");
+        assert_eq!(read.values["hp"], "20");
+        assert_eq!(read.values["move"], "110");
+    }
+
+    #[test]
+    fn who_decides_what_pacify_reads() {
+        let capture = codes("<%h %u> ", "");
+        let mortal = Recognizer::compile(&capture).expect("it compiles");
+        assert!(!mortal
+            .partial("<10 pacified> ")
+            .expect("a prompt")
+            .values
+            .contains_key("pacify"));
+        let immortal = Recognizer::compile_for(
+            &capture,
+            Who {
+                immortal: true,
+                mobile: false,
+            },
+        )
+        .expect("it compiles");
+        let read = immortal.partial("<10 not pacified> ").expect("a prompt");
+        assert_eq!(read.values["pacify"], "not pacified");
+    }
+
+    #[test]
+    fn codes_the_game_cannot_print_readably_recognize_nothing() {
+        assert!(Recognizer::compile(&codes("<`%h> ", "")).is_none());
     }
 
     #[test]

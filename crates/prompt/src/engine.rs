@@ -7,8 +7,14 @@
 
 use std::collections::BTreeMap;
 
+use chrono::{DateTime, FixedOffset};
+use serde_json::Value as Json;
+
+use crate::aabahran::Who;
 use crate::config::PromptConfig;
+use crate::gmcp::{Observed, CHAR_STATE, CHAR_STATUS};
 use crate::stage::Stage;
+use crate::template::Template;
 use crate::vars::{forsaken_lands, Vars};
 
 /// The live profile's custom prompt.
@@ -28,6 +34,9 @@ pub struct PromptEngine {
     /// Moves each time the table changes, so a step can tell whether it
     /// changed the table and an open Settings window reads it again.
     revision: u64,
+    /// Who the prompt is for, from the packets, which decides what
+    /// Aabahran's `%u` and `%s` print.
+    who: Who,
 }
 
 impl PromptEngine {
@@ -44,8 +53,48 @@ impl PromptEngine {
             self.revision += 1;
         }
         self.config = config;
-        self.stage.set_capture(&self.config.capture);
+        self.compile();
         self.apply_rules();
+    }
+
+    /// Compile the table for the stage: the capture for who you are, and
+    /// the fields the design reads.
+    fn compile(&mut self) {
+        self.stage.set_capture_for(&self.config.capture, self.who);
+        self.stage
+            .set_reads(&Template::parse(&self.config.template).reads());
+    }
+
+    /// Keep a GMCP packet. Char.Status and Char.State say who the prompt
+    /// is for, and a change compiles the capture again.
+    pub fn observe(&mut self, package: &str, data: Json, at: DateTime<FixedOffset>) -> Observed {
+        let observed = self.vars.observe(package, data, at);
+        if package.eq_ignore_ascii_case(CHAR_STATUS) || package.eq_ignore_ascii_case(CHAR_STATE) {
+            self.follow_who();
+        }
+        observed
+    }
+
+    /// Who the prompt is for.
+    pub fn who(&self) -> Who {
+        self.who
+    }
+
+    fn follow_who(&mut self) {
+        let gmcp = self.vars.gmcp();
+        let level = gmcp
+            .get(CHAR_STATUS)
+            .and_then(|s| s.get("level"))
+            .and_then(Json::as_i64);
+        let language = gmcp
+            .get(CHAR_STATE)
+            .and_then(|s| s.get("language"))
+            .and_then(Json::as_str);
+        let who = Who::from_packets(level, language);
+        if who != self.who {
+            self.who = who;
+            self.stage.set_capture_for(&self.config.capture, who);
+        }
     }
 
     /// A count that moves each time the table changes.
@@ -97,7 +146,16 @@ impl PromptEngine {
         self.stage.reset();
         self.reported_vars = None;
         self.known_host = known_host;
+        self.forget_who();
         self.apply_rules();
+    }
+
+    /// A new connection starts as a mortal in your own body.
+    fn forget_who(&mut self) {
+        if self.who != Who::default() {
+            self.who = Who::default();
+            self.stage.set_capture_for(&self.config.capture, self.who);
+        }
     }
 
     /// The connection closed. Every value, packet and the new build sign
@@ -108,6 +166,7 @@ impl PromptEngine {
         self.stage.reset();
         self.reported_vars = None;
         self.known_host = false;
+        self.forget_who();
         self.apply_rules();
     }
 
@@ -298,6 +357,39 @@ mod tests {
         let entry = engine.stage.ring().next().expect("an entry");
         assert!(!entry.draw);
         assert!(!entry.capture);
+    }
+
+    #[test]
+    fn an_immortal_reads_pacify_once_char_status_says_so() {
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.set_config(PromptConfig {
+            capture: CaptureConfig::Aabahran(AabahranCapture {
+                prompt: "<%h %u> ".into(),
+                ..AabahranCapture::default()
+            }),
+            ..PromptConfig::default()
+        });
+        let pacify = |engine: &PromptEngine| {
+            engine
+                .stage
+                .recognize(b"", "<10 pacified> ", crate::stage::End::Settled)
+                .expect("the prompt")
+                .values
+                .contains_key("pacify")
+        };
+        assert!(!pacify(&engine), "a mortal until the game says");
+        engine.observe(
+            "Char.Status",
+            json!({"name": "Tester", "level": 60, "race": "human", "class": "warrior"}),
+            at(),
+        );
+        assert!(engine.who().immortal);
+        assert!(pacify(&engine));
+        // A new connection starts as a mortal again.
+        engine.connect(true);
+        assert!(!engine.who().immortal);
+        assert!(!pacify(&engine));
     }
 
     #[test]
