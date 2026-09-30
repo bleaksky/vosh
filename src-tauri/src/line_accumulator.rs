@@ -24,8 +24,10 @@ pub(crate) struct Line {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Partial {
     pub(crate) bytes: Vec<u8>,
-    /// The region it was painted as, when an earlier read painted it.
-    pub(crate) painted: Option<u64>,
+    /// The region it was painted as, when an earlier read painted it, and
+    /// how many of its bytes that region holds. A partial that grew in
+    /// the read that ends it holds more.
+    pub(crate) painted: Option<(u64, usize)>,
 }
 
 #[derive(Debug, Default)]
@@ -116,7 +118,7 @@ impl LineAccumulator {
     /// session does when it reads a partial as your prompt. None when
     /// there is none.
     pub(crate) fn take_partial(&mut self) -> Option<Partial> {
-        let painted = self.painted.take().map(|(gen, _)| gen);
+        let painted = self.painted.take();
         if self.buffer.is_empty() {
             return None;
         }
@@ -233,11 +235,23 @@ mod tests {
             a.take_partial(),
             Some(Partial {
                 bytes: b"<10hp> ".to_vec(),
-                painted: Some(4),
+                painted: Some((4, 7)),
             })
         );
         assert_eq!(a.partial(), None);
         assert_eq!(a.painted(), None);
+        // A partial that grew after its paint says how much of it the
+        // region holds, so the rest is not taken as on screen.
+        let _ = a.feed(b"<10");
+        a.set_painted(Some((5, 3)));
+        let _ = a.feed(b"hp> ");
+        assert_eq!(
+            a.take_partial(),
+            Some(Partial {
+                bytes: b"<10hp> ".to_vec(),
+                painted: Some((5, 3)),
+            })
+        );
     }
 
     #[test]

@@ -1437,7 +1437,8 @@ fn marker_step(
         .recognize(&partial.bytes, &plain, End::Marker)
     {
         Some(block) => {
-            let step = prompt_block(p, batch, block, partial.painted, now, log_session_id);
+            let painted = partial.painted.map(|(gen, _)| gen);
+            let step = prompt_block(p, batch, block, painted, now, log_session_id);
             p.prompt.record(None, now_ms());
             step
         }
@@ -1466,7 +1467,10 @@ fn partial_step(
         let plain = vosh_ansi::plain_text(&bytes);
         match p.prompt.stage.recognize(&bytes, &plain, End::Settled) {
             Some(block) => {
-                let painted = accumulator.take_partial().and_then(|t| t.painted);
+                let painted = accumulator
+                    .take_partial()
+                    .and_then(|t| t.painted)
+                    .map(|(gen, _)| gen);
                 step = Some(prompt_block(p, batch, block, painted, now, log_session_id));
             }
             None => {
@@ -2104,13 +2108,11 @@ async fn capture_pending_line(
         return;
     };
     let plain = vosh_ansi::plain_text(&bytes);
-    // Terminate the line on screen. Write the bytes too only in the
-    // unlikely case they were never painted, to avoid printing the
-    // goodbye twice.
-    let mut out = Vec::with_capacity(bytes.len() + 2);
-    if painted.is_none() {
-        out.extend_from_slice(&bytes);
-    }
+    // Terminate the line on screen. Write only what the end of its read
+    // did not paint, to avoid printing the goodbye twice.
+    let shown = painted.map_or(0, |(_, len)| len.min(bytes.len()));
+    let mut out = Vec::with_capacity(bytes.len() - shown + 2);
+    out.extend_from_slice(&bytes[shown..]);
     out.extend_from_slice(b"\r\n");
     emit_output(app, out);
     scrollback.lock().await.push(bytes.clone());
@@ -2589,6 +2591,128 @@ mod tests {
             let _ = super::send_step(&mut self.p, &self.acc, 0);
             self.acc.forget_partial();
         }
+
+        /// One socket read of `events` in order, as the session handles
+        /// them, then the end of the read.
+        fn read_events(&mut self, events: &[Ev]) -> vosh_prompt::stage::Output {
+            let mut batch = super::ReadBatch::new(super::output_count());
+            let now = tokio::time::Instant::now();
+            for event in events {
+                match event {
+                    Ev::Data(data) => {
+                        for line in self.acc.feed(data) {
+                            let plain = vosh_ansi::plain_text(&line.bytes);
+                            let _ =
+                                super::line_step(&mut self.p, &mut batch, line, plain, now, None);
+                        }
+                    }
+                    Ev::Ga => {
+                        let _ =
+                            super::marker_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+                    }
+                }
+            }
+            let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+            batch.out
+        }
+    }
+
+    /// One event of a socket read.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum Ev {
+        Data(Vec<u8>),
+        Ga,
+    }
+
+    /// What the game sends: bytes with a GA wherever `*` stands.
+    fn stream(text: &str) -> Vec<Ev> {
+        let mut events = Vec::new();
+        for (i, part) in text.split('*').enumerate() {
+            if i > 0 {
+                events.push(Ev::Ga);
+            }
+            if !part.is_empty() {
+                events.push(Ev::Data(part.as_bytes().to_vec()));
+            }
+        }
+        events
+    }
+
+    /// `events` cut into two reads after `at` bytes, a GA counting as
+    /// one.
+    fn split_reads(events: &[Ev], at: usize) -> [Vec<Ev>; 2] {
+        let mut reads: [Vec<Ev>; 2] = [Vec::new(), Vec::new()];
+        let mut seen = 0;
+        for event in events {
+            match event {
+                Ev::Ga => {
+                    reads[usize::from(seen >= at)].push(Ev::Ga);
+                    seen += 1;
+                }
+                Ev::Data(data) => {
+                    let cut = at.saturating_sub(seen).min(data.len());
+                    if cut > 0 {
+                        reads[0].push(Ev::Data(data[..cut].to_vec()));
+                    }
+                    if cut < data.len() {
+                        reads[1].push(Ev::Data(data[cut..].to_vec()));
+                    }
+                    seen += data.len();
+                }
+            }
+        }
+        reads
+    }
+
+    /// How many cuts `events` has, a GA counting as one byte.
+    fn stream_len(events: &[Ev]) -> usize {
+        events
+            .iter()
+            .map(|e| match e {
+                Ev::Data(data) => data.len(),
+                Ev::Ga => 1,
+            })
+            .sum()
+    }
+
+    /// The screen a native grid `columns` wide shows after `reads`, rows
+    /// trimmed, up to the last row that shows anything.
+    fn screen_of(profile: &dyn Fn() -> Profile, columns: usize, reads: &[Vec<Ev>]) -> Vec<String> {
+        let mut wire = Wire::new(profile());
+        let mut grid = crate::term_grid::TermGrid::new(columns, 40);
+        for read in reads {
+            grid.session_output(&wire.read_events(read));
+        }
+        let mut rows: Vec<String> = (0..grid.screen_lines())
+            .map(|line| grid.row_string(line).trim_end().to_string())
+            .collect();
+        while rows.last().is_some_and(String::is_empty) {
+            rows.pop();
+        }
+        rows
+    }
+
+    /// Cut `text` into two reads at every byte, and check each screen is
+    /// the one a single read gives, at 40 and 12 wide, for the profile
+    /// `profile` makes. Returns the 40 wide screen.
+    fn same_at_every_split(profile: &dyn Fn() -> Profile, text: &str) -> Vec<String> {
+        let events = stream(text);
+        let mut wide = Vec::new();
+        for columns in [40, 12] {
+            let whole = screen_of(profile, columns, std::slice::from_ref(&events));
+            for at in 1..stream_len(&events) {
+                let reads = split_reads(&events, at);
+                assert_eq!(
+                    screen_of(profile, columns, &reads),
+                    whole,
+                    "{columns} wide, cut after {at}: {reads:?}"
+                );
+            }
+            if columns == 40 {
+                wide = whole;
+            }
+        }
+        wide
     }
 
     fn with(parts: &[&[u8]]) -> Vec<u8> {
@@ -2815,6 +2939,57 @@ mod tests {
         let second = wire.read_ga(b"");
         assert_eq!(second.bytes, b"\r\n");
         assert_eq!(second.replace, None);
+    }
+
+    #[test]
+    fn a_ga_on_a_partial_that_grew_after_its_paint_writes_the_whole_of_it() {
+        // The game's prompt, cut inside by TCP, on a profile that reads
+        // no prompt.
+        let mut wire = Wire::new(Profile::default());
+        let first = wire.read(b"Huh?\n\r<100hp 50");
+        assert_eq!(
+            first.bytes,
+            with(&[b"Huh?\r\n", &wire.mark(1), b"<100hp 50"])
+        );
+        let second = wire.read_ga(b"m 30mv> ");
+        assert_eq!(
+            second.replace,
+            Some(vosh_prompt::stage::Replace {
+                gen: wire.gen0 + 1,
+                bytes: b"<100hp 50m 30mv> \r\n".to_vec(),
+                fresh: true,
+            })
+        );
+        assert!(second.bytes.is_empty());
+    }
+
+    #[test]
+    fn a_game_prompt_nothing_reads_shows_whole_wherever_the_reads_split() {
+        let screen = same_at_every_split(
+            &Profile::default,
+            "Huh?\n\r<1020hp 800m 930mv> *\n\rYou are hungry.\n\r<1020hp 800m 930mv> *",
+        );
+        assert_eq!(
+            screen,
+            [
+                "Huh?",
+                "<1020hp 800m 930mv>",
+                "",
+                "You are hungry.",
+                "<1020hp 800m 930mv>"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_prompt_that_waits_for_its_line_end_draws_the_same_wherever_the_reads_split() {
+        // The migrated capture on a prompt ending in %c, which the game
+        // follows with a space and a GA.
+        let text = "You are hungry.\n\r[1020/1020hp 800/800mn 930/930mv]\n\r *\n\rA rat arrives.\n\r[1000/1020hp 800/800mn 930/930mv]\n\r *";
+        assert_eq!(
+            same_at_every_split(&|| capture_profile(HP), text),
+            ["You are hungry.", "<1020>", "", "A rat arrives.", "<1000>"]
+        );
     }
 
     #[test]
