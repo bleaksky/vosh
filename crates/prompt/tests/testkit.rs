@@ -658,3 +658,85 @@ fn a_cast_lands_at_once_and_each_tick_takes_an_hour_off() {
         .collect();
     assert_eq!(affect_hours(&login), ["fly 12"]);
 }
+
+/// Every Char.Affects list in `raw`, in order, each as `name hours`.
+fn affect_lists(raw: &[u8]) -> Vec<Vec<String>> {
+    packets(raw)
+        .into_iter()
+        .filter(|(name, _)| name == "Char.Affects")
+        .map(|(_, data)| {
+            data["affects"]
+                .as_array()
+                .expect("a list")
+                .iter()
+                .map(|a| format!("{} {}", a["name"].as_str().unwrap_or(""), a["duration"]))
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn quitting_takes_each_affect_off_in_turn_before_the_goodbye() {
+    let mut mud = playing(Build::New);
+    let _ = run(&mut mud, "cast 10 sanctuary");
+    let _ = run(&mut mud, "tick");
+    let writes = mud.command("quit");
+    assert_eq!(writes.len(), 1);
+    assert!(writes[0].close);
+    // free_char calls affect_remove on each affect, and each removal
+    // writes the list that is left straight to the socket.
+    assert_eq!(
+        affect_lists(&writes[0].bytes),
+        [vec!["armor 43", "sanctuary 9"], vec!["sanctuary 9"], vec![]]
+    );
+    // The goodbye waits in the output buffer until the socket closes.
+    let parts = parts(&writes[0].bytes);
+    assert!(matches!(parts.last(), Some(Part::Text(_))));
+    assert!(parts[..parts.len() - 1]
+        .iter()
+        .all(|p| matches!(p, Part::Packet(..))));
+    // Under lamented tears the game hides every one of those lists.
+    let mut mud = playing(Build::New);
+    let _ = run(&mut mud, "lament");
+    let hidden: Vec<Json> = packets(&mud.command("quit")[0].bytes)
+        .into_iter()
+        .filter(|(name, _)| name == "Char.Affects")
+        .map(|(_, data)| data)
+        .collect();
+    assert_eq!(hidden.len(), 2);
+    assert!(hidden.iter().all(|d| d["hidden"] == true));
+}
+
+#[test]
+fn quit_menu_takes_your_affects_off_and_the_next_line_plays_you_again() {
+    for arg in ["menu", "m", "switch", "character", "char"] {
+        let mut mud = playing(Build::New);
+        let _ = run(&mut mud, "cast 10 sanctuary");
+        let _ = run(&mut mud, "tick");
+        let writes = mud.command(&format!("quit {arg}"));
+        assert!(writes.iter().all(|w| !w.close), "quit {arg} keeps the link");
+        let raw: Vec<u8> = writes.into_iter().flat_map(|w| w.bytes).collect();
+        assert_eq!(
+            affect_lists(&raw),
+            [vec!["armor 43", "sanctuary 9"], vec!["sanctuary 9"], vec![]],
+            "quit {arg}"
+        );
+        assert!(shown(&raw)
+            .contains("You step away from the Forsaken Lands and return to your account menu."));
+        // Your pfile kept the affects as they were when you quit.
+        let again: Vec<u8> = mud
+            .receive(b"\r\n")
+            .into_iter()
+            .flat_map(|w| w.bytes)
+            .collect();
+        assert_eq!(
+            affect_hours(&again),
+            ["bless 5", "armor 43", "sanctuary 9"],
+            "quit {arg}"
+        );
+        assert!(shown(&again).contains("Welcome to the fake Aabahran, Tester."));
+    }
+    // Any other word is a plain quit.
+    let mut mud = playing(Build::New);
+    assert!(mud.command("quit now")[0].close);
+}
