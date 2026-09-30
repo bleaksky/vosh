@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- Vosh at 16 px, drawn on the pixel grid for icon.ico. The Windows and Linux tile: full canvas, macOS squircle, bone rim. -->
+  <defs>
+    <clipPath id="tile"><path d="M0 5.21C0 1.45 1.45 0 5.21 0H10.79C14.55 0 16 1.45 16 5.21V10.79C16 14.55 14.55 16 10.79 16H5.21C1.45 16 0 14.55 0 10.79Z"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="8" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#131a1f"/><stop offset="1" stop-color="#1a2126"/></linearGradient>
+    <radialGradient id="wash" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(8 8) scale(3.5 9)"><stop offset="0" stop-color="#b0c8d4" stop-opacity="0.22"/><stop offset="0.45" stop-color="#b0c8d4" stop-opacity="0.09"/><stop offset="1" stop-color="#b0c8d4" stop-opacity="0"/></radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="16" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#c5c9c7" stop-opacity="0.42"/><stop offset="1" stop-color="#c5c9c7" stop-opacity="0.26"/></linearGradient>
+  </defs>
+  <g clip-path="url(#tile)">
+    <!-- sky and water, horizon on row 8 -->
+    <rect width="16" height="8" fill="url(#sky)"/>
+    <rect y="8" width="16" height="8" fill="#090e13"/>
+    <rect y="9" width="16" height="7" fill="url(#wash)"/>
+    <rect y="8" width="16" height="1" fill="#2a3136"/>
+    <rect x="6" y="8" width="4" height="1" fill="#4c5358"/>
+    <rect x="7" y="8" width="2" height="1" fill="#6a7175"/>
+    <!-- Lysenties, waxing gibbous, lit from the right -->
+    <circle cx="8" cy="4" r="3" fill="#3b4145"/>
+    <path d="M8 1A3 3 0 0 1 8 7A1.2 3 0 0 1 8 1Z" fill="#e4e7e5"/>
+    <!-- the moonpath, widening toward you -->
+    <rect x="7" y="9" width="2" height="3" fill="#b3b8b9"/>
+    <rect x="6" y="11" width="1" height="1" fill="#a9aeb0" fill-opacity="0.45"/>
+    <rect x="9" y="11" width="1" height="1" fill="#a9aeb0" fill-opacity="0.45"/>
+    <!-- the cursor on the axis -->
+    <rect x="7" y="13" width="2" height="1" fill="#b0c8d4"/>
+    <!-- rim: the inner half of a 2 px stroke on the squircle -->
+    <path d="M0 5.21C0 1.45 1.45 0 5.21 0H10.79C14.55 0 16 1.45 16 5.21V10.79C16 14.55 14.55 16 10.79 16H5.21C1.45 16 0 14.55 0 10.79Z" fill="none" stroke="url(#rim)" stroke-width="2"/>
+  </g>
+</svg>

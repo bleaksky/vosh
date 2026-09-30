@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- Vosh at 16 px on the Big Sur grid (12 px body inset 2 px), drawn on the pixel grid for icon.icns 16x16. -->
+  <defs>
+    <clipPath id="body"><path d="M2 5.91C2 3.09 3.09 2 5.91 2H10.09C12.91 2 14 3.09 14 5.91V10.09C14 12.91 12.91 14 10.09 14H5.91C3.09 14 2 12.91 2 10.09Z"/></clipPath>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="0.45"/></filter>
+    <linearGradient id="sky" x1="0" y1="2" x2="0" y2="8" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#141b20"/><stop offset="1" stop-color="#1b2227"/></linearGradient>
+    <radialGradient id="wash" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(8 8) scale(3 7)"><stop offset="0" stop-color="#b0c8d4" stop-opacity="0.22"/><stop offset="0.45" stop-color="#b0c8d4" stop-opacity="0.09"/><stop offset="1" stop-color="#b0c8d4" stop-opacity="0"/></radialGradient>
+    <linearGradient id="rim" x1="0" y1="2" x2="0" y2="14" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#c5c9c7" stop-opacity="0.26"/><stop offset="1" stop-color="#c5c9c7" stop-opacity="0.14"/></linearGradient>
+  </defs>
+  <!-- shadow in the margin -->
+  <path d="M2 5.91C2 3.09 3.09 2 5.91 2H10.09C12.91 2 14 3.09 14 5.91V10.09C14 12.91 12.91 14 10.09 14H5.91C3.09 14 2 12.91 2 10.09Z" transform="translate(0 0.5)" fill="#000000" fill-opacity="0.28" filter="url(#soft)"/>
+  <g clip-path="url(#body)">
+    <!-- sky and water, horizon on row 8 -->
+    <rect x="2" y="2" width="12" height="6" fill="url(#sky)"/>
+    <rect x="2" y="8" width="12" height="6" fill="#090e13"/>
+    <rect x="2" y="9" width="12" height="5" fill="url(#wash)"/>
+    <rect x="2" y="8" width="12" height="1" fill="#2a3136"/>
+    <rect x="7" y="8" width="2" height="1" fill="#5d6468"/>
+    <!-- Lysenties, waxing gibbous, lit from the right -->
+    <circle cx="8" cy="5" r="2" fill="#3b4145"/>
+    <path d="M8 3A2 2 0 0 1 8 7A0.8 2 0 0 1 8 3Z" fill="#e4e7e5"/>
+    <!-- the moonpath, down to the near water -->
+    <rect x="7" y="9" width="2" height="4" fill="#aeb3b4"/>
+    <!-- rim: the inner half of a 2 px stroke on the squircle -->
+    <path d="M2 5.91C2 3.09 3.09 2 5.91 2H10.09C12.91 2 14 3.09 14 5.91V10.09C14 12.91 12.91 14 10.09 14H5.91C3.09 14 2 12.91 2 10.09Z" fill="none" stroke="url(#rim)" stroke-width="2"/>
+  </g>
+</svg>

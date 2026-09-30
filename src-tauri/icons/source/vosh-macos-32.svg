@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Vosh at 32 px on the Big Sur grid (26 px body inset 3 px), drawn on the pixel grid for icon.icns 32x32 and 16x16@2x. -->
+  <defs>
+    <clipPath id="body"><path d="M3 11.47C3 5.36 5.36 3 11.47 3H20.53C26.64 3 29 5.36 29 11.47V20.53C29 26.64 26.64 29 20.53 29H11.47C5.36 29 3 26.64 3 20.53Z"/></clipPath>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="0.6"/></filter>
+    <linearGradient id="sky" x1="0" y1="3" x2="0" y2="15" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#131a1f"/><stop offset="1" stop-color="#1a2126"/></linearGradient>
+    <radialGradient id="glow" cx="16" cy="9" r="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#b0c8d4" stop-opacity="0.10"/><stop offset="1" stop-color="#b0c8d4" stop-opacity="0"/></radialGradient>
+    <radialGradient id="wash" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(16 16) scale(5.5 14)"><stop offset="0" stop-color="#b0c8d4" stop-opacity="0.22"/><stop offset="0.45" stop-color="#b0c8d4" stop-opacity="0.09"/><stop offset="1" stop-color="#b0c8d4" stop-opacity="0"/></radialGradient>
+    <linearGradient id="rim" x1="0" y1="3" x2="0" y2="29" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#c5c9c7" stop-opacity="0.32"/><stop offset="1" stop-color="#c5c9c7" stop-opacity="0.18"/></linearGradient>
+  </defs>
+  <!-- shadow in the margin -->
+  <path d="M3 11.47C3 5.36 5.36 3 11.47 3H20.53C26.64 3 29 5.36 29 11.47V20.53C29 26.64 26.64 29 20.53 29H11.47C5.36 29 3 26.64 3 20.53Z" transform="translate(0 0.6)" fill="#000000" fill-opacity="0.30" filter="url(#soft)"/>
+  <g clip-path="url(#body)">
+    <!-- sky and water, horizon on row 15 -->
+    <rect x="3" y="3" width="26" height="12" fill="url(#sky)"/>
+    <rect x="3" y="3" width="26" height="12" fill="url(#glow)"/>
+    <rect x="3" y="15" width="26" height="14" fill="#090e13"/>
+    <rect x="3" y="16" width="26" height="13" fill="url(#wash)"/>
+    <rect x="3" y="15" width="26" height="1" fill="#2a3136"/>
+    <rect x="13" y="15" width="6" height="1" fill="#454c51"/>
+    <rect x="15" y="15" width="2" height="1" fill="#6a7175"/>
+    <!-- Lysenties, waxing gibbous, lit from the right -->
+    <circle cx="16" cy="9" r="4" fill="#3b4145"/>
+    <path d="M16 5A4 4 0 0 1 16 13A1.6 4 0 0 1 16 5Z" fill="#e4e7e5"/>
+    <!-- scrollback, far too small to read -->
+    <g fill="#c5c9c7" fill-opacity="0.07">
+      <rect x="6" y="20" width="3" height="1"/><rect x="10" y="20" width="3" height="1"/><rect x="19" y="20" width="4" height="1"/><rect x="24" y="20" width="2" height="1"/>
+      <rect x="5" y="22" width="4" height="1"/><rect x="10" y="22" width="3" height="1"/><rect x="19" y="22" width="3" height="1"/><rect x="23" y="22" width="4" height="1"/>
+      <rect x="5" y="24" width="5" height="1"/><rect x="11" y="24" width="2" height="1"/><rect x="19" y="24" width="4" height="1"/>
+    </g>
+    <!-- the moonpath: one lit run per line, widening toward you -->
+    <rect x="15" y="16" width="2" height="4" fill="#b3b8b9"/>
+    <rect x="15" y="20" width="2" height="3" fill="#a9aeb0"/>
+    <rect x="14" y="20" width="1" height="2" fill="#a9aeb0" fill-opacity="0.30"/>
+    <rect x="17" y="20" width="1" height="2" fill="#a9aeb0" fill-opacity="0.30"/>
+    <rect x="14" y="22" width="1" height="1" fill="#a9aeb0" fill-opacity="0.65"/>
+    <rect x="17" y="22" width="1" height="1" fill="#a9aeb0" fill-opacity="0.65"/>
+    <rect x="14" y="23" width="4" height="2" fill="#a0a5a7"/>
+    <!-- look moon, and the cursor on the axis -->
+    <rect x="6" y="27" width="4" height="1" fill="#c5c9c7" fill-opacity="0.30"/>
+    <rect x="11" y="27" width="3" height="1" fill="#c5c9c7" fill-opacity="0.30"/>
+    <rect x="15" y="26" width="2" height="2" fill="#b0c8d4"/>
+    <!-- rim: the inner half of a 2 px stroke on the squircle -->
+    <path d="M3 11.47C3 5.36 5.36 3 11.47 3H20.53C26.64 3 29 5.36 29 11.47V20.53C29 26.64 26.64 29 20.53 29H11.47C5.36 29 3 26.64 3 20.53Z" fill="none" stroke="url(#rim)" stroke-width="2"/>
+  </g>
+</svg>
