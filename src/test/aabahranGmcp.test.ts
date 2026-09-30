@@ -9,13 +9,14 @@ const PACKAGES: Record<string, string> = {
   'char-prompt': 'Char.Prompt',
   'char-state': 'Char.State',
   'room-weather': 'Room.Weather',
+  'room-info': 'Room.Info',
   'group-info': 'Group.Info',
 };
 
 describe('the Aabahran GMCP fixtures', () => {
   it('split into the package each file names and a JSON object', () => {
     const names = aabahranFixtureNames();
-    expect(names.length).toBeGreaterThanOrEqual(18);
+    expect(names.length).toBeGreaterThanOrEqual(27);
     for (const name of names) {
       const prefix = Object.keys(PACKAGES).find((p) => name.startsWith(p));
       expect(prefix, name).toBeDefined();
