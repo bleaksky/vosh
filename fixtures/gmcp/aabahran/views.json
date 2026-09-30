@@ -1,0 +1,219 @@
+{
+  "char-vitals-hidden.gmcp": {
+    "hp": 0,
+    "maxhp": 0,
+    "mana": 0,
+    "maxmana": 0,
+    "move": 0,
+    "maxmove": 0,
+    "hidden": true
+  },
+  "char-vitals-zero.gmcp": {
+    "hp": 0,
+    "maxhp": 0,
+    "mana": 0,
+    "maxmana": 0,
+    "move": 0,
+    "maxmove": 0,
+    "hidden": false
+  },
+  "char-vitals.gmcp": {
+    "hp": 850,
+    "maxhp": 900,
+    "mana": 760,
+    "maxmana": 820,
+    "move": 250,
+    "maxmove": 250,
+    "hidden": false
+  },
+  "char-affects-empty.gmcp": {
+    "affects": [],
+    "hidden": false
+  },
+  "char-affects-hidden.gmcp": {
+    "affects": [],
+    "hidden": true
+  },
+  "char-affects-lament.gmcp": {
+    "affects": [
+      {
+        "name": "bless",
+        "kind": "spell",
+        "duration": 6
+      },
+      {
+        "name": "lamented tears",
+        "kind": "song",
+        "duration": 5
+      }
+    ],
+    "hidden": false
+  },
+  "char-affects.gmcp": {
+    "affects": [
+      {
+        "name": "bless",
+        "kind": "spell",
+        "duration": 6
+      },
+      {
+        "name": "armor",
+        "kind": "spell",
+        "duration": 44
+      },
+      {
+        "name": "bagatelle of bravado",
+        "kind": "song",
+        "duration": 8
+      }
+    ],
+    "hidden": false
+  },
+  "char-combat-end.gmcp": null,
+  "char-combat-hidden.gmcp": {
+    "opponent": "a Blackwatch guard",
+    "hp_pct": null,
+    "condition": null,
+    "hidden": true,
+    "tank": null
+  },
+  "char-combat-lament-older.gmcp": {
+    "opponent": "a Blackwatch guard",
+    "hp_pct": 41,
+    "condition": "big nasty wounds",
+    "hidden": false,
+    "tank": null
+  },
+  "char-combat-tank-hidden.gmcp": {
+    "opponent": "a Blackwatch guard",
+    "hp_pct": null,
+    "condition": null,
+    "hidden": true,
+    "tank": {
+      "name": "Tester",
+      "hp_pct": null
+    }
+  },
+  "char-combat-tank.gmcp": {
+    "opponent": "a Blackwatch guard",
+    "hp_pct": 54,
+    "condition": "quite a few wounds",
+    "hidden": false,
+    "tank": {
+      "name": "Tester",
+      "hp_pct": 78
+    }
+  },
+  "char-combat-withheld.gmcp": {
+    "opponent": "a Blackwatch guard",
+    "hp_pct": null,
+    "condition": null,
+    "hidden": false,
+    "tank": null
+  },
+  "char-combat.gmcp": {
+    "opponent": "a Blackwatch guard",
+    "hp_pct": 54,
+    "condition": "quite a few wounds",
+    "hidden": false,
+    "tank": null
+  },
+  "group-info-empty.gmcp": {
+    "leader": null,
+    "members": [],
+    "hidden": false
+  },
+  "group-info-hidden.gmcp": {
+    "leader": null,
+    "members": [],
+    "hidden": true
+  },
+  "group-info-own-row.gmcp": {
+    "leader": "Tester",
+    "members": [
+      {
+        "id": 1769388810,
+        "name": "Tester",
+        "level": 50,
+        "class": "Dkn",
+        "hp_pct": 64,
+        "mana_pct": 71,
+        "move_pct": 90,
+        "tnl": 1250
+      },
+      {
+        "id": 1769401002,
+        "name": "a loyal wolf",
+        "level": 32,
+        "class": "mob",
+        "hp_pct": 83,
+        "mana_pct": 100,
+        "move_pct": 88,
+        "tnl": 0
+      }
+    ],
+    "hidden": false
+  },
+  "group-info-solo.gmcp": {
+    "leader": null,
+    "members": [],
+    "hidden": false
+  },
+  "group-info.gmcp": {
+    "leader": "Tester",
+    "members": [
+      {
+        "id": 1769388810,
+        "name": "Tester",
+        "level": 50,
+        "class": "Dkn",
+        "hp_pct": 78,
+        "mana_pct": 55,
+        "move_pct": 93,
+        "tnl": 1250
+      },
+      {
+        "id": 1769401002,
+        "name": "a loyal wolf",
+        "level": 32,
+        "class": "mob",
+        "hp_pct": 91,
+        "mana_pct": 100,
+        "move_pct": 88,
+        "tnl": 0
+      }
+    ],
+    "hidden": false
+  },
+  "char-state.gmcp": {
+    "position": "sitting",
+    "language": "common"
+  },
+  "room-weather-indoors.gmcp": {
+    "sky": "indoors",
+    "temp": 18,
+    "unit": "C",
+    "region": "Temperate"
+  },
+  "room-weather.gmcp": {
+    "sky": "rainy",
+    "temp": 60,
+    "unit": "F",
+    "region": "Coastal North"
+  },
+  "char-prompt-fight.gmcp": {
+    "enabled": true,
+    "prompt": "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c",
+    "fprompt": "`1%h``hp [%p] > "
+  },
+  "char-prompt-off.gmcp": {
+    "enabled": false,
+    "prompt": "%n%P%C<%hhp %mm %vmv> ",
+    "fprompt": ""
+  },
+  "char-prompt.gmcp": {
+    "enabled": true,
+    "prompt": "%n%P%C<%hhp %mm %vmv> ",
+    "fprompt": ""
+  }
+}
