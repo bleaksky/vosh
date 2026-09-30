@@ -1873,6 +1873,19 @@ fn room_exits(exits: &Json) -> Value {
     Value::Exits { letters, game }
 }
 
+/// True when an affect row with `next` ticks left outlasts one with
+/// `prev`. A permanent row (-1) outlasts every other, and a row that
+/// gives no duration outlasts none. The Affects pane folds rows the same
+/// way.
+fn outlasts(next: Option<i64>, prev: Option<i64>) -> bool {
+    match (next, prev) {
+        (None, _) => false,
+        (Some(_), None) => true,
+        (Some(_), Some(p)) if p < 0 => false,
+        (Some(n), Some(p)) => n < 0 || n > p,
+    }
+}
+
 /// A GMCP value as a field value.
 fn json_value(value: &Json) -> Resolved {
     match value {
@@ -2207,18 +2220,28 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// An affect by name. The game sends one row per thing it modifies,
+    /// and the name stays up until the last of them drops, so the longest
+    /// row wins, as in the Affects pane.
     fn aff(&self, name: &str) -> Resolved {
         let Some(affects) = self.gmcp().affects() else {
             return Resolved::Missing;
         };
-        match affects
+        let mut rows = affects
             .list
             .iter()
-            .find(|a| gmcp::same_words(&a.name, name))
-        {
-            None => Resolved::Absent,
-            Some(a) => Resolved::Value(a.duration.map_or(Value::Flag, Value::Ticks)),
-        }
+            .filter(|a| gmcp::same_words(&a.name, name));
+        let Some(first) = rows.next() else {
+            return Resolved::Absent;
+        };
+        let duration = rows.fold(first.duration, |longest, a| {
+            if outlasts(a.duration, longest) {
+                a.duration
+            } else {
+                longest
+            }
+        });
+        Resolved::Value(duration.map_or(Value::Flag, Value::Ticks))
     }
 
     fn exits(&self) -> Resolved {

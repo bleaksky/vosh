@@ -654,6 +654,25 @@ fn paths_and_affects_reach_any_packet() {
     );
     assert_eq!(resolve(&vars, "aff:sanctuary"), Resolved::Absent);
     assert_eq!(draw(&vars, "%{aff:armor:on}%{aff:haste:off}"), "armorhaste");
+    // One row per thing an affect modifies. The longest row wins, and a
+    // permanent one outlasts them all, as in the Affects pane.
+    packet(
+        &mut vars,
+        "Char.Affects",
+        json!({"affects":[
+            {"name":"giant strength","duration":3,"location":"strength","modifier":2},
+            {"name":"giant strength","duration":9,"location":"hitroll","modifier":1},
+            {"name":"giant strength","location":"damroll","modifier":1},
+            {"name":"fly","duration":4},
+            {"name":"fly","duration":-1},
+            {"name":"fly","duration":12}
+        ]}),
+    );
+    assert_eq!(
+        resolve(&vars, "aff:giant_strength"),
+        Resolved::Value(Value::Ticks(9))
+    );
+    assert_eq!(resolve(&vars, "aff:fly"), Resolved::Value(Value::Ticks(-1)));
     assert_eq!(
         vars.resolver(&vosh()).label(&FieldRef::with_param(
             "gmcp",
