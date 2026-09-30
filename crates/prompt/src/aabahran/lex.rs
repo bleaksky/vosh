@@ -15,7 +15,7 @@
 
 use std::ops::Range;
 
-use super::codes::{chars, Code};
+use super::codes::{chars, Code, Edges};
 use super::colors::{self, Color};
 use super::{CompileError, Warning, WarningKind, Which, Who};
 
@@ -250,12 +250,20 @@ pub struct Placed {
 /// itself. A backtick that ends the setting or a line drops.
 ///
 /// Pass one's `%C` reaches here as a line end, so the caller drops it
-/// first for a shape where it prints nothing.
+/// first for a shape where it prints nothing. `edges` says what each code
+/// can print in the shape, and whether it can print nothing there.
 ///
-/// A run that ends in a backtick right before a code, or in part of a 256
-/// color that the code's digits would finish, takes the code's first
-/// character as a color, which no pattern can follow. That is the error.
-pub fn pass_two(tokens: &[Lexed], which: Which, who: Who) -> Result<Vec<Placed>, CompileError> {
+/// A run that ends in a backtick right before a code takes the first
+/// character printed after it. When that is always one `process_color`
+/// prints as it is, such as the `[` that `%e` starts with, the backtick
+/// just drops. Otherwise it can take the code's first character as a
+/// color, which no pattern can follow, and so can a run that ends in part
+/// of a 256 color the code's digits would finish. That is the error.
+pub fn pass_two(
+    tokens: &[Lexed],
+    which: Which,
+    edges: &dyn Fn(Code) -> Edges,
+) -> Result<Vec<Placed>, CompileError> {
     let mut out = Vec::new();
     let mut i = 0;
     while let Some(lexed) = tokens.get(i) {
@@ -271,7 +279,7 @@ pub fn pass_two(tokens: &[Lexed], which: Which, who: Who) -> Result<Vec<Placed>,
                 ) {
                     i += 1;
                 }
-                run(&tokens[start..i], tokens.get(i), which, who, &mut out)?;
+                run(&tokens[start..i], &tokens[i..], which, edges, &mut out)?;
                 continue;
             }
             Token::Break | Token::TankBreak => Piece::Break,
@@ -286,14 +294,42 @@ pub fn pass_two(tokens: &[Lexed], which: Which, who: Who) -> Result<Vec<Placed>,
     Ok(out)
 }
 
-/// One run of copied characters, and what follows it.
+/// The characters of a code's text that `process_color` prints as they
+/// are after a backtick.
+const PLAIN: u8 = chars::BRACKET | chars::SPACE | chars::APOS;
+
+/// True when a character prints as it is after a backtick, so the
+/// backtick before it just drops. A color code, `-`, `=`, and the `(`
+/// that can start a 256 color do not.
+fn plain(c: char) -> bool {
+    colors::index(c).is_none() && !matches!(c, '-' | '=' | '(')
+}
+
+/// True when the first character printed from `rest` on, the tokens after
+/// a run that ends in a lone backtick, is always one that prints as it
+/// is, so the backtick drops whatever the codes print. A code that can
+/// print nothing hands the question to what follows it. A line end or
+/// the end of the setting takes the backtick as the game drops it there.
+fn takes_plain(rest: &[Lexed], edges: &dyn Fn(Code) -> Edges) -> bool {
+    match rest.first().map(|l| l.token) {
+        None | Some(Token::Break | Token::TankBreak) => true,
+        Some(Token::Lit(c)) => plain(c),
+        Some(Token::Code(code)) => {
+            let prints = edges(code);
+            prints.first & !PLAIN == 0 && (!prints.nullable || takes_plain(&rest[1..], edges))
+        }
+    }
+}
+
+/// One run of copied characters, and the tokens after it.
 fn run(
     run: &[Lexed],
-    next: Option<&Lexed>,
+    rest: &[Lexed],
     which: Which,
-    who: Who,
+    edges: &dyn Fn(Code) -> Edges,
     out: &mut Vec<Placed>,
 ) -> Result<(), CompileError> {
+    let next = rest.first();
     let chars: Vec<(char, Range<usize>)> = run
         .iter()
         .filter_map(|l| match l.token {
@@ -325,8 +361,9 @@ fn run(
             continue;
         }
         let Some((a, a_span)) = chars.get(k + 1).cloned() else {
-            // A backtick at the end of the run eats what comes next.
-            if next_code.is_some() {
+            // A backtick at the end of the run takes the first character
+            // printed after it.
+            if next_code.is_some() && !takes_plain(rest, edges) {
                 return Err(swallows(span.start));
             }
             k += 1;
@@ -356,7 +393,7 @@ fn run(
             let ends_inside = digits.len() < 3 && k + 2 + digits.len() == n;
             let digit_next = next_code
                 .as_ref()
-                .is_some_and(|(code, _)| code.edges(who).first & chars::DIGIT != 0);
+                .is_some_and(|(code, _)| edges(*code).first & chars::DIGIT != 0);
             if ends_inside && digit_next {
                 return Err(swallows(span.start));
             }
@@ -655,8 +692,10 @@ mod tests {
 
     fn printed(setting: &str) -> Result<Vec<Piece>, CompileError> {
         let read = pass_one(setting, Which::Prompt);
-        pass_two(&read.tokens, Which::Prompt, Who::default())
-            .map(|placed| placed.into_iter().map(|p| p.piece).collect())
+        pass_two(&read.tokens, Which::Prompt, &|code| {
+            code.edges(Who::default())
+        })
+        .map(|placed| placed.into_iter().map(|p| p.piece).collect())
     }
 
     fn table(index: u8, code: char) -> Piece {
@@ -747,9 +786,28 @@ mod tests {
     }
 
     #[test]
+    fn a_backtick_before_a_code_that_starts_with_a_bracket_drops() {
+        // %e always starts with [, which a backtick prints as it is, so
+        // the game prints the same as with no backtick.
+        assert_eq!(
+            printed("<`%e>"),
+            Ok([text("<"), vec![Piece::Code(Code::Exits)], text(">")].concat())
+        );
+        assert_eq!(
+            printed("[`%p]"),
+            Ok([text("["), vec![Piece::Code(Code::TankPct)], text("]")].concat())
+        );
+        // A code that can start with a color code letter still runs in.
+        assert_eq!(printed("`%S").expect_err("%S").code, "%S");
+    }
+
+    #[test]
     fn pieces_keep_where_they_came_from() {
         let read = pass_one("a%l(240)b%h", Which::Prompt);
-        let placed = pass_two(&read.tokens, Which::Prompt, Who::default()).unwrap();
+        let placed = pass_two(&read.tokens, Which::Prompt, &|code| {
+            code.edges(Who::default())
+        })
+        .unwrap();
         let spans: Vec<Range<usize>> = placed.iter().map(|p| p.span.clone()).collect();
         // The color spans %l and the four characters after it.
         assert_eq!(spans, [0..1, 1..8, 8..9, 9..11]);
