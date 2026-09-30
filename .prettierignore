@@ -11,3 +11,4 @@ Cargo.lock
 LICENSE
 fixtures/
 .claude/
+src-tauri/icons/source/vosh.icon/

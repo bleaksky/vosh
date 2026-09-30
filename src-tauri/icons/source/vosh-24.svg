@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Vosh at 24 px, drawn on the pixel grid for icon.ico. The Windows and Linux tile: full canvas, macOS squircle, bone rim. -->
+  <defs>
+    <clipPath id="tile"><path d="M0 7.82C0 2.18 2.18 0 7.82 0H16.18C21.82 0 24 2.18 24 7.82V16.18C24 21.82 21.82 24 16.18 24H7.82C2.18 24 0 21.82 0 16.18Z"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="11" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#131a1f"/><stop offset="1" stop-color="#1a2126"/></linearGradient>
+    <radialGradient id="glow" cx="12" cy="6" r="9" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#b0c8d4" stop-opacity="0.10"/><stop offset="1" stop-color="#b0c8d4" stop-opacity="0"/></radialGradient>
+    <radialGradient id="wash" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(12 12) scale(5 13)"><stop offset="0" stop-color="#b0c8d4" stop-opacity="0.22"/><stop offset="0.45" stop-color="#b0c8d4" stop-opacity="0.09"/><stop offset="1" stop-color="#b0c8d4" stop-opacity="0"/></radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#c5c9c7" stop-opacity="0.40"/><stop offset="1" stop-color="#c5c9c7" stop-opacity="0.24"/></linearGradient>
+  </defs>
+  <g clip-path="url(#tile)">
+    <!-- sky and water, horizon on row 11 -->
+    <rect width="24" height="11" fill="url(#sky)"/>
+    <rect width="24" height="11" fill="url(#glow)"/>
+    <rect y="11" width="24" height="13" fill="#090e13"/>
+    <rect y="12" width="24" height="12" fill="url(#wash)"/>
+    <rect y="11" width="24" height="1" fill="#2a3136"/>
+    <rect x="10" y="11" width="4" height="1" fill="#4c5358"/>
+    <rect x="11" y="11" width="2" height="1" fill="#6a7175"/>
+    <!-- Lysenties, waxing gibbous, lit from the right -->
+    <circle cx="12" cy="6" r="4" fill="#3b4145"/>
+    <path d="M12 2A4 4 0 0 1 12 10A1.6 4 0 0 1 12 2Z" fill="#e4e7e5"/>
+    <!-- scrollback, far too small to read -->
+    <g fill="#c5c9c7" fill-opacity="0.07">
+      <rect x="3" y="16" width="3" height="1"/><rect x="7" y="16" width="3" height="1"/><rect x="14" y="16" width="4" height="1"/><rect x="19" y="16" width="2" height="1"/>
+      <rect x="2" y="18" width="4" height="1"/><rect x="7" y="18" width="2" height="1"/><rect x="15" y="18" width="3" height="1"/><rect x="19" y="18" width="3" height="1"/>
+    </g>
+    <!-- the moonpath: one lit run per line, widening toward you -->
+    <rect x="11" y="12" width="2" height="3" fill="#b3b8b9"/>
+    <rect x="11" y="15" width="2" height="3" fill="#a9aeb0"/>
+    <rect x="10" y="15" width="1" height="2" fill="#a9aeb0" fill-opacity="0.30"/>
+    <rect x="13" y="15" width="1" height="2" fill="#a9aeb0" fill-opacity="0.30"/>
+    <rect x="10" y="17" width="1" height="1" fill="#a9aeb0" fill-opacity="0.65"/>
+    <rect x="13" y="17" width="1" height="1" fill="#a9aeb0" fill-opacity="0.65"/>
+    <rect x="10" y="18" width="4" height="2" fill="#a0a5a7"/>
+    <!-- look moon, and the cursor on the axis -->
+    <rect x="4" y="22" width="3" height="1" fill="#c5c9c7" fill-opacity="0.30"/>
+    <rect x="8" y="22" width="2" height="1" fill="#c5c9c7" fill-opacity="0.30"/>
+    <rect x="11" y="21" width="2" height="2" fill="#b0c8d4"/>
+    <!-- rim: the inner half of a 2 px stroke on the squircle -->
+    <path d="M0 7.82C0 2.18 2.18 0 7.82 0H16.18C21.82 0 24 2.18 24 7.82V16.18C24 21.82 21.82 24 16.18 24H7.82C2.18 24 0 21.82 0 16.18Z" fill="none" stroke="url(#rim)" stroke-width="2"/>
+  </g>
+</svg>

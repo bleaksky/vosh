@@ -1,0 +1,131 @@
+{
+  "fill-specializations": [
+    {
+      "value": {
+        "solid": "srgb:0.33725,0.41961,0.47843,1.00000"
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "solid": "srgb:0.03529,0.05490,0.07451,1.00000"
+      }
+    }
+  ],
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "cursor.svg",
+          "name": "cursor",
+          "glass": false
+        }
+      ],
+      "shadow": {
+        "kind": "none",
+        "opacity": 0.5
+      },
+      "specular": false
+    },
+    {
+      "layers": [
+        {
+          "name": "glade",
+          "glass": false,
+          "image-name-specializations": [
+            {
+              "value": "glade-light.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "glade.svg"
+            },
+            {
+              "appearance": "tinted",
+              "value": "glade.svg"
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "none",
+        "opacity": 0.5
+      },
+      "specular": false
+    },
+    {
+      "layers": [
+        {
+          "name": "moon-lit",
+          "glass": false,
+          "image-name-specializations": [
+            {
+              "value": "moon-lit-light.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "moon-lit.svg"
+            },
+            {
+              "appearance": "tinted",
+              "value": "moon-lit.svg"
+            }
+          ]
+        },
+        {
+          "name": "moon-disc",
+          "glass": false,
+          "image-name-specializations": [
+            {
+              "value": "moon-disc-light.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "moon-disc.svg"
+            },
+            {
+              "appearance": "tinted",
+              "value": "moon-disc.svg"
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "none",
+        "opacity": 0.5
+      },
+      "specular": false
+    },
+    {
+      "layers": [
+        {
+          "name": "scene",
+          "glass": false,
+          "image-name-specializations": [
+            {
+              "value": "scene-light.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "scene.svg"
+            },
+            {
+              "appearance": "tinted",
+              "value": "scene.svg"
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "none",
+        "opacity": 0.5
+      },
+      "specular": false
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}
