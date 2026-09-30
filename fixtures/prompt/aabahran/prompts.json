@@ -1,0 +1,105 @@
+{
+  "notes": "PROMPT settings for the Aabahran compiler. Rows name the log rows the design notes quote, and the settings follow those quotes, not a read of any log. A stored setting is as the game keeps it, from a Current prompt or Prompt set to line. A typed one is what you type after prompt, which Vosh stores as the game would first. Rows with no number are hand cases that cover every code, the tank break, a fight prompt, an empty setting and prompt all. The test expands each setting in several game states with an expander that mirrors bust_a_prompt, reads the lines back, and checks every value against the state. Shapes and warnings list what the compile gives, the AFK shape last.",
+  "prompts": [
+    {
+      "row": 708698,
+      "origin": "stored",
+      "prompt": "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c",
+      "shapes": ["prompt normal", "prompt tank", "prompt afk"],
+      "warnings": []
+    },
+    {
+      "row": 509953,
+      "origin": "stored",
+      "prompt": "[%h/%Hhp %m/%Mmn %v/%Vmv] ",
+      "shapes": ["prompt either", "prompt afk"],
+      "warnings": []
+    },
+    {
+      "row": 507606,
+      "origin": "stored",
+      "prompt": "%hhp %mmn %vmv> ",
+      "shapes": ["prompt either", "prompt afk"],
+      "warnings": []
+    },
+    {
+      "row": 242738,
+      "origin": "typed",
+      "prompt": "> ",
+      "shapes": ["prompt either", "prompt afk"],
+      "warnings": ["short"]
+    },
+    {
+      "row": 244529,
+      "origin": "typed",
+      "prompt": "%l2%L",
+      "shapes": ["prompt either", "prompt afk"],
+      "warnings": ["short"]
+    },
+    {
+      "row": 246847,
+      "origin": "typed",
+      "prompt": "%t (%j1 %j2 %j3) ",
+      "shapes": ["prompt either", "prompt afk"],
+      "warnings": []
+    },
+    {
+      "row": 247013,
+      "origin": "typed",
+      "prompt": "%l(101)blah%L",
+      "shapes": ["prompt either", "prompt afk"],
+      "warnings": []
+    },
+    {
+      "row": null,
+      "what": "Every value code, for an immortal, with a character between each two that run together.",
+      "origin": "stored",
+      "immortal": true,
+      "prompt": "%h/%H %m/%M %v/%V %K %k %E|%a %A %g %x %X|%t %w|%W|%G|%s %S %i|%e|%f1 %f0|%j1 %j2 %j3|%n%p|%P|%r|%R|%z|%b|%o|%O|%u%c",
+      "shapes": ["prompt either", "prompt afk"],
+      "warnings": []
+    },
+    {
+      "row": null,
+      "what": "The stock prompt, whose tank line comes and goes with %C.",
+      "origin": "typed",
+      "prompt": "all",
+      "shapes": ["prompt normal", "prompt tank", "prompt afk"],
+      "warnings": []
+    },
+    {
+      "row": null,
+      "what": "A fight prompt with its own tank line, read only in a fight.",
+      "origin": "stored",
+      "prompt": "<%hhp %vmv> ",
+      "fprompt": "%n%p%C<%hhp %mm> [%S]%c",
+      "shapes": ["prompt either", "fprompt normal", "fprompt tank", "prompt afk"],
+      "warnings": []
+    },
+    {
+      "row": null,
+      "what": "A fight prompt with the colour code Char.Prompt keeps raw.",
+      "origin": "stored",
+      "prompt": "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c",
+      "fprompt": "`1%h``hp [%p] > ",
+      "shapes": ["prompt normal", "prompt tank", "fprompt either", "prompt afk"],
+      "warnings": []
+    },
+    {
+      "row": null,
+      "what": "An empty setting, which the game prints as its fallback.",
+      "origin": "stored",
+      "prompt": "",
+      "shapes": ["prompt fallback", "prompt afk"],
+      "warnings": []
+    },
+    {
+      "row": null,
+      "what": "Codes on three lines, the tank line in the middle.",
+      "origin": "typed",
+      "prompt": "%t %W%c%n%P%C%h/%Hhp %m/%Mmn%c%g gold",
+      "shapes": ["prompt normal", "prompt tank", "prompt afk"],
+      "warnings": []
+    }
+  ]
+}

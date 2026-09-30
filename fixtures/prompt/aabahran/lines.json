@@ -1,0 +1,149 @@
+{
+  "notes": "Prompt lines as the Aabahran game sends them. Each case is one prompt, the lines it prints from the top, the raw bytes of each as hex with no line end, and their plain text. Rows name the log rows the design notes quote. The bytes follow those quotes and were not read from any log, and the character name reads Tester. The state is what the game held, which the test expander in crates/prompt/tests/aabahran_lines.rs turns into the same bytes. A case with whole set holds every line of the prompt, and the shape reads them all. A case with no shape is a line no shape may read.",
+  "cases": [
+    {
+      "row": 410133,
+      "what": "Out of a fight, with the Wizi and Incog prefix in 256 color 240.",
+      "prompt": "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c",
+      "state": {
+        "invis": 52,
+        "incog": 52,
+        "immortal": true,
+        "hit": 329,
+        "max_hit": 329,
+        "mana": 9999,
+        "max_mana": 9999,
+        "moves": 9999,
+        "max_move": 9999
+      },
+      "lines": [
+        {
+          "hex": "1b5b33383b353b3234306d2857697a69203532291b5b303b306d201b5b33383b353b3234306d28496e636f67203532291b5b303b306d205b3332392f333239687020393939392f393939396d6e20393939392f393939396d765d",
+          "plain": "(Wizi 52) (Incog 52) [329/329hp 9999/9999mn 9999/9999mv]"
+        }
+      ],
+      "whole": true,
+      "shape": "normal",
+      "values": {
+        "wizi": "52",
+        "incog": "52",
+        "hp": "329",
+        "maxhp": "329",
+        "mana": "9999",
+        "maxmana": "9999",
+        "move": "9999",
+        "maxmove": "9999"
+      }
+    },
+    {
+      "row": 708498,
+      "what": "The tank line while you tank at 20 percent, the bar in red. Only this first line of the prompt is quoted.",
+      "prompt": "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c",
+      "state": {
+        "invis": 60,
+        "incog": 60,
+        "immortal": true,
+        "fighting": true,
+        "hit": 204,
+        "max_hit": 1020,
+        "tank": { "name": "Tester", "hit": 204, "max_hit": 1020 }
+      },
+      "lines": [
+        {
+          "hex": "1b5b33383b353b3234306d2857697a69203630291b5b303b306d201b5b33383b353b3234306d28496e636f67203630291b5b303b306d205465737465723a205b1b5b303b33316d3d3d3d1b5b303b306d7c1b5b303b33316d2d2d2d1b5b303b306d7c1b5b303b33316d2d2d2d1b5b303b306d7c1b5b303b33316d2d2d2d1b5b303b306d5d",
+          "plain": "(Wizi 60) (Incog 60) Tester: [===|---|---|---]"
+        }
+      ],
+      "whole": false,
+      "shape": "tank",
+      "values": {
+        "wizi": "60",
+        "incog": "60",
+        "tank": "Tester",
+        "tank_bar": "===|---|---|---"
+      }
+    },
+    {
+      "row": 49057,
+      "what": "The stock prompt with Health at 15 percent, which the game colors red. It ends with no line end.",
+      "prompt": "%n%P%C<%hhp %mm %vmv> ",
+      "state": {
+        "hit": 159,
+        "max_hit": 1020,
+        "mana": 310,
+        "moves": 489
+      },
+      "lines": [
+        {
+          "hex": "3c1b5b303b33316d3135391b5b303b306d6870203331306d203438396d763e20",
+          "plain": "<159hp 310m 489mv> "
+        }
+      ],
+      "whole": true,
+      "shape": "normal",
+      "values": { "hp": "159", "mana": "310", "move": "489" }
+    },
+    {
+      "row": 79562,
+      "what": "Away, from a session with 256 color off, so the prefix comes as the nearest of the sixteen colors.",
+      "prompt": "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c",
+      "state": {
+        "invis": 60,
+        "incog": 60,
+        "immortal": true,
+        "afk": true,
+        "color_256": false
+      },
+      "lines": [
+        {
+          "hex": "1b5b33376d2857697a69203630291b5b303b306d201b5b33376d28496e636f67203630291b5b303b306d203c41464b3e20",
+          "plain": "(Wizi 60) (Incog 60) <AFK> "
+        }
+      ],
+      "whole": true,
+      "shape": "afk",
+      "values": { "wizi": "60", "incog": "60", "afk": "1" }
+    },
+    {
+      "row": 49089,
+      "what": "A reply to a quick key that landed on the prompt row. The notes quote its plain text only.",
+      "prompt": "%n%P%C<%hhp %mm %vmv> ",
+      "lines": [
+        {
+          "hex": null,
+          "plain": "<32hp 310m 489mv> You flee east from combat!"
+        }
+      ],
+      "whole": true,
+      "shape": null,
+      "values": {}
+    },
+    {
+      "row": null,
+      "what": "Tanking under lamented tears. The tank line keeps the name, the bar prints nothing, and every vital prints 0.",
+      "prompt": "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c",
+      "state": {
+        "fighting": true,
+        "lament": true,
+        "hit": 900,
+        "max_hit": 1020,
+        "tank": { "name": "Tester", "hit": 900, "max_hit": 1020 }
+      },
+      "lines": [
+        { "hex": "5465737465723a20", "plain": "Tester: " },
+        { "hex": "5b302f30687020302f306d6e20302f306d765d", "plain": "[0/0hp 0/0mn 0/0mv]" }
+      ],
+      "whole": true,
+      "shape": "tank",
+      "values": {
+        "tank": "Tester",
+        "hp": "0",
+        "maxhp": "0",
+        "mana": "0",
+        "maxmana": "0",
+        "move": "0",
+        "maxmove": "0"
+      }
+    }
+  ]
+}
