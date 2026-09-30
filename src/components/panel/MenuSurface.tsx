@@ -230,6 +230,9 @@ export function MenuItem({
           else onHover?.();
         }}
         onKeyDown={(e) => {
+          // A click focuses a button on Windows and Linux, disabled or
+          // not, so the keys must check too.
+          if (disabled) return;
           if (submenu && (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
             e.stopPropagation();
