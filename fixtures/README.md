@@ -9,6 +9,9 @@ fixtures/
   telnet/    Raw telnet negotiation captures (IAC sequences).
   ansi/      ANSI escape sequence captures, including 256 color and truecolor.
   gmcp/      GMCP message captures.
+    aabahran/  Hand written Aabahran packets, one payload per file, for the
+               new server build and the two older builds. Its README lists
+               what each one stands for.
   mccp/      MCCP compressed stream captures.
   pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.
   themes/    One theme file per format the Appearance import reads (Ghostty,
