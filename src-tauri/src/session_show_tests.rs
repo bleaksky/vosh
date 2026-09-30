@@ -1183,3 +1183,64 @@ fn an_echo_that_ends_the_prompt_row_takes_the_row_a_pinned_prompt_left() {
         assert_eq!(play(PromptShow::Pinned, draw), want, "draw {draw}");
     }
 }
+
+/// Whether the row a pinned prompt left is open after `out`, the way the
+/// page tracks it from each payload (src/lib/stores/pinnedPromptStore.ts)
+/// to decide whether Enter on an empty line echoes a line end.
+fn pin_row_after(open: bool, out: &Output) -> bool {
+    match out.pin_row {
+        Some(open) => open,
+        None => open && !vosh_prompt::stage::close_pin_row(&out.bytes).1,
+    }
+}
+
+#[test]
+fn enter_on_an_empty_line_ends_the_row_of_a_prompt_left_in_the_text() {
+    use vosh_prompt::PromptShow;
+    // The pager and the note editor, as Aabahran writes them: no GA and
+    // no line end, and the next page with no line end before it. Vosh
+    // does not read either as your prompt, so both stay in the text.
+    let pager = (
+        b"\n\rLine one of a long help.\n\rLine two.\n\r\r[Hit Return to continue]\r".to_vec(),
+        b"Line three.\n\rLine four.\n\r\n\r[1020/1020hp 800/800mn 930/930mv]\n\r\xff\xf9".to_vec(),
+    );
+    let editor = (
+        b"\n\rEnter your note. End with @.\n\r> ".to_vec(),
+        b"> ".to_vec(),
+    );
+    for (name, (first, next)) in [("pager", &pager), ("editor", &editor)] {
+        let play = |show, draw| {
+            let mut session = Session::new(showing(profile(CODES, HP, draw), show));
+            let mut grid = crate::term_grid::TermGrid::new(80, 40);
+            let mut open = false;
+            for bytes in [wire_fixture("quiet"), first.clone()] {
+                let read = session.read(&bytes);
+                open = pin_row_after(open, &read.out);
+                grid.session_output(&read.out);
+            }
+            for _ in 0..2 {
+                // Enter on an empty line.
+                if !open {
+                    grid.local_write(b"\r\n");
+                    session.local_write();
+                }
+                let _ = session.send("");
+                let read = session.read(next);
+                open = pin_row_after(open, &read.out);
+                grid.session_output(&read.out);
+            }
+            rows_of(&grid)
+        };
+        // Pinned shows the rows the text shows with drawing on, without
+        // the prompts' own, and holds the line ends before the last one.
+        let text = play(PromptShow::Text, true);
+        let mut want: Vec<String> = text.iter().filter(|r| *r != "<1020>").cloned().collect();
+        while want.last().is_some_and(String::is_empty) {
+            want.pop();
+        }
+        for draw in [true, false] {
+            let got = play(PromptShow::Pinned, draw);
+            assert_eq!(got, want, "{name} draw {draw}, in the text {text:#?}");
+        }
+    }
+}
