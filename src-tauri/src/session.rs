@@ -270,7 +270,7 @@ enum OutputSink<'a> {
 
 impl OutputSink<'_> {
     /// Write `bytes` to the terminal.
-    fn write(&mut self, app: &AppHandle, bytes: Vec<u8>) {
+    fn write<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, bytes: Vec<u8>) {
         match self {
             OutputSink::Batch(batch) => batch.out.text(&bytes),
             OutputSink::Direct => emit_output(app, bytes),
@@ -279,7 +279,11 @@ impl OutputSink<'_> {
 
     /// A prompt var changed. A read sends the prompt vars once after its
     /// output, and anything else sends them now.
-    async fn prompt_vars(&mut self, app: &AppHandle, profile: &Arc<Mutex<Profile>>) {
+    async fn prompt_vars<R: tauri::Runtime>(
+        &mut self,
+        app: &AppHandle<R>,
+        profile: &Arc<Mutex<Profile>>,
+    ) {
         match self {
             OutputSink::Batch(batch) => batch.prompt_vars = true,
             OutputSink::Direct => emit_prompt_vars(app, profile, true).await,
@@ -352,8 +356,8 @@ impl SessionHandle {
 /// server's first wrap-width decision is based on the actual
 /// terminal geometry instead of the negotiator's 80×24 fallback.
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn spawn(
-    app: AppHandle,
+pub(crate) async fn spawn<R: tauri::Runtime>(
+    app: AppHandle<R>,
     host: String,
     port: u16,
     tls: bool,
@@ -440,8 +444,8 @@ fn now_ms() -> i64 {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn io_loop(
-    app: AppHandle,
+async fn io_loop<R: tauri::Runtime>(
+    app: AppHandle<R>,
     mut stream: Stream,
     mut rx_outgoing: mpsc::UnboundedReceiver<OutgoingMsg>,
     profile: Arc<Mutex<Profile>>,
@@ -870,8 +874,8 @@ async fn io_loop(
     );
 }
 
-async fn handle_tick(
-    app: &AppHandle,
+async fn handle_tick<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
 ) -> std::io::Result<()> {
@@ -893,8 +897,8 @@ async fn handle_tick(
 /// Report a tick step on `session://tick`, so the frontend counts and
 /// plays the sound when it fired, then run its Send each tick command
 /// through the full input pipeline like a timer command.
-async fn deliver_tick_step(
-    app: &AppHandle,
+async fn deliver_tick_step<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
     step: TickStep,
@@ -916,8 +920,8 @@ async fn deliver_tick_step(
 /// burst-fires. Disabled or deleted timers drop their deadline. Each
 /// due command runs through the same path as the tick auto-fire:
 /// `input::process`, echo its lines, send its bytes.
-async fn fire_due_profile_timers(
-    app: &AppHandle,
+async fn fire_due_profile_timers<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
     timer_next: &mut HashMap<u32, Instant>,
@@ -1037,8 +1041,8 @@ fn run_fired_locked(p: &mut Profile, command: &str, shared: Option<&SharedLayer>
 /// applied, and the combined bytes sent to the server. Mirrors the
 /// typed-input handler so a timer command behaves exactly like the same
 /// line typed at the prompt, including `#lua` and script-bodied aliases.
-async fn run_fired_command(
-    app: &AppHandle,
+async fn run_fired_command<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
     command: &str,
@@ -1079,8 +1083,8 @@ fn framed_echoes<S: AsRef<str>>(lines: &[S]) -> Vec<u8> {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn handle_event(
-    app: &AppHandle,
+async fn handle_event<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     stream: &mut Stream,
     negotiator: &Negotiator,
     accumulator: &mut LineAccumulator,
@@ -1667,8 +1671,8 @@ fn hold_step(p: &mut Profile, accumulator: &mut LineAccumulator, out: &mut Outpu
 
 /// Paint a partial that waited and send it out. `seen` becomes the output
 /// count after it.
-async fn flush_hold(
-    app: &AppHandle,
+async fn flush_hold<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
     accumulator: &mut LineAccumulator,
     seen: &mut u64,
@@ -1781,8 +1785,8 @@ fn render_prompt(p: &Profile, now: Instant) -> String {
 /// keep it for scrollback, send what its triggers send, apply its Lua
 /// actions' IO into the batch, and run the tick command it fired.
 #[allow(clippy::too_many_arguments)]
-async fn deliver_line_step(
-    app: &AppHandle,
+async fn deliver_line_step<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
     timers: &SharedTimers,
@@ -1818,8 +1822,8 @@ async fn deliver_line_step(
 
 /// The end of a read, see [`partial_step`], and the IO its prompt left.
 #[allow(clippy::too_many_arguments)]
-async fn end_read(
-    app: &AppHandle,
+async fn end_read<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     stream: &mut Stream,
     accumulator: &mut LineAccumulator,
     profile: &Arc<Mutex<Profile>>,
@@ -1889,7 +1893,7 @@ fn observe_prompt_gmcp(p: &mut Profile, msg: &vosh_gmcp::Message) {
 /// Tell the webview which values the game hides, when that changed
 /// since the last report. The session calls it once per socket read and
 /// after a send that starts a pulse.
-async fn emit_hidden_change(app: &AppHandle, profile: &Arc<Mutex<Profile>>) {
+async fn emit_hidden_change<R: tauri::Runtime>(app: &AppHandle<R>, profile: &Arc<Mutex<Profile>>) {
     let change = profile.lock().await.prompt.vars.take_hidden_change();
     if let Some(hidden) = change {
         if let Err(e) = app.emit("session://hidden", hidden) {
@@ -1904,8 +1908,8 @@ async fn emit_hidden_change(app: &AppHandle, profile: &Arc<Mutex<Profile>>) {
 /// changed, and the hidden state when it changed. Once per read, so the
 /// packets of one pulse never show the panes a state between them.
 /// `seen` becomes the output count after this read's output.
-async fn finish_read(
-    app: &AppHandle,
+async fn finish_read<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
     logs: &crate::log_state::SharedLogStore,
     log_session: &mut LogSession,
@@ -1983,7 +1987,10 @@ async fn finish_read(
 /// `session://game-prompt-seen`. When the active profile's capture took
 /// a new setting, the profile saves shortly and every window reads the
 /// `[prompt]` table again.
-pub(crate) fn report_game_prompt_seen(app: &AppHandle, seen: Vec<vosh_prompt::GamePromptSeen>) {
+pub(crate) fn report_game_prompt_seen<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    seen: Vec<vosh_prompt::GamePromptSeen>,
+) {
     let applied = seen.iter().any(|s| s.applied);
     for payload in seen {
         if let Err(e) = app.emit("session://game-prompt-seen", payload) {
@@ -2037,8 +2044,8 @@ impl LogSession {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn handle_gmcp(
-    app: &AppHandle,
+async fn handle_gmcp<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     profile: &Arc<Mutex<Profile>>,
     map: &SharedMap,
     timers: &SharedTimers,
@@ -2144,7 +2151,7 @@ async fn handle_gmcp(
         // (ordering preserved) instead of running inline on the io loop,
         // where they sat between a socket read and the next outgoing
         // command write and contributed to command latency.
-        let _ = map_writer(app, map).send(msg.clone());
+        let _ = map_writer(map).send(msg.clone());
     }
     // Phase 4 perf fix: emit on a per-package event channel so each
     // frontend listener subscribes only to the packages it cares
@@ -2176,16 +2183,14 @@ static MAP_WRITER: std::sync::OnceLock<tokio::sync::mpsc::UnboundedSender<vosh_g
     std::sync::OnceLock::new();
 
 fn map_writer(
-    app: &AppHandle,
     map: &crate::map_state::SharedMap,
 ) -> &'static tokio::sync::mpsc::UnboundedSender<vosh_gmcp::Message> {
     MAP_WRITER.get_or_init(|| {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<vosh_gmcp::Message>();
-        let app = app.clone();
         let map = map.clone();
         tauri::async_runtime::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                if let Err(e) = map_state::handle_room_info(&app, &map, &msg).await {
+                if let Err(e) = map_state::handle_room_info(&map, &msg).await {
                     warn!(error = %e, "failed to update map from Room.Info");
                 }
             }
@@ -2239,7 +2244,7 @@ fn supports_subnegotiation() -> Vec<u8> {
 /// Route emissions stay per-line because consumers (chat panel etc.)
 /// expect one event per routed line. The volume here is tiny relative
 /// to the display stream so per-event cost does not show up as lag.
-fn emit_line_routes(app: &AppHandle, result: &LineResult) {
+fn emit_line_routes<R: tauri::Runtime>(app: &AppHandle<R>, result: &LineResult) {
     if let Some(text) = &result.display {
         for pane in &result.routes {
             if let Err(e) = app.emit(
@@ -2259,8 +2264,8 @@ fn emit_line_routes(app: &AppHandle, result: &LineResult) {
 /// produced. Sends and echoes flow to the server and the terminal pane;
 /// timers register with the shared list; `mud.input` lines are run through
 /// the input pipeline so they pick up aliases and slash commands too.
-async fn apply_script_result(
-    app: &AppHandle,
+async fn apply_script_result<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
     timers: &SharedTimers,
@@ -2330,21 +2335,25 @@ async fn apply_script_result(
 /// they changed, such as when a pulse left the capture's values stale.
 /// The vitals store replaces its copy with the payload, so a value that
 /// went stale or was unset drops out.
-async fn emit_prompt_vars(app: &AppHandle, profile: &Arc<Mutex<Profile>>, always: bool) {
+async fn emit_prompt_vars<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    profile: &Arc<Mutex<Profile>>,
+    always: bool,
+) {
     let vars = profile.lock().await.prompt.take_prompt_vars(always);
     if let Some(vars) = vars {
         send_prompt_vars(app, &vars);
     }
 }
 
-fn send_prompt_vars(app: &AppHandle, vars: &BTreeMap<String, String>) {
+fn send_prompt_vars<R: tauri::Runtime>(app: &AppHandle<R>, vars: &BTreeMap<String, String>) {
     if let Err(e) = app.emit("session://prompt-vars", vars) {
         warn!(error = %e, "failed to emit prompt vars");
     }
 }
 
-async fn fire_due_script_timers(
-    app: &AppHandle,
+async fn fire_due_script_timers<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
     timers: &SharedTimers,
@@ -2382,8 +2391,8 @@ async fn fire_due_script_timers(
 /// read painted it, so display only needs the terminating newline. The
 /// value of this pass is logging it and pushing it into the scrollback
 /// ring that the dump persists.
-async fn capture_pending_line(
-    app: &AppHandle,
+async fn capture_pending_line<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     logs: &crate::log_state::SharedLogStore,
     log_session_id: Option<i64>,
     scrollback: &crate::log_state::SharedScrollback,
@@ -2517,13 +2526,13 @@ pub(crate) fn emit_output<R: tauri::Runtime>(app: &AppHandle<R>, bytes: Vec<u8>)
 }
 
 /// Send one read's output. Returns the output count after it.
-fn emit_session_output(app: &AppHandle, out: &Output) -> u64 {
+fn emit_session_output<R: tauri::Runtime>(app: &AppHandle<R>, out: &Output) -> u64 {
     emit_counted(app, out, true)
 }
 
 /// Send a repaint of the open row. It leaves the output count alone,
 /// since the row it writes is still the last thing on screen.
-fn emit_repaint(app: &AppHandle, out: &Output) {
+fn emit_repaint<R: tauri::Runtime>(app: &AppHandle<R>, out: &Output) {
     let _ = emit_counted(app, out, false);
 }
 
@@ -2560,13 +2569,13 @@ fn emit_counted<R: tauri::Runtime>(app: &AppHandle<R>, out: &Output, count: bool
     seen
 }
 
-fn emit_state(app: &AppHandle, payload: StatePayload) {
+fn emit_state<R: tauri::Runtime>(app: &AppHandle<R>, payload: StatePayload) {
     if let Err(e) = app.emit("session://state", payload) {
         warn!(error = %e, "failed to emit session state");
     }
 }
 
-fn emit_input_mode(app: &AppHandle, password: bool) {
+fn emit_input_mode<R: tauri::Runtime>(app: &AppHandle<R>, password: bool) {
     if let Err(e) = app.emit("session://input-mode", InputModePayload { password }) {
         warn!(error = %e, "failed to emit input mode");
     }

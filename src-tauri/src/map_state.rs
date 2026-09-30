@@ -7,7 +7,6 @@
 use std::sync::Arc;
 
 use serde_json::Value;
-use tauri::AppHandle;
 use tokio::sync::Mutex;
 use vosh_gmcp::Message;
 use vosh_map::{direction, MapError, MapStore, Room};
@@ -40,11 +39,7 @@ pub(crate) type SharedMap = Arc<Mutex<Option<MapState>>>;
 /// Aabahran's Room.Info object uses `name`, `area`, `num`, `terrain`, and
 /// `exits` fields; this routine reads what is present and stores defaults
 /// for the rest.
-pub(crate) async fn handle_room_info(
-    _app: &AppHandle,
-    map: &SharedMap,
-    msg: &Message,
-) -> Result<(), MapError> {
+pub(crate) async fn handle_room_info(map: &SharedMap, msg: &Message) -> Result<(), MapError> {
     if msg.package != "Room.Info" {
         return Ok(());
     }

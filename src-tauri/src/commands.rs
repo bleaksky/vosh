@@ -694,8 +694,8 @@ async fn read_shared_layer(state: &SharedState) -> Option<SharedLayer> {
 /// the tick auto-fire command, and `mud.input` then keep the shared
 /// settings across it the way typed input does. Call before taking the
 /// profile lock.
-pub(crate) async fn shared_layer_for_lines<'a>(
-    app: &AppHandle,
+pub(crate) async fn shared_layer_for_lines<'a, R: tauri::Runtime>(
+    app: &AppHandle<R>,
     lines: impl IntoIterator<Item = &'a str>,
 ) -> Option<SharedLayer> {
     let replaces = lines.into_iter().any(crate::input::may_replace_profile);
@@ -2647,8 +2647,8 @@ async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), Stri
 /// persist + load + flip sequence stays identical. An error is a
 /// sentence for you, and leaves the index and the live profile on the
 /// profile you were using.
-pub(crate) async fn apply_profile_switch(
-    app: &AppHandle,
+pub(crate) async fn apply_profile_switch<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     state: &SharedState,
     name: &str,
 ) -> Result<(), String> {
@@ -2735,8 +2735,8 @@ pub(crate) async fn profile_switch(
 /// profile differs from the currently-active one, swap to it and
 /// announce on the terminal so the user knows the active profile
 /// changed. Either way, a new name updates the session identity.
-pub(crate) async fn handle_char_known_for_auto_switch(
-    app: &AppHandle,
+pub(crate) async fn handle_char_known_for_auto_switch<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     state: &SharedState,
     character: &str,
 ) {
@@ -2767,7 +2767,11 @@ pub(crate) async fn handle_char_known_for_auto_switch(
 
 /// Switch to the profile that claims `character` on the live
 /// connection, when that is not the active one already.
-async fn auto_switch_for_character(app: &AppHandle, state: &SharedState, character: &str) {
+async fn auto_switch_for_character<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    character: &str,
+) {
     let Some(new_name) = auto_switch_target(state, character).await else {
         return;
     };
