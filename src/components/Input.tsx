@@ -38,6 +38,7 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { nativeSurfaceEnabled } from './Terminal';
 import { isMacPlatform, shortcutKey } from '../lib/palette';
+import { pinnedRowOpen } from '../lib/stores/pinnedPromptStore';
 
 export interface InputHandle {
   focus: () => void;
@@ -66,7 +67,7 @@ interface Props {
    *  layout shifts when that keystroke lands. */
   fontKey?: string;
   /** Your prompt shows pinned above the command line, so Enter on an
-   *  empty line echoes nothing. */
+   *  empty line at your pinned prompt echoes nothing. */
   promptPinned?: boolean;
 }
 
@@ -659,7 +660,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       quickKey:
         !masked && quickKeysRef.current.some((q) => q.name === firstWord && q.verb.length > 0),
       echoColor: echoColorRef.current,
-      pinned: promptPinnedRef.current,
+      pinRowOpen: promptPinnedRef.current && pinnedRowOpen(),
     });
     if (plan.remember) {
       setHistory((prev) => {

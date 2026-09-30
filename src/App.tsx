@@ -106,6 +106,7 @@ import { useConnection, type ConnectionStatus } from './lib/useConnection';
 import { useEscape } from './lib/escapeStack';
 import { usePromptShow } from './lib/promptShow';
 import { PromptDock } from './components/prompt/PromptDock';
+import { notePageWrite } from './lib/stores/pinnedPromptStore';
 import type { CellSize } from './lib/promptBand';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
@@ -263,6 +264,7 @@ function App() {
   // session on either renderer. The session closes the open row, since
   // the text now follows it, so it never repaints over your echo.
   const writeLive = (text: string) => {
+    notePageWrite(text);
     termRef.current?.write(text);
     void terminalLocalWrite(text).catch(() => {});
   };

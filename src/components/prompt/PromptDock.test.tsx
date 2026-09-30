@@ -199,11 +199,15 @@ describe('cells and colors on the band', () => {
 });
 
 describe('Enter while your prompt shows pinned', () => {
-  it('echoes nothing for an empty line, and typed lines as before', () => {
-    const context = { masked: false, quickKey: false, echoColor: null, pinned: true };
+  it('echoes nothing for an empty line at your pinned prompt, and typed lines as before', () => {
+    const context = { masked: false, quickKey: false, echoColor: null, pinRowOpen: true };
     expect(planSubmit('', context).echo).toBeNull();
     expect(planSubmit('look', context).echo).toBe('look\r\n');
-    expect(planSubmit('', { ...context, pinned: false }).echo).toBe('\r\n');
     expect(planSubmit('', { ...context, masked: true }).echo).toBe('\r\n');
+  });
+
+  it('ends the row of a prompt left in the text, such as the pager', () => {
+    const context = { masked: false, quickKey: false, echoColor: null, pinRowOpen: false };
+    expect(planSubmit('', context).echo).toBe('\r\n');
   });
 });
