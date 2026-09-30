@@ -1204,7 +1204,8 @@ fn render_custom_prompt(p: &Profile) -> Option<String> {
 }
 
 /// What Vosh itself supplies to the custom prompt: the tick timer, your
-/// target and the affects you track. The clock reads the local time.
+/// target, the profile's name and the affects you track. The clock reads
+/// the local time.
 fn prompt_supplies(p: &Profile, now: Instant) -> vosh_prompt::Vosh {
     let tick = p.tick.remaining(now).map(|left| vosh_prompt::vars::Tick {
         remaining: i64::try_from(left.as_millis().div_ceil(1000)).unwrap_or(i64::MAX),
@@ -1213,7 +1214,7 @@ fn prompt_supplies(p: &Profile, now: Instant) -> vosh_prompt::Vosh {
     vosh_prompt::Vosh {
         tick,
         target: p.target.name.clone(),
-        profile: None,
+        profile: p.display_name.clone(),
         now: None,
         tracked: p
             .ui
@@ -2322,11 +2323,12 @@ mod tests {
     }
 
     #[test]
-    fn vosh_supplies_the_tick_target_and_tracked_affects() {
-        let mut p = forsaken_profile("%tick|%{tick:unit}|%target|%{missing:names}");
+    fn vosh_supplies_the_tick_target_tracked_affects_and_profile() {
+        let mut p = forsaken_profile("%tick|%{tick:unit}|%target|%{missing:names}|%profile");
         let now = tokio::time::Instant::now();
         p.tick.enable(now);
         p.target.name = Some("guard".into());
+        p.display_name = Some("Default".into());
         p.ui.tracked_affects = vec![crate::profile_config::TrackedAffect {
             name: "sanctuary".into(),
             label: None,
@@ -2351,7 +2353,7 @@ mod tests {
             "{drawn}"
         );
         assert!(parts[1].ends_with('s'), "{drawn}");
-        assert_eq!(&parts[2..], ["guard", "sanctuary"]);
+        assert_eq!(&parts[2..], ["guard", "sanctuary", "Default"]);
     }
 
     #[test]
