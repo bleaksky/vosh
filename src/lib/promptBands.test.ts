@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { Terminal } from '@xterm/xterm';
+import promptCss from '../styles/prompt.css?raw';
 import {
   BAND_X,
   BAND_Y,
   BAND_Y_ADJACENT,
+  LIFTED_ATTR,
   layoutBands,
   LiftTracker,
+  markLifted,
   type LiftExtent,
 } from './promptBands';
 import { RegionWriter } from './terminalRegion';
@@ -168,5 +171,37 @@ describe('layoutBands', () => {
     expect(band.top).toBe(-20 - BAND_Y);
     expect(band.left).toBe(2 * 10 - BAND_X);
     expect(band.height).toBe(3 * 20 + 2 * BAND_Y);
+  });
+});
+
+describe('the clear ground under lifted bands', () => {
+  // App.tsx writes the terminal area's className whole whenever the
+  // scrollback split opens or closes, so a class the pane added itself
+  // would go and every band would sit under xterm's opaque ground. The
+  // mark is an attribute React never writes on that element.
+  it('marks the terminal area with an attribute, not a class', () => {
+    const attrs = new Set<string>();
+    const area = {
+      className: 'terminal-area',
+      toggleAttribute: (name: string, on: boolean) => {
+        if (on) attrs.add(name);
+        else attrs.delete(name);
+        return on;
+      },
+    };
+    markLifted(area, true);
+    area.className = 'terminal-area terminal-area-split';
+    area.className = 'terminal-area';
+    expect(area.className).not.toContain('lifted');
+    expect([...attrs]).toEqual([LIFTED_ATTR]);
+    markLifted(area, false);
+    expect([...attrs]).toEqual([]);
+  });
+
+  it('clears the ground from that attribute, never from a class', () => {
+    for (const part of ['.terminal-host', '.xterm .xterm-viewport', '.xterm .xterm-screen']) {
+      expect(promptCss).toContain(`.terminal-area[${LIFTED_ATTR}] .terminal-pane-live ${part}`);
+    }
+    expect(promptCss).not.toMatch(/\.prompt-lifted\b/);
   });
 });
