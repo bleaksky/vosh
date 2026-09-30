@@ -6,7 +6,8 @@
 //!
 //! The PROMPT line compiler (section 3) grows here too.
 //!
-//! - [`lex`] stores a setting you typed as `do_prompt` does.
+//! - [`lex`] stores a setting you typed as `do_prompt` does, and reads
+//!   it in the two passes the game prints it in.
 //! - [`codes`] holds every value code, the field it fills and the
 //!   pattern Vosh reads it with.
 //! - [`colors`] holds the backtick colors the game sends and rebuilds
@@ -20,6 +21,7 @@ pub mod codes;
 pub mod colors;
 pub mod lex;
 
+use std::fmt;
 use std::ops::Range;
 
 use serde::Serialize;
@@ -90,6 +92,39 @@ impl Warning {
         }
     }
 }
+
+/// A setting Vosh cannot read at all. A color code that ends right
+/// before a code takes the code's first character as its own, so the
+/// game prints something no pattern can follow.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CompileError {
+    pub which: Which,
+    /// The code the color runs into, as written, such as `%h`.
+    pub code: String,
+    /// Byte range from the backtick to the end of the code.
+    pub span: Range<usize>,
+    /// The sentence to show, final copy.
+    pub text: String,
+}
+
+impl CompileError {
+    pub(crate) fn runs_into(which: Which, code: &str, span: Range<usize>) -> Self {
+        Self {
+            which,
+            code: code.to_string(),
+            span,
+            text: format!("A color code runs into {code}. Put a space between them in the game."),
+        }
+    }
+}
+
+impl fmt::Display for CompileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.text)
+    }
+}
+
+impl std::error::Error for CompileError {}
 
 /// The song that hides your vitals, affects, group and your opponent's
 /// condition while it is on you.
