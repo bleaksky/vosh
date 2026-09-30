@@ -181,6 +181,17 @@ describe('RegionWriter', () => {
     expect(screen(term)).toEqual(['LIVE> ', 'You flee!']);
   });
 
+  it('lets a replace of the region, then text, go in that order over a restore', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: `${mark(1)}PREVIEW> `, restore: 'LIVE> ' });
+    writer.output({
+      text: '\r\nYou flee!\r\n',
+      replace: { gen: 1, text: `${mark(2)}NEW> `, fresh: false },
+    });
+    await parsed(writer);
+    expect(screen(term)).toEqual(['NEW> ', 'You flee!']);
+  });
+
   it('lets a replace of the region itself take the place of its restore', async () => {
     const { term, writer } = setup();
     writer.output({ text: `${mark(1)}PREVIEW> `, restore: 'LIVE> ' });

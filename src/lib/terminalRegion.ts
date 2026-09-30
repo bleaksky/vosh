@@ -197,18 +197,15 @@ export class RegionWriter {
     else this.apply(item.out, false);
   }
 
-  /** `item` writes something after the open region. */
+  /** `item` writes something after the open region. A replace of the
+   *  region itself goes first and takes its place, restore and all. */
   private lands(item: Item): boolean {
     if (item.kind === 'local') return item.text.length > 0;
     if (item.kind === 'parsed') return false;
     const { text, replace } = item.out;
+    if (replace && replace.gen === this.openGen) return false;
     if (text.length > 0) return true;
-    return (
-      replace !== undefined &&
-      replace.gen !== this.openGen &&
-      replace.fresh &&
-      replace.text.length > 0
-    );
+    return replace !== undefined && replace.fresh && replace.text.length > 0;
   }
 
   /** Apply one output. `parsed` says xterm has parsed every earlier

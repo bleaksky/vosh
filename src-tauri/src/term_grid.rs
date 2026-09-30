@@ -1316,6 +1316,15 @@ mod tests {
         g.session_output(&replace(2, &marked(3, b"PLAIN"), false));
         g.local_write(b"look\r\n");
         assert_eq!(screen(&g), ["PLAINlook"]);
+
+        // A replace of the region and text after it, in one output: the
+        // replace goes first, and the text lands after it.
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&preview);
+        let mut next = replace(1, &marked(2, b"NEW> "), false);
+        next.text(b"\r\nYou flee!\r\n");
+        g.session_output(&next);
+        assert_eq!(screen(&g), ["NEW>", "You flee!"]);
     }
 
     #[test]
