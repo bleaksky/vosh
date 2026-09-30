@@ -21,7 +21,7 @@ use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
-use alacritty_terminal::term::cell::Flags;
+use alacritty_terminal::term::cell::{Cell, Flags, Hyperlink};
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
 use regex::RegexBuilder;
@@ -80,6 +80,36 @@ pub(crate) struct TermGrid {
     /// Line ends the session asked the grid to keep back, written before
     /// the next write lands, while your prompt shows pinned.
     pending_hold: Vec<u8>,
+    /// Lifts whose start mark this output fed, with what it fed since.
+    lift_tracks: Vec<LiftTrack>,
+}
+
+/// A lift the grid saw the start mark of, while your prompt shows lifted:
+/// where the mark came, as a region's does, and the bytes fed since, so
+/// its end mark can count the rows back to it at the grid's width, however
+/// far the screen scrolled between the two.
+#[derive(Debug, Clone)]
+struct LiftTrack {
+    id: u64,
+    col: usize,
+    wrap_pending: bool,
+    bytes: Vec<u8>,
+}
+
+/// The hyperlink uri that tags a cell of a lifted prompt. Nothing in Vosh
+/// reads hyperlinks, and alacritty keeps them through reflow, scrolling
+/// and history as it keeps OSC 8 links.
+pub(crate) const LIFT_URI: &str = "vosh:lift";
+
+/// One row of a lift as the grid holds it: the lift, the grid line, the
+/// first tagged column, and one past the last tagged cell that shows a
+/// glyph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LiftSpan {
+    pub id: u64,
+    pub line: i32,
+    pub first: usize,
+    pub end: usize,
 }
 
 /// A region Vosh may replace later, such as the drawn prompt, as this
@@ -120,6 +150,7 @@ impl TermGrid {
             region: None,
             pending_utf8: Vec::new(),
             pending_hold: Vec::new(),
+            lift_tracks: Vec::new(),
         }
     }
 
@@ -142,6 +173,8 @@ impl TermGrid {
     /// two holds, so a pulse that pinned a prompt and wrote nothing never
     /// stacks empty rows.
     pub(crate) fn session_output(&mut self, out: &Output) {
+        // A lift's two marks ride in one output.
+        self.lift_tracks.clear();
         let mut wrote = false;
         if let Some(replace) = &out.replace {
             // Half a character the last write held back belongs to the
@@ -190,6 +223,7 @@ impl TermGrid {
         if bytes.is_empty() {
             return;
         }
+        self.lift_tracks.clear();
         self.restore_first();
         self.write_hold();
         self.region = None;
@@ -295,26 +329,44 @@ impl TermGrid {
         vosh_prompt::wrap::wrap_stream(text, self.columns())
     }
 
-    /// Feed `bytes`, taking each region mark out and noting where it
-    /// came, so the bytes after it are that region's.
+    /// Feed `bytes`, taking each mark out. A region mark notes where its
+    /// region starts, so the bytes after it are that region's. A lift
+    /// start notes where its lift starts, and a lift end tags the lift's
+    /// cells.
     fn feed_marked(&mut self, bytes: &[u8]) {
         let mut rest = bytes;
-        while let Some((start, end, gen)) = find_mark(rest) {
+        while let Some((start, end, mark)) = find_mark(rest) {
             self.feed_region(&rest[..start]);
             let cursor = &self.term.grid().cursor;
-            self.region = Some(Region {
-                gen,
-                col: cursor.point.column.0,
-                wrap_pending: cursor.input_needs_wrap,
-                bytes: Vec::new(),
-                restore: None,
-            });
+            let (col, wrap_pending) = (cursor.point.column.0, cursor.input_needs_wrap);
+            match mark {
+                Mark::Region(gen) => {
+                    self.region = Some(Region {
+                        gen,
+                        col,
+                        wrap_pending,
+                        bytes: Vec::new(),
+                        restore: None,
+                    });
+                }
+                Mark::LiftStart(id) => {
+                    self.lift_tracks.retain(|t| t.id != id);
+                    self.lift_tracks.push(LiftTrack {
+                        id,
+                        col,
+                        wrap_pending,
+                        bytes: Vec::new(),
+                    });
+                }
+                Mark::LiftEnd(id) => self.end_lift(id),
+            }
             rest = &rest[end..];
         }
         self.feed_region(rest);
     }
 
-    /// Feed `bytes`, which belong to the open region when there is one.
+    /// Feed `bytes`, which belong to the open region when there is one,
+    /// and to every lift whose start this output fed.
     fn feed_region(&mut self, bytes: &[u8]) {
         if bytes.is_empty() {
             return;
@@ -323,6 +375,126 @@ impl TermGrid {
         if let Some(region) = self.region.as_mut() {
             region.bytes.extend_from_slice(bytes);
         }
+        for track in &mut self.lift_tracks {
+            track.bytes.extend_from_slice(bytes);
+        }
+    }
+
+    /// Lift `id` ends at the cursor. Tag every cell from its start to the
+    /// cursor. The start is counted back from the cursor through the bytes
+    /// fed since the start mark, laid out again at the grid's width, the
+    /// way a region's is, so a screen that scrolled between the two marks
+    /// never moves it. A repaint's end mark comes with no start in its
+    /// output, and the lines above the region were tagged by the first
+    /// end mark, so it tags from the open region's start.
+    fn end_lift(&mut self, id: u64) {
+        let (col, wrap_pending, bytes) = match self.lift_tracks.iter().position(|t| t.id == id) {
+            Some(i) => {
+                let track = self.lift_tracks.remove(i);
+                (track.col, track.wrap_pending, track.bytes)
+            }
+            None => match &self.region {
+                Some(region) => (region.col, region.wrap_pending, region.bytes.clone()),
+                None => return,
+            },
+        };
+        let laid = Region {
+            gen: 0,
+            col,
+            wrap_pending,
+            bytes,
+            restore: None,
+        };
+        let Some(Extent::Rows { above, col: first }) = region_extent(self.columns(), &laid) else {
+            return;
+        };
+        let cursor = self.term.grid().cursor.clone();
+        // A cursor held past the last column sits on a filled cell.
+        let end = cursor.point.column.0 + usize::from(cursor.input_needs_wrap);
+        let last = cursor.point.line.0;
+        let top = last - i32::try_from(above).unwrap_or(i32::MAX);
+        self.tag_lift(id, top, first, last, end);
+    }
+
+    /// Tag the cells of lift `id` from line `top` at column `first` to
+    /// line `last` before column `end`, with one shared hyperlink extra.
+    fn tag_lift(&mut self, id: u64, top: i32, first: usize, last: i32, end: usize) {
+        let link = Hyperlink::new(Some(format!("vosh-lift-{id}")), LIFT_URI.to_string());
+        let mut template = Cell::default();
+        template.set_hyperlink(Some(link.clone()));
+        let shared = template.extra;
+        let cols = self.columns();
+        let grid = self.term.grid_mut();
+        let topmost = grid.topmost_line().0;
+        let bottommost = grid.bottommost_line().0;
+        for line in top.max(topmost)..=last.min(bottommost) {
+            let from = if line == top { first } else { 0 };
+            let to = if line == last { end.min(cols) } else { cols };
+            let row = &mut grid[Line(line)];
+            for col in from..to {
+                let cell = &mut row[Column(col)];
+                if cell.extra.is_none() {
+                    cell.extra.clone_from(&shared);
+                } else {
+                    cell.set_hyperlink(Some(link.clone()));
+                }
+            }
+        }
+    }
+
+    /// The rows of every lift between grid lines `from` and `to`, each
+    /// with its first tagged column and one past its last tagged glyph.
+    /// Empty rows of a lift are left out.
+    pub(crate) fn lift_spans(&self, from: i32, to: i32) -> Vec<LiftSpan> {
+        let grid = self.term.grid();
+        let cols = grid.columns();
+        let mut spans: Vec<LiftSpan> = Vec::new();
+        for line in from.max(grid.topmost_line().0)..=to.min(grid.bottommost_line().0) {
+            let row = &grid[Line(line)];
+            let start = spans.len();
+            for col in 0..cols {
+                let cell = &row[Column(col)];
+                if cell.extra.is_none() {
+                    continue;
+                }
+                let Some(link) = cell.hyperlink() else {
+                    continue;
+                };
+                if link.uri() != LIFT_URI {
+                    continue;
+                }
+                let Some(id) = link
+                    .id()
+                    .strip_prefix("vosh-lift-")
+                    .and_then(|n| n.parse().ok())
+                else {
+                    continue;
+                };
+                let shows = cell.c != ' '
+                    && cell.c != '\0'
+                    && !cell.flags.contains(Flags::WIDE_CHAR_SPACER);
+                let width = if cell.flags.contains(Flags::WIDE_CHAR) {
+                    2
+                } else {
+                    1
+                };
+                match spans[start..].iter_mut().find(|s| s.id == id) {
+                    Some(span) => {
+                        if shows {
+                            span.end = span.end.max(col + width);
+                        }
+                    }
+                    None => spans.push(LiftSpan {
+                        id,
+                        line,
+                        first: col,
+                        end: if shows { col + width } else { col },
+                    }),
+                }
+            }
+        }
+        spans.retain(|s| s.end > s.first);
+        spans
     }
 
     /// Advance the VT parser over a chunk of post-telnet bytes. vte
@@ -581,10 +753,21 @@ fn erase_back(above: usize, col: usize) -> Vec<u8> {
     out
 }
 
-/// The first region mark in `bytes`: where it starts, where it ends and
-/// its generation.
-fn find_mark(bytes: &[u8]) -> Option<(usize, usize, u64)> {
-    let prefix = format!("\x1b]{MARK_OSC};o;");
+/// A private mark the session writes (D22, and Where your prompt shows).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mark {
+    /// `o;G`, where region G starts.
+    Region(u64),
+    /// `l;L`, where lift L starts.
+    LiftStart(u64),
+    /// `e;L`, where lift L ends.
+    LiftEnd(u64),
+}
+
+/// The first mark in `bytes`: where it starts, where it ends and which
+/// it is.
+fn find_mark(bytes: &[u8]) -> Option<(usize, usize, Mark)> {
+    let prefix = format!("\x1b]{MARK_OSC};");
     let prefix = prefix.as_bytes();
     let mut from = 0;
     while let Some(at) = bytes[from..]
@@ -592,14 +775,23 @@ fn find_mark(bytes: &[u8]) -> Option<(usize, usize, u64)> {
         .position(|w| w == prefix)
         .map(|i| from + i)
     {
-        let digits = &bytes[at + prefix.len()..];
-        let len = digits.iter().take_while(|b| b.is_ascii_digit()).count();
-        if len > 0 && digits.get(len) == Some(&0x07) {
-            let gen = std::str::from_utf8(&digits[..len])
-                .ok()
-                .and_then(|s| s.parse().ok());
-            if let Some(gen) = gen {
-                return Some((at, at + prefix.len() + len + 1, gen));
+        let body = &bytes[at + prefix.len()..];
+        let kind = body.first().copied();
+        if matches!(kind, Some(b'o' | b'l' | b'e')) && body.get(1) == Some(&b';') {
+            let digits = &body[2..];
+            let len = digits.iter().take_while(|b| b.is_ascii_digit()).count();
+            if len > 0 && digits.get(len) == Some(&0x07) {
+                let number = std::str::from_utf8(&digits[..len])
+                    .ok()
+                    .and_then(|s| s.parse().ok());
+                if let Some(n) = number {
+                    let mark = match kind {
+                        Some(b'o') => Mark::Region(n),
+                        Some(b'l') => Mark::LiftStart(n),
+                        _ => Mark::LiftEnd(n),
+                    };
+                    return Some((at, at + prefix.len() + 2 + len + 1, mark));
+                }
             }
         }
         from = at + 1;
@@ -1226,6 +1418,102 @@ mod tests {
         g.cursor()
     }
 
+    fn lift(id: u64, inner: &[u8]) -> Vec<u8> {
+        [
+            vosh_prompt::stage::lift_start(id).as_slice(),
+            inner,
+            &vosh_prompt::stage::lift_end(id),
+        ]
+        .concat()
+    }
+
+    /// Every lift row on the grid, as (id, line, first, end).
+    fn spans(g: &TermGrid) -> Vec<(u64, i32, usize, usize)> {
+        let top = g.term.grid().topmost_line().0;
+        g.lift_spans(top, g.screen_lines() as i32)
+            .into_iter()
+            .map(|s| (s.id, s.line, s.first, s.end))
+            .collect()
+    }
+
+    #[test]
+    fn a_lift_tags_its_cells_and_leaves_your_echo_plain() {
+        let mut g = TermGrid::new(40, 10);
+        let mut prompt = b"room\r\n\r\n".to_vec();
+        prompt.extend(lift(
+            3,
+            &[b"Tester: [===]\r\n".as_slice(), &marked(4, b"<1020hp>")].concat(),
+        ));
+        prompt.push(b' ');
+        g.session_output(&text(&prompt));
+        g.local_write(b"look\r\n");
+        assert_eq!(screen(&g), ["room", "", "Tester: [===]", "<1020hp> look"]);
+        assert_eq!(spans(&g), [(3, 2, 0, 13), (3, 3, 0, 8)]);
+        // The space after the end mark and your echo carry no tag.
+        let grid = g.term.grid();
+        assert!(grid[Line(3)][Column(8)].hyperlink().is_none());
+        assert!(grid[Line(3)][Column(9)].hyperlink().is_none());
+    }
+
+    #[test]
+    fn a_lift_that_scrolls_the_screen_between_its_marks_still_starts_right() {
+        let mut g = TermGrid::new(20, 3);
+        let body = lift(1, b"one\r\ntwo\r\nthree");
+        g.session_output(&text(&[b"a\r\nb\r\nc\r\n".as_slice(), &body].concat()));
+        assert_eq!(screen(&g), ["one", "two", "three"]);
+        assert_eq!(spans(&g), [(1, 0, 0, 3), (1, 1, 0, 3), (1, 2, 0, 5)]);
+        // Word wrapped by the grid, a long lift covers every row it takes.
+        let mut g = TermGrid::new(10, 4);
+        g.session_output(&text(&lift(2, b"1020/1020hp 800/800mn")));
+        assert_eq!(screen(&g), ["1020/1020h", "p", "800/800mn"]);
+        assert_eq!(spans(&g), [(2, 0, 0, 10), (2, 1, 0, 1), (2, 2, 0, 9)]);
+    }
+
+    #[test]
+    fn a_repaint_tags_the_new_prompt_from_its_region() {
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(&lift(
+            1,
+            &[b"Tank\r\n".as_slice(), &marked(2, b"<1020hp>")].concat(),
+        )));
+        g.session_output(&replace(
+            2,
+            &[
+                marked(3, b"<999hp 800m>").as_slice(),
+                &vosh_prompt::stage::lift_end(1),
+            ]
+            .concat(),
+            false,
+        ));
+        assert_eq!(screen(&g), ["Tank", "<999hp 800m>"]);
+        assert_eq!(spans(&g), [(1, 0, 0, 4), (1, 1, 0, 12)]);
+    }
+
+    #[test]
+    fn tags_stay_on_their_text_through_history_and_a_resize() {
+        let mut g = TermGrid::new(30, 4);
+        g.session_output(&text(&lift(5, b"1020/1020hp 800/800mn")));
+        g.session_output(&text(b"\r\nx\r\ny\r\nz\r\nw\r\n"));
+        // Scrolled into history, the tags are still there.
+        assert_eq!(spans(&g), [(5, -2, 0, 21)]);
+        // Reflowed at 12 the space ends the first row, and a span ends at
+        // its last glyph.
+        g.resize(12, 4);
+        let rows: Vec<(u64, usize)> = spans(&g).into_iter().map(|s| (s.0, s.3 - s.2)).collect();
+        assert_eq!(rows, [(5, 11), (5, 9)]);
+        g.resize(40, 4);
+        assert_eq!(spans(&g).len(), 1);
+    }
+
+    #[test]
+    fn a_lift_that_starts_past_a_full_row_starts_on_the_next() {
+        let mut g = TermGrid::new(10, 4);
+        g.local_write(b"0123456789");
+        g.session_output(&text(&lift(1, b"prompt")));
+        assert_eq!(screen(&g), ["0123456789", "prompt"]);
+        assert_eq!(spans(&g), [(1, 1, 0, 6)]);
+    }
+
     #[test]
     fn held_line_ends_wait_until_the_next_write_lands() {
         let mut g = TermGrid::new(40, 10);
@@ -1524,10 +1812,21 @@ mod tests {
     fn marks_are_found_whole_and_only_whole() {
         let mark = vosh_prompt::stage::mark(42);
         let bytes = [b"ab".as_slice(), &mark, b"cd"].concat();
-        assert_eq!(find_mark(&bytes), Some((2, 2 + mark.len(), 42)));
+        assert_eq!(
+            find_mark(&bytes),
+            Some((2, 2 + mark.len(), Mark::Region(42)))
+        );
         assert_eq!(find_mark(b"\x1b]7717;o;\x07"), None);
         assert_eq!(find_mark(b"\x1b]7717;o;12"), None);
         assert_eq!(find_mark(b"plain"), None);
+        let start = vosh_prompt::stage::lift_start(7);
+        let end = vosh_prompt::stage::lift_end(7);
+        assert_eq!(
+            find_mark(&start),
+            Some((0, start.len(), Mark::LiftStart(7)))
+        );
+        assert_eq!(find_mark(&end), Some((0, end.len(), Mark::LiftEnd(7))));
+        assert_eq!(find_mark(b"\x1b]7717;x;7\x07"), None);
         assert_eq!(erase_back(0, 0), b"\r\x1b[0J");
         assert_eq!(erase_back(2, 7), b"\r\x1b[2A\x1b[7C\x1b[0J");
     }
