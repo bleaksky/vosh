@@ -11,7 +11,7 @@
 //!
 //! 1. Script values from `mud.set_prompt_var`. A value for a name the
 //!    capture or GMCP also supplies lasts for the pulse it was set in. A
-//!    name only scripts supply keeps its value.
+//!    name neither supplies keeps its value, Vosh's own among them.
 //! 2. The capture, replaced whole by each recognized prompt, and fresh
 //!    while no pulse has started since.
 //! 3. GMCP, the latest packet per package.
@@ -1073,9 +1073,13 @@ pub fn entry(name: &str) -> Option<&'static Entry> {
 const CAPTURE_KEYS: [&str; 5] = ["hp_pct", "mana_pct", "move_pct", "tank_pct", "tank_bar"];
 
 /// True for a name a capture or GMCP also supplies, so a script value for
-/// it lasts one pulse.
+/// it lasts one pulse. Every catalog field has one of them but Vosh's own
+/// (the tick, your target, the clock and the profile), whose script value
+/// lasts until a script changes it, as any other name's does. The raw
+/// prompt comes from the capture.
 pub fn is_sourced(name: &str) -> bool {
-    entry(name).is_some() || CAPTURE_KEYS.contains(&name)
+    CAPTURE_KEYS.contains(&name)
+        || entry(name).is_some_and(|e| e.group != Group::Vosh || e.kind == Kind::Raw)
 }
 
 /// A vital pair.
