@@ -235,6 +235,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'affects dot circle square plus minus none mark indicator',
     target: at('layout', 'affects', 'affects-marker'),
   },
+  {
+    label: 'Tint what to recast',
+    description:
+      'A missing affect sits on a red wash, and one about to drop sits on yellow or red.',
+    keywords: 'affects tint wash background recast missing expiring drop color',
+    target: at('layout', 'affects', 'affects-tint'),
+  },
 
   // Input, from the approved board.
   {

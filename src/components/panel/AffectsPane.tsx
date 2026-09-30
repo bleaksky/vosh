@@ -43,6 +43,10 @@ import { affectHours, affectsEmptyText, affectWords } from './paneText';
 // or none. The body names any but the dot in data-affects-marker, and
 // panel.css draws the shape in the color of the state.
 //
+// Tint what to recast, there too, washes a missing row red and one
+// about to drop yellow or red. The body carries data-affects-tint while
+// it is on.
+//
 // Timers first is one of three styles you pick there. Countdown
 // (AffectsCountdown.tsx) lists every affect by the hours it has left,
 // and Grouped chips (AffectsChips.tsx) puts what to recast first.
@@ -63,12 +67,19 @@ export function AffectsPane() {
         tracked={tracked}
         hidden={hidden}
         marker={display.marker}
+        tint={display.tint}
         full={full}
       />
     );
   }
   return (
-    <AffectsPaneView current={current} tracked={tracked} hidden={hidden} marker={display.marker} />
+    <AffectsPaneView
+      current={current}
+      tracked={tracked}
+      hidden={hidden}
+      marker={display.marker}
+      tint={display.tint}
+    />
   );
 }
 
@@ -83,6 +94,8 @@ export interface AffectsPaneViewProps {
   box?: Box | undefined;
   /** The mark beside each tracked affect. The dot when left out. */
   marker?: AffectsMarker | undefined;
+  /** Wash the rows to recast, missing and running out. */
+  tint?: boolean | undefined;
 }
 
 /** The pane drawn from plain values, so each state renders in a test. */
@@ -92,6 +105,7 @@ export function AffectsPaneView({
   hidden,
   box,
   marker = 'dot',
+  tint = false,
 }: AffectsPaneViewProps) {
   const rows = useMemo(() => affectsPaneRows(current, tracked, hidden), [current, tracked, hidden]);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -143,6 +157,7 @@ export function AffectsPaneView({
         className="pane-body"
         style={hoursColumn}
         data-affects-marker={marker === 'dot' ? undefined : marker}
+        data-affects-tint={tint ? '' : undefined}
       >
         {body}
       </div>

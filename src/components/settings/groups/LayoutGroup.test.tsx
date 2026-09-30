@@ -92,7 +92,7 @@ describe('AffectsSection', () => {
   it('draws Style and Marker, Timers first and the dot by default', () => {
     const html = drawAffects();
     const labels = [...html.matchAll(/class="st-row-label"[^>]*>([^<]*)</g)].map((m) => m[1]);
-    expect(labels).toEqual(['Style', 'Marker']);
+    expect(labels).toEqual(['Style', 'Marker', 'Tint what to recast']);
     expect(html).toMatch(/<h2[^>]*>Affects<\/h2>/);
     expect(html).toContain(
       'Timers first keeps your slots, Countdown sorts by hours left, and Grouped chips puts what to recast first.',
@@ -109,6 +109,22 @@ describe('AffectsSection', () => {
       'Plus and minus',
       'None',
     ]);
+    expect(html).toContain(
+      'A missing affect sits on a red wash, and one about to drop sits on yellow or red.',
+    );
+    expect(html).not.toMatch(/role="switch"[^>]*checked/);
+  });
+
+  it('shows the tint at its saved value, and quiet while Grouped chips are chosen', () => {
+    const on = drawAffects({ affects_tint: true });
+    expect(on).toMatch(/<input[^>]*checked=""[^>]*role="switch"|role="switch"[^>]*checked/);
+    expect(on).not.toMatch(/role="switch"[^>]*disabled|disabled=""[^>]*role="switch"/);
+    // Chips mark what to recast on their own, and the toggle keeps the
+    // value your other styles use.
+    const chips = drawAffects({ affects_style: 'chips', affects_tint: false });
+    expect(chips).toContain('Grouped chips always mark what to recast.');
+    expect(chips).toMatch(/<input disabled=""[^>]*role="switch"/);
+    expect(chips).not.toMatch(/<input[^>]*checked=""[^>]*role="switch"|role="switch"[^>]*checked/);
   });
 
   it('draws each marker as the pane draws it, the mark you have and the one you miss', () => {
@@ -146,7 +162,7 @@ describe('AffectsSection', () => {
     const anchors = SETTINGS_ROWS.filter(
       (r) => r.target.group === 'layout' && r.target.section === 'affects',
     ).map((r) => r.target.anchor);
-    expect(anchors).toEqual(['affects-style', 'affects-marker']);
+    expect(anchors).toEqual(['affects-style', 'affects-marker', 'affects-tint']);
     for (const anchor of anchors) {
       expect(html).toContain(`data-st-anchor="${anchor}"`);
     }
