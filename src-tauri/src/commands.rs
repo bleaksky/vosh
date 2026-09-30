@@ -1545,10 +1545,13 @@ pub(crate) fn native_surface_set_divider_color(color: Option<String>) {
 /// Tier 3 native renderer: the chrome colors the page derives with its
 /// theme tokens, as CSS colors (hex, or `rgb()`/`rgba()` with alpha). The
 /// split divider, the selection, every find match, the current match, a
-/// hovered link, and the scrollbar thumb. Each call replaces the whole
-/// set, and a missing or unreadable color falls back to one derived from
-/// the terminal palette. The divider setting still wins over `divider`.
+/// hovered link, the scrollbar thumb, and the selected row fill a lifted
+/// prompt's band takes. `appearance` is the theme's, and a light one gives
+/// the band its inset ring. Each call replaces the whole set, and a
+/// missing or unreadable color falls back to one derived from the terminal
+/// palette. The divider setting still wins over `divider`.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn native_surface_set_tokens(
     divider: Option<String>,
     selection: Option<String>,
@@ -1556,6 +1559,8 @@ pub(crate) fn native_surface_set_tokens(
     current_match: Option<String>,
     link: Option<String>,
     scrollbar: Option<String>,
+    selrow: Option<String>,
+    appearance: Option<String>,
 ) {
     #[cfg(native_surface)]
     {
@@ -1567,6 +1572,8 @@ pub(crate) fn native_surface_set_tokens(
             current_match: parse(current_match),
             link: parse(link),
             scrollbar: parse(scrollbar),
+            selrow: parse(selrow),
+            light: appearance.as_deref() == Some("light"),
         });
         crate::native_surface::request_redraw();
     }
@@ -1579,7 +1586,24 @@ pub(crate) fn native_surface_set_tokens(
             current_match,
             link,
             scrollbar,
+            selrow,
+            appearance,
         );
+    }
+}
+
+/// Tier 3 native renderer: draw a band under each lifted prompt while your
+/// prompt shows lifted. The grid tags a lift's cells either way.
+#[tauri::command]
+pub(crate) fn native_surface_set_prompt_bands(on: bool) {
+    #[cfg(native_surface)]
+    {
+        crate::cell_render::set_prompt_bands(on);
+        crate::native_surface::request_redraw();
+    }
+    #[cfg(not(native_surface))]
+    {
+        let _ = on;
     }
 }
 
