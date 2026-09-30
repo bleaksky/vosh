@@ -843,7 +843,6 @@
   flex: none;
   margin-left: 6px;
   font-weight: 500;
-  font-variant-numeric: tabular-nums;
   color: var(--secondary);
 }
 

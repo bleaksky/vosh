@@ -82,6 +82,7 @@ export function liveChipMeasure(): ChipMeasure {
   };
   return {
     mono: (s) => width(`12px ${faces.mono}`, s),
+    hours: (s) => width(`700 12px ${faces.mono}`, s),
     label: (s) => width(`600 11px ${faces.ui}`, s),
     count: (s) => width(`12px ${faces.ui}`, s),
   };

@@ -134,6 +134,13 @@ describe('chipWidth', () => {
     expect(chipWidth('fly', '2', MEASURE)).toBe(49);
     expect(chipWidth('detect magic', '', MEASURE)).toBe(101);
   });
+
+  it('measures the hours at the weight they draw in, when a face tells them apart', () => {
+    // A face whose bold digits run wider: 1 px more a digit.
+    const bold = { ...MEASURE, hours: (s: string) => s.length * 8.2 };
+    expect(chipWidth('sanctuary', '1', bold)).toBe(93);
+    expect(chipWidth('the Triumph of One God', '188', bold)).toBe(203);
+  });
 });
 
 describe('chipPages', () => {

@@ -79,6 +79,10 @@ export function chipLabelMode(rows: readonly AffectRow[], width: number): LabelM
 export interface ChipMeasure {
   /** A name or hours in the terminal face at 12 px. */
   mono: (s: string) => number;
+  /** The hours in the terminal face at 12 px and the heaviest weight
+   *  they draw in, so a face whose bold runs wider never overflows its
+   *  line. The name's measure when left out. */
+  hours?: (s: string) => number;
   /** A group name in the UI face at 600 11 px. */
   label: (s: string) => number;
   /** The count, `N more`, in the UI face at 12 px. */
@@ -96,7 +100,8 @@ export const FIXED_MEASURE: ChipMeasure = {
 /** A chip's width: 7 px each side (6 and the 1 px dashed border while
  *  missing), the name, then 6 px and the hours when it has any. */
 export function chipWidth(name: string, hours: string, measure: ChipMeasure): number {
-  return Math.ceil(7 + measure.mono(name) + (hours ? 6 + measure.mono(hours) : 0) + 7);
+  const hoursW = measure.hours ?? measure.mono;
+  return Math.ceil(7 + measure.mono(name) + (hours ? 6 + hoursW(hours) : 0) + 7);
 }
 
 export interface ChipLine {
