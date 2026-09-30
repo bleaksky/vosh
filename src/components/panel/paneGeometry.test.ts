@@ -3,6 +3,7 @@ import type { AffectRow, AffectRowState } from '../../lib/affectsView';
 import { addPane, defaultLayout, sanitize, splitPane, type PaneSplit } from '../../lib/paneLayout';
 import {
   affectsMinH,
+  affectsMinIn,
   allocate,
   distribute,
   dragSizes,
@@ -12,6 +13,7 @@ import {
   minExtent,
   PANE_FLOOR_H,
   PANE_MIN_H,
+  paneWidth,
 } from './paneGeometry';
 
 const total = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -109,6 +111,41 @@ describe('affectsMinH', () => {
   it('stops at a dozen rows and the hairline', () => {
     const long = rowsOf(...times(30, 'present'), 'harmful');
     expect(affectsMinH(long)).toBe(28 + 12 * 22 + 9);
+  });
+});
+
+describe('affectsMinIn', () => {
+  // Erelei's eight slots and twelve more, faerie fire harmful among them.
+  const twenty = rowsOf(...times(8, 'present'), 'harmful', ...times(11, 'untracked'));
+
+  it('counts two columns for the Affects pane across the whole panel', () => {
+    expect(affectsMinIn(defaultLayout().root, 494, twenty)).toBe(affectsMinH(twenty, 2));
+  });
+
+  it('counts one column once Split right leaves the pane narrow', () => {
+    // The pane draws one column at 247 px, so its minimum holds all
+    // eight slots, the hairline, faerie fire, and the count.
+    const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    expect(affectsMinIn(tree, 494, twenty)).toBe(28 + 8 * 22 + 9 + 2 * 22);
+    const { leaves } = layoutPanes(tree, 494, 664, { affects: affectsMinIn(tree, 494, twenty) });
+    const affects = leaves.find((l) => l.leaf.pane === 'affects');
+    expect(affects?.rect.w).toBe(247);
+    expect(affects?.rect.h).toBeGreaterThanOrEqual(257);
+  });
+
+  it('reads the panel width when the tree has no Affects pane', () => {
+    const tree = sanitize({ id: 'root', split: 'column', children: [{ pane: 'map' }] });
+    expect(affectsMinIn(tree, 300, twenty)).toBe(affectsMinH(twenty, 1));
+  });
+});
+
+describe('paneWidth', () => {
+  it('reads the width a pane gets, whatever the heights', () => {
+    const tree = splitPane(defaultLayout().root, 'affects', 'row', 'group');
+    expect(paneWidth(tree, 494, 'affects')).toBe(247);
+    expect(paneWidth(tree, 494, 'group')).toBe(246);
+    expect(paneWidth(defaultLayout().root, 494, 'affects')).toBe(494);
+    expect(paneWidth(defaultLayout().root, 494, 'chat')).toBeNull();
   });
 });
 

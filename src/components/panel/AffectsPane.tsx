@@ -219,15 +219,17 @@ function AffectCell({
   );
 }
 
-/** The element's inner size, kept current as it resizes. Null until
- *  the first measure. */
+/** The element's size, kept current as it resizes. Null until the
+ *  first measure. The width takes in a scroll bar, so it is the width
+ *  PanelHost gives the pane and the pane draws the columns its minimum
+ *  counts, while the height is what the rows can fill. */
 function useBoxSize(ref: React.RefObject<HTMLElement | null>): Box | null {
   const [box, setBox] = useState<Box | null>(null);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const measure = () => {
-      const width = el.clientWidth;
+      const width = el.offsetWidth;
       const height = el.clientHeight;
       setBox((prev) =>
         prev && prev.width === width && prev.height === height ? prev : { width, height },

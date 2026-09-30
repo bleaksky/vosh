@@ -3,14 +3,14 @@ import { affectsPaneRows } from '../../lib/affectsView';
 import { getGroupState, subscribeGroupState } from '../../lib/groupStore';
 import { useAffects, useAffectsHidden } from '../../lib/stores/affectsStore';
 import { useTrackedAffects } from '../../lib/stores/trackedAffectsStore';
-import { affectsColumns } from './affectsGrid';
-import { affectsMinH, groupMinH, type PaneMins } from './paneGeometry';
+import type { PaneSplit } from '../../lib/paneLayout';
+import { affectsMinH, affectsMinIn, groupMinH, type PaneMins } from './paneGeometry';
 
 // The minimum heights that follow what the Affects and Group panes
-// show right now, for PanelHost to lay the tree out with. The panes
-// order their own rows the same way, so the minimum covers the rows
-// they draw. The Affects pane draws one column or two by its width,
-// which the panel's `width` stands in for.
+// show right now, for PanelHost to lay `root` out `width` wide with.
+// The panes order their own rows the same way, so the minimum covers
+// the rows they draw. The Affects pane draws one column or two by its
+// own width, which affectsMinIn reads from the tree.
 
 function subscribeMembers(cb: () => void): () => void {
   return subscribeGroupState(() => cb());
@@ -22,15 +22,15 @@ function memberCount(): number {
   return group.leader && Array.isArray(group.members) ? group.members.length : 0;
 }
 
-export function usePaneMins(width: number): PaneMins {
+export function usePaneMins(root: PaneSplit | null, width: number): PaneMins {
   const current = useAffects();
   const tracked = useTrackedAffects();
   const hidden = useAffectsHidden();
   const members = useSyncExternalStore(subscribeMembers, memberCount);
-  const columns = affectsColumns(width);
+  const rows = useMemo(() => affectsPaneRows(current, tracked, hidden), [current, tracked, hidden]);
   const affects = useMemo(
-    () => affectsMinH(affectsPaneRows(current, tracked, hidden), columns),
-    [current, tracked, hidden, columns],
+    () => (root ? affectsMinIn(root, width, rows) : affectsMinH(rows)),
+    [root, width, rows],
   );
   const group = groupMinH(members);
   return useMemo(() => ({ affects, group }), [affects, group]);
