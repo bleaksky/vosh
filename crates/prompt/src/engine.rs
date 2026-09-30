@@ -5,7 +5,10 @@
 //! the connection, and a profile switch keeps the GMCP packets while it
 //! drops the values the last profile's prompt read.
 
+use std::collections::BTreeMap;
+
 use crate::config::PromptConfig;
+use crate::stage::Stage;
 use crate::vars::{forsaken_lands, Vars};
 
 /// The live profile's custom prompt.
@@ -15,8 +18,13 @@ pub struct PromptEngine {
     /// What the session feeds the prompt: script values, the capture, the
     /// latest packet of each GMCP package and the hidden state.
     pub vars: Vars,
+    /// What Vosh writes around your prompt: the capture compiled from
+    /// the table, the open row and the candidates ring.
+    pub stage: Stage,
     /// The connection is to The Forsaken Lands. False with no connection.
     known_host: bool,
+    /// The prompt vars the webview last heard.
+    reported_vars: Option<BTreeMap<String, String>>,
 }
 
 impl PromptEngine {
@@ -27,10 +35,42 @@ impl PromptEngine {
 
     /// Take a table for the profile in use, as a load, an import, a
     /// Settings save or an edit hands it over. The session's values stay,
-    /// and the Forsaken Lands rules follow the new capture.
+    /// the capture compiles, and the Forsaken Lands rules follow it.
     pub fn set_config(&mut self, config: PromptConfig) {
         self.config = config;
+        self.stage.set_capture(&self.config.capture);
         self.apply_rules();
+    }
+
+    /// Vosh draws your design over a prompt it reads: drawing is on and
+    /// the design is not empty.
+    pub fn draws(&self) -> bool {
+        self.config.draw && !self.config.template.is_empty()
+    }
+
+    /// Record a candidate in the ring, on a send or a GA or EOR, with
+    /// whether drawing is on and whether the profile has a capture. See
+    /// [`Stage::record`].
+    pub fn record(&mut self, partial: Option<(&[u8], &str)>, at_ms: i64) {
+        let draw = self.draws();
+        let capture = !self.config.capture.is_none();
+        self.stage.record(partial, at_ms, draw, capture);
+    }
+
+    /// The fresh prompt vars for `session://prompt-vars`, when they
+    /// changed since the webview last heard them or `always` asks for them
+    /// anyway, as a recognized prompt does. None otherwise.
+    pub fn take_prompt_vars(&mut self, always: bool) -> Option<BTreeMap<String, String>> {
+        let now = self.vars.prompt_vars();
+        let changed = match &self.reported_vars {
+            Some(last) => *last != now,
+            None => !now.is_empty(),
+        };
+        if !(always || changed) {
+            return None;
+        }
+        self.reported_vars = Some(now.clone());
+        Some(now)
     }
 
     /// Whether the Forsaken Lands rules hold (D17): the host is The
@@ -43,14 +83,19 @@ impl PromptEngine {
     /// `known_host` is whether the host is The Forsaken Lands.
     pub fn connect(&mut self, known_host: bool) {
         self.vars.disconnect();
+        self.stage.reset();
+        self.reported_vars = None;
         self.known_host = known_host;
         self.apply_rules();
     }
 
     /// The connection closed. Every value, packet and the new build sign
-    /// go with it.
+    /// go with it, and so do the open row and the candidates ring. The
+    /// webview clears its copy of the prompt vars on the disconnect.
     pub fn disconnect(&mut self) {
         self.vars.disconnect();
+        self.stage.reset();
+        self.reported_vars = None;
         self.known_host = false;
         self.apply_rules();
     }
@@ -79,7 +124,7 @@ impl PromptEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AabahranCapture, CaptureConfig};
+    use crate::config::{AabahranCapture, CaptureConfig, RegexCapture};
     use crate::vars::Capture;
     use serde_json::json;
 
@@ -166,6 +211,66 @@ mod tests {
         assert!(!engine.vars.new_build());
         assert!(engine.vars.prompt_vars().is_empty());
         assert!(!engine.forsaken());
+    }
+
+    #[test]
+    fn a_table_compiles_its_capture_for_the_stage() {
+        let mut engine = PromptEngine::default();
+        assert!(!engine.stage.has_recognizer());
+        engine.set_config(PromptConfig {
+            capture: CaptureConfig::Regex(RegexCapture {
+                lines: vec![r"<(?<hp>\d+)hp>".into()],
+                ..RegexCapture::default()
+            }),
+            ..PromptConfig::from_legacy(true, "%hp")
+        });
+        assert!(engine.stage.has_recognizer());
+        assert!(engine.draws());
+        engine.connect(false);
+        assert!(
+            engine.stage.has_recognizer(),
+            "a connection keeps the capture"
+        );
+        engine.set_config(PromptConfig::from_legacy(true, "%hp"));
+        assert!(!engine.stage.has_recognizer());
+        // Drawing needs the switch on and a design.
+        engine.set_config(PromptConfig::from_legacy(true, ""));
+        assert!(!engine.draws());
+        engine.set_config(PromptConfig::from_legacy(false, "%hp"));
+        assert!(!engine.draws());
+    }
+
+    #[test]
+    fn prompt_vars_are_reported_when_they_change() {
+        let mut engine = PromptEngine::default();
+        engine.connect(false);
+        assert_eq!(engine.take_prompt_vars(false), None, "nothing yet");
+        assert_eq!(engine.take_prompt_vars(true), Some(BTreeMap::new()));
+        engine.vars.set_script("mood", "grim");
+        let vars = engine.take_prompt_vars(false).expect("a change");
+        assert_eq!(vars.get("mood").map(String::as_str), Some("grim"));
+        assert_eq!(engine.take_prompt_vars(false), None, "no change");
+        assert!(
+            engine.take_prompt_vars(true).is_some(),
+            "a prompt asks anyway"
+        );
+        // A disconnect forgets what the webview heard, since it clears.
+        engine.disconnect();
+        assert_eq!(engine.take_prompt_vars(false), None);
+    }
+
+    #[test]
+    fn the_ring_records_whether_drawing_is_on_and_a_capture_exists() {
+        let mut engine = PromptEngine::default();
+        engine.connect(false);
+        let mut out = crate::stage::Output::new(false);
+        engine
+            .stage
+            .line(&mut out, b"Healer> ", "Healer> ", None, b"Healer> \r\n");
+        engine.record(None, 5);
+        let entry = engine.stage.ring().next().expect("an entry");
+        assert!(!entry.draw);
+        assert!(!entry.capture);
     }
 
     #[test]
