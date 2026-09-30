@@ -216,6 +216,10 @@ pub(crate) enum OutgoingMsg {
     /// as a change to the switch or the design asks. Only the session
     /// task writes session output, so a command sends this instead.
     PromptRepaint,
+    /// The webview wrote to the terminal itself, such as your typed echo
+    /// or an error notice, so the open row is no longer the last thing on
+    /// screen.
+    LocalWrite,
 }
 
 /// Everything one socket read writes to the terminal and reports, kept
@@ -310,6 +314,13 @@ impl SessionHandle {
         self.tx_outgoing
             .send(OutgoingMsg::WindowSize { cols, rows })
             .is_ok()
+    }
+
+    /// Tell the session the webview wrote to the terminal itself, which
+    /// closes the open row. Returns false when the session has already
+    /// been torn down.
+    pub(crate) fn local_write(&self) -> bool {
+        self.tx_outgoing.send(OutgoingMsg::LocalWrite).is_ok()
     }
 
     /// Repaint the open row as the `[prompt]` table now says. Returns
@@ -547,6 +558,9 @@ async fn io_loop(
                             break Some(format!("naws flush failed: {e}"));
                         }
                     }
+                }
+                Some(OutgoingMsg::LocalWrite) => {
+                    profile.lock().await.prompt.stage.close();
                 }
                 Some(OutgoingMsg::PromptRepaint) => {
                     let out = {
@@ -2971,11 +2985,15 @@ mod tests {
             Some(with(&[&wire.mark(4), b"[1020]\x1b[0m"]))
         );
 
-        // Nothing repaints once other output closed the row, or after a
-        // send.
+        // Nothing repaints once other output closed the row, after a
+        // send, or after the webview wrote to the terminal itself.
         assert!(super::repaint_step(&mut wire.p, true, now).is_empty());
         let _ = wire.read(PROMPT_ROW);
         wire.send();
+        assert!(super::repaint_step(&mut wire.p, false, now).is_empty());
+        let _ = wire.read(PROMPT_ROW);
+        assert!(wire.p.prompt.stage.open_row().is_some());
+        wire.p.prompt.stage.close();
         assert!(super::repaint_step(&mut wire.p, false, now).is_empty());
     }
 

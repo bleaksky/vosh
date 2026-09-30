@@ -1632,6 +1632,30 @@ pub(crate) fn native_surface_echo(text: String) {
     }
 }
 
+/// Write text the webview drew itself, such as your typed echo or an
+/// error notice. The native grid takes it too, as it takes every session
+/// write, so it keeps the same content as xterm whichever renderer shows,
+/// and the session closes the open row, since that text now follows it.
+#[tauri::command]
+pub(crate) async fn terminal_local_write(
+    state: State<'_, SharedState>,
+    text: String,
+) -> Result<(), String> {
+    #[cfg(native_surface)]
+    {
+        crate::term_grid::feed_bytes(text.as_bytes());
+        crate::native_surface::request_redraw();
+    }
+    #[cfg(not(native_surface))]
+    {
+        let _ = &text;
+    }
+    if let Some(handle) = state.session.lock().await.as_ref() {
+        let _ = handle.local_write();
+    }
+    Ok(())
+}
+
 /// Tier 3 native renderer (macOS): search the grid and step to the next (or
 /// previous) match, scrolling it into view and highlighting all matches.
 /// Returns `[current, total]` (1-based; `[0, 0]` when no match). A no-op
