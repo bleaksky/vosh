@@ -2845,6 +2845,8 @@ mod tests {
     struct Wire {
         p: Profile,
         acc: super::LineAccumulator,
+        /// The telnet parser, for reads of raw wire bytes.
+        parser: vosh_telnet::Parser,
         /// The first generation this wire hands out, so tests can name
         /// the marks by number.
         gen0: u64,
@@ -2855,6 +2857,7 @@ mod tests {
             let mut wire = Self {
                 p,
                 acc: super::LineAccumulator::new(),
+                parser: vosh_telnet::Parser::new(),
                 gen0: 0,
             };
             wire.gen0 = wire.p.prompt.stage.next_gen();
@@ -2923,6 +2926,46 @@ mod tests {
                 super::now_ms(),
             );
             self.acc.forget_partial();
+        }
+
+        /// One socket read of raw wire bytes, through the telnet parser
+        /// and the steps the session runs for each event: text through
+        /// the Line pass, each GMCP packet through the GMCP step, and a
+        /// GA or EOR through the marker step. Then the end of the read,
+        /// and the hold's deadline before the next one.
+        fn read_wire(&mut self, data: &[u8]) -> vosh_prompt::stage::Output {
+            let mut batch = super::ReadBatch::new(super::output_count());
+            batch.out = vosh_prompt::stage::Output::new(false);
+            let now = tokio::time::Instant::now();
+            for event in self.parser.feed(data) {
+                match event {
+                    super::TelnetEvent::Data(bytes) => {
+                        for line in self.acc.feed(&bytes) {
+                            let plain = vosh_ansi::plain_text(&line.bytes);
+                            let _ =
+                                super::line_step(&mut self.p, &mut batch, line, plain, now, None);
+                        }
+                    }
+                    super::TelnetEvent::Subnegotiation { option, payload }
+                        if option == super::telnet_option::GMCP =>
+                    {
+                        let msg = vosh_gmcp::parse(&payload).expect("every packet parses");
+                        let _ = super::gmcp_step(&mut self.p, &msg, now);
+                    }
+                    super::TelnetEvent::Command(byte)
+                        if byte == super::telnet_codes::GA || byte == super::telnet_codes::EOR =>
+                    {
+                        let _ =
+                            super::marker_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+                    }
+                    _ => {}
+                }
+            }
+            let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+            if batch.hold {
+                super::hold_step(&mut self.p, &mut self.acc, &mut batch.out);
+            }
+            batch.out
         }
 
         /// One socket read of `events` in order, as the session handles
@@ -4369,6 +4412,304 @@ mod tests {
         assert_eq!(named.as_deref(), Some("Tester"));
         // A connection with logging off names nothing.
         super::LogSession::new(None).name(&logs, "Tester").await;
+    }
+
+    /// A synthetic socket read from fixtures/prompt/aabahran/wire.
+    fn wire_fixture(name: &str) -> Vec<u8> {
+        let path = format!(
+            "{}/../fixtures/prompt/aabahran/wire/{name}.bin",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        std::fs::read(&path).unwrap_or_else(|e| panic!("{path}: {e}"))
+    }
+
+    /// A profile that reads Aabahran's codes `prompt` on a connection to
+    /// the fake game on a local port, and draws `<%hp>` in its place.
+    fn fake_profile(prompt: &str) -> Profile {
+        let mut p = codes_profile(prompt, HP);
+        super::start_prompt(&mut p, false);
+        p
+    }
+
+    /// The screen a native grid `columns` wide shows after `reads` of raw
+    /// wire bytes, rows trimmed, up to the last row that shows anything.
+    fn wire_screen(wire: &mut Wire, columns: usize, reads: &[&[u8]]) -> Vec<String> {
+        let mut grid = crate::term_grid::TermGrid::new(columns, 60);
+        for read in reads {
+            grid.session_output(&wire.read_wire(read));
+        }
+        let mut rows: Vec<String> = (0..grid.screen_lines())
+            .map(|line| grid.row_string(line).trim_end().to_string())
+            .collect();
+        while rows.last().is_some_and(String::is_empty) {
+            rows.pop();
+        }
+        rows
+    }
+
+    /// Where to cut `bytes` in two: after every byte of text, and around
+    /// and inside each GMCP packet (in its IAC SB GMCP head, halfway
+    /// through its body, and between its IAC and SE). A cut anywhere else
+    /// in a packet's body reads the same as the one halfway through it.
+    fn cuts(bytes: &[u8]) -> Vec<usize> {
+        let mut cuts = Vec::new();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == 255 && bytes.get(i + 1) == Some(&250) {
+                let end = bytes[i..]
+                    .windows(2)
+                    .position(|w| w == [255, 240])
+                    .map_or(bytes.len(), |p| i + p + 2);
+                cuts.extend([i, i + 1, i + 2, i + 3, (i + end) / 2, end - 1]);
+                i = end;
+                continue;
+            }
+            cuts.push(i);
+            i += 1;
+        }
+        cuts.retain(|&c| c > 0 && c < bytes.len());
+        cuts.sort_unstable();
+        cuts.dedup();
+        cuts
+    }
+
+    /// Read `bytes` as one read and as two cut at every place [`cuts`]
+    /// names, at 40 and 12 wide, and check each screen is the one a single
+    /// read gives. Returns the 80 wide screen of one read and the wire
+    /// that read it.
+    fn wire_same_at_every_split(
+        profile: &dyn Fn() -> Profile,
+        bytes: &[u8],
+    ) -> (Vec<String>, Wire) {
+        for columns in [40, 12] {
+            let whole = wire_screen(&mut Wire::new(profile()), columns, &[bytes]);
+            for at in cuts(bytes) {
+                let reads = vosh_prompt::testkit::reads(bytes, &[at]);
+                assert_eq!(
+                    wire_screen(&mut Wire::new(profile()), columns, &reads),
+                    whole,
+                    "{columns} wide, cut after {at}"
+                );
+            }
+        }
+        let mut wire = Wire::new(profile());
+        let screen = wire_screen(&mut wire, 80, &[bytes]);
+        (screen, wire)
+    }
+
+    /// Every value lamented tears hides, as `session://hidden` reports it.
+    fn all_hidden() -> serde_json::Value {
+        serde_json::json!({"vitals": true, "tank": true, "opponent": true, "affects": true, "group": true})
+    }
+
+    const ROOM: [&str; 3] = [
+        "The Bank of Aabahran",
+        "  Marble counters line the hall, and a clerk nods at you.",
+        "[Exits: south]",
+    ];
+
+    #[test]
+    fn the_quiet_wire_draws_its_prompt_at_every_split() {
+        let bytes = wire_fixture("quiet");
+        let (screen, wire) = wire_same_at_every_split(&|| fake_profile(CODES), &bytes);
+        assert_eq!(screen, [ROOM[0], ROOM[1], ROOM[2], "", "<1020>"]);
+        let vars = wire.p.prompt.vars.prompt_vars();
+        assert_eq!(vars.get("maxhp").map(String::as_str), Some("1020"));
+        assert_eq!(wire.p.prompt.status(), vosh_prompt::Status::Matching);
+    }
+
+    #[test]
+    fn the_fight_wire_reads_the_tank_block_at_every_split() {
+        let bytes = wire_fixture("fight-tank");
+        let (screen, wire) = wire_same_at_every_split(&|| fake_profile(CODES), &bytes);
+        // The design reads nothing on the tank line, so it shows as sent.
+        assert_eq!(
+            screen,
+            [
+                "A Blackwatch guard attacks you!",
+                "A Blackwatch guard has quite a few wounds.",
+                "",
+                "Tester: [===|===|===|---]",
+                "<765>"
+            ]
+        );
+        let vars = wire.p.prompt.vars.prompt_vars();
+        assert_eq!(vars.get("tank").map(String::as_str), Some("Tester"));
+        assert_eq!(vars.get("fight").map(String::as_str), Some("1"));
+        // A design that reads the tank takes over the whole block.
+        let profile = || {
+            let mut p = codes_profile(CODES, "%tank %{tank_hp:pct}%% <%hp>");
+            super::start_prompt(&mut p, false);
+            p
+        };
+        let (screen, _) = wire_same_at_every_split(&profile, &bytes);
+        assert_eq!(screen[3..], ["Tester 75% <765>"]);
+    }
+
+    #[test]
+    fn each_lament_wire_hides_what_the_song_hides_at_every_split() {
+        for (name, battle) in [
+            ("lament-new", false),
+            ("lament-243cac5c", false),
+            ("lament-older", true),
+        ] {
+            let bytes = wire_fixture(name);
+            let (screen, mut wire) = wire_same_at_every_split(&|| fake_profile(CODES), &bytes);
+            let mut want = vec!["Tears fall as the lament takes you."];
+            if battle {
+                want.push("A Blackwatch guard has quite a few wounds.");
+            }
+            want.extend(["", "Tester:", "<?>"]);
+            assert_eq!(screen, want, "{name}");
+            let hidden = wire
+                .p
+                .prompt
+                .vars
+                .take_hidden_change()
+                .expect("a change to report");
+            assert_eq!(
+                serde_json::to_value(hidden).expect("it serializes"),
+                all_hidden(),
+                "{name}"
+            );
+        }
+        // A new build session that had Char.Prompt at login hides the
+        // same values by the flags alone.
+        let mut p = fake_profile(CODES);
+        feed(&mut p, "char-prompt.gmcp");
+        let mut wire = Wire::new(p);
+        let _ = wire.read_wire(&wire_fixture("lament-new"));
+        assert!(wire.p.prompt.vars.new_build());
+        let hidden = wire.p.prompt.vars.take_hidden_change().expect("a change");
+        assert_eq!(
+            serde_json::to_value(hidden).expect("it serializes"),
+            all_hidden()
+        );
+    }
+
+    #[test]
+    fn prompt_all_that_the_next_pulse_completes_draws_both_prompts() {
+        let bytes = wire_fixture("prompt-all-next");
+        let (screen, _) =
+            wire_same_at_every_split(&|| fake_profile("%n%P%C<%hhp %mm %vmv> "), &bytes);
+        assert_eq!(
+            screen,
+            [
+                ROOM[0],
+                ROOM[1],
+                ROOM[2],
+                "",
+                "<1020>",
+                "A Blackwatch guard arrives from the south.",
+                "",
+                "<1020>"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_ga_after_prompt_all_draws_with_no_flash_at_every_split() {
+        let bytes = wire_fixture("ga");
+        let (screen, _) =
+            wire_same_at_every_split(&|| fake_profile("%n%P%C<%hhp %mm %vmv> "), &bytes);
+        assert_eq!(screen, [ROOM[0], ROOM[1], ROOM[2], "", "<1020>"]);
+        // In one read the game's own prompt never reaches the terminal.
+        let mut wire = Wire::new(fake_profile("%n%P%C<%hhp %mm %vmv> "));
+        let out = wire.read_wire(&bytes);
+        assert!(!plain(&String::from_utf8_lossy(&out.bytes)).contains("mv>"));
+    }
+
+    #[test]
+    fn the_login_wire_gives_vosh_the_prompt_with_no_typing() {
+        let bytes = wire_fixture("login-new");
+        // A capture that follows the game, started on another setting.
+        let (screen, mut wire) = wire_same_at_every_split(&|| fake_profile("<%hhp> "), &bytes);
+        assert_eq!(
+            screen,
+            [
+                "Welcome to the fake Aabahran, Tester.",
+                ROOM[0],
+                ROOM[1],
+                ROOM[2],
+                "",
+                "<1020>"
+            ]
+        );
+        let vosh_prompt::CaptureConfig::Aabahran(codes) = &wire.p.prompt.config().capture else {
+            panic!("an aabahran capture");
+        };
+        assert_eq!(codes.prompt, CODES);
+        assert_eq!(codes.source, Some(vosh_prompt::config::CaptureSource::Gmcp));
+        assert!(wire.p.prompt.vars.new_build());
+        let seen = wire.p.prompt.take_seen();
+        assert_eq!(
+            seen,
+            [vosh_prompt::GamePromptSeen {
+                kind: vosh_prompt::SeenKind::Gmcp,
+                text: CODES.into(),
+                applied: true,
+            }]
+        );
+        // A profile that reads no prompt keeps the setting for the card.
+        let mut p = Profile::default();
+        super::start_prompt(&mut p, false);
+        let mut wire = Wire::new(p);
+        let _ = wire.read_wire(&bytes);
+        let packet = wire
+            .p
+            .prompt
+            .vars
+            .gmcp()
+            .char_prompt()
+            .expect("the login Char.Prompt");
+        assert_eq!(packet.prompt, CODES);
+        assert!(packet.at_login);
+        assert!(!wire.p.prompt.take_seen()[0].applied);
+    }
+
+    #[test]
+    fn the_prompt_x_wire_reads_the_new_codes_right_after_the_reply() {
+        let bytes = wire_fixture("prompt-x-new");
+        let (screen, mut wire) = wire_same_at_every_split(&|| fake_profile(CODES), &bytes);
+        assert_eq!(screen, ["Prompt set to <%h/%Hhp %m/%Mmn>", "", "<1020>"]);
+        let vosh_prompt::CaptureConfig::Aabahran(codes) = &wire.p.prompt.config().capture else {
+            panic!("an aabahran capture");
+        };
+        assert_eq!(codes.prompt, vosh_prompt::testkit::wire::PROMPT_X);
+        let seen = wire.p.prompt.take_seen();
+        assert_eq!(seen.len(), 1, "one toast, from Char.Prompt: {seen:?}");
+        assert!(seen[0].applied);
+    }
+
+    #[test]
+    fn the_prompts_off_wire_counts_no_miss_while_the_packages_keep_coming() {
+        let bytes = wire_fixture("prompts-off-new");
+        let (screen, mut wire) = wire_same_at_every_split(&|| fake_profile(CODES), &bytes);
+        assert_eq!(
+            screen,
+            [
+                "You will no longer see prompts.",
+                "",
+                "",
+                "Pulse 1 of 3.",
+                "",
+                "",
+                "Pulse 2 of 3.",
+                "",
+                "",
+                "Pulse 3 of 3."
+            ]
+        );
+        assert_eq!(wire.p.prompt.status(), vosh_prompt::Status::PromptsOff);
+        let report = wire.p.prompt.take_status_change().expect("a report");
+        assert_eq!(report.status, vosh_prompt::Status::PromptsOff);
+        let echo = crate::input::run_line(&mut wire.p, "#prompt").result.echo;
+        assert_eq!(
+            echo.last().map(String::as_str),
+            Some(
+                "You turned prompts off in the game. Type prompt in the game to turn them back on."
+            )
+        );
     }
 
     #[test]
