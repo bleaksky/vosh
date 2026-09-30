@@ -19,7 +19,8 @@
 //!
 //! A value the game hides is Hidden whatever the sources hold, and Vosh
 //! never fills it from another one. [`Hidden`] is worked out from the
-//! latest packets and the fresh capture, never stored.
+//! latest packets and what the prompt read this pulse, through the
+//! capture or a prompt trigger's script values, never stored.
 
 use std::collections::BTreeMap;
 
@@ -1342,7 +1343,7 @@ pub struct Tick {
 }
 
 /// Which values the game hides right now. Worked out from the latest
-/// packets and the fresh capture, never stored (D23).
+/// packets and the fresh prompt values, never stored (D23).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Hidden {
     pub hp: bool,
@@ -1476,7 +1477,8 @@ impl Vars {
     }
 
     /// A value from `mud.set_prompt_var`. A name a capture or GMCP also
-    /// supplies lasts until the next pulse.
+    /// supplies lasts until the next pulse. A prompt trigger reads the
+    /// prompt this way, so the hidden state follows it.
     pub fn set_script(&mut self, name: &str, value: &str) {
         let pulse = is_sourced(name).then(|| self.gmcp.pulse());
         self.script.insert(
@@ -1486,11 +1488,16 @@ impl Vars {
                 pulse,
             },
         );
+        self.recompute();
     }
 
     /// Clear a script value.
     pub fn remove_script(&mut self, name: &str) -> bool {
-        self.script.remove(name).is_some()
+        let removed = self.script.remove(name).is_some();
+        if removed {
+            self.recompute();
+        }
+        removed
     }
 
     /// A profile switch keeps the GMCP snapshot and the new build sign,
@@ -1578,6 +1585,15 @@ impl Vars {
             .map(String::as_str)
     }
 
+    /// A pair's fresh max from the prompt, under the first of its
+    /// spellings that has one, the order the resolver reads them in.
+    fn max_var(&self, pair: Pair) -> Option<&str> {
+        let aliases: &[&str] = entry(pair.max()).map_or(&[], |e| e.aliases);
+        std::iter::once(pair.max())
+            .chain(aliases.iter().copied())
+            .find_map(|name| self.var(name))
+    }
+
     /// True when a script or any capture, stale or not, has had the name,
     /// so it is known even without a fresh value.
     fn known_var(&self, name: &str) -> bool {
@@ -1636,13 +1652,18 @@ impl Vars {
             };
         }
 
-        let capture = self.fresh_capture();
-        let captured = |name: &str| capture.and_then(|c| c.values.get(name));
-        // H1, the capture read a max of 0.
-        let h1 = |pair: Pair| captured(pair.max()).is_some_and(|m| m.trim().parse() == Ok(0_i64));
-        // H2, the capture read a tank but %p and %P printed nothing.
+        // What the prompt read this pulse. A prompt trigger that hands
+        // its groups to `mud.set_prompt_var` reads the prompt as surely
+        // as a capture does, and its values last the same one pulse.
+        let captured = |name: &str| self.var(name);
+        // H1, the prompt read a max of 0.
+        let h1 = |pair: Pair| {
+            self.max_var(pair)
+                .is_some_and(|m| m.trim().parse() == Ok(0_i64))
+        };
+        // H2, the prompt read a tank but %p and %P printed nothing.
         let h2 = captured("tank").is_some_and(|t| !t.trim().is_empty()) && {
-            let health: Vec<&String> = ["tank_pct", "tank_bar"]
+            let health: Vec<&str> = ["tank_pct", "tank_bar"]
                 .iter()
                 .filter_map(|k| captured(k))
                 .collect();
@@ -1982,7 +2003,10 @@ impl<'a> Resolver<'a> {
             _ => None,
         };
         // A max of 0 means the pair does not apply, as for a class with
-        // no mana on another game.
+        // no mana on another game. Under the Forsaken Lands rules a max
+        // of 0 hides the pair first (H1, H3), so this is reached there
+        // only on the new build, whose flags alone decide, and it draws
+        // nothing rather than a percent with no max.
         if max == Some(0) {
             return Resolved::Absent;
         }
