@@ -25,8 +25,10 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use crate::capture::Recognizer;
+use crate::aabahran::Who;
+use crate::capture::{Recognized, Recognizer};
 use crate::config::CaptureConfig;
+use crate::template::FieldRef;
 
 /// The private OSC Vosh marks regions with.
 pub const MARK_OSC: u32 = 7717;
@@ -197,10 +199,13 @@ pub struct BlockLine {
 pub struct Block {
     pub lines: Vec<BlockLine>,
     /// The lines the drawn prompt replaces, by index. The drawn prompt
-    /// always replaces the final line.
+    /// always replaces the final line. A line above it shows as the game
+    /// sent it unless your design reads a value it carries (D7).
     pub replaced: Vec<usize>,
     /// What each group read, by variable.
     pub values: BTreeMap<String, String>,
+    /// The game's away prompt. It shows as sent, even while Vosh draws.
+    pub afk: bool,
 }
 
 impl Block {
@@ -219,6 +224,32 @@ impl Block {
             .map(|l| String::from_utf8_lossy(&l.raw).into_owned())
             .collect();
         lines.join("\r\n")
+    }
+
+    /// The lines above the final one that show as the game sent them
+    /// while Vosh draws, each with its line end.
+    fn heads_shown(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        let last = self.lines.len().saturating_sub(1);
+        for (index, line) in self.lines.iter().enumerate().take(last) {
+            if !self.replaced.contains(&index) {
+                out.extend_from_slice(&line.raw);
+                out.extend_from_slice(b"\r\n");
+            }
+        }
+        out
+    }
+
+    /// Every line above the final one, as the game sent it, each with its
+    /// line end, for a block that shows as sent.
+    fn heads(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        let last = self.lines.len().saturating_sub(1);
+        for line in self.lines.iter().take(last) {
+            out.extend_from_slice(&line.raw);
+            out.extend_from_slice(b"\r\n");
+        }
+        out
     }
 
     /// The lines the drawn prompt replaced, as the game showed them, for
@@ -260,6 +291,85 @@ pub struct Candidate {
     pub capture: bool,
 }
 
+/// What the stage made of a line it was offered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Offer {
+    /// Your prompt. The block, and the region an earlier read painted
+    /// part of it as, which the drawn prompt replaces.
+    Prompt(Block, Option<u64>),
+    /// The top line of a prompt that spans lines. The stage holds it
+    /// until the rest arrives, and writes nothing for it yet.
+    Held,
+    /// Not your prompt.
+    Line,
+}
+
+/// A line the stage held that turned out not to start your prompt. It
+/// goes through the Line pass as any other line, before the line that
+/// released it. `painted` is the region it shows in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Released {
+    pub raw: Vec<u8>,
+    pub plain: String,
+    pub painted: Option<u64>,
+}
+
+/// The lines [`Stage::offer`] released, then what it made of the line
+/// offered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Offered {
+    pub released: Vec<Released>,
+    pub offer: Offer,
+}
+
+/// What the region of the held lines shows: how many held lines and how
+/// long a partial after them. A region painted before the lines were
+/// held shows neither, so it is painted again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct HeldRegion {
+    gen: u64,
+    lines: usize,
+    partial: usize,
+}
+
+/// Which lines above the last one your design hides: every one when it
+/// reads `%{raw}`, else those that carry a value it reads (D7).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct Hides {
+    all: bool,
+    fields: BTreeSet<String>,
+}
+
+impl Hides {
+    fn of(reads: &BTreeSet<FieldRef>) -> Self {
+        Self {
+            all: reads.iter().any(|f| f.name == "raw"),
+            fields: reads.iter().map(|f| f.name.clone()).collect(),
+        }
+    }
+
+    /// True when your design reads a value a line with these groups
+    /// carries.
+    fn line(&self, groups: &[String]) -> bool {
+        self.all
+            || groups
+                .iter()
+                .any(|group| fields_of(group).iter().any(|f| self.fields.contains(*f)))
+    }
+}
+
+/// The fields a capture group feeds, so a line that reads the tank's
+/// health bar carries `tank_hp`.
+fn fields_of(group: &str) -> Vec<&str> {
+    match group {
+        "tank_pct" | "tank_bar" => vec!["tank_hp", group],
+        "hp_pct" | "maxhp" => vec!["hp", group],
+        "mana_pct" | "maxmana" => vec!["mana", group],
+        "move_pct" | "maxmove" => vec!["move", group],
+        _ => vec![group],
+    }
+}
+
 /// A line the ring may record.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct Seen {
@@ -291,12 +401,37 @@ pub struct Stage {
     line_triggers: BTreeSet<String>,
     /// Prompts recognized this session.
     recognized: u64,
+    /// Which lines above the last one your design hides.
+    hides: Hides,
+    /// The top lines of a prompt that spans lines, held until the rest
+    /// arrives.
+    held: Vec<BlockLine>,
+    /// The region the held lines show in, once painted.
+    held_region: Option<HeldRegion>,
 }
 
 impl Stage {
-    /// Compile the capture a profile's `[prompt]` table holds.
+    /// Compile the capture a profile's `[prompt]` table holds, for a
+    /// mortal. See [`Stage::set_capture_for`].
     pub fn set_capture(&mut self, capture: &CaptureConfig) {
-        self.recognizer = Recognizer::compile(capture);
+        self.set_capture_for(capture, Who::default());
+    }
+
+    /// Compile the capture a profile's `[prompt]` table holds. `who`
+    /// decides what Aabahran's `%u` and `%s` print.
+    pub fn set_capture_for(&mut self, capture: &CaptureConfig, who: Who) {
+        self.recognizer = Recognizer::compile_for(capture, who);
+    }
+
+    /// The compiled capture.
+    pub fn recognizer(&self) -> Option<&Recognizer> {
+        self.recognizer.as_ref()
+    }
+
+    /// Take the fields your design reads, which decide the lines above
+    /// the last one it hides (D7).
+    pub fn set_reads(&mut self, reads: &BTreeSet<FieldRef>) {
+        self.hides = Hides::of(reads);
     }
 
     /// Something reads your prompt. Without it Vosh recognizes nothing,
@@ -306,11 +441,13 @@ impl Stage {
     }
 
     /// A connection opened or closed. The regions, the ring and what the
-    /// session noted go. The capture and the generation count stay.
+    /// session noted go. The capture, what the design reads and the
+    /// generation count stay.
     pub fn reset(&mut self) {
         *self = Self {
             recognizer: self.recognizer.take(),
             gen: self.gen,
+            hides: std::mem::take(&mut self.hides),
             ..Self::default()
         };
     }
@@ -351,31 +488,226 @@ impl Stage {
         }
     }
 
-    /// Read a line, or a partial, as your prompt. `end` says how it ended.
-    /// A partial with nothing after it is the prompt only when the
-    /// capture settles. A prompt that settles ends the same wherever the
-    /// reads split: a GA after it leaves the cursor after it, as when it
-    /// settled at the end of a read, and a line end after it follows it.
+    /// Read a line, or a partial, as your prompt on its own. `end` says
+    /// how it ended. A partial with nothing after it is the prompt only
+    /// when the capture settles. A prompt that settles ends the same
+    /// wherever the reads split: a GA after it leaves the cursor after
+    /// it, as when it settled at the end of a read, and a line end after
+    /// it follows it.
     pub fn recognize(&self, raw: &[u8], plain: &str, end: End) -> Option<Block> {
         let recognizer = self.recognizer.as_ref()?;
         let read = match end {
             End::Settled => recognizer.partial(plain)?,
             End::Line | End::Marker | End::SettledLine => recognizer.line(plain)?,
         };
-        let end = match end {
-            End::Marker if recognizer.settles() => End::Settled,
-            End::Line if recognizer.settles() => End::SettledLine,
-            end => end,
+        let line = BlockLine {
+            raw: raw.to_vec(),
+            plain: plain.to_string(),
+            end,
         };
-        Some(Block {
-            lines: vec![BlockLine {
-                raw: raw.to_vec(),
-                plain: plain.to_string(),
-                end,
-            }],
-            replaced: vec![0],
+        Some(self.block(vec![line], read))
+    }
+
+    /// Offer a complete line, or a partial a GA or EOR ended, to the
+    /// stage. With lines held it first tries to finish a prompt that
+    /// spans lines, and when that fails it releases them. Then it reads
+    /// the line on its own, or holds it when it starts a prompt that
+    /// spans lines. `painted` is the region an earlier read painted the
+    /// line in.
+    pub fn offer(&mut self, raw: &[u8], plain: &str, painted: Option<u64>, end: End) -> Offered {
+        let line = BlockLine {
+            raw: raw.to_vec(),
+            plain: plain.to_string(),
+            end,
+        };
+        let mut released = Vec::new();
+        if !self.held.is_empty() {
+            let (read, starts) = {
+                let Some(recognizer) = self.recognizer.as_ref() else {
+                    return Offered {
+                        released: self.release(),
+                        offer: Offer::Line,
+                    };
+                };
+                let mut lines: Vec<&str> = self.held.iter().map(|l| l.plain.as_str()).collect();
+                lines.push(plain);
+                let read = recognizer.read(&lines);
+                let starts = read.is_none() && end == End::Line && recognizer.starts(&lines);
+                (read, starts)
+            };
+            if let Some(read) = read {
+                let region = self.held_region.take().map(|r| r.gen);
+                let mut lines = std::mem::take(&mut self.held);
+                lines.push(line);
+                return Offered {
+                    released,
+                    offer: Offer::Prompt(self.block(lines, read), region.or(painted)),
+                };
+            }
+            if starts {
+                self.held.push(line);
+                self.mark_region_stale(painted);
+                return Offered {
+                    released,
+                    offer: Offer::Held,
+                };
+            }
+            released = self.release();
+        }
+        let (read, starts) = match self.recognizer.as_ref() {
+            Some(recognizer) => {
+                let read = recognizer.read(&[plain]);
+                let starts = read.is_none() && end == End::Line && recognizer.starts(&[plain]);
+                (read, starts)
+            }
+            None => (None, false),
+        };
+        let offer = if let Some(read) = read {
+            Offer::Prompt(self.block(vec![line], read), painted)
+        } else if starts {
+            self.held.push(line);
+            self.mark_region_stale(painted);
+            Offer::Held
+        } else {
+            Offer::Line
+        };
+        Offered { released, offer }
+    }
+
+    /// Read the partial a read ended on, after any held lines, as your
+    /// prompt now, which only a shape that settles does. Returns the
+    /// block and the region the held lines show in, which the drawn
+    /// prompt replaces.
+    pub fn settle(&mut self, raw: &[u8], plain: &str) -> Option<(Block, Option<u64>)> {
+        let read = {
+            let recognizer = self.recognizer.as_ref()?;
+            let mut lines: Vec<&str> = self.held.iter().map(|l| l.plain.as_str()).collect();
+            lines.push(plain);
+            recognizer.read_partial(&lines)?
+        };
+        let region = self.held_region.take().map(|r| r.gen);
+        let mut lines = std::mem::take(&mut self.held);
+        lines.push(BlockLine {
+            raw: raw.to_vec(),
+            plain: plain.to_string(),
+            end: End::Settled,
+        });
+        Some((self.block(lines, read), region))
+    }
+
+    /// Lines are held for the rest of a prompt that spans lines.
+    pub fn holds(&self) -> bool {
+        !self.held.is_empty()
+    }
+
+    /// Hand back the held lines, the first in the region they show in.
+    /// A GA or EOR with no partial after them ends them, since the prompt
+    /// they started never came.
+    pub fn release(&mut self) -> Vec<Released> {
+        let mut region = self.held_region.take().map(|r| r.gen);
+        std::mem::take(&mut self.held)
+            .into_iter()
+            .map(|line| Released {
+                raw: line.raw,
+                plain: line.plain,
+                painted: region.take(),
+            })
+            .collect()
+    }
+
+    /// Forget the held lines, which stay on screen as painted, as a send,
+    /// a local write or other output does. What comes next is read on
+    /// its own.
+    pub fn forget_held(&mut self) {
+        self.held.clear();
+        self.held_region = None;
+    }
+
+    /// A held line an earlier read painted part of: its region shows
+    /// that part, not the held lines, so the end of the read paints
+    /// them again over it.
+    fn mark_region_stale(&mut self, painted: Option<u64>) {
+        if self.held_region.is_none() {
+            if let Some(gen) = painted {
+                self.held_region = Some(HeldRegion {
+                    gen,
+                    lines: usize::MAX,
+                    partial: 0,
+                });
+            }
+        }
+    }
+
+    /// Paint the held lines at the end of a read, and `partial` after
+    /// them when the read ended on one, as one region a later read
+    /// replaces. Nothing when the region already shows them. Returns the
+    /// region and the partial's length, for the line accumulator.
+    fn paint_held(&mut self, out: &mut Output, partial: &[u8]) -> (u64, usize) {
+        let want = (self.held.len(), partial.len());
+        if let Some(region) = self.held_region {
+            if (region.lines, region.partial) == want {
+                return (region.gen, partial.len());
+            }
+        }
+        let gen = self.next_gen();
+        let mut bytes = mark(gen);
+        for line in &self.held {
+            bytes.extend_from_slice(&line.raw);
+            bytes.extend_from_slice(b"\r\n");
+        }
+        bytes.extend_from_slice(partial);
+        match self.held_region {
+            Some(old) => out.replace(old.gen, bytes, true),
+            None => {
+                out.bytes.extend(bytes);
+                out.closed = true;
+            }
+        }
+        self.open = None;
+        self.unrecorded = true;
+        self.held_region = Some(HeldRegion {
+            gen,
+            lines: want.0,
+            partial: want.1,
+        });
+        (gen, partial.len())
+    }
+
+    /// The end of a read that ended on no partial. Held lines paint as a
+    /// region the next read replaces when it finishes the prompt.
+    pub fn end_read(&mut self, out: &mut Output) {
+        self.sync(out);
+        if !self.held.is_empty() {
+            self.paint_held(out, b"");
+        }
+    }
+
+    /// A block of `lines` that `read` read, the last line's end as the
+    /// shape says: a GA after a prompt that settles leaves the cursor
+    /// after it, and a line end after one follows it.
+    fn block(&self, mut lines: Vec<BlockLine>, read: Recognized) -> Block {
+        if let Some(last) = lines.last_mut() {
+            last.end = match last.end {
+                End::Marker if read.settle => End::Settled,
+                End::Line if read.settle => End::SettledLine,
+                end => end,
+            };
+        }
+        let count = lines.len();
+        let replaced = (0..count)
+            .filter(|&i| {
+                i + 1 == count
+                    || self
+                        .hides
+                        .line(read.lines.get(i).map_or(&[][..], |g| &g[..]))
+            })
+            .collect();
+        Block {
+            lines,
+            replaced,
             values: read.values,
-        })
+            afk: read.afk,
+        }
     }
 
     /// Draw `rendered` in place of `block`, as the open row with no line
@@ -396,6 +728,7 @@ impl Stage {
         let gen = self.next_gen();
         let body = drawn(&block, rendered);
         let mut bytes = before.to_vec();
+        bytes.extend(block.heads_shown());
         bytes.extend(mark(gen));
         bytes.extend_from_slice(&body);
         put(out, painted, bytes, true);
@@ -416,6 +749,7 @@ impl Stage {
     ) {
         self.sync(out);
         let mut bytes = before.to_vec();
+        bytes.extend(block.heads());
         if let Some(display) = display {
             bytes.extend_from_slice(display);
             bytes.extend_from_slice(block.final_line().end.terminator());
@@ -460,6 +794,9 @@ impl Stage {
     ) -> Option<(u64, usize)> {
         self.sync(out);
         self.unrecorded = true;
+        if !self.held.is_empty() {
+            return Some(self.paint_held(out, raw));
+        }
         match painted {
             Some((gen, len)) if len == raw.len() => Some((gen, len)),
             Some((old, _)) => {

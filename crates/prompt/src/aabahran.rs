@@ -44,6 +44,23 @@ pub struct Who {
     pub mobile: bool,
 }
 
+/// The level above which the game counts you as an immortal
+/// (`LEVEL_IMMORTAL`, `merc.h`), for `%u`.
+pub const LEVEL_IMMORTAL: i64 = 51;
+
+impl Who {
+    /// Who the prompt is for, from the packets the game sent: the level
+    /// in Char.Status, and Char.State, whose language is empty while you
+    /// control a mobile (correction 27). Without a packet Vosh takes you
+    /// for a mortal in your own body.
+    pub fn from_packets(level: Option<i64>, language: Option<&str>) -> Self {
+        Self {
+            immortal: level.is_some_and(|l| l > LEVEL_IMMORTAL),
+            mobile: language.is_some_and(str::is_empty),
+        }
+    }
+}
+
 /// Which of your two settings a warning or a shape comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub enum Which {
@@ -160,6 +177,15 @@ mod tests {
                 .collect(),
             hidden: false,
         }
+    }
+
+    #[test]
+    fn who_follows_the_level_and_the_language() {
+        assert_eq!(Who::from_packets(None, None), Who::default());
+        assert!(!Who::from_packets(Some(51), None).immortal);
+        assert!(Who::from_packets(Some(52), None).immortal);
+        assert!(!Who::from_packets(None, Some("common")).mobile);
+        assert!(Who::from_packets(Some(60), Some("")).mobile);
     }
 
     #[test]

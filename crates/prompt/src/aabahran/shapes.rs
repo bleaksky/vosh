@@ -127,7 +127,10 @@ impl Shape {
         if self.kind == ShapeKind::Afk {
             values.insert("afk".to_string(), "1".to_string());
         }
-        Some(Recognized { values })
+        Some(Recognized {
+            values,
+            ..Recognized::default()
+        })
     }
 
     /// The names this shape reads, in the order its lines print them,
