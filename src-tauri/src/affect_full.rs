@@ -15,7 +15,20 @@
 //! - otherwise full keeps the most it has seen, so a gauge never passes
 //!   one;
 //! - a permanent affect, or one with no hours, has no full;
-//! - an affect missing from a list has ended, and its full goes.
+//! - an affect missing from a list has left you, and the pane stops
+//!   showing its full. One that comes back at other hours is a new cast
+//!   and starts fresh. One that comes back at the very hours it left with
+//!   never ended, and keeps its full.
+//!
+//! That last rule is for quitting. The game takes your affects off one
+//! at a time as it lets you go, and sends the list that is left after
+//! each (`free_char`, recycle.c 846, and `affect_remove`, handler.c
+//! 3495), so every quit ends with an empty list. Your pfile keeps the
+//! affects with their hours, and hours do not tick while you are out, so
+//! when you play the character again from the account menu each affect
+//! comes back as it left. Until the connection ends, or the game names
+//! another character, the file keeps the fulls of the affects that left.
+//! The next login drops the ones that are not on you.
 //!
 //! A list the game hides (`"hidden": true` under lamented tears) changes
 //! nothing and does not count as the previous list, so a recast under
@@ -142,6 +155,14 @@ fn list_of(data: &Value) -> Option<BTreeMap<String, Hours>> {
     Some(out)
 }
 
+/// A timed affect that left the list on this connection: the full it
+/// had and the hours it showed last.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Left {
+    full: i64,
+    hours: i64,
+}
+
 /// The store. One per app, in [`crate::commands::AppState`].
 #[derive(Debug, Default)]
 pub(crate) struct AffectFull {
@@ -161,7 +182,10 @@ struct Inner {
     unreadable: bool,
     /// The logged in character's key, None until the game names it.
     character: Option<String>,
+    /// The fulls of the affects on you, which the panes draw.
     full: FullMap,
+    /// Timed affects that left the list on this connection, by key.
+    left: BTreeMap<String, Left>,
     /// Hours of each timed affect in the previous list that was not
     /// hidden. None before the first list since you connected.
     last: Option<BTreeMap<String, i64>>,
@@ -172,6 +196,20 @@ struct Inner {
     /// it or as last written. None before the name, and after a write
     /// that failed, so the next flush tries again.
     stored: Option<FullMap>,
+}
+
+impl Inner {
+    /// What the file should hold for the character: the fulls on you, and
+    /// those of the affects that left you on this connection.
+    fn kept(&self) -> FullMap {
+        let mut kept: FullMap = self
+            .left
+            .iter()
+            .map(|(key, left)| (key.clone(), left.full))
+            .collect();
+        kept.extend(self.full.iter().map(|(key, &top)| (key.clone(), top)));
+        kept
+    }
 }
 
 /// One write of a character's map.
@@ -216,24 +254,40 @@ impl AffectFull {
         let last = inner.last.take().unwrap_or_default();
         let mut full = FullMap::new();
         let mut hours_now = BTreeMap::new();
-        for (key, hours) in list {
-            let Hours::Timed(h) = hours else {
+        for (key, hours) in &list {
+            // On you again, in whatever form.
+            let back = inner.left.remove(key);
+            let Hours::Timed(h) = *hours else {
                 continue;
             };
             hours_now.insert(key.clone(), h);
-            let known = before.get(&key).copied();
-            let value = match known {
+            let value = match (before.get(key).copied(), back) {
                 // A rise since the previous list is a recast.
-                Some(_) if last.get(&key).is_some_and(|&prev| h > prev) => h,
-                Some(top) => top.max(h),
+                (Some(_), _) if last.get(key).is_some_and(|&prev| h > prev) => h,
+                (Some(top), _) => top.max(h),
+                // Back at the hours it left with: you played the
+                // character again and it never ended. At other hours it
+                // is a new cast.
+                (None, Some(left)) if left.hours == h => left.full.max(h),
+                (None, Some(_)) => h,
                 // First seen: the saved map says how full it was cast,
                 // unless the hours on you are more, a newer cast.
-                None => pending
+                (None, None) => pending
                     .as_ref()
-                    .and_then(|saved| saved.get(&key))
+                    .and_then(|saved| saved.get(key))
                     .map_or(h, |&saved| saved.max(h)),
             };
-            full.insert(key, value);
+            full.insert(key.clone(), value);
+        }
+        // What left the list keeps its full and its last hours, for the
+        // file and for its return.
+        for (key, &top) in &before {
+            if list.contains_key(key) {
+                continue;
+            }
+            if let Some(&hours) = last.get(key) {
+                inner.left.insert(key.clone(), Left { full: top, hours });
+            }
         }
         inner.last = Some(hours_now);
         if full == before {
@@ -258,6 +312,7 @@ impl AffectFull {
         let before = inner.full.clone();
         if inner.character.is_some() {
             inner.full.clear();
+            inner.left.clear();
             inner.last = None;
         }
         inner.character = Some(key);
@@ -363,7 +418,7 @@ impl AffectFull {
         }
         let path = inner.path.clone()?;
         let character = inner.character.clone()?;
-        let full = inner.full.clone();
+        let full = inner.kept();
         if inner.stored.as_ref() == Some(&full) {
             return None;
         }
@@ -787,6 +842,94 @@ mod tests {
         assert!(!table["characters"].as_table().unwrap().contains_key(ERELEI));
     }
 
+    /// Quitting on the game: `free_char` takes each affect off in turn,
+    /// and each removal sends the list that is left, down to none.
+    fn quit(store: &AffectFull, affects: &[(&str, i64)]) {
+        for i in 1..=affects.len() {
+            seen(store, &affects[i..]);
+        }
+    }
+
+    #[test]
+    fn quitting_takes_affects_off_one_at_a_time_and_the_file_keeps_their_fulls() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        store.character_known(ERELEI.into());
+        seen(&store, &[("armor", 48), ("sanctuary", 10)]);
+        seen(&store, &[("armor", 31), ("sanctuary", 5)]);
+        assert!(store.flush());
+        quit(&store, &[("armor", 31), ("sanctuary", 5)]);
+        assert!(store.map().is_empty(), "the pane shows what the game sends");
+        assert!(!store.flush(), "the file keeps the fulls");
+        store.disconnect();
+        assert_eq!(store.writes(), 1);
+        let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
+        let table: toml::Table = text.parse().unwrap();
+        assert_eq!(
+            map_of(&table["characters"][ERELEI]),
+            map(&[("armor", 48), ("sanctuary", 10)])
+        );
+        // The next login picks up where you quit.
+        let next = store_in(&dir);
+        next.character_known(ERELEI.into());
+        assert_eq!(
+            seen(&next, &[("armor", 31), ("sanctuary", 5)]),
+            Some(map(&[("armor", 48), ("sanctuary", 10)]))
+        );
+    }
+
+    #[test]
+    fn back_from_the_account_menu_your_affects_keep_their_fulls() {
+        let store = AffectFull::default();
+        store.character_known_with(ERELEI.into(), FullMap::new());
+        seen(&store, &[("armor", 48), ("sanctuary", 10)]);
+        seen(&store, &[("armor", 31), ("sanctuary", 5)]);
+        quit(&store, &[("armor", 31), ("sanctuary", 5)]);
+        assert!(store.map().is_empty());
+        // You play the same character again. The game names no one new,
+        // and sends the affects your pfile kept, hours as you left them.
+        assert_eq!(
+            seen(&store, &[("armor", 31), ("sanctuary", 5)]),
+            Some(map(&[("armor", 48), ("sanctuary", 10)]))
+        );
+    }
+
+    #[test]
+    fn an_affect_taken_off_early_and_cast_again_starts_fresh() {
+        let store = AffectFull::default();
+        seen(&store, &[("armor", 48), ("sanctuary", 10)]);
+        seen(&store, &[("armor", 31), ("sanctuary", 9)]);
+        // Sanctuary is dispelled with 9 hours left, then cast again for
+        // less, and armor falls off and comes back for more.
+        seen(&store, &[("armor", 31)]);
+        seen(&store, &[]);
+        assert_eq!(
+            seen(&store, &[("armor", 40), ("sanctuary", 6)]),
+            Some(map(&[("armor", 40), ("sanctuary", 6)]))
+        );
+    }
+
+    #[test]
+    fn quitting_to_play_another_character_writes_the_first_ones_fulls() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store_in(&dir);
+        store.character_known(ERELEI.into());
+        seen(&store, &[("armor", 48)]);
+        seen(&store, &[("armor", 31)]);
+        quit(&store, &[("armor", 31)]);
+        store.character_known("aabahran.com:4000 vanek".into());
+        assert_eq!(seen(&store, &[("armor", 20)]), Some(map(&[("armor", 20)])));
+        store.disconnect();
+        let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
+        let table: toml::Table = text.parse().unwrap();
+        let characters = table["characters"].as_table().unwrap();
+        assert_eq!(map_of(&characters[ERELEI]), map(&[("armor", 48)]));
+        assert_eq!(
+            map_of(&characters["aabahran.com:4000 vanek"]),
+            map(&[("armor", 20)])
+        );
+    }
+
     #[test]
     fn a_round_of_buffs_inside_the_wait_writes_once() {
         let dir = tempfile::tempdir().unwrap();
@@ -859,11 +1002,14 @@ mod tests {
             map_of(&characters[ERELEI]),
             map(&[("armor", 31), ("stone skin", 50)])
         );
-        // An empty map drops the character.
+        // An empty list is what quitting ends with, so it keeps them.
         seen(&store, &[]);
-        assert!(store.flush());
+        assert!(!store.flush());
         let table: toml::Table = std::fs::read_to_string(&path).unwrap().parse().unwrap();
-        assert!(!table["characters"].as_table().unwrap().contains_key(ERELEI));
+        assert_eq!(
+            map_of(&table["characters"][ERELEI]),
+            map(&[("armor", 31), ("stone skin", 50)])
+        );
     }
 
     #[test]
