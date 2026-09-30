@@ -49,6 +49,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use crate::aabahran::Who;
 use crate::capture::{Recognized, Recognizer};
 use crate::config::{CaptureConfig, PromptShow};
+use crate::render::Span;
 use crate::template::{FieldRef, Template, TokenKind};
 
 /// The private OSC Vosh marks regions with.
@@ -640,6 +641,10 @@ pub struct OpenRow {
     /// What the row shows: the drawn prompt, or with drawing off the lines
     /// it replaced.
     pub body: Vec<u8>,
+    /// Where each piece of the design landed in the row, from the render
+    /// that drew it (see [`Stage::set_open_spans`]). Empty while the row
+    /// shows the game's own lines.
+    pub spans: Vec<Span>,
 }
 
 /// One entry of the candidates ring.
@@ -961,6 +966,15 @@ impl Stage {
         self.open.as_ref()
     }
 
+    /// Keep where each piece of the design landed in the open row, from
+    /// the render the session just drew or repainted it with, so the card
+    /// can map a pointer to a piece. Nothing without an open row.
+    pub fn set_open_spans(&mut self, spans: Vec<Span>) {
+        if let Some(open) = self.open.as_mut() {
+            open.spans = spans;
+        }
+    }
+
     /// The last recognized prompt, as sent.
     pub fn last_raw(&self) -> Option<&Block> {
         self.last_raw.as_ref()
@@ -1269,7 +1283,11 @@ impl Stage {
         }
         put(out, painted, bytes, true);
         out.closed = false;
-        self.open = Some(OpenRow { gen, body });
+        self.open = Some(OpenRow {
+            gen,
+            body,
+            spans: Vec::new(),
+        });
         self.open_lift = lift.map(|id| OpenLift {
             id,
             start_inside: false,
@@ -1564,7 +1582,11 @@ impl Stage {
         };
         out.replace_above(old, bytes, above);
         out.closed = false;
-        self.open = Some(OpenRow { gen, body });
+        self.open = Some(OpenRow {
+            gen,
+            body,
+            spans: Vec::new(),
+        });
         self.open_lift = lift;
     }
 
@@ -1647,7 +1669,11 @@ impl Stage {
                 }
                 out.text(&bytes);
                 out.closed = false;
-                self.open = Some(OpenRow { gen, body });
+                self.open = Some(OpenRow {
+                    gen,
+                    body,
+                    spans: Vec::new(),
+                });
                 self.open_lift = lift.map(|id| OpenLift {
                     id,
                     start_inside: false,
@@ -1880,7 +1906,8 @@ mod tests {
             stage.open_row(),
             Some(&OpenRow {
                 gen: 1,
-                body: b"DRAWN".to_vec()
+                body: b"DRAWN".to_vec(),
+                spans: Vec::new(),
             })
         );
         assert_eq!(
@@ -2073,7 +2100,8 @@ mod tests {
             stage.open_row(),
             Some(&OpenRow {
                 gen: 1,
-                body: b"DRAWN\r\n".to_vec()
+                body: b"DRAWN\r\n".to_vec(),
+                spans: Vec::new(),
             })
         );
         let mut new = Output::new(false);
@@ -2305,6 +2333,43 @@ mod tests {
         stage.draw(&mut out, block_of(&stage), None, b"", "DRAWN");
         stage.finish(&mut out);
         assert!(stage.open_row().is_some());
+    }
+
+    #[test]
+    fn the_open_row_keeps_the_spans_of_the_render_that_drew_it() {
+        let span = |piece| Span {
+            piece,
+            row: 0,
+            col: 0,
+            width: 5,
+            fg: crate::render::SpanColor::Default,
+            bg: crate::render::SpanColor::Default,
+            bold: false,
+            italic: false,
+            underline: false,
+        };
+        let mut stage = stage(JAMES, false);
+        stage.set_open_spans(vec![span(0)]);
+        assert_eq!(stage.open_row(), None, "no row to keep them for");
+
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        assert!(stage.open_row().is_some_and(|o| o.spans.is_empty()));
+        stage.set_open_spans(vec![span(0)]);
+        assert_eq!(stage.open_row().map(|o| o.spans.len()), Some(1));
+
+        // A repaint that changes nothing keeps them, and one that draws
+        // another design starts a row with none until the session sets
+        // the new render's.
+        let mut same = Output::new(false);
+        stage.repaint(&mut same, Some("DRAWN"));
+        assert_eq!(stage.open_row().map(|o| o.spans.len()), Some(1));
+        let mut new = Output::new(false);
+        stage.repaint(&mut new, Some("NEW"));
+        assert!(stage.open_row().is_some_and(|o| o.spans.is_empty()));
+        stage.set_open_spans(vec![span(0), span(1)]);
+        assert_eq!(stage.open_row().map(|o| o.spans.len()), Some(2));
     }
 
     #[test]
