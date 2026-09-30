@@ -14,6 +14,9 @@ fixtures/
                what each one stands for.
   mccp/      MCCP compressed stream captures.
   pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.
+  prompt/
+    aabahran/  Aabahran prompt lines as the game sends them, raw and plain,
+               and PROMPT settings for the compiler in crates/prompt.
   themes/    One theme file per format the Appearance import reads (Ghostty,
              iTerm2, Kitty, Alacritty TOML, legacy Alacritty YAML).
   wrap/      Word wrap cases shared by the Rust wrap in crates/prompt and the
@@ -37,3 +40,4 @@ Trim the hex log to the interesting region, then drop it under the matching subd
 - No credentials, no character names, no chat content, no PII.
 - Each fixture must have a parser test that consumes it.
 - Prefer many small fixtures over a few big ones.
+- A fixture written by hand rather than captured says so. A capture file gets a `.notes.md` that marks it synthetic, and a JSON fixture says it in its `notes` field. It stays marked until an approved socat capture takes its place.
