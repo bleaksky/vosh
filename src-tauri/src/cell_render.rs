@@ -1505,11 +1505,31 @@ fn draw_bands<'a>(
     set_stage(rpass, cells);
 }
 
-/// Whether grid line `line` column `col` lies in a lift, from the rows
-/// `lift_spans` read.
-fn in_lift(rows: &HashMap<i32, Vec<(usize, usize)>>, line: i32, col: usize) -> bool {
-    rows.get(&line)
-        .is_some_and(|spans| spans.iter().any(|&(first, end)| col >= first && col < end))
+/// The quad color for a cell of plain ground while bands draw: `tints`,
+/// the selection and find match over it, bottom first, as one translucent
+/// color that blends over whatever lies under the cell, a band or the
+/// clear ground, as each would blend over it in sRGB. Clear with no tint,
+/// so the band shows.
+fn ground_tint(tints: &[Paint]) -> Rgba {
+    // Premultiplied sRGB and coverage, stacked.
+    let mut acc = [0.0f32; 3];
+    let mut alpha = 0.0f32;
+    for t in tints {
+        let a = t.a.clamp(0.0, 1.0);
+        for (i, c) in [t.r, t.g, t.b].into_iter().enumerate() {
+            acc[i] = f32::from(c) / 255.0 * a + acc[i] * (1.0 - a);
+        }
+        alpha = a + alpha * (1.0 - a);
+    }
+    if alpha <= 0.0 {
+        return [0.0; 4];
+    }
+    [
+        srgb_to_linear(acc[0] / alpha),
+        srgb_to_linear(acc[1] / alpha),
+        srgb_to_linear(acc[2] / alpha),
+        alpha,
+    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -2164,22 +2184,13 @@ impl CellRenderer {
         // the bands drawn under them show.
         let bands_on = prompt_bands();
         let mut region_boxes: Vec<Vec<LiftBox>> = Vec::new();
-        let mut lift_rows: HashMap<i32, Vec<(usize, usize)>> = HashMap::new();
         if bands_on {
             for reg in &regions {
                 let last = reg.line0 + reg.vis as i32 - 1;
                 let spans = grid.lift_spans(reg.line0 - MAX_LIFT_ROWS, last + MAX_LIFT_ROWS);
                 region_boxes.push(lift_boxes(&spans, reg.line0, reg.vis));
-                for s in spans {
-                    if s.line >= reg.line0 && s.line <= last {
-                        lift_rows.entry(s.line).or_default().push((s.first, s.end));
-                    }
-                }
             }
         }
-        // The ground under a band: the band over the terminal ground, which
-        // a selection or a find match over a lifted cell blends onto.
-        let band_ground = blend_over(chrome.selrow, rgb_to_rgba(theme_bg()));
         let style_cell = |grid_line: i32,
                           col: usize,
                           y_top: f32,
@@ -2203,36 +2214,39 @@ impl CellRenderer {
                     bg_rgba = field;
                 }
             }
-            // The plain ground, which a band may lie under.
+            // The plain ground, which a band may lie under. It draws clear,
+            // and its tints blend over whatever lies under it, so a band
+            // keeps its shape under a selection or a find match.
             let ground = bands_on
                 && matches!(bg, Color::Named(NamedColor::Background))
                 && !flags.inverse
                 && !signal
                 && field.is_none();
-            if ground && in_lift(&lift_rows, grid_line, col) {
-                bg_rgba = band_ground;
-            }
-            let mut tinted = false;
+            let mut tints = [chrome.selection; 2];
+            let mut tinted = 0;
             if cell_in_selection(selection, grid_line, col) {
-                bg_rgba = blend_over(chrome.selection, bg_rgba);
-                tinted = true;
+                tints[tinted] = chrome.selection;
+                tinted += 1;
             }
             if let Some(ranges) = find_by_line.get(&grid_line) {
                 for &(start, end, active) in ranges {
                     if col >= start && col < end {
-                        let paint = if active {
+                        tints[tinted] = if active {
                             chrome.current_match
                         } else {
                             chrome.find_match
                         };
-                        bg_rgba = blend_over(paint, bg_rgba);
-                        tinted = true;
+                        tinted += 1;
                         break;
                     }
                 }
             }
-            if ground && !tinted {
-                bg_rgba[3] = 0.0;
+            if ground {
+                bg_rgba = ground_tint(&tints[..tinted]);
+            } else {
+                for &tint in &tints[..tinted] {
+                    bg_rgba = blend_over(tint, bg_rgba);
+                }
             }
             let hovered =
                 hover.is_some_and(|(hl, hs, he)| grid_line == hl && col >= hs && col < he);
@@ -3085,14 +3099,53 @@ mod tests {
         );
     }
 
+    /// What the surface shows for `cell`, a quad color, drawn over an
+    /// opaque `under`, as the premultiplied blend composites it: in sRGB.
+    fn composite(cell: Rgba, under: Rgba) -> [u8; 3] {
+        let a = cell[3];
+        let mut out = [0u8; 3];
+        for i in 0..3 {
+            let top = linear_to_srgb(cell[i]) * a;
+            let v = top + linear_to_srgb(under[i]) * (1.0 - a);
+            out[i] = (v * 255.0).round() as u8;
+        }
+        out
+    }
+
+    fn opaque_srgb(c: Rgba) -> [u8; 3] {
+        composite(c, c)
+    }
+
     #[test]
-    fn in_lift_reads_the_rows_a_lift_covers() {
-        let mut rows = HashMap::new();
-        rows.insert(3, vec![(2, 6)]);
-        assert!(in_lift(&rows, 3, 2));
-        assert!(in_lift(&rows, 3, 5));
-        assert!(!in_lift(&rows, 3, 6));
-        assert!(!in_lift(&rows, 4, 3));
+    fn a_tint_over_a_band_blends_over_whatever_lies_under_it() {
+        // Nord: the selection and a find match over a lifted prompt's
+        // band, and over the plain ground beside it.
+        let selection = paint(0x88, 0xc0, 0xd0, 0.4);
+        let find = paint(0xeb, 0xcb, 0x8b, 0.28);
+        let band = rgb_to_rgba(Rgb {
+            r: 0x3b,
+            g: 0x42,
+            b: 0x52,
+        });
+        let ground = rgb_to_rgba(Rgb {
+            r: 0x2e,
+            g: 0x34,
+            b: 0x40,
+        });
+        for tints in [vec![selection], vec![selection, find], vec![find]] {
+            let cell = ground_tint(&tints);
+            assert!(cell[3] < 1.0, "the band still shows through");
+            for under in [band, ground] {
+                let want = tints.iter().fold(under, |c, &t| blend_over(t, c));
+                let got = composite(cell, under);
+                let want = opaque_srgb(want);
+                for i in 0..3 {
+                    assert!(got[i].abs_diff(want[i]) <= 1, "{tints:?} {got:?} {want:?}");
+                }
+            }
+        }
+        // No tint leaves the ground clear.
+        assert_eq!(ground_tint(&[])[3], 0.0);
     }
 
     #[test]
