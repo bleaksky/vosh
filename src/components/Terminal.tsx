@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -21,6 +21,7 @@ import { ansi16Of, xtermThemeFor } from '../lib/terminalTheme';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
 import { OutputShaper } from '../lib/outputShaper';
 import { RegionWriter } from '../lib/terminalRegion';
+import { BandLayer, LiftTracker } from '../lib/promptBands';
 import { ingestRecentNames } from '../lib/recentNames';
 
 /** Session flag set when the native surface never came up, so the page
@@ -192,10 +193,29 @@ interface Props {
   /// at, so a band outside the grid can put its characters on the same
   /// columns.
   onCellSize?: (size: { width: number; height: number; cols: number }) => void;
+  /// Your prompt shows lifted: xterm draws each prompt over a band. The
+  /// live pane only, and only while xterm draws the terminal. The native
+  /// grid draws its own bands, and the split history pane draws none.
+  lifted?: boolean;
 }
 
 // The terminal's palette lives in src/lib/terminalTheme.ts, which the
 // pinned prompt band reads too.
+
+/** `color`, a #rrggbb ground, fully clear. */
+function clearGround(color: string | undefined): string {
+  const m = /^#?([0-9a-f]{6})/i.exec(color ?? '');
+  return m ? `#${m[1]}00` : 'rgba(0, 0, 0, 0)';
+}
+
+/** The theme xterm draws with: the terminal palette, its ground clear
+ *  while the pane lifts your prompts (`clear`), since the bands draw under
+ *  xterm's text and the terminal area's ground shows through. */
+function themeFor(themeId: string, tinted: boolean, clear: boolean) {
+  const theme = xtermThemeFor(findTheme(themeId), tinted);
+  if (clear) theme.background = clearGround(theme.background);
+  return theme;
+}
 
 // TEMPORARY: count live xterm instances to catch a mount/dispose leak
 // across split-scrollback open/close cycles (the history pane mounts and
@@ -213,6 +233,7 @@ export function Terminal({
   onScrollPosition,
   onResultsChanged,
   onCellSize,
+  lifted = false,
 }: Props) {
   const quietRef = useRef(quiet);
   quietRef.current = quiet;
@@ -224,6 +245,10 @@ export function Terminal({
   onResultsChangedRef.current = onResultsChanged;
   const onCellSizeRef = useRef(onCellSize);
   onCellSizeRef.current = onCellSize;
+  const liftedRef = useRef(lifted);
+  liftedRef.current = lifted;
+  // The band layer, while this pane can draw bands.
+  const bandsRef = useRef<BandLayer | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -243,6 +268,25 @@ export function Terminal({
   // disposed and recreated, wiping all output.
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
+
+  // Whether this pane draws bands now: your prompt shows lifted and
+  // xterm draws the terminal.
+  const liftsHere = useCallback(() => liftedRef.current && bandsRef.current !== null, []);
+
+  // The lift state the pane last applied, so the default never touches
+  // xterm's options.
+  const appliedLiftRef = useRef(false);
+
+  // Turn the bands on or off, with the clear ground they need.
+  const applyLift = (term: XTerm) => {
+    const on = liftsHere();
+    if (on === appliedLiftRef.current) return;
+    appliedLiftRef.current = on;
+    term.options.allowTransparency = on;
+    term.options.theme = themeFor(getCurrentThemeId(), themeTerminalColorsRef.current, on);
+    containerRef.current?.closest('.terminal-area')?.classList.toggle('prompt-lifted', on);
+    bandsRef.current?.setEnabled(on);
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -272,7 +316,7 @@ export function Terminal({
       // discrete instant steps via the App.tsx accumulator works
       // better in practice.
       scrollSensitivity: 0.75,
-      theme: xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColorsRef.current),
+      theme: themeFor(getCurrentThemeId(), themeTerminalColorsRef.current, false),
     });
 
     // Every write to this xterm goes through one ordered writer, which
@@ -280,6 +324,9 @@ export function Terminal({
     // nothing was written after them (src/lib/terminalRegion.ts).
     const writer = new RegionWriter(term);
     const localDecoder = new TextDecoder('utf-8', { fatal: false });
+    // Lifted prompts. The tracker registers after the writer, so xterm
+    // hands it the lift marks first and the region marks pass on.
+    const lifts = !quietRef.current && !nativeSurfaceEnabled() ? new LiftTracker(term) : null;
 
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -297,6 +344,11 @@ export function Terminal({
     });
 
     term.open(containerRef.current);
+    const area = containerRef.current.closest<HTMLElement>('.terminal-area');
+    if (lifts && area) {
+      bandsRef.current = new BandLayer(term, lifts, area);
+      applyLift(term);
+    }
 
     // GPU renderer. xterm's WebGL addon must run after term.open() and
     // it reads the host element's pixel size when it allocates the
@@ -1080,6 +1132,9 @@ export function Terminal({
       unsubOutput?.();
       unsubGridSize?.();
       writer.dispose();
+      bandsRef.current?.dispose();
+      bandsRef.current = null;
+      lifts?.dispose();
       resultsSub.dispose();
       scrollDisposable.dispose();
       searchAddon.dispose();
@@ -1156,9 +1211,17 @@ export function Terminal({
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    term.options.theme = xtermThemeFor(findTheme(getCurrentThemeId()), themeTerminalColors);
+    term.options.theme = themeFor(getCurrentThemeId(), themeTerminalColors, liftsHere());
     reportNativeTheme(getCurrentThemeId(), themeTerminalColors);
-  }, [themeTerminalColors]);
+  }, [themeTerminalColors, liftsHere]);
+
+  // Lift your prompts, or stop, when the choice changes.
+  useEffect(() => {
+    const term = termRef.current;
+    if (term) applyLift(term);
+    // applyLift reads the refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lifted]);
 
   // Re-apply when the user edits the base ANSI palette (the colors
   // used while the tint toggle is off).
@@ -1166,13 +1229,14 @@ export function Terminal({
     return subscribeBaseAnsi(() => {
       const term = termRef.current;
       if (!term) return;
-      term.options.theme = xtermThemeFor(
-        findTheme(getCurrentThemeId()),
+      term.options.theme = themeFor(
+        getCurrentThemeId(),
         themeTerminalColorsRef.current,
+        liftsHere(),
       );
       reportNativeTheme(getCurrentThemeId(), themeTerminalColorsRef.current);
     });
-  }, []);
+  }, [liftsHere]);
 
   // Live-refresh the xterm palette when the user switches themes from
   // the settings window. Listens on the cross-window theme event.
@@ -1182,7 +1246,7 @@ export function Terminal({
     subscribeThemeChanges((themeId) => {
       const term = termRef.current;
       if (!term) return;
-      term.options.theme = xtermThemeFor(findTheme(themeId), themeTerminalColorsRef.current);
+      term.options.theme = themeFor(themeId, themeTerminalColorsRef.current, liftsHere());
       reportNativeTheme(themeId, themeTerminalColorsRef.current);
     }).then((fn) => {
       if (cancelled) fn();
@@ -1192,7 +1256,7 @@ export function Terminal({
       cancelled = true;
       unlisten?.();
     };
-  }, []);
+  }, [liftsHere]);
 
   return (
     <div ref={sizingRef} className="terminal-sizer">
