@@ -23,6 +23,8 @@
 //!   compiler among it.
 //! - [`render`] draws a template as ANSI text with a span per piece.
 //! - [`presets`] holds the designs Vosh ships, its default among them.
+//! - [`report`] says what a capture compiles to, for the card, with the
+//!   [`presets`] it offers to start from.
 //! - [`stage`] decides what Vosh writes around your prompt, in one output
 //!   per socket read, with the regions a later output replaces.
 //! - [`wrap`] is the word wrap both renderers share.
@@ -38,6 +40,7 @@ pub mod format;
 pub mod gmcp;
 pub mod presets;
 pub mod render;
+pub mod report;
 pub mod stage;
 pub mod template;
 #[cfg(feature = "testkit")]

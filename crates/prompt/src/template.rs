@@ -700,6 +700,22 @@ pub fn runs_on(kind: &TokenKind, text: &str, next: Option<char>) -> bool {
     (short && name_char(next)) || (bar && (short || bar_body) && (next == ':' || name_char(next)))
 }
 
+/// Tokens as template text, each in its short form unless the next one
+/// would extend it, as [`write_token`] and [`runs_on`] decide.
+pub fn write_tokens(kinds: &[TokenKind]) -> String {
+    let texts: Vec<String> = kinds.iter().map(|k| write_token(k, false)).collect();
+    let mut out = String::new();
+    for (index, kind) in kinds.iter().enumerate() {
+        let next = texts.get(index + 1).and_then(|t| t.chars().next());
+        if runs_on(kind, &texts[index], next) {
+            out.push_str(&write_token(kind, true));
+        } else {
+            out.push_str(&texts[index]);
+        }
+    }
+    out
+}
+
 /// Parse a color spec as a foreground code. `reset` gives
 /// [`Code::Reset`]. None when the spec names nothing.
 fn parse_color_spec(spec: &str) -> Option<Code> {
