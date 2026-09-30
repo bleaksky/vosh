@@ -49,7 +49,8 @@ describe('AffectsPaneView', () => {
     expect(html).not.toContain('The game hides your affects');
     expect(html).toContain('1 missing');
     expect(html).toContain('pane-affect-missing');
-    expect(html).toContain('Bless');
+    expect(html).toContain('bless');
+    expect(html).not.toContain('Bless');
   });
 
   it('tells an empty list the game shows from one it hides', () => {

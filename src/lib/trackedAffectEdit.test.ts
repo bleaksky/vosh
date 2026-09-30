@@ -14,11 +14,12 @@ const t = (name: string, label: string | null = null): TrackedAffect => ({ name,
 const ERELEI = [t('Sanctuary'), t('haste'), t('giant strength'), t('Fly')];
 
 describe('trackedAffectLabel', () => {
-  it('shows your label, else the server name in sentence case', () => {
-    expect(trackedAffectLabel(t('giant strength'))).toBe('Giant strength');
+  it('shows your label, else the name exactly as the game sends it', () => {
+    expect(trackedAffectLabel(t('giant strength'))).toBe('giant strength');
     expect(trackedAffectLabel(t('Protection evil'))).toBe('Protection evil');
+    expect(trackedAffectLabel(t('the Triumph of One God'))).toBe('the Triumph of One God');
     expect(trackedAffectLabel(t('field of discord', 'Shroud'))).toBe('Shroud');
-    expect(trackedAffectLabel(t('haste', '  '))).toBe('Haste');
+    expect(trackedAffectLabel(t('haste', '  '))).toBe('haste');
   });
 });
 
@@ -92,13 +93,13 @@ describe('affectSuggestions', () => {
     { name: 'protection evil' },
   ];
 
-  it('offers what you have and do not track, alphabetically', () => {
+  it('offers what you have and do not track, alphabetically, named as the game sends them', () => {
     expect(affectSuggestions(current, ERELEI, '')).toEqual([
-      { name: 'armor', label: 'Armor' },
-      { name: 'bless', label: 'Bless' },
-      { name: 'detect invisible', label: 'Detect invisible' },
-      { name: 'detect magic', label: 'Detect magic' },
-      { name: 'protection evil', label: 'Protection evil' },
+      { name: 'armor' },
+      { name: 'bless' },
+      { name: 'detect invisible' },
+      { name: 'detect magic' },
+      { name: 'protection evil' },
     ]);
   });
 

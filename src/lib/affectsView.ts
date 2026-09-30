@@ -19,8 +19,8 @@ export interface AffectRow {
   /** Normalized affect name. Stable across pushes, so it doubles as
    *  the React key. */
   key: string;
-  /** Display name. The tracked label when you set one, else the
-   *  server's name in sentence case. */
+  /** Display name. The tracked label when you set one, else the name
+   *  exactly as the game sends it, or as you track it while missing. */
   name: string;
   state: AffectRowState;
   /** Ticks left. -1 is permanent. null for a missing affect or an
@@ -78,13 +78,13 @@ export function affectsView(
     const label = entry.label?.trim();
     const affect = live.get(key);
     if (!affect) {
-      missing.push({ key, name: label || sentenceCase(entry.name), state: 'missing', ticks: null });
+      missing.push({ key, name: label || entry.name, state: 'missing', ticks: null });
       continue;
     }
     const ticks = ticksOf(affect.duration);
     present.push({
       key,
-      name: label || sentenceCase(affect.name),
+      name: label || affect.name,
       state: ticks !== null && ticks >= 0 && ticks <= EXPIRING_TICKS ? 'expiring' : 'present',
       ticks,
     });
@@ -97,7 +97,7 @@ export function affectsView(
     if (trackedKeys.has(key)) continue;
     others.push({
       key,
-      name: sentenceCase(affect.name),
+      name: affect.name,
       state: harmful.has(key) ? 'harmful' : 'untracked',
       ticks: ticksOf(affect.duration),
     });
@@ -147,14 +147,4 @@ function lasting(ticks: number | null): number {
   if (ticks === null) return -1;
   if (ticks < 0) return Number.MAX_SAFE_INTEGER;
   return ticks;
-}
-
-/** Collapse runs of spaces and upper case the first letter of an all
- *  lower case server name ("giant strength" reads "Giant strength").
- *  Names that already carry capitals keep the case the server or you
- *  wrote them in. */
-export function sentenceCase(raw: string): string {
-  const name = raw.replace(/\s+/g, ' ').trim();
-  if (name.length === 0 || name !== name.toLowerCase()) return name;
-  return name.charAt(0).toUpperCase() + name.slice(1);
 }

@@ -1,5 +1,4 @@
 import { normalizeAffectName } from './affects';
-import { sentenceCase } from './affectsView';
 import type { TrackedAffect } from './session';
 
 // Editing a profile's tracked affects in Settings > Characters: the
@@ -9,11 +8,11 @@ import type { TrackedAffect } from './session';
 // save. Names match the way the Affects pane matches them: case and
 // runs of spaces do not count.
 
-/** What a chip and the Affects pane show: your label, else the
- *  server's name in sentence case. */
+/** What a chip and the Affects pane show: your label, else the name
+ *  exactly as the game sends it. */
 export function trackedAffectLabel(entry: TrackedAffect): string {
   const label = entry.label?.trim();
-  return label || sentenceCase(entry.name);
+  return label || entry.name;
 }
 
 export function isTracked(list: readonly TrackedAffect[], name: string): boolean {
@@ -63,11 +62,10 @@ export function setTrackedAffectLabel(
   return list.map((e, i) => (i === index ? { ...e, label: next } : e));
 }
 
-/** A suggestion for Add affect. `name` is what the server sends, which
- *  is what the profile tracks. `label` is how the chip will read. */
+/** A suggestion for Add affect. `name` is what the game sends, which
+ *  is what the profile tracks and how the chip will read. */
 export interface AffectSuggestion {
   name: string;
-  label: string;
 }
 
 /** Affects on you now that the profile does not track, for Add affect.
@@ -89,10 +87,7 @@ export function affectSuggestions(
     seen.add(key);
     if (want.length > 0 && !key.includes(want)) continue;
     found.push({
-      suggestion: {
-        name: affect.name.replace(/\s+/g, ' ').trim(),
-        label: sentenceCase(affect.name),
-      },
+      suggestion: { name: affect.name.replace(/\s+/g, ' ').trim() },
       key,
       starts: want.length > 0 && key.startsWith(want),
     });
