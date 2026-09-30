@@ -152,6 +152,96 @@ impl fmt::Display for CompileError {
 
 impl std::error::Error for CompileError {}
 
+/// What `#prompt game` and `#prompt fight` say Vosh reads from a
+/// setting, as a sentence or two: the vitals first, each with its max
+/// when the setting shows it, then any other value.
+pub fn reads_sentence(names: &[&str], fight: bool) -> String {
+    let what = if fight {
+        "this fight prompt"
+    } else {
+        "this prompt"
+    };
+    let pairs = [
+        ("hp", "maxhp", "Health"),
+        ("mana", "maxmana", "Mana"),
+        ("move", "maxmove", "Moves"),
+    ];
+    let mut vitals: Vec<(&str, bool)> = Vec::new();
+    let mut others: Vec<String> = Vec::new();
+    for name in names {
+        if let Some((cur, max, label)) = pairs.iter().find(|(c, m, _)| name == c || name == m) {
+            if vitals.iter().any(|(l, _)| l == label) {
+                continue;
+            }
+            if *name == *cur {
+                vitals.push((label, names.contains(max)));
+                continue;
+            }
+            if names.contains(cur) {
+                continue;
+            }
+        }
+        let label = value_label(name);
+        if !others.contains(&label) {
+            others.push(label);
+        }
+    }
+    let mut out = Vec::new();
+    if !vitals.is_empty() {
+        let every_max = vitals.iter().all(|(_, max)| *max);
+        let items: Vec<String> = vitals
+            .iter()
+            .map(|(label, max)| {
+                if *max && !every_max {
+                    format!("{label} with its max")
+                } else {
+                    (*label).to_string()
+                }
+            })
+            .collect();
+        let tail = match (every_max, items.len()) {
+            (true, 1) => " with its max",
+            (true, _) => " with their maxes",
+            (false, _) => "",
+        };
+        out.push(format!(
+            "Vosh reads {}{tail} from {what}.",
+            and_list(&items)
+        ));
+        if !others.is_empty() {
+            out.push(format!("It also reads {}.", and_list(&others)));
+        }
+    } else if !others.is_empty() {
+        out.push(format!("Vosh reads {} from {what}.", and_list(&others)));
+    } else {
+        out.push(format!(
+            "Vosh knows {what} by its codes and reads no values from it."
+        ));
+    }
+    out.join(" ")
+}
+
+/// The label a value a setting reads goes by.
+fn value_label(name: &str) -> String {
+    match name {
+        "hp_pct" => "Health percent".into(),
+        "mana_pct" => "Mana percent".into(),
+        "move_pct" => "Moves percent".into(),
+        "tank_pct" | "tank_bar" => "Tank health".into(),
+        _ => crate::vars::entry(name).map_or_else(|| name.to_string(), |e| e.label.to_string()),
+    }
+}
+
+/// `A`, `A and B`, or `A, B, and C`.
+fn and_list(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => one.clone(),
+        [first, second] => format!("{first} and {second}"),
+        [rest @ .., last] => format!("{}, and {last}", rest.join(", ")),
+    }
+}
+
 /// The song that hides your vitals, affects, group and your opponent's
 /// condition while it is on you.
 pub const LAMENT: &str = "lamented tears";
@@ -180,6 +270,41 @@ mod tests {
                 .collect(),
             hidden: false,
         }
+    }
+
+    #[test]
+    fn the_sentence_names_what_a_setting_reads() {
+        let james = ["hp", "maxhp", "mana", "maxmana", "move", "maxmove"];
+        assert_eq!(
+            reads_sentence(&james, false),
+            "Vosh reads Health, Mana, and Moves with their maxes from this prompt."
+        );
+        let mut tank = james.to_vec();
+        tank.extend(["tank", "tank_bar"]);
+        assert_eq!(
+            reads_sentence(&tank, false),
+            "Vosh reads Health, Mana, and Moves with their maxes from this prompt. It also reads Tank and Tank health."
+        );
+        assert_eq!(
+            reads_sentence(&["hp", "maxhp", "mana", "move"], false),
+            "Vosh reads Health with its max, Mana, and Moves from this prompt."
+        );
+        assert_eq!(
+            reads_sentence(&["hp", "maxhp"], true),
+            "Vosh reads Health with its max from this fight prompt."
+        );
+        assert_eq!(
+            reads_sentence(&["hp", "tank_pct"], true),
+            "Vosh reads Health from this fight prompt. It also reads Tank health."
+        );
+        assert_eq!(
+            reads_sentence(&["maxhp", "gold"], false),
+            "Vosh reads Max health and Gold from this prompt."
+        );
+        assert_eq!(
+            reads_sentence(&[], false),
+            "Vosh knows this prompt by its codes and reads no values from it."
+        );
     }
 
     #[test]

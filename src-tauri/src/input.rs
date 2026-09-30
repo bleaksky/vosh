@@ -39,6 +39,9 @@ slash commands:
   #trigger <name> {pattern} <action>   define or replace a trigger
   #untrigger <name>                    remove a trigger
   #triggers                            list triggers
+  #prompt                              say how Vosh reads your prompt
+  #prompt game {setting}               read your prompt from its PROMPT codes
+  #prompt fight {setting}              read your fight prompt from its codes
   #prompt {regex}                      read your prompt with a pattern, each
                                        named group like (?<hp>...) a value
   #unprompt                            stop reading your prompt here
@@ -813,6 +816,12 @@ fn slash_trigger(profile: &mut Profile, args: &str) -> InputResult {
 /// and the design stay as they are. Older builds wrote a trigger named
 /// `prompt-capture` instead, which hid the prompt in every profile.
 fn slash_prompt(profile: &mut Profile, args: &str) -> InputResult {
+    match split_first_word(args) {
+        ("", _) => return prompt_status(profile, chrono::Local::now().fixed_offset()),
+        ("game", rest) => return slash_prompt_codes(profile, rest, false),
+        ("fight", rest) => return slash_prompt_codes(profile, rest, true),
+        _ => {}
+    }
     let Some((pattern, _rest)) = parse_braced_pattern(args) else {
         return error_echo("usage #prompt {regex with named groups like (?<hp>\\d+)}".to_string());
     };
@@ -847,6 +856,138 @@ fn slash_prompt(profile: &mut Profile, args: &str) -> InputResult {
             and_list(&names)
         )
     })
+}
+
+/// `#prompt game {setting}` and `#prompt fight {setting}`: read your prompt
+/// from the codes of your PROMPT or fight prompt setting, typed as you
+/// type it in the game. Vosh stores it as the game would and compiles it,
+/// then says what it reads and any warning. The capture becomes the
+/// active profile's `kind = "aabahran"` with source typed. On the new
+/// build the next Char.Prompt replaces it while the capture follows the
+/// game (D25).
+fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputResult {
+    use vosh_prompt::aabahran::{self, lex, Origin, Which};
+    use vosh_prompt::config::{AabahranCapture, CaptureSource};
+    use vosh_prompt::CaptureConfig;
+
+    let usage = if fight {
+        "usage #prompt fight {your fight prompt setting}"
+    } else {
+        "usage #prompt game {your PROMPT setting}"
+    };
+    let Some((typed, _rest)) = parse_braced_pattern(args) else {
+        return error_echo(usage.to_string());
+    };
+    let held = match &profile.prompt.config().capture {
+        CaptureConfig::Aabahran(codes) => Some(codes.clone()),
+        _ => None,
+    };
+    if fight && held.is_none() {
+        return echo_one(PROMPT_NONE.to_string());
+    }
+    if !fight && typed.trim().eq_ignore_ascii_case("off") {
+        return error_echo(
+            "That turns prompts off in the game. Type the prompt setting you use.".to_string(),
+        );
+    }
+    let which = if fight { Which::Fight } else { Which::Prompt };
+    let normalized = lex::normalize(&typed, which);
+    let codes = held.unwrap_or_default();
+    let (prompt, fprompt) = if fight {
+        (codes.prompt.clone(), normalized.text)
+    } else {
+        (normalized.text, codes.fprompt.clone())
+    };
+    let compiled = match aabahran::compile(&prompt, &fprompt, Origin::Stored, profile.prompt.who())
+    {
+        Ok(compiled) => compiled,
+        Err(e) => return error_echo(e.text),
+    };
+    let mut config = profile.prompt.config().clone();
+    config.capture = CaptureConfig::Aabahran(AabahranCapture {
+        prompt: compiled.prompt.clone(),
+        fprompt: compiled.fprompt.clone(),
+        follow_game: codes.follow_game,
+        seen_at: Some(
+            chrono::Local::now()
+                .fixed_offset()
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, false),
+        ),
+        source: Some(CaptureSource::Typed),
+    });
+    profile.set_prompt_config(config);
+    let mut echo = vec![aabahran::reads_sentence(&compiled.reads(which), fight)];
+    echo.extend(
+        normalized
+            .warnings
+            .iter()
+            .chain(compiled.warnings.iter().filter(|w| w.which == which))
+            .map(|w| w.text.clone()),
+    );
+    InputResult {
+        bytes: Vec::new(),
+        echo,
+        scripts: Vec::new(),
+    }
+}
+
+/// What `#prompt` says when nothing reads your prompt in this profile.
+const PROMPT_NONE: &str = "Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start.";
+/// What `#prompt` says while you have prompts off in the game.
+const PROMPTS_OFF: &str =
+    "You turned prompts off in the game. Type prompt in the game to turn them back on.";
+
+/// `#prompt` alone says what reads your prompt in this profile, when it
+/// last matched, whether Vosh draws, and whether you turned prompts off
+/// in the game. `now` sets the clock the times read in.
+fn prompt_status(profile: &Profile, now: chrono::DateTime<chrono::FixedOffset>) -> InputResult {
+    use vosh_prompt::{CaptureConfig, Status};
+    let engine = &profile.prompt;
+    let clock = |at: chrono::DateTime<chrono::FixedOffset>| {
+        at.with_timezone(now.offset()).format("%-I:%M").to_string()
+    };
+    let mut echo = Vec::new();
+    let reads = match &engine.config().capture {
+        CaptureConfig::None => None,
+        CaptureConfig::Aabahran(codes) => Some(format!(
+            "Vosh reads your prompt from the codes {}.",
+            codes.prompt.trim_end()
+        )),
+        CaptureConfig::Regex(_) => {
+            Some("Vosh reads your prompt with a pattern you pointed at.".to_string())
+        }
+    };
+    match reads {
+        None => echo.push(PROMPT_NONE.to_string()),
+        Some(reads) => {
+            let matched = match engine.last_match_at() {
+                Some(at) => format!("It last matched at {}.", clock(at)),
+                None => "No prompt has matched since you connected.".to_string(),
+            };
+            let drawing = if engine.config().draw {
+                "Drawing is on."
+            } else {
+                "Drawing is off."
+            };
+            echo.push(format!("{reads} {matched} {drawing}"));
+            if engine.status() == Status::NotMatching {
+                let since = engine
+                    .last_match_at()
+                    .map_or_else(|| "you connected".to_string(), clock);
+                echo.push(format!(
+                    "No prompt has matched since {since}. If you changed it in the game, point at it again."
+                ));
+            }
+        }
+    }
+    if engine.prompts_off() {
+        echo.push(PROMPTS_OFF.to_string());
+    }
+    InputResult {
+        bytes: Vec::new(),
+        echo,
+        scripts: Vec::new(),
+    }
 }
 
 /// `A`, `A and B`, or `A, B, and C`.
@@ -1817,8 +1958,147 @@ mod tests {
             ran.result.echo
         );
         assert_eq!(*p.prompt.config(), before);
-        let ran = run_line(&mut p, "#prompt");
+        let ran = run_line(&mut p, "#prompt {");
         assert!(ran.result.echo[0].starts_with("[usage #prompt"));
+    }
+
+    fn codes_of(p: &Profile) -> vosh_prompt::config::AabahranCapture {
+        match &p.prompt.config().capture {
+            vosh_prompt::CaptureConfig::Aabahran(codes) => codes.clone(),
+            other => panic!("an aabahran capture, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prompt_game_stores_the_setting_as_the_game_does_and_says_what_it_reads() {
+        let mut p = Profile::default();
+        p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
+        let ran = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
+        assert_eq!(
+            ran.result.echo,
+            ["Vosh reads Health, Mana, and Moves with their maxes from this prompt. It also reads Tank and Tank health."]
+        );
+        assert!(ran.result.bytes.is_empty(), "Vosh never sends it");
+        let codes = codes_of(&p);
+        assert_eq!(codes.prompt, "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c");
+        assert_eq!(codes.fprompt, "");
+        assert!(codes.follow_game);
+        assert_eq!(
+            codes.source,
+            Some(vosh_prompt::config::CaptureSource::Typed)
+        );
+        assert!(codes.seen_at.is_some());
+        assert!(p.prompt.stage.has_recognizer());
+        assert_eq!(p.prompt.config().template, "%hp", "the design stays");
+
+        // As do_prompt stores it: prompt all, and a space added.
+        let _ = run_line(&mut p, "#prompt game {all}");
+        assert_eq!(codes_of(&p).prompt, "%n%P%C<%hhp %mm %vmv> ");
+        let _ = run_line(&mut p, "#prompt game {<%hhp>}");
+        assert_eq!(codes_of(&p).prompt, "<%hhp> ");
+    }
+
+    #[test]
+    fn prompt_game_says_every_warning_and_refuses_what_it_cannot_read() {
+        let mut p = Profile::default();
+        let ran = run_line(&mut p, "#prompt game {<%h%m %vmv>}");
+        assert_eq!(
+            ran.result.echo,
+            [
+                "Vosh reads Moves from this prompt.",
+                "Vosh cannot tell where Health ends and Mana begins. Put a space between them in the game."
+            ]
+        );
+        let before = p.prompt.config().clone();
+        let ran = run_line(&mut p, "#prompt game {<`%h>}");
+        assert_eq!(
+            ran.result.echo,
+            ["[A color code runs into %h. Put a space between them in the game.]"]
+        );
+        assert_eq!(*p.prompt.config(), before);
+        let ran = run_line(&mut p, "#prompt game {off}");
+        assert_eq!(
+            ran.result.echo,
+            ["[That turns prompts off in the game. Type the prompt setting you use.]"]
+        );
+        let ran = run_line(&mut p, "#prompt game");
+        assert_eq!(
+            ran.result.echo,
+            ["[usage #prompt game {your PROMPT setting}]"]
+        );
+    }
+
+    #[test]
+    fn prompt_fight_sets_the_fight_prompt_beside_your_prompt() {
+        let mut p = Profile::default();
+        let ran = run_line(&mut p, "#prompt fight {`1%h``hp [%p] >}");
+        assert_eq!(
+            ran.result.echo,
+            ["Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start."]
+        );
+        assert!(p.prompt.config().capture.is_none());
+        let _ = run_line(&mut p, "#prompt game {<%hhp>}");
+        let ran = run_line(&mut p, "#prompt fight {`1%h``hp [%p] >}");
+        assert_eq!(
+            ran.result.echo,
+            ["Vosh reads Health from this fight prompt. It also reads Tank health."]
+        );
+        let codes = codes_of(&p);
+        assert_eq!(codes.prompt, "<%hhp> ");
+        assert_eq!(codes.fprompt, "`1%h``hp [%p] > ");
+        let _ = run_line(&mut p, "#prompt fight {off}");
+        assert_eq!(codes_of(&p).fprompt, "");
+        assert_eq!(codes_of(&p).prompt, "<%hhp> ");
+    }
+
+    #[test]
+    fn prompt_alone_says_how_vosh_reads_your_prompt() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-09-29T17:30:00-05:00").unwrap();
+        let status = |p: &Profile| super::prompt_status(p, now).echo;
+        let mut p = Profile::default();
+        assert_eq!(
+            status(&p),
+            ["Vosh does not read your prompt in this profile. Type #prompt game and your prompt setting in braces to start."]
+        );
+        p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
+        let _ = run_line(&mut p, "#prompt game {%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c}");
+        assert_eq!(
+            status(&p),
+            ["Vosh reads your prompt from the codes %n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c. No prompt has matched since you connected. Drawing is on."]
+        );
+        p.prompt.connect(true);
+        let matched = chrono::DateTime::parse_from_rfc3339("2026-09-29T05:04:00-05:00").unwrap();
+        p.prompt.note_prompt(matched);
+        assert_eq!(
+            status(&p),
+            ["Vosh reads your prompt from the codes %n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c. It last matched at 5:04. Drawing is on."]
+        );
+        // Three pulses with no prompt.
+        for _ in 0..4 {
+            p.prompt
+                .observe("Char.Vitals", serde_json::json!({"hp": 1}), now);
+        }
+        assert_eq!(
+            status(&p)[1],
+            "No prompt has matched since 5:04. If you changed it in the game, point at it again."
+        );
+        let _ = run_line(&mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
+        p.set_prompt_config(vosh_prompt::PromptConfig {
+            draw: false,
+            ..p.prompt.config().clone()
+        });
+        p.prompt.observe(
+            "Char.Prompt",
+            serde_json::json!({"enabled": false, "prompt": "%h ", "fprompt": ""}),
+            now,
+        );
+        assert_eq!(
+            status(&p),
+            [
+                "Vosh reads your prompt with a pattern you pointed at. It last matched at 5:04. Drawing is off.",
+                "You turned prompts off in the game. Type prompt in the game to turn them back on."
+            ]
+        );
     }
 
     #[test]
