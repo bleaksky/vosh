@@ -18,6 +18,10 @@
 //! What it answers, besides the game's own `prompt`, `fprompt`, `look`,
 //! `afk`, `compact`, `telnetga` and `quit`:
 //!
+//! - `quit` takes your affects off one at a time, each removal sending
+//!   Char.Affects, then closes the link. `quit menu`, `quit switch` and
+//!   `quit character` do the same and go back to the account menu, where
+//!   the next line plays you again with the affects your pfile kept.
 //! - `fight` starts or ends a fight in which a Blackwatch guard hits you,
 //!   so you tank.
 //! - `lament` puts lamented tears on you or takes it off.
@@ -503,13 +507,7 @@ impl Mud {
                     })
                     .collect();
             }
-            "quit" => {
-                return vec![Write {
-                    after_ms: 0,
-                    bytes: b"Alas, all good things must come to an end.\n\r".to_vec(),
-                    close: true,
-                }];
-            }
+            "quit" => return self.quit(rest),
             _ => self.pulse(Vec::new(), "Huh?\n\r", false),
         };
         self.deliver(pulse)
@@ -689,6 +687,59 @@ impl Mud {
         }
         let early = self.affects();
         self.pulse(early, "The hour passes.\n\r", false)
+    }
+
+    /// `do_quit`, `act_comm.c:2952`. The game saves you, then
+    /// `extract_char` frees you, and `free_char` takes each affect off in
+    /// turn with `affect_remove` (recycle.c 846), which writes the list
+    /// that is left straight to the socket (handler.c 3495). So the lists
+    /// shrink to nothing before the goodbye, which waits in the output
+    /// buffer until the socket closes. `quit menu`, `quit switch` and
+    /// `quit character` go back to the account menu on the same link, and
+    /// the next line plays you again with the affects your pfile kept.
+    fn quit(&mut self, argument: &str) -> Vec<Write> {
+        let arg = argument
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let to_menu = !arg.is_empty()
+            && (["menu", "character", "switch"]
+                .iter()
+                .any(|w| w.starts_with(&arg))
+                || arg == "char");
+        let mut bytes = self.take_affects_off();
+        if to_menu {
+            bytes.extend_from_slice(
+                b"You step away from the Forsaken Lands and return to your account menu.\n\r",
+            );
+            bytes.extend_from_slice(
+                format!("Press Enter to play {} again.\n\r", self.name).as_bytes(),
+            );
+            self.logged_in = false;
+            return vec![Write::now(bytes)];
+        }
+        bytes.extend_from_slice(b"Alas, all good things must come to an end.\n\r");
+        vec![Write {
+            after_ms: 0,
+            bytes,
+            close: true,
+        }]
+    }
+
+    /// `free_char` takes your affects off one at a time, first to last,
+    /// and each removal sends Char.Affects. Your pfile keeps them.
+    fn take_affects_off(&mut self) -> Vec<u8> {
+        let pfile = self.affects.clone();
+        let mut out = Vec::new();
+        while !self.affects.is_empty() {
+            self.affects.remove(0);
+            if self.gmcp {
+                out.extend(self.affects());
+            }
+        }
+        self.affects = pfile;
+        out
     }
 
     fn lament(&mut self) -> Pulse {
