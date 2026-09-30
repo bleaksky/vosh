@@ -199,6 +199,60 @@ describe('chipPages', () => {
     expect(lines).toContain('56 tracked: mounted, armor');
   });
 
+  it('gives a run in name a line of its own when the first chip does not fit after it', () => {
+    // Split right, 247 wide: Tracked leads with a chip 200 px wide, and
+    // the name and its 8 px would leave it 163.
+    const tracked = [{ name: 'the Triumph of One God' }, ...TRACKED];
+    const pages = chipPages(
+      chipGroups(rowsOf(FOURTEEN, tracked)),
+      247,
+      hoursOf,
+      MEASURE,
+      'runin',
+      400,
+    );
+    expect(pagesOf(pages)[0].slice(0, 5)).toEqual([
+      '4 recast: bless, sanctuary',
+      '28: fly',
+      '56 tracked: ',
+      '80: the Triumph of One God',
+      '104: mounted, armor',
+    ]);
+  });
+
+  it('gives a run in name a line of its own at the top of a page too', () => {
+    const current = [aff('armor', 31), aff('haste', 9), aff('the Triumph of One God', 188)];
+    const groups = chipGroups(rowsOf(current, [{ name: 'armor' }]));
+    expect(pagesOf(chipPages(groups, 247, hoursOf, MEASURE, 'runin', 60))).toEqual([
+      ['4 tracked: armor', '32 other: haste', '1 more'],
+      ['4 other: ', '28: the Triumph of One God'],
+    ]);
+    // A page with room for one line keeps the name and the chip together.
+    expect(pagesOf(chipPages(groups, 247, hoursOf, MEASURE, 'runin', 30)).at(-1)).toEqual([
+      '4 other: the Triumph of One God',
+    ]);
+  });
+
+  it('starts the next page with a group whose name and first chip need two lines', () => {
+    const current = [aff('armor', 31), aff('the Triumph of One God', 188)];
+    const groups = chipGroups(rowsOf(current, [{ name: 'armor' }]));
+    expect(pagesOf(chipPages(groups, 247, hoursOf, MEASURE, 'runin', 60))).toEqual([
+      ['4 tracked: armor', '1 more'],
+      ['4 other: ', '28: the Triumph of One God'],
+    ]);
+  });
+
+  it('never ends a page on a name alone', () => {
+    // The long chip leaves no room for the count, so it moves on, and
+    // its name with it.
+    const current = [aff('armor', 31), aff('the Triumph of One God', 1), aff('haste', 9)];
+    const groups = chipGroups(rowsOf(current, [{ name: 'armor' }]));
+    expect(pagesOf(chipPages(groups, 247, hoursOf, MEASURE, 'runin', 80))).toEqual([
+      ['4 tracked: armor', '2 more'],
+      ['4 other: ', '28: the Triumph of One God', '52: haste'],
+    ]);
+  });
+
   it('draws no names when you track nothing', () => {
     const rows = rowsOf(FOURTEEN, []);
     expect(chipLabelMode(rows, 494)).toBe('none');

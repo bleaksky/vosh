@@ -199,6 +199,17 @@ describe('ChipsView', () => {
     );
   });
 
+  it('sets a run in name on a line of its own, hidden from a screen reader', () => {
+    const html = draw(FOURTEEN, {
+      tracked: [{ name: 'the Triumph of One God' }, ...TRACKED],
+      box: { width: 247, height: 400 },
+    });
+    expect(html).toContain(
+      '<div class="pane-chips-line" aria-hidden="true" style="top:56px"><span class="pane-chips-label pane-chips-runin">Tracked</span></div>' +
+        '<ul class="pane-chips-line" aria-label="Tracked" style="top:80px"><li class="pane-chip pane-chip-tracked">',
+    );
+  });
+
   it('draws the board and the gauge with theme tokens only', () => {
     expect(rule('.pane-chips-line')).toContain('left: 18px');
     expect(rule('.pane-chips-line')).toContain('right: 12px');
