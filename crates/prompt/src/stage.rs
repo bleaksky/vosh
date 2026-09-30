@@ -23,7 +23,9 @@
 //! A prompt may span lines (D7). The stage holds a line that starts one
 //! until the rest arrives, within the read, and paints held lines as a
 //! region at the end of a read, so the prompt that finishes them replaces
-//! it. A line that does not finish them releases them to the Line pass.
+//! it. A line that does not finish them releases them to the Line pass,
+//! and so do a send, a local write and the end of the session, which
+//! leave them as they show.
 //! A line above the last one shows as sent unless the design reads a
 //! value it carries. A partial that can still become your prompt waits up
 //! to [`HOLD_MS`] for the next read before it paints raw.
@@ -625,7 +627,8 @@ impl Stage {
 
     /// Hand back the held lines, the first in the region they show in.
     /// A GA or EOR with no partial after them ends them, since the prompt
-    /// they started never came.
+    /// they started never came. A send, a local write or the end of the
+    /// session lets them go as they show.
     pub fn release(&mut self) -> Vec<Released> {
         let mut region = self.held_region.take().map(|r| r.gen);
         std::mem::take(&mut self.held)
@@ -636,14 +639,6 @@ impl Stage {
                 painted: region.take(),
             })
             .collect()
-    }
-
-    /// Forget the held lines, which stay on screen as painted, as a send,
-    /// a local write or other output does. What comes next is read on
-    /// its own.
-    pub fn forget_held(&mut self) {
-        self.held.clear();
-        self.held_region = None;
     }
 
     /// A held line an earlier read painted part of: its region shows
