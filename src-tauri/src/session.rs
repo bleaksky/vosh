@@ -430,10 +430,43 @@ pub(crate) async fn spawn<R: tauri::Runtime>(
         scrollback,
         scrollback_path,
         initial_window_size,
-        crate::profile_set::is_forsaken_lands(&host),
+        forsaken_host(&host, port),
     ));
 
     Ok(SessionHandle { tx_outgoing, task })
+}
+
+/// True when the host is The Forsaken Lands, whose rules the custom
+/// prompt follows (D17). A test can have the fake Aabahran on a local
+/// port count as The Forsaken Lands too.
+fn forsaken_host(host: &str, port: u16) -> bool {
+    crate::profile_set::is_forsaken_lands(host) || forsaken_for_test(port)
+}
+
+/// The local ports tests have count as The Forsaken Lands. Each fake game
+/// listens on a port of its own, so one test never changes another.
+#[cfg(test)]
+static FORSAKEN_TEST_PORTS: std::sync::Mutex<Vec<u16>> = std::sync::Mutex::new(Vec::new());
+
+/// Have the fake game on the local `port` count as The Forsaken Lands, so
+/// a capture that reads no Aabahran codes plays by its rules there.
+#[cfg(test)]
+pub(crate) fn count_as_forsaken_lands(port: u16) {
+    if let Ok(mut ports) = FORSAKEN_TEST_PORTS.lock() {
+        ports.push(port);
+    }
+}
+
+#[cfg(test)]
+fn forsaken_for_test(port: u16) -> bool {
+    FORSAKEN_TEST_PORTS
+        .lock()
+        .is_ok_and(|ports| ports.contains(&port))
+}
+
+#[cfg(not(test))]
+fn forsaken_for_test(_port: u16) -> bool {
+    false
 }
 
 fn now_ms() -> i64 {

@@ -296,6 +296,28 @@ impl Harness {
             .clone()
     }
 
+    /// The live profile's whole `[prompt]` table.
+    async fn prompt_table(&self) -> vosh_prompt::PromptConfig {
+        self.state.profile.lock().await.prompt.config().clone()
+    }
+
+    /// Have the fake game count as The Forsaken Lands, as the real host
+    /// does, so a capture that reads no Aabahran codes plays by its rules.
+    fn count_as_forsaken_lands(&self) {
+        crate::session::count_as_forsaken_lands(self.port);
+    }
+
+    /// Where the profile `name` keeps its file.
+    async fn profile_file(&self, name: &str) -> std::path::PathBuf {
+        self.state
+            .profile_set
+            .lock()
+            .await
+            .as_ref()
+            .expect("the set")
+            .profile_path(name)
+    }
+
     /// Close the connection, let other tests at the shared grid, and let
     /// the save a change marked land in the temporary folder before it
     /// goes.
@@ -753,5 +775,366 @@ async fn a_reconnect_reads_the_prompt_until_char_prompt_comes_again() {
         .await
         .expect("seen");
     assert_eq!(seen.source, "gmcp");
+    h.finish(grid).await;
+}
+
+/// The pattern the old capture trigger held, for the PROMPT the fake
+/// game starts with.
+const OLD_PATTERN: &str =
+    r"\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)/(?<maxmana>\d+)mn (?<move>\d+)/(?<maxmove>\d+)mv\]";
+
+/// James's design.
+const DESIGN: &str = "%{c:100,100,100}[%c_reset%s_italic%hp(%c_hp%pct_hp%c_reset%s_italic%)h %mana(%{c:128,200,255}%pct_mana%c_reset%s_italic%)m %move(%{c:200,255,23}%pct_move%c_reset%s_italic%)v%c_reset%{c:100,100,100}] %c_reset";
+
+/// What his design draws at full health.
+const DRAWN: &str = "[1020(100%)h 800(100%)m 930(100%)v]";
+
+/// The prompt James typed after the move, and what the game stores.
+const TYPED_NEW: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv (%K hp) %s [%S]>";
+const PROMPT_NEW: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv (%K hp) %s [%S]> ";
+
+/// A table as the move from the old capture trigger wrote it: the
+/// trigger's pattern, his design and drawing on.
+fn migrated() -> vosh_prompt::PromptConfig {
+    vosh_prompt::PromptConfig {
+        draw: true,
+        template: DESIGN.into(),
+        capture: vosh_prompt::CaptureConfig::Regex(vosh_prompt::config::RegexCapture {
+            lines: vec![OLD_PATTERN.into()],
+            settle: false,
+            source: Some(vosh_prompt::config::CaptureSource::Migrated),
+            ..vosh_prompt::config::RegexCapture::default()
+        }),
+        ..vosh_prompt::PromptConfig::default()
+    }
+}
+
+/// The codes an aabahran capture holds.
+fn aabahran(capture: &vosh_prompt::CaptureConfig) -> vosh_prompt::config::AabahranCapture {
+    match capture {
+        vosh_prompt::CaptureConfig::Aabahran(codes) => codes.clone(),
+        other => panic!("no aabahran capture: {other:?}"),
+    }
+}
+
+/// The capture a profile file holds on disk, once it reads.
+fn saved_capture(file: &std::path::Path) -> Option<vosh_prompt::CaptureConfig> {
+    crate::profile_config::ProfileConfig::load(file)
+        .ok()
+        .map(|config| config.prompt_config().capture)
+}
+
+/// The reports the capture took, each of which raises the toast.
+fn toasts(h: &Harness) -> Vec<Json> {
+    h.events("session://game-prompt-seen")
+        .into_iter()
+        .filter(|e| e["applied"] == true)
+        .collect()
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_moved_capture_switches_at_login_and_draws_his_new_prompt() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    // James plays an immortal, so (Wizi 60) and (Incog 60) come first.
+    let h = Harness::new(Options {
+        wizi: 60,
+        incog: 60,
+        ..Options::new(Build::New)
+    })
+    .await;
+    h.count_as_forsaken_lands();
+    h.set_prompt(migrated()).await;
+    h.connect().await;
+
+    // Login alone switches the pattern to the codes the game sent, and
+    // the first prompt draws his design over the whole line.
+    h.until_last_row(DRAWN).await;
+    let table = h.prompt_table().await;
+    let codes = aabahran(&table.capture);
+    assert_eq!(codes.prompt, PROMPT);
+    assert_eq!(codes.fprompt, "");
+    assert!(codes.follow_game);
+    assert_eq!(codes.source, Some(vosh_prompt::config::CaptureSource::Gmcp));
+    assert!(codes.seen_at.is_some());
+    assert!(table.draw, "the switch stays");
+    assert_eq!(table.template, DESIGN, "the design stays");
+    assert_eq!(
+        h.events("session://game-prompt-seen"),
+        [serde_json::json!({"kind": "gmcp", "text": PROMPT, "applied": true})]
+    );
+    assert!(
+        h.screen().iter().all(|r| !r.contains("(Wizi 60)")),
+        "{:#?}",
+        h.screen()
+    );
+
+    // His new prompt in the game. Char.Prompt comes before the reply, so
+    // the prompt right after it draws his design over the new line.
+    h.type_line(&format!("prompt {TYPED_NEW}")).await;
+    h.until_shown(&format!("Prompt set to {TYPED_NEW}")).await;
+    h.until_last_row(DRAWN).await;
+    let codes = aabahran(&h.capture().await);
+    assert_eq!(codes.prompt, PROMPT_NEW);
+    assert_eq!(codes.source, Some(vosh_prompt::config::CaptureSource::Gmcp));
+    let screen = h.screen();
+    assert!(
+        screen
+            .iter()
+            .all(|r| !r.contains("(100 hp)") && !r.contains("(Wizi 60)")),
+        "the new line never shows raw: {screen:#?}"
+    );
+    let taken = toasts(&h);
+    assert_eq!(taken.len(), 2, "one toast at login, one for the new prompt");
+    assert_eq!(taken[1]["text"], PROMPT_NEW);
+
+    // The profile file holds the codes once the save lands.
+    let file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    h.until("the saved codes", |_| {
+        saved_capture(&file).is_some_and(|c| {
+            matches!(c, vosh_prompt::CaptureConfig::Aabahran(codes) if codes.prompt == PROMPT_NEW)
+        })
+    })
+    .await;
+    h.finish(grid).await;
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_older_build_switches_a_moved_capture_from_the_reply_to_prompt() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::Older)).await;
+    h.count_as_forsaken_lands();
+    h.set_prompt(migrated()).await;
+    h.connect().await;
+
+    // The pattern reads the old line and draws, and nothing switches at
+    // login, since the older build sends no Char.Prompt.
+    h.until_last_row(DRAWN).await;
+    assert_eq!(h.prompt_table().await, migrated());
+    assert!(h.events("session://game-prompt-seen").is_empty());
+
+    // prompt off switches nothing, and says prompts are off.
+    h.type_line("prompt off").await;
+    h.until_shown("You will no longer see prompts.").await;
+    h.until("the prompts off status", |h| {
+        h.events("session://prompt-status")
+            .last()
+            .is_some_and(|s| s["status"] == "prompts_off")
+    })
+    .await;
+    assert_eq!(h.prompt_table().await, migrated());
+    assert!(toasts(&h).is_empty());
+
+    // prompt x switches it through the observer, and the prompt after
+    // the reply draws.
+    h.type_line(&format!("prompt {TYPED_X}")).await;
+    h.until("the capture to switch", |h| {
+        toasts(h).iter().any(|e| e["text"] == PROMPT_X)
+    })
+    .await;
+    let table = h.prompt_table().await;
+    let codes = aabahran(&table.capture);
+    assert_eq!(codes.prompt, PROMPT_X);
+    assert!(codes.follow_game);
+    assert_eq!(
+        codes.source,
+        Some(vosh_prompt::config::CaptureSource::Session)
+    );
+    assert_eq!(table.template, DESIGN);
+    assert!(table.draw);
+    assert_eq!(
+        toasts(&h),
+        [serde_json::json!({"kind": "prompt", "text": PROMPT_X, "applied": true})]
+    );
+    h.until_last_row(DRAWN).await;
+    assert!(
+        h.screen()
+            .iter()
+            .all(|r| !r.contains("[1020/1020hp 800/800mn]")),
+        "the new line never shows raw: {:#?}",
+        h.screen()
+    );
+    h.finish(grid).await;
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_pattern_you_set_or_took_away_never_switches() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let mut done = Vec::new();
+    for (build, kind) in [(Build::New, "gmcp"), (Build::Older, "prompt")] {
+        let h = Harness::new(Options::new(build)).await;
+        h.count_as_forsaken_lands();
+        h.set_prompt(no_capture()).await;
+        h.connect().await;
+        h.until_last_row("[1020/1020hp 800/800mn 930/930mv]").await;
+
+        // The pattern of the old trigger, set by hand.
+        h.type_line(&format!("#prompt {{{OLD_PATTERN}}}")).await;
+        h.until_shown("from your prompt with this pattern.").await;
+        let typed = h.prompt_table().await;
+        assert!(matches!(
+            &typed.capture,
+            vosh_prompt::CaptureConfig::Regex(r)
+                if r.source == Some(vosh_prompt::config::CaptureSource::Typed)
+        ));
+        h.type_line(&format!("prompt {TYPED_X}")).await;
+        h.until(&format!("{build:?} to show prompt x"), |h| {
+            h.events("session://game-prompt-seen")
+                .iter()
+                .any(|e| e["text"] == PROMPT_X)
+        })
+        .await;
+        assert_eq!(h.prompt_table().await, typed, "{build:?}");
+        assert!(toasts(&h).is_empty(), "{build:?}");
+
+        // #unprompt leaves nothing to switch.
+        h.type_line("#unprompt").await;
+        h.until_shown("Vosh stopped reading your prompt.").await;
+        h.type_line("prompt").await;
+        h.until(&format!("{build:?} to show the prompt again"), |h| {
+            h.events("session://game-prompt-seen")
+                .iter()
+                .filter(|e| e["kind"] == kind && e["text"] == PROMPT_X)
+                .count()
+                == 2
+        })
+        .await;
+        assert!(h.capture().await.is_none(), "{build:?}");
+        assert!(toasts(&h).is_empty(), "{build:?}");
+        h.disconnect().await;
+        done.push(h);
+    }
+    // Let the saves the commands marked land before the folders go.
+    drop(grid);
+    tokio::time::sleep(Duration::from_millis(2_500)).await;
+    drop(done);
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_switch_to_a_profile_with_a_moved_capture_switches_it() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.count_as_forsaken_lands();
+    // Default reads nothing, and Healer holds the moved pattern.
+    h.set_prompt(no_capture()).await;
+    let healer = h.profile_file("Healer").await;
+    let mut file = crate::profile_config::ProfileConfig::default();
+    file.set_prompt(migrated());
+    file.save(&healer).expect("Healer's file");
+    h.connect().await;
+    h.until("Char.Prompt at login", |h| {
+        !h.events("session://game-prompt-seen").is_empty()
+    })
+    .await;
+    h.until_last_row("[1020/1020hp 800/800mn 930/930mv]").await;
+    assert!(h.capture().await.is_none(), "default saves nothing from it");
+
+    // The latest Char.Prompt switches Healer's pattern as the switch
+    // hands it over.
+    crate::commands::apply_profile_switch(h.app.handle(), &h.state, "Healer")
+        .await
+        .expect("the switch");
+    let table = h.prompt_table().await;
+    let codes = aabahran(&table.capture);
+    assert_eq!(codes.prompt, PROMPT);
+    assert_eq!(codes.source, Some(vosh_prompt::config::CaptureSource::Gmcp));
+    assert_eq!(table.template, DESIGN);
+    assert_eq!(
+        toasts(&h),
+        [serde_json::json!({"kind": "gmcp", "text": PROMPT, "applied": true})]
+    );
+    h.type_line("look").await;
+    h.until_last_row(DRAWN).await;
+
+    // Back on Default, which still reads nothing, and Healer's file
+    // holds the codes.
+    crate::commands::apply_profile_switch(h.app.handle(), &h.state, DEFAULT_PROFILE_NAME)
+        .await
+        .expect("the switch back");
+    assert!(h.capture().await.is_none());
+    assert_eq!(toasts(&h).len(), 1);
+    let saved = saved_capture(&healer).expect("Healer's file reads");
+    assert_eq!(aabahran(&saved).prompt, PROMPT);
+    h.finish(grid).await;
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_prompt_vosh_cannot_read_keeps_the_moved_pattern_and_prompt_says_why() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    // A color code runs into %h, so the game prints a digit as a color.
+    let h = Harness::new(Options {
+        prompt: "<`%h> ".into(),
+        ..Options::new(Build::New)
+    })
+    .await;
+    h.count_as_forsaken_lands();
+    h.set_prompt(migrated()).await;
+    h.connect().await;
+    h.until("Char.Prompt at login", |h| {
+        !h.events("session://game-prompt-seen").is_empty()
+    })
+    .await;
+    h.until_last_row("<020>").await;
+    assert_eq!(h.prompt_table().await, migrated());
+    assert!(toasts(&h).is_empty());
+    // The sentence wraps at the 100 columns the screen has.
+    h.type_line("#prompt").await;
+    h.until("the reason the pattern stayed", |h| {
+        h.screen().join(" ").contains(
+            "Vosh kept the pattern from your old capture trigger because a color code runs into %h in the prompt the game sent.",
+        )
+    })
+    .await;
+
+    // A prompt Vosh reads switches it.
+    h.type_line(&format!("prompt {PROMPT}")).await;
+    h.until_last_row(DRAWN).await;
+    assert_eq!(aabahran(&h.capture().await).prompt, PROMPT);
+    assert_eq!(toasts(&h).len(), 1);
+    h.finish(grid).await;
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_reconnect_keeps_the_moved_pattern_until_the_game_sends_your_prompt() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options {
+        reconnect: true,
+        ..Options::new(Build::New)
+    })
+    .await;
+    h.count_as_forsaken_lands();
+    h.set_prompt(migrated()).await;
+    h.connect().await;
+    // No Char.Prompt comes, so the pattern stays and still draws.
+    h.until_shown("Reconnecting.").await;
+    h.until_last_row(DRAWN).await;
+    assert_eq!(h.prompt_table().await, migrated());
+    assert!(h.events("session://game-prompt-seen").is_empty());
+
+    // prompt in the game sends Char.Prompt, which switches it.
+    h.type_line("prompt").await;
+    h.until_shown(&format!("Current prompt: {PROMPT}")).await;
+    h.until("the switch", |h| !toasts(h).is_empty()).await;
+    let codes = aabahran(&h.capture().await);
+    assert_eq!(codes.prompt, PROMPT);
+    assert_eq!(codes.source, Some(vosh_prompt::config::CaptureSource::Gmcp));
+    h.until_last_row(DRAWN).await;
     h.finish(grid).await;
 }
