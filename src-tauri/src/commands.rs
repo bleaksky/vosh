@@ -2595,15 +2595,6 @@ async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), Stri
     // catalog.
     let catalog = state.global_catalog.lock().await.clone();
     let loadouts = state.loadout_set.lock().await.clone();
-    let forsaken = state
-        .current_connection
-        .lock()
-        .ok()
-        .and_then(|g| {
-            g.as_ref()
-                .map(|(host, _)| crate::profile_set::is_forsaken_lands(host))
-        })
-        .unwrap_or(false);
 
     // Step 3: apply the per-profile file (or defaults) and then overlay
     // global.toml so theme/font/keep-last/auto-update/dock_layout
@@ -2611,8 +2602,9 @@ async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), Stri
     {
         let mut p = state.profile.lock().await;
         // The custom prompt keeps the connection's GMCP packets and drops
-        // the values the last profile's triggers set.
-        p.prompt.switch_profile(forsaken);
+        // the values the last profile's prompt read. The file below hands
+        // it the new profile's [prompt] table.
+        p.prompt.switch_profile();
         p.display_name = Some(crate::profile_set::display_name(name));
         match per_profile {
             Some(snap) => {
@@ -3310,7 +3302,7 @@ pub(crate) async fn hidden_get(
 
 /// The body of [`hidden_get`].
 async fn reported_hidden(state: &SharedState) -> vosh_prompt::vars::Hidden {
-    state.profile.lock().await.prompt.reported()
+    state.profile.lock().await.prompt.vars.reported()
 }
 
 /// Replace a profile's tracked affects without touching the rest of
@@ -4801,18 +4793,19 @@ mod tests {
             Some(("play.theforsakenlands.com".into(), 1848));
         {
             let mut p = state.profile.lock().await;
-            p.prompt.set_forsaken(true);
+            p.prompt.connect(true);
             let at = chrono::Local::now().fixed_offset();
-            p.prompt.observe(
+            p.prompt.vars.observe(
                 "Char.Prompt",
                 serde_json::json!({"enabled":true,"prompt":"%n%P%C<%hhp %mm %vmv> ","fprompt":""}),
                 at,
             );
             p.prompt
+                .vars
                 .observe("Char.Vitals", serde_json::json!({"hp":850,"maxhp":900}), at);
-            p.prompt.set_script("hp", "840");
-            p.prompt.set_script("mood", "grim");
-            assert_eq!(p.prompt.prompt_vars().len(), 2);
+            p.prompt.vars.set_script("hp", "840");
+            p.prompt.vars.set_script("mood", "grim");
+            assert_eq!(p.prompt.vars.prompt_vars().len(), 2);
         }
 
         super::switch_live_profile(&state, "Healer").await.unwrap();
@@ -4820,11 +4813,11 @@ mod tests {
         let p = state.profile.lock().await;
         assert!(p.prompt.forsaken());
         assert!(
-            p.prompt.new_build(),
+            p.prompt.vars.new_build(),
             "the Char.Prompt of this connection stays"
         );
-        assert!(p.prompt.gmcp().get("Char.Vitals").is_some());
-        assert!(p.prompt.prompt_vars().is_empty());
+        assert!(p.prompt.vars.gmcp().get("Char.Vitals").is_some());
+        assert!(p.prompt.vars.prompt_vars().is_empty());
     }
 
     #[tokio::test]
@@ -4837,15 +4830,15 @@ mod tests {
         assert_eq!(json(super::reported_hidden(&state).await), nothing);
         {
             let mut p = state.profile.lock().await;
-            p.prompt.set_forsaken(true);
+            p.prompt.connect(true);
             let at = chrono::Local::now().fixed_offset();
             // The older build names the song and sends the true values.
-            p.prompt.observe(
+            p.prompt.vars.observe(
                 "Char.Affects",
                 serde_json::json!({"affects":[{"name":"lamented tears","kind":"song","duration":3}]}),
                 at,
             );
-            p.prompt.observe(
+            p.prompt.vars.observe(
                 "Char.Vitals",
                 serde_json::json!({"hp":850,"maxhp":900,"mana":760,"maxmana":820,"move":250,"maxmove":250}),
                 at,
@@ -4853,7 +4846,7 @@ mod tests {
         }
         // Worked out, but the session has not reported it yet.
         assert_eq!(json(super::reported_hidden(&state).await), nothing);
-        let reported = state.profile.lock().await.prompt.take_hidden_change();
+        let reported = state.profile.lock().await.prompt.vars.take_hidden_change();
         assert!(reported.is_some_and(|h| h.vitals() && h.affects && h.group));
         assert_eq!(
             super::reported_hidden(&state).await,

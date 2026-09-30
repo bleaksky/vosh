@@ -348,7 +348,7 @@ async fn io_loop(
     scrollback: crate::log_state::SharedScrollback,
     scrollback_path: Option<std::path::PathBuf>,
     initial_window_size: (u16, u16),
-    forsaken: bool,
+    known_host: bool,
 ) {
     let mut parser = Parser::new();
     let mut negotiator = Negotiator::new();
@@ -378,7 +378,7 @@ async fn io_loop(
     {
         let mut p = profile.lock().await;
         p.tick.start_session(Instant::now());
-        start_prompt(&mut p, forsaken);
+        start_prompt(&mut p, known_host);
     }
 
     let mut tick_interval = tokio::time::interval(TICK_EMIT_INTERVAL);
@@ -406,7 +406,7 @@ async fn io_loop(
                     // On a server that sends no Char.Vitals your send
                     // starts the next pulse, after which the values the
                     // last prompt set go stale.
-                    if profile.lock().await.prompt.on_send() {
+                    if profile.lock().await.prompt.vars.on_send() {
                         emit_hidden_change(&app, &profile).await;
                     }
                     // Append the input line(s) to the same log session
@@ -1197,7 +1197,7 @@ fn render_custom_prompt(p: &Profile) -> Option<String> {
     let vosh = prompt_supplies(p, Instant::now());
     let rendered = vosh_prompt::render_str(
         &p.ui.prompt_template,
-        &p.prompt.resolver(&vosh),
+        &p.prompt.vars.resolver(&vosh),
         vosh_prompt::RenderOptions::default(),
     );
     (!rendered.ansi.is_empty()).then_some(rendered.ansi)
@@ -1225,11 +1225,11 @@ fn prompt_supplies(p: &Profile, now: Instant) -> vosh_prompt::Vosh {
     }
 }
 
-/// Start the custom prompt's session with no packets and no values,
-/// under the Forsaken Lands rules when `forsaken` holds.
-fn start_prompt(p: &mut Profile, forsaken: bool) {
-    p.prompt.disconnect();
-    p.prompt.set_forsaken(forsaken);
+/// Start the custom prompt's session with no packets and no values.
+/// `known_host` is whether the host is The Forsaken Lands, whose rules
+/// also hold when the profile's capture reads Aabahran's codes.
+fn start_prompt(p: &mut Profile, known_host: bool) {
+    p.prompt.connect(known_host);
 }
 
 /// The custom prompt's packets, values and hidden state go with the
@@ -1237,13 +1237,13 @@ fn start_prompt(p: &mut Profile, forsaken: bool) {
 /// the hidden state that ends here is never reported.
 fn end_prompt(p: &mut Profile) {
     p.prompt.disconnect();
-    let _ = p.prompt.take_hidden_change();
+    let _ = p.prompt.vars.take_hidden_change();
 }
 
 /// Keep a GMCP packet for the custom prompt, stamped with the local
 /// time it arrived.
 fn observe_prompt_gmcp(p: &mut Profile, msg: &vosh_gmcp::Message) {
-    p.prompt.observe(
+    p.prompt.vars.observe(
         &msg.package,
         msg.data.clone(),
         chrono::Local::now().fixed_offset(),
@@ -1254,7 +1254,7 @@ fn observe_prompt_gmcp(p: &mut Profile, msg: &vosh_gmcp::Message) {
 /// since the last report. The session calls it once per socket read and
 /// after a send that starts a pulse.
 async fn emit_hidden_change(app: &AppHandle, profile: &Arc<Mutex<Profile>>) {
-    let change = profile.lock().await.prompt.take_hidden_change();
+    let change = profile.lock().await.prompt.vars.take_hidden_change();
     if let Some(hidden) = change {
         if let Err(e) = app.emit("session://hidden", hidden) {
             warn!(error = %e, "failed to emit the hidden state");
@@ -1577,7 +1577,7 @@ async fn apply_script_result(
 /// after every prompt trigger. The vitals store replaces its copy with
 /// the payload, so a value that went stale or was unset drops out.
 async fn emit_prompt_vars(app: &AppHandle, profile: &Arc<Mutex<Profile>>) {
-    let snapshot: BTreeMap<String, String> = profile.lock().await.prompt.prompt_vars();
+    let snapshot: BTreeMap<String, String> = profile.lock().await.prompt.vars.prompt_vars();
     if let Err(e) = app.emit("session://prompt-vars", &snapshot) {
         warn!(error = %e, "failed to emit prompt vars");
     }
@@ -2184,15 +2184,19 @@ mod tests {
                 "{name}: {drawn:?}"
             );
             // The report the panes read, once.
-            let hidden = p.prompt.take_hidden_change().expect("a change to report");
+            let hidden = p
+                .prompt
+                .vars
+                .take_hidden_change()
+                .expect("a change to report");
             assert_eq!(
                 serde_json::to_value(hidden).expect("it serializes"),
                 case["hidden"],
                 "{name}"
             );
-            assert!(p.prompt.take_hidden_change().is_none(), "{name}");
+            assert!(p.prompt.vars.take_hidden_change().is_none(), "{name}");
             // The vitals store never reads a hidden value from the vars.
-            let vars = p.prompt.prompt_vars();
+            let vars = p.prompt.vars.prompt_vars();
             for key in ["hp", "maxhp", "mana", "maxmana", "move", "maxmove"] {
                 assert_eq!(vars.get(key).map(String::as_str), Some("?"), "{name} {key}");
             }
@@ -2207,7 +2211,7 @@ mod tests {
         for file in older["packets"].as_array().expect("packets") {
             feed(&mut p, file.as_str().expect("a file name"));
         }
-        assert!(p.prompt.take_hidden_change().is_some());
+        assert!(p.prompt.vars.take_hidden_change().is_some());
         // The song ends. Char.Affects comes at once, the rest at the next
         // prompt.
         feed(&mut p, "char-affects.gmcp");
@@ -2216,7 +2220,11 @@ mod tests {
         let pass = pass_line(&mut p, "[850/900hp 760/820mn 250/250mv]");
         let drawn = pass.rendered_prompt.expect("the prompt draws");
         assert_eq!(plain(&drawn), "[850(94%)h 760(93%)m 250(100%)v] ");
-        let hidden = p.prompt.take_hidden_change().expect("a change to report");
+        let hidden = p
+            .prompt
+            .vars
+            .take_hidden_change()
+            .expect("a change to report");
         assert_eq!(
             serde_json::to_value(hidden).expect("it serializes"),
             serde_json::json!({"vitals":false,"tank":false,"opponent":false,"affects":false,"group":false})
@@ -2233,12 +2241,16 @@ mod tests {
         let pass = pass_line(&mut p, "[0/0hp 0/0mn 0/0mv]");
         let drawn = pass.rendered_prompt.expect("the prompt draws");
         assert_eq!(plain(&drawn), "[?(?%)h ?(?%)m ?(?%)v] ");
-        let hidden = p.prompt.take_hidden_change().expect("a change to report");
+        let hidden = p
+            .prompt
+            .vars
+            .take_hidden_change()
+            .expect("a change to report");
         assert_eq!(
             serde_json::to_value(hidden).expect("it serializes"),
             serde_json::json!({"vitals":true,"tank":false,"opponent":false,"affects":false,"group":false})
         );
-        let vars = p.prompt.prompt_vars();
+        let vars = p.prompt.vars.prompt_vars();
         for key in ["hp", "maxhp", "mana", "maxmana", "move", "maxmove"] {
             assert_eq!(vars.get(key).map(String::as_str), Some("?"), "{key}");
         }
@@ -2260,7 +2272,7 @@ mod tests {
             plain(&pass.rendered_prompt.expect("the prompt draws")),
             "1020/1020 a Blackwatch guard 41"
         );
-        assert!(p.prompt.take_hidden_change().is_none());
+        assert!(p.prompt.vars.take_hidden_change().is_none());
     }
 
     /// The pieces the phase 1 gate draws from GMCP, with a separator
@@ -2306,7 +2318,7 @@ mod tests {
             "1250 a Blackwatch guard|FUL waning crescent|sit common rainy 60°F Coastal North|Tester [===|===|===|=--]|S"
         );
         // Nothing is hidden, so nothing is reported.
-        assert!(p.prompt.take_hidden_change().is_none());
+        assert!(p.prompt.vars.take_hidden_change().is_none());
     }
 
     #[test]
@@ -2360,17 +2372,17 @@ mod tests {
     fn a_new_connection_starts_the_prompt_over() {
         let mut p = forsaken_profile(GATE);
         new_build_fight(&mut p);
-        assert!(p.prompt.new_build());
+        assert!(p.prompt.vars.new_build());
         let _ = pass_line(&mut p, PROMPT_LINE);
-        assert!(!p.prompt.prompt_vars().is_empty());
+        assert!(!p.prompt.vars.prompt_vars().is_empty());
 
         super::end_prompt(&mut p);
-        assert!(!p.prompt.new_build());
-        assert!(p.prompt.prompt_vars().is_empty());
-        assert!(p.prompt.gmcp().get("Char.Worth").is_none());
+        assert!(!p.prompt.vars.new_build());
+        assert!(p.prompt.vars.prompt_vars().is_empty());
+        assert!(p.prompt.vars.gmcp().get("Char.Worth").is_none());
         // The hidden state that ended with the connection is never
         // reported, since the stores clear on the disconnect.
-        assert!(p.prompt.take_hidden_change().is_none());
+        assert!(p.prompt.vars.take_hidden_change().is_none());
 
         super::start_prompt(&mut p, false);
         assert!(!p.prompt.forsaken());

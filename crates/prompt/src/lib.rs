@@ -5,6 +5,8 @@
 //! and emits what it returns.
 //!
 //! - [`config`] is the `[prompt]` table of a profile file.
+//! - [`engine`] is the live profile's custom prompt, its table and the
+//!   session's variables together.
 //! - [`capture`] reads patterns you point at, and the capture triggers
 //!   older builds used, into a capture.
 //! - [`template`] parses a prompt template into tokens and the pieces the
@@ -22,6 +24,7 @@
 pub mod aabahran;
 pub mod capture;
 pub mod config;
+pub mod engine;
 pub mod format;
 pub mod gmcp;
 pub mod render;
@@ -30,6 +33,7 @@ pub mod vars;
 pub mod wrap;
 
 pub use config::{CaptureConfig, PromptConfig};
+pub use engine::PromptEngine;
 pub use format::{Position, Resolved, Value};
 pub use render::{render, render_str, MapValues, RenderOptions, Rendered, Span, SpanColor, Values};
 pub use template::{FieldRef, Format, Template};
