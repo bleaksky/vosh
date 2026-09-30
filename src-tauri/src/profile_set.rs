@@ -244,6 +244,10 @@ pub(crate) struct ProfilesIndex {
     /// return, which each one allows for.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub migrations: Vec<String>,
+    /// Sentences a session left for the next launch to show once, such
+    /// as the Line triggers that matched your prompt (D6).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<String>,
 }
 
 /// Per-category scope choice. Per-profile fields move with the
@@ -388,6 +392,7 @@ impl ProfileSet {
             }],
             scope: ScopeConfig::default(),
             migrations: Vec::new(),
+            notices: Vec::new(),
         };
         let set = Self { root, index };
         set.save_index()?;
@@ -821,6 +826,42 @@ impl ProfileSet {
         Ok(())
     }
 
+    /// Record that the one-time step `id` ran and leave `notice` for the
+    /// next launch to show, in one save of the index. An index that does
+    /// not save forgets both, so the step runs again.
+    pub(crate) fn record_with_notice(
+        &mut self,
+        id: &str,
+        notice: Option<String>,
+    ) -> Result<(), ProfileSetError> {
+        if self.migrated(id) {
+            return Ok(());
+        }
+        let before = self.index.clone();
+        self.index.migrations.push(id.to_string());
+        self.index.notices.extend(notice);
+        if let Err(e) = self.save_index() {
+            self.index = before;
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// Take the notices a session left, to show once at launch. They
+    /// leave the index, which saves. When it does not save they show
+    /// anyway, and again at the next launch.
+    pub(crate) fn take_notices(&mut self) -> Vec<String> {
+        if self.index.notices.is_empty() {
+            return Vec::new();
+        }
+        let notices = std::mem::take(&mut self.index.notices);
+        if let Err(e) = self.save_index() {
+            tracing::error!(error = %e, "could not clear the launch notices in profiles.toml");
+            self.index.notices.clone_from(&notices);
+        }
+        notices
+    }
+
     /// Read the per-category scope map.
     pub(crate) fn scope(&self) -> &ScopeConfig {
         &self.index.scope
@@ -981,6 +1022,34 @@ pub(crate) mod tests {
         assert_eq!(set.list().len(), 1);
         assert!(dir.path().join(INDEX_FILENAME).exists());
         assert!(dir.path().join(PROFILES_DIR).exists());
+    }
+
+    #[test]
+    fn a_notice_a_session_leaves_shows_once_at_the_next_launch() {
+        let dir = tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.record_with_notice("step", Some("Once.".to_string()))
+            .unwrap();
+        // A step that already ran leaves nothing more.
+        set.record_with_notice("step", Some("Twice.".to_string()))
+            .unwrap();
+        let text = std::fs::read_to_string(dir.path().join(INDEX_FILENAME)).unwrap();
+        assert!(text.contains("notices = [\"Once.\"]"), "{text}");
+
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        assert!(set.migrated("step"));
+        assert_eq!(set.take_notices(), ["Once."]);
+        assert!(set.take_notices().is_empty());
+        let set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        assert!(set.index.notices.is_empty(), "the take saved");
+        let text = std::fs::read_to_string(dir.path().join(INDEX_FILENAME)).unwrap();
+        assert!(!text.contains("notices"), "{text}");
+
+        // A step with nothing to say is still recorded.
+        let mut set = set;
+        set.record_with_notice("quiet", None).unwrap();
+        assert!(set.migrated("quiet"));
+        assert!(set.take_notices().is_empty());
     }
 
     #[test]

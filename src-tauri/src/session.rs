@@ -735,6 +735,7 @@ async fn io_loop(
     }
 
     accumulator.reset();
+    let line_triggers;
     // Session-only target state and the cached Room.Chars list clear
     // on disconnect — quick-key verb bindings persist via the profile
     // config but the active target and room snapshot are ephemeral.
@@ -745,9 +746,16 @@ async fn io_loop(
         p.target.room_idx = None;
         p.room_chars.clear();
         p.vars.remove("target");
+        line_triggers = p.prompt.stage.line_trigger_notice();
         end_prompt(&mut p);
         had.then(|| p.target.quick_keys.clone())
     };
+    // The first session that read your prompt names the Line triggers
+    // that matched it, once, at the next launch (D6).
+    if let Some(names) = line_triggers {
+        let state = app.state::<crate::commands::SharedState>();
+        crate::prompt_migration::note_line_triggers(state.inner(), names).await;
+    }
     if let Some(quick_keys) = target_after {
         let _ = app.emit(
             "session://target",
@@ -1259,6 +1267,12 @@ fn prompt_block(
         if let Some(step) = tick_reset(p, &line.plain, now) {
             tick_step.get_or_insert(step);
         }
+        // Line triggers no longer see it. Note the ones that would have
+        // fired, for the one-time notice (D6).
+        let matched = vosh_trigger::matching(&p.triggers, &line.plain, MatchScope::Line);
+        p.prompt
+            .stage
+            .line_triggers_matched(matched.into_iter().map(|t| t.name.as_str()));
     }
 
     let last = block.final_line().clone();
@@ -2837,6 +2851,42 @@ mod tests {
         let mut wire = Wire::new(p);
         let out = wire.read(PROMPT_ROW);
         assert_eq!(out.bytes, b"[1020/1020HP 800/800mn 930/930mv]\r\n");
+    }
+
+    #[test]
+    fn line_triggers_that_matched_a_read_prompt_are_noted() {
+        let mut p = capture_profile(HP);
+        let highlight = |name: &str, pattern: &str, target| vosh_trigger::Trigger {
+            name: name.into(),
+            patterns: vec![vosh_trigger::TriggerPattern {
+                pattern: pattern.into(),
+                enabled: true,
+            }],
+            priority: 0,
+            enabled: true,
+            actions: vec![vosh_trigger::TriggerAction::Gag],
+            preset: None,
+            group: None,
+            target,
+        };
+        for trigger in [
+            highlight("hp-watch", r"\d+hp", vosh_trigger::TriggerTarget::Line),
+            highlight("prompt-look", "hp", vosh_trigger::TriggerTarget::Prompt),
+            highlight("hungry", "hungry", vosh_trigger::TriggerTarget::Line),
+        ] {
+            p.triggers.set(trigger).expect("the trigger compiles");
+        }
+        let mut wire = Wire::new(p);
+        let _ = wire.read(b"You are hungry.\n\r");
+        assert_eq!(wire.p.prompt.stage.line_trigger_notice(), None);
+        // The Line trigger does not hide the prompt, since it never sees
+        // it, and it is named.
+        let out = wire.read(PROMPT_ROW);
+        assert_eq!(drawn_in(&out.bytes).as_deref(), Some("<1020>\x1b[0m"));
+        assert_eq!(
+            wire.p.prompt.stage.line_trigger_notice(),
+            Some(vec!["hp-watch".to_string()])
+        );
     }
 
     #[test]
