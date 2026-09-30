@@ -11,7 +11,7 @@ import {
 import { PANE_ROW_PX } from '../../lib/paneLayout';
 import { useAffects, useAffectsHidden } from '../../lib/stores/affectsStore';
 import { useTrackedAffects } from '../../lib/stores/trackedAffectsStore';
-import { affectsGrid, type AffectsCell } from './affectsGrid';
+import { affectsGrid, holdsPage, type AffectsCell } from './affectsGrid';
 import { PaneHeader, PaneMeta } from './PaneHeader';
 import { affectHours, affectWords } from './paneText';
 
@@ -144,8 +144,7 @@ function RestPages({
   // shows the affects that matter most again.
   const home = () => {
     const el = windowRef.current;
-    if (!el || el.scrollTop === 0) return;
-    if (el.matches(':hover') || el.contains(document.activeElement)) return;
+    if (!el || el.scrollTop === 0 || holdsPage(el)) return;
     el.scrollTo({ top: 0, behavior: behavior() });
   };
 
