@@ -199,11 +199,11 @@ describe('the tick timer help', () => {
 
 describe('the help on reading your prompt with a pattern', () => {
   const howTo =
-    '- Tell Vosh how to read your prompt with `#prompt {regex}`, each named group like `(?<hp>\\d+)` a value, and stop with `#unprompt`.';
+    '- Tell Vosh how to read your prompt with `#prompt game {setting}` and `#prompt fight {setting}`, the codes you type in the game, or with `#prompt {regex}`, each named group like `(?<hp>\\d+)` a value. `#prompt` alone says how Vosh reads it, and `#unprompt` stops.';
   const reference =
-    '- `#prompt {regex}` reads your prompt in this profile with a pattern, and `#unprompt` stops reading it.';
+    '- `#prompt game {setting}` and `#prompt fight {setting}` read your prompt in this profile from the codes of your PROMPT and fight prompt, `#prompt {regex}` reads it with a pattern, `#prompt` says how Vosh reads it, and `#unprompt` stops reading it.';
 
-  it('says the pattern is read in the profile, with no trigger', () => {
+  it('says the codes and the pattern are read in the profile, with no trigger', () => {
     const all = HELP_TOPICS.map((t) => t.body).join('\n');
     expect(all).toContain(howTo);
     expect(all).toContain(reference);
