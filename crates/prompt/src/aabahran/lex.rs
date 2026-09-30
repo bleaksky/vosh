@@ -21,8 +21,21 @@ use super::{CompileError, Warning, WarningKind, Which, Who};
 /// What `prompt all` sets (`act_info.c:2098`).
 pub const PROMPT_ALL: &str = "%n%P%C<%hhp %mm %vmv> ";
 
-/// The most characters the game keeps of a setting, `MIL - 1`.
-pub const KEEP: usize = 255;
+/// The most characters of a line the game reads, `MIL - 3`
+/// (`read_from_buffer`, `comm.c:1486-1495`). Past them it says "Line too
+/// long." and runs the ones it read.
+pub const LINE: usize = 253;
+
+/// The most characters of a setting the game keeps when you type it:
+/// what the line holds after `prompt ` or `fprompt `. `do_prompt` would
+/// keep 255, but the line never brings it that many.
+pub fn keeps(which: Which) -> usize {
+    let command = match which {
+        Which::Prompt => "prompt ",
+        Which::Fight => "fprompt ",
+    };
+    LINE - command.len()
+}
 
 /// A setting you typed, as the game stores it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,14 +45,15 @@ pub struct Normalized {
 }
 
 /// Store a setting you typed as the game does. Vosh trims the ends of
-/// every command it sends, and the game skips the spaces after the
-/// command word (`one_argument`, `interp.c:1704-1727`), so no space
-/// before or after the setting reaches `do_prompt`. Then the game keeps
-/// the first 255 characters, turns each `~` into `-` (`smash_tilde`),
-/// and adds one space unless the setting ends in `%c` in any case
-/// (`str_suffix`). `prompt all` is the stock prompt and `fprompt off`
-/// clears the fight prompt. A setting that is empty or only spaces
-/// stays empty, which the game draws as its fallback prompt.
+/// every command it sends. The game reads the first 253 characters of
+/// the line, which leaves [`keeps`] for the setting, and skips the
+/// spaces after the command word (`one_argument`, `interp.c:1704-1727`),
+/// so no space before or after the setting reaches `do_prompt`. That
+/// turns each `~` into `-` (`smash_tilde`) and adds one space unless the
+/// setting ends in `%c` in any case (`str_suffix`). `prompt all` is the
+/// stock prompt and `fprompt off` clears the fight prompt. A setting that
+/// is empty or only spaces stays empty, which the game draws as its
+/// fallback prompt.
 ///
 /// `prompt off` turns prompts off and sets nothing, so the caller
 /// handles it before it gets here.
@@ -48,35 +62,39 @@ pub fn normalize(typed: &str, which: Which) -> Normalized {
         text: String::new(),
         warnings: Vec::new(),
     };
+    let keeps = keeps(which);
     let trimmed = typed.trim();
+    let (read, cut) = match trimmed.char_indices().nth(keeps) {
+        Some((at, _)) => (&trimmed[..at], true),
+        None => (trimmed, false),
+    };
+    let argument = read.trim_start_matches(' ');
     match which {
-        Which::Prompt if trimmed == "all" => {
+        Which::Prompt if argument == "all" => {
             return Normalized {
                 text: PROMPT_ALL.to_string(),
                 warnings: Vec::new(),
             };
         }
-        Which::Fight if trimmed.eq_ignore_ascii_case("off") => return empty(),
+        Which::Fight if argument.eq_ignore_ascii_case("off") => return empty(),
         _ => {}
     }
-    if trimmed.is_empty() {
+    if argument.is_empty() {
         return empty();
     }
     let mut warnings = Vec::new();
-    let kept = match trimmed.char_indices().nth(KEEP) {
-        Some((cut, _)) => {
-            warnings.push(Warning::new(
-                WarningKind::Cut,
-                which,
-                cut..cut,
-                "The game keeps the first 255 characters of your prompt. Vosh reads the same 255."
-                    .to_string(),
-            ));
-            &trimmed[..cut]
-        }
-        None => trimmed,
-    };
-    let mut text = kept.replace('~', "-");
+    if cut {
+        let at = argument.len();
+        warnings.push(Warning::new(
+            WarningKind::Cut,
+            which,
+            at..at,
+            format!(
+                "The game keeps the first {keeps} characters of your prompt. Vosh reads the same {keeps}."
+            ),
+        ));
+    }
+    let mut text = argument.replace('~', "-");
     if !ends_in_break(&text) {
         text.push(' ');
     }
@@ -413,31 +431,48 @@ mod tests {
     }
 
     #[test]
-    fn the_game_keeps_the_first_255_characters() {
+    fn the_game_reads_the_first_253_characters_of_the_line() {
+        // `prompt ` takes 7 of them, so 246 are left for the setting.
         let typed = format!("{}%h", "x".repeat(300));
         let got = normalize(&typed, Which::Prompt);
-        assert_eq!(got.text, format!("{} ", "x".repeat(255)));
+        assert_eq!(got.text, format!("{} ", "x".repeat(246)));
         assert_eq!(
             got.warnings,
             [Warning::new(
                 WarningKind::Cut,
                 Which::Prompt,
-                255..255,
-                "The game keeps the first 255 characters of your prompt. Vosh reads the same 255."
+                246..246,
+                "The game keeps the first 246 characters of your prompt. Vosh reads the same 246."
                     .into(),
             )]
         );
-        // Exactly 255 is kept whole.
-        let typed = "y".repeat(255);
-        let got = normalize(&typed, Which::Fight);
+        // A setting of 250 is cut too, where the game cuts it.
+        let typed = format!("<%hhp>{}", "y".repeat(244));
+        let got = normalize(&typed, Which::Prompt);
+        assert_eq!(got.text, format!("<%hhp>{} ", "y".repeat(240)));
+        assert_eq!(got.warnings.len(), 1);
+        // Exactly 246 is kept whole.
+        let typed = "y".repeat(246);
+        let got = normalize(&typed, Which::Prompt);
         assert_eq!(got.text, format!("{typed} "));
         assert!(got.warnings.is_empty());
-        // The count is in characters, and a cut that ends in spaces keeps
-        // them as the game does.
-        let typed = format!("{}{}zz", "é".repeat(250), " ".repeat(10));
+        // `fprompt ` takes 8, which leaves 245.
+        let typed = "y".repeat(246);
+        let got = normalize(&typed, Which::Fight);
+        assert_eq!(got.text, format!("{} ", "y".repeat(245)));
+        assert_eq!(
+            got.warnings[0].text,
+            "The game keeps the first 245 characters of your prompt. Vosh reads the same 245."
+        );
+        assert!(normalize(&"y".repeat(245), Which::Fight)
+            .warnings
+            .is_empty());
+        // A cut that ends in spaces keeps them as the game does, and the
+        // game adds its own.
+        let typed = format!("{}{}zz", "w".repeat(240), " ".repeat(10));
         let got = normalize(&typed, Which::Prompt);
-        assert_eq!(got.text, format!("{}{}", "é".repeat(250), " ".repeat(6)));
-        assert_eq!(got.warnings[0].span, 505..505);
+        assert_eq!(got.text, format!("{}{}", "w".repeat(240), " ".repeat(7)));
+        assert_eq!(got.warnings[0].span, 246..246);
     }
 
     /// The Char.Prompt fixtures, which carry settings as the game stores

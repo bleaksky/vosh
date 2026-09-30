@@ -267,23 +267,34 @@ fn away_reads_as_its_own_shape() {
 }
 
 #[test]
-fn the_game_keeps_255_characters_and_so_does_vosh() {
+fn the_game_keeps_what_fits_on_the_line_and_so_does_vosh() {
+    // The game reads 253 characters of `prompt ` and the setting.
     let typed = format!("{}<%h>", "x".repeat(300));
     let compiled = compile(&typed, "", Origin::Typed, Who::default()).unwrap();
-    assert_eq!(compiled.prompt, format!("{} ", "x".repeat(255)));
+    assert_eq!(compiled.prompt, format!("{} ", "x".repeat(246)));
     assert_eq!(
         compiled.warnings,
         [Warning {
             kind: WarningKind::Cut,
             which: Which::Prompt,
-            span: 255..255,
+            span: 246..246,
             text:
-                "The game keeps the first 255 characters of your prompt. Vosh reads the same 255."
+                "The game keeps the first 246 characters of your prompt. Vosh reads the same 246."
                     .into(),
         }]
     );
     // What is left reads nothing, and the code past the cut is gone.
     assert!(compiled.reads(Which::Prompt).is_empty());
+    // A 250 character setting loses its last 4, as "Line too long." does
+    // in the game, so Vosh reads what the game prints.
+    let typed = format!("<%hhp>{}", "z".repeat(244));
+    let compiled = compile(&typed, "", Origin::Typed, Who::default()).unwrap();
+    let either = shape(&compiled, Which::Prompt, ShapeKind::Either);
+    let printed = format!("<1020hp>{} ", "z".repeat(240));
+    assert_eq!(
+        values(either.read_partial(&[printed.as_str()])),
+        map(&[("hp", "1020")])
+    );
 }
 
 /// One hand case per code: the setting, a line the game prints for it,
