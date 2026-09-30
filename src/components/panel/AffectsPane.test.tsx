@@ -170,6 +170,38 @@ describe('AffectsPaneView', () => {
     expect(cells).toHaveLength(20);
   });
 
+  it('widens the hours column for a four digit duration', () => {
+    // The inner calm psalm lasts 1200 hours.
+    const calm = draw([...ERELEI, affect('inner calm', 1200)], false, ERELEI_TRACKED, BOARD_BOX);
+    expect(calm).toContain('<div class="pane-body" style="--affect-hours-ch:4">');
+    expect(cellsOf(calm)).toContain('. 1200 inner calm , 1200 hours');
+    expect(draw(ERELEI, false, ERELEI_TRACKED, BOARD_BOX)).toContain(
+      '<div class="pane-body" style="--affect-hours-ch:3">',
+    );
+    // Every cell's hours column takes the widest count, so the names
+    // stay in line and never run into the digits.
+    const hours = rule('.pane-affect-hours');
+    expect(hours).toContain('width: 22px');
+    expect(hours).toContain('min-width: calc(var(--affect-hours-ch, 3) * 1ch)');
+    expect(hours).toContain('flex: none');
+  });
+
+  it('lines the count up with the names over the same hours column', () => {
+    const fight = [
+      ...ERELEI,
+      affect('faerie fire', 3),
+      affect('protective shield', 6),
+      affect('frenzy', 9),
+      affect('giant strength', 40),
+      affect('detect magic', 45),
+    ];
+    const html = draw(fight, false, ERELEI_TRACKED, BOARD_BOX);
+    expect(html).toMatch(
+      /<li class="pane-affects-more-cell"[^>]*><span class="pane-affect-hours" aria-hidden="true"><\/span><button type="button" class="pane-affects-more"/,
+    );
+    expect(rule('.pane-affects-more')).toContain('margin: 0 0 0 8px');
+  });
+
   it('shows your label in place of the name, exactly as you wrote it', () => {
     const html = draw([affect('sanctuary', 9)], false, [{ name: 'sanctuary', label: 'sanc' }]);
     expect(cellsOf(html)).toEqual(['up 9 sanc , 9 hours']);

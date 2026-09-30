@@ -18,6 +18,7 @@ import { affectHours, affectWords } from './paneText';
 // The at a glance checklist, board Affects A, timers first. Two columns
 // of 22 px rows, each the hours left in a right aligned column and then
 // the name exactly as the game sends it, both in the terminal face. The
+// column is three digits wide, wider while a longer count shows. The
 // game's own marks stand in for the hours, `+` permanent and `-`
 // missing. Your tracked affects keep the slots you set in Characters,
 // each with a dot that agrees with its hours. The rest sit under a
@@ -61,6 +62,14 @@ export function AffectsPaneView({ current, tracked, hidden, box }: AffectsPaneVi
   const size = box ?? measured;
   const grid = useMemo(() => affectsGrid(rows, size), [rows, size]);
   const { missing, runningOut } = affectsSummary(rows);
+  // Every cell's hours column fits the longest count, three cells or
+  // more, so the names stay in line and a 1200 hour psalm never runs
+  // into its name.
+  const hoursCh = useMemo(
+    () => Math.max(3, ...rows.map((r) => affectHours(r.state, r.ticks).length)),
+    [rows],
+  );
+  const hoursColumn: CSSProperties = { ['--affect-hours-ch' as string]: hoursCh };
 
   let body: React.ReactNode;
   if (hidden) {
@@ -107,7 +116,7 @@ export function AffectsPaneView({ current, tracked, hidden, box }: AffectsPaneVi
           ) : null
         }
       />
-      <div ref={bodyRef} className="pane-body">
+      <div ref={bodyRef} className="pane-body" style={hoursColumn}>
         {body}
       </div>
     </>
@@ -167,6 +176,7 @@ function RestPages({
           }
           return (
             <li key={`more-${cell.page}`} className="pane-affects-more-cell" style={place}>
+              <span className="pane-affect-hours" aria-hidden="true" />
               <button
                 type="button"
                 className="pane-affects-more"
