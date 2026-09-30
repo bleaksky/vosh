@@ -547,6 +547,8 @@ Example. A profile named `aabahran-erelei` with a `characters` list of `Erelei, 
 
 From the input bar, `#profile save` and `#profile load` write and reload the active profile's file on demand.
 
+Each profile reads your prompt on its own. Vosh moves the capture trigger that `#prompt` made into each profile that draws your own prompt, turns the trigger off, and tells you once at launch. Profiles that draw nothing then show the game's prompt. An older version of Vosh shows the game's prompt in every profile until you turn `prompt-capture` on again under Automation. Back in this version, Vosh moves the capture into your profiles again and turns the trigger off.
+
 ### 7.2 Set up loadouts
 
 Loadouts flip whole groups of aliases, triggers, and macros on and off from one shared catalog. Loadout mode starts with a one time migration from per profile files.
