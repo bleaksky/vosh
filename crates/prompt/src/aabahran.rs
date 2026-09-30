@@ -88,7 +88,7 @@ pub enum WarningKind {
     PacifyMortal,
     /// `%s` while you control a mobile.
     LangMobile,
-    /// The game kept the first 255 characters.
+    /// The game kept only the characters that fit on the line you typed.
     Cut,
     /// A `%` at the end eats the space the game adds.
     LonePercent,
