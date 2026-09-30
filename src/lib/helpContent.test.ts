@@ -53,6 +53,13 @@ describe('the help on the affects pane', () => {
     const { number, title, body: text } = topic();
     expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
   });
+
+  it('sends you to Characters for tracked affects everywhere in HELP.md', () => {
+    expect(helpMd).not.toMatch(/[Tt]racked affects[^.\n]*`panels` tab/);
+    expect(helpMd).toContain(
+      'Tracked affects live in Settings under Characters, then Tracked affects.',
+    );
+  });
 });
 
 describe('the help on password prompts', () => {

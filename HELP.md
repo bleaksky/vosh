@@ -379,7 +379,7 @@ The vitals readout shows hp, mana, and moves. Configure it in the `vitals` tab i
 - Tick `pulse red vignette under 30% hp` to pulse a red vignette when hp drops under 30%.
 - Turn on `custom template (overrides layout)` to write the readout yourself with tokens like `%hp`, `%pct_hp`, `%bar_hp`, `%tick`, and `%time`. Any `Char.Vitals` or `Char.Worth` field resolves as `%fieldname`, and `%%` prints a literal percent.
 
-Place the bar in any zone from the `panels` tab. It ships in the right column, listed as `vitals (hp bar)`. Tracked affects also live in the `panels` tab, not here.
+Place the bar in any zone from the `panels` tab. It ships in the right column, listed as `vitals (hp bar)`. Tracked affects live in Settings under Characters, then Tracked affects.
 
 `reset vitals` restores the stock config.
 
