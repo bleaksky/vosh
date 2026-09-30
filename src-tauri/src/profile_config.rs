@@ -66,6 +66,13 @@ pub(crate) struct ProfileConfig {
     /// catalog, which `#group` follows. See [`GroupFolders`].
     #[serde(default, skip_serializing_if = "GroupFolders::is_empty")]
     pub group_folders: GroupFolders,
+    /// The `[prompt]` table: the switch, the design, earlier designs and
+    /// how Vosh reads the game's prompt. None in a file an older build
+    /// wrote, and left out of a file while it says nothing a default one
+    /// does not. Set it with [`ProfileConfig::set_prompt`], which keeps
+    /// the `[ui]` copy of the switch and the design in step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<vosh_prompt::PromptConfig>,
 }
 
 /// The catalog groups each folder of one profile became when the shared
@@ -298,17 +305,14 @@ pub(crate) struct UiConfig {
     /// values coerce back to `block` on save.
     #[serde(default = "default_input_cursor_style")]
     pub input_cursor_style: String,
-    /// When true, gagged prompts captured via prompt-vars triggers
-    /// are replaced with a frontend-rendered string built from
-    /// `prompt_template`. The template uses the same `%name` /
-    /// `%{name}` / `%name_bar:width:color` syntax as the vitals
-    /// template. Off by default — opt-in.
+    /// A copy of `[prompt] draw`, which holds the switch now. Every save
+    /// writes it, so an older build that reads only this key still draws
+    /// your prompt (D20). A file with no `[prompt]` reads the switch from
+    /// here, see [`ProfileConfig::prompt_config`].
     #[serde(default)]
     pub prompt_template_enabled: bool,
-    /// Template string for the custom prompt renderer. Empty means
-    /// no rendering even if enabled. See vitalsTemplate.ts for the
-    /// token syntax. Captured prompt vars (whatever the user's
-    /// trigger names them) plus the bar tokens are available.
+    /// A copy of `[prompt] template`, written and read the same way as
+    /// [`UiConfig::prompt_template_enabled`].
     #[serde(default)]
     pub prompt_template: String,
     /// Per-row appearance of the vitals panel. Toggles which columns
@@ -1386,7 +1390,7 @@ impl ProfileConfig {
         let disabled_macro_groups: Vec<String> =
             profile.disabled_macro_groups.iter().cloned().collect();
 
-        Self {
+        let mut config = Self {
             connection: ConnectionConfig::default(),
             aliases,
             profile_vars,
@@ -1400,7 +1404,40 @@ impl ProfileConfig {
             disabled_trigger_groups,
             disabled_macro_groups,
             group_folders: profile.group_folders.clone(),
+            prompt: None,
+        };
+        config.set_prompt(profile.prompt.config().clone());
+        config
+    }
+
+    /// The `[prompt]` table this file stands for: its own, or for a file
+    /// with none, the switch and the design older builds kept in `[ui]`.
+    pub(crate) fn prompt_config(&self) -> vosh_prompt::PromptConfig {
+        match &self.prompt {
+            Some(prompt) => prompt.clone(),
+            None => vosh_prompt::PromptConfig::from_legacy(
+                self.ui.prompt_template_enabled,
+                &self.ui.prompt_template,
+            ),
         }
+    }
+
+    /// Set the `[prompt]` table and its `[ui]` copy of the switch and the
+    /// design, which every save writes so an older build still draws
+    /// your prompt (D20). A table that says nothing a default one does
+    /// not stays out of the file.
+    pub(crate) fn set_prompt(&mut self, prompt: vosh_prompt::PromptConfig) {
+        self.ui.prompt_template_enabled = prompt.draw;
+        self.ui.prompt_template.clone_from(&prompt.template);
+        self.prompt = (!prompt.is_default()).then_some(prompt);
+    }
+
+    /// What every load does before anything reads the file. A file with
+    /// no `[prompt]` takes the switch and the design from `[ui]`, and a
+    /// file with one puts its copy in `[ui]` back in step.
+    fn merge_legacy_prompt(&mut self) {
+        let prompt = self.prompt_config();
+        self.set_prompt(prompt);
     }
 
     /// Apply a snapshot onto a live profile, replacing the relevant pieces.
@@ -1475,6 +1512,9 @@ impl ProfileConfig {
         // UI preferences carry across as a single clone (see the
         // matching note in `from_profile`).
         profile.ui = self.ui.clone();
+        // The custom prompt takes the file's [prompt] table, or the
+        // switch and the design an older file kept in [ui].
+        profile.set_prompt_config(self.prompt_config());
 
         // Plugin enabled-set is persisted; the actual load happens in the
         // PluginManager wired into AppState.
@@ -1517,8 +1557,7 @@ impl ProfileConfig {
 
     pub(crate) fn load(path: &Path) -> Result<Self, ConfigError> {
         let toml_str = std::fs::read_to_string(path)?;
-        let config: ProfileConfig = toml::from_str(&toml_str)?;
-        Ok(config)
+        Self::from_toml(&toml_str)
     }
 
     pub(crate) fn to_toml(&self) -> Result<String, ConfigError> {
@@ -1526,7 +1565,9 @@ impl ProfileConfig {
     }
 
     pub(crate) fn from_toml(text: &str) -> Result<Self, ConfigError> {
-        Ok(toml::from_str(text)?)
+        let mut config: ProfileConfig = toml::from_str(text)?;
+        config.merge_legacy_prompt();
+        Ok(config)
     }
 }
 
@@ -3934,5 +3975,174 @@ name = "haste"
 
         assert!(refused.is_err());
         assert!(!set.profile_path("Bard").exists());
+    }
+}
+
+/// The `[prompt]` table in profile files: the legacy merge and the
+/// `[ui]` copy.
+#[cfg(test)]
+mod prompt_tests {
+    use super::*;
+    use vosh_prompt::config::{AabahranCapture, CaptureSource, RegexCapture};
+    use vosh_prompt::{CaptureConfig, PromptConfig};
+
+    /// James's design as his profile file keeps it in `[ui]`.
+    const TEMPLATE: &str = "%{c:100,100,100}[%c_reset%s_italic%hp(%c_hp%pct_hp%c_reset%s_italic%)h %mana(%{c:128,200,255}%pct_mana%c_reset%s_italic%)m %move(%{c:200,255,23}%pct_move%c_reset%s_italic%)v%c_reset%{c:100,100,100}] %c_reset";
+
+    /// The pattern the old capture trigger held.
+    const PATTERN: &str = r"\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)/(?<maxmana>\d+)mn (?<move>\d+)/(?<maxmove>\d+)mv\]";
+
+    /// A profile file an older build wrote, with the switch and the
+    /// design in `[ui]` and no `[prompt]`.
+    fn older_file() -> String {
+        format!(
+            "[ui]\ntheme = \"vellum\"\nprompt_template_enabled = true\nprompt_template = {}\n",
+            toml::Value::String(TEMPLATE.to_string())
+        )
+    }
+
+    fn migrated() -> PromptConfig {
+        PromptConfig {
+            draw: true,
+            template: TEMPLATE.to_string(),
+            previous_templates: Vec::new(),
+            capture: CaptureConfig::Regex(RegexCapture {
+                lines: vec![PATTERN.to_string()],
+                settle: false,
+                names: BTreeMap::new(),
+                seen_at: None,
+                source: Some(CaptureSource::Migrated),
+            }),
+        }
+    }
+
+    #[test]
+    fn a_file_with_no_prompt_table_takes_the_switch_and_design_from_ui() {
+        let config = ProfileConfig::from_toml(&older_file()).unwrap();
+        let prompt = config.prompt.as_ref().expect("the merged table");
+        assert!(prompt.draw);
+        assert_eq!(prompt.template, TEMPLATE);
+        assert!(prompt.capture.is_none());
+        assert_eq!(config.prompt_config(), *prompt);
+    }
+
+    #[test]
+    fn every_load_path_merges_the_legacy_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Healer.toml");
+        std::fs::write(&path, older_file()).unwrap();
+        let config = ProfileConfig::load(&path).unwrap();
+        assert_eq!(config.prompt_config().template, TEMPLATE);
+        assert!(config.prompt_config().draw);
+
+        // A file with neither says nothing, and keeps saying nothing.
+        let bare = ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n").unwrap();
+        assert_eq!(bare.prompt, None);
+        assert!(!bare.to_toml().unwrap().contains("[prompt"));
+    }
+
+    #[test]
+    fn the_prompt_table_wins_over_a_ui_copy_that_drifted() {
+        let text = format!(
+            "{}\n[prompt]\ndraw = false\ntemplate = \"%hp\"\n",
+            older_file()
+        );
+        let config = ProfileConfig::from_toml(&text).unwrap();
+        assert_eq!(
+            config.prompt_config(),
+            PromptConfig::from_legacy(false, "%hp")
+        );
+        assert!(!config.ui.prompt_template_enabled);
+        assert_eq!(config.ui.prompt_template, "%hp");
+    }
+
+    #[test]
+    fn every_save_writes_the_ui_copy_beside_the_table() {
+        let mut live = Profile::default();
+        live.set_prompt_config(migrated());
+        let text = ProfileConfig::from_profile(&live).to_toml().unwrap();
+        let table: toml::Table = text.parse().unwrap();
+        assert_eq!(table["ui"]["prompt_template_enabled"].as_bool(), Some(true));
+        assert_eq!(table["ui"]["prompt_template"].as_str(), Some(TEMPLATE));
+        assert_eq!(table["prompt"]["draw"].as_bool(), Some(true));
+        assert_eq!(table["prompt"]["template"].as_str(), Some(TEMPLATE));
+        let capture = &table["prompt"]["capture"];
+        assert_eq!(capture["kind"].as_str(), Some("regex"));
+        assert_eq!(capture["settle"].as_bool(), Some(false));
+        assert_eq!(capture["source"].as_str(), Some("migrated"));
+        assert_eq!(capture["lines"][0].as_str(), Some(PATTERN));
+    }
+
+    #[test]
+    fn the_table_and_the_ui_copy_round_trip() {
+        let mut live = Profile::default();
+        live.set_prompt_config(migrated());
+        let text = ProfileConfig::from_profile(&live).to_toml().unwrap();
+        let back = ProfileConfig::from_toml(&text).unwrap();
+        assert_eq!(back.prompt_config(), migrated());
+
+        let mut next = Profile::default();
+        let _ = back.apply_to(&mut next);
+        assert_eq!(*next.prompt.config(), migrated());
+        assert!(next.ui.prompt_template_enabled);
+        assert_eq!(next.ui.prompt_template, TEMPLATE);
+    }
+
+    #[test]
+    fn an_older_build_that_drops_the_table_still_draws_the_design() {
+        let mut live = Profile::default();
+        live.set_prompt_config(migrated());
+        let text = ProfileConfig::from_profile(&live).to_toml().unwrap();
+        // An older build reads [ui] alone and writes the file back without
+        // the [prompt] table it does not know.
+        let mut table: toml::Table = text.parse().unwrap();
+        assert!(table.remove("prompt").is_some());
+        let older = toml::to_string_pretty(&table).unwrap();
+
+        let back = ProfileConfig::from_toml(&older).unwrap();
+        let prompt = back.prompt_config();
+        assert!(prompt.draw);
+        assert_eq!(prompt.template, TEMPLATE);
+        assert!(prompt.capture.is_none(), "the capture goes with the table");
+    }
+
+    #[test]
+    fn a_profile_that_draws_nothing_leaves_the_table_out() {
+        let text = ProfileConfig::from_profile(&Profile::default())
+            .to_toml()
+            .unwrap();
+        let table: toml::Table = text.parse().unwrap();
+        assert!(!table.contains_key("prompt"));
+        assert_eq!(
+            table["ui"]["prompt_template_enabled"].as_bool(),
+            Some(false)
+        );
+        assert_eq!(table["ui"]["prompt_template"].as_str(), Some(""));
+    }
+
+    #[test]
+    fn a_load_hands_the_live_prompt_its_table_and_rules() {
+        let mut aabahran = PromptConfig::from_legacy(true, "%hp");
+        aabahran.capture = CaptureConfig::Aabahran(AabahranCapture {
+            prompt: "%n%P%C[%h/%Hhp]%c".into(),
+            ..AabahranCapture::default()
+        });
+        let mut config = ProfileConfig::default();
+        config.set_prompt(aabahran.clone());
+        let text = config.to_toml().unwrap();
+
+        let mut live = Profile::default();
+        let _ = ProfileConfig::from_toml(&text).unwrap().apply_to(&mut live);
+        assert_eq!(*live.prompt.config(), aabahran);
+        assert!(
+            live.prompt.forsaken(),
+            "an Aabahran capture holds the rules on any host"
+        );
+
+        // A reset hands back the default table.
+        let _ = ProfileConfig::default().apply_to(&mut live);
+        assert!(live.prompt.config().is_default());
+        assert!(!live.prompt.forsaken());
+        assert!(!live.ui.prompt_template_enabled);
     }
 }

@@ -68,6 +68,16 @@ pub(crate) struct Profile {
     pub(crate) timers: Vec<Timer>,
 }
 
+impl Profile {
+    /// Take a `[prompt]` table, keeping the `[ui]` copy of its switch and
+    /// design in step, since Settings still reads them there.
+    pub(crate) fn set_prompt_config(&mut self, config: vosh_prompt::PromptConfig) {
+        self.ui.prompt_template_enabled = config.draw;
+        self.ui.prompt_template.clone_from(&config.template);
+        self.prompt.set_config(config);
+    }
+}
+
 /// One keyboard binding: a canonical key string mapped to a
 /// command line. Both halves are user-supplied via the Settings
 /// macros tab; the canonical key string is produced by the
