@@ -1324,6 +1324,9 @@ const MAX_LIFT_ROWS: i32 = 64;
 /// A lift as one region shows it. Its rows count from the region's first
 /// row, below zero or past the region's last when the region cuts it. Its
 /// columns run from its leftmost start to one past its rightmost glyph.
+/// `notch` is one past the last glyph of its last row, when that row is
+/// narrower than the widest and your echo, or anything else, shows after
+/// the lift on it, so the band steps in there instead of running under it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct LiftBox {
     id: u64,
@@ -1331,28 +1334,45 @@ struct LiftBox {
     bottom: i32,
     left: usize,
     right: usize,
+    notch: Option<usize>,
 }
 
 /// Gather `spans` into one box per lift, top first, keeping the lifts that
 /// meet the `vis` rows of a region whose first row is grid line `line0`.
 fn lift_boxes(spans: &[LiftSpan], line0: i32, vis: usize) -> Vec<LiftBox> {
     let mut boxes: Vec<LiftBox> = Vec::new();
+    // Each box's last row as the spans reach it: its end and whether
+    // something shows after it.
+    let mut last: Vec<(usize, bool)> = Vec::new();
     for s in spans {
         let row = s.line - line0;
-        match boxes.iter_mut().find(|b| b.id == s.id) {
-            Some(b) => {
+        match boxes.iter().position(|b| b.id == s.id) {
+            Some(i) => {
+                let b = &mut boxes[i];
                 b.top = b.top.min(row);
+                if row > b.bottom {
+                    last[i] = (s.end, s.after);
+                }
                 b.bottom = b.bottom.max(row);
                 b.left = b.left.min(s.first);
                 b.right = b.right.max(s.end);
             }
-            None => boxes.push(LiftBox {
-                id: s.id,
-                top: row,
-                bottom: row,
-                left: s.first,
-                right: s.end,
-            }),
+            None => {
+                boxes.push(LiftBox {
+                    id: s.id,
+                    top: row,
+                    bottom: row,
+                    left: s.first,
+                    right: s.end,
+                    notch: None,
+                });
+                last.push((s.end, s.after));
+            }
+        }
+    }
+    for (b, &(end, after)) in boxes.iter_mut().zip(&last) {
+        if b.bottom > b.top && after && end > b.left && end < b.right {
+            b.notch = Some(end);
         }
     }
     let vis = i32::try_from(vis).unwrap_or(i32::MAX);
@@ -1361,13 +1381,16 @@ fn lift_boxes(spans: &[LiftSpan], line0: i32, vis: usize) -> Vec<LiftBox> {
     boxes
 }
 
-/// A band's rectangle in pane pixels.
+/// A band's rectangle in pane pixels. A band with a notch leaves out the
+/// part right of `notch[0]` and below `notch[1]`, both from its own left
+/// and top, where your echo sits.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct BandRect {
     x: f32,
     y: f32,
     w: f32,
     h: f32,
+    notch: Option<[f32; 2]>,
 }
 
 /// Each box's band, placed as `layoutBands` places it on xterm, in device
@@ -1394,11 +1417,18 @@ fn band_rects(boxes: &[LiftBox], y0: f32, cell_w: f32, cell_h: f32, scale: f32) 
             let bottom = y0 + (b.bottom + 1) as f32 * cell_h + bottom_out * scale;
             let left = b.left as f32 * cell_w - BAND_X * scale;
             let right = b.right as f32 * cell_w + BAND_X * scale;
+            let notch = b.notch.map(|end| {
+                [
+                    end as f32 * cell_w + BAND_X * scale - left,
+                    y0 + b.bottom as f32 * cell_h - top,
+                ]
+            });
             BandRect {
                 x: left,
                 y: top,
                 w: right - left,
                 h: bottom - top,
+                notch,
             }
         })
         .collect()
@@ -1407,7 +1437,8 @@ fn band_rects(boxes: &[LiftBox], y0: f32, cell_w: f32, cell_h: f32, scale: f32) 
 /// The quads that draw `rects` through the band shader, moved by `shift`
 /// into the band pass's viewport: a rounded fill in `fill`, then an inset
 /// ring in `ring` when the theme is light. The shader reads the corner
-/// radius and the ring width from `uv_min`.
+/// radius and the ring width from `uv_min`, and the notch from `uv_max`,
+/// zero for none.
 fn band_instances(
     rects: &[BandRect],
     shift: [f32; 2],
@@ -1423,7 +1454,7 @@ fn band_instances(
             size: [r.w, r.h],
             color: paint_to_rgba(color),
             uv_min: [radius, ring_w],
-            uv_max: [0.0, 0.0],
+            uv_max: r.notch.unwrap_or([0.0, 0.0]),
         };
         out.push(quad(fill, 0.0));
         if let Some(ring) = ring {
@@ -1552,7 +1583,10 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
 /// The prompt band: a rounded rectangle, or its inset ring, covered by
 /// its signed distance the way a browser antialiases a border radius. The
 /// instance's `uv_min` carries the radius and the ring width, zero for a
-/// fill. The output is premultiplied and sRGB encoded like the cells.
+/// fill. Its `uv_max` carries the notch, zero for none: the band is then
+/// the union of the rows above the last, full width down to the last
+/// row's top, and every row as wide as the last one. The output is
+/// premultiplied and sRGB encoded like the cells.
 const BAND_SHADER: &str = r"
 struct Uniforms { surface_size: vec2<f32>, cell_size: vec2<f32> };
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -1563,6 +1597,7 @@ struct BandOut {
     @location(1) size: vec2<f32>,
     @location(2) color: vec4<f32>,
     @location(3) shape: vec2<f32>,
+    @location(4) notch: vec2<f32>,
 };
 
 @vertex
@@ -1591,7 +1626,17 @@ fn vs(
     out.size = size;
     out.color = color;
     out.shape = uv_min;
+    out.notch = uv_max;
     return out;
+}
+
+// The signed distance from `p` to a rectangle `size` big at the origin,
+// its corners rounded by `r`.
+fn rounded(p: vec2<f32>, size: vec2<f32>, r: f32) -> f32 {
+    let half = size * 0.5;
+    let rr = min(r, min(half.x, half.y));
+    let q = abs(p - half) - half + vec2<f32>(rr, rr);
+    return length(max(q, vec2<f32>(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - rr;
 }
 
 fn lin_to_srgb(c: vec3<f32>) -> vec3<f32> {
@@ -1602,10 +1647,12 @@ fn lin_to_srgb(c: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn fs(in: BandOut) -> @location(0) vec4<f32> {
-    let half = in.size * 0.5;
-    let r = min(in.shape.x, min(half.x, half.y));
-    let q = abs(in.local - half) - half + vec2<f32>(r, r);
-    let d = length(max(q, vec2<f32>(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - r;
+    var d = rounded(in.local, in.size, in.shape.x);
+    if (in.notch.x > 0.0) {
+        let upper = rounded(in.local, vec2<f32>(in.size.x, in.notch.y), in.shape.x);
+        let lower = rounded(in.local, vec2<f32>(in.notch.x, in.size.y), in.shape.x);
+        d = min(upper, lower);
+    }
     var cov = clamp(0.5 - d, 0.0, 1.0);
     if (in.shape.y > 0.0) {
         cov = cov - clamp(0.5 - (d + in.shape.y), 0.0, 1.0);
@@ -2870,6 +2917,51 @@ mod tests {
             line,
             first,
             end,
+            after: false,
+        }
+    }
+
+    /// A lift row with your echo after it.
+    fn span_before_echo(id: u64, line: i32, first: usize, end: usize) -> LiftSpan {
+        LiftSpan {
+            after: true,
+            ..span(id, line, first, end)
+        }
+    }
+
+    #[test]
+    fn a_band_steps_in_around_your_echo_on_its_last_row() {
+        // The fight prompt: a tank line, the gauge row, and the vitals
+        // row your echo follows.
+        let spans = [
+            span(1, 3, 0, 25),
+            span(1, 4, 0, 52),
+            span_before_echo(1, 5, 0, 42),
+        ];
+        let boxes = lift_boxes(&spans, 0, 10);
+        assert_eq!(boxes[0].notch, Some(42));
+        let [band] = band_rects(&boxes, 0.0, 7.8, 17.5, 1.0)[..] else {
+            panic!("one band");
+        };
+        assert!((band.w - (52.0 * 7.8 + 8.0)).abs() < 1e-3);
+        let notch = band.notch.expect("the notch");
+        // 4 px past the last row's last glyph, down from that row's top.
+        assert!((notch[0] - (42.0 * 7.8 + 8.0)).abs() < 1e-3);
+        assert_eq!(notch[1], 2.0 * 17.5 + 2.0);
+        let quad = band_instances(&[band], [0.0, 0.0], paint(1, 2, 3, 1.0), None, 1.0);
+        assert_eq!(quad[0].uv_max, notch);
+        // Nothing after it, the last row widest, or one row: one box.
+        for spans in [
+            vec![span(1, 3, 0, 25), span(1, 4, 0, 52), span(1, 5, 0, 42)],
+            vec![span(1, 4, 0, 30), span_before_echo(1, 5, 0, 42)],
+            vec![span_before_echo(1, 5, 0, 42)],
+        ] {
+            let boxes = lift_boxes(&spans, 0, 10);
+            assert_eq!(boxes[0].notch, None, "{spans:?}");
+            let rects = band_rects(&boxes, 0.0, 7.8, 17.5, 1.0);
+            assert_eq!(rects[0].notch, None);
+            let quad = band_instances(&rects, [0.0, 0.0], paint(1, 2, 3, 1.0), None, 1.0);
+            assert_eq!(quad[0].uv_max, [0.0, 0.0]);
         }
     }
 
@@ -2890,14 +2982,16 @@ mod tests {
                     top: 1,
                     bottom: 2,
                     left: 0,
-                    right: 35
+                    right: 35,
+                    notch: None,
                 },
                 LiftBox {
                     id: 2,
                     top: 4,
                     bottom: 4,
                     left: 4,
-                    right: 9
+                    right: 9,
+                    notch: None,
                 },
             ]
         );
@@ -2915,6 +3009,7 @@ mod tests {
             bottom: 3,
             left: 0,
             right: 35,
+            notch: None,
         }];
         let [band] = band_rects(&boxes, 0.0, 7.8, 17.5, 1.0)[..] else {
             panic!("one band");
@@ -2940,6 +3035,7 @@ mod tests {
             bottom: row,
             left: 0,
             right: 10,
+            notch: None,
         };
         let rects = band_rects(&[lift(1, 4), lift(2, 5)], 0.0, 10.0, 20.0, 1.0);
         assert_eq!(rects[0].y + rects[0].h, 5.0 * 20.0 - 1.0);
@@ -2960,6 +3056,7 @@ mod tests {
             y: 4.0,
             w: 100.0,
             h: 43.0,
+            notch: None,
         };
         let fill = paint(0x3b, 0x42, 0x52, 1.0);
         let dark = band_instances(&[rect], [8.0, 4.0], fill, None, 2.0);
