@@ -444,17 +444,35 @@ fn forsaken_host(host: &str, port: u16) -> bool {
 }
 
 /// The local ports tests have count as The Forsaken Lands. Each fake game
-/// listens on a port of its own, so one test never changes another.
+/// listens on a port of its own, and a port leaves the list when its test
+/// ends, so one test never changes another, even when a later fake game
+/// gets the same port.
 #[cfg(test)]
 static FORSAKEN_TEST_PORTS: std::sync::Mutex<Vec<u16>> = std::sync::Mutex::new(Vec::new());
 
-/// Have the fake game on the local `port` count as The Forsaken Lands, so
-/// a capture that reads no Aabahran codes plays by its rules there.
+/// A local port that counts as The Forsaken Lands until this drops.
 #[cfg(test)]
-pub(crate) fn count_as_forsaken_lands(port: u16) {
+#[derive(Debug)]
+pub(crate) struct ForsakenTestPort(u16);
+
+#[cfg(test)]
+impl Drop for ForsakenTestPort {
+    fn drop(&mut self) {
+        if let Ok(mut ports) = FORSAKEN_TEST_PORTS.lock() {
+            ports.retain(|&port| port != self.0);
+        }
+    }
+}
+
+/// Have the fake game on the local `port` count as The Forsaken Lands, so
+/// a capture that reads no Aabahran codes plays by its rules there, until
+/// the returned guard drops.
+#[cfg(test)]
+pub(crate) fn count_as_forsaken_lands(port: u16) -> ForsakenTestPort {
     if let Ok(mut ports) = FORSAKEN_TEST_PORTS.lock() {
         ports.push(port);
     }
+    ForsakenTestPort(port)
 }
 
 #[cfg(test)]
@@ -2827,6 +2845,18 @@ mod tests {
     use super::base64_encode;
     use crate::input::LineEffects;
     use crate::profile::Profile;
+
+    #[test]
+    fn a_test_port_counts_as_the_forsaken_lands_only_while_its_guard_lives() {
+        // Port 1 is never a fake game's, which binds port 0.
+        assert!(!super::forsaken_host("127.0.0.1", 1));
+        let guard = super::count_as_forsaken_lands(1);
+        assert!(super::forsaken_host("127.0.0.1", 1));
+        assert!(!super::forsaken_host("127.0.0.1", 2));
+        drop(guard);
+        assert!(!super::forsaken_host("127.0.0.1", 1));
+        assert!(super::forsaken_host("play.theforsakenlands.com", 1));
+    }
 
     #[test]
     fn core_supports_set_names_every_package_vosh_reads() {

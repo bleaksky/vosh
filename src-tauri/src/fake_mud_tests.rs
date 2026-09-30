@@ -95,6 +95,9 @@ struct Harness {
     port: u16,
     /// The fake game serves these options to the next connection.
     fake: Arc<StdMutex<Options>>,
+    /// The fake game counts as The Forsaken Lands while this holds a
+    /// guard, which drops with the harness.
+    forsaken: StdMutex<Option<crate::session::ForsakenTestPort>>,
 }
 
 impl Harness {
@@ -143,6 +146,7 @@ impl Harness {
             dir,
             port,
             fake,
+            forsaken: StdMutex::new(None),
         }
     }
 
@@ -303,8 +307,10 @@ impl Harness {
 
     /// Have the fake game count as The Forsaken Lands, as the real host
     /// does, so a capture that reads no Aabahran codes plays by its rules.
+    /// It stops counting when the harness goes.
     fn count_as_forsaken_lands(&self) {
-        crate::session::count_as_forsaken_lands(self.port);
+        let guard = crate::session::count_as_forsaken_lands(self.port);
+        *self.forsaken.lock().expect("the guard") = Some(guard);
     }
 
     /// Where the profile `name` keeps its file.
