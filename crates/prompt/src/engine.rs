@@ -7,15 +7,41 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, FixedOffset, SecondsFormat};
+use serde::Serialize;
 use serde_json::Value as Json;
 
 use crate::aabahran::Who;
-use crate::config::PromptConfig;
-use crate::gmcp::{Observed, CHAR_STATE, CHAR_STATUS};
+use crate::config::{CaptureConfig, CaptureSource, PromptConfig};
+use crate::gmcp::{CharPrompt, Observed, CHAR_STATE, CHAR_STATUS};
 use crate::stage::Stage;
 use crate::template::Template;
 use crate::vars::{forsaken_lands, Vars};
+
+/// What told Vosh your prompt settings, in `session://game-prompt-seen`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SeenKind {
+    /// Char.Prompt.
+    Gmcp,
+    /// A line that shows your PROMPT setting.
+    Prompt,
+    /// A line that shows your fight prompt setting.
+    Fprompt,
+    /// You turned prompts off in the game.
+    Off,
+}
+
+/// The game told Vosh your prompt settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GamePromptSeen {
+    pub kind: SeenKind,
+    /// The setting as the game stores it. For Char.Prompt it is the
+    /// PROMPT, or the fight prompt when only that changed.
+    pub text: String,
+    /// The active profile's capture took it, which raises the toast.
+    pub applied: bool,
+}
 
 /// The live profile's custom prompt.
 #[derive(Debug, Clone, Default)]
@@ -37,6 +63,11 @@ pub struct PromptEngine {
     /// Who the prompt is for, from the packets, which decides what
     /// Aabahran's `%u` and `%s` print.
     who: Who,
+    /// You turned prompts off in the game.
+    prompts_off: bool,
+    /// What the game said of your prompt settings since the session
+    /// last took it.
+    seen: Vec<GamePromptSeen>,
 }
 
 impl PromptEngine {
@@ -66,13 +97,78 @@ impl PromptEngine {
     }
 
     /// Keep a GMCP packet. Char.Status and Char.State say who the prompt
-    /// is for, and a change compiles the capture again.
+    /// is for, and a change compiles the capture again. Char.Prompt is
+    /// the game's own word on your prompt settings, which an aabahran
+    /// capture follows (D10).
     pub fn observe(&mut self, package: &str, data: Json, at: DateTime<FixedOffset>) -> Observed {
         let observed = self.vars.observe(package, data, at);
         if package.eq_ignore_ascii_case(CHAR_STATUS) || package.eq_ignore_ascii_case(CHAR_STATE) {
             self.follow_who();
         }
+        if let Some(prompt) = &observed.prompt {
+            let seen = self.follow_char_prompt(prompt, at);
+            self.seen.push(seen);
+        }
         observed
+    }
+
+    /// Follow a Char.Prompt. `enabled` says whether your text prompt is
+    /// on. An aabahran capture that follows the game takes settings that
+    /// differ from the ones it holds, with the source and the time.
+    fn follow_char_prompt(
+        &mut self,
+        prompt: &CharPrompt,
+        at: DateTime<FixedOffset>,
+    ) -> GamePromptSeen {
+        self.prompts_off = !prompt.enabled;
+        let mut text = prompt.prompt.clone();
+        let mut applied = false;
+        if let CaptureConfig::Aabahran(codes) = &self.config.capture {
+            let differs = codes.prompt != prompt.prompt || codes.fprompt != prompt.fprompt;
+            if codes.follow_game && differs {
+                if codes.prompt == prompt.prompt {
+                    text.clone_from(&prompt.fprompt);
+                }
+                let mut config = self.config.clone();
+                if let CaptureConfig::Aabahran(codes) = &mut config.capture {
+                    codes.prompt.clone_from(&prompt.prompt);
+                    codes.fprompt.clone_from(&prompt.fprompt);
+                    codes.source = Some(CaptureSource::Gmcp);
+                    codes.seen_at = Some(stamp(at));
+                }
+                self.set_config(config);
+                applied = true;
+            }
+        }
+        GamePromptSeen {
+            kind: SeenKind::Gmcp,
+            text,
+            applied,
+        }
+    }
+
+    /// Apply the latest Char.Prompt to the table a profile switch just
+    /// handed over, by the rule every packet follows. Noted for the
+    /// session only when the capture took it.
+    pub fn follow_latest(&mut self, at: DateTime<FixedOffset>) {
+        let Some(prompt) = self.vars.gmcp().char_prompt().cloned() else {
+            return;
+        };
+        let seen = self.follow_char_prompt(&prompt, at);
+        if seen.applied {
+            self.seen.push(seen);
+        }
+    }
+
+    /// What the game said of your prompt settings since the last call,
+    /// oldest first, for `session://game-prompt-seen`.
+    pub fn take_seen(&mut self) -> Vec<GamePromptSeen> {
+        std::mem::take(&mut self.seen)
+    }
+
+    /// You turned prompts off in the game.
+    pub fn prompts_off(&self) -> bool {
+        self.prompts_off
     }
 
     /// Who the prompt is for.
@@ -147,6 +243,8 @@ impl PromptEngine {
         self.reported_vars = None;
         self.known_host = known_host;
         self.forget_who();
+        self.prompts_off = false;
+        self.seen.clear();
         self.apply_rules();
     }
 
@@ -167,6 +265,8 @@ impl PromptEngine {
         self.reported_vars = None;
         self.known_host = false;
         self.forget_who();
+        self.prompts_off = false;
+        self.seen.clear();
         self.apply_rules();
     }
 
@@ -189,6 +289,11 @@ impl PromptEngine {
             self.vars.set_forsaken(forsaken);
         }
     }
+}
+
+/// A time as `seen_at` stores it, RFC 3339 to the second.
+fn stamp(at: DateTime<FixedOffset>) -> String {
+    at.to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 
 #[cfg(test)]
@@ -390,6 +495,211 @@ mod tests {
         engine.connect(true);
         assert!(!engine.who().immortal);
         assert!(!pacify(&engine));
+    }
+
+    /// A profile that follows the game's settings with `prompt`.
+    fn following(prompt: &str) -> PromptConfig {
+        PromptConfig {
+            draw: true,
+            template: "%hp".into(),
+            capture: CaptureConfig::Aabahran(AabahranCapture {
+                prompt: prompt.into(),
+                ..AabahranCapture::default()
+            }),
+            ..PromptConfig::default()
+        }
+    }
+
+    fn char_prompt(enabled: bool, prompt: &str, fprompt: &str) -> serde_json::Value {
+        json!({"enabled": enabled, "prompt": prompt, "fprompt": fprompt})
+    }
+
+    fn codes(engine: &PromptEngine) -> AabahranCapture {
+        match &engine.config().capture {
+            CaptureConfig::Aabahran(codes) => codes.clone(),
+            other => panic!("an aabahran capture, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_changed_char_prompt_updates_the_capture_and_is_noted_once() {
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.set_config(following("<%hhp> "));
+        let revision = engine.revision();
+        engine.observe(
+            "Char.Prompt",
+            char_prompt(true, "%n%P%C<%hhp %mm %vmv> ", ""),
+            at(),
+        );
+        assert!(engine.vars.new_build(), "the first packet is the sign");
+        let got = codes(&engine);
+        assert_eq!(got.prompt, "%n%P%C<%hhp %mm %vmv> ");
+        assert_eq!(got.source, Some(CaptureSource::Gmcp));
+        assert_eq!(got.seen_at.as_deref(), Some("2026-09-29T12:58:02-05:00"));
+        assert!(
+            engine.revision() > revision,
+            "Settings reads the table again"
+        );
+        assert_eq!(
+            engine.take_seen(),
+            [GamePromptSeen {
+                kind: SeenKind::Gmcp,
+                text: "%n%P%C<%hhp %mm %vmv> ".into(),
+                applied: true,
+            }]
+        );
+        assert!(engine.take_seen().is_empty());
+        // The capture reads the new codes at once.
+        assert!(engine
+            .stage
+            .recognize(b"", "<10hp 20m 30mv> ", crate::stage::End::Settled)
+            .is_some());
+
+        // The same settings again change nothing and raise no toast.
+        let revision = engine.revision();
+        engine.observe(
+            "Char.Prompt",
+            char_prompt(true, "%n%P%C<%hhp %mm %vmv> ", ""),
+            at(),
+        );
+        assert_eq!(engine.revision(), revision);
+        assert_eq!(
+            engine.take_seen(),
+            [GamePromptSeen {
+                kind: SeenKind::Gmcp,
+                text: "%n%P%C<%hhp %mm %vmv> ".into(),
+                applied: false,
+            }]
+        );
+
+        // A new fight prompt alone names the fight prompt.
+        engine.observe(
+            "Char.Prompt",
+            char_prompt(true, "%n%P%C<%hhp %mm %vmv> ", "`1%h``hp [%p] > "),
+            at(),
+        );
+        assert_eq!(codes(&engine).fprompt, "`1%h``hp [%p] > ");
+        assert_eq!(engine.take_seen()[0].text, "`1%h``hp [%p] > ");
+    }
+
+    #[test]
+    fn enabled_raises_and_clears_prompts_off_and_keeps_the_codes() {
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.set_config(following("%n%P%C<%hhp %mm %vmv> "));
+        engine.observe(
+            "Char.Prompt",
+            char_prompt(false, "%n%P%C<%hhp %mm %vmv> ", ""),
+            at(),
+        );
+        assert!(engine.prompts_off());
+        assert_eq!(codes(&engine).prompt, "%n%P%C<%hhp %mm %vmv> ");
+        assert!(!engine.take_seen()[0].applied);
+        engine.observe(
+            "Char.Prompt",
+            char_prompt(true, "%n%P%C<%hhp %mm %vmv> ", ""),
+            at(),
+        );
+        assert!(!engine.prompts_off());
+        engine.observe(
+            "Char.Prompt",
+            char_prompt(false, "%n%P%C<%hhp %mm %vmv> ", ""),
+            at(),
+        );
+        engine.disconnect();
+        assert!(
+            !engine.prompts_off(),
+            "a new connection starts with prompts on"
+        );
+    }
+
+    #[test]
+    fn only_an_aabahran_capture_that_follows_the_game_takes_a_char_prompt() {
+        for config in [
+            PromptConfig::from_legacy(true, "%hp"),
+            PromptConfig {
+                capture: CaptureConfig::Regex(RegexCapture {
+                    lines: vec![r"<(?<hp>\d+)hp>".into()],
+                    ..RegexCapture::default()
+                }),
+                ..PromptConfig::default()
+            },
+            PromptConfig {
+                capture: CaptureConfig::Aabahran(AabahranCapture {
+                    prompt: "<%hhp> ".into(),
+                    follow_game: false,
+                    ..AabahranCapture::default()
+                }),
+                ..PromptConfig::default()
+            },
+        ] {
+            let mut engine = PromptEngine::default();
+            engine.connect(true);
+            engine.set_config(config.clone());
+            engine.observe("Char.Prompt", char_prompt(true, "%h %m ", ""), at());
+            assert_eq!(*engine.config(), config);
+            assert!(!engine.take_seen()[0].applied);
+        }
+    }
+
+    #[test]
+    fn a_switch_applies_the_latest_char_prompt_to_the_new_profile() {
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.set_config(PromptConfig::from_legacy(true, "%hp"));
+        engine.observe("Char.Prompt", char_prompt(true, "%h %m ", ""), at());
+        let _ = engine.take_seen();
+
+        engine.switch_profile();
+        engine.set_config(following("<%hhp> "));
+        engine.follow_latest(at());
+        assert_eq!(codes(&engine).prompt, "%h %m ");
+        assert_eq!(engine.take_seen().len(), 1);
+
+        // A profile that reads nothing saves nothing from it.
+        engine.switch_profile();
+        engine.set_config(PromptConfig::from_legacy(true, "%hp"));
+        engine.follow_latest(at());
+        assert!(engine.config().capture.is_none());
+        assert!(engine.take_seen().is_empty());
+
+        // Without a packet this session there is nothing to apply.
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.set_config(following("<%hhp> "));
+        engine.follow_latest(at());
+        assert_eq!(codes(&engine).prompt, "<%hhp> ");
+    }
+
+    #[test]
+    fn every_char_prompt_fixture_is_taken_as_sent() {
+        for file in [
+            "char-prompt.gmcp",
+            "char-prompt-fight.gmcp",
+            "char-prompt-off.gmcp",
+        ] {
+            let path = format!(
+                "{}/../../fixtures/gmcp/aabahran/{file}",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            let text = std::fs::read_to_string(&path).unwrap();
+            let (package, body) = text.trim().split_once(' ').unwrap();
+            let data: serde_json::Value = serde_json::from_str(body).unwrap();
+            let mut engine = PromptEngine::default();
+            engine.connect(true);
+            engine.set_config(following(""));
+            engine.observe(package, data.clone(), at());
+            let got = codes(&engine);
+            assert_eq!(got.prompt, data["prompt"].as_str().unwrap(), "{file}");
+            assert_eq!(got.fprompt, data["fprompt"].as_str().unwrap(), "{file}");
+            assert!(engine.stage.has_recognizer(), "{file} compiles as sent");
+            assert_eq!(
+                engine.prompts_off(),
+                !data["enabled"].as_bool().unwrap(),
+                "{file}"
+            );
+        }
     }
 
     #[test]

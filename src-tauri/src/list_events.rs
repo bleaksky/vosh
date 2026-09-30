@@ -67,6 +67,14 @@ impl ListChanges {
         Self::between(before, ListRevisions::of(profile))
     }
 
+    /// The prompt table alone, for a step that only writes it, such as
+    /// following the settings the game sends.
+    pub(crate) const PROMPT: Self = Self {
+        triggers: false,
+        aliases: false,
+        prompt: true,
+    };
+
     /// The trigger list alone, for a step that only writes triggers.
     pub(crate) const TRIGGERS: Self = Self {
         triggers: true,
