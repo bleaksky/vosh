@@ -4043,6 +4043,47 @@ mod tests {
     }
 
     #[test]
+    fn drawing_off_on_a_tank_block_brings_back_only_the_line_it_replaced() {
+        let mut wire = Wire::new(codes_profile(CODES, HP));
+        let _ = wire.read(format!("{TANK_LINE}\n\r{FIGHT_LINE}\n\r").as_bytes());
+        wire.p.set_prompt_config(vosh_prompt::PromptConfig {
+            draw: false,
+            ..wire.p.prompt.config().clone()
+        });
+        let out = super::repaint_step(&mut wire.p, false, tokio::time::Instant::now());
+        assert_eq!(
+            out.replace,
+            Some(vosh_prompt::stage::Replace {
+                gen: wire.gen0 + 1,
+                bytes: with(&[&wire.mark(2), FIGHT_LINE.as_bytes(), b"\r\n"]),
+                fresh: false,
+            })
+        );
+    }
+
+    #[test]
+    fn a_ga_after_prompt_all_draws_in_the_same_and_the_next_read() {
+        let profile = || codes_profile("%n%P%C<%hhp %mm %vmv> ", HP);
+        let mut wire = Wire::new(profile());
+        let out = wire.read_ga(b"<159hp 310m 489mv> ");
+        assert_eq!(out.bytes, with(&[&wire.mark(1), b"<159>\x1b[0m"]));
+        let screen = same_at_every_split(
+            &profile,
+            "You flee.\n\rTester: [===|===|===|---]\n\r<159hp 310m 489mv> *\n\rThe guard arrives.\n\r<159hp 310m 489mv> *",
+        );
+        assert_eq!(
+            screen,
+            [
+                "You flee.",
+                "Tester: [===|===|===|---]",
+                "<159>",
+                "The guard arrives.",
+                "<159>"
+            ]
+        );
+    }
+
+    #[test]
     fn a_held_line_the_rest_never_follows_shows_as_any_line() {
         let text = format!("{TANK_LINE}\n\rYou are hungry.\n\r{FIGHT_LINE}\n\r");
         let screen = same_at_every_split(&|| codes_profile(CODES, HP), &text);
