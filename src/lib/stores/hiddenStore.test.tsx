@@ -16,6 +16,8 @@ import { aabahranPacket } from '../../test/aabahranGmcp';
 
 type Handler = (event: { payload: unknown }) => void;
 const handlers = new Map<string, Set<Handler>>();
+// What hidden_get answers, the state the backend last reported.
+let reported: unknown = null;
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: async (event: string, cb: Handler) => {
@@ -31,6 +33,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: async (cmd: string) => {
     if (cmd === 'ui_get_config') return {};
     if (cmd === 'affects_snapshot_get') return null;
+    if (cmd === 'hidden_get') return reported;
     if (cmd === 'target_get') return { name: null, room_idx: null, quick_keys: [] };
     throw new Error(`no fake for ${cmd}`);
   },
@@ -115,6 +118,7 @@ function vitalValues(html: string): string[] {
 beforeEach(() => {
   vi.resetModules();
   handlers.clear();
+  reported = null;
   vi.stubGlobal('window', globalThis);
 });
 
@@ -169,6 +173,51 @@ describe('hiddenStore', () => {
       expect(drawn.group).not.toContain('Tester');
     });
   }
+
+  it('reads what the backend last reported in a window that opens during the song', async () => {
+    // Settings opens, or the main window reloads, on the older build
+    // while the song is on. The backend reported the change before this
+    // window listened, and it reports each change once.
+    const older = lament.cases[2];
+    reported = older.hidden;
+    const s = await load();
+    expect(s.hidden.getHidden()).toEqual(older.hidden);
+    // The older build keeps sending the true values.
+    for (const name of older.packets) packet(name);
+    expect(s.vitals.getVitals()).toMatchObject({ hp: 0, maxhp: 0, hidden: true });
+    const drawn = panes(s);
+    expect(vitalValues(drawn.vitals)).toEqual(['?', '? / ?', '? / ?', '? / ?']);
+    expect(drawn.affects).toContain('The game hides your affects right now.');
+    expect(drawn.group).toContain('The game hides your group right now.');
+    expect(drawn.group).not.toContain('Tester');
+  });
+
+  it('keeps a report or a disconnect that lands before the answer', async () => {
+    const late = () => {
+      let answer: (value: unknown) => void = () => undefined;
+      reported = new Promise((resolve) => {
+        answer = resolve;
+      });
+      return (value: unknown) => answer(value);
+    };
+
+    let answer = late();
+    let s = await load();
+    hidden(NOTHING);
+    answer(EVERYTHING);
+    await settle();
+    expect(s.hidden.getHidden()).toEqual(NOTHING);
+
+    vi.resetModules();
+    handlers.clear();
+    answer = late();
+    s = await load();
+    hidden(EVERYTHING);
+    disconnect();
+    answer(EVERYTHING);
+    await settle();
+    expect(s.hidden.getHidden()).toEqual(NOTHING);
+  });
 
   it('shows each pane again once the song ends', async () => {
     const s = await load();
