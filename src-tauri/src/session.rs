@@ -5175,3 +5175,7 @@ mod tests {
         assert_eq!(base64_encode(&[0xff, 0xfe, 0xfd]), "//79");
     }
 }
+
+#[cfg(test)]
+#[path = "session_show_tests.rs"]
+mod show_tests;
