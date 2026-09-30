@@ -1244,3 +1244,67 @@ fn enter_on_an_empty_line_ends_the_row_of_a_prompt_left_in_the_text() {
         }
     }
 }
+
+/// `p` with a Prompts trigger on `hp` that does `action`.
+fn prompts_trigger(mut p: Profile, action: vosh_trigger::TriggerAction) -> Profile {
+    p.triggers
+        .set(vosh_trigger::Trigger {
+            name: "on-prompt".into(),
+            patterns: vec![vosh_trigger::TriggerPattern {
+                pattern: "hp".into(),
+                enabled: true,
+            }],
+            priority: 0,
+            enabled: true,
+            actions: vec![action],
+            preset: None,
+            group: None,
+            target: vosh_trigger::TriggerTarget::Prompt,
+        })
+        .expect("the trigger compiles");
+    p
+}
+
+#[test]
+fn leaving_pinned_with_drawing_off_keeps_what_prompts_triggers_did() {
+    use vosh_prompt::PromptShow;
+    use vosh_trigger::TriggerAction;
+    let replace = TriggerAction::Replace {
+        template: "HITPOINTS".into(),
+    };
+    for action in [TriggerAction::Gag, replace] {
+        let make = |show| {
+            showing(
+                prompts_trigger(profile(CODES, HP, false), action.clone()),
+                show,
+            )
+        };
+        let quiet = wire_fixture("quiet");
+        // In the text all along.
+        let mut text = Session::new(make(PromptShow::Text));
+        let mut want = crate::term_grid::TermGrid::new(80, 30);
+        want.session_output(&text.read(&quiet).out);
+        // Pinned, then back before anything else lands.
+        for back in [PromptShow::Text, PromptShow::Lifted] {
+            let mut session = Session::new(make(PromptShow::Pinned));
+            let mut grid = crate::term_grid::TermGrid::new(80, 30);
+            let read = session.read(&quiet);
+            let band = read.out.pin.clone().expect("the band");
+            grid.session_output(&read.out);
+            // A repaint while pinned keeps the band as the trigger left it.
+            let again = session.repaint();
+            assert!(
+                again.pin.is_none() || again.pin.as_ref() == Some(&band),
+                "{action:?}"
+            );
+            session.p = showing(std::mem::take(&mut session.p), back);
+            let out = session.repaint();
+            grid.session_output(&out);
+            assert_eq!(
+                rows_of(&grid),
+                rows_of(&want),
+                "{action:?} back to {back:?}"
+            );
+        }
+    }
+}

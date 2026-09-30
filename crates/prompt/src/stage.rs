@@ -710,6 +710,15 @@ impl Swallow {
     }
 }
 
+/// A prompt pinned with drawing off, after Prompts triggers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PinnedShown {
+    /// What the band shows.
+    band: Vec<u8>,
+    /// What the text would have shown, line ends included.
+    text: Vec<u8>,
+}
+
 /// A line the ring may record.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct Seen {
@@ -755,6 +764,11 @@ pub struct Stage {
     shown_as: PromptShow,
     /// What the band shows while your prompt shows pinned.
     pinned: Option<Vec<u8>>,
+    /// A prompt pinned with drawing off, as Prompts triggers left it: what
+    /// the band shows for it, and what the text would have shown, so a
+    /// repaint of the band and a move back to the text keep what the
+    /// triggers did.
+    pinned_shown: Option<PinnedShown>,
     /// The next empty line writes nothing, since the pinned prompt's row
     /// it would have ended is not in the text.
     swallow: Option<Swallow>,
@@ -1249,6 +1263,7 @@ impl Stage {
     ) {
         let body = pin_body(&block, Some(rendered));
         self.pin(out, block, painted, before, body);
+        self.pinned_shown = None;
     }
 
     /// Pin `block` shown as sent, drawing off: the band shows every line
@@ -1263,10 +1278,17 @@ impl Stage {
         display: Option<&[u8]>,
     ) {
         let mut body = block.heads();
+        let mut text = block.heads();
         if let Some(display) = display {
             body.extend_from_slice(display);
+            text.extend_from_slice(display);
+            text.extend_from_slice(block.final_line().end.terminator());
         }
         let body = trim_line_end(body);
+        self.pinned_shown = Some(PinnedShown {
+            band: body.clone(),
+            text,
+        });
         self.pin(out, block, painted, before, body);
     }
 
@@ -1468,7 +1490,11 @@ impl Stage {
             return;
         };
         let rendered = rendered.filter(|_| !block.afk);
-        let body = pin_body(block, rendered);
+        // Drawing off, the band keeps what Prompts triggers left.
+        let body = match (rendered, &self.pinned_shown) {
+            (None, Some(shown)) => shown.band.clone(),
+            _ => pin_body(block, rendered),
+        };
         if body == *pinned {
             return;
         }
@@ -1506,6 +1532,7 @@ impl Stage {
     fn move_from_pinned(&mut self, out: &mut Output, rendered: Option<&str>) {
         out.pin = Some(Vec::new());
         self.pinned = None;
+        let pinned_shown = self.pinned_shown.take();
         self.shown_as = self.show;
         if self.swallow.take().is_none() {
             return;
@@ -1537,10 +1564,17 @@ impl Stage {
                 });
             }
             None => {
-                let mut shown = block.heads();
-                let last = block.final_line();
-                shown.extend_from_slice(&last.raw);
-                shown.extend_from_slice(last.end.terminator());
+                // As Prompts triggers left it, when it pinned drawing off.
+                let shown = match pinned_shown {
+                    Some(shown) => shown.text,
+                    None => {
+                        let mut shown = block.heads();
+                        let last = block.final_line();
+                        shown.extend_from_slice(&last.raw);
+                        shown.extend_from_slice(last.end.terminator());
+                        shown
+                    }
+                };
                 let bytes = self.lift_shown(shown);
                 out.text(&bytes);
             }
@@ -2791,6 +2825,39 @@ mod tests {
         let mut stage = stage(SETTLES, true);
         stage.set_show(PromptShow::Pinned);
         stage
+    }
+
+    #[test]
+    fn a_prompt_pinned_with_drawing_off_keeps_what_prompts_triggers_did() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        let block = read(&stage, PROMPT, End::Line);
+        stage.pin_shown(&mut out, block, None, b"", Some(b"[1020/1020HITPOINTS]"));
+        assert_eq!(out.pin.as_deref(), Some(&b"[1020/1020HITPOINTS]"[..]));
+        stage.finish(&mut out);
+        // A repaint of the band keeps the trigger's text.
+        let mut again = Output::new(false);
+        stage.repaint(&mut again, None);
+        assert_eq!(again.pin, None);
+        // Back in the text it shows as the trigger left it.
+        stage.set_show(PromptShow::Text);
+        let mut back = Output::new(false);
+        stage.repaint(&mut back, None);
+        assert_eq!(back.bytes, b"[1020/1020HITPOINTS]\r\n");
+        // A trigger that hid it leaves nothing to bring back.
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.pin_shown(&mut out, block, None, b"", None);
+        stage.finish(&mut out);
+        let mut again = Output::new(false);
+        stage.repaint(&mut again, None);
+        assert_eq!(again.pin, None, "the band stays empty");
+        stage.set_show(PromptShow::Text);
+        let mut back = Output::new(false);
+        stage.repaint(&mut back, None);
+        assert!(back.bytes.is_empty());
     }
 
     #[test]
