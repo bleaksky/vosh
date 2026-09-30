@@ -20,8 +20,15 @@ regex-automata = "0.4"
 # Local time for the clock pieces (clock only, no default features).
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
+[features]
+# The test kit: the game's own prompt printer, for the tests here and the
+# session tests in src-tauri.
+testkit = []
+
 [dev-dependencies]
 vosh-gmcp = { path = "../gmcp" }
+# The tests here read the test kit.
+vosh-prompt = { path = ".", features = ["testkit"] }
 
 [lints]
 workspace = true

@@ -5253,6 +5253,7 @@ dependencies = [
  "serde",
  "serde_json",
  "vosh-gmcp",
+ "vosh-prompt",
 ]
 
 [[package]]

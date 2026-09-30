@@ -23,6 +23,8 @@
 //! - [`stage`] decides what Vosh writes around your prompt, in one output
 //!   per socket read, with the regions a later output replaces.
 //! - [`wrap`] is the word wrap both renderers share.
+//! - `testkit`, behind the `testkit` feature, prints prompts the way the
+//!   game does, for tests.
 
 pub mod aabahran;
 pub mod capture;
@@ -33,6 +35,8 @@ pub mod gmcp;
 pub mod render;
 pub mod stage;
 pub mod template;
+#[cfg(feature = "testkit")]
+pub mod testkit;
 pub mod vars;
 pub mod wrap;
 
