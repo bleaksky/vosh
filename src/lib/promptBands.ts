@@ -13,7 +13,9 @@
 // layoutBands turns lifts into rectangles the way the prompt boards draw
 // the edit band: 4 px past the first and last glyph of the widest row, 2 px
 // above the first row and below the last, radius 4. Two lifts on adjacent
-// rows keep 2 px of ground between them. BandLayer draws them in a layer
+// rows keep 2 px of ground between them. When your echo follows a prompt
+// whose last row is narrower than the widest, the band steps in 4 px past
+// that row's last glyph, so the echo never sits on it. BandLayer draws them in a layer
 // under xterm's text, repositioned in xterm's own render frame so band and
 // text land in the same composite.
 
@@ -54,15 +56,22 @@ export interface LiftExtent {
   left: number;
   /** One past the rightmost glyph it shows in any row. */
   right: number;
+  /** One past the last glyph of its last row, when that row is narrower
+   *  than the widest and something shows after the lift on it, such as
+   *  your echo, so the band steps in there instead of running under it. */
+  notch?: number;
 }
 
-/** A band in CSS px, relative to the first row of the viewport. */
+/** A band in CSS px, relative to the first row of the viewport. A band
+ *  with a notch leaves out the part right of `notch.x` and below
+ *  `notch.y`, both from its own left and top, where your echo sits. */
 export interface BandBox {
   id: number;
   left: number;
   top: number;
   width: number;
   height: number;
+  notch?: { x: number; y: number };
 }
 
 /** The parts of an xterm the tracker reads. */
@@ -201,6 +210,8 @@ export class LiftTracker implements IDisposable {
       if (endRow < from) continue;
       let left = cols;
       let right = 0;
+      let lastRight = 0;
+      let after = false;
       for (let row = startRow; row <= endRow; row++) {
         const line = buffer.getLine(row);
         if (!line) continue;
@@ -220,9 +231,22 @@ export class LiftTracker implements IDisposable {
           left = Math.min(left, first);
           right = Math.max(right, last);
         }
+        if (row === endRow) {
+          lastRight = last;
+          // Anything that shows after the lift on its last row.
+          for (let x = Math.max(bound, 0); x < cols && !after; x++) {
+            cell.value = line.getCell(x, cell.value);
+            after =
+              (cell.value?.getWidth() ?? 1) > 0 && (cell.value?.getChars() ?? '').trim() !== '';
+          }
+        }
       }
       if (right <= left) continue;
-      out.push({ id: lift.id, top: startRow, bottom: endRow, left, right });
+      const extent: LiftExtent = { id: lift.id, top: startRow, bottom: endRow, left, right };
+      if (endRow > startRow && after && lastRight > left && lastRight < right) {
+        extent.notch = lastRight;
+      }
+      out.push(extent);
     }
     return out;
   }
@@ -242,9 +266,10 @@ export function markLifted(
   area.toggleAttribute(LIFTED_ATTR, on);
 }
 
-/** The band outsets the prompt boards measure. */
+/** The band outsets the prompt boards measure, and its corner radius. */
 export const BAND_X = 4;
 export const BAND_Y = 2;
+export const BAND_RADIUS = 4;
 /** A shared edge between lifts on adjacent rows stops 1 px inside its
  *  row instead of reaching 2 px past it, so 2 px of ground stays between
  *  the two bands. */
@@ -268,8 +293,64 @@ export function layoutBands(
     const bottom = (lift.bottom - viewportY + 1) * cellH + bottomOut;
     const left = lift.left * cellW - BAND_X;
     const right = lift.right * cellW + BAND_X;
-    return { id: lift.id, left, top, width: right - left, height: bottom - top };
+    const box: BandBox = { id: lift.id, left, top, width: right - left, height: bottom - top };
+    if (lift.notch !== undefined) {
+      box.notch = {
+        x: lift.notch * cellW + BAND_X - left,
+        y: (lift.bottom - viewportY) * cellH - top,
+      };
+    }
+    return box;
   });
+}
+
+/** The outline of a band `width` by `height` whose part right of `nx` and
+ *  below `ny` is left out, as an SVG path: radius `r` on each outer
+ *  corner, square where the rows above meet the last row. `inset` draws it
+ *  that far inside, for the light ring. */
+export function notchedPath(
+  width: number,
+  height: number,
+  nx: number,
+  ny: number,
+  r: number,
+  inset: number,
+): string {
+  const i = inset;
+  const a = r - i;
+  const n = (v: number) => String(Math.round(v * 1000) / 1000);
+  const arc = (x: number, y: number) => `A${n(a)} ${n(a)} 0 0 1 ${n(x)} ${n(y)}`;
+  return [
+    `M${n(r)} ${n(i)}`,
+    `H${n(width - r)}`,
+    arc(width - i, r),
+    `V${n(ny - r)}`,
+    arc(width - r, ny - i),
+    `H${n(nx - i)}`,
+    `V${n(height - r)}`,
+    arc(nx - r, height - i),
+    `H${n(r)}`,
+    arc(i, height - r),
+    `V${n(r)}`,
+    arc(r, i),
+    'Z',
+  ].join('');
+}
+
+/** The SVG a notched band draws: its fill, then the ring a light theme
+ *  shows half a pixel inside its edge. */
+function notchedSvg(box: BandBox): string {
+  const notch = box.notch;
+  if (!notch) return '';
+  const w = box.width;
+  const h = box.height;
+  const fill = notchedPath(w, h, notch.x, notch.y, BAND_RADIUS, 0);
+  const ring = notchedPath(w, h, notch.x, notch.y, BAND_RADIUS, 0.5);
+  return (
+    `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
+    `<path class="prompt-lift-fill" d="${fill}"/>` +
+    `<path class="prompt-lift-ring" d="${ring}"/></svg>`
+  );
 }
 
 /** How far down from its top the band layer, whose top sits at
@@ -435,6 +516,13 @@ export class BandLayer implements IDisposable {
       band.style.transform = `translate(${box.left + BAND_X}px, ${box.top + BAND_Y}px)`;
       band.style.width = `${box.width}px`;
       band.style.height = `${box.height}px`;
+      // A band that steps in around your echo is an outline, not a box.
+      const shape = notchedSvg(box);
+      if (band.dataset.shape !== shape) {
+        band.dataset.shape = shape;
+        band.innerHTML = shape;
+        band.classList.toggle('prompt-lift-band-notched', shape !== '');
+      }
     });
   }
 }

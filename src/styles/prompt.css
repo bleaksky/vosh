@@ -75,6 +75,34 @@
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.14);
 }
 
+/* A band that steps in around your echo on its last row draws as one SVG
+   outline, the fill and on a light theme the same ring half a pixel
+   inside its edge. */
+.prompt-lift-band.prompt-lift-band-notched,
+:root[data-appearance='light'] .prompt-lift-band.prompt-lift-band-notched {
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.prompt-lift-band-notched svg {
+  display: block;
+  overflow: visible;
+}
+
+.prompt-lift-fill {
+  fill: var(--selrow);
+}
+
+.prompt-lift-ring {
+  fill: none;
+}
+
+:root[data-appearance='light'] .prompt-lift-ring {
+  stroke: rgba(0, 0, 0, 0.14);
+  stroke-width: 1;
+}
+
 .terminal-area[data-prompt-lifted] .terminal-pane-live .terminal-host,
 .terminal-area[data-prompt-lifted] .terminal-pane-live .xterm .xterm-viewport,
 .terminal-area[data-prompt-lifted] .terminal-pane-live .xterm .xterm-screen {
