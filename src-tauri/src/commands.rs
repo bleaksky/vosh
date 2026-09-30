@@ -3249,9 +3249,20 @@ pub(crate) async fn ui_get_config(
     state: State<'_, SharedState>,
 ) -> Result<UiConfigPayload, String> {
     let p = state.profile.lock().await;
+    Ok(ui_config_of(&p, ui_config_generation()))
+}
+
+/// What `ui_get_config` hands the webview for the live profile `p`, read
+/// at `generation`. The prompt switch and template come from the
+/// `[prompt]` table, which holds them now (the Settings bridge, phases 2
+/// to 4 of the prompt editor).
+fn ui_config_of(p: &crate::profile::Profile, generation: u64) -> UiConfigPayload {
     let mut payload = UiConfigPayload::from_ui(&p.ui);
-    payload.generation = Some(ui_config_generation());
-    Ok(payload)
+    let prompt = p.prompt.config();
+    payload.prompt_template_enabled = prompt.draw;
+    payload.prompt_template.clone_from(&prompt.template);
+    payload.generation = Some(generation);
+    payload
 }
 
 /// Save the whole UI config. A copy read before the live config was last
@@ -3265,7 +3276,7 @@ pub(crate) async fn ui_set_config(
 ) -> Result<bool, String> {
     let applied = {
         let mut p = state.profile.lock().await;
-        apply_ui_config(&mut p.ui, config, ui_config_generation())
+        apply_ui_save(&mut p, config, ui_config_generation())
     };
     if !applied {
         return Ok(false);
@@ -3273,6 +3284,24 @@ pub(crate) async fn ui_set_config(
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
     Ok(true)
+}
+
+/// Write a whole config save onto the live profile `p`, unless it was
+/// read at a generation other than `current`. Returns whether it applied.
+/// The prompt switch and template go through to the `[prompt]` table,
+/// each only when it differs from what the table holds, so a save that
+/// carries them unchanged leaves a newer table alone, its capture and
+/// earlier designs included. The `[ui]` copy then follows the table.
+fn apply_ui_save(p: &mut crate::profile::Profile, config: UiConfigPayload, current: u64) -> bool {
+    let draw = config.prompt_template_enabled;
+    let template = config.prompt_template.clone();
+    if !apply_ui_config(&mut p.ui, config, current) {
+        return false;
+    }
+    let mut prompt = p.prompt.config().clone();
+    prompt.take_switch_and_template(draw, &template);
+    p.set_prompt_config(prompt);
+    true
 }
 
 /// Write a whole config save onto `ui`, unless it was read at a
@@ -4511,6 +4540,87 @@ mod tests {
         let mut live = UiConfig::default();
         assert!(super::apply_ui_config(&mut live, save_of(&edited, None), 4));
         assert_eq!(live.font_size, 16);
+    }
+
+    /// A live profile whose `[prompt]` table holds more than Settings
+    /// shows: a capture and an earlier design.
+    fn prompt_profile() -> crate::profile::Profile {
+        let mut p = crate::profile::Profile::default();
+        p.set_prompt_config(vosh_prompt::PromptConfig {
+            draw: true,
+            template: "%hp".into(),
+            previous_templates: vec!["%mana".into()],
+            capture: vosh_prompt::CaptureConfig::Regex(vosh_prompt::config::RegexCapture {
+                lines: vec![r"\[(?<hp>\d+)hp\]".into()],
+                ..vosh_prompt::config::RegexCapture::default()
+            }),
+        });
+        p
+    }
+
+    #[test]
+    fn settings_reads_the_prompt_switch_and_template_from_the_table() {
+        let mut p = prompt_profile();
+        // A [ui] copy that drifted never reaches Settings.
+        p.ui.prompt_template_enabled = false;
+        p.ui.prompt_template = "stale".into();
+        let payload = super::ui_config_of(&p, 5);
+        assert!(payload.prompt_template_enabled);
+        assert_eq!(payload.prompt_template, "%hp");
+        assert_eq!(payload.generation, Some(5));
+    }
+
+    #[test]
+    fn a_settings_save_with_an_unchanged_template_leaves_a_newer_table_alone() {
+        let mut p = prompt_profile();
+        let newer = p.prompt.config().clone();
+        let mut save = super::ui_config_of(&p, 4);
+        save.font_size = 16;
+        assert!(super::apply_ui_save(&mut p, save, 4));
+        assert_eq!(p.ui.font_size, 16);
+        assert_eq!(*p.prompt.config(), newer);
+        assert!(p.ui.prompt_template_enabled);
+        assert_eq!(p.ui.prompt_template, "%hp");
+    }
+
+    #[test]
+    fn the_settings_switch_and_template_write_through_to_the_table() {
+        let mut p = prompt_profile();
+        let mut save = super::ui_config_of(&p, 4);
+        save.prompt_template_enabled = false;
+        assert!(super::apply_ui_save(&mut p, save, 4));
+        let prompt = p.prompt.config();
+        assert!(!prompt.draw);
+        assert_eq!(prompt.template, "%hp");
+        assert_eq!(prompt.previous_templates, ["%mana"]);
+        assert!(!prompt.capture.is_none(), "the capture stays");
+        assert!(!p.ui.prompt_template_enabled);
+
+        let mut save = super::ui_config_of(&p, 4);
+        save.prompt_template = "[%hp/%maxhp]".into();
+        assert!(super::apply_ui_save(&mut p, save, 4));
+        let prompt = p.prompt.config();
+        assert_eq!(prompt.template, "[%hp/%maxhp]");
+        assert!(!prompt.draw);
+        assert_eq!(prompt.previous_templates, ["%mana"]);
+        assert!(!prompt.capture.is_none());
+        assert_eq!(p.ui.prompt_template, "[%hp/%maxhp]");
+
+        // The table is what the next save writes, the [ui] copy with it.
+        let file = crate::profile_config::ProfileConfig::from_profile(&p);
+        assert_eq!(file.prompt_config(), *p.prompt.config());
+        assert_eq!(file.ui.prompt_template, "[%hp/%maxhp]");
+    }
+
+    #[test]
+    fn a_settings_save_turned_away_leaves_the_table_alone() {
+        let mut p = prompt_profile();
+        let before = p.prompt.config().clone();
+        let mut save = super::ui_config_of(&p, 3);
+        save.prompt_template = "old profile".into();
+        assert!(!super::apply_ui_save(&mut p, save, 4));
+        assert_eq!(*p.prompt.config(), before);
+        assert_eq!(p.ui.prompt_template, "%hp");
     }
 
     #[test]
@@ -6576,8 +6686,10 @@ mod tests {
             ui.chip_style = pick(&["value_only", "caption", "icon"]);
             ui.moons_position = pick(&["right-edge", "left-edge"]);
             ui.paste_line_delay_ms = 10 * n;
-            ui.prompt_template_enabled = true;
-            ui.prompt_template = format!("<%h hp {n}>");
+            config.set_prompt(vosh_prompt::PromptConfig::from_legacy(
+                true,
+                &format!("<%h hp {n}>"),
+            ));
             config
         }
 

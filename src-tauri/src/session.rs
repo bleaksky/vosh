@@ -1170,7 +1170,7 @@ fn prompt_pass(p: &mut Profile, bytes: &[u8], already_shown: bool) -> Option<Pro
     let rendered_prompt = if result.display.is_none() {
         let rendered = render_custom_prompt(p);
         tracing::debug!(
-            template_len = p.ui.prompt_template.len(),
+            template_len = p.prompt.config().template.len(),
             rendered_len = rendered.as_ref().map_or(0, String::len),
             already_shown,
             "prompt: template render"
@@ -1191,12 +1191,13 @@ fn prompt_pass(p: &mut Profile, bytes: &[u8], already_shown: bool) -> Option<Pro
 /// the values triggers set, then the latest GMCP packets, then what Vosh
 /// itself knows, and draws `?` for a value the game hides.
 fn render_custom_prompt(p: &Profile) -> Option<String> {
-    if !p.ui.prompt_template_enabled {
+    let config = p.prompt.config();
+    if !config.draw {
         return None;
     }
     let vosh = prompt_supplies(p, Instant::now());
     let rendered = vosh_prompt::render_str(
-        &p.ui.prompt_template,
+        &config.template,
         &p.prompt.vars.resolver(&vosh),
         vosh_prompt::RenderOptions::default(),
     );
@@ -2057,8 +2058,7 @@ mod tests {
             "{:?}",
             ran.result.echo
         );
-        p.ui.prompt_template_enabled = true;
-        p.ui.prompt_template = template.to_string();
+        p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, template));
         p
     }
 
@@ -2099,7 +2099,7 @@ mod tests {
         assert!(pass.rendered_prompt.is_none());
 
         // With drawing off the capture still gags, and nothing draws.
-        p.ui.prompt_template_enabled = false;
+        p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(false, TEMPLATE));
         let pass = pass_line(&mut p, PROMPT_LINE);
         assert!(pass.result.display.is_none());
         assert!(pass.rendered_prompt.is_none());
