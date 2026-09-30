@@ -3297,6 +3297,22 @@ fn apply_ui_config(
     true
 }
 
+/// Which values the game hides, as every open window last heard it on
+/// `session://hidden`. The session reports each change once, so a window
+/// that opens or reloads while the game hides something, Settings among
+/// them, reads the state here. Nothing is hidden with no connection.
+#[tauri::command]
+pub(crate) async fn hidden_get(
+    state: State<'_, SharedState>,
+) -> Result<vosh_prompt::vars::Hidden, String> {
+    Ok(reported_hidden(state.inner()).await)
+}
+
+/// The body of [`hidden_get`].
+async fn reported_hidden(state: &SharedState) -> vosh_prompt::vars::Hidden {
+    state.profile.lock().await.prompt.reported()
+}
+
 /// Replace a profile's tracked affects without touching the rest of
 /// its UI config, so an editor outside Settings cannot write a stale
 /// snapshot over other fields. Returns the normalized list.
@@ -4809,6 +4825,40 @@ mod tests {
         );
         assert!(p.prompt.gmcp().get("Char.Vitals").is_some());
         assert!(p.prompt.prompt_vars().is_empty());
+    }
+
+    #[tokio::test]
+    async fn hidden_get_answers_what_the_session_last_reported() {
+        let state: super::SharedState = std::sync::Arc::new(super::AppState::default());
+        let nothing = serde_json::json!({
+            "vitals": false, "tank": false, "opponent": false, "affects": false, "group": false,
+        });
+        let json = |h| serde_json::to_value(h).unwrap();
+        assert_eq!(json(super::reported_hidden(&state).await), nothing);
+        {
+            let mut p = state.profile.lock().await;
+            p.prompt.set_forsaken(true);
+            let at = chrono::Local::now().fixed_offset();
+            // The older build names the song and sends the true values.
+            p.prompt.observe(
+                "Char.Affects",
+                serde_json::json!({"affects":[{"name":"lamented tears","kind":"song","duration":3}]}),
+                at,
+            );
+            p.prompt.observe(
+                "Char.Vitals",
+                serde_json::json!({"hp":850,"maxhp":900,"mana":760,"maxmana":820,"move":250,"maxmove":250}),
+                at,
+            );
+        }
+        // Worked out, but the session has not reported it yet.
+        assert_eq!(json(super::reported_hidden(&state).await), nothing);
+        let reported = state.profile.lock().await.prompt.take_hidden_change();
+        assert!(reported.is_some_and(|h| h.vitals() && h.affects && h.group));
+        assert_eq!(
+            super::reported_hidden(&state).await,
+            reported.expect("a report")
+        );
     }
 
     #[tokio::test]

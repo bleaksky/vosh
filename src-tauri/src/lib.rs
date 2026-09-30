@@ -380,6 +380,7 @@ pub fn run() {
             characters::profile_set_world,
             characters::session_identity_get,
             affects_snapshot::affects_snapshot_get,
+            commands::hidden_get,
             characters::profile_export_file,
             commands::ui_set_theme,
             fonts_list,
