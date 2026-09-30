@@ -15,9 +15,8 @@
 //!   one pattern to `mud.set_prompt_var` (see
 //!   [`vosh_prompt::capture::from_trigger`]). One that does more stays as
 //!   it was, and the launch notice names it when it hides the prompt.
-//! - Enabled triggers move. A turned off `prompt-capture` moves too while
-//!   no profile has a capture, which is what an older build leaves behind
-//!   when it drops `[prompt]` and the migration list on its next save.
+//! - Enabled triggers move. A `prompt-capture` that was off before the
+//!   first move stays off, since you turned it off yourself.
 //! - Loadout mode. A catalog trigger goes into every profile that draws a
 //!   design, or when none does, into every profile, so a Vitals pane the
 //!   capture feeds keeps working. The catalog trigger is turned off.
@@ -32,6 +31,13 @@
 //! and runs once. Launch runs it before any profile loads, under the
 //! persist lock, and skips it while the shared catalog wizard waits for a
 //! relaunch.
+//!
+//! An older build reads the switch and the design from `[ui]` and drops
+//! `[prompt]` from each profile file it saves, the active one at every
+//! quit, while `profiles.toml` keeps the record. So the move runs again
+//! whenever a profile file that Vosh wrote a `[prompt]` into, which its
+//! `.before-prompt-editor` copy shows, has none. Then the `prompt-capture`
+//! that move turned off goes back into each such profile it fits.
 
 use std::path::{Path, PathBuf};
 
@@ -41,7 +47,7 @@ use vosh_prompt::CaptureConfig;
 use vosh_trigger::{Trigger, TriggerAction};
 
 use crate::loadout_store;
-use crate::profile_config::ProfileConfig;
+use crate::profile_config::{before_prompt_editor_path, ProfileConfig};
 use crate::profile_set::{display_name, ProfileSet};
 
 /// The id the move is recorded under in `profiles.toml`.
@@ -101,7 +107,11 @@ pub(crate) fn run(app_data: &Path) -> Vec<String> {
             return Vec::new();
         }
     };
-    if set.migrated(MIGRATION) {
+    let returned = set
+        .list()
+        .iter()
+        .any(|entry| lost_prompt(&set.profile_path(&entry.name)));
+    if set.migrated(MIGRATION) && !returned {
         return Vec::new();
     }
     let loadout = loadout_store::path_b_mode_active(app_data);
@@ -194,7 +204,24 @@ struct ProfileFile {
     name: String,
     path: PathBuf,
     config: ProfileConfig,
+    /// An older build saved it without the `[prompt]` Vosh wrote into it.
+    lost_prompt: bool,
     changed: bool,
+}
+
+/// Whether the profile file at `path` lost the `[prompt]` table Vosh
+/// wrote into it, as an older build that saves it leaves it. Vosh keeps
+/// the file as it was before its first `[prompt]`, and a `[prompt]` that
+/// says nothing a default one does not stays out of the file, so a file
+/// with that copy and no table either went back to a default prompt in
+/// this build or lost its table to an older one. A file that does not
+/// read says nothing.
+fn lost_prompt(path: &Path) -> bool {
+    before_prompt_editor_path(path).exists()
+        && std::fs::read_to_string(path)
+            .ok()
+            .and_then(|text| text.parse::<toml::Table>().ok())
+            .is_some_and(|table| !table.contains_key("prompt"))
 }
 
 impl ProfileFile {
@@ -244,10 +271,11 @@ fn candidate(trigger: &Trigger) -> Option<Result<RegexCapture, NotACapture>> {
     Some(capture::from_trigger(&patterns, body))
 }
 
-/// Whether a trigger moves: it is on, or it is the `prompt-capture` an
-/// older build left off while no profile has a capture.
-fn eligible(trigger: &Trigger, none_capture: bool) -> bool {
-    trigger.enabled || (trigger.name == CAPTURE_TRIGGER && none_capture)
+/// Whether a trigger that reads your prompt moves into `file`: it is on,
+/// or it is the `prompt-capture` an earlier move turned off and `file`
+/// lost the capture that move gave it to an older build.
+fn moves_into(trigger: &Trigger, file: &ProfileFile) -> bool {
+    trigger.enabled || (trigger.name == CAPTURE_TRIGGER && file.lost_prompt)
 }
 
 /// A trigger that stays but still hides the prompt, which the notice
@@ -278,12 +306,12 @@ pub(crate) fn migrate(set: &ProfileSet, app_data: &Path, loadout: bool) -> Resul
         };
         files.push(ProfileFile {
             name: entry.name.clone(),
+            lost_prompt: lost_prompt(&path),
             path,
             config,
             changed: false,
         });
     }
-    let none_capture = !files.iter().any(ProfileFile::has_capture);
     let mut moved = Moved::default();
 
     // The shared catalog, in loadout mode.
@@ -307,9 +335,9 @@ pub(crate) fn migrate(set: &ProfileSet, app_data: &Path, loadout: bool) -> Resul
                 continue;
             };
             match read {
-                Ok(capture) if eligible(trigger, none_capture) => {
+                Ok(capture) => {
                     for &i in &targets {
-                        if files[i].take(&capture) {
+                        if moves_into(trigger, &files[i]) && files[i].take(&capture) {
                             moved.took(&files[i].name);
                         }
                     }
@@ -318,7 +346,6 @@ pub(crate) fn migrate(set: &ProfileSet, app_data: &Path, loadout: bool) -> Resul
                         catalog_changed = true;
                     }
                 }
-                Ok(_) => {}
                 Err(why) => {
                     if still_hides(trigger, why) {
                         moved.leave(trigger, why);
@@ -336,8 +363,8 @@ pub(crate) fn migrate(set: &ProfileSet, app_data: &Path, loadout: bool) -> Resul
                 continue;
             };
             match read {
-                Ok(capture) if eligible(trigger, none_capture) => {
-                    if file.take(&capture) {
+                Ok(capture) => {
+                    if moves_into(trigger, file) && file.take(&capture) {
                         moved.took(&file.name);
                     }
                     if trigger.enabled {
@@ -345,7 +372,6 @@ pub(crate) fn migrate(set: &ProfileSet, app_data: &Path, loadout: bool) -> Resul
                         file.changed = true;
                     }
                 }
-                Ok(_) => {}
                 Err(why) => {
                     if still_hides(trigger, why) {
                         moved.leave(trigger, why);
@@ -818,6 +844,82 @@ mud.set_prompt_var('move', captures[4])"""
         std::fs::write(&path, toml::to_string_pretty(&index).unwrap()).unwrap();
     }
 
+    /// What an older build does on quit: it saves the active profile
+    /// without [prompt], and leaves profiles.toml as it is, since it
+    /// writes the index only on a switch, a claim or an edit to the list.
+    fn older_build_quits(root: &Path) {
+        let path = root.join("profiles/default.toml");
+        let mut file: toml::Table = std::fs::read_to_string(&path).unwrap().parse().unwrap();
+        file.remove("prompt");
+        std::fs::write(&path, toml::to_string_pretty(&file).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn a_return_from_an_older_build_moves_the_capture_again() {
+        let dir = james_like(CAPTURE_TRIGGER);
+        let root = dir.path();
+        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        older_build_quits(root);
+        assert!(ProfileSet::load_or_migrate(root.to_path_buf())
+            .unwrap()
+            .migrated(MIGRATION));
+        assert!(profile(root, "default").prompt_config().capture.is_none());
+
+        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        let default = profile(root, "default").prompt_config();
+        assert_eq!(moved_capture(&default).lines, [PATTERN]);
+        assert!(default.draw);
+        assert_eq!(default.template, TEMPLATE);
+        assert!(!catalog_trigger(root, "prompt-capture").enabled);
+        // Healer and Test-Prompt stay untouched.
+        assert_eq!(text(root, "profiles/Healer.toml"), HEALER_FILE);
+        assert_eq!(text(root, "profiles/Test-Prompt.toml"), TEST_PROMPT_FILE);
+        // The copy from the first run stays as it was.
+        let before = before_prompt_editor_path(&root.join("profiles/default.toml"));
+        assert_eq!(std::fs::read_to_string(before).unwrap(), default_file());
+        // Back in step, so the next launch changes nothing.
+        let after = snapshot(root);
+        assert!(run(root).is_empty());
+        assert_eq!(snapshot(root), after);
+    }
+
+    #[test]
+    fn a_capture_turned_on_again_in_an_older_build_moves_again() {
+        let dir = james_like(CAPTURE_TRIGGER);
+        let root = dir.path();
+        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        older_build_quits(root);
+        // You turned it back on so the older build drew your prompt.
+        let path = root.join("catalog.toml");
+        let catalog = text(root, "catalog.toml").replacen("enabled = false", "enabled = true", 1);
+        std::fs::write(&path, catalog).unwrap();
+        assert!(catalog_trigger(root, "prompt-capture").enabled);
+
+        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        let default = profile(root, "default").prompt_config();
+        assert_eq!(moved_capture(&default).lines, [PATTERN]);
+        assert!(!catalog_trigger(root, "prompt-capture").enabled);
+        assert_eq!(text(root, "profiles/Healer.toml"), HEALER_FILE);
+    }
+
+    #[test]
+    fn a_capture_you_turned_off_before_the_move_stays_off() {
+        // The trigger off, its pattern on.
+        let off = CAPTURE_TRIGGER.replacen("enabled = true", "enabled = false", 1);
+        let dir = james_like(&off);
+        let root = dir.path();
+        assert!(!catalog_trigger(root, "prompt-capture").enabled);
+        let default_before = text(root, "profiles/default.toml");
+
+        assert!(run(root).is_empty());
+        assert!(profile(root, "default").prompt_config().capture.is_none());
+        assert_eq!(text(root, "profiles/default.toml"), default_before);
+        assert!(!catalog_trigger(root, "prompt-capture").enabled);
+        assert!(ProfileSet::load_or_migrate(root.to_path_buf())
+            .unwrap()
+            .migrated(MIGRATION));
+    }
+
     #[test]
     fn a_rerun_after_an_older_build_takes_the_turned_off_capture_again() {
         let dir = james_like(CAPTURE_TRIGGER);
@@ -842,34 +944,50 @@ mud.set_prompt_var('move', captures[4])"""
     }
 
     #[test]
-    fn a_turned_off_capture_stays_off_while_a_profile_has_one() {
+    fn a_rolled_back_profile_takes_its_capture_again_while_another_keeps_its_own() {
         let dir = james_like(CAPTURE_TRIGGER);
         let root = dir.path();
         assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
-        older_build_saves(root);
         // Healer read its prompt from the game's codes meanwhile.
         let healer_path = root.join("profiles/Healer.toml");
         let mut healer = ProfileConfig::load(&healer_path).unwrap();
-        healer.set_prompt(PromptConfig {
+        let codes = PromptConfig {
             capture: CaptureConfig::Aabahran(AabahranCapture::default()),
             ..PromptConfig::default()
-        });
+        };
+        healer.set_prompt(codes.clone());
         healer.save(&healer_path).unwrap();
-        let before = snapshot(root);
+        older_build_saves(root);
+        let healer_before = text(root, "profiles/Healer.toml");
 
-        assert!(run(root).is_empty());
-        assert!(profile(root, "default").prompt_config().capture.is_none());
+        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        let default = profile(root, "default").prompt_config();
+        assert_eq!(moved_capture(&default).lines, [PATTERN]);
+        assert_eq!(text(root, "profiles/Healer.toml"), healer_before);
+        assert_eq!(profile(root, "Healer").prompt_config(), codes);
         assert!(ProfileSet::load_or_migrate(root.to_path_buf())
             .unwrap()
             .migrated(MIGRATION));
-        // Only the index changed, to record the move.
-        let not_index = |files: BTreeMap<PathBuf, Vec<u8>>| {
-            files
-                .into_iter()
-                .filter(|(path, _)| !path.to_string_lossy().contains("profiles.toml"))
-                .collect::<BTreeMap<_, _>>()
-        };
-        assert_eq!(not_index(snapshot(root)), not_index(before));
+    }
+
+    #[test]
+    fn a_turned_off_capture_stays_off_for_a_profile_an_older_build_never_saved() {
+        let dir = james_like(CAPTURE_TRIGGER);
+        let root = dir.path();
+        assert_eq!(run(root), [MOVED_INTO_DEFAULT]);
+        // You took the capture out of Default in this build, and nothing
+        // else draws or reads your prompt.
+        let path = root.join("profiles/default.toml");
+        let mut default = ProfileConfig::load(&path).unwrap();
+        let mut prompt = default.prompt_config();
+        prompt.capture = CaptureConfig::None;
+        default.set_prompt(prompt);
+        default.save(&path).unwrap();
+        let before = snapshot(root);
+
+        assert!(run(root).is_empty());
+        assert_eq!(snapshot(root), before);
+        assert!(profile(root, "default").prompt_config().capture.is_none());
     }
 
     #[test]
