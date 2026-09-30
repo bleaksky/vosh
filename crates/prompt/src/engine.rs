@@ -58,6 +58,47 @@ pub struct SessionSetting {
     pub at: DateTime<FixedOffset>,
 }
 
+/// How many pulses in a row without your prompt make it not matching.
+pub const MISSES: u32 = 3;
+
+/// Whether Vosh reads your prompt, for `session://prompt-status` and
+/// `#prompt`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Status {
+    /// Nothing reads your prompt in this profile.
+    NoCapture,
+    Matching,
+    /// Three pulses in a row brought no prompt Vosh reads.
+    NotMatching,
+    /// You turned prompts off in the game, so no prompt comes and none
+    /// is missed (D28).
+    PromptsOff,
+}
+
+/// `session://prompt-status`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StatusReport {
+    pub status: Status,
+    /// When Vosh last read your prompt, RFC 3339 local time.
+    pub last_match_at: Option<String>,
+}
+
+/// What counts misses between prompts (section 4).
+#[derive(Debug, Clone, Default)]
+struct Misses {
+    /// Pulses or sends in a row that brought no prompt Vosh read.
+    count: u32,
+    /// A prompt was read since the pulse started, or since your send.
+    matched: bool,
+    /// A pulse has started this session, so the next one ends it.
+    in_pulse: bool,
+    /// The game sent text since your last send.
+    text: bool,
+    last_match_at: Option<DateTime<FixedOffset>>,
+    reported: Option<StatusReport>,
+}
+
 /// What the observer keeps between lines (section 3).
 #[derive(Debug, Clone, Default)]
 struct Observer {
@@ -97,6 +138,7 @@ pub struct PromptEngine {
     /// last took it.
     seen: Vec<GamePromptSeen>,
     observer: Observer,
+    misses: Misses,
 }
 
 impl PromptEngine {
@@ -111,6 +153,10 @@ impl PromptEngine {
     pub fn set_config(&mut self, config: PromptConfig) {
         if self.config != config {
             self.revision += 1;
+        }
+        if self.config.capture != config.capture {
+            // A new capture starts with no misses.
+            self.misses.count = 0;
         }
         self.config = config;
         self.compile();
@@ -133,6 +179,7 @@ impl PromptEngine {
         let observed = self.vars.observe(package, data, at);
         if observed.pulse {
             self.observer.off_line = false;
+            self.pulse_started();
         }
         if package.eq_ignore_ascii_case(CHAR_STATUS) || package.eq_ignore_ascii_case(CHAR_STATE) {
             self.follow_who();
@@ -209,10 +256,79 @@ impl PromptEngine {
     /// off` in it means the reply sets nothing. `text` is what went to
     /// the game, aliases expanded. `at_ms` is milliseconds since the
     /// epoch.
-    pub fn note_send(&mut self, text: &str, at_ms: i64) {
+    ///
+    /// Returns true when the send started a pulse, on a server that
+    /// sends no Char.Vitals.
+    pub fn note_send(&mut self, text: &str, at_ms: i64) -> bool {
         self.observer.sent_at = Some(at_ms);
         self.observer.sent_off = text.lines().any(observer::turns_prompts_off);
         self.observer.off_line = false;
+        if !self.forsaken() {
+            // Elsewhere a miss is a send whose reply brought text but no
+            // prompt Vosh read before your next send.
+            if self.stage.has_recognizer() && self.misses.text && !self.misses.matched {
+                self.misses.count += 1;
+            }
+            self.misses.text = false;
+            self.misses.matched = false;
+        }
+        let pulse = self.vars.on_send();
+        if pulse {
+            self.pulse_started();
+        }
+        pulse
+    }
+
+    /// A pulse started. Under the Forsaken Lands rules the one before it
+    /// is a miss when it brought no prompt Vosh read, unless you turned
+    /// prompts off (D28).
+    fn pulse_started(&mut self) {
+        if !self.forsaken() {
+            return;
+        }
+        let missed = self.misses.in_pulse && !self.misses.matched;
+        if missed && self.stage.has_recognizer() && !self.prompts_off {
+            self.misses.count += 1;
+        }
+        self.misses.in_pulse = true;
+        self.misses.matched = false;
+    }
+
+    /// The game sent a line or a partial.
+    pub fn note_text(&mut self) {
+        self.misses.text = true;
+    }
+
+    /// Whether Vosh reads your prompt now.
+    pub fn status(&self) -> Status {
+        if self.prompts_off {
+            Status::PromptsOff
+        } else if !self.stage.has_recognizer() {
+            Status::NoCapture
+        } else if self.misses.count >= MISSES {
+            Status::NotMatching
+        } else {
+            Status::Matching
+        }
+    }
+
+    /// When Vosh last read your prompt this session.
+    pub fn last_match_at(&self) -> Option<DateTime<FixedOffset>> {
+        self.misses.last_match_at
+    }
+
+    /// The status when it changed since the last call, for one
+    /// `session://prompt-status` per socket read.
+    pub fn take_status_change(&mut self) -> Option<StatusReport> {
+        let report = StatusReport {
+            status: self.status(),
+            last_match_at: self.misses.last_match_at.map(stamp),
+        };
+        if self.misses.reported.as_ref() == Some(&report) {
+            return None;
+        }
+        self.misses.reported = Some(report.clone());
+        Some(report)
     }
 
     /// The observer reads lines now: the Forsaken Lands rules hold, no
@@ -294,9 +410,13 @@ impl PromptEngine {
         self.observer.seen.as_ref()
     }
 
-    /// Vosh read your prompt, so your text prompt is on.
-    pub fn note_prompt(&mut self) {
+    /// Vosh read your prompt at `at`, so your text prompt is on and no
+    /// prompt is missed.
+    pub fn note_prompt(&mut self, at: DateTime<FixedOffset>) {
         self.prompts_off = false;
+        self.misses.count = 0;
+        self.misses.matched = true;
+        self.misses.last_match_at = Some(at);
     }
 
     /// Apply the latest Char.Prompt to the table a profile switch just
@@ -398,6 +518,10 @@ impl PromptEngine {
         self.prompts_off = false;
         self.seen.clear();
         self.observer = Observer::default();
+        self.misses = Misses {
+            reported: self.misses.reported.take(),
+            ..Misses::default()
+        };
         self.apply_rules();
     }
 
@@ -421,6 +545,10 @@ impl PromptEngine {
         self.prompts_off = false;
         self.seen.clear();
         self.observer = Observer::default();
+        self.misses = Misses {
+            reported: self.misses.reported.take(),
+            ..Misses::default()
+        };
         self.apply_rules();
     }
 
@@ -951,7 +1079,7 @@ mod tests {
         engine.note_send("prompt off\r\n", SENT + 4_000);
         line(&mut engine, "You will no longer see prompts.", 4_010);
         assert!(engine.prompts_off());
-        engine.note_prompt();
+        engine.note_prompt(at());
         assert!(!engine.prompts_off());
     }
 
@@ -986,6 +1114,105 @@ mod tests {
             Some("%h ")
         );
         assert!(!engine.take_seen()[0].applied);
+    }
+
+    fn vitals(engine: &mut PromptEngine) {
+        engine.observe("Char.Vitals", json!({"hp": 10, "maxhp": 20}), at());
+    }
+
+    #[test]
+    fn three_pulses_without_a_prompt_are_not_matching_and_one_match_clears_it() {
+        let mut engine = older_build("<%hhp> ");
+        assert_eq!(engine.status(), Status::Matching);
+        let first = engine.take_status_change().expect("the first report");
+        assert_eq!(first.status, Status::Matching);
+        assert_eq!(first.last_match_at, None);
+        assert_eq!(engine.take_status_change(), None, "no change");
+        // The pulse that starts the session is no miss.
+        vitals(&mut engine);
+        vitals(&mut engine);
+        vitals(&mut engine);
+        assert_eq!(engine.status(), Status::Matching, "two misses");
+        vitals(&mut engine);
+        assert_eq!(engine.status(), Status::NotMatching);
+        assert_eq!(
+            engine.take_status_change().map(|r| r.status),
+            Some(Status::NotMatching)
+        );
+        engine.note_prompt(at());
+        let report = engine.take_status_change().expect("matching again");
+        assert_eq!(report.status, Status::Matching);
+        assert_eq!(
+            report.last_match_at.as_deref(),
+            Some("2026-09-29T12:58:02-05:00")
+        );
+        // A pulse with a prompt in it is no miss.
+        for _ in 0..5 {
+            vitals(&mut engine);
+            engine.note_prompt(at());
+        }
+        assert_eq!(engine.status(), Status::Matching);
+    }
+
+    #[test]
+    fn pulses_with_prompts_off_count_no_miss() {
+        let mut engine = older_build("%n%P%C<%hhp %mm %vmv> ");
+        engine.observe(
+            "Char.Prompt",
+            char_prompt(false, "%n%P%C<%hhp %mm %vmv> ", ""),
+            at(),
+        );
+        // The new build keeps sending the packages each pulse.
+        for _ in 0..5 {
+            vitals(&mut engine);
+        }
+        assert_eq!(engine.status(), Status::PromptsOff);
+        engine.observe(
+            "Char.Prompt",
+            char_prompt(true, "%n%P%C<%hhp %mm %vmv> ", ""),
+            at(),
+        );
+        assert_eq!(engine.status(), Status::Matching, "no misses were kept");
+    }
+
+    #[test]
+    fn a_profile_without_a_capture_misses_nothing() {
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        for _ in 0..5 {
+            vitals(&mut engine);
+        }
+        assert_eq!(engine.status(), Status::NoCapture);
+        engine.set_config(following("<%hhp> "));
+        assert_eq!(engine.status(), Status::Matching);
+    }
+
+    #[test]
+    fn other_games_count_misses_by_send() {
+        let mut engine = PromptEngine::default();
+        engine.connect(false);
+        engine.set_config(PromptConfig {
+            capture: CaptureConfig::Regex(RegexCapture {
+                lines: vec![r"^<(?<hp>\d+)hp> $".into()],
+                ..RegexCapture::default()
+            }),
+            ..PromptConfig::default()
+        });
+        // Char.Vitals starts no miss here, and a send with no reply is
+        // none either.
+        for _ in 0..4 {
+            vitals(&mut engine);
+            engine.note_send("look\r\n", 0);
+        }
+        assert_eq!(engine.status(), Status::Matching);
+        for _ in 0..3 {
+            engine.note_text();
+            engine.note_send("look\r\n", 0);
+        }
+        assert_eq!(engine.status(), Status::NotMatching);
+        engine.note_text();
+        engine.note_prompt(at());
+        assert_eq!(engine.status(), Status::Matching);
     }
 
     #[test]

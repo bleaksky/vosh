@@ -1240,6 +1240,7 @@ fn line_step(
     now: Instant,
     log_session_id: Option<i64>,
 ) -> Vec<LineStep> {
+    p.prompt.note_text();
     // Without Char.Prompt this session, the game's reply to your own
     // `prompt` tells Vosh your setting.
     if p.prompt.observing(now_ms()) {
@@ -1376,7 +1377,7 @@ fn prompt_block(
         values: block.values.clone(),
         raw: Some(block.raw_text()),
     });
-    p.prompt.note_prompt();
+    p.prompt.note_prompt(chrono::Local::now().fixed_offset());
     if !disagree.is_empty() {
         debug!(target: "vosh::prompt", fields = ?disagree, "the prompt and GMCP disagree");
     }
@@ -1577,6 +1578,7 @@ fn partial_step(
 ) -> Option<LineStep> {
     let mut step = None;
     if let Some(bytes) = accumulator.partial().map(<[u8]>::to_vec) {
+        p.prompt.note_text();
         let plain = vosh_ansi::plain_text(&bytes);
         match p.prompt.stage.settle(&bytes, &plain) {
             Some((block, region)) => {
@@ -1625,8 +1627,7 @@ fn send_step(p: &mut Profile, accumulator: &LineAccumulator, sent: &[u8], at_ms:
     );
     p.prompt.stage.close();
     p.prompt.stage.forget_held();
-    p.prompt.note_send(&String::from_utf8_lossy(sent), at_ms);
-    p.prompt.vars.on_send()
+    p.prompt.note_send(&String::from_utf8_lossy(sent), at_ms)
 }
 
 /// A window size message. A new size closes the open row, since each
@@ -1837,7 +1838,7 @@ async fn finish_read(
         gag_without_reader,
         character,
     } = batch;
-    let (vars, hidden, prompt_seen) = {
+    let (vars, hidden, prompt_seen, status) = {
         let mut p = profile.lock().await;
         // Echoes the end of the read wrote close the open row.
         p.prompt.stage.finish(&out);
@@ -1845,6 +1846,7 @@ async fn finish_read(
             p.prompt.take_prompt_vars(prompt_vars),
             p.prompt.vars.take_hidden_change(),
             p.prompt.take_seen(),
+            p.prompt.take_status_change(),
         )
     };
     if !out.is_empty() {
@@ -1887,6 +1889,11 @@ async fn finish_read(
         }
     }
     report_game_prompt_seen(app, prompt_seen);
+    if let Some(status) = status {
+        if let Err(e) = app.emit("session://prompt-status", status) {
+            warn!(error = %e, "failed to emit the prompt status");
+        }
+    }
 }
 
 /// Tell the webview what the game said of your prompt settings, on
@@ -4087,6 +4094,27 @@ mod tests {
             panic!("an aabahran capture");
         };
         assert_eq!(codes.prompt, "%n%P%C<%hhp %mm %vmv> ");
+    }
+
+    #[test]
+    fn the_new_build_with_prompts_off_raises_no_not_matching() {
+        let mut p = codes_profile("%n%P%C<%hhp %mm %vmv> ", HP);
+        super::start_prompt(&mut p, true);
+        let mut wire = Wire::new(p);
+        feed(&mut wire.p, "char-prompt-off.gmcp");
+        // Each pulse brings the prompt time packages and no prompt text.
+        for _ in 0..5 {
+            feed(&mut wire.p, "char-vitals.gmcp");
+            feed(&mut wire.p, "char-state.gmcp");
+            let _ = wire.read(b"");
+        }
+        let report = wire.p.prompt.take_status_change().expect("a report");
+        assert_eq!(report.status, vosh_prompt::Status::PromptsOff);
+        // Prompts on again, and the prompt reads.
+        feed(&mut wire.p, "char-prompt.gmcp");
+        feed(&mut wire.p, "char-vitals.gmcp");
+        let _ = wire.read(b"<159hp 310m 489mv> ");
+        assert_eq!(wire.p.prompt.status(), vosh_prompt::Status::Matching);
     }
 
     #[test]

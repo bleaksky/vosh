@@ -37,7 +37,7 @@ pub mod vars;
 pub mod wrap;
 
 pub use config::{CaptureConfig, PromptConfig};
-pub use engine::{GamePromptSeen, PromptEngine, SeenKind};
+pub use engine::{GamePromptSeen, PromptEngine, SeenKind, Status, StatusReport};
 pub use format::{Position, Resolved, Value};
 pub use render::{render, render_str, MapValues, RenderOptions, Rendered, Span, SpanColor, Values};
 pub use template::{FieldRef, Format, Template};
