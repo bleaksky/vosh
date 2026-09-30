@@ -185,6 +185,7 @@ impl PromptEngine {
     /// Compile the table for the stage: the capture for who you are, and
     /// the fields the design reads.
     fn compile(&mut self) {
+        self.stage.set_show(self.config.show);
         self.stage.set_capture_for(&self.config.capture, self.who);
         self.stage
             .set_reads(&Template::parse(&self.config.template).reads());

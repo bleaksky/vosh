@@ -32,12 +32,20 @@
 //!
 //! The stage also keeps the candidates ring, one entry per send and per GA
 //! or EOR, which the prompt card reads to show and check your prompt.
+//!
+//! Where your prompt shows (`[prompt] show`) decides the rest. In the
+//! text, the stage writes as described above. Pinned, a recognized prompt
+//! leaves the text: the output carries it in [`Output::pin`] for the band
+//! above the command line, the line ends before it wait in
+//! [`Output::hold`] until the next write lands, and the empty line your
+//! next unasked text starts with writes nothing, so the text keeps the
+//! rows it would have kept minus the prompt's own.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::aabahran::Who;
 use crate::capture::{Recognized, Recognizer};
-use crate::config::CaptureConfig;
+use crate::config::{CaptureConfig, PromptShow};
 use crate::template::FieldRef;
 
 /// The private OSC Vosh marks regions with.
@@ -68,7 +76,8 @@ pub struct Replace {
 }
 
 /// What Vosh writes to the terminal for one socket read, or for one
-/// repaint. A renderer applies `replace` first, then `bytes`.
+/// repaint. A renderer applies `replace` first, then `bytes`, and keeps
+/// `hold` back until the next write lands.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Output {
     pub replace: Option<Replace>,
@@ -76,9 +85,42 @@ pub struct Output {
     /// The live render for the region this output leaves open, written
     /// back before anything else lands, when the region shows a preview.
     pub restore: Option<Vec<u8>>,
+    /// What the band above the command line shows from now on, while your
+    /// prompt shows pinned: the prompt's rows joined by `\r\n`, with no
+    /// line end after the last. Empty clears the band.
+    pub pin: Option<Vec<u8>>,
+    /// Line ends the renderer keeps back until the next write lands, so
+    /// while you wait the text ends on its last line and not on the empty
+    /// rows a pinned prompt left. It is always the tail of `bytes`, never
+    /// anything before it: whatever this output writes later takes it
+    /// back first.
+    pub hold: Vec<u8>,
     /// The open row is no longer the last thing on screen.
     closed: bool,
+    /// Output from elsewhere reached the terminal before this output.
+    other: bool,
+    /// How many writes of this output showed something, so the stage can
+    /// tell text landed after a pinned prompt, whoever wrote it.
+    visible: u64,
+    /// Which output this is, so the stage can tell a new one from the one
+    /// it pinned in.
+    id: OutputId,
 }
+
+/// A number each [`Output::new`] hands out. It never makes two outputs
+/// unequal, so tests compare outputs by what they write.
+#[derive(Debug, Clone, Copy, Default)]
+struct OutputId(u64);
+
+impl PartialEq for OutputId {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for OutputId {}
+
+static NEXT_OUTPUT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 impl Output {
     /// An empty output. `other` says output from elsewhere, such as a
@@ -87,13 +129,56 @@ impl Output {
     pub fn new(other: bool) -> Self {
         Self {
             closed: other,
+            other,
+            id: OutputId(NEXT_OUTPUT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)),
             ..Self::default()
         }
     }
 
-    /// Nothing to write.
+    /// Nothing to write and nothing for the band.
     pub fn is_empty(&self) -> bool {
-        self.replace.is_none() && self.bytes.is_empty() && self.restore.is_none()
+        self.untouched() && self.pin.is_none()
+    }
+
+    /// Nothing written to the text yet. Held line ends count as written,
+    /// and the band does not count.
+    fn untouched(&self) -> bool {
+        self.replace.is_none()
+            && self.bytes.is_empty()
+            && self.hold.is_empty()
+            && self.restore.is_none()
+    }
+
+    /// Put the held line ends back at the end of the bytes, since
+    /// something is about to be written after them.
+    fn unhold(&mut self) {
+        if !self.hold.is_empty() {
+            let hold = std::mem::take(&mut self.hold);
+            self.bytes.extend(hold);
+        }
+    }
+
+    /// Append `bytes` after everything written so far, held line ends
+    /// included.
+    fn push(&mut self, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
+        self.unhold();
+        self.bytes.extend_from_slice(bytes);
+        if shows_anything(bytes) {
+            self.visible += 1;
+        }
+    }
+
+    /// Keep back the line ends this output ends on, the ones a pinned
+    /// prompt's row would have followed.
+    fn hold_tail(&mut self) {
+        self.unhold();
+        let at = trailing_line_ends(&self.bytes);
+        if at < self.bytes.len() {
+            self.hold = self.bytes.split_off(at);
+        }
     }
 
     /// Write bytes that are not a region, such as a line as the Line
@@ -102,15 +187,15 @@ impl Output {
         if bytes.is_empty() {
             return;
         }
-        self.bytes.extend_from_slice(bytes);
+        self.push(bytes);
         self.closed = true;
     }
 
     /// Write `bytes` as region `gen`, such as the partial a read ended on.
     /// It closes the open row.
     pub fn region(&mut self, gen: u64, bytes: &[u8]) {
-        self.bytes.extend(mark(gen));
-        self.bytes.extend_from_slice(bytes);
+        self.push(&mark(gen));
+        self.push(bytes);
         self.closed = true;
     }
 
@@ -120,11 +205,14 @@ impl Output {
     /// bytes the region is closed, so `fresh` bytes follow on a new row
     /// and anything else is dropped.
     pub fn replace(&mut self, gen: u64, bytes: Vec<u8>, fresh: bool) {
-        if self.is_empty() {
+        if self.untouched() {
+            if shows_anything(&bytes) {
+                self.visible += 1;
+            }
             self.replace = Some(Replace { gen, bytes, fresh });
         } else if fresh && !bytes.is_empty() {
             self.new_row();
-            self.bytes.extend(bytes);
+            self.push(&bytes);
         } else {
             return;
         }
@@ -134,21 +222,107 @@ impl Output {
     /// End the row the cursor sits on, unless this output already left it
     /// at the start of one.
     fn new_row(&mut self) {
-        if self.is_empty() || !self.at_row_start() {
-            self.bytes.extend_from_slice(b"\r\n");
+        if self.untouched() || !self.at_row_start() {
+            self.push(b"\r\n");
         }
     }
 
     /// True when what this output wrote last ends a row. Marks write
     /// nothing, so they do not count.
     fn at_row_start(&self) -> bool {
-        let last = if self.bytes.is_empty() {
+        let last = if !self.hold.is_empty() {
+            &self.hold[..]
+        } else if self.bytes.is_empty() {
             self.replace.as_ref().map_or(&[][..], |r| &r.bytes[..])
         } else {
             &self.bytes[..]
         };
         without_trailing_marks(last).ends_with(b"\n")
     }
+}
+
+/// True when `bytes` put a visible character on screen: anything but line
+/// ends, spaces and escape sequences.
+fn shows_anything(bytes: &[u8]) -> bool {
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            0x1b => i = escape_end(bytes, i),
+            b'\r' | b'\n' | b' ' | b'\t' | 0x07 => i += 1,
+            _ => return true,
+        }
+    }
+    false
+}
+
+/// Where the escape sequence that starts at `at` ends: after the final
+/// byte of a CSI, after the BEL or ST of an OSC, after the next byte
+/// otherwise.
+fn escape_end(bytes: &[u8], at: usize) -> usize {
+    match bytes.get(at + 1) {
+        Some(b'[') => {
+            let mut i = at + 2;
+            while i < bytes.len() && !(0x40..=0x7e).contains(&bytes[i]) {
+                i += 1;
+            }
+            (i + 1).min(bytes.len())
+        }
+        Some(b']') => {
+            let mut i = at + 2;
+            while i < bytes.len() {
+                if bytes[i] == 0x07 {
+                    return i + 1;
+                }
+                if bytes[i] == 0x1b && bytes.get(i + 1) == Some(&b'\\') {
+                    return i + 2;
+                }
+                i += 1;
+            }
+            bytes.len()
+        }
+        Some(_) => at + 2,
+        None => bytes.len(),
+    }
+}
+
+/// Where the line ends `bytes` finishes on start: a run of `\r`, `\n` and
+/// SGR codes after the last thing that shows, holding at least one line
+/// end. `bytes.len()` when there is none. A mark or any other escape stops
+/// the run, so a region never loses its start to the hold.
+pub fn trailing_line_ends(bytes: &[u8]) -> usize {
+    let mut at = bytes.len();
+    let mut line_end = false;
+    loop {
+        match bytes[..at].last() {
+            Some(b'\n') => {
+                line_end = true;
+                at -= 1;
+            }
+            Some(b'\r') => at -= 1,
+            Some(b'm') => match sgr_start(&bytes[..at]) {
+                Some(start) => at = start,
+                None => break,
+            },
+            _ => break,
+        }
+    }
+    if line_end {
+        at
+    } else {
+        bytes.len()
+    }
+}
+
+/// The start of the SGR code `ESC [ params m` that `bytes` ends with.
+fn sgr_start(bytes: &[u8]) -> Option<usize> {
+    let end = bytes.len().checked_sub(1)?;
+    let esc = bytes[..end].iter().rposition(|&b| b == 0x1b)?;
+    let params = &bytes[esc + 1..end];
+    (params.first() == Some(&b'[')
+        && params[1..]
+            .iter()
+            .all(|b| b.is_ascii_digit() || *b == b';' || *b == b':'))
+    .then_some(esc)
 }
 
 /// `bytes` without the marks at its end.
@@ -384,6 +558,37 @@ fn fields_of(group: &str) -> Vec<&str> {
     }
 }
 
+/// The empty line a pinned prompt's row would have ended with, which
+/// writes nothing when it comes. `seen` is how many visible writes the
+/// output `output` had when the prompt pinned, so a later one disarms it,
+/// and so does any visible write in a later output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Swallow {
+    output: u64,
+    seen: u64,
+}
+
+impl Swallow {
+    /// Armed as of now in `out`.
+    fn at(out: &Output) -> Self {
+        Self {
+            output: out.id.0,
+            seen: out.visible,
+        }
+    }
+
+    /// Something showed in `out` since it armed, or `out` came from
+    /// elsewhere.
+    fn ended_by(self, out: &Output) -> bool {
+        let seen = if out.id.0 == self.output {
+            self.seen
+        } else {
+            0
+        };
+        out.other || out.visible > seen
+    }
+}
+
 /// A line the ring may record.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct Seen {
@@ -422,6 +627,16 @@ pub struct Stage {
     held: Vec<BlockLine>,
     /// The region the held lines show in, once painted.
     held_region: Option<HeldRegion>,
+    /// Where your prompt shows, from the `[prompt]` table.
+    show: PromptShow,
+    /// Where the latest prompt went, so a change to `show` knows what
+    /// to move.
+    shown_as: PromptShow,
+    /// What the band shows while your prompt shows pinned.
+    pinned: Option<Vec<u8>>,
+    /// The next empty line writes nothing, since the pinned prompt's row
+    /// it would have ended is not in the text.
+    swallow: Option<Swallow>,
 }
 
 impl Stage {
@@ -462,8 +677,31 @@ impl Stage {
             recognizer: self.recognizer.take(),
             gen: self.gen,
             hides: std::mem::take(&mut self.hides),
+            show: self.show,
+            shown_as: self.show,
             ..Self::default()
         };
+    }
+
+    /// Take where your prompt shows from the `[prompt]` table. The prompt
+    /// on screen moves at the next repaint.
+    pub fn set_show(&mut self, show: PromptShow) {
+        self.show = show;
+    }
+
+    /// Where your prompt shows.
+    pub fn shows(&self) -> PromptShow {
+        self.show
+    }
+
+    /// What the band shows, while your prompt shows pinned.
+    pub fn pinned(&self) -> Option<&[u8]> {
+        self.pinned.as_deref()
+    }
+
+    /// The next empty line writes nothing.
+    pub fn swallows(&self) -> bool {
+        self.swallow.is_some()
     }
 
     /// A new generation for a region.
@@ -483,9 +721,18 @@ impl Stage {
     }
 
     /// Close the open row, as a send, a local write, a window size change
-    /// or other output does.
+    /// or other output does. A pinned prompt left no row, so the line end
+    /// it would have taken still writes nothing.
     pub fn close(&mut self) {
         self.open = None;
+    }
+
+    /// The webview wrote to the terminal itself, such as your typed echo.
+    /// It closes the open row and lands where a pinned prompt's row would
+    /// have been, so the next empty line writes again.
+    pub fn local_write(&mut self) {
+        self.open = None;
+        self.swallow = None;
     }
 
     /// Catch up with `out` before it goes out, so bytes written after
@@ -495,10 +742,15 @@ impl Stage {
         self.sync(out);
     }
 
-    /// Bytes written after the open row close it.
+    /// Bytes written after the open row close it. Output from elsewhere,
+    /// or anything that showed after a pinned prompt, means the next
+    /// empty line writes again.
     fn sync(&mut self, out: &Output) {
         if out.closed {
             self.open = None;
+        }
+        if self.swallow.is_some_and(|swallow| swallow.ended_by(out)) {
+            self.swallow = None;
         }
     }
 
@@ -677,7 +929,7 @@ impl Stage {
         match self.held_region {
             Some(old) => out.replace(old.gen, bytes, true),
             None => {
-                out.bytes.extend(bytes);
+                out.push(&bytes);
                 out.closed = true;
             }
         }
@@ -752,6 +1004,7 @@ impl Stage {
         put(out, painted, bytes, true);
         out.closed = false;
         self.open = Some(OpenRow { gen, body });
+        self.shown_as = self.show;
         self.note_recognized(block);
     }
 
@@ -773,6 +1026,71 @@ impl Stage {
             bytes.extend_from_slice(block.final_line().end.terminator());
         }
         write(out, &mut self.open, painted, bytes);
+        self.shown_as = self.show;
+        self.note_recognized(block);
+    }
+
+    /// Pin `block` drawn as `rendered`: it leaves the text, and the band
+    /// shows the lines above the last one that show as sent, then the
+    /// design. See [`Stage::pin`].
+    pub fn pin_drawn(
+        &mut self,
+        out: &mut Output,
+        block: Block,
+        painted: Option<u64>,
+        before: &[u8],
+        rendered: &str,
+    ) {
+        let body = pin_body(&block, Some(rendered));
+        self.pin(out, block, painted, before, body);
+    }
+
+    /// Pin `block` shown as sent, drawing off: the band shows every line
+    /// above the last one, then what Prompts triggers left of the last.
+    /// `display` is None when one hid it. See [`Stage::pin`].
+    pub fn pin_shown(
+        &mut self,
+        out: &mut Output,
+        block: Block,
+        painted: Option<u64>,
+        before: &[u8],
+        display: Option<&[u8]>,
+    ) {
+        let mut body = block.heads();
+        if let Some(display) = display {
+            body.extend_from_slice(display);
+        }
+        let body = trim_line_end(body);
+        self.pin(out, block, painted, before, body);
+    }
+
+    /// Take `block` out of the text and put `body` on the band. `before`,
+    /// such as lines a Prompts trigger's script echoed, still goes to the
+    /// text, over the region `painted` when an earlier read painted part
+    /// of the prompt there. With nothing before, that region is erased,
+    /// which a renderer that wrote after it drops. The line ends the text
+    /// ends on are held back, and the empty line your next unasked text
+    /// starts with writes nothing, unless the prompt already took its line
+    /// end.
+    fn pin(
+        &mut self,
+        out: &mut Output,
+        block: Block,
+        painted: Option<u64>,
+        before: &[u8],
+        body: Vec<u8>,
+    ) {
+        self.sync(out);
+        match painted {
+            Some(gen) => out.replace(gen, before.to_vec(), !before.is_empty()),
+            None => out.text(before),
+        }
+        out.hold_tail();
+        self.open = None;
+        self.swallow = (block.final_line().end != End::SettledLine).then(|| Swallow::at(out));
+        out.pin = Some(body.clone());
+        self.pinned = Some(body);
+        self.shown_as = PromptShow::Pinned;
         self.note_recognized(block);
     }
 
@@ -788,7 +1106,15 @@ impl Stage {
         bytes: &[u8],
     ) {
         self.sync(out);
-        write(out, &mut self.open, painted, bytes.to_vec());
+        // The line end a pinned prompt's row would have taken, and any
+        // empty line with it, writes nothing. It is still logged and kept.
+        let swallowed = self.swallow.is_some()
+            && painted.is_none()
+            && plain.trim().is_empty()
+            && !shows_anything(bytes);
+        if !swallowed {
+            write(out, &mut self.open, painted, bytes.to_vec());
+        }
         self.unrecorded = true;
         if !plain.trim().is_empty() {
             // Reuse the buffers, since this runs for every line.
@@ -874,6 +1200,12 @@ impl Stage {
     /// the row.
     pub fn repaint(&mut self, out: &mut Output, rendered: Option<&str>) {
         self.sync(out);
+        match (self.shown_as, self.show) {
+            (PromptShow::Pinned, PromptShow::Pinned) => return self.repaint_pinned(out, rendered),
+            (_, PromptShow::Pinned) => return self.move_to_pinned(out, rendered),
+            (PromptShow::Pinned, _) => return self.move_from_pinned(out, rendered),
+            _ => {}
+        }
         let Some(open) = &self.open else {
             return;
         };
@@ -894,6 +1226,77 @@ impl Stage {
         out.replace(old, bytes, false);
         out.closed = false;
         self.open = Some(OpenRow { gen, body });
+    }
+
+    /// Show the band as the `[prompt]` table now says. It never writes to
+    /// the text, so it never races your echo.
+    fn repaint_pinned(&mut self, out: &mut Output, rendered: Option<&str>) {
+        let (Some(block), Some(pinned)) = (&self.last_raw, &self.pinned) else {
+            return;
+        };
+        let rendered = rendered.filter(|_| !block.afk);
+        let body = pin_body(block, rendered);
+        if body == *pinned {
+            return;
+        }
+        out.pin = Some(body.clone());
+        self.pinned = Some(body);
+    }
+
+    /// You chose Pinned. The open row, if any, is erased and its prompt
+    /// goes to the band, and the next empty line writes nothing. Without
+    /// one, the next prompt goes to the band.
+    fn move_to_pinned(&mut self, out: &mut Output, rendered: Option<&str>) {
+        let Some(open) = self.open.take() else {
+            self.shown_as = PromptShow::Pinned;
+            return;
+        };
+        let Some(block) = &self.last_raw else {
+            return;
+        };
+        let rendered = rendered.filter(|_| !block.afk);
+        let body = pin_body(block, rendered);
+        let settled_line = block.final_line().end == End::SettledLine;
+        out.replace(open.gen, Vec::new(), false);
+        self.swallow = (!settled_line).then(|| Swallow::at(out));
+        out.pin = Some(body.clone());
+        self.pinned = Some(body);
+        self.shown_as = PromptShow::Pinned;
+    }
+
+    /// You chose to show your prompt in the text again. The band empties.
+    /// While the pinned prompt's row would still be the last thing on
+    /// screen, the prompt comes back there, as a fresh open row after the
+    /// held line ends. Otherwise the next prompt shows in the text.
+    fn move_from_pinned(&mut self, out: &mut Output, rendered: Option<&str>) {
+        out.pin = Some(Vec::new());
+        self.pinned = None;
+        self.shown_as = self.show;
+        if self.swallow.take().is_none() {
+            return;
+        }
+        let Some(block) = self.last_raw.clone() else {
+            return;
+        };
+        match rendered.filter(|_| !block.afk) {
+            Some(rendered) => {
+                let gen = self.next_gen();
+                let body = drawn(&block, rendered);
+                let mut bytes = block.heads_shown();
+                bytes.extend(mark(gen));
+                bytes.extend_from_slice(&body);
+                out.text(&bytes);
+                out.closed = false;
+                self.open = Some(OpenRow { gen, body });
+            }
+            None => {
+                let mut bytes = block.heads();
+                let last = block.final_line();
+                bytes.extend_from_slice(&last.raw);
+                bytes.extend_from_slice(last.end.terminator());
+                out.text(&bytes);
+            }
+        }
     }
 
     fn note_recognized(&mut self, block: Block) {
@@ -995,6 +1398,32 @@ fn drawn(block: &Block, rendered: &str) -> Vec<u8> {
         body.extend_from_slice(b"\r\n");
     }
     body
+}
+
+/// What the band shows for `block`: the lines above the last one that
+/// show as sent, then `rendered`, or with drawing off every line as the
+/// game sent it. No line end after the last row.
+fn pin_body(block: &Block, rendered: Option<&str>) -> Vec<u8> {
+    match rendered {
+        Some(rendered) => {
+            let mut body = block.heads_shown();
+            body.extend_from_slice(rendered.as_bytes());
+            trim_line_end(body)
+        }
+        None => {
+            let mut body = block.heads();
+            body.extend_from_slice(&block.final_line().raw);
+            trim_line_end(body)
+        }
+    }
+}
+
+/// `bytes` without the line ends at its very end.
+fn trim_line_end(mut bytes: Vec<u8>) -> Vec<u8> {
+    while bytes.last().is_some_and(|&b| b == b'\n' || b == b'\r') {
+        bytes.pop();
+    }
+    bytes
 }
 
 /// Write `bytes` over the region `painted`, or as they are.
@@ -1622,5 +2051,409 @@ mod tests {
             .expect("the prompt");
         assert_eq!(block.raw_text(), colored);
         assert_eq!(block.final_line().plain, PROMPT);
+    }
+
+    /// A stage that reads JAMES and pins your prompt.
+    fn pinned_stage() -> Stage {
+        let mut stage = stage(JAMES, false);
+        stage.set_show(PromptShow::Pinned);
+        stage
+    }
+
+    /// Pin the prompt as the session does with drawing on.
+    fn pin_prompt(stage: &mut Stage, out: &mut Output) {
+        let block = read(stage, PROMPT, End::Line);
+        stage.pin_drawn(out, block, None, b"", "DRAWN");
+    }
+
+    #[test]
+    fn the_line_ends_a_text_ends_on_are_found_after_its_last_visible_character() {
+        assert_eq!(trailing_line_ends(b"room\r\n\r\n"), 4);
+        assert_eq!(trailing_line_ends(b"room\x1b[0m\r\n\x1b[0m\r\n"), 4);
+        assert_eq!(trailing_line_ends(b"room"), 4);
+        assert_eq!(
+            trailing_line_ends(b"room\x1b[0m"),
+            8,
+            "no line end, no hold"
+        );
+        assert_eq!(trailing_line_ends(b"\r\n"), 0);
+        assert_eq!(trailing_line_ends(b""), 0);
+        // A mark stops the run, so a region keeps its start.
+        let mut marked = b"a\r\n".to_vec();
+        marked.extend(mark(3));
+        marked.extend_from_slice(b"\r\n");
+        assert_eq!(trailing_line_ends(&marked), marked.len() - 2);
+        assert!(shows_anything(b"a"));
+        assert!(!shows_anything(b"\r\n \x1b[0m\x1b]7717;o;4\x07"));
+    }
+
+    #[test]
+    fn a_pinned_prompt_leaves_the_text_and_holds_the_line_ends_before_it() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        out.text(b"The Bank of Aabahran\r\n[Exits: south]\r\n");
+        stage.line(&mut out, b"", "", None, b"\r\n");
+        pin_prompt(&mut stage, &mut out);
+        assert_eq!(out.bytes, b"The Bank of Aabahran\r\n[Exits: south]");
+        assert_eq!(out.hold, b"\r\n\r\n");
+        assert_eq!(out.pin.as_deref(), Some(&b"DRAWN"[..]));
+        assert_eq!(out.replace, None);
+        assert_eq!(stage.open_row(), None);
+        assert_eq!(stage.pinned(), Some(&b"DRAWN"[..]));
+        assert!(stage.swallows());
+        stage.finish(&out);
+
+        // The next unasked text starts with an empty line, which writes
+        // nothing, then lands where the prompt's row was.
+        let mut next = Output::new(false);
+        stage.line(&mut next, b"", "", None, b"\r\n");
+        assert!(next.bytes.is_empty() && next.hold.is_empty());
+        stage.line(
+            &mut next,
+            b"Tarvik tells you 'hi'",
+            "Tarvik tells you 'hi'",
+            None,
+            b"Tarvik tells you 'hi'\r\n",
+        );
+        stage.line(&mut next, b"", "", None, b"\r\n");
+        pin_prompt(&mut stage, &mut next);
+        assert_eq!(next.bytes, b"Tarvik tells you 'hi'");
+        assert_eq!(next.hold, b"\r\n\r\n");
+        // Once text lands, the next empty line writes again.
+        let mut more = Output::new(false);
+        stage.line(&mut more, b"", "", None, b"\r\n");
+        assert!(more.bytes.is_empty(), "the second pin armed it again");
+    }
+
+    #[test]
+    fn two_pins_in_one_read_keep_the_hold_at_the_end_of_the_output() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        pin_prompt(&mut stage, &mut out);
+        assert_eq!(out.hold, b"\r\n\r\n");
+        // The next pulse in the same read.
+        stage.line(&mut out, b"", "", None, b"\r\n");
+        stage.line(&mut out, b"tell", "tell", None, b"tell\r\n");
+        assert_eq!(
+            out.bytes, b"room\r\n\r\ntell\r\n",
+            "the hold went back first"
+        );
+        assert!(out.hold.is_empty());
+        stage.line(&mut out, b"", "", None, b"\r\n");
+        pin_prompt(&mut stage, &mut out);
+        assert_eq!(out.bytes, b"room\r\n\r\ntell");
+        assert_eq!(out.hold, b"\r\n\r\n");
+        // A region painted after a pin takes the hold back too.
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        pin_prompt(&mut stage, &mut out);
+        let _ = stage.paint_partial(&mut out, b"<10", None);
+        assert!(out.hold.is_empty());
+        assert!(out.bytes.starts_with(b"room\r\n\r\n\x1b]7717;o;"));
+    }
+
+    #[test]
+    fn the_end_of_a_read_keeps_the_swallow_however_often_it_is_told() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        pin_prompt(&mut stage, &mut out);
+        stage.end_read(&mut out);
+        stage.finish(&out);
+        stage.finish(&out);
+        assert!(stage.swallows());
+        let mut next = Output::new(false);
+        stage.line(&mut next, b"", "", None, b"\r\n");
+        assert!(next.bytes.is_empty());
+        // Text in a later output ends it, whoever wrote it.
+        next.text(b"echo\r\n");
+        stage.finish(&next);
+        assert!(!stage.swallows());
+    }
+
+    #[test]
+    fn a_pulse_of_hidden_lines_moves_nothing() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&out);
+        let mut next = Output::new(false);
+        stage.line(&mut next, b"", "", None, b"\r\n");
+        stage.line(&mut next, b"spam", "spam", None, b"");
+        stage.line(&mut next, b"", "", None, b"\r\n");
+        pin_prompt(&mut stage, &mut next);
+        assert!(next.bytes.is_empty());
+        assert!(next.hold.is_empty());
+        assert_eq!(next.pin.as_deref(), Some(&b"DRAWN"[..]));
+        assert!(!next.is_empty(), "the band still changes");
+    }
+
+    #[test]
+    fn enter_on_an_empty_line_moves_nothing_and_updates_the_band() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&out);
+        // A send leaves it armed.
+        stage.close();
+        let mut next = Output::new(false);
+        stage.line(&mut next, b"", "", None, b"\r\n");
+        let block = read(&stage, PROMPT, End::Line);
+        stage.pin_drawn(&mut next, block, None, b"", "NEW");
+        assert!(next.bytes.is_empty() && next.hold.is_empty());
+        assert_eq!(next.pin.as_deref(), Some(&b"NEW"[..]));
+        assert!(!next.is_empty());
+    }
+
+    #[test]
+    fn a_local_write_and_other_output_end_the_swallow() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&out);
+        stage.local_write();
+        let mut next = Output::new(false);
+        stage.line(&mut next, b"", "", None, b"\r\n");
+        assert_eq!(next.bytes, b"\r\n");
+
+        let mut out = Output::new(false);
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&out);
+        let mut next = Output::new(true);
+        stage.line(&mut next, b"", "", None, b"\r\n");
+        assert_eq!(next.bytes, b"\r\n");
+
+        // Text a script echoed in the same read ends it too.
+        let mut out = Output::new(false);
+        pin_prompt(&mut stage, &mut out);
+        out.text(b"echo\r\n");
+        stage.line(&mut out, b"", "", None, b"\r\n");
+        assert!(out.bytes.ends_with(b"echo\r\n\r\n"));
+    }
+
+    #[test]
+    fn a_prompt_that_took_its_line_end_arms_nothing() {
+        let mut stage = stage(SETTLES, true);
+        stage.set_show(PromptShow::Pinned);
+        let block = read(&stage, "<10hp> ", End::Line);
+        assert_eq!(block.final_line().end, End::SettledLine);
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        stage.pin_drawn(&mut out, block, None, b"", "DRAWN");
+        assert!(!stage.swallows());
+        assert_eq!(
+            out.pin.as_deref(),
+            Some(&b"DRAWN"[..]),
+            "no line end on the band"
+        );
+        stage.line(&mut out, b"arrives", "arrives", None, b"arrives\r\n");
+        assert_eq!(out.bytes, b"room\r\n\r\narrives\r\n");
+    }
+
+    #[test]
+    fn a_painted_start_of_a_pinned_prompt_is_erased_unless_closed() {
+        let mut stage = pinned_stage();
+        let mut first = Output::new(false);
+        let painted = stage.paint_partial(&mut first, b"[1020/1020hp 800", None);
+        let mut second = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.pin_drawn(&mut second, block, painted.map(|(g, _)| g), b"", "DRAWN");
+        assert_eq!(
+            second.replace,
+            Some(Replace {
+                gen: 1,
+                bytes: Vec::new(),
+                fresh: false,
+            })
+        );
+        assert!(second.bytes.is_empty());
+        // Echoes a Prompts trigger wrote take the painted region's place,
+        // line end and all, since a replace is written whole.
+        let mut third = Output::new(false);
+        let painted = stage.paint_partial(&mut third, b"[1020", None);
+        let mut fourth = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.pin_drawn(
+            &mut fourth,
+            block,
+            painted.map(|(g, _)| g),
+            b"low on mana\r\n",
+            "DRAWN",
+        );
+        assert_eq!(
+            fourth.replace,
+            Some(Replace {
+                gen: 2,
+                bytes: b"low on mana\r\n".to_vec(),
+                fresh: true,
+            })
+        );
+        // After other output the painted start is closed, so it stays.
+        let mut fifth = Output::new(false);
+        let painted = stage.paint_partial(&mut fifth, b"[1020", None);
+        let mut sixth = Output::new(false);
+        sixth.text(b"The moon rises.\r\n");
+        let block = read(&stage, PROMPT, End::Line);
+        stage.pin_drawn(&mut sixth, block, painted.map(|(g, _)| g), b"", "DRAWN");
+        assert_eq!(sixth.replace, None);
+        assert_eq!(sixth.bytes, b"The moon rises.");
+        assert_eq!(sixth.hold, b"\r\n");
+    }
+
+    #[test]
+    fn a_pinned_prompt_that_spans_lines_puts_every_line_on_the_band() {
+        let stage = pinned_stage();
+        let block = Block {
+            lines: vec![
+                BlockLine {
+                    raw: b"Tester: [===|---]".to_vec(),
+                    plain: "Tester: [===|---]".into(),
+                    end: End::Line,
+                },
+                BlockLine {
+                    raw: PROMPT.as_bytes().to_vec(),
+                    plain: PROMPT.into(),
+                    end: End::Line,
+                },
+            ],
+            replaced: vec![1],
+            values: BTreeMap::new(),
+            afk: false,
+        };
+        let mut stage = stage;
+        let mut out = Output::new(false);
+        out.text(b"A guard has quite a few wounds.\r\n\r\n");
+        stage.pin_drawn(&mut out, block.clone(), None, b"", "DRAWN");
+        assert_eq!(out.pin.as_deref(), Some(&b"Tester: [===|---]\r\nDRAWN"[..]));
+        assert_eq!(out.bytes, b"A guard has quite a few wounds.");
+        // A design that reads the tank line takes it over.
+        let over = Block {
+            replaced: vec![0, 1],
+            ..block.clone()
+        };
+        let mut out = Output::new(false);
+        stage.pin_drawn(&mut out, over, None, b"", "Tank 75%\r\nDRAWN");
+        assert_eq!(out.pin.as_deref(), Some(&b"Tank 75%\r\nDRAWN"[..]));
+        // Drawing off, the band shows the lines as sent, and a trigger
+        // that hid the last one leaves the lines above it.
+        let mut out = Output::new(false);
+        stage.pin_shown(
+            &mut out,
+            block.clone(),
+            None,
+            b"",
+            Some(b"\x1b[31m[shown]\x1b[0m"),
+        );
+        assert_eq!(
+            out.pin.as_deref(),
+            Some(&b"Tester: [===|---]\r\n\x1b[31m[shown]\x1b[0m"[..])
+        );
+        let mut out = Output::new(false);
+        stage.pin_shown(&mut out, block, None, b"", None);
+        assert_eq!(out.pin.as_deref(), Some(&b"Tester: [===|---]"[..]));
+    }
+
+    #[test]
+    fn a_repaint_while_pinned_changes_only_the_band() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&out);
+        let mut repaint = Output::new(false);
+        stage.repaint(&mut repaint, Some("NEW"));
+        assert_eq!(repaint.pin.as_deref(), Some(&b"NEW"[..]));
+        assert!(repaint.bytes.is_empty() && repaint.replace.is_none() && repaint.hold.is_empty());
+        let mut same = Output::new(false);
+        stage.repaint(&mut same, Some("NEW"));
+        assert!(same.is_empty());
+        let mut off = Output::new(false);
+        stage.repaint(&mut off, None);
+        assert_eq!(off.pin.as_deref(), Some(PROMPT.as_bytes()));
+        // Your echo after it changes nothing about that.
+        stage.local_write();
+        let mut later = Output::new(false);
+        stage.repaint(&mut later, Some("LATER"));
+        assert_eq!(later.pin.as_deref(), Some(&b"LATER"[..]));
+    }
+
+    #[test]
+    fn choosing_pinned_moves_the_open_row_to_the_band() {
+        let mut stage = stage(JAMES, false);
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        stage.finish(&out);
+        stage.set_show(PromptShow::Pinned);
+        let mut moved = Output::new(false);
+        stage.repaint(&mut moved, Some("DRAWN"));
+        assert_eq!(
+            moved.replace,
+            Some(Replace {
+                gen: 1,
+                bytes: Vec::new(),
+                fresh: false,
+            })
+        );
+        assert_eq!(moved.pin.as_deref(), Some(&b"DRAWN"[..]));
+        assert!(stage.swallows());
+        assert_eq!(stage.open_row(), None);
+        // With the row closed, the next prompt goes to the band.
+        let mut stage = self::stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        stage.close();
+        stage.set_show(PromptShow::Pinned);
+        let mut moved = Output::new(false);
+        stage.repaint(&mut moved, Some("DRAWN"));
+        assert!(moved.is_empty());
+    }
+
+    #[test]
+    fn leaving_pinned_brings_the_prompt_back_only_while_its_row_would_still_be_last() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&out);
+        stage.set_show(PromptShow::Text);
+        let mut back = Output::new(false);
+        stage.repaint(&mut back, Some("DRAWN"));
+        assert_eq!(back.pin.as_deref(), Some(&b""[..]), "the band empties");
+        assert_eq!(back.bytes, with(&[&mark(1), b"DRAWN"]));
+        assert_eq!(stage.open_row().map(|r| r.gen), Some(1));
+        assert!(!stage.swallows());
+
+        // After your echo the prompt stays off the text.
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&out);
+        stage.local_write();
+        stage.set_show(PromptShow::Text);
+        let mut back = Output::new(false);
+        stage.repaint(&mut back, Some("DRAWN"));
+        assert_eq!(back.pin.as_deref(), Some(&b""[..]));
+        assert!(back.bytes.is_empty());
+        assert_eq!(stage.open_row(), None);
+    }
+
+    #[test]
+    fn in_the_text_nothing_is_held_or_pinned() {
+        let mut stage = stage(JAMES, false);
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        assert!(out.hold.is_empty());
+        assert_eq!(out.pin, None);
+        assert!(!stage.swallows());
+        stage.line(&mut out, b"", "", None, b"\r\n");
+        assert!(out.bytes.ends_with(b"DRAWN\r\n"));
     }
 }
