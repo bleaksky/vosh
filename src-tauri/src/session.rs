@@ -12,7 +12,7 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
-use vosh_prompt::stage::{Block, End, Output};
+use vosh_prompt::stage::{Block, BlockLine, End, Offer, Output};
 use vosh_telnet::{
     codes as telnet_codes, option as telnet_option, Event as TelnetEvent, Negotiator, Parser,
 };
@@ -566,7 +566,9 @@ async fn io_loop(
                     }
                 }
                 Some(OutgoingMsg::LocalWrite) => {
-                    profile.lock().await.prompt.stage.close();
+                    let mut p = profile.lock().await;
+                    p.prompt.stage.close();
+                    p.prompt.stage.forget_held();
                 }
                 Some(OutgoingMsg::PromptRepaint) => {
                     let out = {
@@ -1089,7 +1091,7 @@ async fn handle_event(
                 // later just to read the tick. The line is the game's
                 // tick, so the step fires once per tick and carries the
                 // Send each tick command to run after the lock drops.
-                let step = {
+                let steps = {
                     let lock_t0 = std::time::Instant::now();
                     let mut p = profile.lock().await;
                     perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
@@ -1097,8 +1099,10 @@ async fn handle_event(
                     line_step(&mut p, batch, line, plain, Instant::now(), log_session_id)
                 };
                 perf.trigger_lua_ns += trigger_t0.elapsed().as_nanos() as u64;
-                deliver_line_step(app, stream, profile, timers, scrollback, batch, step, perf)
-                    .await?;
+                for step in steps {
+                    deliver_line_step(app, stream, profile, timers, scrollback, batch, step, perf)
+                        .await?;
+                }
             }
             Ok(())
         }
@@ -1115,11 +1119,11 @@ async fn handle_event(
             // prompt on its own, since the pager and editor prompts end
             // with one too. Either way the candidates ring records one
             // entry.
-            let step = {
+            let steps = {
                 let mut p = profile.lock().await;
                 marker_step(&mut p, accumulator, batch, Instant::now(), log_session_id)
             };
-            if let Some(step) = step {
+            for step in steps {
                 deliver_line_step(app, stream, profile, timers, scrollback, batch, step, perf)
                     .await?;
             }
@@ -1222,10 +1226,12 @@ struct LineStep {
     scrollback: Option<Vec<u8>>,
 }
 
-/// Handle one complete line under the profile lock. A line the capture
-/// reads is your prompt and goes through [`prompt_block`]. Any other runs
-/// the Line pass and lands in the batch as its triggers left it,
-/// replacing the start an earlier read painted.
+/// Handle one complete line under the profile lock. The stage reads it
+/// as your prompt, alone or as the last line of a prompt that spans lines,
+/// through [`prompt_block`], or holds it as the top line of one. Lines it
+/// held and let go, then a line that is no prompt, run the Line pass and
+/// land in the batch as their triggers left them, each replacing the
+/// start an earlier read painted.
 fn line_step(
     p: &mut Profile,
     batch: &mut ReadBatch,
@@ -1233,15 +1239,71 @@ fn line_step(
     plain: String,
     now: Instant,
     log_session_id: Option<i64>,
-) -> LineStep {
-    if let Some(block) = p.prompt.stage.recognize(&line.bytes, &plain, End::Line) {
-        return prompt_block(p, batch, block, line.painted, now, log_session_id);
+) -> Vec<LineStep> {
+    let offered = p
+        .prompt
+        .stage
+        .offer(&line.bytes, &plain, line.painted, End::Line);
+    let mut steps = released_steps(p, batch, offered.released, now, log_session_id);
+    match offered.offer {
+        Offer::Prompt(block, painted) => {
+            steps.push(prompt_block(p, batch, block, painted, now, log_session_id));
+        }
+        Offer::Held => {}
+        Offer::Line => steps.push(text_line_step(
+            p,
+            batch,
+            line.bytes,
+            plain,
+            line.painted,
+            now,
+            log_session_id,
+        )),
     }
+    steps
+}
+
+/// Lines the stage held and let go, each through the Line pass in order.
+fn released_steps(
+    p: &mut Profile,
+    batch: &mut ReadBatch,
+    released: Vec<vosh_prompt::stage::Released>,
+    now: Instant,
+    log_session_id: Option<i64>,
+) -> Vec<LineStep> {
+    released
+        .into_iter()
+        .map(|line| {
+            text_line_step(
+                p,
+                batch,
+                line.raw,
+                line.plain,
+                line.painted,
+                now,
+                log_session_id,
+            )
+        })
+        .collect()
+}
+
+/// A complete line that is not your prompt. It runs the Line pass and
+/// lands in the batch as its triggers left it, replacing the region
+/// `painted` an earlier read painted its start in.
+fn text_line_step(
+    p: &mut Profile,
+    batch: &mut ReadBatch,
+    bytes: Vec<u8>,
+    plain: String,
+    painted: Option<u64>,
+    now: Instant,
+    log_session_id: Option<i64>,
+) -> LineStep {
     let LinePass {
         result,
         tick_step,
         mut apply,
-    } = line_pass(p, &line.bytes, &plain, now);
+    } = line_pass(p, &bytes, &plain, now);
     if result.display.is_none() {
         note_gag_without_reader(p, batch, &plain, MatchScope::Line);
     }
@@ -1264,7 +1326,7 @@ fn line_step(
     }
     p.prompt
         .stage
-        .line(&mut batch.out, &line.bytes, &plain, line.painted, &shown);
+        .line(&mut batch.out, &bytes, &plain, painted, &shown);
     // A line that shows is logged, in one transaction at the end of the
     // read, and kept in the ring buffer that becomes scrollback on the
     // next launch. The raw bytes carry ANSI, and the plain text drives
@@ -1275,7 +1337,7 @@ fn line_step(
                 session_id: sid,
                 ts_ms: now_ms(),
                 text: plain,
-                raw: Some(line.bytes),
+                raw: Some(bytes),
             });
         }
         text.as_bytes().to_vec()
@@ -1338,7 +1400,8 @@ fn prompt_block(
 
     let mut before = Vec::new();
     let mut scrollback = None;
-    if p.prompt.draws() {
+    // The away prompt shows as sent, even while Vosh draws.
+    if p.prompt.draws() && !block.afk {
         // Echoes land where the prompt was, above the drawn prompt.
         for echo in apply.echoes.drain(..) {
             before.extend_from_slice(echo.as_bytes());
@@ -1356,11 +1419,22 @@ fn prompt_block(
             }
         }
         let display = result.display.as_deref().map(str::as_bytes);
+        // The lines above the last one show as sent and are logged with
+        // it.
+        let heads: Vec<BlockLine> = block.lines[..block.lines.len() - 1].to_vec();
         p.prompt
             .stage
             .show(&mut batch.out, block, painted, &before, display);
         if let Some(text) = &result.display {
             if let Some(sid) = log_session_id {
+                for head in heads {
+                    batch.log.push(vosh_log::LogEntry {
+                        session_id: sid,
+                        ts_ms: now_ms(),
+                        text: head.plain,
+                        raw: Some(head.raw),
+                    });
+                }
                 batch.log.push(vosh_log::LogEntry {
                     session_id: sid,
                     ts_ms: now_ms(),
@@ -1433,44 +1507,60 @@ fn unread_partial(
 }
 
 /// A GA or EOR arrived. The partial it ends is your prompt when the
-/// capture reads it, and otherwise goes through [`unread_partial`]. The
-/// candidates ring records one entry either way.
+/// capture reads it, alone or after held lines, and otherwise goes
+/// through [`unread_partial`]. Held lines it does not finish run the Line
+/// pass first. The candidates ring records one entry either way.
 fn marker_step(
     p: &mut Profile,
     accumulator: &mut LineAccumulator,
     batch: &mut ReadBatch,
     now: Instant,
     log_session_id: Option<i64>,
-) -> Option<LineStep> {
+) -> Vec<LineStep> {
     let Some(partial) = accumulator.take_partial() else {
+        // A GA after lines the stage held ends them, since the rest of
+        // the prompt never came.
+        let released = p.prompt.stage.release();
+        let steps = released_steps(p, batch, released, now, log_session_id);
         p.prompt.record(None, now_ms());
-        return None;
+        return steps;
     };
     let plain = vosh_ansi::plain_text(&partial.bytes);
-    let step = match p
+    let painted = partial.painted.map(|(gen, _)| gen);
+    let offered = p
         .prompt
         .stage
-        .recognize(&partial.bytes, &plain, End::Marker)
-    {
-        Some(block) => {
-            let painted = partial.painted.map(|(gen, _)| gen);
-            let step = prompt_block(p, batch, block, painted, now, log_session_id);
+        .offer(&partial.bytes, &plain, painted, End::Marker);
+    let mut steps = released_steps(p, batch, offered.released, now, log_session_id);
+    match offered.offer {
+        Offer::Prompt(block, painted) => {
+            steps.push(prompt_block(p, batch, block, painted, now, log_session_id));
             p.prompt.record(None, now_ms());
-            step
         }
-        None => {
-            let step = unread_partial(p, batch, &partial, &plain);
+        Offer::Held | Offer::Line => {
+            // The lines it released took the region the partial was
+            // painted in, so the partial writes after them.
+            let partial = if steps.is_empty() {
+                partial
+            } else {
+                Partial {
+                    painted: None,
+                    ..partial
+                }
+            };
+            steps.push(unread_partial(p, batch, &partial, &plain));
             p.prompt.record(Some((&partial.bytes, &plain)), now_ms());
-            step
         }
-    };
-    Some(step)
+    }
+    steps
 }
 
-/// The end of a read. A partial the capture settles on is your prompt
-/// now, so it draws in this read and never flashes. Any other partial
-/// paints as a region a later read replaces. Then the stage catches up
-/// with everything the read wrote.
+/// The end of a read. A partial the capture settles on, alone or after
+/// held lines, is your prompt now, so it draws in this read and never
+/// flashes. Any other partial paints as a region a later read replaces,
+/// with the held lines before it. Held lines with no partial after them
+/// paint the same way. Then the stage catches up with everything the read
+/// wrote.
 fn partial_step(
     p: &mut Profile,
     accumulator: &mut LineAccumulator,
@@ -1481,13 +1571,20 @@ fn partial_step(
     let mut step = None;
     if let Some(bytes) = accumulator.partial().map(<[u8]>::to_vec) {
         let plain = vosh_ansi::plain_text(&bytes);
-        match p.prompt.stage.recognize(&bytes, &plain, End::Settled) {
-            Some(block) => {
+        match p.prompt.stage.settle(&bytes, &plain) {
+            Some((block, region)) => {
                 let painted = accumulator
                     .take_partial()
                     .and_then(|t| t.painted)
                     .map(|(gen, _)| gen);
-                step = Some(prompt_block(p, batch, block, painted, now, log_session_id));
+                step = Some(prompt_block(
+                    p,
+                    batch,
+                    block,
+                    region.or(painted),
+                    now,
+                    log_session_id,
+                ));
             }
             None => {
                 let painted =
@@ -1497,6 +1594,8 @@ fn partial_step(
                 accumulator.set_painted(painted);
             }
         }
+    } else {
+        p.prompt.stage.end_read(&mut batch.out);
     }
     p.prompt.stage.finish(&batch.out);
     step
@@ -1517,6 +1616,7 @@ fn send_step(p: &mut Profile, accumulator: &LineAccumulator, at_ms: i64) -> bool
         at_ms,
     );
     p.prompt.stage.close();
+    p.prompt.stage.forget_held();
     p.prompt.vars.on_send()
 }
 
@@ -1687,7 +1787,7 @@ fn end_prompt(p: &mut Profile) {
 /// Keep a GMCP packet for the custom prompt, stamped with the local
 /// time it arrived.
 fn observe_prompt_gmcp(p: &mut Profile, msg: &vosh_gmcp::Message) {
-    p.prompt.vars.observe(
+    p.prompt.observe(
         &msg.package,
         msg.data.clone(),
         chrono::Local::now().fixed_offset(),
@@ -2849,7 +2949,8 @@ mod tests {
             Some(7),
         );
         assert_eq!(batch.log.len(), 1, "a prompt that shows is logged");
-        assert_eq!(step.scrollback.as_deref(), Some(PROMPT_LINE.as_bytes()));
+        assert_eq!(step.len(), 1);
+        assert_eq!(step[0].scrollback.as_deref(), Some(PROMPT_LINE.as_bytes()));
         // A drawn prompt is neither logged nor kept for scrollback.
         let mut p = capture_profile(HP);
         let mut batch = super::ReadBatch::new(super::output_count());
@@ -2865,7 +2966,8 @@ mod tests {
             Some(7),
         );
         assert!(batch.log.is_empty());
-        assert_eq!(step.scrollback, None);
+        assert_eq!(step.len(), 1);
+        assert_eq!(step[0].scrollback, None);
         assert!(batch.prompt_vars, "the prompt vars follow a prompt");
     }
 
@@ -3667,6 +3769,241 @@ mod tests {
         super::start_prompt(&mut p, false);
         assert!(!p.prompt.forsaken());
         assert_eq!(p.prompt.config().template, GATE);
+    }
+
+    /// James's PROMPT as the game stores it, and the tank block it prints
+    /// while someone in the group tanks.
+    const CODES: &str = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c";
+    const TANK_LINE: &str = "Tester: [===|===|---|---]";
+    const FIGHT_LINE: &str = "[159/1020hp 310/800mn 489/930mv]";
+
+    /// A profile that reads Aabahran's codes `prompt` and draws
+    /// `template` in its place.
+    fn codes_profile(prompt: &str, template: &str) -> Profile {
+        let mut p = Profile::default();
+        p.set_prompt_config(vosh_prompt::PromptConfig {
+            draw: true,
+            template: template.to_string(),
+            capture: vosh_prompt::CaptureConfig::Aabahran(vosh_prompt::config::AabahranCapture {
+                prompt: prompt.to_string(),
+                ..vosh_prompt::config::AabahranCapture::default()
+            }),
+            ..vosh_prompt::PromptConfig::default()
+        });
+        p
+    }
+
+    #[test]
+    fn the_codes_read_and_draw_a_one_line_prompt() {
+        let mut wire = Wire::new(codes_profile(CODES, HP));
+        let out = wire.read(b"You are hungry.\n\r[1020/1020hp 800/800mn 930/930mv]\n\r");
+        assert_eq!(
+            out.bytes,
+            with(&[b"You are hungry.\r\n", &wire.mark(1), b"<1020>\x1b[0m"])
+        );
+        assert!(wire.p.prompt.stage.open_row().is_some());
+    }
+
+    #[test]
+    fn a_tank_line_shows_as_sent_when_the_design_reads_nothing_on_it() {
+        let mut wire = Wire::new(codes_profile(CODES, HP));
+        let out = wire.read(format!("{TANK_LINE}\n\r{FIGHT_LINE}\n\r").as_bytes());
+        assert_eq!(
+            out.bytes,
+            with(&[
+                TANK_LINE.as_bytes(),
+                b"\r\n",
+                &wire.mark(1),
+                b"<159>\x1b[0m"
+            ])
+        );
+        // The capture read the whole block.
+        let vars = wire.p.prompt.vars.prompt_vars();
+        assert_eq!(vars.get("tank").map(String::as_str), Some("Tester"));
+        assert_eq!(vars.get("fight").map(String::as_str), Some("1"));
+        // Drawing off brings back only the line the design replaced, so
+        // the tank line never shows twice.
+        let block = wire.p.prompt.stage.last_raw().expect("the block").clone();
+        assert_eq!(block.replaced, [1]);
+        assert_eq!(block.shown(), format!("{FIGHT_LINE}\r\n").into_bytes());
+    }
+
+    #[test]
+    fn a_design_that_reads_the_tank_takes_over_the_whole_block() {
+        for template in ["%tank <%hp>", "%{tank_hp:game} <%hp>", "%{raw}"] {
+            let mut wire = Wire::new(codes_profile(CODES, template));
+            let out = wire.read(format!("{TANK_LINE}\n\r{FIGHT_LINE}\n\r").as_bytes());
+            let text = String::from_utf8_lossy(&out.bytes).into_owned();
+            assert!(
+                text.starts_with(&String::from_utf8_lossy(&wire.mark(1)).into_owned()),
+                "{template}: {text:?}"
+            );
+            let block = wire.p.prompt.stage.last_raw().expect("the block");
+            assert_eq!(block.replaced, [0, 1], "{template}");
+        }
+    }
+
+    #[test]
+    fn a_tank_block_draws_the_same_wherever_the_reads_split() {
+        // The game follows a prompt ending in %c with a space and a GA,
+        // and starts the next output with a line end.
+        let text =
+            format!("You flee.\n\r{TANK_LINE}\n\r{FIGHT_LINE}\n\r *\n\rThe guard arrives.\n\r");
+        let screen = same_at_every_split(&|| codes_profile(CODES, HP), &text);
+        assert_eq!(
+            screen,
+            ["You flee.", TANK_LINE, "<159>", "", "The guard arrives."]
+        );
+        let screen = same_at_every_split(&|| codes_profile(CODES, "%tank <%hp>"), &text);
+        assert_eq!(
+            screen,
+            ["You flee.", "Tester <159>", "", "The guard arrives."]
+        );
+    }
+
+    #[test]
+    fn a_held_tank_line_paints_at_the_end_of_a_read_and_the_prompt_replaces_it() {
+        let mut wire = Wire::new(codes_profile(CODES, HP));
+        let out = wire.read(format!("{TANK_LINE}\n\r").as_bytes());
+        assert_eq!(
+            out.bytes,
+            with(&[&wire.mark(1), TANK_LINE.as_bytes(), b"\r\n"])
+        );
+        let out = wire.read(format!("{FIGHT_LINE}\n\r").as_bytes());
+        assert!(out.bytes.is_empty());
+        assert_eq!(
+            out.replace,
+            Some(vosh_prompt::stage::Replace {
+                gen: wire.gen0 + 1,
+                bytes: with(&[
+                    TANK_LINE.as_bytes(),
+                    b"\r\n",
+                    &wire.mark(2),
+                    b"<159>\x1b[0m"
+                ]),
+                fresh: true,
+            })
+        );
+        // A send forgets a painted tank line, which stays as it shows,
+        // and the next prompt reads on its own.
+        let _ = wire.read(format!("{TANK_LINE}\n\r").as_bytes());
+        wire.send();
+        let out = wire.read(format!("{FIGHT_LINE}\n\r").as_bytes());
+        assert_eq!(out.replace, None);
+        assert_eq!(out.bytes, with(&[&wire.mark(4), b"<159>\x1b[0m"]));
+    }
+
+    #[test]
+    fn a_held_line_the_rest_never_follows_shows_as_any_line() {
+        let text = format!("{TANK_LINE}\n\rYou are hungry.\n\r{FIGHT_LINE}\n\r");
+        let screen = same_at_every_split(&|| codes_profile(CODES, HP), &text);
+        assert_eq!(screen, [TANK_LINE, "You are hungry.", "<159>"]);
+        // A GA ends a held line, since the prompt it started never came.
+        let screen = same_at_every_split(
+            &|| codes_profile(CODES, HP),
+            &format!("{TANK_LINE}\n\r*You flee.\n\r"),
+        );
+        assert_eq!(screen, [TANK_LINE, "You flee."]);
+    }
+
+    #[test]
+    fn a_released_line_runs_the_line_pass_and_is_logged() {
+        let mut p = codes_profile(CODES, HP);
+        p.triggers
+            .set(vosh_trigger::Trigger {
+                name: "hush".into(),
+                patterns: vec![vosh_trigger::TriggerPattern {
+                    pattern: "^Tester: ".into(),
+                    enabled: true,
+                }],
+                priority: 0,
+                enabled: true,
+                actions: vec![vosh_trigger::TriggerAction::Gag],
+                preset: None,
+                group: None,
+                target: vosh_trigger::TriggerTarget::Line,
+            })
+            .unwrap();
+        let mut batch = super::ReadBatch::new(super::output_count());
+        let now = tokio::time::Instant::now();
+        let mut acc = super::LineAccumulator::new();
+        let mut steps = Vec::new();
+        for line in acc.feed(format!("{TANK_LINE}\n\rYou are hungry.\n\r").as_bytes()) {
+            let plain = vosh_ansi::plain_text(&line.bytes);
+            steps.extend(super::line_step(
+                &mut p,
+                &mut batch,
+                line,
+                plain,
+                now,
+                Some(3),
+            ));
+        }
+        // The tank line ran the Line pass once it was let go, and its
+        // trigger hid it.
+        assert_eq!(batch.out.bytes, b"You are hungry.\r\n");
+        assert_eq!(steps.len(), 2);
+        assert_eq!(batch.log.len(), 1, "only the line that shows is logged");
+    }
+
+    #[test]
+    fn drawing_off_shows_the_whole_block_as_sent_and_logs_it() {
+        let mut p = codes_profile(CODES, HP);
+        p.set_prompt_config(vosh_prompt::PromptConfig {
+            draw: false,
+            ..p.prompt.config().clone()
+        });
+        let mut wire = Wire::new(p);
+        let out = wire.read(format!("{TANK_LINE}\n\r{FIGHT_LINE}\n\r").as_bytes());
+        assert_eq!(
+            out.bytes,
+            format!("{TANK_LINE}\r\n{FIGHT_LINE}\r\n").into_bytes()
+        );
+        let mut batch = super::ReadBatch::new(super::output_count());
+        let now = tokio::time::Instant::now();
+        let mut acc = super::LineAccumulator::new();
+        for line in acc.feed(format!("{TANK_LINE}\n\r{FIGHT_LINE}\n\r").as_bytes()) {
+            let plain = vosh_ansi::plain_text(&line.bytes);
+            let _ = super::line_step(&mut wire.p, &mut batch, line, plain, now, Some(3));
+        }
+        let logged: Vec<&str> = batch.log.iter().map(|e| e.text.as_str()).collect();
+        assert_eq!(logged, [TANK_LINE, FIGHT_LINE]);
+    }
+
+    #[test]
+    fn prompt_all_settles_with_its_tank_line_in_one_read() {
+        let mut wire = Wire::new(codes_profile("%n%P%C<%hhp %mm %vmv> ", HP));
+        let out = wire.read(b"Tester: [===|===|===|---]\n\r<159hp 310m 489mv> ");
+        assert_eq!(
+            out.bytes,
+            with(&[
+                b"Tester: [===|===|===|---]\r\n",
+                &wire.mark(1),
+                b"<159>\x1b[0m"
+            ])
+        );
+        let screen = same_at_every_split(
+            &|| codes_profile("%n%P%C<%hhp %mm %vmv> ", HP),
+            "You flee.\n\rTester: [===|===|===|---]\n\r<159hp 310m 489mv> ",
+        );
+        assert_eq!(screen, ["You flee.", "Tester: [===|===|===|---]", "<159>"]);
+    }
+
+    #[test]
+    fn the_away_prompt_shows_as_sent_and_notes_you_are_away() {
+        let mut wire = Wire::new(codes_profile("%n%P%C<%hhp %mm %vmv> ", HP));
+        let out = wire.read(b"<AFK> ");
+        assert_eq!(out.bytes, b"<AFK> ");
+        assert_eq!(wire.p.prompt.stage.open_row(), None);
+        let vars = wire.p.prompt.vars.prompt_vars();
+        assert_eq!(vars.get("afk").map(String::as_str), Some("1"));
+    }
+
+    #[test]
+    fn an_empty_setting_draws_over_the_fallback() {
+        let mut wire = Wire::new(codes_profile("", HP));
+        let out = wire.read(b"<20hp 100m 110mv> ");
+        assert_eq!(out.bytes, with(&[&wire.mark(1), b"<20>\x1b[0m"]));
     }
 
     #[tokio::test]
