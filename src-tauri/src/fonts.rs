@@ -22,15 +22,19 @@ pub(crate) struct FontEntry {
     /// CSS family name. What the user picks from the settings list and
     /// what we mint into the `@font-face` block.
     pub family: String,
-    /// True when the regular face of this family advertises itself as
-    /// monospace. The settings UI uses this to default the picker to
+    /// True when the first face the system lists for this family
+    /// advertises itself as monospace. That face is not always the
+    /// regular one. The settings UI uses this to default the picker to
     /// monospaces, which is what makes sense for a terminal.
     pub monospace: bool,
 }
 
-/// Process-lifetime cache of the enumerated font list. Computing it
-/// requires reading + parsing every installed font file to decide the
-/// monospace flag, which costs 200–500ms on typical desktops. The set
+/// Process-lifetime cache of the enumerated font list. On macOS the
+/// monospace flag comes from CoreText's font descriptors, which read
+/// no font file, and the list takes about 0.1 s in a fresh process.
+/// Before that, font-kit's `select_family_by_name` took about 2 s,
+/// since it reads every file of each family. Windows and Linux still
+/// load the first face of each family through font-kit. The set
 /// rarely changes during a session, so we lock in the first result
 /// and serve it instantly on every subsequent Settings open.
 ///
@@ -90,14 +94,16 @@ fn enumerate_fonts() -> Vec<FontEntry> {
         }
     };
 
-    // The cost here is dominated by `is_family_monospace`, which
-    // loads + parses each font file from disk to read its monospace
-    // flag. We pay it once per process; the FONTS_CACHE above keeps
-    // every later call instant.
+    // The cost here is the monospace flag of each family. We pay it
+    // once per process; the FONTS_CACHE above keeps every later call
+    // instant.
     let mut entries: Vec<FontEntry> = families
         .into_iter()
         .map(|family| {
-            let monospace = is_family_monospace(&source, &family);
+            #[cfg(target_os = "macos")]
+            let monospace = is_family_monospace(&family);
+            #[cfg(not(target_os = "macos"))]
+            let monospace = is_family_monospace_font_kit(&source, &family);
             FontEntry { family, monospace }
         })
         .collect();
@@ -106,7 +112,75 @@ fn enumerate_fonts() -> Vec<FontEntry> {
     entries
 }
 
-fn is_family_monospace(source: &SystemSource, family: &str) -> bool {
+/// The monospace flag of the first face CoreText lists for `family`,
+/// read from its font descriptor. It builds the family query font-kit's
+/// `select_family_by_name` builds and reads the first match, which is
+/// the face font-kit's handle list starts with whenever font-kit can
+/// read its file. It loads no font, where font-kit read every file of
+/// the family and took about 2 s for the whole list. Do not swap in
+/// `CTFontDescriptorCreateMatchingFontDescriptor` or look at any other
+/// face. Both change the answer for some families. An unknown family
+/// is not monospace.
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+fn is_family_monospace(family: &str) -> bool {
+    use core_foundation::array::CFArray;
+    use core_foundation::base::{CFType, TCFType};
+    use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
+    use core_foundation::number::CFNumber;
+    use core_foundation::string::CFString;
+    use core_text::font_collection;
+    use core_text::font_descriptor::{
+        self, kCTFontMonoSpaceTrait, kCTFontSymbolicTrait, kCTFontTraitsAttribute,
+        CTFontDescriptorCopyAttribute,
+    };
+
+    let attributes: CFDictionary<CFString, CFType> = CFDictionary::from_CFType_pairs(&[(
+        CFString::new("NSFontFamilyAttribute"),
+        CFString::new(family).as_CFType(),
+    )]);
+    let query = font_descriptor::new_from_attributes(&attributes);
+    let collection = font_collection::new_from_descriptors(&CFArray::from_CFTypes(&[query]));
+    let Some(descriptors) = collection.get_descriptors() else {
+        return false;
+    };
+    let Some(first) = descriptors.get(0) else {
+        return false;
+    };
+    // SAFETY: the descriptor is a live CTFontDescriptor and the key is
+    // CoreText's own constant. The copy comes back retained, or null
+    // when the face has no traits, and the create rule wrap releases it.
+    let value = unsafe {
+        let raw =
+            CTFontDescriptorCopyAttribute(first.as_concrete_TypeRef(), kCTFontTraitsAttribute);
+        if raw.is_null() {
+            return false;
+        }
+        CFType::wrap_under_create_rule(raw)
+    };
+    if !value.instance_of::<CFDictionary>() {
+        return false;
+    }
+    // SAFETY: the value is a CFDictionary, checked above, and the get
+    // rule wrap retains it for as long as `traits` lives. The key is
+    // CoreText's own constant.
+    let (traits, key) = unsafe {
+        let traits: CFDictionary<CFString, CFType> =
+            CFDictionary::wrap_under_get_rule(value.as_CFTypeRef() as CFDictionaryRef);
+        (traits, CFString::wrap_under_get_rule(kCTFontSymbolicTrait))
+    };
+    traits
+        .find(&key)
+        .and_then(|symbolic| symbolic.downcast::<CFNumber>())
+        .and_then(|symbolic| symbolic.to_i64())
+        .is_some_and(|bits| bits & i64::from(kCTFontMonoSpaceTrait) != 0)
+}
+
+/// The monospace flag of the first face font-kit lists for `family`,
+/// read by loading that face. Windows and Linux use it. On macOS the
+/// tests keep it to check the CoreText answer against.
+#[cfg(any(test, not(target_os = "macos")))]
+fn is_family_monospace_font_kit(source: &SystemSource, family: &str) -> bool {
     let Ok(handle) = source.select_family_by_name(family) else {
         return false;
     };
@@ -117,7 +191,8 @@ fn is_family_monospace(source: &SystemSource, family: &str) -> bool {
         .is_some_and(|font| font.is_monospace())
 }
 
-/// Find the on-disk path of a font family's regular face. Returns
+/// Find the on-disk path of the first face font-kit lists for a
+/// family, which is not always the regular one. Returns
 /// `None` for memory-only handles (which on our targets shouldn't
 /// happen for system-installed fonts) and for unknown families.
 pub(crate) fn font_path_for_family(family: &str) -> Option<(PathBuf, u32)> {
@@ -238,6 +313,41 @@ mod tests {
         for list in &lists[1..] {
             assert!(same(&lists[0], list));
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn core_text_flags_the_monospace_families() {
+        for family in ["Menlo", "Monaco"] {
+            assert!(is_family_monospace(family), "{family} is monospace");
+        }
+        // font-kit found no face for PingFang SC, so it was never
+        // monospace there either.
+        for family in ["Helvetica", "Times", "PingFang SC"] {
+            assert!(!is_family_monospace(family), "{family} is proportional");
+        }
+        assert!(!is_family_monospace("No Such Family Vosh Test"));
+        assert!(!is_family_monospace(""));
+    }
+
+    // Slow, about 2 s in a debug build, since the font-kit side reads
+    // every font file. Run it with --ignored after a change to either
+    // check or a macOS update.
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "reads every installed font file"]
+    fn core_text_agrees_with_font_kit_on_every_family() {
+        let source = SystemSource::new();
+        let families = source.all_families().expect("font-kit lists the families");
+        let differ: Vec<(&String, bool)> = families
+            .iter()
+            .map(|family| (family, is_family_monospace(family)))
+            .filter(|(family, mono)| *mono != is_family_monospace_font_kit(&source, family))
+            .collect();
+        assert!(
+            differ.is_empty(),
+            "CoreText and font-kit disagree on {differ:?}"
+        );
     }
 
     #[test]
