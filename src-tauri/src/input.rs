@@ -39,9 +39,9 @@ slash commands:
   #trigger <name> {pattern} <action>   define or replace a trigger
   #untrigger <name>                    remove a trigger
   #triggers                            list triggers
-  #prompt {regex}                      capture prompt vars from named groups
-                                       like (?<hp>...) (?<mn>...) etc.
-  #unprompt                            remove the prompt-capture trigger
+  #prompt {regex}                      read your prompt with a pattern, each
+                                       named group like (?<hp>...) a value
+  #unprompt                            stop reading your prompt here
   #group <name> on|off                 enable/disable a group across
                                        triggers + aliases + macros
   #group <name>                        show current state of a group
@@ -804,89 +804,71 @@ fn slash_trigger(profile: &mut Profile, args: &str) -> InputResult {
     }
 }
 
-/// `#prompt {regex}` — create or replace a single prompt-capture
-/// trigger named "prompt-capture". Auto-generates a Lua body that
-/// binds every named capture group in the regex to a prompt var of
-/// the same name via `mud.set_prompt_var(...)`. The vitals template
-/// resolver reads these with priority over GMCP, so a tintin-style
-/// `#prompt {(?<hp>\d+)/(?<maxhp>\d+) hp}` immediately drives the
-/// chip from parsed prompt text.
-///
-/// Defaults to `target=line` because ROM-derived MUDs (including
-/// Aabahran) send prompts with newlines and so they flow through the
-/// line dispatch. Power users can flip the resulting trigger to
-/// `target=prompt` via the Triggers drawer if their MUD only sends
-/// prompts via GA/EOR.
+/// `#prompt {regex}`: read your prompt with a pattern. It becomes the
+/// active profile's capture, `[prompt.capture] kind = "regex"`, with
+/// `settle` worked out from the pattern, so an anchored pattern that ends
+/// in text reads a prompt with no line end at once. Each named group
+/// reads into the value of its name, so `(?<hp>\d+)` feeds Health, and a
+/// pattern with none still tells Vosh where your prompt is. The switch
+/// and the design stay as they are. Older builds wrote a trigger named
+/// `prompt-capture` instead, which hid the prompt in every profile.
 fn slash_prompt(profile: &mut Profile, args: &str) -> InputResult {
     let Some((pattern, _rest)) = parse_braced_pattern(args) else {
-        return error_echo(
-            "usage #prompt {regex with named captures like (?<hp>\\d+)}".to_string(),
-        );
+        return error_echo("usage #prompt {regex with named groups like (?<hp>\\d+)}".to_string());
     };
     let regex = match regex::Regex::new(&pattern) {
         Ok(r) => r,
-        Err(e) => return error_echo(format!("invalid regex: {e}")),
+        Err(e) => return error_echo(format!("Vosh cannot read that pattern. {e}")),
     };
-    // Walk capture groups and translate named ones into
-    // `mud.set_prompt_var("name", captures[N+1])` lines. `captures[1]`
-    // is the full match (see `eval_with_captures` in script_state);
-    // numbered groups start at `[2]`. Unnamed groups are skipped —
-    // there is no var name to bind them to.
-    let mut lines: Vec<String> = Vec::new();
-    let mut bound: Vec<String> = Vec::new();
-    for (idx, name) in regex.capture_names().enumerate() {
-        if idx == 0 {
-            continue;
-        }
-        if let Some(name) = name {
-            lines.push(format!(
-                "mud.set_prompt_var(\"{name}\", captures[{}])",
-                idx + 1
-            ));
-            bound.push(name.to_string());
-        }
-    }
-    if lines.is_empty() {
-        return error_echo(
-            "regex has no named captures; nothing to bind. use (?<name>...) syntax.".to_string(),
-        );
-    }
-    let body = lines.join("\n");
-    let trigger = Trigger {
-        name: "prompt-capture".to_string(),
-        patterns: vec![vosh_trigger::TriggerPattern {
-            pattern,
-            enabled: true,
-        }],
-        priority: 100,
-        enabled: true,
-        actions: vec![
-            vosh_trigger::TriggerAction::Gag,
-            vosh_trigger::TriggerAction::Script { body },
-        ],
-        preset: None,
-        group: None,
-        target: vosh_trigger::TriggerTarget::Line,
+    let names: Vec<String> = regex
+        .capture_names()
+        .flatten()
+        .map(str::to_string)
+        .collect();
+    let capture = vosh_prompt::config::RegexCapture {
+        settle: vosh_prompt::capture::settle(&pattern),
+        lines: vec![pattern],
+        names: std::collections::BTreeMap::new(),
+        seen_at: Some(
+            chrono::Local::now()
+                .fixed_offset()
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, false),
+        ),
+        source: Some(vosh_prompt::config::CaptureSource::Typed),
     };
-    match profile.triggers.set(trigger) {
-        Ok(()) => InputResult {
-            bytes: Vec::new(),
-            echo: vec![
-                "prompt-capture trigger set (target=line)".to_string(),
-                format!("  bound prompt vars: {}", bound.join(", ")),
-            ],
-            scripts: Vec::new(),
-        },
-        Err(e) => error_echo(format!("trigger rejected: {e}")),
+    let mut config = profile.prompt.config().clone();
+    config.capture = vosh_prompt::CaptureConfig::Regex(capture);
+    profile.set_prompt_config(config);
+    echo_one(if names.is_empty() {
+        "Vosh reads your prompt with this pattern.".to_string()
+    } else {
+        format!(
+            "Vosh reads {} from your prompt with this pattern.",
+            and_list(&names)
+        )
+    })
+}
+
+/// `A`, `A and B`, or `A, B, and C`.
+fn and_list(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => one.clone(),
+        [first, second] => format!("{first} and {second}"),
+        [rest @ .., last] => format!("{}, and {last}", rest.join(", ")),
     }
 }
 
+/// `#unprompt`: stop reading your prompt in the active profile. The
+/// game's prompt shows again, and the design stays saved.
 fn slash_unprompt(profile: &mut Profile) -> InputResult {
-    if profile.triggers.remove("prompt-capture") {
-        echo_one("prompt-capture trigger removed".to_string())
-    } else {
-        error_echo("no prompt-capture trigger found".to_string())
+    if profile.prompt.config().capture.is_none() {
+        return echo_one("Vosh does not read your prompt in this profile.".to_string());
     }
+    let mut config = profile.prompt.config().clone();
+    config.capture = vosh_prompt::CaptureConfig::None;
+    profile.set_prompt_config(config);
+    echo_one("Vosh stopped reading your prompt. Your design stays saved.".to_string())
 }
 
 /// `#group <name> [on|off]` — flip a group's enabled state across
@@ -1767,6 +1749,98 @@ fn echo_lines<'a>(lines: impl IntoIterator<Item = &'a str>) -> InputResult {
 mod tests {
     use super::*;
     use vosh_alias::Alias;
+
+    fn regex_capture(p: &Profile) -> vosh_prompt::config::RegexCapture {
+        match &p.prompt.config().capture {
+            vosh_prompt::CaptureConfig::Regex(capture) => capture.clone(),
+            other => panic!("a regex capture, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn prompt_writes_a_regex_capture_to_the_profile() {
+        let mut p = Profile::default();
+        p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
+        let ran = run_line(
+            &mut p,
+            r"#prompt {\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)m\]}",
+        );
+        assert_eq!(
+            ran.result.echo,
+            ["Vosh reads hp, maxhp, and mana from your prompt with this pattern."]
+        );
+        let capture = regex_capture(&p);
+        assert_eq!(
+            capture.lines,
+            [r"\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)m\]"]
+        );
+        assert!(
+            !capture.settle,
+            "an unanchored pattern waits for a line end"
+        );
+        assert_eq!(
+            capture.source,
+            Some(vosh_prompt::config::CaptureSource::Typed)
+        );
+        assert!(capture.seen_at.is_some());
+        assert!(capture.names.is_empty());
+        // The switch and the design stay, and no trigger is written.
+        assert!(p.prompt.config().draw);
+        assert_eq!(p.prompt.config().template, "%hp");
+        assert!(p.triggers.get("prompt-capture").is_none());
+        assert!(p.prompt.stage.has_recognizer());
+
+        // An anchored pattern that ends in text settles.
+        let ran = run_line(&mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
+        assert_eq!(
+            ran.result.echo,
+            ["Vosh reads hp from your prompt with this pattern."]
+        );
+        assert!(regex_capture(&p).settle);
+        // A pattern with no groups only says where your prompt is.
+        let ran = run_line(&mut p, "#prompt {^> $}");
+        assert_eq!(
+            ran.result.echo,
+            ["Vosh reads your prompt with this pattern."]
+        );
+    }
+
+    #[test]
+    fn prompt_with_a_bad_pattern_changes_nothing() {
+        let mut p = Profile::default();
+        let _ = run_line(&mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
+        let before = p.prompt.config().clone();
+        let ran = run_line(&mut p, r"#prompt {\[(?<hp>\d+}");
+        assert!(
+            ran.result.echo[0].starts_with("[Vosh cannot read that pattern."),
+            "{:?}",
+            ran.result.echo
+        );
+        assert_eq!(*p.prompt.config(), before);
+        let ran = run_line(&mut p, "#prompt");
+        assert!(ran.result.echo[0].starts_with("[usage #prompt"));
+    }
+
+    #[test]
+    fn unprompt_stops_reading_and_keeps_the_design() {
+        let mut p = Profile::default();
+        p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, "%hp"));
+        let ran = run_line(&mut p, "#unprompt");
+        assert_eq!(
+            ran.result.echo,
+            ["Vosh does not read your prompt in this profile."]
+        );
+        let _ = run_line(&mut p, r"#prompt {^<(?<hp>\d+)hp> $}");
+        let ran = run_line(&mut p, "#unprompt");
+        assert_eq!(
+            ran.result.echo,
+            ["Vosh stopped reading your prompt. Your design stays saved."]
+        );
+        assert!(p.prompt.config().capture.is_none());
+        assert!(!p.prompt.stage.has_recognizer());
+        assert_eq!(p.prompt.config().template, "%hp");
+        assert!(p.prompt.config().draw);
+    }
 
     /// Run `lines` through the pipeline the way the typed path does and
     /// note each one.

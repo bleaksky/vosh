@@ -2848,12 +2848,28 @@ mod tests {
 
     #[test]
     fn a_capture_trigger_with_no_reader_hides_the_prompt_and_is_named_once() {
+        // The trigger older builds wrote for `#prompt`.
         let mut p = Profile::default();
-        let ran = crate::input::run_line(
-            &mut p,
-            r"#prompt {\[(?<hp>\d+)/(?<maxhp>\d+)hp (?<mana>\d+)/(?<maxmana>\d+)mn (?<move>\d+)/(?<maxmove>\d+)mv\]}",
-        );
-        assert!(!ran.result.echo.is_empty());
+        p.triggers
+            .set(vosh_trigger::Trigger {
+                name: "prompt-capture".into(),
+                patterns: vec![vosh_trigger::TriggerPattern {
+                    pattern: CAPTURE.into(),
+                    enabled: true,
+                }],
+                priority: 100,
+                enabled: true,
+                actions: vec![
+                    vosh_trigger::TriggerAction::Gag,
+                    vosh_trigger::TriggerAction::Script {
+                        body: "mud.set_prompt_var(\"hp\", captures[2])".into(),
+                    },
+                ],
+                preset: None,
+                group: None,
+                target: vosh_trigger::TriggerTarget::Line,
+            })
+            .expect("the trigger compiles");
         p.set_prompt_config(vosh_prompt::PromptConfig::from_legacy(true, HP));
         let mut wire = Wire::new(p);
         let batch = wire.read_with(PROMPT_ROW, false, false);
