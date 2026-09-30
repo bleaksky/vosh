@@ -14,7 +14,7 @@ pub mod game;
 pub mod mud;
 pub mod wire;
 
-pub use mud::{Build, Mud, Options, Write};
+pub use mud::{Affect, Build, Mud, Options, Write};
 
 /// A GMCP packet as the game writes it: IAC SB GMCP, the package, a
 /// space, the JSON, IAC SE. UTF-8 text holds no IAC byte, so none is

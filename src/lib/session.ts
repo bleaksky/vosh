@@ -342,6 +342,20 @@ export async function affectsSnapshotGet(): Promise<unknown> {
   return invoke('affects_snapshot_get');
 }
 
+/** The affect fulls the backend keeps for the logged in character. */
+export async function affectFullGet(): Promise<unknown> {
+  return invoke('affect_full_get');
+}
+
+/** Hear the affect fulls change: a list that starts, recasts, or ends
+ *  an affect, the saved fulls at login, or a disconnect that empties
+ *  them. The payload is the whole map. */
+export async function subscribeAffectFullChanged(
+  cb: (value: unknown) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>('vosh://affect-full-changed', (event) => cb(event.payload));
+}
+
 export interface RoutedPayload {
   pane: string;
   text: string;

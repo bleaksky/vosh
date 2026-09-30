@@ -62,6 +62,7 @@ fn enable_macos_spellcheck(window: &tauri::WebviewWindow) -> Result<(), tauri::E
     })
 }
 
+mod affect_full;
 mod affects_snapshot;
 mod app_menu;
 #[cfg(native_surface)]
@@ -204,6 +205,11 @@ pub fn run() {
             }
             if let Ok(path) = app.path().app_data_dir() {
                 migrate_from_mudclient_dir(&path);
+                // How full each affect was cast, per character, for the
+                // Affects pane's gauges. Read when the game names you.
+                state
+                    .affect_full
+                    .set_path(path.join(affect_full::FILE_NAME));
 
                 // The profile set and the active profile, then the
                 // shared catalog and loadouts in loadout mode. See
@@ -388,6 +394,7 @@ pub fn run() {
             characters::profile_set_world,
             characters::session_identity_get,
             affects_snapshot::affects_snapshot_get,
+            affect_full::affect_full_get,
             commands::hidden_get,
             prompt_lookup::prompt_last_seen,
             characters::profile_export_file,
@@ -459,6 +466,12 @@ pub fn run() {
 /// Write the live profile once on the way out. The exit flow in
 /// [`exit_flush`] decides when, so this runs exactly once.
 fn flush_profile_on_exit(app_handle: &tauri::AppHandle) {
+    // The affect fulls are a cache of their own, written whatever
+    // becomes of the profile.
+    app_handle
+        .state::<commands::SharedState>()
+        .affect_full
+        .flush();
     // Honor a #profile reset/load: the in-memory profile is
     // deliberately diverged from disk; do not write it back.
     if commands::AUTO_PERSIST_SUPPRESSED.load(std::sync::atomic::Ordering::Acquire) {

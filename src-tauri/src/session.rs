@@ -944,10 +944,11 @@ async fn io_loop<R: tauri::Runtime>(
     }
     let _ = stream.shutdown().await;
     // The affects list goes stale with the session, as the frontend
-    // store drops its copy on the disconnected state below.
-    app.state::<crate::commands::SharedState>()
-        .last_affects
-        .clear();
+    // store drops its copy on the disconnected state below. The affect
+    // fulls are written for the next login, then cleared.
+    let shared = app.state::<crate::commands::SharedState>();
+    shared.last_affects.clear();
+    crate::affect_full::disconnect(&app, shared.inner());
     // Reset password mode on disconnect so the next session starts with
     // a normal-text input even if the server bailed mid-password-prompt.
     emit_input_mode(&app, false);
@@ -2372,6 +2373,10 @@ async fn handle_gmcp<R: tauri::Runtime>(
     app.state::<crate::commands::SharedState>()
         .last_affects
         .observe(&msg.package, &msg.data);
+    // A list that changes the affect fulls sends them first, so the
+    // windows never draw the list against the old ones (a recast at
+    // fewer hours than the old full).
+    crate::affect_full::observe(app, &msg.package, &msg.data);
     let event_name = format!("session://gmcp/{}", msg.package.replace('.', "-"));
     if let Err(e) = app.emit(&event_name, &msg.data) {
         warn!(error = %e, package = %msg.package, "failed to emit GMCP event");

@@ -64,6 +64,7 @@ async function load() {
     tickCount: await import('./tickCountStore'),
     vitalsOptions: await import('./vitalsOptionsStore'),
     affectsDisplay: await import('./affectsDisplayStore'),
+    affectFull: await import('./affectFullStore'),
     group: await import('../groupStore'),
     gamePrompt: await import('./gamePromptStore'),
     charState: await import('./charStateStore'),
@@ -581,6 +582,30 @@ describe('stores on the event bus', () => {
     answer({ tracked_affects: [], tick_count: 'up' });
     await settle();
     expect(s.tickCount.getTickCount()).toBe('down_past_zero');
+  });
+
+  it('seed the affect fulls, follow each change, and clear them on a disconnect', async () => {
+    commands.set('affect_full_get', { armor: 48, sanctuary: 10 });
+    const s = await load();
+    expect(s.affectFull.getAffectFull()).toEqual({ armor: 48, sanctuary: 10 });
+    fire('vosh://affect-full-changed', { armor: 48, sanctuary: 10, fly: 53, bad: 'x' });
+    const heard = s.affectFull.getAffectFull();
+    expect(heard).toEqual({ armor: 48, sanctuary: 10, fly: 53 });
+    // The same map again keeps the snapshot, so nothing renders.
+    fire('vosh://affect-full-changed', { fly: 53, armor: 48, sanctuary: 10 });
+    expect(s.affectFull.getAffectFull()).toBe(heard);
+    disconnect();
+    expect(s.affectFull.getAffectFull()).toEqual({});
+  });
+
+  it('keep an affect full change over a slower first read', async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    commands.set('affect_full_get', new Promise((resolve) => (answer = resolve)));
+    const s = await load();
+    fire('vosh://affect-full-changed', { armor: 40 });
+    answer({ armor: 48 });
+    await settle();
+    expect(s.affectFull.getAffectFull()).toEqual({ armor: 40 });
   });
 
   it('follow the affects display Settings or the pane menu saves and each profile keeps', async () => {

@@ -24,6 +24,9 @@
 //! - `blind` makes you blind or lets you see again, so the game withholds
 //!   your opponent's health.
 //! - `split` cuts the next prompt into two writes [`SPLIT_MS`] apart.
+//! - `cast N name` puts an affect on you for N hours, or recasts it, and
+//!   `tick` runs one hour of `affect_update`: each timed affect loses an
+//!   hour and one at 0 wears off. Each sends Char.Affects at once.
 //! - `spam N` sends N lines and a prompt, and `pulses N` sends N pulses
 //!   [`PULSE_MS`] apart, as combat rounds come.
 //!
@@ -137,6 +140,63 @@ pub struct Options {
     /// `(Wizi N) ` and `(Incog N) ` before each prompt.
     pub wizi: i64,
     pub incog: i64,
+    /// The affects on you when you log in, as your pfile holds them.
+    pub affects: Vec<Affect>,
+}
+
+/// An affect on you, one Char.Affects row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Affect {
+    pub kind: String,
+    pub name: String,
+    /// Hours left, -1 permanent.
+    pub duration: i64,
+    pub level: i64,
+    pub location: String,
+    pub modifier: i64,
+}
+
+impl Affect {
+    /// A spell of level 50 that modifies nothing.
+    pub fn spell(name: &str, duration: i64) -> Self {
+        Self {
+            kind: "spell".into(),
+            name: name.into(),
+            duration,
+            level: MORTAL_LEVEL,
+            location: "none".into(),
+            modifier: 0,
+        }
+    }
+
+    /// The row as `gmcp_send_affects` writes it.
+    fn json(&self) -> String {
+        format!(
+            r#"{{"kind":{},"name":{},"duration":{},"level":{},"location":{},"modifier":{}}}"#,
+            quote(&self.kind),
+            quote(&self.name),
+            self.duration,
+            self.level,
+            quote(&self.location),
+            self.modifier
+        )
+    }
+}
+
+/// What Tester logs in with: bless for 6 hours and armor for 44.
+pub fn default_affects() -> Vec<Affect> {
+    vec![
+        Affect {
+            location: "hitroll".into(),
+            modifier: 4,
+            ..Affect::spell("bless", 6)
+        },
+        Affect {
+            location: "ac".into(),
+            modifier: -20,
+            ..Affect::spell("armor", 44)
+        },
+    ]
 }
 
 impl Options {
@@ -152,6 +212,7 @@ impl Options {
             compact: false,
             wizi: 0,
             incog: 0,
+            affects: default_affects(),
         }
     }
 }
@@ -205,6 +266,8 @@ pub struct Mud {
     pub compact: bool,
     /// You cannot see, so the game withholds your opponent's health.
     pub blind: bool,
+    /// The affects on you, in the order Char.Affects lists them.
+    pub affects: Vec<Affect>,
     /// The client answered IAC WILL GMCP.
     gmcp: bool,
     logged_in: bool,
@@ -239,6 +302,7 @@ impl Mud {
             ga: options.ga,
             compact: options.compact,
             blind: false,
+            affects: options.affects,
             gmcp: false,
             logged_in: false,
             split_next: false,
@@ -382,6 +446,8 @@ impl Mud {
             "l" | "lo" | "loo" | "look" => self.look(),
             "fight" | "kill" => self.fight(),
             "lament" => self.lament(),
+            "cast" => self.cast(rest),
+            "tick" => self.tick(),
             "blind" => self.blind(),
             "afk" => {
                 self.state.afk = !self.state.afk;
@@ -594,6 +660,37 @@ impl Mud {
         self.pulse(Vec::new(), reply, false)
     }
 
+    /// `cast N name`: the affect lands for N hours, or its hours start
+    /// over when it is on you already.
+    fn cast(&mut self, argument: &str) -> Pulse {
+        let (hours, name) = argument
+            .split_once(char::is_whitespace)
+            .map_or(("", argument), |(h, n)| (h, n.trim()));
+        let Ok(hours) = hours.parse::<i64>() else {
+            return self.pulse(Vec::new(), "Cast what, for how many hours?\n\r", false);
+        };
+        match self.affects.iter_mut().find(|a| a.name == name) {
+            Some(affect) => affect.duration = hours,
+            None => self.affects.push(Affect::spell(name, hours)),
+        }
+        let reply = format!("You cast {name}.\n\r");
+        let early = self.affects();
+        self.pulse(early, &reply, false)
+    }
+
+    /// One hour of `affect_update`: a timed affect loses an hour, and one
+    /// at 0 wears off. Permanent ones stay.
+    fn tick(&mut self) -> Pulse {
+        self.affects.retain(|a| a.duration != 0);
+        for affect in &mut self.affects {
+            if affect.duration > 0 {
+                affect.duration -= 1;
+            }
+        }
+        let early = self.affects();
+        self.pulse(early, "The hour passes.\n\r", false)
+    }
+
     fn lament(&mut self) -> Pulse {
         self.state.lament = !self.state.lament;
         let reply = if self.state.lament {
@@ -802,9 +899,10 @@ impl Mud {
             (true, Build::Older) => format!(
                 r#"{{"affects":[{BLESS},{{"kind":"song","name":"lamented tears","duration":5,"level":42,"location":"none","modifier":0}}]}}"#
             ),
-            (false, _) => format!(
-                r#"{{"affects":[{BLESS},{{"kind":"spell","name":"armor","duration":44,"level":50,"location":"ac","modifier":-20}}]}}"#
-            ),
+            (false, _) => {
+                let rows: Vec<String> = self.affects.iter().map(Affect::json).collect();
+                format!(r#"{{"affects":[{}]}}"#, rows.join(","))
+            }
         };
         self.packet("Char.Affects", &json)
     }

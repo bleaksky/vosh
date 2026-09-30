@@ -615,3 +615,46 @@ fn an_immortal_with_wizi_and_incog_sees_the_prefix_before_each_prompt() {
     );
     assert_eq!(prompt_lines(&login), ["[1020/1020hp 800/800mn 930/930mv]"]);
 }
+
+/// Each affect in a Char.Affects packet as `name hours`.
+fn affect_hours(raw: &[u8]) -> Vec<String> {
+    packet(raw, "Char.Affects").expect("Char.Affects")["affects"]
+        .as_array()
+        .expect("a list")
+        .iter()
+        .map(|a| format!("{} {}", a["name"].as_str().unwrap_or(""), a["duration"]))
+        .collect()
+}
+
+#[test]
+fn a_cast_lands_at_once_and_each_tick_takes_an_hour_off() {
+    let mut mud = playing(Build::New);
+    let raw = run(&mut mud, "cast 10 sanctuary");
+    assert_eq!(names(&raw)[0], "Char.Affects", "the cast lands at once");
+    assert_eq!(affect_hours(&raw), ["bless 6", "armor 44", "sanctuary 10"]);
+    assert!(shown(&raw).contains("You cast sanctuary."));
+    let raw = run(&mut mud, "tick");
+    assert_eq!(affect_hours(&raw), ["bless 5", "armor 43", "sanctuary 9"]);
+    // A recast starts the hours over.
+    let raw = run(&mut mud, "cast 48 armor");
+    assert_eq!(affect_hours(&raw), ["bless 5", "armor 48", "sanctuary 9"]);
+    // An affect at 0 wears off on the next tick, and a permanent one stays.
+    let _ = run(&mut mud, "cast 0 bless");
+    let _ = run(&mut mud, "cast -1 mounted");
+    let raw = run(&mut mud, "tick");
+    assert_eq!(
+        affect_hours(&raw),
+        ["armor 47", "sanctuary 8", "mounted -1"]
+    );
+    // The login list is what the pfile holds.
+    let mut mud = Mud::new(Options {
+        affects: vec![mud::Affect::spell("fly", 12)],
+        ..Options::new(Build::New)
+    });
+    let login: Vec<u8> = mud
+        .receive(&[telnet::IAC, telnet::DO, telnet::GMCP])
+        .into_iter()
+        .flat_map(|w| w.bytes)
+        .collect();
+    assert_eq!(affect_hours(&login), ["fly 12"]);
+}
