@@ -36,14 +36,42 @@ pub(crate) struct LastSeen {
     pub character: Option<String>,
 }
 
-/// Who the log lookup reads for: the characters `profile` claims, and
-/// every character a profile claims on `host` and `port`.
+/// Who the log lookup reads for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Characters {
+    /// The characters the profile claims.
+    pub mine: Vec<String>,
+    /// Every character a profile claims on the host and port.
+    pub claimed: Vec<String>,
+    /// A profile plays the host and port with no character named.
+    pub open: bool,
+}
+
+impl Characters {
+    /// The lookup's scope on `host` and `port`.
+    pub(crate) fn scope<'a>(&'a self, host: &'a str, port: u16) -> CharacterScope<'a> {
+        CharacterScope {
+            host,
+            port,
+            mine: &self.mine,
+            claimed: &self.claimed,
+            open: self.open,
+        }
+    }
+}
+
+/// Who the log lookup reads for: the characters `profile` claims, every
+/// character a profile claims on `host` and `port`, and whether a
+/// profile there claims none. That one could play anyone, so an older
+/// session with no name never falls to the one character claimed there.
+/// A world whose login toggle is off counts too, since you can still
+/// connect with its profile.
 pub(crate) fn character_scope(
     profiles: &[ProfileEntry],
     profile: &str,
     host: &str,
     port: u16,
-) -> (Vec<String>, Vec<String>) {
+) -> Characters {
     let host = host.trim().to_ascii_lowercase();
     let mine = profiles
         .iter()
@@ -51,7 +79,7 @@ pub(crate) fn character_scope(
         .and_then(|p| p.auto_match.as_ref())
         .map(|am| am.characters.clone())
         .unwrap_or_default();
-    let claimed = profiles
+    let here: Vec<_> = profiles
         .iter()
         .filter_map(|p| p.auto_match.as_ref())
         .filter(|am| {
@@ -60,9 +88,15 @@ pub(crate) fn character_scope(
                 .is_some_and(|h| h.trim().to_ascii_lowercase() == host)
                 && am.port.map_or(true, |p| p == port)
         })
-        .flat_map(|am| am.characters.iter().cloned())
         .collect();
-    (mine, claimed)
+    Characters {
+        mine,
+        claimed: here
+            .iter()
+            .flat_map(|am| am.characters.iter().cloned())
+            .collect(),
+        open: here.iter().any(|am| am.characters.is_empty()),
+    }
 }
 
 /// The newest prompt reply in your log that belongs to one of `scope`'s
@@ -140,7 +174,7 @@ pub(crate) async fn last_seen(state: &SharedState) -> Option<LastSeen> {
             });
         }
     }
-    let (host, port, mine, claimed) = {
+    let (host, port, characters) = {
         let connection = state.current_connection.lock().ok().and_then(|g| g.clone());
         let guard = state.profile_set.lock().await;
         let set = guard.as_ref()?;
@@ -156,21 +190,16 @@ pub(crate) async fn last_seen(state: &SharedState) -> Option<LastSeen> {
                 (host, port)
             }
         };
-        let (mine, claimed) = character_scope(set.list(), set.active_name(), &host, port);
-        (host, port, mine, claimed)
+        let characters = character_scope(set.list(), set.active_name(), &host, port);
+        (host, port, characters)
     };
-    if mine.is_empty() {
+    if characters.mine.is_empty() {
         return None;
     }
     let reader = state.log_reader.clone();
     let writer = state.logs.clone();
     let lookup = tauri::async_runtime::spawn_blocking(move || {
-        let scope = CharacterScope {
-            host: &host,
-            port,
-            mine: &mine,
-            claimed: &claimed,
-        };
+        let scope = characters.scope(&host, port);
         {
             let guard = reader.blocking_lock();
             if let Some(store) = guard.as_ref() {
@@ -215,16 +244,12 @@ mod tests {
     }
 
     fn lookup(store: &LogStore, profile: &str) -> Option<LastSeen> {
-        let (mine, claimed) = character_scope(&profiles(), profile, HOST, 1848);
-        logged(
-            store,
-            &CharacterScope {
-                host: HOST,
-                port: 1848,
-                mine: &mine,
-                claimed: &claimed,
-            },
-        )
+        lookup_in(&profiles(), store, profile)
+    }
+
+    fn lookup_in(profiles: &[ProfileEntry], store: &LogStore, profile: &str) -> Option<LastSeen> {
+        let characters = character_scope(profiles, profile, HOST, 1848);
+        logged(store, &characters.scope(HOST, 1848))
     }
 
     fn session(store: &mut LogStore, character: Option<&str>, lines: &[&str]) {
@@ -239,11 +264,55 @@ mod tests {
 
     #[test]
     fn the_scope_names_this_profiles_characters_and_every_claimed_one() {
-        let (mine, claimed) = character_scope(&profiles(), "Healer", "PLAY.example.com ", 1848);
-        assert_eq!(mine, ["Healer"]);
-        assert_eq!(claimed, ["Tester", "Tester", "Healer"]);
-        let (_, claimed) = character_scope(&profiles(), "default", HOST, 4000);
-        assert_eq!(claimed, ["Tester"], "only the profile that pins no port");
+        let characters = character_scope(&profiles(), "Healer", "PLAY.example.com ", 1848);
+        assert_eq!(characters.mine, ["Healer"]);
+        assert_eq!(characters.claimed, ["Tester", "Tester", "Healer"]);
+        assert!(!characters.open);
+        let characters = character_scope(&profiles(), "default", HOST, 4000);
+        assert_eq!(
+            characters.claimed,
+            ["Tester"],
+            "only the profile that pins no port"
+        );
+    }
+
+    #[test]
+    fn a_profile_that_names_no_character_opens_the_game_to_anyone() {
+        let mut host_only = entry("default", HOST, None, &[]);
+        let profiles = vec![
+            host_only.clone(),
+            entry("Healer", HOST, Some(1848), &["Healer"]),
+        ];
+        assert!(character_scope(&profiles, "Healer", HOST, 1848).open);
+        // Its login toggle off, you can still connect with it.
+        if let Some(am) = host_only.auto_match.as_mut() {
+            am.enabled = false;
+        }
+        let off = vec![host_only, entry("Healer", HOST, Some(1848), &["Healer"])];
+        assert!(character_scope(&off, "Healer", HOST, 1848).open);
+        // Another game does not count.
+        let elsewhere = vec![
+            entry("default", "other.example.com", None, &[]),
+            entry("Healer", HOST, Some(1848), &["Healer"]),
+        ];
+        assert!(!character_scope(&elsewhere, "Healer", HOST, 1848).open);
+    }
+
+    #[test]
+    fn healer_never_takes_a_prompt_from_a_session_someone_else_played() {
+        // The default profile plays the game by host alone, and Tester
+        // logged in there before the log kept a character.
+        let profiles = vec![
+            entry("default", HOST, None, &[]),
+            entry("Healer", HOST, Some(1848), &["Healer"]),
+        ];
+        let mut store = LogStore::in_memory().unwrap();
+        session(
+            &mut store,
+            None,
+            &["> Tester", "> prompt", "Current prompt: %h/%H "],
+        );
+        assert_eq!(lookup_in(&profiles, &store, "Healer"), None);
     }
 
     #[test]
@@ -296,16 +365,7 @@ mod tests {
         assert_eq!(lookup(&store, "Healer"), None);
         // With one character claimed on the game, it is theirs.
         let one = [entry("default", HOST, Some(1848), &["Tester"])];
-        let (mine, claimed) = character_scope(&one, "default", HOST, 1848);
-        let seen = logged(
-            &store,
-            &CharacterScope {
-                host: HOST,
-                port: 1848,
-                mine: &mine,
-                claimed: &claimed,
-            },
-        );
+        let seen = lookup_in(&one, &store, "default");
         assert_eq!(seen.and_then(|s| s.prompt).as_deref(), Some("%h "));
     }
 
