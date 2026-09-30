@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { defaultLayout, splitPane } from '../../lib/paneLayout';
 import type { ImmQueues } from '../../lib/immStore';
 import { immRows, immSummary } from './immRows';
-import { affectStateWord, chatTime, exitsLabel, ticksLabel } from './paneText';
+import { affectHours, affectWords, chatTime, exitsLabel } from './paneText';
 
 // paneActions pulls in the Tauri bridge through the layout store, so
 // stub it. The pure tree helper under test never calls it.
@@ -35,23 +35,29 @@ describe('chatTime', () => {
   });
 });
 
-describe('ticksLabel', () => {
-  it('says missing, the ticks, or permanent', () => {
-    expect(ticksLabel('missing', null)).toBe('missing');
-    expect(ticksLabel('present', 12)).toBe('12');
-    expect(ticksLabel('expiring', 0)).toBe('0');
-    expect(ticksLabel('present', -1)).toBe('permanent');
-    expect(ticksLabel('untracked', null)).toBe('');
+describe('affectHours', () => {
+  it('prints the hours with the marks of the game affects bar', () => {
+    expect(affectHours('missing', null)).toBe('-');
+    expect(affectHours('present', -1)).toBe('+');
+    expect(affectHours('present', 12)).toBe('12');
+    expect(affectHours('untracked', 188)).toBe('188');
+    expect(affectHours('expiring', 0)).toBe('0');
+    expect(affectHours('untracked', null)).toBe('');
   });
 });
 
-describe('affectStateWord', () => {
-  it('names the states only the marker color shows', () => {
-    expect(affectStateWord('expiring')).toBe('expiring');
-    expect(affectStateWord('harmful')).toBe('harmful');
-    expect(affectStateWord('missing')).toBeNull();
-    expect(affectStateWord('present')).toBeNull();
-    expect(affectStateWord('untracked')).toBeNull();
+describe('affectWords', () => {
+  it('says what the hours column and the marks show, for a screen reader', () => {
+    expect(affectWords('missing', null)).toBe(', missing');
+    expect(affectWords('present', -1)).toBe(', permanent');
+    expect(affectWords('present', 31)).toBe(', 31 hours');
+    expect(affectWords('expiring', 2)).toBe(', 2 hours, running out');
+    expect(affectWords('expiring', 1)).toBe(', 1 hour, running out');
+    expect(affectWords('expiring', 0)).toBe(', 0 hours, running out');
+    expect(affectWords('harmful', 3)).toBe(', 3 hours, harmful');
+    expect(affectWords('harmful', null)).toBe(', harmful');
+    expect(affectWords('untracked', 8)).toBe(', 8 hours');
+    expect(affectWords('untracked', null)).toBe('');
   });
 });
 

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  affectMark,
   affectsPaneRows,
+  affectsSummary,
   affectsView,
+  hoursTone,
   isTrackedRow,
   type AffectInput,
   type AffectRow,
@@ -12,49 +15,75 @@ const aff = (name: string, duration: number | null): AffectInput => ({ name, dur
 const track = (...names: string[]) => names.map((name) => ({ name, label: null }));
 const brief = (rows: AffectRow[]) => rows.map((r) => [r.name, r.state, r.ticks]);
 
+// Erelei on the approved board: his eight tracked affects in his order,
+// and the list the game sends while bless has worn off.
+const ERELEI_TRACKED = track(
+  'mounted',
+  'sanctuary',
+  'bless',
+  'armor',
+  'shield',
+  'stone skin',
+  'fly',
+  'levitate',
+);
+const ERELEI_AFFECTS = [
+  aff('pass door', 8),
+  aff('levitate', 44),
+  aff('detect invis', 47),
+  aff('sanctuary', 1),
+  aff('haste', 14),
+  aff('stone skin', 38),
+  aff('shield', 31),
+  aff('armor', 31),
+  aff('fly', 2),
+  aff('the Triumph of One God', 188),
+  aff('mounted', -1),
+  aff('virtues', -1),
+  aff('totems canticle', 22),
+  aff('bagatelle of bravado', 19),
+];
+
 describe('affectsView', () => {
   it('reproduces the approved Affects pane for Erelei', () => {
-    const rows = affectsView(
-      [
-        aff('armor', 24),
-        aff('bless', 6),
-        aff('fly', 2),
-        aff('giant strength', 18),
-        aff('haste', 8),
-        aff('poison', 3),
-        aff('sanctuary', 12),
-      ],
-      track('sanctuary', 'haste', 'giant strength', 'fly', 'protection evil', 'detect invisible'),
-    );
+    // The board's affects list, newest first as the game prints it.
+    const rows = affectsView(ERELEI_AFFECTS, ERELEI_TRACKED);
     expect(brief(rows)).toEqual([
-      ['protection evil', 'missing', null],
-      ['detect invisible', 'missing', null],
+      ['mounted', 'present', -1],
+      ['sanctuary', 'expiring', 1],
+      ['bless', 'missing', null],
+      ['armor', 'present', 31],
+      ['shield', 'present', 31],
+      ['stone skin', 'present', 38],
       ['fly', 'expiring', 2],
-      ['haste', 'present', 8],
-      ['sanctuary', 'present', 12],
-      ['giant strength', 'present', 18],
-      ['poison', 'harmful', 3],
-      ['bless', 'untracked', 6],
-      ['armor', 'untracked', 24],
+      ['levitate', 'present', 44],
+      ['pass door', 'untracked', 8],
+      ['haste', 'untracked', 14],
+      ['bagatelle of bravado', 'untracked', 19],
+      ['totems canticle', 'untracked', 22],
+      ['detect invis', 'untracked', 47],
+      ['the Triumph of One God', 'untracked', 188],
+      ['virtues', 'untracked', -1],
     ]);
+    expect(affectsSummary(rows)).toEqual({ missing: 1, runningOut: 2 });
   });
 
-  it('lists missing tracked affects first, in tracked order', () => {
+  it('keeps a missing tracked affect in its slot', () => {
     const rows = affectsView([aff('haste', 5)], track('sanctuary', 'haste', 'armor', 'bless'));
     expect(brief(rows)).toEqual([
       ['sanctuary', 'missing', null],
+      ['haste', 'present', 5],
       ['armor', 'missing', null],
       ['bless', 'missing', null],
-      ['haste', 'present', 5],
     ]);
   });
 
-  it('sorts present tracked affects by ticks, permanent after timed, unknown last', () => {
+  it('keeps tracked affects in your order whatever their ticks', () => {
     const rows = affectsView(
       [aff('a', null), aff('b', -1), aff('c', 30), aff('d', 4), aff('e', 11)],
       track('a', 'b', 'c', 'd', 'e'),
     );
-    expect(rows.map((r) => r.name)).toEqual(['d', 'e', 'c', 'b', 'a']);
+    expect(rows.map((r) => r.name)).toEqual(['a', 'b', 'c', 'd', 'e']);
     expect(rows.find((r) => r.key === 'b')?.ticks).toBe(-1);
     expect(rows.find((r) => r.key === 'a')?.ticks).toBeNull();
   });
@@ -123,14 +152,14 @@ describe('affectsView', () => {
       [aff('field of discord', 4)],
       [
         { name: 'field of discord', label: 'Shroud' },
-        { name: 'sanctuary', label: 'Sanc' },
+        { name: 'sanctuary', label: 'sanc' },
         { name: 'haste', label: '  ' },
       ],
     );
     expect(brief(rows)).toEqual([
-      ['Sanc', 'missing', null],
-      ['haste', 'missing', null],
       ['Shroud', 'present', 4],
+      ['sanc', 'missing', null],
+      ['haste', 'missing', null],
     ]);
   });
 
@@ -150,8 +179,8 @@ describe('affectsView', () => {
   it('collapses duplicate tracked entries', () => {
     const rows = affectsView([aff('haste', 3)], track('haste', 'Haste', 'fly', 'fly'));
     expect(brief(rows)).toEqual([
-      ['fly', 'missing', null],
       ['haste', 'present', 3],
+      ['fly', 'missing', null],
     ]);
   });
 
@@ -190,6 +219,51 @@ describe('affectsView', () => {
   it('splits tracked rows from the rest', () => {
     const rows = affectsView([aff('armor', 3), aff('haste', 4)], track('haste', 'fly'));
     expect(rows.map(isTrackedRow)).toEqual([true, true, false]);
+  });
+});
+
+describe('hoursTone', () => {
+  it('follows the game, red at one hour or none, and warns at two', () => {
+    expect(hoursTone(0)).toBe('danger');
+    expect(hoursTone(1)).toBe('danger');
+    expect(hoursTone(2)).toBe('warn');
+    expect(hoursTone(3)).toBeNull();
+    expect(hoursTone(188)).toBeNull();
+    expect(hoursTone(-1)).toBeNull();
+    expect(hoursTone(null)).toBeNull();
+  });
+});
+
+describe('affectMark', () => {
+  const row = (state: AffectRow['state'], ticks: number | null): AffectRow => ({
+    key: 'x',
+    name: 'x',
+    state,
+    ticks,
+  });
+
+  it('gives each tracked slot a dot that agrees with its hours', () => {
+    expect(affectMark(row('present', 31))).toBe('up');
+    expect(affectMark(row('present', -1))).toBe('up');
+    expect(affectMark(row('present', null))).toBe('up');
+    expect(affectMark(row('expiring', 2))).toBe('warn');
+    expect(affectMark(row('expiring', 1))).toBe('danger');
+    expect(affectMark(row('expiring', 0))).toBe('danger');
+    expect(affectMark(row('missing', null))).toBe('missing');
+  });
+
+  it('marks a harmful affect and leaves the rest bare', () => {
+    expect(affectMark(row('harmful', 3))).toBe('harmful');
+    expect(affectMark(row('harmful', 1))).toBe('harmful');
+    expect(affectMark(row('untracked', 8))).toBeNull();
+    expect(affectMark(row('untracked', 1))).toBeNull();
+  });
+});
+
+describe('affectsSummary', () => {
+  it('counts nothing when every tracked affect is up for a while', () => {
+    const rows = affectsView([aff('armor', 31), aff('poison', 1)], track('armor'));
+    expect(affectsSummary(rows)).toEqual({ missing: 0, runningOut: 0 });
   });
 });
 
