@@ -1118,6 +1118,65 @@ async fn a_prompt_vosh_cannot_read_keeps_the_moved_pattern_and_prompt_says_why()
 // session output also feeds. No task of the session takes it.
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_moved_pattern_that_fills_a_name_of_its_own_stays_and_draws() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.count_as_forsaken_lands();
+    // The old trigger handed its first group to health, which no code
+    // fills, and the design reads it.
+    let moved = vosh_prompt::PromptConfig {
+        draw: true,
+        template: "HP=%health".into(),
+        capture: vosh_prompt::CaptureConfig::Regex(vosh_prompt::config::RegexCapture {
+            lines: vec![r"\[(?<h>\d+)/(?<maxhp>\d+)hp".into()],
+            names: [("h".to_string(), "health".to_string())].into(),
+            source: Some(vosh_prompt::config::CaptureSource::Migrated),
+            ..vosh_prompt::config::RegexCapture::default()
+        }),
+        ..vosh_prompt::PromptConfig::default()
+    };
+    h.set_prompt(moved.clone()).await;
+    h.connect().await;
+
+    // Login leaves the pattern in place, so the design keeps its value.
+    h.until("Char.Prompt at login", |h| {
+        !h.events("session://game-prompt-seen").is_empty()
+    })
+    .await;
+    h.until_last_row("HP=1020").await;
+    assert_eq!(h.prompt_table().await, moved);
+    assert!(toasts(&h).is_empty());
+    h.type_line("#prompt").await;
+    h.until("the reason the pattern stayed", |h| {
+        h.screen().join(" ").contains(
+            "Vosh kept the pattern from your old capture trigger because it fills a value named health, and no prompt code fills that name.",
+        )
+    })
+    .await;
+
+    // A new prompt in the game changes nothing, and the pattern draws
+    // over the new line.
+    h.type_line(&format!("prompt {TYPED_NEW}")).await;
+    h.until_shown(&format!("Prompt set to {TYPED_NEW}")).await;
+    h.until_last_row("HP=1020").await;
+    assert!(h
+        .events("session://game-prompt-seen")
+        .iter()
+        .any(|e| e["text"] == PROMPT_NEW));
+    assert_eq!(h.prompt_table().await, moved);
+    assert!(toasts(&h).is_empty());
+    assert!(
+        h.screen().iter().all(|r| !r.contains("(100 hp)")),
+        "the new line never shows raw: {:#?}",
+        h.screen()
+    );
+    h.finish(grid).await;
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_reconnect_keeps_the_moved_pattern_until_the_game_sends_your_prompt() {
     let grid = crate::term_grid::lock_shared_grid_for_test();
     let h = Harness::new(Options {

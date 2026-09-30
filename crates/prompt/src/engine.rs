@@ -12,12 +12,13 @@ use serde::Serialize;
 use serde_json::Value as Json;
 
 use crate::aabahran::observer::{self, ReplyKind};
-use crate::aabahran::{CompileError, Origin, Which, Who};
+use crate::aabahran::{and_list, CompileError, Origin, Which, Who};
+use crate::capture;
 use crate::config::{AabahranCapture, CaptureConfig, CaptureSource, PromptConfig};
 use crate::gmcp::{CharPrompt, Observed, CHAR_STATE, CHAR_STATUS};
 use crate::stage::Stage;
 use crate::template::Template;
-use crate::vars::{forsaken_lands, Vars};
+use crate::vars::{self, forsaken_lands, Vars};
 
 /// What told Vosh your prompt settings, in `session://game-prompt-seen`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -112,6 +113,19 @@ struct Observer {
     seen: Option<SessionSetting>,
 }
 
+/// Why the migrated capture kept its pattern when the game showed your
+/// PROMPT.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Kept {
+    /// A color code runs into a code in the settings the game sent, so
+    /// they do not compile.
+    Compile(CompileError),
+    /// The pattern fills values under names of its own, in the order it
+    /// reads them. No code fills them, so the design and any script that
+    /// reads them would go blank.
+    Unknown(Vec<String>),
+}
+
 /// The live profile's custom prompt.
 #[derive(Debug, Clone, Default)]
 pub struct PromptEngine {
@@ -141,7 +155,7 @@ pub struct PromptEngine {
     misses: Misses,
     /// Why the migrated capture kept its pattern when the game last
     /// showed your PROMPT this session.
-    kept_pattern: Option<CompileError>,
+    kept_pattern: Option<Kept>,
 }
 
 impl PromptEngine {
@@ -270,9 +284,12 @@ impl PromptEngine {
     /// the observer reads. A fight prompt alone says too little. Without
     /// one from the game, the fight prompt is the one the game showed
     /// this session, or none. The design and the drawing switch stay as
-    /// they are. When the settings do not compile, the pattern stays and
-    /// [`PromptEngine::kept_pattern`] says why. Returns whether it
-    /// switched.
+    /// they are. The pattern stays, and [`PromptEngine::kept_pattern`]
+    /// says why, when it fills a value under a name Vosh does not know,
+    /// which no code fills, or when the settings do not compile. A value
+    /// under a name Vosh knows that the codes leave out is one your
+    /// PROMPT no longer shows, so it does not hold the switch back.
+    /// Returns whether it switched.
     fn switch_migrated(
         &mut self,
         prompt: Option<&str>,
@@ -284,6 +301,11 @@ impl PromptEngine {
             return false;
         };
         if !self.forsaken() {
+            return false;
+        }
+        let unknown = self.unknown_values();
+        if !unknown.is_empty() {
+            self.kept_pattern = Some(Kept::Unknown(unknown));
             return false;
         }
         let fprompt = fprompt
@@ -303,23 +325,50 @@ impl PromptEngine {
                 true
             }
             Err(error) => {
-                self.kept_pattern = Some(error);
+                self.kept_pattern = Some(Kept::Compile(error));
                 false
             }
         }
     }
 
+    /// The values the capture's pattern fills under names Vosh does not
+    /// know, in the order it reads them. None for any other capture.
+    fn unknown_values(&self) -> Vec<String> {
+        let CaptureConfig::Regex(pattern) = &self.config.capture else {
+            return Vec::new();
+        };
+        capture::fills(pattern)
+            .into_iter()
+            .filter(|name| !vars::known(name))
+            .collect()
+    }
+
     /// Why the migrated capture kept its pattern when the game last
     /// showed your PROMPT this session, as one sentence for `#prompt`.
     pub fn kept_pattern(&self) -> Option<String> {
-        let error = self.kept_pattern.as_ref()?;
-        let setting = match error.which {
-            Which::Prompt => "prompt",
-            Which::Fight => "fight prompt",
+        let because = match self.kept_pattern.as_ref()? {
+            Kept::Compile(error) => {
+                let setting = match error.which {
+                    Which::Prompt => "prompt",
+                    Which::Fight => "fight prompt",
+                };
+                format!(
+                    "a color code runs into {} in the {setting} the game sent",
+                    error.code
+                )
+            }
+            Kept::Unknown(names) => match names.as_slice() {
+                [name] => {
+                    format!("it fills a value named {name}, and no prompt code fills that name")
+                }
+                _ => format!(
+                    "it fills values named {}, and no prompt code fills those names",
+                    and_list(names)
+                ),
+            },
         };
         Some(format!(
-            "Vosh kept the pattern from your old capture trigger because a color code runs into {} in the {setting} the game sent.",
-            error.code
+            "Vosh kept the pattern from your old capture trigger because {because}."
         ))
     }
 
@@ -1654,6 +1703,114 @@ mod tests {
         assert_eq!(*engine.config(), migrated());
         assert!(engine.kept_pattern().is_some());
         assert!(engine.take_seen().is_empty());
+    }
+
+    /// A migrated table whose pattern reads `pattern`, with `names` for
+    /// its groups, and a design that reads `design`.
+    fn migrated_with(pattern: &str, names: &[(&str, &str)], design: &str) -> PromptConfig {
+        PromptConfig {
+            draw: true,
+            template: design.into(),
+            previous_templates: Vec::new(),
+            capture: CaptureConfig::Regex(RegexCapture {
+                lines: vec![pattern.into()],
+                names: names
+                    .iter()
+                    .map(|(group, var)| ((*group).to_string(), (*var).to_string()))
+                    .collect(),
+                source: Some(CaptureSource::Migrated),
+                ..RegexCapture::default()
+            }),
+        }
+    }
+
+    #[test]
+    fn a_pattern_that_fills_a_name_no_code_fills_keeps_the_pattern_and_says_why() {
+        // Groups named for themselves, outside the catalog, as the help
+        // invites you to name them.
+        let own = migrated_with(r"\[(?<h>\d+)/(?<mh>\d+)hp\]", &[], "[%h/%mh hp]");
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.set_config(own.clone());
+        engine.observe("Char.Prompt", char_prompt(true, "[%h/%Hhp]%c", ""), at());
+        assert_eq!(*engine.config(), own, "the pattern and the design stay");
+        assert!(!engine.take_seen()[0].applied, "no toast and no save");
+        assert_eq!(
+            engine.kept_pattern().as_deref(),
+            Some("Vosh kept the pattern from your old capture trigger because it fills values named h and mh, and no prompt code fills those names.")
+        );
+        // The pattern still reads the values the design shows.
+        let block = engine
+            .stage
+            .recognize(b"", "[100/200hp]", End::Line)
+            .expect("the prompt");
+        assert_eq!(block.values.get("h").map(String::as_str), Some("100"));
+        assert_eq!(block.values.get("mh").map(String::as_str), Some("200"));
+        // No PROMPT the game shows later changes that.
+        engine.observe("Char.Prompt", char_prompt(true, NEW, ""), at());
+        assert_eq!(*engine.config(), own);
+        assert!(engine.kept_pattern().is_some());
+
+        // A group the old trigger handed to a name of its own, through the
+        // names the move wrote.
+        let named = migrated_with(
+            r"\[(?<h>\d+)/(?<maxhp>\d+)hp",
+            &[("h", "health")],
+            "HP=%health",
+        );
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.set_config(named.clone());
+        engine.observe("Char.Prompt", char_prompt(true, OLD, ""), at());
+        assert_eq!(*engine.config(), named);
+        assert_eq!(
+            engine.kept_pattern().as_deref(),
+            Some("Vosh kept the pattern from your old capture trigger because it fills a value named health, and no prompt code fills that name.")
+        );
+
+        // The observer keeps it too, on a build without Char.Prompt, and
+        // a profile switch that hands it the latest packet.
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.set_config(named.clone());
+        engine.note_send("prompt x\r\n", SENT);
+        line(&mut engine, "Prompt set to <%hhp %Hmhp> ", 5);
+        assert_eq!(*engine.config(), named);
+        assert!(!engine.take_seen()[0].applied);
+        assert!(engine.kept_pattern().is_some());
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.observe("Char.Prompt", char_prompt(true, OLD, ""), at());
+        engine.switch_profile();
+        engine.set_config(named.clone());
+        engine.follow_latest(at());
+        assert_eq!(*engine.config(), named);
+        assert!(engine.take_seen().iter().all(|s| !s.applied));
+        assert!(engine.kept_pattern().is_some());
+    }
+
+    #[test]
+    fn a_pattern_that_fills_only_names_vosh_knows_switches() {
+        // A group the old trigger never read, another spelling of a max,
+        // and a percent the codes fill all leave the switch alone.
+        let known = migrated_with(
+            r"\[(?<hp>\d+)/(?<mhp>\d+)hp (?<hp_pct>\d+)% (?<extra>\w+)\]",
+            &[("extra", "")],
+            "%hp/%mhp",
+        );
+        let mut engine = PromptEngine::default();
+        engine.connect(true);
+        engine.set_config(known);
+        engine.observe("Char.Prompt", char_prompt(true, NEW, ""), at());
+        assert_eq!(codes(&engine).prompt, NEW);
+        assert_eq!(engine.kept_pattern(), None);
+
+        // A value the game's PROMPT no longer shows goes with it, since
+        // no code fills a name the catalog knows but the prompt leaves out.
+        let mut engine = moved();
+        engine.observe("Char.Prompt", char_prompt(true, "<%hhp %mm> ", ""), at());
+        assert_eq!(codes(&engine).prompt, "<%hhp %mm> ");
+        assert!(engine.take_seen()[0].applied);
     }
 
     #[test]

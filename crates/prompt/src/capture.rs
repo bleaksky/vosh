@@ -424,6 +424,23 @@ fn found(shape: &Shape, mut read: Recognized) -> Recognized {
     read
 }
 
+/// The values a regex capture fills, each group under the variable it
+/// feeds, in the order the pattern reads them, each once. A group mapped
+/// to an empty name fills nothing, and a capture that reads nothing
+/// fills nothing (see [`Recognizer::compile_for`]).
+pub fn fills(capture: &RegexCapture) -> Vec<String> {
+    let Some(Reader::Regex { groups, .. }) = regex_reader(capture) else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = Vec::new();
+    for (_, var) in groups {
+        if !names.contains(&var) {
+            names.push(var);
+        }
+    }
+    names
+}
+
 fn regex_reader(capture: &RegexCapture) -> Option<Reader> {
     let [pattern] = capture.lines.as_slice() else {
         return None;
@@ -650,6 +667,25 @@ mod tests {
             read.values,
             values(&[("hp", "10"), ("mana", "20"), ("gold", "50")])
         );
+    }
+
+    #[test]
+    fn a_regex_capture_fills_each_name_its_groups_feed_once() {
+        let CaptureConfig::Regex(capture) = regex(
+            &[r"<(?<h>\d+)hp (\d+)m (?<v>\d+)mv (\d+)x (?<gold>\d+)g (?<hp>\d+)>"],
+            false,
+            &[("h", "hp"), ("2", "mana"), ("v", "")],
+        ) else {
+            unreachable!()
+        };
+        assert_eq!(fills(&capture), ["hp", "mana", "gold"]);
+        // A capture that reads nothing fills nothing.
+        for lines in [&[][..], &[""], &["a", "b"], &["(?<hp>"]] {
+            let CaptureConfig::Regex(capture) = regex(lines, false, &[]) else {
+                unreachable!()
+            };
+            assert!(fills(&capture).is_empty(), "{lines:?}");
+        }
     }
 
     #[test]

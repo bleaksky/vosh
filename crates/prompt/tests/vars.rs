@@ -11,7 +11,7 @@ use common::{
 };
 use serde_json::json;
 use vosh_prompt::format::Position;
-use vosh_prompt::vars::{is_sourced, Tick, CATALOG};
+use vosh_prompt::vars::{is_sourced, known, Tick, CATALOG};
 use vosh_prompt::{
     render_str, FieldRef, MapValues, RenderOptions, Resolved, Value, Values, Vars, Vosh,
 };
@@ -112,6 +112,20 @@ fn a_script_value_for_a_name_only_vosh_supplies_keeps_its_value() {
         "hp", "mhp", "raw", "wizi", "afk", "tank_pct", "exits", "gold",
     ] {
         assert!(is_sourced(name), "{name}");
+    }
+}
+
+#[test]
+fn vosh_knows_the_catalog_its_spellings_and_the_percents() {
+    for name in [
+        "hp", "maxhp", "mhp", "max_move", "hp_pct", "tank_bar", "wizi", "fight", "slot10", "moon2",
+        "target", "tar", "tick",
+    ] {
+        assert!(known(name), "{name}");
+    }
+    // A name only a pattern or a script fills.
+    for name in ["h", "mh", "health", "HP", "aff", ""] {
+        assert!(!known(name), "{name}");
     }
 }
 

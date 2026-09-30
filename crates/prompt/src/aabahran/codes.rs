@@ -554,6 +554,9 @@ mod tests {
                 crate::vars::entry(name).is_some() || percent.contains(&name),
                 "{name} is no catalog field"
             );
+            // A moved pattern that fills a name Vosh does not know keeps
+            // its pattern, since no code ever fills that name.
+            assert!(crate::vars::known(name), "{name} is known");
         }
         assert_eq!(Code::Slot(0).name(), Some("slot10"));
         assert_eq!(Code::Slot(1).name(), Some("slot1"));
