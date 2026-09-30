@@ -196,7 +196,45 @@ impl LogStore {
              CREATE INDEX IF NOT EXISTS idx_log_lines_session
                  ON log_lines(session_id, ts_ms);",
         )?;
+        // The character a session belongs to came later. A log an
+        // older build wrote gains the column here, and its sessions
+        // keep no character.
+        if !self.has_column("sessions", "character")? {
+            self.conn
+                .execute_batch("ALTER TABLE sessions ADD COLUMN character TEXT")?;
+        }
         Ok(())
+    }
+
+    /// True when `table` has a column named `column`.
+    fn has_column(&self, table: &str, column: &str) -> Result<bool> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT 1 FROM pragma_table_info(?1) WHERE name = ?2")?;
+        Ok(stmt.exists(params![table, column])?)
+    }
+
+    /// Name the character a session belongs to, the first time the game
+    /// names it. A session that already has one keeps it.
+    pub fn set_session_character(&mut self, session_id: i64, character: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE sessions SET character = ?1 WHERE id = ?2 AND character IS NULL",
+            params![character, session_id],
+        )?;
+        Ok(())
+    }
+
+    /// The character a session belongs to, when the game named one.
+    pub fn session_character(&self, session_id: i64) -> Result<Option<String>> {
+        let found = self
+            .conn
+            .query_row(
+                "SELECT character FROM sessions WHERE id = ?1",
+                params![session_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()?;
+        Ok(found.flatten())
     }
 
     /// Open a new session row and return its id.
@@ -793,6 +831,81 @@ mod tests {
             s.search_page("(", &SearchOptions::default(), true),
             Err(LogError::Regex(_))
         ));
+    }
+
+    /// A folder of its own under the temp folder, for a test that needs
+    /// a log on disk.
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("vosh-log-{name}-{}-{nanos}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_session_is_named_once() {
+        let mut s = store();
+        let id = s.start_session("h", 1, 0).unwrap();
+        assert_eq!(s.session_character(id).unwrap(), None);
+        s.set_session_character(id, "Tester").unwrap();
+        assert_eq!(s.session_character(id).unwrap().as_deref(), Some("Tester"));
+        // A later name leaves the first one.
+        s.set_session_character(id, "Other").unwrap();
+        assert_eq!(s.session_character(id).unwrap().as_deref(), Some("Tester"));
+        assert_eq!(
+            s.session_character(id + 1).unwrap(),
+            None,
+            "no such session"
+        );
+    }
+
+    #[test]
+    fn an_older_log_gains_the_character_column_and_keeps_its_rows() {
+        let dir = temp_dir("older");
+        let path = dir.join("logs.sqlite");
+        {
+            // The schema an older build wrote, with no character column.
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE sessions (
+                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     host TEXT NOT NULL,
+                     port INTEGER NOT NULL,
+                     started_at_ms INTEGER NOT NULL,
+                     ended_at_ms INTEGER
+                 );
+                 CREATE TABLE log_lines (
+                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     session_id INTEGER NOT NULL REFERENCES sessions(id),
+                     ts_ms INTEGER NOT NULL,
+                     text TEXT NOT NULL,
+                     raw BLOB
+                 );
+                 CREATE INDEX idx_log_lines_session ON log_lines(session_id, ts_ms);
+                 INSERT INTO sessions (host, port, started_at_ms, ended_at_ms)
+                     VALUES ('h', 1, 10, 20);
+                 INSERT INTO log_lines (session_id, ts_ms, text) VALUES (1, 11, 'hello');",
+            )
+            .unwrap();
+        }
+        let mut s = LogStore::open(&path).unwrap();
+        assert!(s.has_column("sessions", "character").unwrap());
+        let old = s.get_session(1).unwrap().expect("the old session");
+        assert_eq!((old.host.as_str(), old.line_count), ("h", 1));
+        assert_eq!(s.session_character(1).unwrap(), None);
+        let id = s.start_session("h", 1, 30).unwrap();
+        s.set_session_character(id, "Tester").unwrap();
+        drop(s);
+
+        // Opening it again finds the column there and adds nothing.
+        let s = LogStore::open(&path).unwrap();
+        assert_eq!(s.session_character(id).unwrap().as_deref(), Some("Tester"));
+        drop(s);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
