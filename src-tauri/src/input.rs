@@ -1996,6 +1996,11 @@ mod tests {
         assert_eq!(codes_of(&p).prompt, "%n%P%C<%hhp %mm %vmv> ");
         let _ = run_line(&mut p, "#prompt game {<%hhp>}");
         assert_eq!(codes_of(&p).prompt, "<%hhp> ");
+        // No space around the setting reaches the game.
+        let _ = run_line(&mut p, "#prompt game { <%hhp %mm> }");
+        assert_eq!(codes_of(&p).prompt, "<%hhp %mm> ");
+        let _ = run_line(&mut p, "#prompt game { all }");
+        assert_eq!(codes_of(&p).prompt, "%n%P%C<%hhp %mm %vmv> ");
     }
 
     #[test]

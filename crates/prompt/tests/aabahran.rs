@@ -202,6 +202,24 @@ fn prompt_all_settles_and_reads_as_a_partial_or_a_line() {
 }
 
 #[test]
+fn a_typed_prompt_with_spaces_around_it_reads_what_the_game_prints() {
+    // You type `prompt  <%hhp %mm %vmv> `. The game stores the setting
+    // without the spaces before it and prints `<1020hp 800m 930mv> `.
+    let compiled = compile(" <%hhp %mm %vmv> ", "", Origin::Typed, Who::default()).unwrap();
+    assert_eq!(compiled.prompt, "<%hhp %mm %vmv> ");
+    let either = shape(&compiled, Which::Prompt, ShapeKind::Either);
+    assert_eq!(
+        values(either.read_partial(&["<1020hp 800m 930mv> "])),
+        map(&[("hp", "1020"), ("mana", "800"), ("move", "930")])
+    );
+    let compiled = compile(" all ", " off ", Origin::Typed, Who::default()).unwrap();
+    assert_eq!(
+        (compiled.prompt.as_str(), compiled.fprompt.as_str()),
+        (PROMPT_ALL, "")
+    );
+}
+
+#[test]
 fn an_empty_prompt_reads_the_fallback() {
     for compiled in [
         stored("", ""),

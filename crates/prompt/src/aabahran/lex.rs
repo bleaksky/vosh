@@ -31,12 +31,15 @@ pub struct Normalized {
     pub warnings: Vec<Warning>,
 }
 
-/// Store a setting you typed as the game does. Trailing spaces go, then
-/// the game keeps the first 255 characters, turns each `~` into `-`
-/// (`smash_tilde`), and adds one space unless the setting ends in `%c`
-/// in any case (`str_suffix`). `prompt all` is the stock prompt and
-/// `fprompt off` clears the fight prompt. A setting that is empty or
-/// only spaces stays empty, which the game draws as its fallback prompt.
+/// Store a setting you typed as the game does. Vosh trims the ends of
+/// every command it sends, and the game skips the spaces after the
+/// command word (`one_argument`, `interp.c:1704-1727`), so no space
+/// before or after the setting reaches `do_prompt`. Then the game keeps
+/// the first 255 characters, turns each `~` into `-` (`smash_tilde`),
+/// and adds one space unless the setting ends in `%c` in any case
+/// (`str_suffix`). `prompt all` is the stock prompt and `fprompt off`
+/// clears the fight prompt. A setting that is empty or only spaces
+/// stays empty, which the game draws as its fallback prompt.
 ///
 /// `prompt off` turns prompts off and sets nothing, so the caller
 /// handles it before it gets here.
@@ -45,17 +48,17 @@ pub fn normalize(typed: &str, which: Which) -> Normalized {
         text: String::new(),
         warnings: Vec::new(),
     };
+    let trimmed = typed.trim();
     match which {
-        Which::Prompt if typed == "all" => {
+        Which::Prompt if trimmed == "all" => {
             return Normalized {
                 text: PROMPT_ALL.to_string(),
                 warnings: Vec::new(),
             };
         }
-        Which::Fight if typed.eq_ignore_ascii_case("off") => return empty(),
+        Which::Fight if trimmed.eq_ignore_ascii_case("off") => return empty(),
         _ => {}
     }
-    let trimmed = typed.trim_end_matches(' ');
     if trimmed.is_empty() {
         return empty();
     }
@@ -349,7 +352,16 @@ mod tests {
             "[%h/%Hhp %m/%Mmn %v/%Vmv] "
         );
         assert_eq!(stored("<%hhp>   "), "<%hhp> ");
-        assert_eq!(stored("  <%hhp>"), "  <%hhp> ");
+    }
+
+    #[test]
+    fn the_game_skips_the_spaces_before_the_setting() {
+        // The game skips the spaces after the command word, and Vosh
+        // trims the ends of every command it sends.
+        assert_eq!(stored("  <%hhp>"), "<%hhp> ");
+        assert_eq!(stored(" <%hhp %mm %vmv> "), "<%hhp %mm %vmv> ");
+        // Spaces inside the setting stay.
+        assert_eq!(stored("<%hhp>  <%mm>"), "<%hhp>  <%mm> ");
     }
 
     #[test]
@@ -368,6 +380,9 @@ mod tests {
     #[test]
     fn prompt_all_is_the_stock_prompt() {
         assert_eq!(stored("all"), PROMPT_ALL);
+        // The spaces around it never reach the game.
+        assert_eq!(stored(" all "), PROMPT_ALL);
+        assert_eq!(stored("all  "), PROMPT_ALL);
         // The game compares exactly, so anything else is a setting.
         assert_eq!(stored("All"), "All ");
         assert_eq!(normalize("all", Which::Fight).text, "all ");
@@ -377,6 +392,7 @@ mod tests {
     fn fprompt_off_clears_the_fight_prompt() {
         assert_eq!(normalize("off", Which::Fight).text, "");
         assert_eq!(normalize("OFF", Which::Fight).text, "");
+        assert_eq!(normalize(" off ", Which::Fight).text, "");
         assert_eq!(normalize("off!", Which::Fight).text, "off! ");
     }
 
