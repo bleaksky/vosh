@@ -13,6 +13,8 @@ fixtures/
   pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.
   themes/    One theme file per format the Appearance import reads (Ghostty,
              iTerm2, Kitty, Alacritty TOML, legacy Alacritty YAML).
+  wrap/      Word wrap cases shared by the Rust wrap in crates/prompt and the
+             TypeScript WordWrapper, so both renderers break lines alike.
 ```
 
 ## Capturing From Aabahran

@@ -271,11 +271,12 @@ static WRAP_PENDING: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 /// Feed the live session's display bytes word-wrapped at the grid width.
 /// xterm receives this stream word-wrapped by the frontend `WordWrapper`
 /// (src/lib/wordWrap.ts); without the same treatment the surface hard-wraps
-/// mid-word at the grid edge and the two renderers disagree. This is a
-/// faithful port: complete lines wrap at the last whitespace before the
-/// width, the chunk's partial tail flushes immediately (parity with the
-/// frontend, which flushes per chunk so prompts appear), and ANSI escape
-/// sequences count zero width.
+/// mid-word at the grid edge and the two renderers disagree. The wrap is
+/// `vosh_prompt::wrap`, which runs the same fixture as the frontend:
+/// complete lines wrap at the last whitespace before the width, the
+/// chunk's partial tail flushes immediately (parity with the frontend,
+/// which flushes per chunk so prompts appear), and ANSI escape sequences
+/// count zero width.
 pub(crate) fn feed_session_bytes(bytes: &[u8]) {
     let Ok(mut slot) = grid_slot().lock() else {
         return;
@@ -308,107 +309,8 @@ pub(crate) fn feed_session_bytes(bytes: &[u8]) {
         }
     };
     if !text.is_empty() {
-        grid.feed(wrap_stream(&text, cols).as_bytes());
+        grid.feed(vosh_prompt::wrap::wrap_stream(&text, cols).as_bytes());
     }
-}
-
-/// Word-wrap a chunk of terminal text at `cols`: complete lines (any \r or
-/// \n terminator) wrap in place, and the trailing partial line wraps and
-/// emits immediately.
-fn wrap_stream(text: &str, cols: usize) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut line = String::new();
-    for ch in text.chars() {
-        if ch == '\n' || ch == '\r' {
-            out.push_str(&wrap_line(&line, cols));
-            out.push(ch);
-            line.clear();
-        } else {
-            line.push(ch);
-        }
-    }
-    out.push_str(&wrap_line(&line, cols));
-    out
-}
-
-/// Walk `line` once, tracking the visible column with ANSI escapes at zero
-/// width. When the column exceeds `cols`, insert a CRLF at the last
-/// whitespace so the wrap lands between words; a single token wider than
-/// the width hard-wraps at the boundary so the line still terminates.
-fn wrap_line(line: &str, cols: usize) -> String {
-    enum AnsiState {
-        Normal,
-        Esc,
-        Csi,
-        Osc,
-    }
-    let cols = cols.max(1);
-    let mut out = String::with_capacity(line.len());
-    let mut visible_col = 0usize;
-    // Byte position in `out` of the most recent whitespace on this line;
-    // None when the line (or current wrapped segment) starts with a word.
-    let mut last_ws: Option<(usize, usize)> = None; // (byte pos, visible col)
-    let mut state = AnsiState::Normal;
-
-    for ch in line.chars() {
-        match state {
-            AnsiState::Esc => {
-                out.push(ch);
-                state = match ch {
-                    '[' => AnsiState::Csi,
-                    ']' => AnsiState::Osc,
-                    _ => AnsiState::Normal,
-                };
-                continue;
-            }
-            AnsiState::Csi => {
-                out.push(ch);
-                if ('\u{40}'..='\u{7e}').contains(&ch) {
-                    state = AnsiState::Normal;
-                }
-                continue;
-            }
-            AnsiState::Osc => {
-                out.push(ch);
-                if ch == '\u{07}' || ch == '\u{9c}' {
-                    state = AnsiState::Normal;
-                } else if ch == '\u{1b}' {
-                    state = AnsiState::Esc;
-                }
-                continue;
-            }
-            AnsiState::Normal => {}
-        }
-        if ch == '\u{1b}' {
-            out.push(ch);
-            state = AnsiState::Esc;
-            continue;
-        }
-
-        out.push(ch);
-        visible_col += 1;
-
-        if ch == ' ' || ch == '\t' {
-            last_ws = Some((out.len() - 1, visible_col));
-        }
-
-        if visible_col > cols {
-            if let Some((ws_pos, ws_col)) = last_ws {
-                // Replace the whitespace with CRLF so the wrap lands
-                // between words; everything after it starts the next line.
-                out.replace_range(ws_pos..=ws_pos, "\r\n");
-                visible_col -= ws_col;
-                last_ws = None;
-            } else {
-                // Single token wider than the terminal: hard-wrap at the
-                // boundary, keeping the current char on the new line.
-                let pos = out.len() - ch.len_utf8();
-                out.insert_str(pos, "\r\n");
-                visible_col = 1;
-            }
-        }
-    }
-    out
 }
 
 /// Current (display offset, scrollback length) of the shared grid, for the
@@ -872,7 +774,7 @@ mod tests {
         // template WITHOUT trailing newline.
         g.feed(b"\r\nPlayers matched: 9\r\n\r\n");
         g.feed(
-            wrap_stream(
+            vosh_prompt::wrap::wrap_stream(
                 "\x1b[3m\x1b[38;5;240m[\x1b[0m329(\x1b[38;5;42m100%\x1b[0m)h\x1b[0m",
                 80,
             )
@@ -885,33 +787,8 @@ mod tests {
         assert!(row3.starts_with("[329(100%)hwho"), "got: {row3:?}");
     }
 
-    #[test]
-    fn wrap_line_breaks_at_the_last_whitespace() {
-        assert_eq!(
-            wrap_line("the quick brown fox", 10),
-            "the quick\r\nbrown fox"
-        );
-    }
-
-    #[test]
-    fn wrap_line_counts_ansi_escapes_as_zero_width() {
-        let line = "\x1b[33mthe quick\x1b[0m brown fox";
-        assert_eq!(wrap_line(line, 10), "\x1b[33mthe quick\x1b[0m\r\nbrown fox");
-    }
-
-    #[test]
-    fn wrap_line_hard_wraps_a_token_wider_than_the_terminal() {
-        assert_eq!(wrap_line("abcdefgh", 5), "abcde\r\nfgh");
-    }
-
-    #[test]
-    fn wrap_stream_wraps_complete_lines_and_the_partial_tail() {
-        // Line-terminated content wraps in place; the unterminated tail
-        // (a prompt) flushes immediately, matching the frontend wrapper.
-        let out = wrap_stream("a long enough line here\r\nprompt> ", 12);
-        assert_eq!(out, "a long\r\nenough line\r\nhere\r\nprompt> ");
-    }
-
+    // The wrap itself runs fixtures/wrap/cases.json in crates/prompt and in
+    // src/lib/wordWrap.test.ts.
     #[test]
     fn session_feed_word_wraps_at_the_grid_width() {
         let _shared = lock_shared_grid_for_test();

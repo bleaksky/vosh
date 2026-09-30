@@ -5201,6 +5201,7 @@ dependencies = [
  "vosh-gmcp",
  "vosh-log",
  "vosh-map",
+ "vosh-prompt",
  "vosh-script",
  "vosh-telnet",
  "vosh-trigger",
@@ -5246,6 +5247,7 @@ version = "0.7.2"
 dependencies = [
  "chrono",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

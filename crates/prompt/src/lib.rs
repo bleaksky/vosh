@@ -9,10 +9,12 @@
 //! - [`format`] holds the values a template draws and the plain text of
 //!   each format.
 //! - [`render`] draws a template as ANSI text with a span per piece.
+//! - [`wrap`] is the word wrap both renderers share.
 
 pub mod format;
 pub mod render;
 pub mod template;
+pub mod wrap;
 
 pub use format::{Position, Resolved, Value};
 pub use render::{render, render_str, MapValues, RenderOptions, Rendered, Span, SpanColor, Values};
