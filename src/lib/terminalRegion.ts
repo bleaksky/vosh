@@ -13,6 +13,14 @@
 // plain write passes straight to xterm while nothing waits. A write that
 // reads the buffer waits for xterm to parse what came before it, reads
 // the marker and the cursor, writes, and only then lets the queue go on.
+//
+// The wait is a write of nothing with a callback. It has to be an empty
+// byte array, never an empty string. xterm 6.1 parses everything it
+// holds before a resize, and that loop stops at the first empty string,
+// then drops every write and callback after it. The writer would wait
+// for good and xterm would show nothing more. The same loop can parse
+// again what xterm had already parsed, callbacks included, so each wait
+// runs its callback once.
 
 /** The private OSC a region mark uses. */
 export const REGION_OSC = 7717;
@@ -40,7 +48,7 @@ export interface RegionTerminal {
       callback: (data: string) => boolean | Promise<boolean>,
     ): { dispose(): void };
   };
-  write(data: string, callback?: () => void): void;
+  write(data: string | Uint8Array, callback?: () => void): void;
   registerMarker(cursorYOffset?: number): RegionMarker | undefined;
 }
 
@@ -60,6 +68,10 @@ export interface RegionOutput {
   replace?: RegionReplace;
   restore?: string;
 }
+
+/** A write of nothing that xterm's flush before a resize still parses
+ *  and calls back for, since it is not falsy as an empty string is. */
+const NOTHING = new Uint8Array(0);
 
 // eslint-disable-next-line no-control-regex
 const MARK = /\x1b\]7717;o;(\d+)\x07/g;
@@ -127,7 +139,8 @@ export class RegionWriter {
     if (text.length > 0) this.push({ kind: 'local', text });
   }
 
-  /** Run `then` once xterm has parsed everything written before it. */
+  /** Run `then` once xterm has parsed everything written before it, and
+   *  after any resize that made xterm parse it. */
   whenParsed(then: () => void): void {
     this.push({ kind: 'parsed', then });
   }
@@ -163,11 +176,24 @@ export class RegionWriter {
     }
   }
 
+  /** Call `then` once xterm has parsed every write so far. xterm may
+   *  call it from inside a resize, before the buffer takes the new size,
+   *  and may call it twice, so it runs only the first time. */
+  private wait(then: () => void): void {
+    let done = false;
+    this.term.write(NOTHING, () => {
+      if (done) return;
+      done = true;
+      then();
+    });
+  }
+
   /** Run `then` after xterm parses every write so far, holding the queue
-   *  until it has. */
+   *  until it has. It runs at once, even inside a resize, so it reads the
+   *  marker and cursor at the width they were parsed at. */
   private afterParse(then: () => void): void {
     this.busy = true;
-    this.term.write('', () => {
+    this.wait(() => {
       this.busy = false;
       // The terminal went away while the write waited.
       if (this.disposed) return;
@@ -178,7 +204,10 @@ export class RegionWriter {
 
   private run(item: Item): void {
     if (item.kind === 'parsed') {
-      this.term.write('', item.then);
+      // Code outside the writer runs once xterm is done, never in the
+      // middle of a resize.
+      const { then } = item;
+      this.wait(() => queueMicrotask(then));
       return;
     }
     // A preview goes back to the live render before anything lands after

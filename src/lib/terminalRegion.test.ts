@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { Terminal } from '@xterm/xterm';
-import { eraseBack, lastMark, RegionWriter, type RegionOutput } from './terminalRegion';
+import {
+  eraseBack,
+  lastMark,
+  RegionWriter,
+  type RegionOutput,
+  type RegionTerminal,
+} from './terminalRegion';
 
 // The region rules against a real xterm with no page around it. Writes
 // go in back to back, as session events and your typed echo do, before
@@ -17,6 +23,12 @@ function setup(cols = 40, rows = 10) {
 /** Resolve once xterm has parsed everything the writer took so far. */
 function parsed(writer: RegionWriter): Promise<void> {
   return new Promise((resolve) => writer.whenParsed(resolve));
+}
+
+/** Like `parsed`, but gives up after a while, for a writer that may
+ *  have stopped for good. */
+function settled(writer: RegionWriter): Promise<void> {
+  return Promise.race([parsed(writer), new Promise<void>((resolve) => setTimeout(resolve, 200))]);
 }
 
 /** The screen's rows, trailing blanks trimmed, up to the last row that
@@ -222,6 +234,71 @@ describe('RegionWriter', () => {
     writer.local('after\r\n');
     await new Promise((resolve) => term.write('', () => resolve(undefined)));
     expect(screen(term)).toEqual(['PROMPT> ']);
+  });
+
+  it('keeps writing after a resize lands while a replace waits', async () => {
+    // xterm parses everything it holds when it resizes. The replace
+    // still goes in, and what came after it still reaches the screen.
+    const { term, writer } = setup();
+    writer.output({ text: `You are hungry.\r\n${mark(1)}PROMPT> ` });
+    await parsed(writer);
+    writer.output(replace(1, `${mark(2)}NEW> `));
+    term.resize(30, 10);
+    writer.local('look\r\n');
+    writer.output({ text: 'You see nothing special.\r\n' });
+    await settled(writer);
+    expect(screen(term)).toEqual(['You are hungry.', 'NEW> look', 'You see nothing special.']);
+  });
+
+  it('replaces a region at the width xterm parsed it at when a resize narrows it', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: `abcdefghijklmnopqrstuvwxyz${mark(1)}You are hun` });
+    writer.output(replace(1, 'You are hungry.\r\n', true));
+    term.resize(12, 10);
+    await settled(writer);
+    expect(screen(term).join('')).toBe('abcdefghijklmnopqrstuvwxyzYou are hungry.');
+  });
+
+  it('runs a parse callback when a resize lands before xterm parses', async () => {
+    const { term, writer } = setup();
+    writer.local('restored scrollback\r\n');
+    const ran: string[] = [];
+    writer.whenParsed(() => ran.push(screen(term).join('|')));
+    term.resize(30, 10);
+    await settled(writer);
+    expect(ran).toEqual(['restored scrollback']);
+  });
+
+  it('waits once when xterm calls back twice for the same write', async () => {
+    // xterm's flush before a resize can parse writes it already parsed,
+    // and call their callbacks again.
+    const writes: string[] = [];
+    const callbacks: (() => void)[] = [];
+    const term: RegionTerminal = {
+      cols: 40,
+      buffer: { active: { cursorX: 0, cursorY: 0, baseY: 0 } },
+      parser: { registerOscHandler: () => ({ dispose() {} }) },
+      write(data, callback) {
+        if (typeof data === 'string') writes.push(data);
+        if (callback) callbacks.push(callback);
+      },
+      registerMarker: () => undefined,
+    };
+    const parseTwice = () => {
+      const pending = callbacks.splice(0);
+      for (const callback of [...pending, ...pending]) callback();
+    };
+    const writer = new RegionWriter(term);
+    let ran = 0;
+    writer.output({ text: 'You are hun' });
+    writer.output(replace(1, 'You are hungry.\r\n', true));
+    writer.local('look\r\n');
+    writer.whenParsed(() => ran++);
+    parseTwice();
+    parseTwice();
+    await Promise.resolve();
+    expect(writes).toEqual(['You are hun', 'You are hungry.\r\n', 'look\r\n']);
+    expect(ran).toBe(1);
   });
 
   it('keeps the order of writes that arrive while a replace waits', async () => {
