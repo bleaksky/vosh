@@ -65,6 +65,7 @@ import { setBaseAnsi } from './lib/baseAnsi';
 import { startStores } from './lib/stores';
 import { pushToast } from './lib/toasts';
 import { showLaunchNotices, showMigrationApplied } from './lib/launchNotices';
+import { startGamePromptToasts } from './lib/gamePromptToast';
 import { CommandPalette } from './components/CommandPalette';
 import { disconnectSession } from './lib/session';
 import {
@@ -1158,6 +1159,20 @@ function App() {
     subscribeBaseAnsiChanged((colors) => {
       setBaseAnsi(colors);
     }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    // The game sent a new prompt setting and your capture follows it.
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void startGamePromptToasts().then((fn) => {
       if (cancelled) fn();
       else unlisten = fn;
     });
