@@ -521,6 +521,23 @@ async fn io_loop<R: tauri::Runtime>(
                     if hold_until.take().is_some() {
                         flush_hold(&app, &profile, &mut accumulator, &mut seen_output).await;
                     }
+                    // Lines held for the rest of a prompt let go as they
+                    // show, before your line leaves, since it follows them.
+                    if let Err(e) = let_go_held_lines(
+                        &app,
+                        &mut stream,
+                        &profile,
+                        &timers,
+                        &scrollback,
+                        &logs,
+                        &mut log_session,
+                        &mut seen_output,
+                        &mut perf,
+                    )
+                    .await
+                    {
+                        warn!(error = %e, "letting go of held lines failed");
+                    }
                     // The send records a prompt candidate and closes the
                     // open row. On a server that sends no Char.Vitals it
                     // also starts the next pulse, after which the values
@@ -585,9 +602,25 @@ async fn io_loop<R: tauri::Runtime>(
                     if hold_until.take().is_some() {
                         flush_hold(&app, &profile, &mut accumulator, &mut seen_output).await;
                     }
+                    // Your typed echo follows the lines held for the rest
+                    // of a prompt, so they let go as they show.
+                    if let Err(e) = let_go_held_lines(
+                        &app,
+                        &mut stream,
+                        &profile,
+                        &timers,
+                        &scrollback,
+                        &logs,
+                        &mut log_session,
+                        &mut seen_output,
+                        &mut perf,
+                    )
+                    .await
+                    {
+                        warn!(error = %e, "letting go of held lines failed");
+                    }
                     let mut p = profile.lock().await;
                     p.prompt.stage.close();
-                    p.prompt.stage.forget_held();
                 }
                 Some(OutgoingMsg::PromptRepaint) => {
                     let out = {
@@ -800,6 +833,7 @@ async fn io_loop<R: tauri::Runtime>(
     if hold_until.is_some() {
         flush_hold(&app, &profile, &mut accumulator, &mut seen_output).await;
     }
+    capture_held_lines(&profile, &logs, log_session_id, &scrollback).await;
     capture_pending_line(&app, &logs, log_session_id, &scrollback, &mut accumulator).await;
 
     {
@@ -1302,7 +1336,7 @@ fn line_step(
             batch,
             line.bytes,
             plain,
-            line.painted,
+            Shows::Now(line.painted),
             now,
             log_session_id,
         )),
@@ -1326,7 +1360,7 @@ fn released_steps(
                 batch,
                 line.raw,
                 line.plain,
-                line.painted,
+                Shows::Now(line.painted),
                 now,
                 log_session_id,
             )
@@ -1334,15 +1368,79 @@ fn released_steps(
         .collect()
 }
 
+/// Let go of the lines the stage holds for the rest of a prompt, as your
+/// send or a local write does. The end of their read painted them, and
+/// what you typed follows them, so each stays as it shows. Each runs the
+/// Line pass, so triggers see it and it is logged and kept for
+/// scrollback.
+fn let_go_held(
+    p: &mut Profile,
+    batch: &mut ReadBatch,
+    now: Instant,
+    log_session_id: Option<i64>,
+) -> Vec<LineStep> {
+    p.prompt
+        .stage
+        .release()
+        .into_iter()
+        .map(|line| {
+            text_line_step(
+                p,
+                batch,
+                line.raw,
+                line.plain,
+                Shows::Painted,
+                now,
+                log_session_id,
+            )
+        })
+        .collect()
+}
+
+/// The lines the stage still holds as the session ends. The end of their
+/// read painted them, so each is logged and kept for scrollback as it
+/// shows. Returns the log rows and the scrollback lines.
+fn end_held(
+    p: &mut Profile,
+    log_session_id: Option<i64>,
+) -> (Vec<vosh_log::LogEntry>, Vec<Vec<u8>>) {
+    let mut log = Vec::new();
+    let mut kept = Vec::new();
+    for line in p.prompt.stage.release() {
+        if let Some(sid) = log_session_id {
+            log.push(vosh_log::LogEntry {
+                session_id: sid,
+                ts_ms: now_ms(),
+                text: line.plain,
+                raw: Some(line.raw.clone()),
+            });
+        }
+        kept.push(line.raw);
+    }
+    (log, kept)
+}
+
+/// Where a line that is not your prompt shows.
+#[derive(Debug, Clone, Copy)]
+enum Shows {
+    /// It writes now, over the region an earlier read painted its start
+    /// in, if any.
+    Now(Option<u64>),
+    /// The end of its read painted it whole and output followed it, so it
+    /// stays as it shows.
+    Painted,
+}
+
 /// A complete line that is not your prompt. It runs the Line pass and
-/// lands in the batch as its triggers left it, replacing the region
-/// `painted` an earlier read painted its start in.
+/// lands in the batch as its triggers left it, replacing the region an
+/// earlier read painted its start in, or stays as an earlier read
+/// painted it (`shows`).
 fn text_line_step(
     p: &mut Profile,
     batch: &mut ReadBatch,
     bytes: Vec<u8>,
     plain: String,
-    painted: Option<u64>,
+    shows: Shows,
     now: Instant,
     log_session_id: Option<i64>,
 ) -> LineStep {
@@ -1367,33 +1465,42 @@ fn text_line_step(
             shown.extend_from_slice(b"\r\n");
         }
     }
-    if let Some(text) = &result.display {
-        shown.extend_from_slice(text.as_bytes());
-        shown.extend_from_slice(b"\r\n");
-    }
-    p.prompt
-        .stage
-        .line(&mut batch.out, &bytes, &plain, painted, &shown);
+    let kept = match shows {
+        Shows::Now(painted) => {
+            if let Some(text) = &result.display {
+                shown.extend_from_slice(text.as_bytes());
+                shown.extend_from_slice(b"\r\n");
+            }
+            p.prompt
+                .stage
+                .line(&mut batch.out, &bytes, &plain, painted, &shown);
+            result.display.as_ref().map(|text| text.as_bytes().to_vec())
+        }
+        Shows::Painted => {
+            // It shows as the game sent it, whatever its triggers do. What
+            // a script echoed in place of a hidden line lands after it.
+            p.prompt
+                .stage
+                .line(&mut batch.out, &bytes, &plain, None, &shown);
+            Some(bytes.clone())
+        }
+    };
     // A line that shows is logged, in one transaction at the end of the
     // read, and kept in the ring buffer that becomes scrollback on the
     // next launch. The raw bytes carry ANSI, and the plain text drives
     // the regex search.
-    let scrollback: Vec<Vec<u8>> = result
-        .display
-        .as_ref()
-        .map(|text| {
-            if let Some(sid) = log_session_id {
-                batch.log.push(vosh_log::LogEntry {
-                    session_id: sid,
-                    ts_ms: now_ms(),
-                    text: plain,
-                    raw: Some(bytes),
-                });
-            }
-            text.as_bytes().to_vec()
-        })
-        .into_iter()
-        .collect();
+    let mut scrollback = Vec::new();
+    if let Some(text) = kept {
+        if let Some(sid) = log_session_id {
+            batch.log.push(vosh_log::LogEntry {
+                session_id: sid,
+                ts_ms: now_ms(),
+                text: plain,
+                raw: Some(bytes),
+            });
+        }
+        scrollback.push(text);
+    }
     LineStep {
         result,
         apply,
@@ -1720,6 +1827,65 @@ async fn flush_hold<R: tauri::Runtime>(
     }
 }
 
+/// Let go of the lines the stage holds for the rest of a prompt, through
+/// [`let_go_held`], and send what their Line pass left: the routes, the
+/// scrollback, what their triggers send, and the log rows. `seen`
+/// becomes the output count after it.
+#[allow(clippy::too_many_arguments)]
+async fn let_go_held_lines<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    stream: &mut Stream,
+    profile: &Arc<Mutex<Profile>>,
+    timers: &SharedTimers,
+    scrollback: &crate::log_state::SharedScrollback,
+    logs: &crate::log_state::SharedLogStore,
+    log_session: &mut LogSession,
+    seen: &mut u64,
+    perf: &mut PerfCounters,
+) -> std::io::Result<()> {
+    let mut batch = ReadBatch::new(*seen);
+    let steps = {
+        let mut p = profile.lock().await;
+        if !p.prompt.stage.holds() {
+            return Ok(());
+        }
+        let_go_held(&mut p, &mut batch, Instant::now(), log_session.id)
+    };
+    for step in steps {
+        deliver_line_step(
+            app, stream, profile, timers, scrollback, &mut batch, step, perf,
+        )
+        .await?;
+    }
+    finish_read(app, profile, logs, log_session, batch, seen, perf).await;
+    Ok(())
+}
+
+/// Log the lines the stage still holds as the session ends, and keep them
+/// for scrollback, through [`end_held`].
+async fn capture_held_lines(
+    profile: &Arc<Mutex<Profile>>,
+    logs: &crate::log_state::SharedLogStore,
+    log_session_id: Option<i64>,
+    scrollback: &crate::log_state::SharedScrollback,
+) {
+    let (log, kept) = end_held(&mut *profile.lock().await, log_session_id);
+    if !kept.is_empty() {
+        let mut ring = scrollback.lock().await;
+        for text in kept {
+            ring.push(text);
+        }
+    }
+    if !log.is_empty() {
+        let mut guard = logs.lock().await;
+        if let Some(store) = guard.as_mut() {
+            if let Err(e) = store.append_batch(&log) {
+                warn!(error = %e, "disconnect held lines log append failed");
+            }
+        }
+    }
+}
+
 /// Wait until `until`, or forever with no deadline.
 async fn sleep_until_hold(until: Option<Instant>) {
     match until {
@@ -1744,7 +1910,6 @@ fn send_step(p: &mut Profile, accumulator: &LineAccumulator, sent: &[u8], at_ms:
         at_ms,
     );
     p.prompt.stage.close();
-    p.prompt.stage.forget_held();
     p.prompt.note_send(&String::from_utf8_lossy(sent), at_ms)
 }
 
@@ -2943,8 +3108,10 @@ mod tests {
             self.read_with(data, true, false).out
         }
 
-        /// You send a line.
+        /// You send a line. Held lines let go first, as in the session.
         fn send(&mut self) {
+            let mut batch = super::ReadBatch::new(super::output_count());
+            let _ = super::let_go_held(&mut self.p, &mut batch, tokio::time::Instant::now(), None);
             let _ = super::send_step(&mut self.p, &self.acc, b"look\r\n", 0);
             self.acc.forget_partial();
         }
@@ -4135,6 +4302,114 @@ mod tests {
         let out = wire.read(format!("{FIGHT_LINE}\n\r").as_bytes());
         assert_eq!(out.replace, None);
         assert_eq!(out.bytes, with(&[&wire.mark(4), b"<159>\x1b[0m"]));
+    }
+
+    #[test]
+    fn a_held_line_your_send_lets_go_runs_the_line_pass_and_is_logged() {
+        let mut p = codes_profile(CODES, HP);
+        p.triggers
+            .set(vosh_trigger::Trigger {
+                name: "answer".into(),
+                patterns: vec![vosh_trigger::TriggerPattern {
+                    pattern: "^Bob says: ".into(),
+                    enabled: true,
+                }],
+                priority: 0,
+                enabled: true,
+                actions: vec![vosh_trigger::TriggerAction::Send {
+                    template: "nod".into(),
+                }],
+                preset: None,
+                group: None,
+                target: vosh_trigger::TriggerTarget::Line,
+            })
+            .unwrap();
+        let mut wire = Wire::new(p);
+        // A line that can start a tank block ends the read, so the stage
+        // holds it and paints it.
+        let out = wire.read(b"You flee.\n\rBob says: \n\r");
+        assert_eq!(
+            out.bytes,
+            with(&[b"You flee.\r\n", &wire.mark(1), b"Bob says: \r\n"])
+        );
+        assert!(wire.p.prompt.stage.holds());
+        // You send before the next read. The line stays as it shows and
+        // runs the Line pass, so its trigger answers and it is logged and
+        // kept for scrollback.
+        let mut batch = super::ReadBatch::new(super::output_count());
+        let steps = super::let_go_held(
+            &mut wire.p,
+            &mut batch,
+            tokio::time::Instant::now(),
+            Some(3),
+        );
+        assert!(!wire.p.prompt.stage.holds());
+        assert!(batch.out.is_empty(), "it stays as it shows");
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].result.sends, ["nod"]);
+        assert_eq!(steps[0].scrollback, bytes_of(&["Bob says: "]));
+        let logged: Vec<&str> = batch.log.iter().map(|e| e.text.as_str()).collect();
+        assert_eq!(logged, ["Bob says: "]);
+        // The next read is read on its own.
+        wire.send();
+        let out = wire.read(b"The Bank of Aabahran\n\r");
+        assert_eq!(out.replace, None);
+        assert_eq!(out.bytes, b"The Bank of Aabahran\r\n");
+    }
+
+    #[test]
+    fn a_held_line_a_script_hides_still_shows_and_its_echo_follows() {
+        let mut p = codes_profile(CODES, HP);
+        p.triggers
+            .set(vosh_trigger::Trigger {
+                name: "swap".into(),
+                patterns: vec![vosh_trigger::TriggerPattern {
+                    pattern: "^Bob says: ".into(),
+                    enabled: true,
+                }],
+                priority: 0,
+                enabled: true,
+                actions: vec![
+                    vosh_trigger::TriggerAction::Gag,
+                    vosh_trigger::TriggerAction::Script {
+                        body: "mud.echo('Bob speaks.')".into(),
+                    },
+                ],
+                preset: None,
+                group: None,
+                target: vosh_trigger::TriggerTarget::Line,
+            })
+            .unwrap();
+        let mut wire = Wire::new(p);
+        let _ = wire.read(b"Bob says: \n\r");
+        let mut batch = super::ReadBatch::new(super::output_count());
+        let steps = super::let_go_held(
+            &mut wire.p,
+            &mut batch,
+            tokio::time::Instant::now(),
+            Some(3),
+        );
+        // The end of its read painted it, so it is logged and kept as it
+        // shows, and the echo lands after it.
+        assert_eq!(batch.out.bytes, b"Bob speaks.\r\n");
+        assert_eq!(steps[0].scrollback, bytes_of(&["Bob says: "]));
+        assert_eq!(batch.log.len(), 1);
+    }
+
+    #[test]
+    fn a_held_line_at_the_end_of_the_session_is_logged_and_kept() {
+        let mut wire = Wire::new(codes_profile(CODES, HP));
+        let _ = wire.read(format!("{TANK_LINE}\n\r").as_bytes());
+        let (log, kept) = super::end_held(&mut wire.p, Some(3));
+        let logged: Vec<&str> = log.iter().map(|e| e.text.as_str()).collect();
+        assert_eq!(logged, [TANK_LINE]);
+        assert_eq!(kept, bytes_of(&[TANK_LINE]));
+        assert!(!wire.p.prompt.stage.holds());
+        // Without a log session it is still kept.
+        let _ = wire.read(format!("{TANK_LINE}\n\r").as_bytes());
+        let (log, kept) = super::end_held(&mut wire.p, None);
+        assert!(log.is_empty());
+        assert_eq!(kept.len(), 1);
     }
 
     #[test]
