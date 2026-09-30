@@ -1490,6 +1490,40 @@ mod tests {
     }
 
     #[test]
+    fn a_repaint_that_wraps_tags_every_row_it_takes() {
+        // At 8 columns the new prompt wraps under the head line.
+        let mut g = TermGrid::new(8, 10);
+        g.session_output(&text(&lift(
+            1,
+            &[b"Tank\r\n".as_slice(), &marked(2, b"<1020hp>")].concat(),
+        )));
+        assert_eq!(spans(&g), [(1, 0, 0, 4), (1, 1, 0, 8)]);
+        g.session_output(&replace(
+            2,
+            &[
+                marked(3, b"<999hp 800m>").as_slice(),
+                &vosh_prompt::stage::lift_end(1),
+            ]
+            .concat(),
+            false,
+        ));
+        assert_eq!(screen(&g), ["Tank", "<999hp", "800m>"]);
+        assert_eq!(spans(&g), [(1, 0, 0, 4), (1, 1, 0, 6), (1, 2, 0, 5)]);
+        // A repaint back to one row leaves no tag on the row below.
+        g.session_output(&replace(
+            3,
+            &[
+                marked(4, b"<1020hp>").as_slice(),
+                &vosh_prompt::stage::lift_end(1),
+            ]
+            .concat(),
+            false,
+        ));
+        assert_eq!(screen(&g), ["Tank", "<1020hp>"]);
+        assert_eq!(spans(&g), [(1, 0, 0, 4), (1, 1, 0, 8)]);
+    }
+
+    #[test]
     fn tags_stay_on_their_text_through_history_and_a_resize() {
         let mut g = TermGrid::new(30, 4);
         g.session_output(&text(&lift(5, b"1020/1020hp 800/800mn")));
