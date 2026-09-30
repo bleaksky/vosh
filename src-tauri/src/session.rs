@@ -237,6 +237,9 @@ struct ReadBatch {
     /// Triggers that hid a prompt while nothing reads it, each named
     /// once a session.
     gag_without_reader: Vec<String>,
+    /// The character Char.Status named in this read, for the log's
+    /// session row.
+    character: Option<String>,
 }
 
 impl ReadBatch {
@@ -249,6 +252,7 @@ impl ReadBatch {
             log: Vec::new(),
             prompt_vars: false,
             gag_without_reader: Vec::new(),
+            character: None,
         }
     }
 }
@@ -487,6 +491,9 @@ async fn io_loop(
     // The output count after this session last wrote. Output from
     // elsewhere moves it, which closes the open row.
     let mut seen_output = output_count();
+    // The log's row for this connection, named once the game names the
+    // character.
+    let mut log_session = LogSession::new(log_session_id);
 
     // Phase 1 audit instrumentation. See `PerfCounters` doc.
     let mut perf = PerfCounters::default();
@@ -626,7 +633,16 @@ async fn io_loop(
                     ).await {
                         warn!(error = %e, "prompt handling at the end of a read failed");
                     }
-                    finish_read(&app, &profile, &logs, batch, &mut seen_output, &mut perf).await;
+                    finish_read(
+                        &app,
+                        &profile,
+                        &logs,
+                        &mut log_session,
+                        batch,
+                        &mut seen_output,
+                        &mut perf,
+                    )
+                    .await;
                 }
                 Err(e) => {
                     error!(error = %e, "read failed");
@@ -693,6 +709,7 @@ async fn io_loop(
                                     &app,
                                     &profile,
                                     &logs,
+                                    &mut log_session,
                                     batch,
                                     &mut seen_output,
                                     &mut perf,
@@ -1699,6 +1716,7 @@ async fn finish_read(
     app: &AppHandle,
     profile: &Arc<Mutex<Profile>>,
     logs: &crate::log_state::SharedLogStore,
+    log_session: &mut LogSession,
     batch: ReadBatch,
     seen: &mut u64,
     perf: &mut PerfCounters,
@@ -1708,6 +1726,7 @@ async fn finish_read(
         log,
         prompt_vars,
         gag_without_reader,
+        character,
     } = batch;
     let (vars, hidden) = {
         let mut p = profile.lock().await;
@@ -1738,6 +1757,9 @@ async fn finish_read(
             perf.log_append_ns += append_t0.elapsed().as_nanos() as u64;
         }
     }
+    if let Some(character) = character {
+        log_session.name(logs, &character).await;
+    }
     for trigger in gag_without_reader {
         if let Err(e) = app.emit(
             "session://prompt-gag-without-reader",
@@ -1762,6 +1784,38 @@ async fn finish_read(
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct GagWithoutReaderPayload {
     pub trigger: String,
+}
+
+/// The log's row for this connection, and whether it names the
+/// character yet.
+struct LogSession {
+    id: Option<i64>,
+    named: bool,
+}
+
+impl LogSession {
+    fn new(id: Option<i64>) -> Self {
+        Self { id, named: false }
+    }
+
+    /// Name the character the row belongs to, the first time Char.Status
+    /// names one, so the prompt lookup can tell whose session it was.
+    /// Char.Status comes again on later pulses, and those write nothing.
+    async fn name(&mut self, logs: &crate::log_state::SharedLogStore, character: &str) {
+        let Some(id) = self.id else {
+            return;
+        };
+        if self.named {
+            return;
+        }
+        self.named = true;
+        let mut guard = logs.lock().await;
+        if let Some(store) = guard.as_mut() {
+            if let Err(e) = store.set_session_character(id, character) {
+                warn!(error = %e, "failed to name the log session's character");
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1852,6 +1906,9 @@ async fn handle_gmcp(
         if let Some(name) = msg.data.get("name").and_then(|v| v.as_str()) {
             let owned = name.trim().to_string();
             if !owned.is_empty() {
+                if msg.package == "Char.Status" {
+                    batch.character = Some(owned.clone());
+                }
                 let state = app.state::<crate::commands::SharedState>();
                 crate::commands::handle_char_known_for_auto_switch(app, state.inner(), &owned)
                     .await;
@@ -3610,6 +3667,27 @@ mod tests {
         super::start_prompt(&mut p, false);
         assert!(!p.prompt.forsaken());
         assert_eq!(p.prompt.config().template, GATE);
+    }
+
+    #[tokio::test]
+    async fn the_log_row_takes_the_first_character_char_status_names() {
+        let mut store = vosh_log::LogStore::in_memory().unwrap();
+        let id = store.start_session("h", 1, 0).unwrap();
+        let logs: crate::log_state::SharedLogStore =
+            std::sync::Arc::new(tokio::sync::Mutex::new(Some(store)));
+        let mut session = super::LogSession::new(Some(id));
+        session.name(&logs, "Tester").await;
+        session.name(&logs, "Other").await;
+        let named = logs
+            .lock()
+            .await
+            .as_ref()
+            .unwrap()
+            .session_character(id)
+            .unwrap();
+        assert_eq!(named.as_deref(), Some("Tester"));
+        // A connection with logging off names nothing.
+        super::LogSession::new(None).name(&logs, "Tester").await;
     }
 
     #[test]
