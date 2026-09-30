@@ -90,6 +90,7 @@ mod plugins;
 mod profile;
 mod profile_config;
 mod profile_set;
+mod prompt_lookup;
 mod prompt_migration;
 mod script_state;
 mod session;
@@ -386,6 +387,7 @@ pub fn run() {
             characters::session_identity_get,
             affects_snapshot::affects_snapshot_get,
             commands::hidden_get,
+            prompt_lookup::prompt_last_seen,
             characters::profile_export_file,
             commands::ui_set_theme,
             fonts_list,
