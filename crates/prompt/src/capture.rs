@@ -4,8 +4,9 @@
 //! [`settle`] decides whether a partial line the last pattern matches is
 //! the prompt at once. [`from_trigger`] reads a capture trigger, the kind
 //! `#prompt {regex}` wrote, into a capture the profile holds.
-//! [`Recognizer`] is a capture compiled for the stage, which reads a line
-//! or a partial as your prompt.
+//! [`Recognizer`] is a capture compiled for the stage, a regex capture or
+//! Aabahran's codes, which reads a line, a partial or a block of lines as
+//! your prompt and says whether a partial can still become one.
 
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
