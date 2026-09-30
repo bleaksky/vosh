@@ -4,9 +4,12 @@ import { PANEL_WIDTH_MAX, PANEL_WIDTH_MIN } from '../../../lib/paneLayout';
 import { isMacPlatform, shortcutKeys, shortcutLabel } from '../../../lib/palette';
 import { profilePossessive } from '../../../lib/profileLabel';
 import {
+  AFFECTS_MARKERS,
   profilesList,
   subscribeProfileSwitched,
   subscribeProfilesChanged,
+  type AffectsMarker,
+  type AffectsStyle,
   type UiConfig,
   type VitalsDensity,
   type VitalsMeter,
@@ -40,8 +43,11 @@ import {
 // Show the panel and Width write that profile's pane layout through
 // the panel layout store, so the main window follows at once. What
 // each character keeps, its panes and tracked affects, stays in
-// Characters, which the last Panel row opens. Vitals, Split terminal,
-// and Status line save with the rest of the config.
+// Characters, which the last Panel row opens. Affects, Vitals, Split
+// terminal, and Status line save with the rest of the config. Each
+// profile keeps its own, but they say how a pane draws, not what a
+// character tracks, so they sit here beside the Vitals and Tick counts
+// rows that work the same way.
 
 // The keycaps read the shortcut table the menu bar and the palette
 // read, so every place shows the same keys.
@@ -144,6 +150,8 @@ export function LayoutGroup({ config, setConfig, onError, navigate }: SettingsPa
         />
       </Section>
 
+      {config && <AffectsSection config={config} update={update} />}
+
       {config && <VitalsSection config={config} update={update} />}
 
       {config && (
@@ -187,6 +195,85 @@ export function StatusLineSection({
     <Section id="status" title="Status line">
       <TickTimeStyleRow config={config} setConfig={setConfig} onError={onError} />
       <TickCountRow config={config} setConfig={setConfig} onError={onError} />
+    </Section>
+  );
+}
+
+const AFFECTS_STYLE_OPTIONS: readonly SegmentedOption<AffectsStyle>[] = [
+  { value: 'timers', label: 'Timers first' },
+  { value: 'countdown', label: 'Countdown' },
+  { value: 'chips', label: 'Grouped chips' },
+];
+
+const MARKER_NAMES: Record<AffectsMarker, string> = {
+  dot: 'Dot',
+  square: 'Square',
+  plus_minus: 'Plus and minus',
+  none: 'None',
+};
+
+/** A Marker segment's picture: the mark of an affect you have, then
+ *  the mark of one you are missing, the pane's own 8 px shapes 4 px
+ *  apart, in the segment's text color. */
+function MarkerPicture({ marker }: { marker: AffectsMarker }) {
+  return (
+    <span className="st-marker" data-affects-marker={marker} aria-hidden="true">
+      <span className="pane-affect-mark is-up" />
+      <span className="pane-affect-mark is-missing" />
+    </span>
+  );
+}
+
+const MARKER_OPTIONS: readonly SegmentedOption<AffectsMarker>[] = AFFECTS_MARKERS.map((id) =>
+  id === 'none'
+    ? { value: id, label: MARKER_NAMES[id] }
+    : { value: id, name: MARKER_NAMES[id], label: <MarkerPicture marker={id} /> },
+);
+
+/** How the Affects pane draws (AffectsStyles SPEC 4.1): one of the
+ *  three approved boards, and the mark beside each tracked affect.
+ *  Grouped chips show the state on each chip, so the Marker row goes
+ *  quiet while they are chosen and keeps your pick for the other two.
+ *  Exported for its test. */
+export function AffectsSection({
+  config,
+  update,
+}: {
+  config: UiConfig;
+  update: (patch: Partial<UiConfig>) => void;
+}) {
+  const chips = config.affects_style === 'chips';
+  const markers = chips
+    ? MARKER_OPTIONS.map((option) => ({ ...option, disabled: true }))
+    : MARKER_OPTIONS;
+  return (
+    <Section id="affects" title="Affects">
+      <Row
+        label="Style"
+        description="Timers first keeps your slots, Countdown sorts by hours left, and Grouped chips puts what to recast first."
+        anchor="affects-style"
+      >
+        <Segmented
+          options={AFFECTS_STYLE_OPTIONS}
+          value={config.affects_style}
+          onChange={(style) => update({ affects_style: style })}
+        />
+      </Row>
+      <Row
+        label="Marker"
+        description={
+          chips
+            ? 'Grouped chips show the state on each chip, so they draw no marker.'
+            : 'It sits beside each affect you track, and its color shows whether the affect is up, running out, or missing.'
+        }
+        anchor="affects-marker"
+      >
+        <Segmented
+          options={markers}
+          value={config.affects_marker}
+          onChange={(marker) => update({ affects_marker: marker })}
+        />
+      </Row>
     </Section>
   );
 }
