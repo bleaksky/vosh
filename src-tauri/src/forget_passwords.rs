@@ -6,14 +6,13 @@
 //! store hands back row ids and counts only, and an error names what
 //! failed, never a row.
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tracing::warn;
 use vosh_log::{Forgotten, PasswordLines};
 
 use crate::commands::SharedState;
 use crate::input::LogsCommand;
 use crate::log_state::SharedLogStore;
-use crate::session::OutputPayload;
 
 /// How a run ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -160,7 +159,7 @@ pub(crate) fn message(outcome: &Outcome) -> String {
 pub(crate) const USAGE: &str = "[usage #logs forget-passwords [now]]";
 
 /// Run `command` off the input path and echo what it found or did.
-pub(crate) fn start(app: &AppHandle, command: LogsCommand) {
+pub(crate) fn start<R: tauri::Runtime>(app: &AppHandle<R>, command: LogsCommand) {
     let now = match command {
         LogsCommand::Usage => {
             echo(app, USAGE);
@@ -177,13 +176,10 @@ pub(crate) fn start(app: &AppHandle, command: LogsCommand) {
     });
 }
 
-/// Print `line` in the terminal pane the way other slash commands do.
-fn echo(app: &AppHandle, line: &str) {
-    let buf = format!("{line}\r\n");
-    let _ = app.emit(
-        "session://output",
-        OutputPayload::from_bytes(buf.as_bytes()),
-    );
+/// Print `line` in the terminal pane the way other slash commands do,
+/// through the one path that feeds the native renderer and xterm alike.
+fn echo<R: tauri::Runtime>(app: &AppHandle<R>, line: &str) {
+    crate::session::emit_output(app, format!("{line}\r\n").into_bytes());
 }
 
 #[cfg(test)]

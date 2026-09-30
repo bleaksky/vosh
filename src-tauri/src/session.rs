@@ -1703,7 +1703,21 @@ impl OutputPayload {
     }
 }
 
-fn emit_output(app: &AppHandle, bytes: Vec<u8>) {
+/// Held across both halves of [`emit_output`], so the native grid and
+/// xterm take the output of every caller in the same order.
+static OUTPUT_ORDER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Print `bytes` in the terminal. Every write to the terminal pane goes
+/// through here: the session loop, a slash command's echo, the `#logs`
+/// reply, and the rest. Nothing else emits `session://output`.
+pub(crate) fn emit_output<R: tauri::Runtime>(app: &AppHandle<R>, bytes: Vec<u8>) {
+    let payload = OutputPayload::from_bytes(&bytes);
+    // The session loop and the command handlers write from different
+    // tasks. Without the lock, two writes could reach the grid in one
+    // order and xterm in the other.
+    let _order = OUTPUT_ORDER
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     // Tier 3: feed the native terminal grid the same bytes xterm receives,
     // for every output path (line pipeline AND the prompt pipeline's gag
     // clearing / replaced text / echoes), then repaint. This is the single
@@ -1715,7 +1729,7 @@ fn emit_output(app: &AppHandle, bytes: Vec<u8>) {
         crate::term_grid::feed_session_bytes(&bytes);
         crate::native_surface::request_redraw();
     }
-    if let Err(e) = app.emit("session://output", OutputPayload::from_bytes(&bytes)) {
+    if let Err(e) = app.emit("session://output", payload) {
         warn!(error = %e, "failed to emit session output");
     }
 }

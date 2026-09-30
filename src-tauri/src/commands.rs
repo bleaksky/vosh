@@ -209,7 +209,7 @@ use crate::profile_config::{
 };
 use crate::script_state;
 use crate::script_state::SharedTimers;
-use crate::session::{self, OutputPayload, SessionHandle, TargetPayload};
+use crate::session::{self, SessionHandle, TargetPayload};
 
 /// Application-wide state. Phase 1 carries a single optional session and one
 /// profile. Phase 5 widens this to a session map; Phase 9 widens to multiple
@@ -706,9 +706,27 @@ pub(crate) async fn shared_layer_for_lines<'a>(
     read_shared_layer(&state).await
 }
 
+/// What the terminal prints when you send a line with no connection.
+const NOT_CONNECTED: &[u8] = b"\r\n[not connected]\r\n";
+
+/// Print the lines a typed line echoes, such as a slash command's
+/// reply, one to a row. They go through [`session::emit_output`] like
+/// every other terminal write, so the native renderer shows them too.
+fn echo_lines<R: tauri::Runtime>(app: &AppHandle<R>, lines: &[String]) {
+    if lines.is_empty() {
+        return;
+    }
+    let mut buf = Vec::new();
+    for line in lines {
+        buf.extend_from_slice(line.as_bytes());
+        buf.extend_from_slice(b"\r\n");
+    }
+    session::emit_output(app, buf);
+}
+
 #[tauri::command]
-pub(crate) async fn session_send_input(
-    app: AppHandle,
+pub(crate) async fn session_send_input<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, SharedState>,
     line: String,
 ) -> Result<(), String> {
@@ -810,14 +828,7 @@ pub(crate) async fn session_send_input(
         let _ = app.emit("session://target", payload);
     }
 
-    if !result.echo.is_empty() {
-        let mut buf = Vec::new();
-        for line in &result.echo {
-            buf.extend_from_slice(line.as_bytes());
-            buf.extend_from_slice(b"\r\n");
-        }
-        let _ = app.emit("session://output", OutputPayload::from_bytes(&buf));
-    }
+    echo_lines(&app, &result.echo);
 
     if result.bytes.is_empty() {
         return Ok(());
@@ -825,10 +836,7 @@ pub(crate) async fn session_send_input(
 
     let current = state.session.lock().await;
     let Some(handle) = current.as_ref() else {
-        let _ = app.emit(
-            "session://output",
-            OutputPayload::from_bytes(b"\r\n[not connected]\r\n"),
-        );
+        session::emit_output(&app, NOT_CONNECTED.to_vec());
         return Ok(());
     };
     if !handle.send(result.bytes) {
@@ -844,17 +852,14 @@ pub(crate) async fn session_send_input(
 /// of it echoes to the terminal. The session log keeps `> (hidden)` in
 /// its place.
 #[tauri::command]
-pub(crate) async fn session_send_masked(
-    app: AppHandle,
+pub(crate) async fn session_send_masked<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, SharedState>,
     line: String,
 ) -> Result<(), String> {
     let current = state.session.lock().await;
     let Some(handle) = current.as_ref() else {
-        let _ = app.emit(
-            "session://output",
-            OutputPayload::from_bytes(b"\r\n[not connected]\r\n"),
-        );
+        session::emit_output(&app, NOT_CONNECTED.to_vec());
         return Ok(());
     };
     if !handle.send_masked(crate::hidden_input::masked_line_bytes(&line)) {
@@ -2747,10 +2752,7 @@ async fn auto_switch_for_character(app: &AppHandle, state: &SharedState, charact
             auto_switch_failed_line(&e)
         }
     };
-    let _ = app.emit(
-        "session://output",
-        OutputPayload::from_bytes(line.as_bytes()),
-    );
+    session::emit_output(app, line.into_bytes());
 }
 
 /// The profile that `character` logging in on the live connection
@@ -7904,3 +7906,7 @@ mod wizard_roundtrip_tests;
 #[cfg(test)]
 #[path = "broadcast_tests.rs"]
 mod broadcast_tests;
+
+#[cfg(all(test, native_surface))]
+#[path = "echo_tests.rs"]
+mod echo_tests;
