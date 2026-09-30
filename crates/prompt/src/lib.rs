@@ -19,6 +19,8 @@
 //!   resolver that answers the renderer, with the hidden model.
 //! - [`aabahran`] holds what Vosh knows about Aabahran alone.
 //! - [`render`] draws a template as ANSI text with a span per piece.
+//! - [`stage`] decides what Vosh writes around your prompt, in one output
+//!   per socket read, with the regions a later output replaces.
 //! - [`wrap`] is the word wrap both renderers share.
 
 pub mod aabahran;
@@ -28,6 +30,7 @@ pub mod engine;
 pub mod format;
 pub mod gmcp;
 pub mod render;
+pub mod stage;
 pub mod template;
 pub mod vars;
 pub mod wrap;
