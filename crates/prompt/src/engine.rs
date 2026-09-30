@@ -1007,7 +1007,9 @@ mod tests {
 
     #[test]
     fn a_reply_after_your_send_updates_the_capture() {
-        for sent in ["prompt %h %m ", "prom %h %m ", "p %h %m "] {
+        // Any send opens the window, prompt abbreviated or another
+        // command such as chan.
+        for sent in ["prompt %h %m ", "prom %h %m ", "p %h %m ", "chan"] {
             let mut engine = older_build("<%hhp> ");
             engine.note_send(&format!("{sent}\r\n"), SENT);
             line(&mut engine, "Prompt set to %h %m ", 40);
