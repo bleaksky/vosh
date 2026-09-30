@@ -1,0 +1,799 @@
+//! The values a template draws and the plain text of each format
+//! (section 1.4 of the build spec).
+//!
+//! A resolver hands the renderer a [`Resolved`] per field. The renderer
+//! draws the colored forms itself (bars, the game's tank bar, hidden marks)
+//! and asks [`Value::text`] for everything else.
+
+// Game numbers and bar widths sit far below 2^52, so the float math for
+// shares and rounded percents is exact.
+#![allow(clippy::cast_precision_loss)]
+
+use chrono::{Datelike, NaiveDateTime, Timelike};
+
+use crate::template::Format;
+
+/// What a resolver knows about a field right now.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Resolved {
+    /// Vosh has a current value.
+    Value(Value),
+    /// The game hides it right now. Drawn as a dim `?`.
+    Hidden,
+    /// It does not apply right now, such as no tank out of a fight. A false
+    /// flag and a zero count are Absent. Drawn as nothing.
+    Absent,
+    /// Vosh has no source for it yet. Drawn as nothing.
+    Missing,
+    /// The name is in no catalog and no script set it. The token prints as
+    /// written so a typo stays visible.
+    Unknown,
+}
+
+/// A position, as Char.State names it and `%S` abbreviates it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Position {
+    Dead,
+    MortallyWounded,
+    Incapacitated,
+    Stunned,
+    Meditate,
+    Sleeping,
+    Resting,
+    Sitting,
+    Fighting,
+    Standing,
+}
+
+impl Position {
+    pub const ALL: [Position; 10] = [
+        Position::Dead,
+        Position::MortallyWounded,
+        Position::Incapacitated,
+        Position::Stunned,
+        Position::Meditate,
+        Position::Sleeping,
+        Position::Resting,
+        Position::Sitting,
+        Position::Fighting,
+        Position::Standing,
+    ];
+
+    /// The game's word, as Char.State sends it.
+    pub fn word(self) -> &'static str {
+        match self {
+            Position::Dead => "dead",
+            Position::MortallyWounded => "mortally wounded",
+            Position::Incapacitated => "incapacitated",
+            Position::Stunned => "stunned",
+            Position::Meditate => "meditate",
+            Position::Sleeping => "sleeping",
+            Position::Resting => "resting",
+            Position::Sitting => "sitting",
+            Position::Fighting => "fighting",
+            Position::Standing => "standing",
+        }
+    }
+
+    /// What `%S` prints. Nothing while you meditate.
+    pub fn abbrev(self) -> &'static str {
+        match self {
+            Position::Dead => "dea",
+            Position::MortallyWounded => "mor",
+            Position::Incapacitated => "inc",
+            Position::Stunned => "stn",
+            Position::Meditate => "",
+            Position::Sleeping => "slp",
+            Position::Resting => "rst",
+            Position::Sitting => "sit",
+            Position::Fighting => "fgt",
+            Position::Standing => "std",
+        }
+    }
+
+    pub fn from_word(word: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.word() == word)
+    }
+
+    /// The position `%S` printed. The empty string is meditate.
+    pub fn from_abbrev(abbrev: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.abbrev() == abbrev)
+    }
+}
+
+/// What `%j` prints for phases 0 to 7.
+pub const MOON_CODES: [&str; 8] = ["new", "wax", "Hwx", "Gwx", "FUL", "Gwn", "Hwn", "wan"];
+
+/// The phase as a word, for the `word` format.
+pub const MOON_WORDS: [&str; 8] = [
+    "new",
+    "waxing crescent",
+    "first quarter",
+    "waxing gibbous",
+    "full",
+    "waning gibbous",
+    "last quarter",
+    "waning crescent",
+];
+
+/// A value a field holds.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Value {
+    /// A whole number, such as gold, level or a room number.
+    Num(i64),
+    /// A value with a max, such as health. `pct` is the game's own percent
+    /// (`%K`), used when no max is known.
+    Gauge {
+        cur: i64,
+        max: Option<i64>,
+        pct: Option<i64>,
+    },
+    /// A percent, such as the opponent's health or a member's mana.
+    Pct(i64),
+    /// The tank's health percent. Its game format is the `%P` bar.
+    TankHp(i64),
+    /// Text, such as a name, a word or a script value.
+    Text(String),
+    /// A flag that holds. A false flag is [`Resolved::Absent`].
+    Flag,
+    /// Names with their count, such as tracked affects missing. An empty
+    /// list is [`Resolved::Absent`].
+    List(Vec<String>),
+    /// A moon. `phase` runs 0 (new) to 7, `name` is the packet's phase name.
+    Moon {
+        phase: u8,
+        active: bool,
+        name: Option<String>,
+    },
+    Position(Position),
+    /// A language as Char.State spells it.
+    Lang(String),
+    /// Exits. `letters` is what the value format prints (`N E (S) W`),
+    /// `game` the game's own text (`[Exits: N E (S) W]`).
+    Exits {
+        letters: String,
+        game: String,
+    },
+    /// An immortal level with the game's word for it, `Wizi` or `Incog`.
+    Level {
+        word: String,
+        level: i64,
+    },
+    /// An affect slot as `%f` prints it, ticks, `~` or `-`.
+    Slot(String),
+    /// The game hour, 0 to 23.
+    Hour(u8),
+    /// A temperature, with its unit when the game names one.
+    Temp {
+        degrees: i64,
+        unit: Option<char>,
+    },
+    /// Seconds with the interval as the max, the tick.
+    Seconds {
+        secs: i64,
+        max: Option<i64>,
+    },
+    /// The local clock. `date` marks the date field, which prints a date.
+    Clock {
+        at: NaiveDateTime,
+        date: bool,
+    },
+    /// Ticks left on an affect, -1 for permanent.
+    Ticks(i64),
+    /// A group member and their health percent.
+    Member {
+        name: String,
+        pct: i64,
+    },
+    /// Text with the game's colors, the raw prompt.
+    Styled(String),
+}
+
+/// A percent rounded to the nearest whole number. None when `max` is not
+/// above 0.
+pub fn percent_rounded(cur: i64, max: i64) -> Option<i64> {
+    (max > 0).then(|| ((cur as f64 / max as f64) * 100.0).round() as i64)
+}
+
+/// A percent by integer division, as the server works it out. None when
+/// `max` is below 1, where the game prints nothing.
+pub fn percent_game(cur: i64, max: i64) -> Option<i64> {
+    (max >= 1).then(|| cur.saturating_mul(100) / max)
+}
+
+/// `1,250`.
+pub fn grouped(n: i64) -> String {
+    let digits = n.unsigned_abs().to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3 + 1);
+    if n < 0 {
+        out.push('-');
+    }
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// `1.2k`, `812k`, `3.4m`. Tenths are cut, not rounded, so 1250 reads
+/// `1.2k` next to its grouped `1,250`.
+pub fn short(n: i64) -> String {
+    let sign = if n < 0 { "-" } else { "" };
+    let a = n.unsigned_abs();
+    let (unit, suffix) = match a {
+        0..=999 => return n.to_string(),
+        1_000..=999_999 => (1_000, "k"),
+        1_000_000..=999_999_999 => (1_000_000, "m"),
+        _ => (1_000_000_000, "b"),
+    };
+    let whole = a / unit;
+    let tenth = a % unit * 10 / unit;
+    if whole < 10 && tenth > 0 {
+        format!("{sign}{whole}.{tenth}{suffix}")
+    } else {
+        format!("{sign}{whole}{suffix}")
+    }
+}
+
+/// The game hour as `2 pm`.
+pub fn hour_word(hour: u8) -> String {
+    let h = hour % 24;
+    let half = if h < 12 { "am" } else { "pm" };
+    let twelve = match h % 12 {
+        0 => 12,
+        n => n,
+    };
+    format!("{twelve} {half}")
+}
+
+/// A language as `%s` prints it, first letter lowercased.
+pub fn lang_game(lang: &str) -> String {
+    let mut chars = lang.chars();
+    match chars.next() {
+        Some(first) => first.to_lowercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
+
+/// A color band the game draws a value in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Band {
+    Plain,
+    Yellow,
+    BoldYellow,
+    Red,
+    BoldRed,
+}
+
+impl Band {
+    /// The foreground SGR the band writes. Plain is the terminal's color.
+    pub fn fg(self) -> &'static str {
+        match self {
+            Band::Plain => "39",
+            Band::Yellow => "33",
+            Band::BoldYellow => "1;33",
+            Band::Red => "31",
+            Band::BoldRed => "1;31",
+        }
+    }
+
+    /// The background SGR the band writes. Bold has no background.
+    pub fn bg(self) -> &'static str {
+        match self {
+            Band::Plain => "49",
+            Band::Yellow | Band::BoldYellow => "43",
+            Band::Red | Band::BoldRed => "41",
+        }
+    }
+}
+
+/// The `%h` bands. Plain above 40 percent, bold yellow at 40 and below,
+/// red at 20 and below.
+pub fn h_band(pct: i64) -> Band {
+    if pct <= 20 {
+        Band::Red
+    } else if pct <= 40 {
+        Band::BoldYellow
+    } else {
+        Band::Plain
+    }
+}
+
+/// The `%P` bands (`health_prompt`). Yellow under 75 percent, red under 25,
+/// bold red under 5.
+pub fn p_band(pct: i64) -> Band {
+    if pct < 5 {
+        Band::BoldRed
+    } else if pct < 25 {
+        Band::Red
+    } else if pct < 75 {
+        Band::Yellow
+    } else {
+        Band::Plain
+    }
+}
+
+/// The ANSI color for how full a share is. Green from two thirds, yellow
+/// from one third, red below.
+pub fn how_full(fraction: f64) -> u8 {
+    if fraction >= 0.66 {
+        2
+    } else if fraction >= 0.33 {
+        3
+    } else {
+        1
+    }
+}
+
+/// Which of the twelve `%P` cells are full, as `health_prompt` fills them.
+pub fn tank_bar_cells(pct: i64) -> [bool; 12] {
+    let mut cells = [false; 12];
+    for (i, cell) in cells.iter_mut().enumerate() {
+        *cell = (i as i64 * 25 / 3) < pct;
+    }
+    cells
+}
+
+impl Value {
+    /// How full the value is, 0 to 1, for bars and color by how full.
+    /// None when nothing gives a share.
+    pub fn fraction(&self) -> Option<f64> {
+        let share =
+            |cur: i64, max: i64| (max > 0).then(|| (cur as f64 / max as f64).clamp(0.0, 1.0));
+        match self {
+            Value::Gauge { cur, max, pct } => match (max, pct) {
+                (Some(max), _) => share(*cur, *max),
+                (None, Some(pct)) => share(*pct, 100),
+                (None, None) => None,
+            },
+            Value::Pct(pct) | Value::TankHp(pct) | Value::Member { pct, .. } => share(*pct, 100),
+            Value::Seconds {
+                secs,
+                max: Some(max),
+            } => share(*secs, *max),
+            _ => None,
+        }
+    }
+
+    /// True for the values a bar can draw, even when no share is known yet.
+    pub fn has_bar(&self) -> bool {
+        matches!(
+            self,
+            Value::Gauge { .. }
+                | Value::Pct(_)
+                | Value::TankHp(_)
+                | Value::Member { .. }
+                | Value::Seconds { .. }
+        )
+    }
+
+    /// The rounded percent the `pct` format prints.
+    pub fn percent(&self) -> Option<i64> {
+        match self {
+            Value::Gauge { cur, max, pct } => match (max, pct) {
+                (Some(max), _) if *max > 0 => percent_rounded(*cur, *max),
+                (_, Some(pct)) => Some(*pct),
+                _ => None,
+            },
+            Value::Pct(pct) | Value::TankHp(pct) | Value::Member { pct, .. } => Some(*pct),
+            Value::Seconds {
+                secs,
+                max: Some(max),
+            } => percent_rounded(*secs, *max),
+            _ => None,
+        }
+    }
+
+    /// The percent by the server's integer division, for the game's bands.
+    pub fn game_percent(&self) -> Option<i64> {
+        match self {
+            Value::Gauge { cur, max, pct } => match (max, pct) {
+                (Some(max), _) if *max >= 1 => percent_game(*cur, *max),
+                (_, Some(pct)) => Some(*pct),
+                _ => None,
+            },
+            Value::Pct(pct) | Value::TankHp(pct) | Value::Member { pct, .. } => Some(*pct),
+            Value::Seconds {
+                secs,
+                max: Some(max),
+            } => percent_game(*secs, *max),
+            _ => None,
+        }
+    }
+
+    /// The text of the value format.
+    fn value_text(&self, label: &str) -> String {
+        match self {
+            Value::Num(n) | Value::Level { level: n, .. } | Value::Temp { degrees: n, .. } => {
+                n.to_string()
+            }
+            Value::Gauge { cur, .. } => cur.to_string(),
+            Value::Pct(pct) | Value::TankHp(pct) => pct.to_string(),
+            Value::Text(s) | Value::Lang(s) | Value::Slot(s) | Value::Styled(s) => s.clone(),
+            Value::Flag => label.to_string(),
+            Value::List(names) => names.len().to_string(),
+            Value::Moon { phase, active, .. } => moon_code(*phase, *active).to_string(),
+            Value::Position(p) => p.abbrev().to_string(),
+            Value::Exits { letters, .. } => letters.clone(),
+            Value::Hour(h) => h.to_string(),
+            Value::Seconds { secs, .. } => secs.to_string(),
+            Value::Clock { at, date: false } => at.format("%H:%M:%S").to_string(),
+            Value::Clock { at, date: true } => at.format("%Y-%m-%d").to_string(),
+            Value::Ticks(-1) => "perm".to_string(),
+            Value::Ticks(n) => n.to_string(),
+            Value::Member { name, pct } => format!("{name} {pct}%"),
+        }
+    }
+
+    /// The plain text of a format, or None when the format does not apply
+    /// to this value. The renderer draws bars, the tank's game bar, an
+    /// immortal level's game look and styled text itself.
+    pub fn text(&self, format: &Format, label: &str) -> Option<String> {
+        match format {
+            Format::Value => Some(self.value_text(label)),
+            Format::Max => match self {
+                Value::Gauge { max, .. } | Value::Seconds { max, .. } => {
+                    Some(max.map(|m| m.to_string()).unwrap_or_default())
+                }
+                _ => None,
+            },
+            Format::Pct => self.percent().map(|p| p.to_string()),
+            Format::Game => Some(match self {
+                Value::Moon { phase, active, .. } => moon_code(*phase, *active).to_string(),
+                Value::Exits { game, .. } => game.clone(),
+                Value::Lang(lang) => lang_game(lang),
+                Value::Level { word, level } => format!("({word} {level})"),
+                _ => self.value_text(label),
+            }),
+            Format::Word => match self {
+                Value::Position(p) => Some(p.word().to_string()),
+                Value::Moon { phase, active, .. } => Some(if *active {
+                    MOON_WORDS
+                        .get(usize::from(*phase))
+                        .copied()
+                        .unwrap_or_default()
+                        .to_string()
+                } else {
+                    String::new()
+                }),
+                Value::Hour(h) => Some(hour_word(*h)),
+                Value::Text(s) => Some(s.clone()),
+                _ => None,
+            },
+            Format::Name => match self {
+                Value::Moon { name, active, .. } => Some(if *active {
+                    name.clone().unwrap_or_default()
+                } else {
+                    String::new()
+                }),
+                Value::Member { name, .. } | Value::Text(name) => Some(name.clone()),
+                _ => None,
+            },
+            Format::Grouped => self.whole().map(grouped),
+            Format::Short => self.whole().map(short),
+            Format::Unit => match self {
+                Value::Seconds { secs, .. } => Some(format!("{secs}s")),
+                Value::Temp {
+                    degrees,
+                    unit: Some(unit),
+                } => Some(format!("{degrees}°{unit}")),
+                Value::Temp {
+                    degrees,
+                    unit: None,
+                } => Some(format!("{degrees}°")),
+                _ => None,
+            },
+            Format::Trunc(chars) => match self {
+                Value::Styled(_) => None,
+                _ => Some(self.value_text(label).chars().take(*chars).collect()),
+            },
+            Format::Hm | Format::Hms | Format::Md => match self {
+                Value::Clock { at, .. } => Some(clock(at, format)),
+                _ => None,
+            },
+            Format::Count => match self {
+                Value::List(names) => Some(names.len().to_string()),
+                _ => None,
+            },
+            Format::Names => match self {
+                Value::List(names) => Some(names.join(", ")),
+                _ => None,
+            },
+            Format::On => Some(label.to_string()),
+            Format::Off => Some(String::new()),
+            Format::Bar { .. } => None,
+        }
+    }
+
+    /// The whole number the grouped and short formats print.
+    fn whole(&self) -> Option<i64> {
+        match self {
+            Value::Num(n) | Value::Gauge { cur: n, .. } => Some(*n),
+            _ => None,
+        }
+    }
+}
+
+/// What `%j` prints for a moon, `-` when it is not up.
+pub fn moon_code(phase: u8, active: bool) -> &'static str {
+    if !active {
+        return "-";
+    }
+    MOON_CODES.get(usize::from(phase)).copied().unwrap_or("-")
+}
+
+fn clock(at: &NaiveDateTime, format: &Format) -> String {
+    match format {
+        Format::Hm => format!("{:02}:{:02}", at.hour(), at.minute()),
+        Format::Hms => format!("{:02}:{:02}:{:02}", at.hour(), at.minute(), at.second()),
+        _ => {
+            const MONTHS: [&str; 12] = [
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+            ];
+            format!("{} {}", MONTHS[at.month0() as usize], at.day())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+
+    fn at() -> NaiveDateTime {
+        NaiveDate::from_ymd_opt(2026, 9, 29)
+            .and_then(|d| d.and_hms_opt(8, 42, 10))
+            .expect("a valid date")
+    }
+
+    fn text(value: &Value, format: Format) -> Option<String> {
+        value.text(&format, "Label")
+    }
+
+    #[test]
+    fn numbers_group_and_shorten() {
+        assert_eq!(grouped(0), "0");
+        assert_eq!(grouped(999), "999");
+        assert_eq!(grouped(1250), "1,250");
+        assert_eq!(grouped(1_234_567), "1,234,567");
+        assert_eq!(grouped(-1250), "-1,250");
+        assert_eq!(short(999), "999");
+        assert_eq!(short(1000), "1k");
+        assert_eq!(short(1250), "1.2k");
+        assert_eq!(short(1299), "1.2k");
+        assert_eq!(short(12_500), "12k");
+        assert_eq!(short(812_345), "812k");
+        assert_eq!(short(1_200_000), "1.2m");
+        assert_eq!(short(3_400_000_000), "3.4b");
+        assert_eq!(short(-1250), "-1.2k");
+    }
+
+    #[test]
+    fn percents_round_or_divide_as_the_server_does() {
+        assert_eq!(percent_rounded(300, 1020), Some(29));
+        assert_eq!(percent_rounded(1, 3), Some(33));
+        assert_eq!(percent_rounded(2, 3), Some(67));
+        assert_eq!(percent_rounded(5, 0), None);
+        assert_eq!(percent_game(2, 3), Some(66));
+        assert_eq!(percent_game(408, 1020), Some(40));
+        assert_eq!(percent_game(5, 0), None);
+    }
+
+    #[test]
+    fn game_bands_follow_the_server() {
+        assert_eq!(h_band(41), Band::Plain);
+        assert_eq!(h_band(40), Band::BoldYellow);
+        assert_eq!(h_band(21), Band::BoldYellow);
+        assert_eq!(h_band(20), Band::Red);
+        assert_eq!(p_band(75), Band::Plain);
+        assert_eq!(p_band(74), Band::Yellow);
+        assert_eq!(p_band(24), Band::Red);
+        assert_eq!(p_band(4), Band::BoldRed);
+        assert_eq!(how_full(1.0), 2);
+        assert_eq!(how_full(0.66), 2);
+        assert_eq!(how_full(0.5), 3);
+        assert_eq!(how_full(0.33), 3);
+        assert_eq!(how_full(0.2), 1);
+    }
+
+    #[test]
+    fn tank_bar_cells_fill_as_health_prompt_does() {
+        let full = |pct| tank_bar_cells(pct).iter().filter(|c| **c).count();
+        assert_eq!(full(100), 12);
+        assert_eq!(full(0), 0);
+        assert_eq!(full(1), 1);
+        // 17 to 24 percent fills three cells, the logged `[===|---|---|---]`.
+        assert_eq!(full(17), 3);
+        assert_eq!(full(24), 3);
+        assert_eq!(full(25), 3);
+        assert_eq!(full(26), 4);
+        assert_eq!(full(60), 8);
+    }
+
+    #[test]
+    fn positions_map_between_words_and_abbreviations() {
+        assert_eq!(Position::from_word("fighting"), Some(Position::Fighting));
+        assert_eq!(Position::from_abbrev("fgt"), Some(Position::Fighting));
+        assert_eq!(Position::from_abbrev(""), Some(Position::Meditate));
+        assert_eq!(
+            Position::from_word("meditate").map(Position::abbrev),
+            Some("")
+        );
+        assert_eq!(Position::from_word("hovering"), None);
+        for p in Position::ALL {
+            assert_eq!(Position::from_word(p.word()), Some(p));
+            assert_eq!(Position::from_abbrev(p.abbrev()), Some(p));
+        }
+    }
+
+    #[test]
+    fn vitals_print_value_max_and_percent() {
+        let hp = Value::Gauge {
+            cur: 300,
+            max: Some(1020),
+            pct: None,
+        };
+        assert_eq!(text(&hp, Format::Value).as_deref(), Some("300"));
+        assert_eq!(text(&hp, Format::Max).as_deref(), Some("1020"));
+        assert_eq!(text(&hp, Format::Pct).as_deref(), Some("29"));
+        assert_eq!(text(&hp, Format::Grouped).as_deref(), Some("300"));
+        assert_eq!(hp.game_percent(), Some(29));
+        // %K alone feeds the percent when no max is known.
+        let pct_only = Value::Gauge {
+            cur: 300,
+            max: None,
+            pct: Some(29),
+        };
+        assert_eq!(text(&pct_only, Format::Pct).as_deref(), Some("29"));
+        assert_eq!(text(&pct_only, Format::Max).as_deref(), Some(""));
+        assert_eq!(pct_only.fraction(), Some(0.29));
+        // A max of 0 gives no percent, so the format does not apply.
+        let zero = Value::Gauge {
+            cur: 0,
+            max: Some(0),
+            pct: None,
+        };
+        assert_eq!(text(&zero, Format::Pct), None);
+        assert_eq!(zero.fraction(), None);
+        assert!(zero.has_bar());
+    }
+
+    #[test]
+    fn game_formats_print_as_the_game_does() {
+        let moon = Value::Moon {
+            phase: 4,
+            active: true,
+            name: Some("full and whole".to_string()),
+        };
+        assert_eq!(text(&moon, Format::Value).as_deref(), Some("FUL"));
+        assert_eq!(text(&moon, Format::Game).as_deref(), Some("FUL"));
+        assert_eq!(text(&moon, Format::Word).as_deref(), Some("full"));
+        assert_eq!(text(&moon, Format::Name).as_deref(), Some("full and whole"));
+        let down = Value::Moon {
+            phase: 2,
+            active: false,
+            name: Some("half-lit and growing".to_string()),
+        };
+        assert_eq!(text(&down, Format::Game).as_deref(), Some("-"));
+        assert_eq!(text(&down, Format::Word).as_deref(), Some(""));
+        assert_eq!(text(&down, Format::Name).as_deref(), Some(""));
+
+        let pos = Value::Position(Position::Fighting);
+        assert_eq!(text(&pos, Format::Value).as_deref(), Some("fgt"));
+        assert_eq!(text(&pos, Format::Game).as_deref(), Some("fgt"));
+        assert_eq!(text(&pos, Format::Word).as_deref(), Some("fighting"));
+        let meditate = Value::Position(Position::Meditate);
+        assert_eq!(text(&meditate, Format::Game).as_deref(), Some(""));
+        assert_eq!(text(&meditate, Format::Word).as_deref(), Some("meditate"));
+
+        let lang = Value::Lang("Thsu'ul".to_string());
+        assert_eq!(text(&lang, Format::Value).as_deref(), Some("Thsu'ul"));
+        assert_eq!(text(&lang, Format::Game).as_deref(), Some("thsu'ul"));
+
+        let exits = Value::Exits {
+            letters: "N E (S) W".to_string(),
+            game: "[Exits: N E (S) W]".to_string(),
+        };
+        assert_eq!(text(&exits, Format::Value).as_deref(), Some("N E (S) W"));
+        assert_eq!(
+            text(&exits, Format::Game).as_deref(),
+            Some("[Exits: N E (S) W]")
+        );
+
+        let wizi = Value::Level {
+            word: "Wizi".to_string(),
+            level: 60,
+        };
+        assert_eq!(text(&wizi, Format::Value).as_deref(), Some("60"));
+        assert_eq!(text(&wizi, Format::Game).as_deref(), Some("(Wizi 60)"));
+
+        let slot = Value::Slot("~".to_string());
+        assert_eq!(text(&slot, Format::Game).as_deref(), Some("~"));
+        // A field with no look of its own prints its value in game format.
+        assert_eq!(
+            text(&Value::Num(1250), Format::Game).as_deref(),
+            Some("1250")
+        );
+    }
+
+    #[test]
+    fn words_units_and_clocks() {
+        assert_eq!(hour_word(0), "12 am");
+        assert_eq!(hour_word(11), "11 am");
+        assert_eq!(hour_word(12), "12 pm");
+        assert_eq!(hour_word(14), "2 pm");
+        assert_eq!(
+            text(&Value::Hour(14), Format::Word).as_deref(),
+            Some("2 pm")
+        );
+        let tick = Value::Seconds {
+            secs: 14,
+            max: Some(60),
+        };
+        assert_eq!(text(&tick, Format::Unit).as_deref(), Some("14s"));
+        assert_eq!(text(&tick, Format::Pct).as_deref(), Some("23"));
+        let temp = |unit| Value::Temp { degrees: 61, unit };
+        assert_eq!(
+            text(&temp(Some('F')), Format::Unit).as_deref(),
+            Some("61°F")
+        );
+        assert_eq!(text(&temp(None), Format::Unit).as_deref(), Some("61°"));
+        let time = Value::Clock {
+            at: at(),
+            date: false,
+        };
+        let date = Value::Clock {
+            at: at(),
+            date: true,
+        };
+        assert_eq!(text(&time, Format::Value).as_deref(), Some("08:42:10"));
+        assert_eq!(text(&time, Format::Hm).as_deref(), Some("08:42"));
+        assert_eq!(text(&time, Format::Hms).as_deref(), Some("08:42:10"));
+        assert_eq!(text(&date, Format::Value).as_deref(), Some("2026-09-29"));
+        assert_eq!(text(&date, Format::Md).as_deref(), Some("Sep 29"));
+    }
+
+    #[test]
+    fn lists_flags_and_affects() {
+        let missing = Value::List(vec!["sanctuary".to_string(), "haste".to_string()]);
+        assert_eq!(text(&missing, Format::Value).as_deref(), Some("2"));
+        assert_eq!(text(&missing, Format::Count).as_deref(), Some("2"));
+        assert_eq!(
+            text(&missing, Format::Names).as_deref(),
+            Some("sanctuary, haste")
+        );
+        assert_eq!(text(&Value::Flag, Format::Value).as_deref(), Some("Label"));
+        assert_eq!(text(&Value::Flag, Format::On).as_deref(), Some("Label"));
+        assert_eq!(text(&Value::Flag, Format::Off).as_deref(), Some(""));
+        assert_eq!(
+            text(&Value::Ticks(12), Format::Value).as_deref(),
+            Some("12")
+        );
+        assert_eq!(
+            text(&Value::Ticks(-1), Format::Value).as_deref(),
+            Some("perm")
+        );
+        let low = Value::Member {
+            name: "Tarvik".to_string(),
+            pct: 45,
+        };
+        assert_eq!(text(&low, Format::Value).as_deref(), Some("Tarvik 45%"));
+        assert_eq!(text(&low, Format::Name).as_deref(), Some("Tarvik"));
+        assert_eq!(text(&low, Format::Pct).as_deref(), Some("45"));
+    }
+
+    #[test]
+    fn formats_that_do_not_apply_give_none() {
+        let name = Value::Text("the Bank of Aabahran".to_string());
+        assert_eq!(text(&name, Format::Trunc(8)).as_deref(), Some("the Bank"));
+        assert_eq!(text(&name, Format::Pct), None);
+        assert_eq!(text(&name, Format::Max), None);
+        assert_eq!(text(&name, Format::Grouped), None);
+        assert_eq!(text(&name, Format::Unit), None);
+        assert_eq!(text(&name, Format::Hm), None);
+        assert_eq!(text(&Value::Num(5), Format::Pct), None);
+        assert_eq!(text(&Value::Num(5), Format::Names), None);
+    }
+}

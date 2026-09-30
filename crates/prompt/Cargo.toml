@@ -7,5 +7,9 @@ authors.workspace = true
 description = "The custom prompt engine for Vosh. Template, renderer and word wrap, with no Tauri."
 rust-version.workspace = true
 
+[dependencies]
+# Local time for the clock pieces (clock only, no default features).
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
 [lints]
 workspace = true
