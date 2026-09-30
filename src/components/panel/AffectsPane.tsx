@@ -12,11 +12,12 @@ import { useAffectFull } from '../../lib/stores/affectFullStore';
 import { useAffectsDisplay } from '../../lib/stores/affectsDisplayStore';
 import { useAffects, useAffectsHidden } from '../../lib/stores/affectsStore';
 import { useTrackedAffects } from '../../lib/stores/trackedAffectsStore';
+import { ChipsView } from './AffectsChips';
 import { CountdownView } from './AffectsCountdown';
 import { affectsGrid, type AffectsCell } from './affectsGrid';
 import { useBoxSize, usePagedWindow, type Box } from './affectsHooks';
-import { AffectMark, AffectsHeader, affectsEmpty, MoreButton } from './affectsParts';
-import { affectHours, affectWords } from './paneText';
+import { AffectMark, AffectsEmpty, AffectsHeader, MoreButton } from './affectsParts';
+import { affectHours, affectsEmptyText, affectWords } from './paneText';
 
 // The at a glance checklist, board Affects A, timers first. Two columns
 // of 22 px rows, each the hours left in a right aligned column and then
@@ -43,7 +44,8 @@ import { affectHours, affectWords } from './paneText';
 // panel.css draws the shape in the color of the state.
 //
 // Timers first is one of three styles you pick there. Countdown
-// (AffectsCountdown.tsx) lists every affect by the hours it has left.
+// (AffectsCountdown.tsx) lists every affect by the hours it has left,
+// and Grouped chips (AffectsChips.tsx) puts what to recast first.
 
 export function AffectsPane() {
   const current = useAffects();
@@ -51,6 +53,9 @@ export function AffectsPane() {
   const hidden = useAffectsHidden();
   const display = useAffectsDisplay();
   const full = useAffectFull();
+  if (display.style === 'chips') {
+    return <ChipsView current={current} tracked={tracked} hidden={hidden} full={full} />;
+  }
   if (display.style === 'countdown') {
     return (
       <CountdownView
@@ -102,8 +107,9 @@ export function AffectsPaneView({
   );
   const hoursColumn: CSSProperties = { ['--affect-hours-ch' as string]: hoursCh };
 
-  let body = affectsEmpty(current, hidden, rows);
-  if (body === null) {
+  const empty = affectsEmptyText(current, hidden, rows);
+  let body: React.ReactNode = empty === null ? null : <AffectsEmpty text={empty} />;
+  if (empty === null) {
     const columns: CSSProperties = {
       gridTemplateColumns: `repeat(${grid.columns}, minmax(0, 1fr))`,
     };

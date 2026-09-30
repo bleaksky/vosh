@@ -5,6 +5,8 @@ import { useAffectsDisplay } from '../../lib/stores/affectsDisplayStore';
 import { useAffects, useAffectsHidden } from '../../lib/stores/affectsStore';
 import { useTrackedAffects } from '../../lib/stores/trackedAffectsStore';
 import type { PaneSplit } from '../../lib/paneLayout';
+import { AFFECTS_TWO_COLUMNS_W } from './affectsGrid';
+import { useChipMeasure } from './chipMeasure';
 import { affectsMinIn, affectsStyleMinH, groupMinH, type PaneMins } from './paneGeometry';
 
 // The minimum heights that follow what the Affects and Group panes
@@ -29,11 +31,17 @@ export function usePaneMins(root: PaneSplit | null, width: number): PaneMins {
   const tracked = useTrackedAffects();
   const hidden = useAffectsHidden();
   const { style } = useAffectsDisplay();
+  // The chips pack with the pane's own measure, so the minimum holds
+  // the lines the pane draws.
+  const measure = useChipMeasure();
   const members = useSyncExternalStore(subscribeMembers, memberCount);
   const rows = useMemo(() => affectsPaneRows(current, tracked, hidden), [current, tracked, hidden]);
   const affects = useMemo(
-    () => (root ? affectsMinIn(root, width, rows, style) : affectsStyleMinH(rows, 2, style)),
-    [root, width, rows, style],
+    () =>
+      root
+        ? affectsMinIn(root, width, rows, style, measure)
+        : affectsStyleMinH(rows, AFFECTS_TWO_COLUMNS_W, style, measure),
+    [root, width, rows, style, measure],
   );
   const group = groupMinH(members);
   return useMemo(() => ({ affects, group }), [affects, group]);
