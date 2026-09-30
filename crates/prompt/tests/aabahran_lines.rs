@@ -140,7 +140,7 @@ fn every_quoted_line_reads_as_its_shape() {
         let immortal = case.state.as_ref().is_some_and(|s| s.immortal);
         let who = Who {
             immortal,
-            mobile: false,
+            ..Who::default()
         };
         let compiled = compile(&case.prompt, &case.fprompt, Origin::Stored, who).expect(&label);
         let plains: Vec<&str> = case.lines.iter().map(|l| l.plain.as_str()).collect();
@@ -231,7 +231,7 @@ fn every_prompt_compiles_to_its_shapes_and_warnings() {
         let label = format!("{:?} {} {}", case.row, case.what, case.prompt);
         let who = Who {
             immortal: case.immortal,
-            mobile: false,
+            ..Who::default()
         };
         let compiled = compiled(&case, who);
         let shapes: Vec<String> = compiled
@@ -454,6 +454,7 @@ fn every_prompt_reads_back_what_the_game_printed() {
             let who = Who {
                 immortal: state.immortal,
                 mobile: state.npc,
+                ..Who::default()
             };
             let compiled = compiled(&case, who);
             let label = format!("{:?} {} in state {state_name}", case.row, case.prompt);

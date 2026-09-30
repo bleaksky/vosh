@@ -891,7 +891,7 @@ fn slash_prompt_codes(profile: &mut Profile, args: &str, fight: bool) -> InputRe
         );
     }
     let which = if fight { Which::Fight } else { Which::Prompt };
-    let normalized = lex::normalize(&typed, which);
+    let normalized = lex::normalize(&typed, which, profile.prompt.who());
     let codes = held.unwrap_or_default();
     let (prompt, fprompt) = if fight {
         (codes.prompt.clone(), normalized.text)
@@ -2014,6 +2014,8 @@ mod tests {
                 "Vosh cannot tell where Health ends and Mana begins. Put a space between them in the game."
             ]
         );
+        // The game keeps a typed backtick only from trust 55.
+        trusted(&mut p);
         let before = p.prompt.config().clone();
         let ran = run_line(&mut p, "#prompt game {<`%h>}");
         assert_eq!(
@@ -2033,9 +2035,32 @@ mod tests {
         );
     }
 
+    /// Char.Status for an immortal with trust 55, whose typed backticks
+    /// the game keeps.
+    fn trusted(p: &mut Profile) {
+        p.prompt.observe(
+            "Char.Status",
+            serde_json::json!({"name": "Tester", "level": 60}),
+            chrono::Local::now().fixed_offset(),
+        );
+    }
+
+    #[test]
+    fn prompt_game_stores_what_the_game_keeps_of_your_backticks() {
+        // A mortal, or anyone before Char.Status names a level, loses
+        // each backtick and the character after it.
+        let mut p = Profile::default();
+        let _ = run_line(&mut p, "#prompt game {`(240)[%h/%Hhp]}");
+        assert_eq!(codes_of(&p).prompt, "240)[%h/%Hhp] ");
+        trusted(&mut p);
+        let _ = run_line(&mut p, "#prompt game {`(240)[%h/%Hhp]}");
+        assert_eq!(codes_of(&p).prompt, "`(240)[%h/%Hhp] ");
+    }
+
     #[test]
     fn prompt_fight_sets_the_fight_prompt_beside_your_prompt() {
         let mut p = Profile::default();
+        trusted(&mut p);
         let ran = run_line(&mut p, "#prompt fight {`1%h``hp [%p] >}");
         assert_eq!(
             ran.result.echo,
