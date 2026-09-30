@@ -1262,8 +1262,8 @@ struct LineStep {
     result: LineResult,
     apply: ApplyResult,
     tick_step: Option<TickStep>,
-    /// The text to keep in the scrollback ring, for a line that shows.
-    scrollback: Option<Vec<u8>>,
+    /// The lines to keep in the scrollback ring, each as it shows.
+    scrollback: Vec<Vec<u8>>,
 }
 
 /// Handle one complete line under the profile lock. The stage reads it
@@ -1378,17 +1378,22 @@ fn text_line_step(
     // read, and kept in the ring buffer that becomes scrollback on the
     // next launch. The raw bytes carry ANSI, and the plain text drives
     // the regex search.
-    let scrollback = result.display.as_ref().map(|text| {
-        if let Some(sid) = log_session_id {
-            batch.log.push(vosh_log::LogEntry {
-                session_id: sid,
-                ts_ms: now_ms(),
-                text: plain,
-                raw: Some(bytes),
-            });
-        }
-        text.as_bytes().to_vec()
-    });
+    let scrollback: Vec<Vec<u8>> = result
+        .display
+        .as_ref()
+        .map(|text| {
+            if let Some(sid) = log_session_id {
+                batch.log.push(vosh_log::LogEntry {
+                    session_id: sid,
+                    ts_ms: now_ms(),
+                    text: plain,
+                    raw: Some(bytes),
+                });
+            }
+            text.as_bytes().to_vec()
+        })
+        .into_iter()
+        .collect();
     LineStep {
         result,
         apply,
@@ -1404,7 +1409,8 @@ fn text_line_step(
 /// draws in its place, or with drawing off it shows as sent. Line
 /// triggers and Lua `match_line` never see it (D6), and the tick reset
 /// pattern still does. A drawn prompt is neither logged nor kept for
-/// scrollback. The prompt vars go out after the batch.
+/// scrollback, and every line of it that shows is both, as any line that
+/// shows. The prompt vars go out after the batch.
 fn prompt_block(
     p: &mut Profile,
     batch: &mut ReadBatch,
@@ -1447,7 +1453,7 @@ fn prompt_block(
     batch.prompt_vars = true;
 
     let mut before = Vec::new();
-    let mut scrollback = None;
+    let mut scrollback = Vec::new();
     // The away prompt shows as sent, even while Vosh draws.
     if p.prompt.draws() && !block.afk {
         // Echoes land where the prompt was, above the drawn prompt.
@@ -1456,9 +1462,21 @@ fn prompt_block(
             before.extend_from_slice(b"\r\n");
         }
         let rendered = render_prompt(p, now);
+        // A line above the last one your design reads nothing on shows
+        // as the game sent it (D7).
+        let last_index = block.lines.len() - 1;
+        let heads_shown: Vec<BlockLine> = block.lines[..last_index]
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| !block.replaced.contains(index))
+            .map(|(_, line)| line.clone())
+            .collect();
         p.prompt
             .stage
             .draw(&mut batch.out, block, painted, &before, &rendered);
+        for head in &heads_shown {
+            keep_shown(batch, &mut scrollback, head, &head.raw, log_session_id);
+        }
     } else {
         if result.display.is_none() {
             for echo in apply.echoes.drain(..) {
@@ -1467,30 +1485,23 @@ fn prompt_block(
             }
         }
         let display = result.display.as_deref().map(str::as_bytes);
-        // The lines above the last one show as sent and are logged with
-        // it.
+        // The lines above the last one show as sent, whatever Prompts
+        // triggers do to the last one.
         let heads: Vec<BlockLine> = block.lines[..block.lines.len() - 1].to_vec();
         p.prompt
             .stage
             .show(&mut batch.out, block, painted, &before, display);
+        for head in &heads {
+            keep_shown(batch, &mut scrollback, head, &head.raw, log_session_id);
+        }
         if let Some(text) = &result.display {
-            if let Some(sid) = log_session_id {
-                for head in heads {
-                    batch.log.push(vosh_log::LogEntry {
-                        session_id: sid,
-                        ts_ms: now_ms(),
-                        text: head.plain,
-                        raw: Some(head.raw),
-                    });
-                }
-                batch.log.push(vosh_log::LogEntry {
-                    session_id: sid,
-                    ts_ms: now_ms(),
-                    text: last.plain,
-                    raw: Some(last.raw),
-                });
-            }
-            scrollback = Some(text.as_bytes().to_vec());
+            keep_shown(
+                batch,
+                &mut scrollback,
+                &last,
+                text.as_bytes(),
+                log_session_id,
+            );
         }
     }
     LineStep {
@@ -1499,6 +1510,27 @@ fn prompt_block(
         tick_step,
         scrollback,
     }
+}
+
+/// A line of your prompt that shows: logged, in one transaction at the
+/// end of the read, and kept in the ring buffer that becomes scrollback,
+/// as `shown`, what the terminal shows of it.
+fn keep_shown(
+    batch: &mut ReadBatch,
+    scrollback: &mut Vec<Vec<u8>>,
+    line: &BlockLine,
+    shown: &[u8],
+    log_session_id: Option<i64>,
+) {
+    if let Some(sid) = log_session_id {
+        batch.log.push(vosh_log::LogEntry {
+            session_id: sid,
+            ts_ms: now_ms(),
+            text: line.plain.clone(),
+            raw: Some(line.raw.clone()),
+        });
+    }
+    scrollback.push(shown.to_vec());
 }
 
 /// A partial Vosh does not read as your prompt, ended by a GA or EOR. It
@@ -1550,7 +1582,7 @@ fn unread_partial(
         result,
         apply,
         tick_step: None,
-        scrollback: None,
+        scrollback: Vec::new(),
     }
 }
 
@@ -1805,7 +1837,7 @@ async fn deliver_line_step<R: tauri::Runtime>(
         perf.routed_emits += result.routes.len() as u64;
     }
     emit_line_routes(app, &result);
-    if let Some(text) = kept {
+    for text in kept {
         let sb_t0 = std::time::Instant::now();
         scrollback.lock().await.push(text);
         perf.scrollback_push_ns += sb_t0.elapsed().as_nanos() as u64;
@@ -3162,7 +3194,7 @@ mod tests {
         );
         assert_eq!(batch.log.len(), 1, "a prompt that shows is logged");
         assert_eq!(step.len(), 1);
-        assert_eq!(step[0].scrollback.as_deref(), Some(PROMPT_LINE.as_bytes()));
+        assert_eq!(step[0].scrollback, [PROMPT_LINE.as_bytes()]);
         // A drawn prompt is neither logged nor kept for scrollback.
         let mut p = capture_profile(HP);
         let mut batch = super::ReadBatch::new(super::output_count());
@@ -3179,7 +3211,7 @@ mod tests {
         );
         assert!(batch.log.is_empty());
         assert_eq!(step.len(), 1);
-        assert_eq!(step[0].scrollback, None);
+        assert!(step[0].scrollback.is_empty());
         assert!(batch.prompt_vars, "the prompt vars follow a prompt");
     }
 
@@ -4221,6 +4253,76 @@ mod tests {
         }
         let logged: Vec<&str> = batch.log.iter().map(|e| e.text.as_str()).collect();
         assert_eq!(logged, [TANK_LINE, FIGHT_LINE]);
+    }
+
+    /// Run `text` through the Line pass as one read. Returns what it
+    /// logged, what it kept for scrollback, and what it wrote.
+    fn logged_and_kept(p: &mut Profile, text: &str) -> (Vec<String>, Vec<Vec<u8>>, Vec<u8>) {
+        let mut batch = super::ReadBatch::new(super::output_count());
+        let now = tokio::time::Instant::now();
+        let mut acc = super::LineAccumulator::new();
+        let mut kept = Vec::new();
+        for line in acc.feed(text.as_bytes()) {
+            let plain = vosh_ansi::plain_text(&line.bytes);
+            for step in super::line_step(p, &mut batch, line, plain, now, Some(3)) {
+                kept.extend(step.scrollback);
+            }
+        }
+        let logged = batch.log.iter().map(|e| e.text.clone()).collect();
+        (logged, kept, batch.out.bytes)
+    }
+
+    fn bytes_of(lines: &[&str]) -> Vec<Vec<u8>> {
+        lines.iter().map(|l| l.as_bytes().to_vec()).collect()
+    }
+
+    #[test]
+    fn a_tank_line_that_shows_while_vosh_draws_is_logged_and_kept() {
+        let fight = format!("You flee.\n\r{TANK_LINE}\n\r{FIGHT_LINE}\n\r");
+        let mut p = codes_profile(CODES, HP);
+        let (logged, kept, _) = logged_and_kept(&mut p, &fight);
+        assert_eq!(logged, ["You flee.", TANK_LINE]);
+        assert_eq!(kept, bytes_of(&["You flee.", TANK_LINE]));
+        // A design that reads the tank draws in place of the line, which
+        // then is neither logged nor kept.
+        let mut p = codes_profile(CODES, "%tank <%hp>");
+        let (logged, kept, _) = logged_and_kept(&mut p, &fight);
+        assert_eq!(logged, ["You flee."]);
+        assert_eq!(kept, bytes_of(&["You flee."]));
+    }
+
+    #[test]
+    fn with_drawing_off_every_line_that_shows_is_logged_and_kept() {
+        let block = format!("{TANK_LINE}\n\r{FIGHT_LINE}\n\r");
+        let mut p = codes_profile(CODES, HP);
+        p.set_prompt_config(vosh_prompt::PromptConfig {
+            draw: false,
+            ..p.prompt.config().clone()
+        });
+        let (logged, kept, _) = logged_and_kept(&mut p, &block);
+        assert_eq!(logged, [TANK_LINE, FIGHT_LINE]);
+        assert_eq!(kept, bytes_of(&[TANK_LINE, FIGHT_LINE]));
+        // A Prompts trigger hides the final line. The tank line still
+        // shows, so it is still logged and kept.
+        p.triggers
+            .set(vosh_trigger::Trigger {
+                name: "hide-prompt".into(),
+                patterns: vec![vosh_trigger::TriggerPattern {
+                    pattern: "hp ".into(),
+                    enabled: true,
+                }],
+                priority: 0,
+                enabled: true,
+                actions: vec![vosh_trigger::TriggerAction::Gag],
+                preset: None,
+                group: None,
+                target: vosh_trigger::TriggerTarget::Prompt,
+            })
+            .unwrap();
+        let (logged, kept, shown) = logged_and_kept(&mut p, &block);
+        assert_eq!(shown, format!("{TANK_LINE}\r\n").into_bytes());
+        assert_eq!(logged, [TANK_LINE]);
+        assert_eq!(kept, bytes_of(&[TANK_LINE]));
     }
 
     #[test]
