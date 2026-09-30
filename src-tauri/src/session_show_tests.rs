@@ -413,29 +413,20 @@ fn digest_steps(steps: &[Step]) -> u64 {
 /// `VOSH_WRITE_PLAYS` names a folder. Nothing otherwise.
 #[test]
 fn write_plays_for_the_screenshot_harness() {
+    use vosh_prompt::PromptShow;
     let Ok(dir) = std::env::var("VOSH_WRITE_PLAYS") else {
         return;
     };
     let plays = [
-        ("text-detailed", profile(CODES, DETAILED, true)),
-        ("text-off", profile(CODES, DETAILED, false)),
-        (
-            "pinned-detailed",
-            showing(
-                profile(CODES, DETAILED, true),
-                vosh_prompt::PromptShow::Pinned,
-            ),
-        ),
-        (
-            "pinned-off",
-            showing(
-                profile(CODES, DETAILED, false),
-                vosh_prompt::PromptShow::Pinned,
-            ),
-        ),
+        ("text-detailed", PromptShow::Text, true),
+        ("text-off", PromptShow::Text, false),
+        ("pinned-detailed", PromptShow::Pinned, true),
+        ("pinned-off", PromptShow::Pinned, false),
+        ("lifted-detailed", PromptShow::Lifted, true),
+        ("lifted-off", PromptShow::Lifted, false),
     ];
-    for (name, p) in plays {
-        let steps: Vec<serde_json::Value> = fake_play(p)
+    for (name, show, draw) in plays {
+        let steps: Vec<serde_json::Value> = fake_play(showing(profile(CODES, DETAILED, draw), show))
             .into_iter()
             .map(|step| match step {
                 Step::Output(json) => serde_json::json!({
@@ -1061,4 +1052,58 @@ fn the_pinned_splits_the_webview_replays_are_what_the_session_sends() {
         stored == pinned_splits(),
         "the session changed, so write the file again with VOSH_WRITE_PINNED_SPLITS=1"
     );
+}
+
+#[test]
+fn lifted_prompts_stay_in_the_text_with_marks_that_take_no_room() {
+    use vosh_prompt::PromptShow;
+    for (name, bytes, prompt) in pinned_streams() {
+        for draw in [true, false] {
+            let mut text = Session::new(counting(profile(prompt, HP, draw)));
+            let mut lifted = Session::new(showing(
+                counting(profile(prompt, HP, draw)),
+                PromptShow::Lifted,
+            ));
+            let mut splits = vec![Vec::new()];
+            splits.extend(cuts(&bytes).into_iter().map(|at| vec![at]));
+            for at in &splits {
+                let want = replay(&mut text, &bytes, at);
+                let got = replay(&mut lifted, &bytes, at);
+                let label = format!("{name} draw {draw} cut {at:?}");
+                let flat = |reads: &[Read]| {
+                    (
+                        reads.iter().flat_map(|r| r.log.clone()).collect::<Vec<_>>(),
+                        reads
+                            .iter()
+                            .flat_map(|r| r.kept.clone())
+                            .collect::<Vec<_>>(),
+                        reads
+                            .iter()
+                            .flat_map(|r| r.sends.clone())
+                            .collect::<Vec<_>>(),
+                    )
+                };
+                assert_eq!(flat(&got), flat(&want), "{label}");
+                // The screen is the text's, save the one space a lift that
+                // ends on a glyph keeps before your echo.
+                for columns in [40, 12] {
+                    assert_eq!(
+                        grid_screen(&got, columns).0,
+                        grid_screen(&want, columns).0,
+                        "{label} {columns} wide"
+                    );
+                }
+            }
+            // Every prompt in one read carries a start and an end.
+            let got = replay(&mut lifted, &bytes, &[]);
+            let all: Vec<u8> = got.iter().flat_map(|r| r.out.bytes.clone()).collect();
+            let text_all = String::from_utf8_lossy(&all);
+            let starts = text_all.matches("\x1b]7717;l;").count();
+            let ends = text_all.matches("\x1b]7717;e;").count();
+            assert_eq!(starts, ends, "{name} draw {draw}");
+            if name != "prompts-off-new" {
+                assert!(starts >= 1, "{name} draw {draw}");
+            }
+        }
+    }
 }

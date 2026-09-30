@@ -39,7 +39,10 @@
 //! above the command line, the line ends before it wait in
 //! [`Output::hold`] until the next write lands, and the empty line your
 //! next unasked text starts with writes nothing, so the text keeps the
-//! rows it would have kept minus the prompt's own.
+//! rows it would have kept minus the prompt's own. Lifted, each prompt
+//! stays in the text between two more private marks, `ESC ] 7717 ; l ; L
+//! BEL` before its first line and `ESC ] 7717 ; e ; L BEL` after its last
+//! visible byte, so each renderer can draw a band under it.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -64,6 +67,53 @@ pub const ZONE_MAX: usize = 6;
 /// The mark that starts region `gen`, `ESC ] 7717 ; o ; G BEL`.
 pub fn mark(gen: u64) -> Vec<u8> {
     format!("\x1b]{MARK_OSC};o;{gen}\x07").into_bytes()
+}
+
+/// The mark that starts lift `id`, the prompt a band goes under while
+/// your prompt shows lifted: `ESC ] 7717 ; l ; L BEL`.
+pub fn lift_start(id: u64) -> Vec<u8> {
+    format!("\x1b]{MARK_OSC};l;{id}\x07").into_bytes()
+}
+
+/// The mark that ends lift `id`, right after its last visible byte:
+/// `ESC ] 7717 ; e ; L BEL`. A repaint writes it again, and a renderer
+/// takes the latest one as where the lift ends.
+pub fn lift_end(id: u64) -> Vec<u8> {
+    format!("\x1b]{MARK_OSC};e;{id}\x07").into_bytes()
+}
+
+/// `body` with the end mark of lift `id` after its last visible byte, so
+/// before the line ends it finishes on. A body that finishes on no line
+/// end and on a character other than a space gets one plain space after
+/// the mark, so your echo starts a cell later and the band's 4 px reach
+/// past the last glyph stays inside that cell instead of under your echo.
+pub fn with_lift_end(body: &[u8], id: u64) -> Vec<u8> {
+    let at = trailing_line_ends(body);
+    let (shown, ends) = body.split_at(at);
+    let mut out = shown.to_vec();
+    out.extend(lift_end(id));
+    if ends.is_empty() && last_shown_char(shown).is_some_and(|c| c != b' ') {
+        out.push(b' ');
+    }
+    out.extend_from_slice(ends);
+    out
+}
+
+/// The last byte of `bytes` that shows, escape sequences skipped.
+fn last_shown_char(bytes: &[u8]) -> Option<u8> {
+    let mut last = None;
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == 0x1b {
+            i = escape_end(bytes, i);
+            continue;
+        }
+        if !matches!(bytes[i], b'\r' | b'\n') {
+            last = Some(bytes[i]);
+        }
+        i += 1;
+    }
+    last
 }
 
 /// Replace region `gen` with `bytes`. When the region is still open, the
@@ -328,15 +378,22 @@ fn sgr_start(bytes: &[u8]) -> Option<usize> {
     .then_some(esc)
 }
 
-/// `bytes` without the marks at its end.
+/// `bytes` without the marks at its end, region and lift marks alike.
 fn without_trailing_marks(mut bytes: &[u8]) -> &[u8] {
-    let prefix = format!("\x1b]{MARK_OSC};o;");
+    let prefix = format!("\x1b]{MARK_OSC};");
     while bytes.ends_with(b"\x07") {
         let Some(start) = find_last(bytes, prefix.as_bytes()) else {
             break;
         };
         let tail = &bytes[start + prefix.len()..bytes.len() - 1];
-        if tail.is_empty() || !tail.iter().all(u8::is_ascii_digit) {
+        let Some(digits) = tail
+            .strip_prefix(b"o;")
+            .or_else(|| tail.strip_prefix(b"l;"))
+            .or_else(|| tail.strip_prefix(b"e;"))
+        else {
+            break;
+        };
+        if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
             break;
         }
         bytes = &bytes[..start];
@@ -455,6 +512,15 @@ impl Block {
         }
         out
     }
+}
+
+/// The lift the open row carries while your prompt shows lifted, and
+/// whether its start mark sits inside the row's region, as it does when
+/// you chose Lifted with the row open, so a repaint writes it again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct OpenLift {
+    id: u64,
+    start_inside: bool,
 }
 
 /// The drawn prompt while it is the last thing on screen.
@@ -640,6 +706,8 @@ pub struct Stage {
     /// The next empty line writes nothing, since the pinned prompt's row
     /// it would have ended is not in the text.
     swallow: Option<Swallow>,
+    /// The lift the open row carries, set with every open row.
+    open_lift: Option<OpenLift>,
 }
 
 impl Stage {
@@ -1038,17 +1106,46 @@ impl Stage {
         rendered: &str,
     ) {
         self.sync(out);
+        let lift = self.lifts().then(|| self.next_gen());
         let gen = self.next_gen();
         let body = drawn(&block, rendered);
         let mut bytes = before.to_vec();
+        if let Some(id) = lift {
+            bytes.extend(lift_start(id));
+        }
         bytes.extend(block.heads_shown());
         bytes.extend(mark(gen));
-        bytes.extend_from_slice(&body);
+        match lift {
+            Some(id) => bytes.extend(with_lift_end(&body, id)),
+            None => bytes.extend_from_slice(&body),
+        }
         put(out, painted, bytes, true);
         out.closed = false;
         self.open = Some(OpenRow { gen, body });
+        self.open_lift = lift.map(|id| OpenLift {
+            id,
+            start_inside: false,
+        });
         self.shown_as = self.show;
         self.note_recognized(block);
+    }
+
+    /// Your prompt shows lifted, so each one carries lift marks.
+    fn lifts(&self) -> bool {
+        self.show == PromptShow::Lifted
+    }
+
+    /// `bytes`, the lines of a prompt shown as sent, between the marks of
+    /// a new lift while your prompt shows lifted and something in them
+    /// shows.
+    fn lift_shown(&mut self, bytes: Vec<u8>) -> Vec<u8> {
+        if !self.lifts() || !shows_anything(&bytes) {
+            return bytes;
+        }
+        let id = self.next_gen();
+        let mut out = lift_start(id);
+        out.extend(with_lift_end(&bytes, id));
+        out
     }
 
     /// Show `block` as sent, drawing off. `display` is what Prompts
@@ -1062,12 +1159,13 @@ impl Stage {
         display: Option<&[u8]>,
     ) {
         self.sync(out);
-        let mut bytes = before.to_vec();
-        bytes.extend(block.heads());
+        let mut shown = block.heads();
         if let Some(display) = display {
-            bytes.extend_from_slice(display);
-            bytes.extend_from_slice(block.final_line().end.terminator());
+            shown.extend_from_slice(display);
+            shown.extend_from_slice(block.final_line().end.terminator());
         }
+        let mut bytes = before.to_vec();
+        bytes.extend(self.lift_shown(shown));
         write(out, &mut self.open, painted, bytes);
         self.shown_as = self.show;
         self.note_recognized(block);
@@ -1259,16 +1357,35 @@ impl Stage {
             Some(rendered) => drawn(block, rendered),
             None => block.shown(),
         };
-        if body == open.body {
+        // Choosing Lifted lifts the open row, from its region's start.
+        let lifting = self.open_lift.is_none() && self.lifts();
+        if body == open.body && !lifting {
             return;
         }
         let old = open.gen;
+        let lift = match self.open_lift {
+            Some(lift) => Some(lift),
+            None if lifting => Some(OpenLift {
+                id: self.next_gen(),
+                start_inside: true,
+            }),
+            None => None,
+        };
         let gen = self.next_gen();
         let mut bytes = mark(gen);
-        bytes.extend_from_slice(&body);
+        match lift {
+            Some(lift) => {
+                if lift.start_inside {
+                    bytes.extend(lift_start(lift.id));
+                }
+                bytes.extend(with_lift_end(&body, lift.id));
+            }
+            None => bytes.extend_from_slice(&body),
+        }
         out.replace(old, bytes, false);
         out.closed = false;
         self.open = Some(OpenRow { gen, body });
+        self.open_lift = lift;
     }
 
     /// Show the band as the `[prompt]` table now says. It never writes to
@@ -1301,6 +1418,7 @@ impl Stage {
         let body = pin_body(block, rendered);
         let settled_line = block.final_line().end == End::SettledLine;
         out.replace(open.gen, Vec::new(), false);
+        self.open_lift = None;
         self.swallow = (!settled_line).then(|| Swallow::at(out));
         out.pin = Some(body.clone());
         self.pinned = Some(body);
@@ -1323,20 +1441,33 @@ impl Stage {
         };
         match rendered.filter(|_| !block.afk) {
             Some(rendered) => {
+                let lift = self.lifts().then(|| self.next_gen());
                 let gen = self.next_gen();
                 let body = drawn(&block, rendered);
-                let mut bytes = block.heads_shown();
+                let mut bytes = Vec::new();
+                if let Some(id) = lift {
+                    bytes.extend(lift_start(id));
+                }
+                bytes.extend(block.heads_shown());
                 bytes.extend(mark(gen));
-                bytes.extend_from_slice(&body);
+                match lift {
+                    Some(id) => bytes.extend(with_lift_end(&body, id)),
+                    None => bytes.extend_from_slice(&body),
+                }
                 out.text(&bytes);
                 out.closed = false;
                 self.open = Some(OpenRow { gen, body });
+                self.open_lift = lift.map(|id| OpenLift {
+                    id,
+                    start_inside: false,
+                });
             }
             None => {
-                let mut bytes = block.heads();
+                let mut shown = block.heads();
                 let last = block.final_line();
-                bytes.extend_from_slice(&last.raw);
-                bytes.extend_from_slice(last.end.terminator());
+                shown.extend_from_slice(&last.raw);
+                shown.extend_from_slice(last.end.terminator());
+                let bytes = self.lift_shown(shown);
                 out.text(&bytes);
             }
         }
@@ -2498,5 +2629,180 @@ mod tests {
         assert!(!stage.swallows());
         stage.line(&mut out, b"", "", None, b"\r\n");
         assert!(out.bytes.ends_with(b"DRAWN\r\n"));
+    }
+
+    /// A stage that reads `pattern` and lifts your prompt.
+    fn lifted_stage(pattern: &str, settle: bool) -> Stage {
+        let mut stage = stage(pattern, settle);
+        stage.set_show(PromptShow::Lifted);
+        stage
+    }
+
+    #[test]
+    fn a_lift_ends_after_the_last_visible_byte_and_keeps_your_echo_a_cell_away() {
+        assert_eq!(lift_start(4), b"\x1b]7717;l;4\x07");
+        assert_eq!(lift_end(4), b"\x1b]7717;e;4\x07");
+        // A body that ends on a glyph gains one plain space.
+        assert_eq!(
+            with_lift_end(b"DRAWN", 4),
+            with(&[b"DRAWN", &lift_end(4), b" "])
+        );
+        assert_eq!(
+            with_lift_end(b"DRAWN\x1b[0m", 4),
+            with(&[b"DRAWN\x1b[0m", &lift_end(4), b" "])
+        );
+        // One that ends on a space, or keeps a line end, gains nothing.
+        assert_eq!(
+            with_lift_end(b"<10hp> ", 4),
+            with(&[b"<10hp> ", &lift_end(4)])
+        );
+        assert_eq!(
+            with_lift_end(b"DRAWN\r\n", 4),
+            with(&[b"DRAWN", &lift_end(4), b"\r\n"])
+        );
+        // The marks take no room when the text wraps.
+        let marked = with(&[&lift_start(1), b"ab cd", &lift_end(1)]);
+        let text = String::from_utf8(marked.clone()).unwrap();
+        assert_eq!(crate::wrap::wrap_stream(&text, 5).as_bytes(), &marked[..]);
+    }
+
+    #[test]
+    fn a_lifted_prompt_carries_its_marks_around_every_line_it_shows() {
+        let mut stage = lifted_stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = Block {
+            lines: vec![
+                BlockLine {
+                    raw: b"Tester: [===|---]".to_vec(),
+                    plain: "Tester: [===|---]".into(),
+                    end: End::Line,
+                },
+                BlockLine {
+                    raw: PROMPT.as_bytes().to_vec(),
+                    plain: PROMPT.into(),
+                    end: End::Line,
+                },
+            ],
+            replaced: vec![1],
+            values: BTreeMap::new(),
+            afk: false,
+        };
+        stage.draw(&mut out, block.clone(), None, b"echo\r\n", "DRAWN");
+        // Echoes stay outside, the tank line shown as sent inside.
+        assert_eq!(
+            out.bytes,
+            with(&[
+                b"echo\r\n",
+                &lift_start(1),
+                b"Tester: [===|---]\r\n",
+                &mark(2),
+                b"DRAWN",
+                &lift_end(1),
+                b" "
+            ])
+        );
+        assert_eq!(stage.open_row().map(|r| &r.body[..]), Some(&b"DRAWN"[..]));
+        // A repaint rewrites the region with the same lift's end mark.
+        let mut repaint = Output::new(false);
+        stage.repaint(&mut repaint, Some("NEW> "));
+        assert_eq!(
+            repaint.replace.map(|r| r.bytes),
+            Some(with(&[&mark(3), b"NEW> ", &lift_end(1)]))
+        );
+        // Drawing off, the repaint lifts the line as the game sent it.
+        let mut off = Output::new(false);
+        stage.repaint(&mut off, None);
+        assert_eq!(
+            off.replace.map(|r| r.bytes),
+            Some(with(&[&mark(4), PROMPT.as_bytes(), &lift_end(1), b"\r\n"]))
+        );
+        // Shown as sent, the whole block sits between the marks, before
+        // its line end.
+        let mut shown = Output::new(false);
+        stage.show(&mut shown, block, None, b"", Some(PROMPT.as_bytes()));
+        assert_eq!(
+            shown.bytes,
+            with(&[
+                &lift_start(5),
+                b"Tester: [===|---]\r\n",
+                PROMPT.as_bytes(),
+                &lift_end(5),
+                b"\r\n"
+            ])
+        );
+    }
+
+    #[test]
+    fn a_prompt_whole_before_its_line_end_ends_its_lift_before_it() {
+        let mut stage = lifted_stage(SETTLES, true);
+        let block = read(&stage, "<10hp> ", End::Line);
+        let mut out = Output::new(false);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        assert_eq!(
+            out.bytes,
+            with(&[&lift_start(1), &mark(2), b"DRAWN", &lift_end(1), b"\r\n"])
+        );
+        // A prompt shown as sent that keeps the cursor after it ends on
+        // its own space.
+        let block = read(&stage, "<10hp> ", End::Settled);
+        let mut out = Output::new(false);
+        stage.show(&mut out, block, None, b"", Some(b"<10hp> "));
+        assert_eq!(out.bytes, with(&[&lift_start(3), b"<10hp> ", &lift_end(3)]));
+    }
+
+    #[test]
+    fn choosing_lifted_lifts_the_open_row_at_once() {
+        let mut stage = stage(JAMES, false);
+        let block = read(&stage, PROMPT, End::Line);
+        let mut out = Output::new(false);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        assert!(!out.bytes.windows(8).any(|w| w == b"7717;l;1"));
+        stage.set_show(PromptShow::Lifted);
+        let mut lift = Output::new(false);
+        stage.repaint(&mut lift, Some("DRAWN"));
+        assert_eq!(
+            lift.replace.map(|r| r.bytes),
+            Some(with(&[
+                &mark(3),
+                &lift_start(2),
+                b"DRAWN",
+                &lift_end(2),
+                b" "
+            ]))
+        );
+        // The start sits inside the region, so a repaint writes it again.
+        let mut again = Output::new(false);
+        stage.repaint(&mut again, Some("NEW"));
+        assert_eq!(
+            again.replace.map(|r| r.bytes),
+            Some(with(&[
+                &mark(4),
+                &lift_start(2),
+                b"NEW",
+                &lift_end(2),
+                b" "
+            ]))
+        );
+        // Back to the text, the row keeps its marks, and nothing moves.
+        stage.set_show(PromptShow::Text);
+        let mut same = Output::new(false);
+        stage.repaint(&mut same, Some("NEW"));
+        assert!(same.is_empty());
+    }
+
+    #[test]
+    fn leaving_pinned_for_lifted_brings_the_prompt_back_lifted() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&out);
+        stage.set_show(PromptShow::Lifted);
+        let mut back = Output::new(false);
+        stage.repaint(&mut back, Some("DRAWN"));
+        assert_eq!(
+            back.bytes,
+            with(&[&lift_start(1), &mark(2), b"DRAWN", &lift_end(1), b" "])
+        );
     }
 }
