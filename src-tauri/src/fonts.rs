@@ -8,6 +8,11 @@
 //! `@font-face` block pointing at `font://<family>` whenever the user
 //! picks a system font, and the matched-by-CSS family name resolves
 //! to the file we serve here.
+//!
+//! On macOS that scheme serves nothing yet. font-kit's CoreText source
+//! hands back in-memory handles, never file paths, so
+//! `font_path_for_family` returns `None` for every family and
+//! `font://` answers 404. Windows and Linux get file paths.
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -204,9 +209,11 @@ fn is_family_monospace_font_kit(source: &SystemSource, family: &str) -> bool {
 }
 
 /// Find the on-disk path of the first face font-kit lists for a
-/// family, which is not always the regular one. Returns
-/// `None` for memory-only handles (which on our targets shouldn't
-/// happen for system-installed fonts) and for unknown families.
+/// family, which is not always the regular one. Returns `None` for
+/// unknown families and for memory-only handles. On macOS every handle
+/// is memory-only, since font-kit's CoreText source reads each font
+/// into memory, so this returns `None` for every family there and
+/// `font://` answers 404.
 pub(crate) fn font_path_for_family(family: &str) -> Option<(PathBuf, u32)> {
     let source = SystemSource::new();
     let handle_family = source.select_family_by_name(family).ok()?;
