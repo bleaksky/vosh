@@ -1549,8 +1549,14 @@ impl ProfileConfig {
         self.macros.clear();
     }
 
+    /// Write the profile file at `path`. The first save that writes a
+    /// `[prompt]` table into it keeps the file as it was, see
+    /// [`keep_before_prompt_editor`].
     pub(crate) fn save(&self, path: &Path) -> Result<(), ConfigError> {
         let toml_str = toml::to_string_pretty(self)?;
+        if self.prompt.is_some() && !is_unread(path) {
+            keep_before_prompt_editor(path);
+        }
         write_with_backup(path, &toml_str)?;
         Ok(())
     }
@@ -1568,6 +1574,57 @@ impl ProfileConfig {
         let mut config: ProfileConfig = toml::from_str(text)?;
         config.merge_legacy_prompt();
         Ok(config)
+    }
+}
+
+/// The copy of a profile file as it was before Vosh first wrote a
+/// `[prompt]` table into it, `<file>.before-prompt-editor`.
+pub(crate) fn before_prompt_editor_path(path: &Path) -> PathBuf {
+    let mut name = path
+        .file_name()
+        .map(std::ffi::OsStr::to_os_string)
+        .unwrap_or_default();
+    name.push(".before-prompt-editor");
+    path.with_file_name(name)
+}
+
+/// Keep the profile file at `path` as it was, once, before a save writes
+/// the first `[prompt]` table into it, so the design and switch it held
+/// in `[ui]` survive whatever you try in the prompt editor. Backup
+/// rotation never removes the copy, since [`prune_backups`] only takes
+/// `.bak.<digits>` names. Nothing happens when the copy exists, when
+/// there is no file yet, or when the file already has a `[prompt]`
+/// table. A copy that fails is logged and the save goes on, since the
+/// rotating backups still hold the file.
+fn keep_before_prompt_editor(path: &Path) {
+    let copy = before_prompt_editor_path(path);
+    if copy.exists() || !path.is_file() {
+        return;
+    }
+    let has_prompt = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| text.parse::<toml::Table>().ok())
+        .is_some_and(|table| table.contains_key("prompt"));
+    if has_prompt {
+        return;
+    }
+    match std::fs::copy(path, &copy) {
+        Ok(_) => {
+            tracing::info!(
+                copy = %copy.display(),
+                "kept the profile file before the prompt editor",
+            );
+        }
+        Err(e) => {
+            // A copy cut short is no copy, and would stop the next save
+            // from making a whole one.
+            let _ = std::fs::remove_file(&copy);
+            tracing::warn!(
+                error = %e,
+                copy = %copy.display(),
+                "could not keep the profile file before the prompt editor",
+            );
+        }
     }
 }
 
@@ -3978,8 +4035,8 @@ name = "haste"
     }
 }
 
-/// The `[prompt]` table in profile files: the legacy merge and the
-/// `[ui]` copy.
+/// The `[prompt]` table in profile files: the legacy merge, the `[ui]`
+/// copy, and the copy kept before the first table.
 #[cfg(test)]
 mod prompt_tests {
     use super::*;
@@ -4144,5 +4201,79 @@ mod prompt_tests {
         assert!(live.prompt.config().is_default());
         assert!(!live.prompt.forsaken());
         assert!(!live.ui.prompt_template_enabled);
+    }
+
+    fn save_prompt(path: &Path, template: &str) {
+        let mut config = ProfileConfig::from_toml(&older_file()).unwrap();
+        config.set_prompt(PromptConfig::from_legacy(true, template));
+        config.save(path).unwrap();
+    }
+
+    #[test]
+    fn the_first_prompt_table_keeps_the_file_as_it_was() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("default.toml");
+        std::fs::write(&path, older_file()).unwrap();
+        let copy = before_prompt_editor_path(&path);
+        assert_eq!(
+            copy.file_name().unwrap().to_str(),
+            Some("default.toml.before-prompt-editor")
+        );
+
+        save_prompt(&path, TEMPLATE);
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), older_file());
+        assert!(std::fs::read_to_string(&path).unwrap().contains("[prompt]"));
+
+        // A dozen later saves rotate the backups and never touch the copy.
+        for n in 0..(BACKUP_RETENTION + 2) {
+            save_prompt(&path, &format!("%hp {n}"));
+        }
+        assert_eq!(std::fs::read_to_string(&copy).unwrap(), older_file());
+        // Saves in the same millisecond share a backup name, so the count
+        // is at most the retention.
+        let backups = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().contains(".bak."))
+            .count();
+        assert!((1..=BACKUP_RETENTION).contains(&backups), "{backups}");
+    }
+
+    #[test]
+    fn the_copy_is_made_once_and_never_over_a_file_that_had_the_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Healer.toml");
+        let copy = before_prompt_editor_path(&path);
+
+        // No file yet, nothing to keep.
+        save_prompt(&path, "%hp");
+        assert!(!copy.exists());
+        // The file already holds a [prompt] table, so there is nothing
+        // from before the prompt editor to keep.
+        save_prompt(&path, "%mana");
+        assert!(!copy.exists());
+
+        // A save with no table keeps nothing either.
+        let other = dir.path().join("Bard.toml");
+        std::fs::write(&other, "[ui]\ntheme = \"nord\"\n").unwrap();
+        ProfileConfig::from_toml("[ui]\ntheme = \"nord\"\n")
+            .unwrap()
+            .save(&other)
+            .unwrap();
+        assert!(!before_prompt_editor_path(&other).exists());
+    }
+
+    #[test]
+    fn a_file_held_unread_gets_no_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("default.toml");
+        std::fs::write(&path, "not [ toml").unwrap();
+        hold_unread(&path);
+        let mut config = ProfileConfig::default();
+        config.set_prompt(PromptConfig::from_legacy(true, "%hp"));
+        assert!(config.save(&path).is_err());
+        release_unread(&path);
+        assert!(!before_prompt_editor_path(&path).exists());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "not [ toml");
     }
 }
