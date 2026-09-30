@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useMemo, useRef, type CSSProperties } from 'react';
 import {
   affectMark,
   affectsPaneRows,
@@ -13,7 +13,8 @@ import type { AffectsMarker } from '../../lib/session';
 import { useAffectsDisplay } from '../../lib/stores/affectsDisplayStore';
 import { useAffects, useAffectsHidden } from '../../lib/stores/affectsStore';
 import { useTrackedAffects } from '../../lib/stores/trackedAffectsStore';
-import { affectsGrid, holdsPage, type AffectsCell } from './affectsGrid';
+import { affectsGrid, type AffectsCell } from './affectsGrid';
+import { useBoxSize, usePagedWindow, type Box } from './affectsHooks';
 import { PaneHeader, PaneMeta } from './PaneHeader';
 import { affectHours, affectWords } from './paneText';
 
@@ -50,8 +51,6 @@ export function AffectsPane() {
     <AffectsPaneView current={current} tracked={tracked} hidden={hidden} marker={display.marker} />
   );
 }
-
-type Box = { width: number; height: number };
 
 export interface AffectsPaneViewProps {
   /** Your affects, or null until the server sends the list. */
@@ -159,25 +158,18 @@ function RestPages({
   pages: number;
   columns: CSSProperties;
 }) {
-  const windowRef = useRef<HTMLDivElement | null>(null);
   const pageHeight = pageRows * PANE_ROW_PX;
-  const behavior = (): ScrollBehavior =>
-    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
   // Back to the first page once you point and tab away, so the pane
   // shows the affects that matter most again.
-  const home = () => {
-    const el = windowRef.current;
-    if (!el || el.scrollTop === 0 || holdsPage(el)) return;
-    el.scrollTo({ top: 0, behavior: behavior() });
-  };
+  const paged = usePagedWindow(pageHeight);
 
   return (
     <div
-      ref={windowRef}
+      ref={paged.ref}
       className={`pane-affects-rest${pages > 1 ? ' is-paged' : ''}`}
       style={{ height: pageHeight }}
-      onPointerLeave={home}
-      onBlur={() => requestAnimationFrame(home)}
+      onPointerLeave={paged.onPointerLeave}
+      onBlur={paged.onBlur}
     >
       <ul
         className="pane-affects-grid"
@@ -203,12 +195,7 @@ function RestPages({
                 type="button"
                 className="pane-affects-more"
                 aria-label={`${cell.count} more affects, scroll to them`}
-                onClick={() =>
-                  windowRef.current?.scrollTo({
-                    top: (cell.page + 1) * pageHeight,
-                    behavior: behavior(),
-                  })
-                }
+                onClick={() => paged.toPage(cell.page + 1)}
               >
                 {cell.count} more
               </button>
@@ -249,28 +236,4 @@ function AffectCell({
       </span>
     </li>
   );
-}
-
-/** The element's size, kept current as it resizes. Null until the
- *  first measure. The width takes in a scroll bar, so it is the width
- *  PanelHost gives the pane and the pane draws the columns its minimum
- *  counts, while the height is what the rows can fill. */
-function useBoxSize(ref: React.RefObject<HTMLElement | null>): Box | null {
-  const [box, setBox] = useState<Box | null>(null);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const measure = () => {
-      const width = el.offsetWidth;
-      const height = el.clientHeight;
-      setBox((prev) =>
-        prev && prev.width === width && prev.height === height ? prev : { width, height },
-      );
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [ref]);
-  return box;
 }

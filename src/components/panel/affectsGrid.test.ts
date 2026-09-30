@@ -6,6 +6,7 @@ import {
   affectsColumns,
   affectsGrid,
   holdsPage,
+  pageCells,
   type AffectsGrid,
 } from './affectsGrid';
 
@@ -201,6 +202,34 @@ describe('affectsGrid', () => {
     const grid = affectsGrid(many, { width: 494, height: 22 });
     expect(cells(grid)).toEqual(['a0@1,1', '2 more@1,2', 'a1@2,1', 'a2@2,2']);
     expect(grid.rest.map((c) => c.pageStart)).toEqual([true, false, true, false]);
+  });
+});
+
+describe('pageCells', () => {
+  const five = ['a', 'b', 'c', 'd', 'e'].map((n) => row(n, 'untracked'));
+  const placed = (rows: AffectRow[], columns: number, pageRows: number) =>
+    pageCells(rows, columns, pageRows).cells.map((c) =>
+      c.kind === 'affect'
+        ? `${c.row.name}@${c.gridRow},${c.gridColumn}${c.pageStart ? '^' : ''}`
+        : `${c.count} more@${c.gridRow},${c.gridColumn} p${c.page}`,
+    );
+
+  it('fills down the left column, then down the right, and counts what follows', () => {
+    expect(placed(five, 2, 2)).toEqual([
+      'a@1,1^',
+      'b@2,1',
+      'c@1,2',
+      '2 more@2,2 p0',
+      'd@3,1^',
+      'e@4,1',
+    ]);
+    expect(pageCells(five, 2, 2).pages).toBe(2);
+  });
+
+  it('holds everything on one page when it fits, and a one cell page never counts', () => {
+    expect(placed(five, 2, 3)).toEqual(['a@1,1^', 'b@2,1', 'c@3,1', 'd@1,2', 'e@2,2']);
+    expect(placed(five.slice(0, 2), 1, 1)).toEqual(['a@1,1^', 'b@2,1^']);
+    expect(pageCells([], 2, 4)).toEqual({ cells: [], pages: 0 });
   });
 });
 
