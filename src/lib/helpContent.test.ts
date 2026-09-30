@@ -349,3 +349,50 @@ describe('the help on the chat pane', () => {
     expect(helpMd).toContain(`### ${topic.number} ${topic.title}\n\n${topic.body}\n`);
   });
 });
+
+describe('the help on where your prompt shows', () => {
+  const topic = () => {
+    const found = HELP_TOPICS.find((t) => t.id === 'shape.prompt-show');
+    if (!found) throw new Error('no help topic shape.prompt-show');
+    return found;
+  };
+
+  it('names the row and each place it offers', () => {
+    const text = topic().body;
+    expect(topic().section).toBe('Shape the window');
+    expect(text).toContain('pick a place under `Where your prompt shows`');
+    expect(text).toContain('- `In the text` shows each prompt where the game sends it.');
+    expect(text).toContain('- `Lifted` keeps every prompt in the text on a raised band');
+    expect(text).toContain('- `Pinned` takes your prompts out of the text');
+    expect(text).toContain('Every prompt still reaches the session log and your Prompts triggers.');
+  });
+
+  it('says what the choice needs and where it saves', () => {
+    const text = topic().body;
+    expect(text).toContain('The choice needs Vosh to read your prompt.');
+    expect(text).toContain('`#prompt show lifted`');
+    expect(text).toContain('The choice saves in the `[prompt]` table of your profile as `show`.');
+    expect(text).toContain(
+      'An older version of Vosh ignores it and shows your prompt in the text.',
+    );
+  });
+
+  it('says where xterm shows a lifted prompt plain', () => {
+    expect(topic().body).toContain(
+      'With the xterm renderer, the newest 1000 prompts keep their bands and older ones show plain.',
+    );
+  });
+
+  it('lists #prompt show with the slash commands', () => {
+    expect(body('automate.slash-commands')).toContain('`#prompt show text|lifted|pinned`');
+    expect(body('reference.slash-commands')).toContain('`#prompt show text|lifted|pinned`');
+  });
+
+  it('matches HELP.md word for word', () => {
+    for (const id of ['shape.prompt-show', 'automate.slash-commands', 'reference.slash-commands']) {
+      const found = HELP_TOPICS.find((t) => t.id === id);
+      if (!found) throw new Error(`no help topic ${id}`);
+      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+    }
+  });
+});
