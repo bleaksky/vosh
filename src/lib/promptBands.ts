@@ -244,6 +244,17 @@ export function layoutBands(
   });
 }
 
+/** How far down from its top the band layer, whose top sits at
+ *  `layerTop` in the terminal area, is cut while the scrollback split
+ *  lays the history pane over the live one down to `historyBottom`. The
+ *  history text hides the live rows under it but not the band's reach
+ *  past the text, so the live bands stop at the divider, as the native
+ *  grid stops them. 0 with the split closed. */
+export function dividerCut(layerTop: number, historyBottom: number | null): number {
+  if (historyBottom === null) return 0;
+  return Math.max(0, historyBottom - layerTop);
+}
+
 /** Draws the bands of a LiftTracker in a layer under an xterm's text.
  *
  *  The layer sits in the terminal area, under the terminal well, because
@@ -251,7 +262,8 @@ export function layoutBands(
  *  past it. It is clipped to the text's rectangle plus the band's reach,
  *  so a lift the viewport cuts shows its visible part, square at the cut.
  *  xterm's own ground has to be clear for it to show, which Terminal.tsx
- *  sets while your prompt shows lifted. */
+ *  sets while your prompt shows lifted. While the scrollback split is
+ *  open the layer stops at the divider (see dividerCut). */
 export class BandLayer implements IDisposable {
   private readonly term: Terminal;
   private readonly tracker: LiftTracker;
@@ -259,10 +271,17 @@ export class BandLayer implements IDisposable {
   private layer: HTMLDivElement | null = null;
   private readonly subs: IDisposable[] = [];
   private readonly observer: ResizeObserver | null;
+  /** Watches the terminal well for the history pane coming and going. */
+  private readonly wellObserver: MutationObserver | null;
+  /** The history pane being watched for its divider moving. */
+  private history: Element | null = null;
   private on = false;
   /** Where xterm's first cell sits in the container, and the text's size,
    *  measured when the layout may have moved. */
   private frame: { x: number; y: number; width: number; height: number } | null = null;
+  /** The history pane's bottom in the container, null with the split
+   *  closed, undefined until measured. */
+  private historyBottom: number | null | undefined = undefined;
 
   constructor(term: Terminal, tracker: LiftTracker, container: HTMLElement) {
     this.term = term;
@@ -277,9 +296,19 @@ export class BandLayer implements IDisposable {
         ? null
         : new ResizeObserver(() => {
             this.frame = null;
+            this.historyBottom = undefined;
             this.place();
           });
     this.observer?.observe(container);
+    // The split mounts the history pane in the well and drags its
+    // divider without xterm drawing, so the cut follows both itself.
+    const well = container.querySelector('.terminal-well');
+    this.wellObserver =
+      well && typeof MutationObserver !== 'undefined'
+        ? new MutationObserver(() => this.watchHistory())
+        : null;
+    if (well) this.wellObserver?.observe(well, { childList: true });
+    this.watchHistory();
   }
 
   /** Draw the bands, or clear them. */
@@ -297,8 +326,21 @@ export class BandLayer implements IDisposable {
   dispose(): void {
     for (const sub of this.subs) sub.dispose();
     this.observer?.disconnect();
+    this.wellObserver?.disconnect();
     this.layer?.remove();
     this.layer = null;
+  }
+
+  /** Follow the history pane of the scrollback split, when there is one. */
+  private watchHistory(): void {
+    const history = this.container.querySelector('.terminal-pane-history');
+    if (history !== this.history) {
+      if (this.history) this.observer?.unobserve(this.history);
+      this.history = history;
+      if (history) this.observer?.observe(history);
+    }
+    this.historyBottom = undefined;
+    this.place();
   }
 
   /** The layer, first in the container, made on first use. */
@@ -320,6 +362,14 @@ export class BandLayer implements IDisposable {
     return { x: s.left - c.left, y: s.top - c.top, width: s.width, height: s.height };
   }
 
+  /** The history pane's bottom in the container, or null with the split
+   *  closed. */
+  private measureHistory(): number | null {
+    const history = this.history;
+    if (!history?.isConnected) return null;
+    return history.getBoundingClientRect().bottom - this.container.getBoundingClientRect().top;
+  }
+
   private place(): void {
     if (!this.on) return;
     const cell = (
@@ -336,6 +386,9 @@ export class BandLayer implements IDisposable {
     layer.style.top = `${frame.y - BAND_Y}px`;
     layer.style.width = `${frame.width + 2 * BAND_X}px`;
     layer.style.height = `${frame.height + 2 * BAND_Y}px`;
+    if (this.historyBottom === undefined) this.historyBottom = this.measureHistory();
+    const cut = dividerCut(frame.y - BAND_Y, this.historyBottom);
+    layer.style.clipPath = cut > 0 ? `inset(${cut}px 0 0 0)` : '';
     const viewportY = this.term.buffer.active.viewportY;
     const boxes = layoutBands(
       this.tracker.extents(viewportY - 1, viewportY + this.term.rows),
