@@ -1536,6 +1536,13 @@ impl Vars {
         })
     }
 
+    /// The hidden state the last [`Vars::take_hidden_change`] reported,
+    /// which every open window has heard. A window that opens or reloads
+    /// later reads this, since each change is reported once.
+    pub fn reported(&self) -> Hidden {
+        self.emitted
+    }
+
     /// The fresh capture and script values for `session://prompt-vars`, a
     /// hidden one as `?`. Stale values are left out.
     pub fn prompt_vars(&self) -> BTreeMap<String, String> {

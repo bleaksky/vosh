@@ -409,6 +409,35 @@ fn one_hidden_change_per_read() {
 }
 
 #[test]
+fn the_reported_state_is_what_the_last_report_said() {
+    // A window that opens late reads this, so it must match the report
+    // every other window heard, not a state no report carried.
+    let mut vars = Vars::new(true);
+    assert_eq!(vars.reported(), Hidden::default());
+    for file in [
+        "char-affects-lament.gmcp",
+        "char-vitals.gmcp",
+        "char-combat-lament-older.gmcp",
+        "group-info-own-row.gmcp",
+    ] {
+        feed(&mut vars, file);
+    }
+    assert_eq!(vars.hidden(), ALL);
+    assert_eq!(vars.reported(), Hidden::default());
+    assert_eq!(vars.take_hidden_change(), Some(ALL));
+    assert_eq!(vars.reported(), ALL);
+    // The song ends and comes back within one read, so nothing new is
+    // reported and the reported state stays.
+    feed(&mut vars, "char-affects.gmcp");
+    feed(&mut vars, "char-affects-lament.gmcp");
+    assert_eq!(vars.take_hidden_change(), None);
+    assert_eq!(vars.reported(), ALL);
+    vars.disconnect();
+    assert_eq!(vars.take_hidden_change(), Some(Hidden::default()));
+    assert_eq!(vars.reported(), Hidden::default());
+}
+
+#[test]
 fn being_solo_is_not_hidden() {
     let mut vars = Vars::new(true);
     feed(&mut vars, "char-vitals.gmcp");
