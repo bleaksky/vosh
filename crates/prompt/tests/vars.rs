@@ -67,6 +67,107 @@ fn a_name_only_scripts_supply_keeps_its_value() {
 }
 
 #[test]
+fn a_script_value_comes_first_for_every_field() {
+    // A game without Char.Status, where a trigger that gags the prompt
+    // reads each of these from the prompt itself.
+    let values = [
+        ("name", "Tester"),
+        ("race", "elf"),
+        ("class", "warrior"),
+        ("level", "50"),
+        ("bank", "5000"),
+        ("trains", "3"),
+        ("pracs", "12"),
+        ("cabal", "Nexus"),
+        ("leader", "Tarvik"),
+        ("group_size", "3"),
+        ("group_low", "Tarvik 45"),
+        ("missing", "sanctuary"),
+        ("terrain", "forest"),
+        ("sector", "3"),
+        ("region_num", "2"),
+        ("people", "2"),
+        ("things", "1"),
+        ("day", "12"),
+        ("month", "3"),
+        ("year", "812"),
+        ("sun", "dark"),
+        ("sky", "cloudy"),
+        ("tick", "14"),
+        ("profile", "Healer"),
+        ("opponent_hp", "60"),
+        ("raw", "<1020hp>"),
+    ];
+    let mut vars = Vars::new(false);
+    let mut first = BTreeMap::new();
+    for (name, value) in values {
+        vars.set_script(name, value);
+        first.insert(name.to_string(), value.to_string());
+    }
+    // Each prints what the first renderer printed.
+    let template = values
+        .iter()
+        .map(|(name, _)| format!("%{{{name}}}"))
+        .collect::<Vec<_>>()
+        .join("|");
+    let legacy = render_str(
+        &template,
+        &MapValues::new(&first, now()),
+        RenderOptions::default(),
+    );
+    assert_eq!(draw(&vars, &template), legacy.plain);
+    // And each keeps the formats of its kind.
+    assert_eq!(
+        draw(
+            &vars,
+            "Lv %level t%tick %{tick:unit} %{bank:grouped} %{opponent_hp:pct}%%"
+        ),
+        "Lv 50 t14 14s 5,000 60%"
+    );
+    // Flags read as flags, and a zero count is Absent.
+    for (name, value) in [
+        ("near", "1"),
+        ("eclipse", "yes"),
+        ("triad", "0"),
+        ("people", "0"),
+    ] {
+        vars.set_script(name, value);
+    }
+    assert_eq!(
+        draw(
+            &vars,
+            "%{if:near}near%{end}%{if:eclipse} eclipse%{end}%{if:triad} triad%{end}%{if:people} people%{end}"
+        ),
+        "near eclipse"
+    );
+    assert_eq!(resolve(&vars, "people"), Resolved::Absent);
+
+    // A script value beats the packet for its pulse, and Vosh's own
+    // values after that.
+    let mut vars = Vars::new(true);
+    packet(
+        &mut vars,
+        "Char.Status",
+        json!({"name":"Tester","level":50,"race":"elf","class":"warrior"}),
+    );
+    feed(&mut vars, "char-vitals.gmcp");
+    vars.set_script("level", "51");
+    vars.set_script("tick", "14");
+    let mut timed = vosh();
+    timed.tick = Some(Tick {
+        remaining: 30,
+        interval: Some(60),
+    });
+    timed.profile = Some("Default".to_string());
+    assert_eq!(
+        draw_with(&vars, &timed, "%level %tick %profile"),
+        "51 14 Default"
+    );
+    feed(&mut vars, "char-vitals.gmcp");
+    assert_eq!(draw_with(&vars, &timed, "%level"), "50");
+}
+
+#[test]
 fn a_stale_capture_name_is_missing_not_unknown() {
     // Another game, where each send starts a pulse.
     let mut vars = Vars::new(false);

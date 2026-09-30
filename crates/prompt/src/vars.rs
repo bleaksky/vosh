@@ -1823,6 +1823,15 @@ fn is(value: Value) -> Got {
     Got::Is(Resolved::Value(value))
 }
 
+/// A source that answers with a whole state, where Missing means it has
+/// nothing to say yet.
+fn got(resolved: Resolved) -> Got {
+    match resolved {
+        Resolved::Missing => Got::Nothing,
+        other => Got::Is(other),
+    }
+}
+
 fn truthy(s: &str) -> bool {
     !matches!(
         s.trim().to_ascii_lowercase().as_str(),
@@ -1953,6 +1962,35 @@ impl<'a> Resolver<'a> {
             None => Got::Nothing,
             Some(t) if truthy(t) => is(Value::Flag),
             Some(_) => Got::Is(Resolved::Absent),
+        }
+    }
+
+    /// A prompt value read as a percent, text when it is not a number.
+    fn var_pct(&self, name: &str) -> Got {
+        match self.vars.var(name).map(str::trim) {
+            None => Got::Nothing,
+            Some("") => Got::Blank,
+            Some(t) => is(t
+                .parse::<i64>()
+                .map_or_else(|_| Value::Text(t.to_string()), Value::Pct)),
+        }
+    }
+
+    /// A prompt value read as a count. Zero is Absent, and a list of
+    /// names prints as the script wrote it.
+    fn var_count(&self, name: &str) -> Got {
+        match self.var_num(name) {
+            Got::Is(Resolved::Value(Value::Num(0))) => Got::Is(Resolved::Absent),
+            other => other,
+        }
+    }
+
+    /// A prompt value read as text with the game's colors, for `%{raw}`.
+    fn var_styled(&self, name: &str) -> Got {
+        match self.vars.var(name) {
+            None => Got::Nothing,
+            Some(t) if t.trim().is_empty() => Got::Blank,
+            Some(t) => is(Value::Styled(t.to_string())),
         }
     }
 
@@ -2168,6 +2206,47 @@ impl<'a> Resolver<'a> {
             .map(str::to_string)
     }
 
+    /// The roster, every member named. Solo is Absent.
+    fn group_size(&self) -> Resolved {
+        match self.group() {
+            None => Resolved::Missing,
+            Some(g) if g.members.is_empty() => Resolved::Absent,
+            Some(g) => Resolved::Value(Value::List(
+                g.members
+                    .iter()
+                    .map(|m| m.name.clone().unwrap_or_else(|| "someone".to_string()))
+                    .collect(),
+            )),
+        }
+    }
+
+    /// The tick, a script value first, with Vosh's interval as its max.
+    fn tick(&self) -> Resolved {
+        let interval = self.vosh.tick.and_then(|t| t.interval);
+        first(&[
+            &|| match self.vars.var("tick").map(str::trim) {
+                None => Got::Nothing,
+                Some("") => Got::Blank,
+                Some(t) => t.parse().map_or_else(
+                    |_| is(Value::Text(t.to_string())),
+                    |secs| {
+                        is(Value::Seconds {
+                            secs,
+                            max: interval,
+                        })
+                    },
+                ),
+            },
+            &|| match self.vosh.tick {
+                Some(t) => is(Value::Seconds {
+                    secs: t.remaining,
+                    max: t.interval,
+                }),
+                None => Got::Nothing,
+            },
+        ])
+    }
+
     fn group_low(&self) -> Resolved {
         let Some(group) = self.group() else {
             return Resolved::Missing;
@@ -2371,13 +2450,20 @@ impl<'a> Resolver<'a> {
         first(&[&from_var, &from_gmcp])
     }
 
+    /// The game sends `none` for no cabal. A script value prints as
+    /// written.
     fn cabal(&self) -> Resolved {
-        match first(&[&|| self.packet_text(CHAR_WORTH, "cabal")]) {
-            Resolved::Value(Value::Text(t)) if t.trim().eq_ignore_ascii_case("none") => {
-                Resolved::Absent
-            }
-            other => other,
-        }
+        first(&[
+            &|| self.var_text("cabal"),
+            &|| match self.packet_text(CHAR_WORTH, "cabal") {
+                Got::Is(Resolved::Value(Value::Text(t)))
+                    if t.trim().eq_ignore_ascii_case("none") =>
+                {
+                    Got::Is(Resolved::Absent)
+                }
+                other => other,
+            },
+        ])
     }
 
     fn queue(&self, key: &str) -> Resolved {
@@ -2442,7 +2528,7 @@ impl<'a> Resolver<'a> {
             "opponent" => first(&[&|| self.var_text("opponent"), &|| {
                 self.opponent(|k| k.target.clone().map(Value::Text))
             }]),
-            "opponent_hp" => first(&[&|| self.var_num("opponent_hp"), &|| {
+            "opponent_hp" => first(&[&|| self.var_pct("opponent_hp"), &|| {
                 self.opponent(|k| k.hp_pct.map(Value::Pct))
             }]),
             "opponent_cond" => first(&[&|| self.var_text("opponent_cond"), &|| {
@@ -2451,20 +2537,17 @@ impl<'a> Resolver<'a> {
             "tank" => self.tank(),
             "tank_hp" => self.tank_hp(),
             "pos" => self.pos(),
-            "leader" => first(&[&|| self.packet_text(GROUP_INFO, "leader")]),
-            "group_size" => match self.group() {
-                None => Resolved::Missing,
-                Some(g) if g.members.is_empty() => Resolved::Absent,
-                Some(g) => Resolved::Value(Value::List(
-                    g.members
-                        .iter()
-                        .map(|m| m.name.clone().unwrap_or_else(|| "someone".to_string()))
-                        .collect(),
-                )),
-            },
-            "group_low" => self.group_low(),
-            "name" | "race" | "class" => first(&[&|| self.packet_text(CHAR_STATUS, name)]),
-            "level" => first(&[&|| self.packet_num(CHAR_STATUS, "level")]),
+            "leader" => first(&[&|| self.var_text("leader"), &|| {
+                self.packet_text(GROUP_INFO, "leader")
+            }]),
+            "group_size" => first(&[&|| self.var_count("group_size"), &|| got(self.group_size())]),
+            "group_low" => first(&[&|| self.var_text("group_low"), &|| got(self.group_low())]),
+            "name" | "race" | "class" => first(&[&|| self.var_text(name), &|| {
+                self.packet_text(CHAR_STATUS, name)
+            }]),
+            "level" => first(&[&|| self.var_num("level"), &|| {
+                self.packet_num(CHAR_STATUS, "level")
+            }]),
             "lang" => self.lang(),
             "stallion" | "olc" | "pacify" => first(&[&|| self.var_text(name)]),
             "area_num" | "olc_vnum" => first(&[&|| self.var_num(name)]),
@@ -2480,10 +2563,14 @@ impl<'a> Resolver<'a> {
             "rp" => first(&[&|| self.var_num("rp"), &|| {
                 self.packet_num(CHAR_WORTH, "rps")
             }]),
-            "bank" | "trains" => first(&[&|| self.packet_num(CHAR_WORTH, name)]),
-            "pracs" => first(&[&|| self.packet_num(CHAR_WORTH, "practices")]),
+            "bank" | "trains" => first(&[&|| self.var_num(name), &|| {
+                self.packet_num(CHAR_WORTH, name)
+            }]),
+            "pracs" => first(&[&|| self.var_num("pracs"), &|| {
+                self.packet_num(CHAR_WORTH, "practices")
+            }]),
             "cabal" => self.cabal(),
-            "missing" => self.missing(),
+            "missing" => first(&[&|| self.var_count("missing"), &|| got(self.missing())]),
             "room" => first(&[&|| self.var_text("room"), &|| {
                 self.packet_text(ROOM_INFO, "name")
             }]),
@@ -2494,32 +2581,50 @@ impl<'a> Resolver<'a> {
                 self.packet_text(ROOM_INFO, "area")
             }]),
             "exits" => self.exits(),
-            "terrain" => first(&[&|| self.packet_text(ROOM_INFO, "terrain")]),
-            "sector" => first(&[&|| self.packet_num(ROOM_INFO, "sector")]),
-            "region_num" => first(&[&|| self.packet_num(ROOM_INFO, "region")]),
+            "terrain" => first(&[&|| self.var_text("terrain"), &|| {
+                self.packet_text(ROOM_INFO, "terrain")
+            }]),
+            "sector" => first(&[&|| self.var_num("sector"), &|| {
+                self.packet_num(ROOM_INFO, "sector")
+            }]),
+            "region_num" => first(&[&|| self.var_num("region_num"), &|| {
+                self.packet_num(ROOM_INFO, "region")
+            }]),
             "region" => self.region(),
             "temp" => self.temp(),
             "weather" => first(&[&|| self.var_text("weather"), &|| {
                 self.packet_text(ROOM_WEATHER, "sky")
             }]),
-            "people" => self.names(ROOM_CHARS),
-            "things" => self.names(ROOM_ITEMS),
+            "people" => first(&[
+                &|| self.var_count("people"),
+                &|| got(self.names(ROOM_CHARS)),
+            ]),
+            "things" => first(&[
+                &|| self.var_count("things"),
+                &|| got(self.names(ROOM_ITEMS)),
+            ]),
             "hour" => self.hour(),
-            "day" | "month" | "year" => first(&[&|| self.packet_num(WORLD_TIME, name)]),
-            "sun" => first(&[&|| self.packet_text(WORLD_TIME, "sunlight")]),
-            "sky" => first(&[&|| self.packet_text(WORLD_TIME, "sky")]),
+            "day" | "month" | "year" => first(&[&|| self.var_num(name), &|| {
+                self.packet_num(WORLD_TIME, name)
+            }]),
+            "sun" => first(&[&|| self.var_text("sun"), &|| {
+                self.packet_text(WORLD_TIME, "sunlight")
+            }]),
+            "sky" => first(&[&|| self.var_text("sky"), &|| {
+                self.packet_text(WORLD_TIME, "sky")
+            }]),
             "moon1" => self.moon(0),
             "moon2" => self.moon(1),
             "moon3" => self.moon(2),
-            "eclipse" | "triad" => first(&[&|| self.packet(WORLD_MOONS, name, json_value)]),
-            "near" => first(&[&|| self.packet(WORLD_MOONS, "near_alignment", json_value)]),
-            "tick" => match self.vosh.tick {
-                Some(t) => Resolved::Value(Value::Seconds {
-                    secs: t.remaining,
-                    max: t.interval,
-                }),
-                None => Resolved::Missing,
-            },
+            "eclipse" | "triad" => first(&[&|| self.var_flag(name), &|| {
+                self.packet(WORLD_MOONS, name, json_value)
+            }]),
+            "near" => first(&[&|| self.var_flag("near"), &|| {
+                self.packet(WORLD_MOONS, "near_alignment", json_value)
+            }]),
+            "tick" => self.tick(),
+            // The clock reads no script value, as the first renderer read
+            // none.
             "time" | "date" => Resolved::Value(Value::Clock {
                 at: self
                     .vosh
@@ -2536,14 +2641,23 @@ impl<'a> Resolver<'a> {
                 Some(t) if !t.is_empty() => is(Value::Text(t.to_string())),
                 _ => Got::Is(Resolved::Absent),
             }]),
-            "profile" => match &self.vosh.profile {
-                Some(p) => Resolved::Value(Value::Text(p.clone())),
-                None => Resolved::Missing,
-            },
-            "raw" => match self.vars.fresh_capture().and_then(|c| c.raw.clone()) {
-                Some(raw) => Resolved::Value(Value::Styled(raw)),
-                None => Resolved::Missing,
-            },
+            "profile" => first(&[&|| self.var_text("profile"), &|| match self
+                .vosh
+                .profile
+                .as_deref()
+                .map(str::trim)
+            {
+                Some(p) if !p.is_empty() => is(Value::Text(p.to_string())),
+                _ => Got::Nothing,
+            }]),
+            "raw" => first(&[&|| self.var_styled("raw"), &|| match self
+                .vars
+                .fresh_capture()
+                .and_then(|c| c.raw.clone())
+            {
+                Some(raw) => is(Value::Styled(raw)),
+                None => Got::Nothing,
+            }]),
             slot if slot.starts_with("slot") => first(&[&|| self.var_text(slot)]),
             _ => Resolved::Unknown,
         }
