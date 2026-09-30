@@ -313,3 +313,66 @@ describe('RegionWriter', () => {
     expect(screen(term)).toEqual(['NEW> look', 'You see nothing special.', 'LAST> ']);
   });
 });
+
+describe('RegionWriter held line ends', () => {
+  const cursor = (term: Terminal) => [term.buffer.active.cursorY, term.buffer.active.cursorX];
+
+  it('keeps them back until the next session text lands, and writes them once', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: 'room\r\n[Exits: south]', hold: '\r\n\r\n' });
+    await parsed(writer);
+    expect(screen(term)).toEqual(['room', '[Exits: south]']);
+    expect(cursor(term)).toEqual([1, 14]);
+    expect(writer.pendingRows()).toBe(2);
+    writer.output({ text: 'tell', hold: '\r\n\r\n' });
+    await parsed(writer);
+    expect(screen(term)).toEqual(['room', '[Exits: south]', '', 'tell']);
+  });
+
+  it('writes them before your echo, whichever reaches xterm first', async () => {
+    for (const echoFirst of [true, false]) {
+      const { term, writer } = setup();
+      writer.output({ text: 'room', hold: '\r\n\r\n' });
+      const reply = { text: 'The Bank of Aabahran', hold: '\r\n\r\n' };
+      if (echoFirst) {
+        writer.local('look\r\n');
+        writer.output(reply);
+      } else {
+        writer.output(reply);
+        writer.local('look\r\n');
+      }
+      await parsed(writer);
+      expect(screen(term)).toEqual(
+        echoFirst
+          ? ['room', '', 'look', 'The Bank of Aabahran']
+          : ['room', '', 'The Bank of Aabahran', '', 'look'],
+      );
+    }
+  });
+
+  it('keeps the longer hold through an output that writes nothing', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: 'room', hold: '\r\n\r\n' });
+    writer.output({ text: '', hold: '\r\n' });
+    writer.output({ text: '' });
+    expect(writer.pendingRows()).toBe(2);
+    writer.output({ text: 'tell' });
+    await parsed(writer);
+    expect(screen(term)).toEqual(['room', '', 'tell']);
+    expect(writer.pendingRows()).toBe(0);
+  });
+
+  it('replaces the open region before them and writes a fresh replace after them', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: `${mark(1)}partial` });
+    writer.output({ text: '', hold: '\r\n' });
+    writer.output(replace(1, `${mark(2)}WHOLE`));
+    await parsed(writer);
+    expect(screen(term)).toEqual(['WHOLE']);
+    writer.output({ text: 'and more' });
+    writer.output({ text: '', hold: '\r\n\r\n' });
+    writer.output(replace(9, 'fresh\r\n', true));
+    await parsed(writer);
+    expect(screen(term)).toEqual(['WHOLE', 'and more', '', 'fresh']);
+  });
+});

@@ -20,6 +20,13 @@ fixtures/
       wire/    Synthetic socket reads the fake Aabahran in the test kit
                plays, one .bin of raw telnet bytes per case with a
                .notes.md that says what it holds and marks it synthetic.
+      pinned/  splits.b64, the session's payloads with your prompt pinned
+               for every wire case and a few pulses back to back, as one
+               read and as two cut at every place, with the native grid's
+               screen of each. Generated, synthetic, and stored as base64
+               of a gzip so the webview test can import it as text. The
+               session test holds it to what the session sends, and
+               VOSH_WRITE_PINNED_SPLITS=1 writes it again.
   themes/    One theme file per format the Appearance import reads (Ghostty,
              iTerm2, Kitty, Alacritty TOML, legacy Alacritty YAML).
   wrap/      Word wrap cases shared by the Rust wrap in crates/prompt and the

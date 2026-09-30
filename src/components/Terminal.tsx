@@ -18,8 +18,8 @@ import { baseAnsiRecord, subscribeBaseAnsi } from '../lib/baseAnsi';
 import { loadScrollback, onOutput, setWindowSize, terminalLocalWrite } from '../lib/session';
 import { findTheme, type AppTheme } from '../lib/themes';
 import { getCurrentThemeId, subscribeThemeChanges } from '../lib/theme';
-import { WordWrapper } from '../lib/wordWrap';
-import { RegionWriter, type RegionOutput, type RegionReplace } from '../lib/terminalRegion';
+import { OutputShaper } from '../lib/outputShaper';
+import { RegionWriter } from '../lib/terminalRegion';
 import { ingestRecentNames } from '../lib/recentNames';
 import { hexToRgba } from '../lib/mapPalette';
 
@@ -770,7 +770,9 @@ export function Terminal({
     // scrollback that overfilled).
     const padToBottom = () => {
       const cursorY = term.buffer.active.cursorY;
-      const rowsBelow = term.rows - 1 - cursorY;
+      // Line ends held back for a pinned prompt go out with the padding,
+      // so they count toward it.
+      const rowsBelow = term.rows - 1 - cursorY - writer.pendingRows();
       if (rowsBelow > 0) {
         writer.local('\r\n'.repeat(rowsBelow));
       }
@@ -836,10 +838,9 @@ export function Terminal({
     // line-buffer's wrap math still has the whole line for any line
     // ending in \n; the only thing that flushes "early" is the
     // already-complete prompt at the chunk tail.
-    const wrapper = new WordWrapper(term.cols);
-    const decoder = new TextDecoder('utf-8', { fatal: false });
+    const shaper = new OutputShaper(term.cols);
     term.onResize(({ cols }) => {
-      wrapper.setCols(cols);
+      shaper.setCols(cols);
       // Same tail-anchor rationale as in onOutput below: a resize
       // shifts baseY without moving viewportY, which can land the
       // live pane above its tail. Snap on resize so the freeze
@@ -855,28 +856,10 @@ export function Terminal({
         term.scrollToBottom();
       }
     });
-    // Wrap a whole chunk: complete lines and the partial at its end.
-    const wrapChunk = (text: string) => wrapper.process(text) + wrapper.flush();
-    const replaceDecoder = new TextDecoder('utf-8', { fatal: false });
     onOutput((out) => {
-      let replace: RegionReplace | undefined;
-      if (out.replace) {
-        // A replace rewrites its region whole, so half a character the
-        // last output held back goes with it.
-        decoder.decode();
-        replace = {
-          gen: out.replace.gen,
-          text: wrapChunk(replaceDecoder.decode(out.replace.bytes)),
-          fresh: out.replace.fresh,
-        };
-      }
-      const text = decoder.decode(out.bytes, { stream: true });
-      const wrapped = wrapChunk(text);
-      const restore = out.restore ? wrapChunk(replaceDecoder.decode(out.restore)) : undefined;
-      if (wrapped.length > 0 || replace !== undefined || restore !== undefined) {
-        const output: RegionOutput = { text: wrapped };
-        if (replace) output.replace = replace;
-        if (restore !== undefined) output.restore = restore;
+      // Decoded across outputs and word wrapped (src/lib/outputShaper.ts).
+      const { output, text } = shaper.shape(out);
+      if (output) {
         writer.output(output);
         // Live pane is a strict tail of server output. Without this
         // snap, dragging the split-scrollback divider can leave the
@@ -901,7 +884,7 @@ export function Terminal({
       // Cost is one regex pass per output chunk; sub-millisecond.
       if (!quietRef.current) {
         ingestRecentNames(text);
-        if (replace) ingestRecentNames(replace.text);
+        if (output?.replace) ingestRecentNames(output.replace.text);
       }
     }).then((unlisten) => {
       unsubOutput = unlisten;

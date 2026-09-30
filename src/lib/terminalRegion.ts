@@ -14,6 +14,14 @@
 // reads the buffer waits for xterm to parse what came before it, reads
 // the marker and the cursor, writes, and only then lets the queue go on.
 //
+// While your prompt shows pinned, an output can end on line ends it asks
+// the writer to hold back, so the text ends on its last line while you
+// wait. The writer writes them before the next thing that lands at the
+// cursor: session text, a fresh replace, or a local write such as your
+// echo. A replace of the open region lies before them, so it goes first.
+// An output that writes nothing at the cursor keeps the longer of its
+// hold and the one waiting, so hidden pulses never stack empty rows.
+//
 // The wait is a write of nothing with a callback. It has to be an empty
 // byte array, never an empty string. xterm 6.1 parses everything it
 // holds before a resize, and that loop stops at the first empty string,
@@ -62,11 +70,13 @@ export interface RegionReplace {
 
 /** One session output, decoded and wrapped: the replace goes first, then
  *  the text. `restore` is the live render for the region the output
- *  leaves open, which goes back over it before anything else lands. */
+ *  leaves open, which goes back over it before anything else lands.
+ *  `hold` is line ends that wait for the next write. */
 export interface RegionOutput {
   text: string;
   replace?: RegionReplace;
   restore?: string;
+  hold?: string;
 }
 
 /** A write of nothing that xterm's flush before a resize still parses
@@ -114,6 +124,9 @@ export class RegionWriter {
   private restore: { gen: number; text: string } | null = null;
   /** Where the last mark came, as xterm parsed it. */
   private mark: Mark | null = null;
+  /** Line ends an output held back, written before the next write lands
+   *  at the cursor. */
+  private pendingHold = '';
   /** A write waits for xterm to parse what came before it. */
   private busy = false;
   private readonly queue: Item[] = [];
@@ -137,6 +150,12 @@ export class RegionWriter {
    *  lands after the open region, so it closes it. */
   local(text: string): void {
     if (text.length > 0) this.push({ kind: 'local', text });
+  }
+
+  /** How many rows the held line ends take once they are written, so
+   *  padding can leave room for them. */
+  pendingRows(): number {
+    return (this.pendingHold.match(/\n/g) ?? []).length;
   }
 
   /** Run `then` once xterm has parsed everything written before it, and
@@ -220,6 +239,7 @@ export class RegionWriter {
       return;
     }
     if (item.kind === 'local') {
+      this.writeHold();
       this.write(item.text);
       return;
     }
@@ -246,19 +266,39 @@ export class RegionWriter {
    *  write, so the marker and cursor can be read. */
   private apply(out: RegionOutput, parsed: boolean): void {
     const { replace } = out;
+    let wrote = false;
     if (replace && parsed) {
       const back = replace.gen === this.openGen ? this.locate(replace.gen) : null;
       if (back !== null) {
         this.write(back + replace.text);
       } else if (replace.fresh && replace.text.length > 0) {
-        const lead = this.term.buffer.active.cursorX === 0 ? '' : '\r\n';
+        // Held line ends end their row, which xterm has not parsed yet.
+        const held = this.writeHold();
+        const lead = held || this.term.buffer.active.cursorX === 0 ? '' : '\r\n';
         this.write(lead + replace.text);
+        wrote = true;
       }
     }
-    if (out.text.length > 0) this.write(out.text);
+    if (out.text.length > 0) {
+      this.writeHold();
+      this.write(out.text);
+      wrote = true;
+    }
+    const hold = out.hold ?? '';
+    if (wrote || hold.length > this.pendingHold.length) this.pendingHold = hold;
     if (out.restore !== undefined && this.openGen !== null) {
       this.restore = { gen: this.openGen, text: out.restore };
     }
+  }
+
+  /** Write the held line ends, which close the open region, since they
+   *  come after it. True when there were any. */
+  private writeHold(): boolean {
+    if (this.pendingHold.length === 0) return false;
+    const hold = this.pendingHold;
+    this.pendingHold = '';
+    this.write(hold);
+    return true;
   }
 
   /** Put the live render back over the open region. */
