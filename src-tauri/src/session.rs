@@ -1828,13 +1828,14 @@ async fn finish_read(
         gag_without_reader,
         character,
     } = batch;
-    let (vars, hidden) = {
+    let (vars, hidden, prompt_seen) = {
         let mut p = profile.lock().await;
         // Echoes the end of the read wrote close the open row.
         p.prompt.stage.finish(&out);
         (
             p.prompt.take_prompt_vars(prompt_vars),
             p.prompt.vars.take_hidden_change(),
+            p.prompt.take_seen(),
         )
     };
     if !out.is_empty() {
@@ -1875,6 +1876,24 @@ async fn finish_read(
         if let Err(e) = app.emit("session://hidden", hidden) {
             warn!(error = %e, "failed to emit the hidden state");
         }
+    }
+    report_game_prompt_seen(app, prompt_seen);
+}
+
+/// Tell the webview what the game said of your prompt settings, on
+/// `session://game-prompt-seen`. When the active profile's capture took
+/// a new setting, the profile saves shortly and every window reads the
+/// `[prompt]` table again.
+pub(crate) fn report_game_prompt_seen(app: &AppHandle, seen: Vec<vosh_prompt::GamePromptSeen>) {
+    let applied = seen.iter().any(|s| s.applied);
+    for payload in seen {
+        if let Err(e) = app.emit("session://game-prompt-seen", payload) {
+            warn!(error = %e, "failed to emit the game's prompt settings");
+        }
+    }
+    if applied {
+        crate::commands::mark_profile_dirty(app);
+        broadcast_list_changes(app, ListChanges::PROMPT);
     }
 }
 
@@ -3997,6 +4016,29 @@ mod tests {
         assert_eq!(wire.p.prompt.stage.open_row(), None);
         let vars = wire.p.prompt.vars.prompt_vars();
         assert_eq!(vars.get("afk").map(String::as_str), Some("1"));
+    }
+
+    #[test]
+    fn a_char_prompt_before_its_text_reads_the_new_codes_at_once() {
+        let mut p = codes_profile("<%hhp> ", HP);
+        super::start_prompt(&mut p, true);
+        let mut wire = Wire::new(p);
+        feed_inline(
+            &mut wire.p,
+            "Char.Prompt",
+            serde_json::json!({"enabled": true, "prompt": "%n%P%C<%hhp %mm %vmv> ", "fprompt": ""}),
+        );
+        let seen = wire.p.prompt.take_seen();
+        assert!(seen[0].applied);
+        let out = wire.read(b"Prompt set to %n%P%C<%hhp %mm %vmv> \n\r<159hp 310m 489mv> ");
+        assert_eq!(
+            out.bytes,
+            with(&[
+                b"Prompt set to %n%P%C<%hhp %mm %vmv> \r\n",
+                &wire.mark(1),
+                b"<159>\x1b[0m"
+            ])
+        );
     }
 
     #[test]

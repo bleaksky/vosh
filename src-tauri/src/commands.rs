@@ -2630,6 +2630,9 @@ async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), Stri
         if let Some(catalog) = &catalog {
             lay_catalog_over(&mut p, catalog, loadouts.as_ref());
         }
+        // The latest Char.Prompt of the connection applies to the new
+        // profile's capture by the rule every packet follows.
+        p.prompt.follow_latest(chrono::Local::now().fixed_offset());
         // Under the same lock as the swap, so a pane layout write edited
         // from the old profile's tree, or a whole config save read from
         // the old profile, is refused from here on.
@@ -2651,6 +2654,9 @@ pub(crate) async fn apply_profile_switch(
 ) -> Result<(), String> {
     let app_data = app.path().app_data_dir().ok();
     switch_profile(state, app_data.as_deref(), name).await?;
+    // The new profile's capture took the game's latest prompt settings.
+    let seen = state.profile.lock().await.prompt.take_seen();
+    crate::session::report_game_prompt_seen(app, seen);
 
     // Hand every window the new profile's panes, tracked affects, tick
     // settings, and chip style from here, then the replace notice, on
@@ -5024,6 +5030,61 @@ mod tests {
         assert!(p.prompt.config().is_default());
         assert!(!p.prompt.forsaken());
         assert!(p.prompt.vars.gmcp().get("Char.Vitals").is_some());
+    }
+
+    #[tokio::test]
+    async fn a_switch_applies_the_latest_char_prompt_to_the_next_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = switch_state(dir.path()).await;
+        let game = "%n%P%C<%hhp %mm %vmv> ";
+        {
+            let mut p = state.profile.lock().await;
+            p.prompt.connect(true);
+            p.prompt.observe(
+                "Char.Prompt",
+                serde_json::json!({"enabled": true, "prompt": game, "fprompt": ""}),
+                chrono::Local::now().fixed_offset(),
+            );
+            assert!(!p.prompt.take_seen()[0].applied, "default reads nothing");
+        }
+        let codes = |follow_game| vosh_prompt::PromptConfig {
+            draw: true,
+            template: "%hp".into(),
+            capture: vosh_prompt::CaptureConfig::Aabahran(vosh_prompt::config::AabahranCapture {
+                prompt: "<%h%m %vmv> ".into(),
+                follow_game,
+                ..vosh_prompt::config::AabahranCapture::default()
+            }),
+            ..vosh_prompt::PromptConfig::default()
+        };
+        let mut file = ProfileConfig::default();
+        file.set_prompt(codes(true));
+        file.save(&healer_file(dir.path())).unwrap();
+
+        super::switch_live_profile(&state, "Healer").await.unwrap();
+        {
+            let mut p = state.profile.lock().await;
+            let vosh_prompt::CaptureConfig::Aabahran(taken) = &p.prompt.config().capture else {
+                panic!("an aabahran capture");
+            };
+            assert_eq!(taken.prompt, game);
+            assert_eq!(taken.source, Some(vosh_prompt::config::CaptureSource::Gmcp));
+            let seen = p.prompt.take_seen();
+            assert_eq!(seen.len(), 1);
+            assert!(seen[0].applied, "the toast follows");
+        }
+
+        // A capture that does not follow the game keeps its codes.
+        let mut file = ProfileConfig::default();
+        file.set_prompt(codes(false));
+        file.save(&healer_file(dir.path())).unwrap();
+        super::switch_live_profile(&state, "Test-Prompt")
+            .await
+            .unwrap();
+        super::switch_live_profile(&state, "Healer").await.unwrap();
+        let mut p = state.profile.lock().await;
+        assert_eq!(*p.prompt.config(), codes(false));
+        assert!(p.prompt.take_seen().is_empty());
     }
 
     #[tokio::test]
