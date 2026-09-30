@@ -72,7 +72,7 @@ export function PanelHost() {
   useMoreBelow(areaRef);
 
   const root = layout?.root ?? null;
-  const mins = usePaneMins(size.w);
+  const mins = usePaneMins(root, size.w);
   const geometry = useMemo(
     () => (root ? layoutPanes(root, size.w, size.h, mins) : null),
     [root, size.w, size.h, mins],

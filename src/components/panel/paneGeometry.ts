@@ -1,5 +1,5 @@
 import { isTrackedRow, type AffectRow } from '../../lib/affectsView';
-import { AFFECTS_RULE_PX, affectsRestMinRows } from './affectsGrid';
+import { AFFECTS_RULE_PX, affectsColumns, affectsRestMinRows } from './affectsGrid';
 import {
   PANE_HEADER_PX,
   PANE_MIN_H,
@@ -106,6 +106,14 @@ export function affectsMinH(rows: readonly AffectRow[], columns = 2): number {
   const rule = tracked > 0 && restRows > 0 ? AFFECTS_RULE_PX : 0;
   const need = PANE_HEADER_PX + Math.min(LIST_MIN_ROWS, trackedRows + restRows) * PANE_ROW_PX;
   return Math.max(PANE_MIN_H.affects, need + rule);
+}
+
+/** The Affects pane's minimum in `root` laid out `width` wide. The
+ *  pane draws one column or two by its own width, which a Split right
+ *  halves, so the minimum counts the columns the pane draws. A tree
+ *  without the pane reads the panel's width. */
+export function affectsMinIn(root: PaneSplit, width: number, rows: readonly AffectRow[]): number {
+  return affectsMinH(rows, affectsColumns(paneWidth(root, width, 'affects') ?? width));
 }
 
 /** The Group pane's minimum for `members` rows: every member up to
@@ -253,6 +261,15 @@ export function layoutPanes(
   const out: PaneGeometry = { leaves: [], handles: [] };
   place(root, { x: 0, y: 0, w: Math.max(0, width), h: Math.max(0, height) }, out, mins);
   return out;
+}
+
+/** The width `pane` gets in a `width` wide panel, or null when the
+ *  tree does not hold it. Row splits share the width by weight and
+ *  MIN_PANE_W alone, so no minimum height moves it, and PanelHost
+ *  reads it before it knows those. */
+export function paneWidth(root: PaneSplit, width: number, pane: PaneType): number | null {
+  const box = layoutPanes(root, width, 0).leaves.find((l) => l.leaf.pane === pane);
+  return box ? box.rect.w : null;
 }
 
 function place(node: PaneNode, rect: Rect, out: PaneGeometry, mins: PaneMins): void {
