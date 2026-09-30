@@ -27,11 +27,14 @@
 //!   [`presets`] it offers to start from.
 //! - [`stage`] decides what Vosh writes around your prompt, in one output
 //!   per socket read, with the regions a later output replaces.
+//! - [`candidates`] groups the candidates ring by shape and checks a
+//!   capture against it and your scrollback.
 //! - [`wrap`] is the word wrap both renderers share.
 //! - `testkit`, behind the `testkit` feature, prints prompts the way the
 //!   game does and plays a fake Aabahran for tests and scripted runs.
 
 pub mod aabahran;
+pub mod candidates;
 pub mod capture;
 pub mod config;
 pub mod edit;
