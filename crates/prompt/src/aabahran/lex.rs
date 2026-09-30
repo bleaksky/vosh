@@ -1,11 +1,22 @@
-//! A PROMPT setting as the game stores it.
+//! A PROMPT setting as the game stores it, and the two passes the game
+//! prints it in.
 //!
 //! [`normalize`] does what `do_prompt` and `do_fprompt`
 //! (`act_info.c:2083-2146`) do to a setting you type. A setting the game
 //! sends in Char.Prompt, or shows after `Current prompt:`, is already
 //! stored that way, so Vosh reads it as it came and skips this step.
+//!
+//! [`pass_one`] reads the stored setting as `bust_a_prompt`
+//! (`comm.c:1801-1944`) does, into characters it copies, breaks and
+//! value codes. [`pass_two`] reads each run of copied characters as
+//! `send_to_char` (`comm.c:6583-6649`) and `process_color` do, into text
+//! and colors that take no cell.
 
-use super::{Warning, WarningKind, Which};
+use std::ops::Range;
+
+use super::codes::{chars, Code};
+use super::colors::{self, Color};
+use super::{CompileError, Warning, WarningKind, Which, Who};
 
 /// What `prompt all` sets (`act_info.c:2098`).
 pub const PROMPT_ALL: &str = "%n%P%C<%hhp %mm %vmv> ";
@@ -73,6 +84,254 @@ pub fn normalize(typed: &str, which: Which) -> Normalized {
 /// tests it.
 fn ends_in_break(text: &str) -> bool {
     text.len() >= 2 && text.as_bytes()[text.len() - 2..].eq_ignore_ascii_case(b"%c")
+}
+
+/// What pass one reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Token {
+    /// A character the game copies as it is. A backtick among them starts
+    /// a color in pass two.
+    Lit(char),
+    /// `%c`, a line end.
+    Break,
+    /// `%C`, a line end only while your opponent fights someone in your
+    /// group.
+    TankBreak,
+    /// A value code.
+    Code(Code),
+}
+
+/// A token and the bytes of the setting it came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Lexed {
+    pub token: Token,
+    pub span: Range<usize>,
+}
+
+/// A setting read by pass one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PassOne {
+    pub tokens: Vec<Lexed>,
+    pub warnings: Vec<Warning>,
+}
+
+const LONE_PERCENT: &str =
+    "Your prompt ends in a lone %, which swallows the space the game adds. Remove it in the game.";
+
+/// Read a stored setting as `bust_a_prompt` does. `%l` and a character
+/// copy a backtick and that character, `%L` two backticks and `%%` a
+/// percent sign. `%f` or `%j` with no digit prints nothing and leaves the
+/// next character alone. `%` and any other character prints nothing and
+/// takes that character, so a `%` at the end swallows the space the game
+/// adds, which warns.
+pub fn pass_one(setting: &str, which: Which) -> PassOne {
+    let mut tokens = Vec::new();
+    let mut warnings = Vec::new();
+    let mut push = |token, span| tokens.push(Lexed { token, span });
+    let mut it = setting.char_indices().peekable();
+    while let Some((at, c)) = it.next() {
+        if c != '%' {
+            push(Token::Lit(c), at..at + c.len_utf8());
+            continue;
+        }
+        let Some((code_at, letter)) = it.next() else {
+            // The game reads on past the end of the setting.
+            warnings.push(lone_percent(which, at..at + 1));
+            break;
+        };
+        let end = code_at + letter.len_utf8();
+        match letter {
+            'c' => push(Token::Break, at..end),
+            'C' => push(Token::TankBreak, at..end),
+            'l' => {
+                // The backtick and whatever character follows. At the very
+                // end the game copies the backtick alone.
+                let (x, end) = match it.next() {
+                    Some((x_at, x)) => (Some(x), x_at + x.len_utf8()),
+                    None => (None, end),
+                };
+                push(Token::Lit('`'), at..end);
+                if let Some(x) = x {
+                    push(Token::Lit(x), at..end);
+                }
+            }
+            'L' => {
+                push(Token::Lit('`'), at..end);
+                push(Token::Lit('`'), at..end);
+            }
+            '%' => push(Token::Lit('%'), at..end),
+            'f' | 'j' => {
+                if let Some(&(digit_at, digit)) = it.peek() {
+                    if let Some(code) = Code::with_digit(letter, digit) {
+                        it.next();
+                        push(Token::Code(code), at..digit_at + 1);
+                    }
+                }
+            }
+            _ => match Code::from_letter(letter) {
+                Some(code) => push(Token::Code(code), at..end),
+                None if letter == ' ' && end == setting.len() => {
+                    warnings.push(lone_percent(which, at..end));
+                }
+                None => {}
+            },
+        }
+    }
+    PassOne { tokens, warnings }
+}
+
+fn lone_percent(which: Which, span: Range<usize>) -> Warning {
+    Warning::new(WarningKind::LonePercent, which, span, LONE_PERCENT.into())
+}
+
+/// What the game prints, after pass two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Piece {
+    /// A character that takes one cell.
+    Text(char),
+    /// A color, which takes no cell.
+    Color(Color),
+    /// A line end.
+    Break,
+    /// A value code.
+    Code(Code),
+}
+
+/// A piece and the bytes of the setting it came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Placed {
+    pub piece: Piece,
+    pub span: Range<usize>,
+}
+
+/// Read each run of copied characters as `send_to_char` does. A backtick
+/// and a color code make a color, `(NNN)` and `)NNN(` a 256 color, `-`
+/// a tilde and `=` a backtick, and any other character prints as
+/// itself. A backtick that ends the setting or a line drops.
+///
+/// Pass one's `%C` reaches here as a line end, so the caller drops it
+/// first for a shape where it prints nothing.
+///
+/// A run that ends in a backtick right before a code, or in part of a 256
+/// color that the code's digits would finish, takes the code's first
+/// character as a color, which no pattern can follow. That is the error.
+pub fn pass_two(tokens: &[Lexed], which: Which, who: Who) -> Result<Vec<Placed>, CompileError> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while let Some(lexed) = tokens.get(i) {
+        let piece = match lexed.token {
+            Token::Lit(_) => {
+                let start = i;
+                while matches!(
+                    tokens.get(i),
+                    Some(Lexed {
+                        token: Token::Lit(_),
+                        ..
+                    })
+                ) {
+                    i += 1;
+                }
+                run(&tokens[start..i], tokens.get(i), which, who, &mut out)?;
+                continue;
+            }
+            Token::Break | Token::TankBreak => Piece::Break,
+            Token::Code(code) => Piece::Code(code),
+        };
+        out.push(Placed {
+            piece,
+            span: lexed.span.clone(),
+        });
+        i += 1;
+    }
+    Ok(out)
+}
+
+/// One run of copied characters, and what follows it.
+fn run(
+    run: &[Lexed],
+    next: Option<&Lexed>,
+    which: Which,
+    who: Who,
+    out: &mut Vec<Placed>,
+) -> Result<(), CompileError> {
+    let chars: Vec<(char, Range<usize>)> = run
+        .iter()
+        .filter_map(|l| match l.token {
+            Token::Lit(c) => Some((c, l.span.clone())),
+            _ => None,
+        })
+        .collect();
+    let next_code = next.and_then(|l| match l.token {
+        Token::Code(code) => Some((code, l.span.clone())),
+        _ => None,
+    });
+    let swallows = |from: usize| {
+        let (code, span) = next_code.clone().expect("a code follows");
+        CompileError::runs_into(which, &code.written(), from..span.end)
+    };
+    let n = chars.len();
+    let mut k = 0;
+    while k < n {
+        let (c, span) = chars[k].clone();
+        let mut place = |piece, end: usize| {
+            out.push(Placed {
+                piece,
+                span: span.start..end,
+            });
+        };
+        if c != '`' {
+            place(Piece::Text(c), span.end);
+            k += 1;
+            continue;
+        }
+        let Some((a, a_span)) = chars.get(k + 1).cloned() else {
+            // A backtick at the end of the run eats what comes next.
+            if next_code.is_some() {
+                return Err(swallows(span.start));
+            }
+            k += 1;
+            continue;
+        };
+        if a == '(' || a == ')' {
+            let close = if a == '(' { ')' } else { '(' };
+            let digits: String = chars[k + 2..]
+                .iter()
+                .take(3)
+                .map(|(d, _)| *d)
+                .take_while(char::is_ascii_digit)
+                .collect();
+            if digits.len() == 3 && chars.get(k + 5).is_some_and(|(c, _)| *c == close) {
+                let number: u16 = digits.parse().expect("three digits");
+                let color = if a == '(' {
+                    Color::Fg256(number)
+                } else {
+                    Color::Bg256(number)
+                };
+                place(Piece::Color(color), chars[k + 5].1.end);
+                k += 6;
+                continue;
+            }
+            // The run ends inside the color, and the code after it can
+            // print the digits that finish it.
+            let ends_inside = digits.len() < 3 && k + 2 + digits.len() == n;
+            let digit_next = next_code
+                .as_ref()
+                .is_some_and(|(code, _)| code.edges(who).first & chars::DIGIT != 0);
+            if ends_inside && digit_next {
+                return Err(swallows(span.start));
+            }
+        }
+        let piece = match a {
+            '-' => Piece::Text('~'),
+            '=' => Piece::Text('`'),
+            _ => colors::index(a).map_or(Piece::Text(a), |index| {
+                Piece::Color(Color::Table { index, code: a })
+            }),
+        };
+        place(piece, a_span.end);
+        k += 2;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -186,5 +445,188 @@ mod tests {
                 assert!(got.warnings.is_empty(), "{key} in {file}");
             }
         }
+    }
+
+    fn tokens(setting: &str) -> Vec<Token> {
+        pass_one(setting, Which::Prompt)
+            .tokens
+            .into_iter()
+            .map(|l| l.token)
+            .collect()
+    }
+
+    fn lits(text: &str) -> Vec<Token> {
+        text.chars().map(Token::Lit).collect()
+    }
+
+    #[test]
+    fn pass_one_reads_as_bust_a_prompt_does() {
+        use Token::{Break, Code as C, Lit, TankBreak};
+        let cases: Vec<(&str, Vec<Token>)> = vec![
+            ("ab", lits("ab")),
+            ("%c", vec![Break]),
+            ("%C", vec![TankBreak]),
+            ("%h", vec![C(Code::Hp)]),
+            ("%l1", lits("`1")),
+            ("%l%h", lits("`%h")),
+            ("%L", lits("``")),
+            ("%%", lits("%")),
+            ("%%h", lits("%h")),
+            ("%f1", vec![C(Code::Slot(1))]),
+            ("%f0", vec![C(Code::Slot(0))]),
+            ("%j3", vec![C(Code::Moon(3))]),
+            // %f and %j with no digit print nothing and leave the next
+            // character to be read.
+            ("%fx", lits("x")),
+            ("%j%h", vec![C(Code::Hp)]),
+            // Any other letter prints nothing and goes with the %.
+            ("%qx", lits("x")),
+            ("a%yb", lits("ab")),
+            ("50% hp", lits("50hp")),
+            (
+                "%n%P%C[%h]%c",
+                vec![
+                    C(Code::Tank),
+                    C(Code::TankBar),
+                    TankBreak,
+                    Lit('['),
+                    C(Code::Hp),
+                    Lit(']'),
+                    Break,
+                ],
+            ),
+        ];
+        for (setting, want) in cases {
+            assert_eq!(tokens(setting), want, "{setting}");
+        }
+    }
+
+    #[test]
+    fn pass_one_keeps_where_each_token_came_from() {
+        let read = pass_one("<%l1%h%f1x>", Which::Prompt);
+        let spans: Vec<Range<usize>> = read.tokens.iter().map(|l| l.span.clone()).collect();
+        assert_eq!(spans, [0..1, 1..4, 1..4, 4..6, 6..9, 9..10, 10..11]);
+    }
+
+    #[test]
+    fn a_lone_percent_at_the_end_warns() {
+        for (setting, span, count) in [("<%h> %", 5..6, 4), ("<%h>% ", 4..6, 3)] {
+            let read = pass_one(setting, Which::Fight);
+            assert_eq!(read.tokens.len(), count, "{setting}");
+            assert_eq!(
+                read.warnings,
+                [Warning::new(
+                    WarningKind::LonePercent,
+                    Which::Fight,
+                    span,
+                    "Your prompt ends in a lone %, which swallows the space the game adds. Remove it in the game.".into(),
+                )],
+                "{setting}"
+            );
+        }
+        // A percent and a space in the middle take the space quietly.
+        assert!(pass_one("50% hp ", Which::Prompt).warnings.is_empty());
+    }
+
+    fn printed(setting: &str) -> Result<Vec<Piece>, CompileError> {
+        let read = pass_one(setting, Which::Prompt);
+        pass_two(&read.tokens, Which::Prompt, Who::default())
+            .map(|placed| placed.into_iter().map(|p| p.piece).collect())
+    }
+
+    fn table(index: u8, code: char) -> Piece {
+        Piece::Color(Color::Table { index, code })
+    }
+
+    fn text(t: &str) -> Vec<Piece> {
+        t.chars().map(Piece::Text).collect()
+    }
+
+    #[test]
+    fn pass_two_reads_colors_as_send_to_char_does() {
+        use Piece::{Color as Col, Text};
+        let cases: Vec<(&str, Vec<Piece>)> = vec![
+            // `(NNN) and `)NNN( are 256 colors.
+            ("%l(240)x", vec![Col(Color::Fg256(240)), Text('x')]),
+            ("%l)017(x", vec![Col(Color::Bg256(17)), Text('x')]),
+            ("%l(300)", vec![Col(Color::Fg256(300))]),
+            // A table code.
+            ("%l1x", vec![table(1, '1'), Text('x')]),
+            ("%L", vec![table(0, '`')]),
+            ("%l$", vec![table(12, '$')]),
+            // - and = print a tilde and a backtick.
+            ("%l-%l=", text("~`")),
+            // Any other character prints as itself.
+            ("%l[x", text("[x")),
+            ("%l(x", text("(x")),
+            // Not a whole 256 color. ( prints, and ) is a table color.
+            ("%l(24", text("(24")),
+            ("%l(2400)", text("(2400)")),
+            ("%l)24", [vec![table(12, ')')], text("24")].concat()),
+            // %l takes the next character whatever it is, so %l%h is a
+            // color and an h.
+            ("%l%h", [vec![table(13, '%')], text("h")].concat()),
+            // A backtick at the end drops.
+            ("ab%l", text("ab")),
+            // A lone backtick before a line end drops too.
+            ("a`%cb", [text("a"), vec![Piece::Break], text("b")].concat()),
+        ];
+        for (setting, want) in cases {
+            assert_eq!(printed(setting), Ok(want), "{setting}");
+        }
+    }
+
+    #[test]
+    fn the_help_example_reads_as_the_game_colors_it() {
+        let got = printed("<%l!%h%Lhp %l6%m%Lm %l3%v%Lmv>").unwrap();
+        let want = [
+            text("<"),
+            vec![table(9, '!'), Piece::Code(Code::Hp), table(0, '`')],
+            text("hp "),
+            vec![table(6, '6'), Piece::Code(Code::Mana), table(0, '`')],
+            text("m "),
+            vec![table(3, '3'), Piece::Code(Code::Move), table(0, '`')],
+            text("mv>"),
+        ]
+        .concat();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn a_color_that_runs_into_a_code_is_an_error() {
+        let error = |setting: &str| printed(setting).expect_err(setting);
+        let err = error("<`%h>");
+        assert_eq!(err.code, "%h");
+        assert_eq!(err.span, 1..4);
+        assert_eq!(
+            err.text,
+            "A color code runs into %h. Put a space between them in the game."
+        );
+        assert_eq!(err.to_string(), err.text);
+        // A 256 color the code's digits would finish.
+        assert_eq!(error("%l(%h").code, "%h");
+        assert_eq!(error("%l(2%f1").code, "%f1");
+        assert_eq!(error("%l)24%g").code, "%g");
+        // Across a code that prints nothing in pass one.
+        assert_eq!(error("`%q%x").code, "%x");
+        assert_eq!(error("`%n").code, "%n");
+        // A code that cannot print a digit leaves the 256 color unmade.
+        assert_eq!(
+            printed("%l(%S"),
+            Ok(vec![Piece::Text('('), Piece::Code(Code::Pos)])
+        );
+        // Three digits wait for a close no code prints.
+        assert!(printed("%l(240%h").is_ok());
+        // A whole color right before a code is fine.
+        assert!(printed("%l1%h").is_ok());
+    }
+
+    #[test]
+    fn pieces_keep_where_they_came_from() {
+        let read = pass_one("a%l(240)b%h", Which::Prompt);
+        let placed = pass_two(&read.tokens, Which::Prompt, Who::default()).unwrap();
+        let spans: Vec<Range<usize>> = placed.iter().map(|p| p.span.clone()).collect();
+        // The color spans %l and the four characters after it.
+        assert_eq!(spans, [0..1, 1..8, 8..9, 9..11]);
     }
 }
