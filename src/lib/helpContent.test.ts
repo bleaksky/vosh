@@ -213,6 +213,17 @@ describe('the help on reading your prompt with a pattern', () => {
   });
 });
 
+describe('the help on the prompt capture move', () => {
+  const paragraph =
+    "Each profile reads your prompt on its own. Vosh moves the capture trigger that `#prompt` made into each profile that draws your own prompt, turns the trigger off, and tells you once at launch. Profiles that draw nothing then show the game's prompt. An older version of Vosh shows the game's prompt in every profile until you turn `prompt-capture` on again under Automation. Back in this version, Vosh moves the capture into your profiles again and turns the trigger off.";
+
+  it('says what the move does and what an older version shows, in both places', () => {
+    const profiles = HELP_TOPICS.find((t) => t.number === '7.1');
+    expect(profiles?.body).toContain(paragraph);
+    expect(helpMd).toContain(`${paragraph}\n`);
+  });
+});
+
 describe('the help on forgetting passwords in the session log', () => {
   const logsParagraph =
     'Type `#logs forget-passwords` to count the lines that hold a password. Vosh says how many it found and in how many sessions, and it never shows the lines themselves. Type `#logs forget-passwords now` to blank them. Each one then reads `> (hidden)`, and Vosh rewrites `logs.sqlite` so the old text is gone from the disk too. On a large log this takes a few seconds, and new game text waits until it finishes. The rewrite needs free disk space about the size of `logs.sqlite`. When Vosh cannot finish it, the lines stay blanked, Vosh says so, and the next `#logs forget-passwords now` finishes the rewrite. A backup of your disk, like Time Machine, keeps its own copy of the old file.';
