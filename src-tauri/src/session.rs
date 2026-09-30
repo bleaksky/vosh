@@ -2261,15 +2261,10 @@ fn emit_counted<R: tauri::Runtime>(app: &AppHandle<R>, out: &Output, count: bool
     // so nothing reaches xterm without also reaching the grid.
     #[cfg(native_surface)]
     {
-        // Word-wrapped at the grid width, matching the frontend WordWrapper
-        // that xterm receives this same stream through. The grid does not
-        // find regions yet, so it takes a replace as a rewrite of the row
-        // the cursor is on, which is right for a region of one row.
-        if let Some(replace) = &out.replace {
-            crate::term_grid::feed_session_bytes(b"\x1b[2K\r");
-            crate::term_grid::feed_session_bytes(&replace.bytes);
-        }
-        crate::term_grid::feed_session_bytes(&out.bytes);
+        // Word wrapped at the grid width, matching the frontend
+        // WordWrapper that xterm receives this same stream through. The
+        // grid finds each region in its own rows, as xterm does (D22).
+        crate::term_grid::feed_session_output(out);
         crate::native_surface::request_redraw();
     }
     if let Err(e) = app.emit("session://output", payload) {

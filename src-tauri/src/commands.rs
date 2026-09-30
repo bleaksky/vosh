@@ -1623,7 +1623,7 @@ pub(crate) fn native_surface_set_visible(visible: bool) {
 pub(crate) fn native_surface_echo(text: String) {
     #[cfg(native_surface)]
     {
-        crate::term_grid::feed_bytes(text.as_bytes());
+        crate::term_grid::feed_local(text.as_bytes());
         crate::native_surface::request_redraw();
     }
     #[cfg(not(native_surface))]
@@ -1643,7 +1643,7 @@ pub(crate) async fn terminal_local_write(
 ) -> Result<(), String> {
     #[cfg(native_surface)]
     {
-        crate::term_grid::feed_bytes(text.as_bytes());
+        crate::term_grid::feed_local(text.as_bytes());
         crate::native_surface::request_redraw();
     }
     #[cfg(not(native_surface))]
@@ -3000,7 +3000,7 @@ pub(crate) async fn scrollback_load(
     let seeded_native = feed_native && crate::term_grid::claim_seed() && !bytes.is_empty();
     #[cfg(native_surface)]
     if seeded_native {
-        crate::term_grid::feed_bytes(&bytes);
+        crate::term_grid::feed_local(&bytes);
         crate::native_surface::request_redraw();
     }
     #[cfg(not(native_surface))]

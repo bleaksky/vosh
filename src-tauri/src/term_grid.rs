@@ -25,6 +25,7 @@ use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Term};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
 use regex::RegexBuilder;
+use vosh_prompt::stage::{Output, MARK_OSC};
 
 /// Render-relevant cell attributes, decoupled from alacritty's `Flags`.
 #[derive(Clone, Copy, Default)]
@@ -71,6 +72,31 @@ pub(crate) struct TermGrid {
     // Read by the deferred cell accessors (see the impl note below).
     #[allow(dead_code)]
     size: GridSize,
+    /// The region the last session write left open, if any (D22).
+    region: Option<Region>,
+    /// The start of a character the last session write split, held
+    /// until the rest arrives so it decodes whole before wrapping.
+    pending_utf8: Vec<u8>,
+}
+
+/// A region Vosh may replace later, such as the drawn prompt, as this
+/// grid holds it (D22). It starts at a mark `ESC ] 7717 ; o ; G BEL` and
+/// stays open while nothing else is written after it. The grid keeps
+/// the bytes it wrote after the mark, so it can count the rows they take
+/// at the width it has when a replace comes, a resize included.
+#[derive(Debug, Clone)]
+struct Region {
+    gen: u64,
+    /// The column the mark came at.
+    col: usize,
+    /// The mark came with the cursor held past the last column, so the
+    /// region starts at the next row.
+    wrap_pending: bool,
+    /// What the grid wrote after the mark, as it fed it.
+    bytes: Vec<u8>,
+    /// The live render to write back before anything else lands, when
+    /// the region shows a preview.
+    restore: Option<Vec<u8>>,
 }
 
 // The read side (size + cell accessors) is the grid API the M2c wgpu
@@ -88,6 +114,169 @@ impl TermGrid {
             term,
             parser: Processor::new(),
             size,
+            region: None,
+            pending_utf8: Vec::new(),
+        }
+    }
+
+    /// Write one session output, as `session://output` carries it to
+    /// xterm: its replace, then its bytes, then its restore (D22).
+    ///
+    /// A replace for the open region moves to the region's start,
+    /// erases to the end of the screen and writes its bytes there. For a
+    /// region something was written after, a fresh replace writes its
+    /// bytes on a new row, and any other is dropped. The bytes then
+    /// follow as they are, which closes the region. A restore rides the
+    /// region the output leaves open, and goes back over it before
+    /// anything else lands. Text is word wrapped at the grid width, as
+    /// xterm's is by the webview.
+    pub(crate) fn session_output(&mut self, out: &Output) {
+        if let Some(replace) = &out.replace {
+            // Half a character the last write held back belongs to the
+            // region the replace rewrites whole.
+            self.pending_utf8.clear();
+            let text = self.wrap(&String::from_utf8_lossy(&replace.bytes));
+            if let Some(to_start) = self.locate(replace.gen) {
+                self.region = None;
+                self.feed(&to_start);
+                self.feed_marked(text.as_bytes());
+            } else if replace.fresh && !replace.bytes.is_empty() {
+                self.restore_first();
+                self.region = None;
+                if !self.at_row_start() {
+                    self.feed(b"\r\n");
+                }
+                self.feed_marked(text.as_bytes());
+            }
+        }
+        if !out.bytes.is_empty() {
+            self.restore_first();
+            self.region = None;
+            let text = self.decode(&out.bytes);
+            if !text.is_empty() {
+                let text = self.wrap(&text);
+                self.feed_marked(text.as_bytes());
+            }
+        }
+        if let (Some(restore), Some(region)) = (&out.restore, self.region.as_mut()) {
+            region.restore = Some(restore.clone());
+        }
+    }
+
+    /// Write text the webview wrote itself, such as your typed echo. It
+    /// lands after the open region, so it closes it, and a preview the
+    /// region shows goes back to the live render first.
+    pub(crate) fn local_write(&mut self, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
+        self.restore_first();
+        self.region = None;
+        self.feed(bytes);
+    }
+
+    /// Put the live render back over the open region when it holds one.
+    /// The write that follows closes the region.
+    fn restore_first(&mut self) {
+        let Some(region) = self.region.as_mut() else {
+            return;
+        };
+        let Some(restore) = region.restore.take() else {
+            return;
+        };
+        let gen = region.gen;
+        if let Some(to_start) = self.locate(gen) {
+            let text = self.wrap(&String::from_utf8_lossy(&restore));
+            self.region = None;
+            self.feed(&to_start);
+            self.feed_marked(text.as_bytes());
+        }
+    }
+
+    /// The bytes that move the cursor to the start of open region `gen`
+    /// and erase from there to the end of the screen. Empty when the
+    /// region wrote nothing yet. None when `gen` is not open, or its
+    /// start has scrolled above the screen.
+    fn locate(&self, gen: u64) -> Option<Vec<u8>> {
+        let region = self.region.as_ref().filter(|r| r.gen == gen)?;
+        match region_extent(self.columns(), region)? {
+            Extent::Nothing => Some(Vec::new()),
+            Extent::Rows { above, col } => {
+                let cursor = self.term.grid().cursor.point.line.0;
+                if cursor < 0 || above > cursor as usize {
+                    return None;
+                }
+                Some(erase_back(above, col))
+            }
+        }
+    }
+
+    /// The cursor sits at the start of a row with nothing held.
+    fn at_row_start(&self) -> bool {
+        let cursor = &self.term.grid().cursor;
+        cursor.point.column.0 == 0 && !cursor.input_needs_wrap
+    }
+
+    /// `bytes` as text, holding back a character split at its end.
+    fn decode(&mut self, bytes: &[u8]) -> String {
+        self.pending_utf8.extend_from_slice(bytes);
+        match std::str::from_utf8(&self.pending_utf8) {
+            Ok(s) => {
+                let s = s.to_string();
+                self.pending_utf8.clear();
+                s
+            }
+            Err(e) => {
+                let valid = e.valid_up_to();
+                let s = String::from_utf8_lossy(&self.pending_utf8[..valid]).into_owned();
+                // Keep at most one code point of tail. Longer garbage is
+                // not a split character, so let it through lossily.
+                if self.pending_utf8.len() - valid <= 3 {
+                    self.pending_utf8.drain(..valid);
+                } else {
+                    self.pending_utf8.clear();
+                }
+                s
+            }
+        }
+    }
+
+    /// Word wrap `text` at the grid width. xterm receives the same
+    /// stream word wrapped by the webview's `WordWrapper`
+    /// (src/lib/wordWrap.ts). Without it the grid would break mid word
+    /// at its edge and the two renderers would disagree. Both run
+    /// `vosh_prompt::wrap` against one fixture.
+    fn wrap(&self, text: &str) -> String {
+        vosh_prompt::wrap::wrap_stream(text, self.columns())
+    }
+
+    /// Feed `bytes`, taking each region mark out and noting where it
+    /// came, so the bytes after it are that region's.
+    fn feed_marked(&mut self, bytes: &[u8]) {
+        let mut rest = bytes;
+        while let Some((start, end, gen)) = find_mark(rest) {
+            self.feed_region(&rest[..start]);
+            let cursor = &self.term.grid().cursor;
+            self.region = Some(Region {
+                gen,
+                col: cursor.point.column.0,
+                wrap_pending: cursor.input_needs_wrap,
+                bytes: Vec::new(),
+                restore: None,
+            });
+            rest = &rest[end..];
+        }
+        self.feed_region(rest);
+    }
+
+    /// Feed `bytes`, which belong to the open region when there is one.
+    fn feed_region(&mut self, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
+        self.feed(bytes);
+        if let Some(region) = self.region.as_mut() {
+            region.bytes.extend_from_slice(bytes);
         }
     }
 
@@ -225,6 +414,117 @@ impl TermGrid {
     }
 }
 
+/// Where a region starts, counted back from the cursor at its end.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Extent {
+    /// The region wrote nothing that moved the cursor on from its mark,
+    /// so a replace writes where the cursor is.
+    Nothing,
+    /// The region starts `above` rows over the cursor, at `col`.
+    Rows { above: usize, col: usize },
+}
+
+/// The most rows a region's layout is worked out for. A region taller
+/// than any screen has its start above it anyway.
+const EXTENT_ROWS: usize = 1024;
+
+/// Lay `region` out again at `columns` wide, the way this grid laid it
+/// out, and say where it starts. The count comes from the region's own
+/// bytes, so it holds at the grid's width now, after a resize too. The
+/// grid reflows rows it wrapped itself, and the word wrap's line ends
+/// are hard, so the region takes the rows a fresh layout gives it. None
+/// when the region is taller than [`EXTENT_ROWS`].
+fn region_extent(columns: usize, region: &Region) -> Option<Extent> {
+    if region.bytes.is_empty() {
+        return Some(Extent::Nothing);
+    }
+    let columns = columns.max(1);
+    // Each hard row, plus a row for every full width of bytes, which
+    // counts escape codes too, so it never falls short.
+    let hard_rows = region.bytes.split(|&b| b == b'\n').count();
+    let rows = hard_rows + (region.col + region.bytes.len()) / columns + 2;
+    if rows > EXTENT_ROWS {
+        return None;
+    }
+    let size = GridSize {
+        columns,
+        screen_lines: rows,
+    };
+    let config = Config {
+        scrolling_history: 0,
+        ..Config::default()
+    };
+    let mut term = Term::new(config, &size, NoopListener);
+    let mut parser: Processor = Processor::new();
+    let mut feed = |bytes: &[u8]| {
+        for &byte in bytes {
+            parser.advance(&mut term, byte);
+        }
+    };
+    // Put the cursor where the mark came, held past the last column when
+    // it was there, by writing the last cell.
+    if region.wrap_pending {
+        feed(format!("\x1b[{columns}Gx").as_bytes());
+    } else {
+        feed(format!("\x1b[{}G", region.col + 1).as_bytes());
+    }
+    feed(&region.bytes);
+    let end = term.grid().cursor.point.line.0.max(0) as usize;
+    let (start, col) = if region.wrap_pending {
+        (1, 0)
+    } else {
+        (0, region.col)
+    };
+    Some(if end < start {
+        Extent::Nothing
+    } else {
+        Extent::Rows {
+            above: end - start,
+            col,
+        }
+    })
+}
+
+/// Move the cursor from the end of a region to its start, `above` rows
+/// up at `col`, then erase to the end of the screen (D22 rule c).
+fn erase_back(above: usize, col: usize) -> Vec<u8> {
+    let mut out = b"\r".to_vec();
+    if above > 0 {
+        out.extend(format!("\x1b[{above}A").into_bytes());
+    }
+    if col > 0 {
+        out.extend(format!("\x1b[{col}C").into_bytes());
+    }
+    out.extend_from_slice(b"\x1b[0J");
+    out
+}
+
+/// The first region mark in `bytes`: where it starts, where it ends and
+/// its generation.
+fn find_mark(bytes: &[u8]) -> Option<(usize, usize, u64)> {
+    let prefix = format!("\x1b]{MARK_OSC};o;");
+    let prefix = prefix.as_bytes();
+    let mut from = 0;
+    while let Some(at) = bytes[from..]
+        .windows(prefix.len())
+        .position(|w| w == prefix)
+        .map(|i| from + i)
+    {
+        let digits = &bytes[at + prefix.len()..];
+        let len = digits.iter().take_while(|b| b.is_ascii_digit()).count();
+        if len > 0 && digits.get(len) == Some(&0x07) {
+            let gen = std::str::from_utf8(&digits[..len])
+                .ok()
+                .and_then(|s| s.parse().ok());
+            if let Some(gen) = gen {
+                return Some((at, at + prefix.len() + len + 1, gen));
+            }
+        }
+        from = at + 1;
+    }
+    None
+}
+
 static GRID: OnceLock<Mutex<Option<TermGrid>>> = OnceLock::new();
 
 fn grid_slot() -> &'static Mutex<Option<TermGrid>> {
@@ -253,64 +553,28 @@ pub(crate) fn claim_seed() -> bool {
     !SEEDED.swap(true, std::sync::atomic::Ordering::AcqRel)
 }
 
-/// Feed the live session's display bytes into the shared grid, creating
-/// it on first use. Called from the session loop. Cheap and lock-guarded;
-/// the renderer reads the same grid.
-pub(crate) fn feed_bytes(bytes: &[u8]) {
+/// Write text the webview wrote itself into the shared grid, creating it
+/// on first use: your typed echo, a notice, the restored scrollback. See
+/// [`TermGrid::local_write`]. Lock guarded, and the renderer reads the
+/// same grid.
+pub(crate) fn feed_local(bytes: &[u8]) {
     let Ok(mut slot) = grid_slot().lock() else {
         return;
     };
     let grid = slot.get_or_insert_with(|| TermGrid::new(80, 24));
-    grid.feed(bytes);
+    grid.local_write(bytes);
 }
 
-// UTF-8 tail carried between session chunks so a multi-byte character
-// split across two network reads decodes whole before wrapping.
-static WRAP_PENDING: Mutex<Vec<u8>> = Mutex::new(Vec::new());
-
-/// Feed the live session's display bytes word-wrapped at the grid width.
-/// xterm receives this stream word-wrapped by the frontend `WordWrapper`
-/// (src/lib/wordWrap.ts); without the same treatment the surface hard-wraps
-/// mid-word at the grid edge and the two renderers disagree. The wrap is
-/// `vosh_prompt::wrap`, which runs the same fixture as the frontend:
-/// complete lines wrap at the last whitespace before the width, the
-/// chunk's partial tail flushes immediately (parity with the frontend,
-/// which flushes per chunk so prompts appear), and ANSI escape sequences
-/// count zero width.
-pub(crate) fn feed_session_bytes(bytes: &[u8]) {
+/// Write one session output into the shared grid under its lock, word
+/// wrapped at the grid width, with its replace and restore. See
+/// [`TermGrid::session_output`]. Every `session://output` goes through
+/// here as well, so the grid holds what xterm holds.
+pub(crate) fn feed_session_output(out: &Output) {
     let Ok(mut slot) = grid_slot().lock() else {
         return;
     };
     let grid = slot.get_or_insert_with(|| TermGrid::new(80, 24));
-    let cols = grid.columns();
-    let text = {
-        let Ok(mut pending) = WRAP_PENDING.lock() else {
-            return;
-        };
-        pending.extend_from_slice(bytes);
-        match std::str::from_utf8(&pending) {
-            Ok(s) => {
-                let s = s.to_string();
-                pending.clear();
-                s
-            }
-            Err(e) => {
-                let valid = e.valid_up_to();
-                let s = String::from_utf8_lossy(&pending[..valid]).into_owned();
-                // Keep at most one code point of tail; longer garbage is
-                // not a split character, so let it through lossily.
-                if pending.len() - valid <= 3 {
-                    pending.drain(..valid);
-                } else {
-                    pending.clear();
-                }
-                s
-            }
-        }
-    };
-    if !text.is_empty() {
-        grid.feed(vosh_prompt::wrap::wrap_stream(&text, cols).as_bytes());
-    }
+    grid.session_output(out);
 }
 
 /// Current (display offset, scrollback length) of the shared grid, for the
@@ -641,9 +905,6 @@ pub(crate) fn lock_shared_grid_for_test() -> std::sync::MutexGuard<'static, ()> 
 /// [`lock_shared_grid_for_test`] held.
 #[cfg(test)]
 pub(crate) fn blank_shared_grid_for_test(columns: usize, screen_lines: usize) {
-    if let Ok(mut pending) = WRAP_PENDING.lock() {
-        pending.clear();
-    }
     *grid_slot().lock().unwrap() = Some(TermGrid::new(columns, screen_lines));
 }
 
@@ -734,10 +995,10 @@ mod tests {
     }
 
     #[test]
-    fn feed_bytes_creates_and_fills_the_shared_grid() {
+    fn a_local_write_creates_and_fills_the_shared_grid() {
         let _shared = lock_shared_grid_for_test();
         *grid_slot().lock().unwrap() = None;
-        feed_bytes(b"shared");
+        feed_local(b"shared");
         let slot = grid_slot().lock().unwrap();
         let g = slot.as_ref().expect("grid created on first feed");
         assert!(g.row_string(0).starts_with("shared"));
@@ -841,6 +1102,243 @@ mod tests {
         assert!(!flags.italic);
     }
 
+    /// A session output that writes `bytes`.
+    fn text(bytes: &[u8]) -> Output {
+        let mut out = Output::new(false);
+        out.text(bytes);
+        out
+    }
+
+    /// A session output that replaces region `gen` with `bytes`.
+    fn replace(gen: u64, bytes: &[u8], fresh: bool) -> Output {
+        let mut out = Output::new(false);
+        out.replace(gen, bytes.to_vec(), fresh);
+        out
+    }
+
+    fn marked(gen: u64, bytes: &[u8]) -> Vec<u8> {
+        [vosh_prompt::stage::mark(gen).as_slice(), bytes].concat()
+    }
+
+    /// The screen's rows, trailing blanks trimmed, up to the last row
+    /// that shows anything.
+    fn screen(g: &TermGrid) -> Vec<String> {
+        let mut rows: Vec<String> = (0..g.screen_lines())
+            .map(|line| g.row_string(line).trim_end().to_string())
+            .collect();
+        while rows.last().is_some_and(String::is_empty) {
+            rows.pop();
+        }
+        rows
+    }
+
+    #[test]
+    fn a_replace_rewrites_the_open_region_where_it_starts() {
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(
+            &[b"hungry\r\n".as_slice(), &marked(1, b"PROMPT")].concat(),
+        ));
+        g.session_output(&replace(1, &marked(2, b"NEW"), false));
+        assert_eq!(screen(&g), ["hungry", "NEW"]);
+        // The replace opened region 2, so the next one lands too.
+        g.session_output(&replace(2, &marked(3, b"LAST"), false));
+        assert_eq!(screen(&g), ["hungry", "LAST"]);
+        // Region 2 is gone, so a replace for it is dropped.
+        g.session_output(&replace(2, b"STALE", false));
+        assert_eq!(screen(&g), ["hungry", "LAST"]);
+    }
+
+    #[test]
+    fn a_replace_after_a_local_write_is_dropped() {
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(
+            &[b"hungry\r\n".as_slice(), &marked(1, b"PROMPT")].concat(),
+        ));
+        g.local_write(b"look\r\n");
+        g.session_output(&replace(1, &marked(2, b"NEW"), false));
+        // The echo stays and the prompt shows once.
+        assert_eq!(screen(&g), ["hungry", "PROMPTlook"]);
+    }
+
+    #[test]
+    fn a_replace_after_other_output_is_dropped_unless_fresh() {
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(&marked(1, b"abc")));
+        g.session_output(&text(b"xyz"));
+        g.session_output(&replace(1, b"dropped", false));
+        assert_eq!(screen(&g), ["abcxyz"]);
+        // A fresh one goes on a new row, since the cursor is mid row.
+        g.session_output(&replace(1, b"abcdef\r\n", true));
+        assert_eq!(screen(&g), ["abcxyz", "abcdef"]);
+        // At the start of a row it writes there.
+        g.session_output(&text(&marked(2, b"You are hun")));
+        g.local_write(b"look\r\n");
+        g.session_output(&replace(2, b"You are hungry.\r\n", true));
+        assert_eq!(
+            screen(&g),
+            ["abcxyz", "abcdef", "You are hunlook", "You are hungry."]
+        );
+    }
+
+    #[test]
+    fn a_line_completing_a_painted_partial_replaces_it() {
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(&marked(1, b"You are hun")));
+        let mut next = replace(1, b"You are hungry.\r\n", true);
+        next.text(b"You feel better.\r\n");
+        g.session_output(&next);
+        assert_eq!(screen(&g), ["You are hungry.", "You feel better."]);
+        // The completed line carries no mark, so nothing stays open.
+        g.session_output(&replace(1, b"again", false));
+        assert_eq!(screen(&g), ["You are hungry.", "You feel better."]);
+    }
+
+    #[test]
+    fn a_region_the_grid_wrapped_is_erased_whole() {
+        let mut g = TermGrid::new(12, 10);
+        g.session_output(&text(b"before\r\n"));
+        g.session_output(&text(&marked(1, b"[1020/1020hp 800/800mn 930/930mv]")));
+        assert_eq!(screen(&g).len(), 4, "{:?}", screen(&g));
+        g.session_output(&replace(1, &marked(2, b"NEW"), false));
+        assert_eq!(screen(&g), ["before", "NEW"]);
+    }
+
+    #[test]
+    fn a_replace_after_a_resize_counts_the_rows_at_the_new_width() {
+        // A full screen, as in the app, so the prompt sits on the last row.
+        let mut g = TermGrid::new(40, 6);
+        g.session_output(&text(b"one\r\ntwo\r\nthree\r\nfour\r\nbefore\r\n"));
+        g.session_output(&text(&marked(1, b"[1020/1020hp 800/800mn 930/930mv]")));
+        assert_eq!(
+            screen(&g),
+            [
+                "one",
+                "two",
+                "three",
+                "four",
+                "before",
+                "[1020/1020hp 800/800mn 930/930mv]"
+            ]
+        );
+        // Narrower, the prompt takes three rows.
+        g.resize(12, 6);
+        assert_eq!(
+            screen(&g),
+            [
+                "three",
+                "four",
+                "before",
+                "[1020/1020hp",
+                " 800/800mn 9",
+                "30/930mv]"
+            ]
+        );
+        g.session_output(&replace(1, &marked(2, b"NEW"), false));
+        assert_eq!(screen(&g), ["three", "four", "before", "NEW"]);
+        // A prompt the word wrap broke keeps its break when the grid
+        // widens again.
+        g.session_output(&replace(2, &marked(3, b"[1020/1020hp 800/800mn]"), false));
+        assert_eq!(
+            screen(&g),
+            ["three", "four", "before", "[1020/1020hp", "800/800mn]"]
+        );
+        g.resize(40, 6);
+        g.session_output(&replace(3, &marked(4, b"WIDE"), false));
+        let rows = screen(&g);
+        assert_eq!(rows[rows.len() - 2..], ["before", "WIDE"], "{rows:?}");
+    }
+
+    #[test]
+    fn a_region_a_resize_pushes_above_the_screen_counts_as_closed() {
+        // A nearly empty screen: the narrower grid pushes the rows over
+        // the cursor into history, where the region's start is out of
+        // reach, so a replace for it is dropped and a fresh one writes on
+        // a new row.
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(&marked(1, b"[1020/1020hp 800/800mn 930/930mv]")));
+        g.resize(12, 10);
+        let before = screen(&g);
+        g.session_output(&replace(1, b"dropped", false));
+        assert_eq!(screen(&g), before);
+        g.session_output(&replace(1, b"fresh", true));
+        assert_eq!(screen(&g).last().map(String::as_str), Some("fresh"));
+    }
+
+    #[test]
+    fn a_mark_after_a_full_row_starts_its_region_on_the_next_row() {
+        let mut g = TermGrid::new(10, 10);
+        g.local_write(b"0123456789");
+        g.session_output(&text(&marked(1, b"PROMPT")));
+        assert_eq!(screen(&g), ["0123456789", "PROMPT"]);
+        g.session_output(&replace(1, &marked(2, b"NEW"), false));
+        assert_eq!(screen(&g), ["0123456789", "NEW"]);
+        // A region that wrote nothing yet takes the replace where it is.
+        g.local_write(b"\r\n0123456789");
+        g.session_output(&text(&marked(3, b"")));
+        g.session_output(&replace(3, &marked(4, b"HERE"), false));
+        assert_eq!(screen(&g), ["0123456789", "NEW", "0123456789", "HERE"]);
+    }
+
+    #[test]
+    fn a_region_that_starts_mid_row_keeps_what_came_before_it() {
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&text(b"<10hp> "));
+        g.session_output(&text(&marked(1, b"You are hun")));
+        g.session_output(&replace(1, b"You are hungry.\r\n", true));
+        assert_eq!(screen(&g), ["<10hp> You are hungry."]);
+    }
+
+    #[test]
+    fn a_restore_goes_back_before_anything_else_lands() {
+        // Before a local write.
+        let mut g = TermGrid::new(40, 10);
+        let mut preview = text(&marked(1, b"PREVIEW"));
+        preview.restore = Some(b"LIVE".to_vec());
+        g.session_output(&preview);
+        assert_eq!(screen(&g), ["PREVIEW"]);
+        g.local_write(b"look\r\n");
+        assert_eq!(screen(&g), ["LIVElook"]);
+
+        // Before session output.
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&preview);
+        g.session_output(&text(b"\r\nYou flee!\r\n"));
+        assert_eq!(screen(&g), ["LIVE", "You flee!"]);
+
+        // A replace of the region itself takes its place, and its own
+        // restore rides the region it opens.
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&preview);
+        let mut again = replace(1, &marked(2, b"OTHER"), false);
+        again.restore = Some(b"LIVE2".to_vec());
+        g.session_output(&again);
+        assert_eq!(screen(&g), ["OTHER"]);
+        g.session_output(&replace(2, &marked(3, b"PLAIN"), false));
+        g.local_write(b"look\r\n");
+        assert_eq!(screen(&g), ["PLAINlook"]);
+    }
+
+    #[test]
+    fn a_split_character_decodes_whole_across_outputs() {
+        let mut g = TermGrid::new(40, 10);
+        let word = "caf\u{e9}".as_bytes();
+        g.session_output(&text(&word[..4]));
+        g.session_output(&text(&word[4..]));
+        assert_eq!(screen(&g), ["caf\u{e9}"]);
+    }
+
+    #[test]
+    fn marks_are_found_whole_and_only_whole() {
+        let mark = vosh_prompt::stage::mark(42);
+        let bytes = [b"ab".as_slice(), &mark, b"cd"].concat();
+        assert_eq!(find_mark(&bytes), Some((2, 2 + mark.len(), 42)));
+        assert_eq!(find_mark(b"\x1b]7717;o;\x07"), None);
+        assert_eq!(find_mark(b"\x1b]7717;o;12"), None);
+        assert_eq!(find_mark(b"plain"), None);
+        assert_eq!(erase_back(0, 0), b"\r\x1b[0J");
+        assert_eq!(erase_back(2, 7), b"\r\x1b[2A\x1b[7C\x1b[0J");
+    }
+
     // The wrap itself runs fixtures/wrap/cases.json in crates/prompt and in
     // src/lib/wordWrap.test.ts.
     #[test]
@@ -851,7 +1349,7 @@ mod tests {
         };
         *slot = Some(TermGrid::new(10, 24));
         drop(slot);
-        feed_session_bytes(b"the quick brown fox\r\n");
+        feed_session_output(&text(b"the quick brown fox\r\n"));
         let slot = grid_slot().lock().unwrap();
         let g = slot.as_ref().unwrap();
         assert!(g.row_string(0).starts_with("the quick"));
