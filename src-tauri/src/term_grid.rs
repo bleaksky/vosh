@@ -105,14 +105,16 @@ struct LiftTrack {
 pub(crate) const LIFT_URI: &str = "vosh:lift";
 
 /// One row of a lift as the grid holds it: the lift, the grid line, the
-/// first tagged column, and one past the last tagged cell that shows a
-/// glyph.
+/// first tagged column, one past the last tagged cell that shows a glyph,
+/// and whether anything outside the lift shows after it on the row, such
+/// as your echo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LiftSpan {
     pub id: u64,
     pub line: i32,
     pub first: usize,
     pub end: usize,
+    pub after: bool,
 }
 
 /// A region Vosh may replace later, such as the drawn prompt, as this
@@ -537,25 +539,10 @@ impl TermGrid {
             let start = spans.len();
             for col in 0..cols {
                 let cell = &row[Column(col)];
-                if cell.extra.is_none() {
-                    continue;
-                }
-                let Some(link) = cell.hyperlink() else {
+                let Some(id) = lift_of(cell) else {
                     continue;
                 };
-                if link.uri() != LIFT_URI {
-                    continue;
-                }
-                let Some(id) = link
-                    .id()
-                    .strip_prefix("vosh-lift-")
-                    .and_then(|n| n.parse().ok())
-                else {
-                    continue;
-                };
-                let shows = cell.c != ' '
-                    && cell.c != '\0'
-                    && !cell.flags.contains(Flags::WIDE_CHAR_SPACER);
+                let shows = shows_glyph(cell);
                 let width = if cell.flags.contains(Flags::WIDE_CHAR) {
                     2
                 } else {
@@ -572,8 +559,16 @@ impl TermGrid {
                         line,
                         first: col,
                         end: if shows { col + width } else { col },
+                        after: false,
                     }),
                 }
+            }
+            // Anything outside a lift that shows after it on the row.
+            for span in &mut spans[start..] {
+                span.after = (span.end..cols).any(|col| {
+                    let cell = &row[Column(col)];
+                    shows_glyph(cell) && lift_of(cell) != Some(span.id)
+                });
             }
         }
         spans.retain(|s| s.end > s.first);
@@ -749,6 +744,22 @@ impl TermGrid {
         let empty_below = (used..lines).all(|line| grid[Line(line as i32)].is_clear());
         (used < lines && empty_below).then_some(used)
     }
+}
+
+/// The lift a cell of a lifted prompt belongs to, from its tag.
+fn lift_of(cell: &Cell) -> Option<u64> {
+    cell.extra.as_ref()?;
+    let link = cell.hyperlink()?;
+    if link.uri() != LIFT_URI {
+        return None;
+    }
+    link.id().strip_prefix("vosh-lift-")?.parse().ok()
+}
+
+/// The cell shows a glyph: not a blank and not the spacer after a wide
+/// character.
+fn shows_glyph(cell: &Cell) -> bool {
+    cell.c != ' ' && cell.c != '\0' && !cell.flags.contains(Flags::WIDE_CHAR_SPACER)
 }
 
 /// Where a region starts, counted back from the cursor at its end.
@@ -1539,6 +1550,23 @@ mod tests {
         let grid = g.term.grid();
         assert!(grid[Line(3)][Column(8)].hyperlink().is_none());
         assert!(grid[Line(3)][Column(9)].hyperlink().is_none());
+    }
+
+    #[test]
+    fn a_lift_row_says_when_your_echo_shows_after_it() {
+        let mut g = TermGrid::new(40, 10);
+        let mut prompt = lift(
+            3,
+            &[b"Tester: [===]\r\n".as_slice(), &marked(4, b"<1020hp>")].concat(),
+        );
+        prompt.push(b' ');
+        g.session_output(&text(&prompt));
+        let after = |g: &TermGrid| -> Vec<bool> {
+            g.lift_spans(0, 10).into_iter().map(|s| s.after).collect()
+        };
+        assert_eq!(after(&g), [false, false], "nothing after it yet");
+        g.local_write(b"look\r\n");
+        assert_eq!(after(&g), [false, true]);
     }
 
     #[test]
