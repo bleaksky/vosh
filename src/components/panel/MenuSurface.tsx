@@ -188,6 +188,10 @@ interface ItemProps {
   /** Pointer entered the row. Rows without a submenu use it to close
    *  a sibling's submenu. */
   onHover?: () => void;
+  /** The row took focus, from the pointer or the arrow keys. A menu
+   *  with several submenus uses it to close the ones this row does not
+   *  open. */
+  onFocus?: () => void;
   itemRef?: (el: HTMLButtonElement | null) => void;
 }
 
@@ -200,6 +204,7 @@ export function MenuItem({
   trailing,
   submenu,
   onHover,
+  onFocus,
   itemRef,
 }: ItemProps) {
   return (
@@ -214,6 +219,7 @@ export function MenuItem({
         aria-expanded={submenu ? submenu.open : undefined}
         aria-controls={submenu?.open ? submenu.controls : undefined}
         tabIndex={-1}
+        onFocus={onFocus}
         onPointerMove={(e) => {
           if (disabled) return;
           if (document.activeElement !== e.currentTarget) e.currentTarget.focus();
