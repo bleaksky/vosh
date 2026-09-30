@@ -207,6 +207,77 @@ describe('AffectsPaneView', () => {
     expect(cellsOf(html)).toEqual(['up 9 sanc , 9 hours']);
   });
 
+  it('keeps the dot on a body with no marker attribute, as before the choice', () => {
+    const html = draw(ERELEI, false, ERELEI_TRACKED, BOARD_BOX);
+    expect(html).not.toContain('data-affects-marker');
+    const dot = renderToStaticMarkup(
+      <PaneLeafContext.Provider value={LEAF}>
+        <AffectsPaneView
+          current={ERELEI}
+          tracked={ERELEI_TRACKED}
+          hidden={false}
+          box={BOARD_BOX}
+          marker="dot"
+        />
+      </PaneLeafContext.Provider>,
+    );
+    expect(dot).toBe(html);
+  });
+
+  it('names the marker on the body, and every cell keeps its state mark', () => {
+    for (const marker of ['square', 'plus_minus', 'none'] as const) {
+      const html = renderToStaticMarkup(
+        <PaneLeafContext.Provider value={LEAF}>
+          <AffectsPaneView
+            current={ERELEI}
+            tracked={ERELEI_TRACKED}
+            hidden={false}
+            box={BOARD_BOX}
+            marker={marker}
+          />
+        </PaneLeafContext.Provider>,
+      );
+      expect(html).toContain(
+        `<div class="pane-body" style="--affect-hours-ch:3" data-affects-marker="${marker}">`,
+      );
+      // The state still rides on each mark, so color carries it in
+      // every shape.
+      expect(cellsOf(html).slice(0, 3)).toEqual([
+        'up + mounted , permanent',
+        'danger 1(danger) sanctuary , 1 hour, running out',
+        'missing - bless , missing',
+      ]);
+    }
+  });
+
+  it('paints every marker shape in the color of its state', () => {
+    expect(rule('.pane-affect-mark')).toContain('--mark: var(--success)');
+    expect(rule('.pane-affect-mark.is-up')).toContain('background: var(--mark)');
+    expect(rule('.pane-affect-mark.is-warn')).toContain('--mark: var(--warn)');
+    expect(rule('.pane-affect-mark.is-danger')).toContain('--mark: var(--danger)');
+    // The ring keeps its 1.25 px width.
+    const missing = rule('.pane-affect-mark.is-missing');
+    expect(missing).toContain('--mark: var(--danger)');
+    expect(missing).toContain('border: 1.25px solid var(--mark)');
+    expect(rule("[data-affects-marker='square'] .pane-affect-mark:not(.is-harmful)")).toContain(
+      'border-radius: 1.5px',
+    );
+    expect(
+      rule("[data-affects-marker='plus_minus'] .pane-affect-mark:not(.is-harmful)::before"),
+    ).toContain('height: 1.5px');
+    // A plus while you have it: the upright stroke, which a minus drops.
+    expect(panelCss).toMatch(
+      /\.pane-affect-mark:not\(\.is-harmful\):not\(\.is-missing\)::after \{\s*left: 3\.25px;\s*top: 0;\s*width: 1\.5px;\s*height: 8px;/,
+    );
+    // No mark sets the hours at the text edge.
+    expect(rule("[data-affects-marker='none'] .pane-affect-mark")).toContain('display: none');
+    expect(rule("[data-affects-marker='none'] .pane-affect-hours")).toContain('margin-left: 0');
+    // The marker rules come after the base rules they refine.
+    expect(panelCss.indexOf("[data-affects-marker='none'] .pane-affect-hours {")).toBeGreaterThan(
+      panelCss.indexOf('.pane-affect-hours {'),
+    );
+  });
+
   it('sets the names and the hours in the terminal face', () => {
     expect(rule('.pane-affect-name')).toContain('font-family: var(--font-mud');
     expect(rule('.pane-affect-hours')).toContain('font-family: var(--font-mud');
