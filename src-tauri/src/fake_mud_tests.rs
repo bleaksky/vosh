@@ -1284,3 +1284,88 @@ async fn affect_fulls_follow_a_cast_and_come_back_at_the_next_login() {
     .await;
     h.finish(grid).await;
 }
+
+/// The fulls saved for Tester on the fake game, from the file.
+fn saved_fulls(h: &Harness) -> crate::affect_full::FullMap {
+    let file = h.dir.path().join(crate::affect_full::FILE_NAME);
+    let text = std::fs::read_to_string(file).expect("the fulls are written");
+    let table: toml::Table = text.parse().expect("the file reads");
+    let key = format!("127.0.0.1:{} tester", h.port);
+    table["characters"]
+        .get(key.as_str())
+        .and_then(toml::Value::as_table)
+        .map(|t| {
+            t.iter()
+                .filter_map(|(k, v)| Some((k.clone(), v.as_integer()?)))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn affect_fulls_outlast_quitting_to_the_menu_and_out_of_the_game() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.state
+        .affect_full
+        .set_path(h.dir.path().join(crate::affect_full::FILE_NAME));
+    h.connect().await;
+    h.until("the login fulls", |h| {
+        h.state.affect_full.map() == fulls(&[("armor", 44), ("bless", 6)])
+    })
+    .await;
+    h.type_line("cast 48 armor").await;
+    h.type_line("tick").await;
+    h.type_line("tick").await;
+    h.until_shown("You cast armor.").await;
+    h.until("two ticks", |h| {
+        h.screen()
+            .iter()
+            .filter(|r| r.contains("The hour passes."))
+            .count()
+            == 2
+    })
+    .await;
+    let want = fulls(&[("armor", 48), ("bless", 6)]);
+    assert_eq!(h.state.affect_full.map(), want);
+
+    // quit menu: the game takes each affect off in turn, and the pane
+    // empties with it, on the same link.
+    h.type_line("quit menu").await;
+    h.until_shown("return to your account menu").await;
+    h.until("the pane empties", |h| h.state.affect_full.map().is_empty())
+        .await;
+    // Play Tester again: the game sends the affects the pfile kept, with
+    // armor at 46 and bless at 4, and each keeps its full.
+    h.type_line("").await;
+    h.until("the fulls come back", |h| h.state.affect_full.map() == want)
+        .await;
+
+    // quit: the same lists, then the game closes the link. Vosh writes
+    // the fulls you quit with, not the empty list the game ended on.
+    h.type_line("quit").await;
+    h.until("the game closes the link", |h| {
+        h.events("session://state")
+            .iter()
+            .any(|e| e["kind"] == "disconnected")
+    })
+    .await;
+    h.until("the fulls are saved", |h| {
+        h.state.affect_full.map().is_empty() && saved_fulls(h) == want
+    })
+    .await;
+    h.disconnect().await;
+
+    // Log back in with the affects as the game kept them.
+    h.fake.lock().expect("the options").affects = vec![
+        vosh_prompt::testkit::Affect::spell("bless", 4),
+        vosh_prompt::testkit::Affect::spell("armor", 46),
+    ];
+    h.connect().await;
+    h.until("the same fulls", |h| h.state.affect_full.map() == want)
+        .await;
+    h.finish(grid).await;
+}
