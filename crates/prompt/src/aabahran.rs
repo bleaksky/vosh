@@ -12,6 +12,8 @@
 //!   pattern Vosh reads it with.
 //! - [`colors`] holds the backtick colors the game sends and rebuilds
 //!   your codes from them.
+//! - [`shapes`] compiles your settings into the shapes Vosh recognizes
+//!   your prompt by, with the settle flag of each.
 //!
 //! Every warning carries the span of the setting it is about, as the
 //! game stores it, and a sentence the card and `#prompt` show as they
@@ -20,6 +22,9 @@
 pub mod codes;
 pub mod colors;
 pub mod lex;
+pub mod shapes;
+
+pub use shapes::{compile, Compiled, Origin, Shape, ShapeKind, ShapeLine};
 
 use std::fmt;
 use std::ops::Range;
