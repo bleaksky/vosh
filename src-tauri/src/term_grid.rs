@@ -25,7 +25,7 @@ use alacritty_terminal::term::cell::{Cell, Flags, Hyperlink};
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor};
 use regex::RegexBuilder;
-use vosh_prompt::stage::{Output, MARK_OSC};
+use vosh_prompt::stage::{close_pin_row, Output, MARK_OSC};
 
 /// Render-relevant cell attributes, decoupled from alacritty's `Flags`.
 #[derive(Clone, Copy, Default)]
@@ -82,6 +82,9 @@ pub(crate) struct TermGrid {
     pending_hold: Vec<u8>,
     /// Lifts whose start mark this output fed, with what it fed since.
     lift_tracks: Vec<LiftTrack>,
+    /// The row a pinned prompt left is where the next write lands, so the
+    /// line end that would end it writes nothing.
+    pin_row: bool,
 }
 
 /// A lift the grid saw the start mark of, while your prompt shows lifted:
@@ -151,6 +154,7 @@ impl TermGrid {
             pending_utf8: Vec::new(),
             pending_hold: Vec::new(),
             lift_tracks: Vec::new(),
+            pin_row: false,
         }
     }
 
@@ -171,7 +175,9 @@ impl TermGrid {
     /// which lies before them. This output's own hold then waits. An
     /// output that writes nothing at the cursor keeps the longer of the
     /// two holds, so a pulse that pinned a prompt and wrote nothing never
-    /// stacks empty rows.
+    /// stacks empty rows. While the row a pinned prompt left is open, the
+    /// line end that would end it writes nothing, and the output says
+    /// whether the row is open after it.
     pub(crate) fn session_output(&mut self, out: &Output) {
         // A lift's two marks ride in one output.
         self.lift_tracks.clear();
@@ -192,6 +198,7 @@ impl TermGrid {
                 if !self.at_row_start() {
                     self.feed(b"\r\n");
                 }
+                let text = self.land(text);
                 self.feed_marked(text.as_bytes());
                 wrote = true;
             }
@@ -201,6 +208,7 @@ impl TermGrid {
             self.write_hold();
             self.region = None;
             let text = self.decode(&out.bytes);
+            let text = self.land(text);
             if !text.is_empty() {
                 let text = self.wrap(&text);
                 self.feed_marked(text.as_bytes());
@@ -209,6 +217,9 @@ impl TermGrid {
         }
         if wrote || out.hold.len() > self.pending_hold.len() {
             self.pending_hold.clone_from(&out.hold);
+        }
+        if let Some(open) = out.pin_row {
+            self.pin_row = open;
         }
         if let (Some(restore), Some(region)) = (&out.restore, self.region.as_mut()) {
             region.restore = Some(restore.clone());
@@ -227,7 +238,29 @@ impl TermGrid {
         self.restore_first();
         self.write_hold();
         self.region = None;
-        self.feed(bytes);
+        let bytes = if self.pin_row {
+            let (rest, closed) = close_pin_row(bytes);
+            self.pin_row = !closed;
+            rest
+        } else {
+            std::borrow::Cow::Borrowed(bytes)
+        };
+        self.feed(&bytes);
+    }
+
+    /// `text` as it lands at the cursor: without the line end that would
+    /// end the row a pinned prompt left, while that row is open.
+    fn land(&mut self, text: String) -> String {
+        if !self.pin_row {
+            return text;
+        }
+        let (rest, closed) = close_pin_row(text.as_bytes());
+        self.pin_row = !closed;
+        match rest {
+            std::borrow::Cow::Borrowed(_) => text,
+            // Only a line end and a carriage return went, so it is text.
+            std::borrow::Cow::Owned(rest) => String::from_utf8(rest).unwrap_or_default(),
+        }
     }
 
     /// Write the line ends the session held back, which closes the open
@@ -1958,7 +1991,7 @@ mod tests {
                 .recognize(GAME.as_bytes(), GAME, End::Line)
                 .expect("the capture reads the game's prompt");
             stage.draw(&mut out, block, None, b"", drawn);
-            stage.finish(&out);
+            stage.finish(&mut out);
             out
         }
 
@@ -2088,7 +2121,7 @@ mod tests {
             let mut first = Output::new(false);
             first.text(b"You are hungry.\r\n");
             let painted = stage.paint_partial(&mut first, b"[1020/10", None);
-            stage.finish(&first);
+            stage.finish(&mut first);
             g.session_output(&first);
             assert_eq!(screen(&g), ["You are", "hungry.", "[1020/10"]);
             let mut second = Output::new(false);

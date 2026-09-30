@@ -148,6 +148,15 @@ pub struct Output {
     /// anything before it: whatever this output writes later takes it
     /// back first.
     pub hold: Vec<u8>,
+    /// While your prompt shows pinned, whether the row the pinned prompt
+    /// would have held is still where the next thing lands once this
+    /// output is written, so each renderer drops the line end that would
+    /// end it (see [`close_pin_row`]). None in the text and lifted, where
+    /// renderers keep every byte.
+    pub pin_row: Option<bool>,
+    /// The row a prompt this output pinned left is still open, so the
+    /// line end the next write would end it with writes nothing.
+    row_open: bool,
     /// The open row is no longer the last thing on screen.
     closed: bool,
     /// Output from elsewhere reached the terminal before this output.
@@ -212,14 +221,25 @@ impl Output {
     }
 
     /// Append `bytes` after everything written so far, held line ends
-    /// included.
+    /// included. After a pinned prompt, the line end that would end its
+    /// row goes, since the row is not in the text.
     fn push(&mut self, bytes: &[u8]) {
         if bytes.is_empty() {
             return;
         }
+        let bytes = if self.row_open {
+            let (rest, closed) = close_pin_row(bytes);
+            self.row_open = !closed;
+            rest
+        } else {
+            std::borrow::Cow::Borrowed(bytes)
+        };
+        if bytes.is_empty() {
+            return;
+        }
         self.unhold();
-        self.bytes.extend_from_slice(bytes);
-        if shows_anything(bytes) {
+        self.bytes.extend_from_slice(&bytes);
+        if shows_anything(&bytes) {
             self.visible += 1;
         }
     }
@@ -306,6 +326,37 @@ fn shows_anything(bytes: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// What `bytes` does to the row a pinned prompt left open. The prompt is
+/// not in the text, so the line end that would end its row writes
+/// nothing: the first one, when only escape sequences and carriage
+/// returns come before it. Returns the bytes left to write, and whether
+/// the row is closed, by that line end or by anything else that lands on
+/// it first. Escape sequences alone leave it open. Both renderers apply
+/// it to what reaches them from outside the session's reads, such as a
+/// framed echo or an error notice, and the stage to its own writes after
+/// a pin in the same output.
+pub fn close_pin_row(bytes: &[u8]) -> (std::borrow::Cow<'_, [u8]>, bool) {
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            0x1b => i = escape_end(bytes, i),
+            b'\r' => i += 1,
+            b'\n' => {
+                let start = if i > 0 && bytes[i - 1] == b'\r' {
+                    i - 1
+                } else {
+                    i
+                };
+                let mut rest = bytes[..start].to_vec();
+                rest.extend_from_slice(&bytes[i + 1..]);
+                return (std::borrow::Cow::Owned(rest), true);
+            }
+            _ => return (std::borrow::Cow::Borrowed(bytes), true),
+        }
+    }
+    (std::borrow::Cow::Borrowed(bytes), false)
 }
 
 /// Where the escape sequence that starts at `at` ends: after the final
@@ -646,15 +697,16 @@ impl Swallow {
         }
     }
 
-    /// Something showed in `out` since it armed, or `out` came from
-    /// elsewhere.
+    /// Something showed in `out` since it armed, or `out` is a later
+    /// output that came after output from elsewhere. Output from
+    /// elsewhere that came before the output it armed in came before the
+    /// prompt, so it ends nothing.
     fn ended_by(self, out: &Output) -> bool {
-        let seen = if out.id.0 == self.output {
-            self.seen
+        if out.id.0 == self.output {
+            out.visible > self.seen
         } else {
-            0
-        };
-        out.other || out.visible > seen
+            out.other || out.visible > 0
+        }
     }
 }
 
@@ -847,10 +899,23 @@ impl Stage {
     }
 
     /// Catch up with `out` before it goes out, so bytes written after
-    /// the open row close it. The session calls it at the end of every
+    /// the open row close it, and say whether a pinned prompt's row is
+    /// still open after it. The session calls it at the end of every
     /// read.
-    pub fn finish(&mut self, out: &Output) {
+    pub fn finish(&mut self, out: &mut Output) {
         self.sync(out);
+        self.seal(out);
+    }
+
+    /// While your prompt shows pinned, or leaves Pinned, tell the
+    /// renderers whether the pinned prompt's row is open after `out`.
+    fn seal(&self, out: &mut Output) {
+        if self.show == PromptShow::Pinned
+            || self.shown_as == PromptShow::Pinned
+            || out.pin.is_some()
+        {
+            out.pin_row = Some(self.swallow.is_some());
+        }
     }
 
     /// Bytes written after the open row close it. Output from elsewhere,
@@ -1229,6 +1294,7 @@ impl Stage {
         out.hold_tail();
         self.open = None;
         self.swallow = (block.final_line().end != End::SettledLine).then(|| Swallow::at(out));
+        out.row_open = self.swallow.is_some();
         out.pin = Some(body.clone());
         self.pinned = Some(body);
         self.shown_as = PromptShow::Pinned;
@@ -1340,6 +1406,13 @@ impl Stage {
     /// that. A repaint is dropped by a renderer that wrote anything after
     /// the row.
     pub fn repaint(&mut self, out: &mut Output, rendered: Option<&str>) {
+        self.repaint_row(out, rendered);
+        self.seal(out);
+    }
+
+    /// [`Stage::repaint`], before the renderers hear about the pinned
+    /// prompt's row.
+    fn repaint_row(&mut self, out: &mut Output, rendered: Option<&str>) {
         self.sync(out);
         match (self.shown_as, self.show) {
             (PromptShow::Pinned, PromptShow::Pinned) => return self.repaint_pinned(out, rendered),
@@ -1420,6 +1493,7 @@ impl Stage {
         out.replace(open.gen, Vec::new(), false);
         self.open_lift = None;
         self.swallow = (!settled_line).then(|| Swallow::at(out));
+        out.row_open = self.swallow.is_some();
         out.pin = Some(body.clone());
         self.pinned = Some(body);
         self.shown_as = PromptShow::Pinned;
@@ -2048,7 +2122,7 @@ mod tests {
         let mut out = Output::new(false);
         stage.draw(&mut out, block_of(&stage), None, b"", "DRAWN");
         out.text(b"You flee!\r\n");
-        stage.finish(&out);
+        stage.finish(&mut out);
         let mut later = Output::new(false);
         stage.repaint(&mut later, None);
         assert!(later.is_empty());
@@ -2079,14 +2153,14 @@ mod tests {
         let mut out = Output::new(false);
         stage.draw(&mut out, block_of(&stage), None, b"", "DRAWN");
         stage.line(&mut out, b"spam", "spam", None, b"");
-        stage.finish(&out);
+        stage.finish(&mut out);
         assert!(stage.open_row().is_some());
 
         // A prompt drawn after other output in the same read stays open.
         let mut out = Output::new(true);
         out.text(b"text\r\n");
         stage.draw(&mut out, block_of(&stage), None, b"", "DRAWN");
-        stage.finish(&out);
+        stage.finish(&mut out);
         assert!(stage.open_row().is_some());
     }
 
@@ -2275,7 +2349,7 @@ mod tests {
         assert_eq!(stage.open_row(), None);
         assert_eq!(stage.pinned(), Some(&b"DRAWN"[..]));
         assert!(stage.swallows());
-        stage.finish(&out);
+        stage.finish(&mut out);
 
         // The next unasked text starts with an empty line, which writes
         // nothing, then lands where the prompt's row was.
@@ -2334,15 +2408,15 @@ mod tests {
         out.text(b"room\r\n\r\n");
         pin_prompt(&mut stage, &mut out);
         stage.end_read(&mut out);
-        stage.finish(&out);
-        stage.finish(&out);
+        stage.finish(&mut out);
+        stage.finish(&mut out);
         assert!(stage.swallows());
         let mut next = Output::new(false);
         stage.line(&mut next, b"", "", None, b"\r\n");
         assert!(next.bytes.is_empty());
         // Text in a later output ends it, whoever wrote it.
         next.text(b"echo\r\n");
-        stage.finish(&next);
+        stage.finish(&mut next);
         assert!(!stage.swallows());
     }
 
@@ -2352,7 +2426,7 @@ mod tests {
         let mut out = Output::new(false);
         out.text(b"room\r\n\r\n");
         pin_prompt(&mut stage, &mut out);
-        stage.finish(&out);
+        stage.finish(&mut out);
         let mut next = Output::new(false);
         stage.line(&mut next, b"", "", None, b"\r\n");
         stage.line(&mut next, b"spam", "spam", None, b"");
@@ -2370,7 +2444,7 @@ mod tests {
         let mut out = Output::new(false);
         out.text(b"room\r\n\r\n");
         pin_prompt(&mut stage, &mut out);
-        stage.finish(&out);
+        stage.finish(&mut out);
         // A send leaves it armed.
         stage.close();
         let mut next = Output::new(false);
@@ -2387,7 +2461,7 @@ mod tests {
         let mut stage = pinned_stage();
         let mut out = Output::new(false);
         pin_prompt(&mut stage, &mut out);
-        stage.finish(&out);
+        stage.finish(&mut out);
         stage.local_write();
         let mut next = Output::new(false);
         stage.line(&mut next, b"", "", None, b"\r\n");
@@ -2395,7 +2469,7 @@ mod tests {
 
         let mut out = Output::new(false);
         pin_prompt(&mut stage, &mut out);
-        stage.finish(&out);
+        stage.finish(&mut out);
         let mut next = Output::new(true);
         stage.line(&mut next, b"", "", None, b"\r\n");
         assert_eq!(next.bytes, b"\r\n");
@@ -2406,6 +2480,15 @@ mod tests {
         out.text(b"echo\r\n");
         stage.line(&mut out, b"", "", None, b"\r\n");
         assert!(out.bytes.ends_with(b"echo\r\n\r\n"));
+
+        // Output from elsewhere that came before the read the prompt
+        // pinned in came before the prompt, so it ends nothing.
+        let mut out = Output::new(true);
+        out.text(b"tell\r\n\r\n");
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&mut out);
+        assert!(stage.swallows());
+        assert_eq!(out.pin_row, Some(true));
     }
 
     #[test]
@@ -2536,7 +2619,7 @@ mod tests {
         let mut out = Output::new(false);
         out.text(b"room\r\n\r\n");
         pin_prompt(&mut stage, &mut out);
-        stage.finish(&out);
+        stage.finish(&mut out);
         let mut repaint = Output::new(false);
         stage.repaint(&mut repaint, Some("NEW"));
         assert_eq!(repaint.pin.as_deref(), Some(&b"NEW"[..]));
@@ -2561,7 +2644,7 @@ mod tests {
         out.text(b"room\r\n\r\n");
         let block = read(&stage, PROMPT, End::Line);
         stage.draw(&mut out, block, None, b"", "DRAWN");
-        stage.finish(&out);
+        stage.finish(&mut out);
         stage.set_show(PromptShow::Pinned);
         let mut moved = Output::new(false);
         stage.repaint(&mut moved, Some("DRAWN"));
@@ -2594,7 +2677,7 @@ mod tests {
         let mut out = Output::new(false);
         out.text(b"room\r\n\r\n");
         pin_prompt(&mut stage, &mut out);
-        stage.finish(&out);
+        stage.finish(&mut out);
         stage.set_show(PromptShow::Text);
         let mut back = Output::new(false);
         stage.repaint(&mut back, Some("DRAWN"));
@@ -2607,7 +2690,7 @@ mod tests {
         let mut stage = pinned_stage();
         let mut out = Output::new(false);
         pin_prompt(&mut stage, &mut out);
-        stage.finish(&out);
+        stage.finish(&mut out);
         stage.local_write();
         stage.set_show(PromptShow::Text);
         let mut back = Output::new(false);
@@ -2615,6 +2698,99 @@ mod tests {
         assert_eq!(back.pin.as_deref(), Some(&b""[..]));
         assert!(back.bytes.is_empty());
         assert_eq!(stage.open_row(), None);
+    }
+
+    #[test]
+    fn the_line_end_that_would_end_a_pinned_row_is_found_past_escapes() {
+        let cut = |bytes: &[u8]| {
+            let (rest, closed) = close_pin_row(bytes);
+            (rest.into_owned(), closed)
+        };
+        assert_eq!(cut(b"\r\nTICK\r\n"), (b"TICK\r\n".to_vec(), true));
+        assert_eq!(cut(b"\n"), (Vec::new(), true));
+        // Colors before it stay, since they write nothing.
+        assert_eq!(cut(b"\x1b[33m\r\nTICK"), (b"\x1b[33mTICK".to_vec(), true));
+        // Text that shows first fills the row, so nothing goes.
+        assert_eq!(cut(b"look\r\n"), (b"look\r\n".to_vec(), true));
+        assert_eq!(cut(b" look"), (b" look".to_vec(), true));
+        // Escapes alone leave the row open.
+        assert_eq!(cut(b"\x1b[0m"), (b"\x1b[0m".to_vec(), false));
+        assert_eq!(cut(b""), (Vec::new(), false));
+    }
+
+    #[test]
+    fn a_framed_echo_after_a_pinned_prompt_takes_the_prompt_row() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        pin_prompt(&mut stage, &mut out);
+        // A script echo in the same read, framed with a line end first to
+        // end the prompt's row. That row is not in the text, so the line
+        // end writes nothing and the echo takes the row.
+        out.text(b"\r\nThe moon rises.\r\n");
+        assert_eq!(out.bytes, b"room\r\n\r\nThe moon rises.\r\n");
+        assert!(out.hold.is_empty());
+        // Only the first one goes.
+        out.text(b"\r\nThe sun sets.\r\n");
+        assert_eq!(
+            out.bytes,
+            b"room\r\n\r\nThe moon rises.\r\n\r\nThe sun sets.\r\n"
+        );
+        // Swallowed empty lines leave the row open for the echo after them.
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        pin_prompt(&mut stage, &mut out);
+        stage.line(&mut out, b"", "", None, b"\r\n");
+        out.text(b"\r\nThe moon rises.\r\n");
+        assert_eq!(out.bytes, b"room\r\n\r\nThe moon rises.\r\n");
+    }
+
+    #[test]
+    fn each_pinned_output_says_whether_the_prompt_row_is_open() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&mut out);
+        assert_eq!(out.pin_row, Some(true));
+        // Text that lands closes it.
+        let mut next = Output::new(false);
+        stage.line(&mut next, b"", "", None, b"\r\n");
+        stage.line(&mut next, b"tell", "tell", None, b"tell\r\n");
+        stage.finish(&mut next);
+        assert_eq!(next.pin_row, Some(false));
+        // A prompt that took its line end leaves no row open.
+        let mut settles = stage_settling_pinned();
+        let block = read(&settles, "<10hp> ", End::Line);
+        let mut out = Output::new(false);
+        settles.pin_drawn(&mut out, block, None, b"", "DRAWN");
+        settles.finish(&mut out);
+        assert_eq!(out.pin_row, Some(false));
+        // Leaving Pinned closes it with the band.
+        let mut out = Output::new(false);
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&mut out);
+        stage.set_show(PromptShow::Text);
+        let mut back = Output::new(false);
+        stage.repaint(&mut back, Some("DRAWN"));
+        assert_eq!(back.pin_row, Some(false));
+        // In the text no output says anything about it.
+        let mut text = self::stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = read(&text, PROMPT, End::Line);
+        text.draw(&mut out, block, None, b"", "DRAWN");
+        text.finish(&mut out);
+        assert_eq!(out.pin_row, None);
+        let mut again = Output::new(false);
+        text.repaint(&mut again, Some("NEW"));
+        assert_eq!(again.pin_row, None);
+    }
+
+    /// A stage whose capture settles, pinning your prompt.
+    fn stage_settling_pinned() -> Stage {
+        let mut stage = stage(SETTLES, true);
+        stage.set_show(PromptShow::Pinned);
+        stage
     }
 
     #[test]
@@ -2796,7 +2972,7 @@ mod tests {
         let mut out = Output::new(false);
         out.text(b"room\r\n\r\n");
         pin_prompt(&mut stage, &mut out);
-        stage.finish(&out);
+        stage.finish(&mut out);
         stage.set_show(PromptShow::Lifted);
         let mut back = Output::new(false);
         stage.repaint(&mut back, Some("DRAWN"));

@@ -83,6 +83,10 @@ export interface OutputPayload {
   /** Line ends at the end of this payload that each renderer keeps back
    *  until the next write lands, as base64. */
   hold?: string;
+  /** While your prompt shows pinned, whether the pinned prompt's row is
+   *  still where the next thing lands after this payload, so the line
+   *  end that would end that row writes nothing. */
+  pin_row?: boolean;
 }
 
 /** One session write, decoded: the replace goes first, then `bytes`,
@@ -93,6 +97,7 @@ export interface SessionOutput {
   restore?: Uint8Array;
   pin?: Uint8Array;
   hold?: Uint8Array;
+  pinRow?: boolean;
 }
 
 /** Standard base64 to bytes. `atob` yields a binary string, one char per
@@ -115,6 +120,7 @@ export function decodeOutputPayload(payload: OutputPayload): SessionOutput {
   if (typeof payload.restore === 'string') out.restore = base64Bytes(payload.restore);
   if (typeof payload.pin === 'string') out.pin = base64Bytes(payload.pin);
   if (typeof payload.hold === 'string') out.hold = base64Bytes(payload.hold);
+  if (typeof payload.pin_row === 'boolean') out.pinRow = payload.pin_row;
   return out;
 }
 
