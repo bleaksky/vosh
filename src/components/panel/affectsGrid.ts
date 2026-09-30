@@ -26,7 +26,7 @@ export function affectsColumns(width: number): number {
   return width >= AFFECTS_TWO_COLUMNS_W ? 2 : 1;
 }
 
-interface CellPlace {
+export interface CellPlace {
   /** 1 based grid line of the row, counting every page. */
   gridRow: number;
   gridColumn: number;
@@ -77,15 +77,26 @@ export function affectsGrid(
   // for that, the body scrolls.
   const leastRows = others.length > 1 ? Math.ceil(2 / columns) : 1;
   const pageRows = Math.max(leastRows, Math.min(allRows, fit));
-  const slots = pageRows * columns;
+  const { cells: rest, pages } = pageCells(others, columns, pageRows);
+  return { columns, tracked, rule, rest, pageRows, pages };
+}
 
-  const rest: AffectsCell[] = [];
+/** Place `rows` in pages `pageRows` rows tall and `columns` wide. Each
+ *  page fills down the left column, then down the right. A page that
+ *  cannot hold everything left gives its last cell to the count of
+ *  what follows, unless the page is a single cell. The rest of Timers
+ *  first and the whole of Countdown page this way. */
+export function pageCells(
+  rows: readonly AffectRow[],
+  columns: number,
+  pageRows: number,
+): { cells: AffectsCell[]; pages: number } {
+  const slots = pageRows * columns;
+  const cells: AffectsCell[] = [];
   let next = 0;
   let page = 0;
-  while (next < others.length) {
-    const left = others.length - next;
-    // A page that cannot hold everything left gives its last cell to
-    // the count, unless the page is a single cell.
+  while (next < rows.length) {
+    const left = rows.length - next;
     const counts = left > slots && slots > 1;
     const take = counts ? slots - 1 : Math.min(left, slots);
     const place = (i: number): CellPlace => ({
@@ -94,13 +105,13 @@ export function affectsGrid(
       pageStart: i === 0,
     });
     for (let i = 0; i < take; i += 1) {
-      rest.push({ kind: 'affect', row: others[next + i], ...place(i) });
+      cells.push({ kind: 'affect', row: rows[next + i], ...place(i) });
     }
     next += take;
-    if (counts) rest.push({ kind: 'more', count: others.length - next, page, ...place(slots - 1) });
+    if (counts) cells.push({ kind: 'more', count: rows.length - next, page, ...place(slots - 1) });
     page += 1;
   }
-  return { columns, tracked, rule, rest, pageRows, pages: page };
+  return { cells, pages: page };
 }
 
 /** Rows of the rest the pane keeps in view at its least: every
