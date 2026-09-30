@@ -614,6 +614,13 @@ impl PromptEngine {
         self.config.show
     }
 
+    /// The rows the band above the command line keeps while your prompt
+    /// shows pinned. See [`Stage::zone`].
+    pub fn zone(&self) -> usize {
+        self.stage
+            .zone(self.draws(), &Template::parse(&self.config.template))
+    }
+
     /// Record a candidate in the ring, on a send or a GA or EOR, with
     /// whether drawing is on and whether the profile has a capture. See
     /// [`Stage::record`].
@@ -1835,5 +1842,65 @@ mod tests {
         // prompt in the game sends it.
         engine.observe("Char.Prompt", char_prompt(true, OLD, ""), at());
         assert_eq!(codes(&engine).prompt, OLD);
+    }
+
+    /// An engine reading Aabahran's `prompt` and drawing `template` while
+    /// `draw` is on.
+    fn zoned(prompt: &str, template: &str, draw: bool) -> PromptEngine {
+        let mut engine = PromptEngine::default();
+        engine.set_config(PromptConfig {
+            draw,
+            template: template.into(),
+            capture: CaptureConfig::Aabahran(AabahranCapture {
+                prompt: prompt.into(),
+                ..AabahranCapture::default()
+            }),
+            ..PromptConfig::default()
+        });
+        engine
+    }
+
+    #[test]
+    fn the_band_keeps_the_rows_the_tallest_prompt_can_take() {
+        // One line, no tank code: one row.
+        assert_eq!(zoned("[%h/%Hhp]%c", "<%hp>", true).zone(), 1);
+        // James's PROMPT prints the tank line above the vitals in a fight.
+        // A design that reads nothing on it leaves it as sent.
+        let james = "%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c";
+        assert_eq!(zoned(james, "<%hp>", true).zone(), 2);
+        // One that reads the tank takes it over.
+        assert_eq!(zoned(james, "%tank %{tank_hp:pct}%% <%hp>", true).zone(), 1);
+        // Every line break counts, inside a condition too.
+        let detailed = "%{if:fight}%opponent%nl%{end}%hp";
+        assert_eq!(zoned(james, detailed, true).zone(), 3);
+        assert_eq!(
+            zoned("[%h/%Hhp]%c", "%hp%{nl}%mana%nl%move", true).zone(),
+            3
+        );
+        // A design that reads the prompt as sent takes its lines.
+        assert_eq!(zoned(james, "%{raw}", true).zone(), 2);
+        assert_eq!(zoned(james, "%{raw}%nl%hp", true).zone(), 3);
+        // Not drawing, the game's own lines.
+        assert_eq!(zoned(james, detailed, false).zone(), 2);
+        assert_eq!(zoned("[%h/%Hhp]%c", "", true).zone(), 1);
+        // No more than six.
+        let tall = "%hp%nl%hp%nl%hp%nl%hp%nl%hp%nl%hp%nl%hp%nl%hp";
+        assert_eq!(zoned(james, tall, true).zone(), crate::stage::ZONE_MAX);
+    }
+
+    #[test]
+    fn a_regex_capture_and_no_capture_keep_one_row_and_its_breaks() {
+        let mut engine = PromptEngine::default();
+        assert_eq!(engine.zone(), 1);
+        engine.set_config(PromptConfig {
+            draw: true,
+            template: "%hp%nl%mana".into(),
+            capture: CaptureConfig::Regex(RegexCapture {
+                lines: vec![r"\[(?<hp>\d+)hp\]".into()],
+                ..RegexCapture::default()
+            }),
+            ..PromptConfig::default()
+        });
+        assert_eq!(engine.zone(), 2);
     }
 }

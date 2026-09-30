@@ -9,6 +9,7 @@ import { startChipStyleStore } from './chipStyleStore';
 import { startCombatStore } from './combatStore';
 import { startGamePromptStore } from './gamePromptStore';
 import { startHiddenStore } from './hiddenStore';
+import { startPinnedPromptStore } from './pinnedPromptStore';
 import { startRoomStore } from './roomStore';
 import { startTargetStore } from './targetStore';
 import { startTickCountStore } from './tickCountStore';
@@ -50,4 +51,5 @@ export function startStores(): void {
   startTickStore();
   startTickCountStore();
   startChipStyleStore();
+  startPinnedPromptStore();
 }

@@ -419,6 +419,20 @@ fn write_plays_for_the_screenshot_harness() {
     let plays = [
         ("text-detailed", profile(CODES, DETAILED, true)),
         ("text-off", profile(CODES, DETAILED, false)),
+        (
+            "pinned-detailed",
+            showing(
+                profile(CODES, DETAILED, true),
+                vosh_prompt::PromptShow::Pinned,
+            ),
+        ),
+        (
+            "pinned-off",
+            showing(
+                profile(CODES, DETAILED, false),
+                vosh_prompt::PromptShow::Pinned,
+            ),
+        ),
     ];
     for (name, p) in plays {
         let steps: Vec<serde_json::Value> = fake_play(p)

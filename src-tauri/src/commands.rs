@@ -3436,6 +3436,11 @@ pub(crate) struct PromptShowState {
     pub capture: bool,
     /// The game sent Char.Prompt this session.
     pub game_sent: bool,
+    /// The rows the band above the command line keeps while your prompt
+    /// shows pinned, the most any prompt the capture reads can take.
+    pub zone: usize,
+    /// You turned prompts off in the game.
+    pub prompts_off: bool,
 }
 
 /// Where the active profile's prompt shows, and whether it reads one.
@@ -3453,6 +3458,8 @@ fn prompt_show_state(p: &crate::profile::Profile) -> PromptShowState {
         show: p.prompt.show().name().to_string(),
         capture: p.prompt.stage.has_recognizer(),
         game_sent: p.prompt.vars.gmcp().prompt_seen(),
+        zone: p.prompt.zone(),
+        prompts_off: p.prompt.prompts_off(),
     }
 }
 
@@ -4906,6 +4913,8 @@ mod tests {
                 show: "text".into(),
                 capture: false,
                 game_sent: false,
+                zone: 1,
+                prompts_off: false,
             }
         );
         p = prompt_profile();
@@ -4922,6 +4931,14 @@ mod tests {
         assert_eq!(state.show, "lifted");
         assert!(state.capture);
         assert!(state.game_sent);
+        assert_eq!(state.zone, 1);
+        assert!(!state.prompts_off);
+        p.prompt.observe(
+            "Char.Prompt",
+            serde_json::json!({"enabled": false, "prompt": "<%hhp> ", "fprompt": ""}),
+            chrono::Local::now().fixed_offset(),
+        );
+        assert!(super::prompt_show_state(&p).prompts_off);
     }
 
     #[test]

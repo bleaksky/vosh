@@ -65,6 +65,9 @@ interface Props {
    *  holds a stale height until the next keystroke and the whole
    *  layout shifts when that keystroke lands. */
   fontKey?: string;
+  /** Your prompt shows pinned above the command line, so Enter on an
+   *  empty line echoes nothing. */
+  promptPinned?: boolean;
 }
 
 // Regex set for "is this line chat-like?" — when the toggle in
@@ -109,9 +112,12 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
     onExitSplit,
     onSelectAllTerminal,
     fontKey,
+    promptPinned = false,
   }: Props,
   ref,
 ) {
+  const promptPinnedRef = useRef(promptPinned);
+  promptPinnedRef.current = promptPinned;
   const [value, setValue] = useState('');
   const [spellcheckPrompt, setSpellcheckPrompt] = useState(false);
   // Caret shape from Settings, general. Only the paint changes — every
@@ -653,6 +659,7 @@ export const Input = forwardRef<InputHandle, Props>(function Input(
       quickKey:
         !masked && quickKeysRef.current.some((q) => q.name === firstWord && q.verb.length > 0),
       echoColor: echoColorRef.current,
+      pinned: promptPinnedRef.current,
     });
     if (plan.remember) {
       setHistory((prev) => {

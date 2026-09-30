@@ -105,6 +105,8 @@ import { offeredPaneTypes } from './components/panel/paneTypes';
 import { useConnection, type ConnectionStatus } from './lib/useConnection';
 import { useEscape } from './lib/escapeStack';
 import { usePromptShow } from './lib/promptShow';
+import { PromptDock } from './components/prompt/PromptDock';
+import type { CellSize } from './lib/promptBand';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
@@ -240,6 +242,12 @@ function App() {
   const panelLayout = usePanelLayout();
   // Where your prompt shows, and whether this profile reads one.
   const promptShow = usePromptShow();
+  const promptPinned = promptShow?.show === 'pinned' && promptShow.capture;
+  // The cell the live terminal draws at, which the pinned band lays its
+  // characters out on.
+  const [cellSize, setCellSize] = useState<CellSize | null>(null);
+  // Bright bold, which the native grid and the pinned band over it follow.
+  const [brightBold, setBrightBold] = useState(false);
   const panelOpen = panelLayout?.panel_open ?? true;
   const panelWidth = panelWidthOf(panelLayout);
   const shownPanes = useMemo(() => (panelLayout ? allPanes(panelLayout.root) : []), [panelLayout]);
@@ -264,6 +272,7 @@ function App() {
   // Report the bright-bold setting to the native surface (xterm has no
   // equivalent option, so this drives the GPU renderer only).
   const applyBrightBold = (on: boolean) => {
+    setBrightBold(on);
     if (nativeSurfaceEnabled()) {
       void invoke('native_surface_set_bright_bold', { on }).catch(() => {});
     }
@@ -1336,6 +1345,7 @@ function App() {
     <Input
       ref={inputRef}
       enabled={connected}
+      promptPinned={promptPinned}
       fontKey={`${fontFamily}|${fontSize}`}
       onError={handleError}
       onSelectAllTerminal={() => termRef.current?.selectAll()}
@@ -1700,9 +1710,22 @@ function App() {
             onResultsChanged={(event) =>
               setFindResults({ index: event.resultIndex, count: event.resultCount })
             }
+            onCellSize={setCellSize}
           />
         </div>
       </div>
+      {/* Your prompt pinned above the command line. It takes rows from
+          the terminal only while your prompt shows pinned. */}
+      {promptPinned && promptShow && cellSize && (
+        <PromptDock
+          state={promptShow}
+          cell={cellSize}
+          fontSize={fontSize}
+          themeTerminalColors={themeTerminalColors}
+          brightBold={brightBold}
+          renderer={nativeSurfaceEnabled() ? 'native' : 'xterm'}
+        />
+      )}
     </div>
   );
 

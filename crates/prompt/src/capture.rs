@@ -313,6 +313,28 @@ impl Recognizer {
         }
     }
 
+    /// The groups each line of each way the game prints your prompt
+    /// reads, top line first, and whether that way is the away prompt,
+    /// which always shows as sent. A regex capture has one way, one line.
+    pub fn shapes(&self) -> Vec<(Vec<Vec<String>>, bool)> {
+        let names = |re: &Regex| -> Vec<String> {
+            re.capture_names().flatten().map(str::to_string).collect()
+        };
+        match &self.reader {
+            Reader::Regex { line, .. } => vec![(vec![names(line)], false)],
+            Reader::Codes(compiled) => compiled
+                .shapes
+                .iter()
+                .map(|shape| {
+                    (
+                        shape.lines.iter().map(|l| names(&l.line)).collect(),
+                        shape.kind == ShapeKind::Afk,
+                    )
+                })
+                .collect(),
+        }
+    }
+
     /// True when a partial some shape reads is the prompt at once.
     pub fn settles(&self) -> bool {
         match &self.reader {
