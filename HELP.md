@@ -293,6 +293,7 @@ Slash commands drive Vosh from the input bar without opening settings. Vosh hand
 - Manage variables with `#var <name> [value]`, `#unvar <name>`, and `#vars`.
 - Manage triggers with `#trigger <name> {pattern} <action>`, `#untrigger <name>`, and `#triggers`.
 - Tell Vosh how to read your prompt with `#prompt game {setting}` and `#prompt fight {setting}`, the codes you type in the game, or with `#prompt {regex}`, each named group like `(?<hp>\d+)` a value. `#prompt` alone says how Vosh reads it, and `#unprompt` stops.
+- Pick where your prompt shows with `#prompt show text|lifted|pinned`.
 - Flip whole folders with `#group <name> on|off` and inspect them with `#groups`.
 - Tune the tick with `#tick`, `#tick interval <secs>`, `#tick warn at <secs>`, and the rest listed under `#help`.
 - Record a command sequence with `#record <name>`, finish with `#endrec`, abort with `#record cancel`.
@@ -443,6 +444,22 @@ The imm panel lists staff queues sorted worst first. Its home is the right colum
 - Read the chips. Rows trail `N overdue` and `N nearing`, applications add `N unread`, and journals add `N unawarded`.
 
 The header sums the board as `N overdue`, `N nearing`, or `clear`. A count flashes when it grows. An empty board after the feed reads `all clear`.
+
+### 4.9 Choose where your prompt shows
+
+Once Vosh reads your prompt, you choose where it shows. Open Settings, choose Input, open `Advanced`, and pick a place under `Where your prompt shows`.
+
+- `In the text` shows each prompt where the game sends it. The terminal reads as it always has.
+- `Lifted` keeps every prompt in the text on a raised band in the selected row color of your theme, scrollback included. A prompt that ends on a character gains one space after its band, so your echo never touches it.
+- `Pinned` takes your prompts out of the text and shows your latest one on a band above the command line. The band keeps the height of your tallest prompt, so it holds still through a fight. Every prompt still reaches the session log and your Prompts triggers.
+
+From the input bar, `#prompt show lifted` picks the same place, and `text` or `pinned` in its place picks the others. `#prompt` alone also says where your prompt shows.
+
+The choice needs Vosh to read your prompt. Until it does, the row stays off and says what to do first, and `#prompt show` tells you to type `#prompt game` with your prompt setting in braces. While you have prompts off in the game, the pinned band says so and shows nothing else.
+
+With the xterm renderer, the newest 1000 prompts keep their bands and older ones show plain. The split history pane shows them plain too. The native renderer keeps a band on every prompt in the scrollback.
+
+The choice saves in the `[prompt]` table of your profile as `show`. An older version of Vosh ignores it and shows your prompt in the text. When that version saves your profile, the choice is gone, so pick it again here.
 
 ## Tick and target
 
@@ -693,6 +710,7 @@ This is every slash command Vosh understands today.
 - `#var <name> [value]` sets or shows a session variable, `#unvar <name>` removes it from both scopes, `#vars` lists.
 - `#trigger <name> {pattern} <action> [args]` defines, `#untrigger <name>` removes, `#triggers` lists by priority.
 - `#prompt game {setting}` and `#prompt fight {setting}` read your prompt in this profile from the codes of your PROMPT and fight prompt, `#prompt {regex}` reads it with a pattern, `#prompt` says how Vosh reads it, and `#unprompt` stops reading it.
+- `#prompt show text|lifted|pinned` shows your prompt in this profile in the text, lifted on a band in the text, or pinned above the command line.
 - `#group <name> on|off` toggles a group, `#group <name>` shows state, `#groups` lists.
 - `#tick`, `#tick interval <secs>`, `#tick reset`, `#tick on {pattern}`, `#tick off`, `#tick fire <command>`, `#tick nofire`, `#tick sound on|off`, `#tick disable`, `#tick enable` drive the tick timer.
 - `#tick warn`, `#tick warn at <secs>`, `#tick warn message <text>`, `#tick warn color <name>`, `#tick warn off` shape the tick warning.
