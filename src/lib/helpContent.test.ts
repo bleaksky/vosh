@@ -205,3 +205,27 @@ describe('the help on forgetting passwords in the session log', () => {
     expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
   });
 });
+
+describe('the help on the chat pane', () => {
+  it('says how a message prints and where its color comes from', () => {
+    const text = body('shape.chat-pane');
+    expect(text).toContain('Read a line as `[tell] Selune: meet at the bank`.');
+    expect(text).toContain('Wrapped lines hang two cells in');
+    expect(text).toContain("from your theme's terminal colors");
+    expect(text).toContain('Point at a message to see when it arrived.');
+    expect(text).not.toContain('tab per channel');
+    expect(text).not.toContain('`visible/total`');
+  });
+
+  it('says how to bring in the tells you send', () => {
+    expect(body('shape.chat-pane')).toContain(
+      'A trigger on `^You tell ` with a route to `tell` makes each one read `[tell] to Selune: text`.',
+    );
+  });
+
+  it('matches HELP.md word for word', () => {
+    const topic = HELP_TOPICS.find((t) => t.id === 'shape.chat-pane');
+    if (!topic) throw new Error('no help topic shape.chat-pane');
+    expect(helpMd).toContain(`### ${topic.number} ${topic.title}\n\n${topic.body}\n`);
+  });
+});
