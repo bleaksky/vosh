@@ -16,13 +16,19 @@
 //!    while no pulse has started since.
 //! 3. GMCP, the latest packet per package.
 //! 4. Vosh itself, the tick, your target, the clock and the profile.
+//!
+//! A value the game hides is Hidden whatever the sources hold, and Vosh
+//! never fills it from another one. [`Hidden`] is worked out from the
+//! latest packets and the fresh capture, never stored.
 
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, FixedOffset, NaiveDateTime};
-use serde::Serialize;
+use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
 use serde_json::Value as Json;
 
+use crate::aabahran;
 use crate::format::{lang_game, Position, Resolved, Value, MOON_CODES};
 use crate::gmcp::{
     self, Find, Observed, Snapshot, CHAR_COMBAT, CHAR_STATE, CHAR_STATUS, CHAR_VITALS, CHAR_WORTH,
@@ -1335,6 +1341,57 @@ pub struct Tick {
     pub interval: Option<i64>,
 }
 
+/// Which values the game hides right now. Worked out from the latest
+/// packets and the fresh capture, never stored (D23).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Hidden {
+    pub hp: bool,
+    pub mana: bool,
+    pub moves: bool,
+    /// The tank's health.
+    pub tank: bool,
+    /// Your opponent's health and condition.
+    pub opponent: bool,
+    /// Every affect field and the Affects pane.
+    pub affects: bool,
+    /// Every group field and the Group pane.
+    pub group: bool,
+}
+
+impl Hidden {
+    pub fn pair(&self, pair: Pair) -> bool {
+        match pair {
+            Pair::Hp => self.hp,
+            Pair::Mana => self.mana,
+            Pair::Move => self.moves,
+        }
+    }
+
+    /// Any of the three vitals.
+    pub fn vitals(&self) -> bool {
+        self.hp || self.mana || self.moves
+    }
+
+    /// Nothing is hidden.
+    pub fn none(&self) -> bool {
+        *self == Hidden::default()
+    }
+}
+
+/// The `session://hidden` payload, `{vitals, tank, opponent, affects,
+/// group}`.
+impl Serialize for Hidden {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut s = serializer.serialize_struct("Hidden", 5)?;
+        s.serialize_field("vitals", &self.vitals())?;
+        s.serialize_field("tank", &self.tank)?;
+        s.serialize_field("opponent", &self.opponent)?;
+        s.serialize_field("affects", &self.affects)?;
+        s.serialize_field("group", &self.group)?;
+        s.end()
+    }
+}
+
 /// True when the Forsaken Lands rules hold (D17). They hold when the host
 /// is The Forsaken Lands or the active capture reads Aabahran's codes.
 pub fn forsaken_lands(known_host: bool, aabahran_capture: bool) -> bool {
@@ -1348,6 +1405,8 @@ pub struct Vars {
     gmcp: Snapshot,
     capture: Option<(Capture, u64)>,
     script: BTreeMap<String, Scripted>,
+    hidden: Hidden,
+    emitted: Hidden,
     disagreements: u64,
 }
 
@@ -1369,6 +1428,7 @@ impl Vars {
     /// or a new capture kind can.
     pub fn set_forsaken(&mut self, forsaken: bool) {
         self.forsaken = forsaken;
+        self.recompute();
     }
 
     pub fn gmcp(&self) -> &Snapshot {
@@ -1383,13 +1443,19 @@ impl Vars {
 
     /// Keep a GMCP packet.
     pub fn observe(&mut self, package: &str, data: Json, at: DateTime<FixedOffset>) -> Observed {
-        self.gmcp.observe(package, data, at)
+        let observed = self.gmcp.observe(package, data, at);
+        self.recompute();
+        observed
     }
 
     /// Note one of your own sends. It starts a pulse on a server that has
     /// sent no Char.Vitals.
     pub fn on_send(&mut self) -> bool {
-        self.gmcp.on_send()
+        let pulse = self.gmcp.on_send();
+        if pulse {
+            self.recompute();
+        }
+        pulse
     }
 
     /// Take a recognized prompt's values. They are fresh until the next
@@ -1397,6 +1463,7 @@ impl Vars {
     /// for the `vosh::prompt` log, and counts them.
     pub fn capture(&mut self, capture: Capture) -> Vec<&'static str> {
         self.capture = Some((capture, self.gmcp.pulse()));
+        self.recompute();
         let disagree = self.disagreements_now();
         self.disagreements += disagree.len() as u64;
         disagree
@@ -1432,17 +1499,34 @@ impl Vars {
         self.capture = None;
         self.script.clear();
         self.forsaken = forsaken;
+        self.recompute();
     }
 
-    /// A disconnect clears everything but the rules.
+    /// A disconnect clears everything but the rules and what was last
+    /// emitted, so the next [`Vars::take_hidden_change`] clears the panes.
     pub fn disconnect(&mut self) {
         self.capture = None;
         self.script.clear();
         self.gmcp.clear();
+        self.recompute();
     }
 
-    /// The fresh capture and script values for `session://prompt-vars`.
-    /// Stale values are left out.
+    /// What the game hides right now.
+    pub fn hidden(&self) -> Hidden {
+        self.hidden
+    }
+
+    /// The hidden state when it changed since the last call, for one
+    /// `session://hidden` per socket read.
+    pub fn take_hidden_change(&mut self) -> Option<Hidden> {
+        (self.hidden != self.emitted).then(|| {
+            self.emitted = self.hidden;
+            self.hidden
+        })
+    }
+
+    /// The fresh capture and script values for `session://prompt-vars`, a
+    /// hidden one as `?`. Stale values are left out.
     pub fn prompt_vars(&self) -> BTreeMap<String, String> {
         let mut out = BTreeMap::new();
         if let Some(capture) = self.fresh_capture() {
@@ -1455,12 +1539,21 @@ impl Vars {
                 out.insert(name.clone(), scripted.value.clone());
             }
         }
+        for (name, value) in &mut out {
+            if self.name_hidden(name) {
+                *value = "?".to_string();
+            }
+        }
         out
     }
 
     /// A resolver over these variables and what Vosh supplies.
     pub fn resolver<'a>(&'a self, vosh: &'a Vosh) -> Resolver<'a> {
         Resolver { vars: self, vosh }
+    }
+
+    fn recompute(&mut self) {
+        self.hidden = self.work_out_hidden();
     }
 
     fn fresh_capture(&self) -> Option<&Capture> {
@@ -1495,8 +1588,98 @@ impl Vars {
                 .is_some_and(|(c, _)| c.values.contains_key(name))
     }
 
+    /// True when the name reads a value the game hides.
+    fn name_hidden(&self, name: &str) -> bool {
+        if let Some(pair) = Pair::of(name) {
+            return self.hidden.pair(pair);
+        }
+        match name {
+            "tank_hp" | "tank_pct" | "tank_bar" => self.hidden.tank,
+            "opponent_hp" | "opponent_cond" => self.hidden.opponent,
+            "missing" => self.hidden.affects,
+            "leader" | "group_size" | "group_low" => self.hidden.group,
+            _ => false,
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Hidden (section 1.2)
+    // -----------------------------------------------------------------
+
+    fn work_out_hidden(&self) -> Hidden {
+        if !self.forsaken {
+            return Hidden::default();
+        }
+        let vitals = self.gmcp.vitals();
+        let affects = self.gmcp.affects();
+        let group = self.gmcp.group();
+        let combat = self.gmcp.combat();
+        let v_flag = vitals.as_ref().is_some_and(|v| v.hidden);
+        let a_flag = affects.as_ref().is_some_and(|a| a.hidden);
+        let g_flag = group.as_ref().is_some_and(|g| g.hidden);
+        let k_flag = combat.as_ref().is_some_and(|k| k.hidden);
+        let tank_without_health = combat
+            .as_ref()
+            .and_then(|k| k.tank.as_ref())
+            .is_some_and(|t| t.hp_pct.is_none());
+
+        if self.new_build() {
+            // The packets' own flags decide, and nothing else does.
+            return Hidden {
+                hp: v_flag,
+                mana: v_flag,
+                moves: v_flag,
+                tank: tank_without_health,
+                opponent: k_flag,
+                affects: a_flag,
+                group: g_flag,
+            };
+        }
+
+        let capture = self.fresh_capture();
+        let captured = |name: &str| capture.and_then(|c| c.values.get(name));
+        // H1, the capture read a max of 0.
+        let h1 = |pair: Pair| captured(pair.max()).is_some_and(|m| m.trim().parse() == Ok(0_i64));
+        // H2, the capture read a tank but %p and %P printed nothing.
+        let h2 = captured("tank").is_some_and(|t| !t.trim().is_empty()) && {
+            let health: Vec<&String> = ["tank_pct", "tank_bar"]
+                .iter()
+                .filter_map(|k| captured(k))
+                .collect();
+            !health.is_empty() && health.iter().all(|h| h.trim().is_empty())
+        };
+        // H3, Char.Vitals sent a max of 0.
+        let h3 = |pair: Pair| vitals.as_ref().is_some_and(|v| pair.gmcp(v).1 == Some(0));
+        // H4, Char.Vitals carries the flag.
+        let h4 = v_flag;
+        // H5, Char.Combat names a target but leaves out its health or
+        // condition.
+        let h5 = combat
+            .as_ref()
+            .is_some_and(|k| k.target.is_some() && (k.hp_pct.is_none() || k.condition.is_none()));
+        // H6, Group.Info carries the flag.
+        let h6 = g_flag;
+        // H7, Char.Affects names the song or carries the flag.
+        let h7 = a_flag || affects.as_ref().is_some_and(aabahran::names_lament);
+        // Z, Group.Info is {}.
+        let z = group.as_ref().is_some_and(|g| g.empty);
+
+        let pair = |p: Pair| h1(p) || h3(p) || h4 || h7;
+        let any_h1_h3 = Pair::ALL.into_iter().any(|p| h1(p) || h3(p));
+        let affects_empty = affects.as_ref().is_some_and(|a| a.list.is_empty());
+        Hidden {
+            hp: pair(Pair::Hp),
+            mana: pair(Pair::Mana),
+            moves: pair(Pair::Move),
+            tank: h2 || h4 || h7 || tank_without_health,
+            opponent: h5 || h7 || k_flag,
+            affects: h7 || (affects_empty && any_h1_h3),
+            group: h6 || h7 || (z && (any_h1_h3 || h4)),
+        }
+    }
+
     /// The names whose fresh captured value disagrees with GMCP, after
-    /// the `%s` and `%S` mappings.
+    /// the `%s` and `%S` mappings. Hidden values are not compared.
     fn disagreements_now(&self) -> Vec<&'static str> {
         let Some(capture) = self.fresh_capture() else {
             return Vec::new();
@@ -1524,7 +1707,7 @@ impl Vars {
         };
         let mut out = Vec::new();
         let mut check = |name: &'static str, same: Option<bool>| {
-            if same == Some(false) {
+            if same == Some(false) && !self.name_hidden(name) {
                 out.push(name);
             }
         };
@@ -2169,6 +2352,35 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// True when a path reads a value the game hides.
+    fn path_hidden(&self, path: &str) -> bool {
+        let (package, keys) = match self.gmcp().find(path) {
+            Find::NoPacket => return false,
+            Find::Missing { package, keys } | Find::Found { package, keys, .. } => (package, keys),
+        };
+        let hidden = self.vars.hidden;
+        let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
+        if package.eq_ignore_ascii_case(CHAR_VITALS) {
+            match keys.first().and_then(|k| Pair::of(k)) {
+                Some(pair) => hidden.pair(pair),
+                None => hidden.vitals(),
+            }
+        } else if package.eq_ignore_ascii_case(gmcp::CHAR_AFFECTS) {
+            hidden.affects
+        } else if package.eq_ignore_ascii_case(GROUP_INFO) {
+            hidden.group
+        } else if package.eq_ignore_ascii_case(CHAR_COMBAT) {
+            match keys.as_slice() {
+                [] => hidden.opponent || hidden.tank,
+                ["hp_pct" | "condition", ..] => hidden.opponent,
+                ["tank"] | ["tank", "hp_pct", ..] => hidden.tank,
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
     fn resolve_entry(&self, e: &'static Entry) -> Resolved {
         let name = e.name;
         if let Some(pair) = Pair::of(name) {
@@ -2366,14 +2578,40 @@ fn label(f: &FieldRef, gmcp: Option<&Snapshot>) -> String {
 
 impl Values for Resolver<'_> {
     fn resolve(&self, f: &FieldRef) -> Resolved {
+        let hidden = self.vars.hidden;
         match field(f) {
-            Some(Field::Entry(e)) => self.resolve_entry(e),
-            Some(Field::Aff(name)) => self.aff(name),
-            Some(Field::Member(stat, who)) => self.member(stat, who),
+            Some(Field::Entry(e)) => {
+                if self.vars.name_hidden(e.name) {
+                    return Resolved::Hidden;
+                }
+                self.resolve_entry(e)
+            }
+            Some(Field::Aff(name)) => {
+                if hidden.affects {
+                    return Resolved::Hidden;
+                }
+                self.aff(name)
+            }
+            Some(Field::Member(stat, who)) => {
+                if hidden.group {
+                    return Resolved::Hidden;
+                }
+                self.member(stat, who)
+            }
             Some(Field::Queue(key)) => self.queue(key),
-            Some(Field::Gmcp(path)) => self.gmcp_path(path),
+            Some(Field::Gmcp(path)) => {
+                if self.path_hidden(path) {
+                    return Resolved::Hidden;
+                }
+                self.gmcp_path(path)
+            }
             None if f.param.is_some() => Resolved::Unknown,
-            None => self.resolve_other(&f.name),
+            None => {
+                if self.vars.name_hidden(&f.name) {
+                    return Resolved::Hidden;
+                }
+                self.resolve_other(&f.name)
+            }
         }
     }
 
