@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen, type EventCallback } from '@tauri-apps/api/event';
 import {
   broadcastUiConfigChanges,
+  decodeOutputPayload,
   followReplacedUiConfig,
   getUiConfig,
   isOwnThemeEcho,
@@ -633,5 +634,31 @@ describe('the shared catalog wizard calls', () => {
     expect(event).toBe('vosh://migration-applied');
     (handler as EventCallback<unknown>)({ event, id: 1, payload: null });
     expect(heard).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a session output payload', () => {
+  const b64 = (text: string) => btoa(text);
+  const text = (bytes: Uint8Array | undefined) =>
+    bytes === undefined ? undefined : new TextDecoder().decode(bytes);
+
+  it('decodes the bytes alone when nothing is replaced', () => {
+    const out = decodeOutputPayload({ b64: b64('You are hungry.\r\n') });
+    expect(text(out.bytes)).toBe('You are hungry.\r\n');
+    expect(out.replace).toBeUndefined();
+    expect(out.restore).toBeUndefined();
+  });
+
+  it('decodes a replace and a restore beside the bytes', () => {
+    const out = decodeOutputPayload({
+      b64: '',
+      replace: { gen: 7, b64: b64('\x1b]7717;o;8\x07NEW> '), fresh: true },
+      restore: b64('LIVE> '),
+    });
+    expect(out.bytes).toHaveLength(0);
+    expect(out.replace?.gen).toBe(7);
+    expect(out.replace?.fresh).toBe(true);
+    expect(text(out.replace?.bytes)).toBe('\x1b]7717;o;8\x07NEW> ');
+    expect(text(out.restore)).toBe('LIVE> ');
   });
 });
