@@ -463,13 +463,32 @@ fn prompt_vars_mark_hidden_values() {
 }
 
 #[test]
-fn other_games_hide_nothing() {
+fn other_games_hide_a_field_only_when_its_packet_says_so() {
     let mut vars = Vars::new(false);
     for file in [
         "char-vitals-hidden.gmcp",
+        "char-affects-hidden.gmcp",
+        "char-combat-hidden.gmcp",
+        "group-info-hidden.gmcp",
+    ] {
+        feed(&mut vars, file);
+    }
+    lament_capture(&mut vars);
+    let hidden = vars.hidden();
+    assert!(hidden.hp && hidden.mana && hidden.moves);
+    assert!(hidden.affects && hidden.group && hidden.opponent);
+    assert!(!hidden.tank);
+    assert_eq!(resolve(&vars, "hp"), Resolved::Hidden);
+}
+
+#[test]
+fn other_games_use_none_of_the_derived_rules() {
+    let mut vars = Vars::new(false);
+    for file in [
+        "char-vitals-zero.gmcp",
         "char-affects-lament.gmcp",
         "char-combat-withheld.gmcp",
-        "group-info-hidden.gmcp",
+        "group-info-empty.gmcp",
     ] {
         feed(&mut vars, file);
     }

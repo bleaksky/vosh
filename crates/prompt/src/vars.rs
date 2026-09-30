@@ -1634,9 +1634,6 @@ impl Vars {
     // -----------------------------------------------------------------
 
     fn work_out_hidden(&self) -> Hidden {
-        if !self.forsaken {
-            return Hidden::default();
-        }
         let vitals = self.gmcp.vitals();
         let affects = self.gmcp.affects();
         let group = self.gmcp.group();
@@ -1649,6 +1646,22 @@ impl Vars {
             .as_ref()
             .and_then(|k| k.tank.as_ref())
             .is_some_and(|t| t.hp_pct.is_none());
+
+        if !self.forsaken {
+            // Another game. A packet that says hidden means it, as the
+            // panes read it on every host. The derived rules below read
+            // Aabahran's own habits, a max of 0 or a named song, so
+            // they stay on the Forsaken Lands.
+            return Hidden {
+                hp: v_flag,
+                mana: v_flag,
+                moves: v_flag,
+                tank: false,
+                opponent: k_flag,
+                affects: a_flag,
+                group: g_flag,
+            };
+        }
 
         if self.new_build() {
             // The packets' own flags decide, and nothing else does.
