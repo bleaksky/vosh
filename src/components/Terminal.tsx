@@ -328,6 +328,8 @@ export function Terminal({
     // Lifted prompts. The tracker registers after the writer, so xterm
     // hands it the lift marks first and the region marks pass on.
     const lifts = !quietRef.current && !nativeSurfaceEnabled() ? new LiftTracker(term) : null;
+    // A prompt that leaves the text takes its band with it.
+    if (lifts) writer.onErase((row, col) => lifts.dropFrom(row, col));
 
     const fit = new FitAddon();
     term.loadAddon(fit);

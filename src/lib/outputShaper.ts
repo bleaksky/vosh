@@ -45,6 +45,12 @@ export class OutputShaper {
         text: this.wrapChunk(this.replaceDecoder.decode(out.replace.bytes)),
         fresh: out.replace.fresh,
       };
+      if (out.replace.above) {
+        replace.above = {
+          plain: out.replace.above.plain,
+          text: this.wrapChunk(this.replaceDecoder.decode(out.replace.above.bytes)),
+        };
+      }
     }
     const text = this.decoder.decode(out.bytes, { stream: true });
     const wrapped = this.wrapChunk(text);

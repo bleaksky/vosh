@@ -277,7 +277,7 @@ describe('RegionWriter', () => {
     const callbacks: (() => void)[] = [];
     const term: RegionTerminal = {
       cols: 40,
-      buffer: { active: { cursorX: 0, cursorY: 0, baseY: 0 } },
+      buffer: { active: { cursorX: 0, cursorY: 0, baseY: 0, getLine: () => undefined } },
       parser: { registerOscHandler: () => ({ dispose() {} }) },
       write(data, callback) {
         if (typeof data === 'string') writes.push(data);
@@ -434,5 +434,54 @@ describe('the row a pinned prompt leaves open', () => {
     writer.output({ text: '\r\nTICK\r\n' });
     await parsed(writer);
     expect(screen(term)).toEqual(['room', '', 'TICK']);
+  });
+});
+
+describe('the lines above a region on a change of where your prompt shows', () => {
+  const tank = 'Tester: [===|===|===|---]';
+  const drawn = (gen: number) => `wounds.\r\n\r\n${tank}\r\n${mark(gen)}<765>`;
+  const moved = (gen: number, text: string, above: string, plain = tank): RegionOutput => ({
+    text: '',
+    replace: { gen, text, fresh: false, above: { plain, text: above } },
+  });
+
+  it('erases the tank line with the region when it sits right above it', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: drawn(1) });
+    writer.output(moved(1, '', ''));
+    await parsed(writer);
+    expect(screen(term)).toEqual(['wounds.']);
+  });
+
+  it('finds the lines however narrow the terminal wrapped them', async () => {
+    const { term, writer } = setup(12);
+    writer.output({ text: drawn(1) });
+    writer.output(moved(1, '', ''));
+    await parsed(writer);
+    expect(screen(term)).toEqual(['wounds.']);
+  });
+
+  it('replaces only the region when the lines above show something else', async () => {
+    const { term, writer } = setup();
+    writer.output({ text: drawn(1) });
+    writer.output(moved(1, `${mark(2)}NEW`, 'never', 'Somebody else: [---]'));
+    await parsed(writer);
+    expect(screen(term)).toEqual(['wounds.', '', tank, 'NEW']);
+  });
+
+  it('tells who asks where a replace that writes nothing erased from', async () => {
+    const { writer } = setup();
+    const erased: [number, number][] = [];
+    writer.onErase((row, col) => erased.push([row, col]));
+    writer.output({ text: drawn(1) });
+    writer.output(moved(1, '', ''));
+    writer.output({ text: `x${mark(3)}more` });
+    writer.output(replace(3, `${mark(4)}again`));
+    writer.output(replace(4, ''));
+    await parsed(writer);
+    expect(erased).toEqual([
+      [2, 0],
+      [2, 1],
+    ]);
   });
 });

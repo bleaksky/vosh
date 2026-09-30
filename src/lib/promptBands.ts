@@ -113,9 +113,37 @@ export class LiftTracker implements IDisposable {
     return { row, offset: (cursorRow - row) * this.term.cols + buffer.cursorX };
   }
 
+  /** Forget every lift that starts at or after buffer row `row` column
+   *  `col`, which a replace that wrote nothing erased, so text written
+   *  there later never takes its band. */
+  dropFrom(row: number, col: number): void {
+    const cols = this.term.cols;
+    for (const lift of [...this.lifts.values()]) {
+      if (lift.start.isDisposed) continue;
+      const startRow = lift.start.line + Math.floor(lift.startOffset / cols);
+      const startCol = lift.startOffset % cols;
+      if (startRow > row || (startRow === row && startCol >= col)) {
+        this.lifts.delete(lift.id);
+        lift.start.dispose();
+      }
+    }
+  }
+
   private begin(id: number): void {
     const buffer = this.term.buffer.active;
     const { row, offset } = this.cursorLogical();
+    // A repaint starts a lift again inside its region. When it already
+    // starts earlier, above the region at a tank line, it keeps that start.
+    const known = this.lifts.get(id);
+    if (
+      known &&
+      !known.start.isDisposed &&
+      known.start.line >= 0 &&
+      (known.start.line < row || (known.start.line === row && known.startOffset <= offset))
+    ) {
+      known.end = null;
+      return;
+    }
     const marker = this.term.registerMarker(row - (buffer.baseY + buffer.cursorY));
     if (!marker) return;
     this.lifts.get(id)?.start.dispose();
