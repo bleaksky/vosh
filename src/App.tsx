@@ -104,6 +104,7 @@ import {
 import { offeredPaneTypes } from './components/panel/paneTypes';
 import { useConnection, type ConnectionStatus } from './lib/useConnection';
 import { useEscape } from './lib/escapeStack';
+import { usePromptShow } from './lib/promptShow';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
@@ -237,6 +238,8 @@ function App() {
   // band and the palette show, hide, and size the panel through it,
   // and the panel edits the tree through it.
   const panelLayout = usePanelLayout();
+  // Where your prompt shows, and whether this profile reads one.
+  const promptShow = usePromptShow();
   const panelOpen = panelLayout?.panel_open ?? true;
   const panelWidth = panelWidthOf(panelLayout);
   const shownPanes = useMemo(() => (panelLayout ? allPanes(panelLayout.root) : []), [panelLayout]);
@@ -1428,6 +1431,7 @@ function App() {
     connect: () => void connection.connect(),
     disconnect: () => void disconnectSession(),
     insertInput: (text) => inputRef.current?.insert(text),
+    promptShow: promptShow?.capture ? promptShow.show : null,
   });
 
   const closeMainWindow = () => {

@@ -1,6 +1,6 @@
 import { resetPanelLayout } from '../components/panel/panelReset';
 import APP_SHORTCUTS from './appShortcuts.json';
-import { exportAliases, sendInput, setUiTheme } from './session';
+import { exportAliases, sendInput, setUiTheme, type PromptShow } from './session';
 import type { PaneType } from './paneLayout';
 import {
   applyAndBroadcastTheme,
@@ -206,7 +206,16 @@ export interface PaletteDeps {
   /** Put text into the input row and focus it (for parameterized
    *  aliases the user finishes typing). */
   insertInput: (text: string) => void;
+  /** Where your prompt shows. The three rows that pick it appear only
+   *  while the profile reads a prompt, so the shell passes it then. */
+  promptShow?: PromptShow | null;
 }
+
+const PROMPT_SHOW_ROWS: { show: PromptShow; title: string }[] = [
+  { show: 'text', title: 'Show your prompt in the text' },
+  { show: 'lifted', title: 'Lift your prompts in the text' },
+  { show: 'pinned', title: 'Pin your prompt above the command line' },
+];
 
 const PANE_TITLES: Record<PaneType, string> = {
   map: 'Show map',
@@ -310,6 +319,20 @@ export function buildPaletteEntries(deps: PaletteDeps): PaletteEntry[] {
   }
   // Throws away the panes you arranged, so it wears the danger color
   // and stays out of Recent, and the palette never opens on it.
+  if (deps.promptShow) {
+    const current = deps.promptShow;
+    for (const row of PROMPT_SHOW_ROWS) {
+      entries.push({
+        id: `prompt-show-${row.show}`,
+        section: 'view',
+        title: row.title,
+        keywords: 'prompt pin pinned lift lifted raise band chip bottom where',
+        checked: row.show === current,
+        searchOnly: true,
+        run: () => void sendInput(`#prompt show ${row.show}`),
+      });
+    }
+  }
   entries.push({
     id: 'panel-reset',
     section: 'view',

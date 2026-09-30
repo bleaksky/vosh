@@ -132,6 +132,31 @@ describe('paletteSections', () => {
     expect(ids(['map', 'imm'])).toEqual(['pane-map', 'pane-imm']);
   });
 
+  it('picks where your prompt shows only while the profile reads one', async () => {
+    const none = buildPaletteEntries(deps());
+    expect(none.some((r) => r.id.startsWith('prompt-show-'))).toBe(false);
+    const rows = buildPaletteEntries(deps({ promptShow: 'lifted' })).filter((r) =>
+      r.id.startsWith('prompt-show-'),
+    );
+    expect(rows.map((r) => r.title)).toEqual([
+      'Show your prompt in the text',
+      'Lift your prompts in the text',
+      'Pin your prompt above the command line',
+    ]);
+    expect(rows.map((r) => r.checked)).toEqual([false, true, false]);
+    expect(rows.every((r) => r.section === 'view' && r.searchOnly)).toBe(true);
+    // Typing finds them, and the list you open on stays as it was.
+    const found = flat(
+      paletteSections(buildPaletteEntries(deps({ promptShow: 'text' })), 'pin', []),
+    );
+    expect(found.map((r) => r.id)).toContain('prompt-show-pinned');
+    const opened = paletteSections(buildPaletteEntries(deps({ promptShow: 'text' })), '', []);
+    expect(flat(opened).some((r) => r.id.startsWith('prompt-show-'))).toBe(false);
+    vi.mocked(invoke).mockClear();
+    await rows[2].run();
+    expect(invoke).toHaveBeenCalledWith('session_send_input', { line: '#prompt show pinned' });
+  });
+
   it('names the world on the connect row when you are offline', () => {
     const rows = buildPaletteEntries(deps({ connected: false }));
     const last = rows[rows.length - 1];

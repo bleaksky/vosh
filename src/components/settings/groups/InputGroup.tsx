@@ -1,13 +1,15 @@
 import { useEffect, useId, useState } from 'react';
 import { promptPreviewChunks } from '../../../lib/promptPreview';
+import { usePromptShow, type PromptShowState } from '../../../lib/promptShow';
 import { styleToCss } from '../../../lib/ansi';
-import { INPUT_CURSOR_STYLES, type InputCursorStyle } from '../../../lib/session';
+import { INPUT_CURSOR_STYLES, type InputCursorStyle, type PromptShow } from '../../../lib/session';
 import type { SettingsTarget } from '../../../lib/settingsNav';
 import { useVitals } from '../../../lib/stores/vitalsStore';
 import { getCurrentThemeId } from '../../../lib/theme';
 import { findTheme } from '../../../lib/themes';
 import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
+import { PromptShowField } from '../rows/PromptShowRow';
 import {
   Card,
   ColorField,
@@ -49,7 +51,7 @@ const CARETS: readonly SegmentedOption<InputCursorStyle>[] = INPUT_CURSOR_STYLES
 }));
 
 // Rows inside Advanced. A deep link or search hit on one opens it.
-const ADVANCED_ANCHORS: ReadonlySet<string> = new Set(['paste-delay', 'prompt']);
+const ADVANCED_ANCHORS: ReadonlySet<string> = new Set(['paste-delay', 'prompt', 'prompt-show']);
 
 function opensAdvanced(target: SettingsTarget): boolean {
   return (
@@ -62,6 +64,7 @@ export function InputGroup({ target, navSeq, config, setConfig, onError }: Setti
   const { update } = useSettingsAutoSave(setConfig, onError);
   const [advanced, setAdvanced] = useState(() => opensAdvanced(target));
   const advancedId = useId();
+  const promptShow = usePromptShow();
 
   useEffect(() => {
     if (opensAdvanced(target)) setAdvanced(true);
@@ -147,9 +150,12 @@ export function InputGroup({ target, navSeq, config, setConfig, onError }: Setti
               <PromptBlock
                 enabled={config.prompt_template_enabled}
                 template={config.prompt_template}
+                show={config.prompt_show}
+                showState={promptShow}
                 textColor={terminalText}
                 onEnabled={(on) => update({ prompt_template_enabled: on })}
                 onTemplate={(text) => update({ prompt_template: text })}
+                onShow={(show) => update({ prompt_show: show })}
               />
             </DisclosurePanel>
           )}
@@ -159,24 +165,31 @@ export function InputGroup({ target, navSeq, config, setConfig, onError }: Setti
   );
 }
 
-/** Draw your own prompt: the toggle on the label line, then the
- *  template in the terminal font, then the template drawn the way the
- *  terminal would with your vitals full. Interim until the Prompt
- *  section replaces it. The switch and the design save to the profile's
- *  [prompt] table, and SettingsApp reads them again when a command such
- *  as #prompt changes the table. */
-function PromptBlock({
+/** Draw your own prompt: the toggle on the label line, then where your
+ *  prompt shows, then the template in the terminal font, then the
+ *  template drawn the way the terminal would with your vitals full.
+ *  Interim until the Prompt section replaces it. The switch, the place
+ *  and the design save to the profile's [prompt] table, and SettingsApp
+ *  reads them again when a command such as #prompt changes the table.
+ *  Exported for its test. */
+export function PromptBlock({
   enabled,
   template,
+  show,
+  showState,
   textColor,
   onEnabled,
   onTemplate,
+  onShow,
 }: {
   enabled: boolean;
   template: string;
+  show: PromptShow;
+  showState: PromptShowState | null;
   textColor: string;
   onEnabled: (on: boolean) => void;
   onTemplate: (text: string) => void;
+  onShow: (show: PromptShow) => void;
 }) {
   const fieldId = useId();
   const previewId = useId();
@@ -190,6 +203,7 @@ function PromptBlock({
       >
         <Toggle checked={enabled} onChange={onEnabled} />
       </Row>
+      <PromptShowField value={show} state={showState} onChange={onShow} />
       <label htmlFor={fieldId} className="st-visually-hidden">
         Prompt template
       </label>

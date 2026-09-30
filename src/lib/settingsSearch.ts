@@ -282,6 +282,12 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'advanced custom prompt template gag replace preview',
     target: at('input', 'advanced', 'prompt'),
   },
+  {
+    label: 'Where your prompt shows',
+    description: 'Your prompt shows in the text, where the game sends it.',
+    keywords: 'advanced prompt pin pinned lift lifted raise band chip bottom',
+    target: at('input', 'advanced', 'prompt-show'),
+  },
 
   // Automation, from the approved board.
   {
