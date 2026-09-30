@@ -198,6 +198,9 @@ beforeAll(async () => {
     setTimeout: globalThis.setTimeout.bind(globalThis),
     clearTimeout: globalThis.clearTimeout.bind(globalThis),
   });
+  // React DOM reads navigator.userAgent when it loads. Node 20, the CI
+  // version, has no navigator of its own.
+  vi.stubGlobal('navigator', { userAgent: 'node' });
   // React DOM checks for a DOM once, when it loads, so it loads now.
   ({ createRoot } = await import('react-dom/client'));
   ({ AppearancePage } = await import('./AppearancePage'));
