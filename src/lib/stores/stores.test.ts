@@ -63,6 +63,7 @@ async function load() {
     chipStyle: await import('./chipStyleStore'),
     tickCount: await import('./tickCountStore'),
     vitalsOptions: await import('./vitalsOptionsStore'),
+    affectsDisplay: await import('./affectsDisplayStore'),
     group: await import('../groupStore'),
     gamePrompt: await import('./gamePromptStore'),
     charState: await import('./charStateStore'),
@@ -580,6 +581,52 @@ describe('stores on the event bus', () => {
     answer({ tracked_affects: [], tick_count: 'up' });
     await settle();
     expect(s.tickCount.getTickCount()).toBe('down_past_zero');
+  });
+
+  it('follow the affects display Settings or the pane menu saves and each profile keeps', async () => {
+    commands.set('ui_get_config', {
+      tracked_affects: [],
+      affects_style: 'countdown',
+      affects_marker: 'square',
+    });
+    const s = await load();
+    expect(s.affectsDisplay.getAffectsDisplay()).toEqual({
+      style: 'countdown',
+      marker: 'square',
+      tint: false,
+    });
+    fire('vosh://affects-display-changed', { style: 'chips', marker: 'none', tint: true });
+    const heard = s.affectsDisplay.getAffectsDisplay();
+    expect(heard).toEqual({ style: 'chips', marker: 'none', tint: true });
+    // The same display again keeps the snapshot, so nothing renders.
+    fire('vosh://affects-display-changed', { style: 'chips', marker: 'none', tint: true });
+    expect(s.affectsDisplay.getAffectsDisplay()).toBe(heard);
+    fire('vosh://affects-display-changed', { style: 'grid', marker: 'check' });
+    expect(s.affectsDisplay.getAffectsDisplay()).toEqual({
+      style: 'timers',
+      marker: 'dot',
+      tint: false,
+    });
+    commands.set('ui_get_config', { tracked_affects: [], affects_tint: true });
+    fire('vosh://profile-switched', 'Erelei');
+    await settle();
+    expect(s.affectsDisplay.getAffectsDisplay()).toEqual({
+      style: 'timers',
+      marker: 'dot',
+      tint: true,
+    });
+  });
+
+  it('keep an affects display a pick sent over a slower config read', async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    commands.set('ui_get_config', { tracked_affects: [], affects_style: 'countdown' });
+    const s = await load();
+    commands.set('ui_get_config', new Promise((resolve) => (answer = resolve)));
+    fire('vosh://profile-switched', 'Erelei');
+    fire('vosh://affects-display-changed', { style: 'chips', marker: 'dot', tint: false });
+    answer({ tracked_affects: [], affects_style: 'timers' });
+    await settle();
+    expect(s.affectsDisplay.getAffectsDisplay().style).toBe('chips');
   });
 
   it('follow the vitals options Settings saves and each profile keeps', async () => {

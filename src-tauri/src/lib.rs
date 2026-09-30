@@ -392,6 +392,7 @@ pub fn run() {
             prompt_lookup::prompt_last_seen,
             characters::profile_export_file,
             commands::ui_set_theme,
+            commands::ui_set_affects_display,
             fonts_list,
             macros_list,
             macros_set,

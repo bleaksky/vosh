@@ -366,6 +366,21 @@ pub(crate) struct UiConfig {
     /// profile, like `chip_style`. Unknown values coerce back to `up`.
     #[serde(default = "default_tick_count")]
     pub tick_count: String,
+    /// Which layout the Affects pane draws: `timers` (the default,
+    /// Timers first), `countdown`, or `chips` (Grouped chips). Per
+    /// profile, like the rest of the panel. Unknown values coerce back
+    /// to `timers` on save.
+    #[serde(default = "default_affects_style")]
+    pub affects_style: String,
+    /// The mark beside each tracked affect in the timers and countdown
+    /// layouts: `dot` (the default), `square`, `plus_minus`, or `none`.
+    /// Unknown values coerce back to `dot` on save.
+    #[serde(default = "default_affects_marker")]
+    pub affects_marker: String,
+    /// Tint the missing and running out rows in the timers and
+    /// countdown layouts. Off by default. The chips layout always does.
+    #[serde(default)]
+    pub affects_tint: bool,
 }
 
 /// Vitals row appearance. Each `show_*` toggle controls whether the
@@ -620,6 +635,40 @@ pub(crate) fn coerce_tick_count(value: String) -> String {
         value
     } else {
         default_tick_count()
+    }
+}
+
+/// The layouts the Affects pane draws. Anything else saves as the
+/// default, Timers first.
+pub(crate) const AFFECTS_STYLES: [&str; 3] = ["timers", "countdown", "chips"];
+
+fn default_affects_style() -> String {
+    "timers".to_string()
+}
+
+/// Keep a known affects layout and turn anything else into `timers`.
+pub(crate) fn coerce_affects_style(value: String) -> String {
+    if AFFECTS_STYLES.contains(&value.as_str()) {
+        value
+    } else {
+        default_affects_style()
+    }
+}
+
+/// The marks the Affects pane draws beside a tracked affect. Anything
+/// else saves as the default, the dot.
+pub(crate) const AFFECTS_MARKERS: [&str; 4] = ["dot", "square", "plus_minus", "none"];
+
+fn default_affects_marker() -> String {
+    "dot".to_string()
+}
+
+/// Keep a known affects marker and turn anything else into `dot`.
+pub(crate) fn coerce_affects_marker(value: String) -> String {
+    if AFFECTS_MARKERS.contains(&value.as_str()) {
+        value
+    } else {
+        default_affects_marker()
     }
 }
 
@@ -1196,6 +1245,9 @@ impl Default for UiConfig {
             moons_position: default_moons_position(),
             chip_style: default_chip_style(),
             tick_count: default_tick_count(),
+            affects_style: default_affects_style(),
+            affects_marker: default_affects_marker(),
+            affects_tint: false,
         }
     }
 }
