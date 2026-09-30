@@ -292,7 +292,7 @@ Slash commands drive Vosh from the input bar without opening settings. Vosh hand
 - Manage aliases with `#alias <name> <expansion>`, `#unalias <name>`, and `#aliases`.
 - Manage variables with `#var <name> [value]`, `#unvar <name>`, and `#vars`.
 - Manage triggers with `#trigger <name> {pattern} <action>`, `#untrigger <name>`, and `#triggers`.
-- Bind prompt stats with `#prompt {regex}` using named groups like `(?<hp>\d+)`, and clear with `#unprompt`.
+- Tell Vosh how to read your prompt with `#prompt {regex}`, each named group like `(?<hp>\d+)` a value, and stop with `#unprompt`.
 - Flip whole folders with `#group <name> on|off` and inspect them with `#groups`.
 - Tune the tick with `#tick`, `#tick interval <secs>`, `#tick warn at <secs>`, and the rest listed under `#help`.
 - Record a command sequence with `#record <name>`, finish with `#endrec`, abort with `#record cancel`.
@@ -684,7 +684,7 @@ This is every slash command Vosh understands today.
 - `#alias <name> <expansion>` defines, `#unalias <name>` removes, `#aliases` lists.
 - `#var <name> [value]` sets or shows a session variable, `#unvar <name>` removes it from both scopes, `#vars` lists.
 - `#trigger <name> {pattern} <action> [args]` defines, `#untrigger <name>` removes, `#triggers` lists by priority.
-- `#prompt {regex}` binds named captures to prompt vars, `#unprompt` removes it.
+- `#prompt {regex}` reads your prompt in this profile with a pattern, and `#unprompt` stops reading it.
 - `#group <name> on|off` toggles a group, `#group <name>` shows state, `#groups` lists.
 - `#tick`, `#tick interval <secs>`, `#tick reset`, `#tick on {pattern}`, `#tick off`, `#tick fire <command>`, `#tick nofire`, `#tick sound on|off`, `#tick disable`, `#tick enable` drive the tick timer.
 - `#tick warn`, `#tick warn at <secs>`, `#tick warn message <text>`, `#tick warn color <name>`, `#tick warn off` shape the tick warning.

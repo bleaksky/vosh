@@ -45,7 +45,7 @@ use crate::profile_set::{display_name, ProfileSet};
 /// The id the move is recorded under in `profiles.toml`.
 pub(crate) const MIGRATION: &str = "prompt-capture-to-profile";
 
-/// The name `#prompt {regex}` gave its trigger.
+/// The name `#prompt {regex}` gave its trigger in older builds.
 const CAPTURE_TRIGGER: &str = "prompt-capture";
 
 /// The id the check of Line triggers against your prompt is recorded
