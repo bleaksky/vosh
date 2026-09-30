@@ -196,6 +196,46 @@ pub(crate) enum OutgoingMsg {
     WindowSize { cols: u16, rows: u16 },
 }
 
+/// Everything one socket read writes to the terminal and reports, kept
+/// in stream order and sent once at the end of the read, so a prompt
+/// that arrives in one read never flashes. The Line pass, the GMCP
+/// handler's echoes and the GA path all write here.
+#[derive(Default)]
+struct ReadBatch {
+    /// The terminal output.
+    out: Vec<u8>,
+    /// Log rows, flushed in one transaction.
+    log: Vec<vosh_log::LogEntry>,
+    /// A prompt var changed, so the prompt vars go out after the output.
+    prompt_vars: bool,
+}
+
+/// Where a step writes to the terminal: the batch of the read it runs
+/// in, or straight out for work outside a read, such as a timer.
+enum OutputSink<'a> {
+    Batch(&'a mut ReadBatch),
+    Direct,
+}
+
+impl OutputSink<'_> {
+    /// Write `bytes` to the terminal.
+    fn write(&mut self, app: &AppHandle, bytes: Vec<u8>) {
+        match self {
+            OutputSink::Batch(batch) => batch.out.extend(bytes),
+            OutputSink::Direct => emit_output(app, bytes),
+        }
+    }
+
+    /// A prompt var changed. A read sends the prompt vars once after its
+    /// output, and anything else sends them now.
+    async fn prompt_vars(&mut self, app: &AppHandle, profile: &Arc<Mutex<Profile>>) {
+        match self {
+            OutputSink::Batch(batch) => batch.prompt_vars = true,
+            OutputSink::Direct => emit_prompt_vars(app, profile).await,
+        }
+    }
+}
+
 pub(crate) struct SessionHandle {
     tx_outgoing: mpsc::UnboundedSender<OutgoingMsg>,
     task: JoinHandle<()>,
@@ -463,6 +503,7 @@ async fn io_loop(
                     perf.socket_reads += 1;
                     perf.bytes_in += n as u64;
                     let events = parser.feed(&buf[..n]);
+                    let mut batch = ReadBatch::default();
                     for event in events {
                         // Once the server sends DO NAWS we know NAWS is
                         // active and future window-size changes can push
@@ -480,20 +521,18 @@ async fn io_loop(
                             &profile,
                             &map,
                             &timers,
-                            &logs,
                             log_session_id,
                             &scrollback,
                             &mut server_echo,
                             event,
+                            &mut batch,
                             &mut perf,
                         ).await {
                             warn!(error = %e, "event handling failed");
                             break;
                         }
                     }
-                    // Once per read, so the packets of one pulse never
-                    // show the panes a state between them.
-                    emit_hidden_change(&app, &profile).await;
+                    finish_read(&app, &profile, &logs, batch, &mut perf).await;
                 }
                 Err(e) => {
                     error!(error = %e, "read failed");
@@ -515,6 +554,7 @@ async fn io_loop(
                                 perf.bytes_in += n as u64;
                                 drained_bytes += n;
                                 let events = parser.feed(&buf[..n]);
+                                let mut batch = ReadBatch::default();
                                 for event in events {
                                     if let Err(handle_err) = handle_event(
                                         &app,
@@ -524,11 +564,11 @@ async fn io_loop(
                                         &profile,
                                         &map,
                                         &timers,
-                                        &logs,
                                         log_session_id,
                                         &scrollback,
                                         &mut server_echo,
                                         event,
+                                        &mut batch,
                                         &mut perf,
                                     )
                                     .await
@@ -540,7 +580,7 @@ async fn io_loop(
                                         break;
                                     }
                                 }
-                                emit_hidden_change(&app, &profile).await;
+                                finish_read(&app, &profile, &logs, batch, &mut perf).await;
                             }
                             Err(drain_err)
                                 if drain_err.kind() == std::io::ErrorKind::WouldBlock =>
@@ -666,7 +706,7 @@ async fn handle_tick(
     if let Some(text) = &step.warn_echo {
         emit_output(app, text.clone().into_bytes());
     }
-    deliver_tick_step(app, stream, profile, step).await
+    deliver_tick_step(app, stream, profile, step, &mut OutputSink::Direct).await
 }
 
 /// Report a tick step on `session://tick`, so the frontend counts and
@@ -677,12 +717,13 @@ async fn deliver_tick_step(
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
     step: TickStep,
+    sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
     if let Err(e) = app.emit("session://tick", &step.payload) {
         warn!(error = %e, "failed to emit tick payload");
     }
     if let Some(command) = step.command {
-        run_fired_command(app, stream, profile, &command).await?;
+        run_fired_command(app, stream, profile, &command, sink).await?;
     }
     Ok(())
 }
@@ -735,7 +776,7 @@ async fn fire_due_profile_timers(
         due
     };
     for command in due {
-        run_fired_command(app, stream, profile, &command).await?;
+        run_fired_command(app, stream, profile, &command, &mut OutputSink::Direct).await?;
     }
     Ok(())
 }
@@ -820,6 +861,7 @@ async fn run_fired_command(
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
     command: &str,
+    sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
     let shared = crate::commands::shared_layer_for_lines(app, [command]).await;
     let FiredRun {
@@ -834,19 +876,25 @@ async fn run_fired_command(
     broadcast_list_changes(app, lists);
     crate::commands::settle_line_effects(app, effects).await;
     if !echoes.is_empty() {
-        let mut buf = Vec::new();
-        for line in &echoes {
-            buf.extend_from_slice(b"\r\n");
-            buf.extend_from_slice(line.as_bytes());
-        }
-        buf.extend_from_slice(b"\r\n");
-        emit_output(app, buf);
+        sink.write(app, framed_echoes(&echoes));
     }
     if !bytes.is_empty() {
         stream.write_all(&bytes).await?;
         stream.flush().await?;
     }
     Ok(())
+}
+
+/// Echo lines outside a trigger's own line, each on its own row with a
+/// line end before the first.
+fn framed_echoes<S: AsRef<str>>(lines: &[S]) -> Vec<u8> {
+    let mut buf = Vec::new();
+    for line in lines {
+        buf.extend_from_slice(b"\r\n");
+        buf.extend_from_slice(line.as_ref().as_bytes());
+    }
+    buf.extend_from_slice(b"\r\n");
+    buf
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -858,11 +906,11 @@ async fn handle_event(
     profile: &Arc<Mutex<Profile>>,
     map: &SharedMap,
     timers: &SharedTimers,
-    logs: &crate::log_state::SharedLogStore,
     log_session_id: Option<i64>,
     scrollback: &crate::log_state::SharedScrollback,
     server_echo: &mut ServerEcho,
     event: TelnetEvent,
+    batch: &mut ReadBatch,
     perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
     // WILL ECHO means the server takes over echoing what you type, which
@@ -875,27 +923,22 @@ async fn handle_event(
     }
     match event {
         TelnetEvent::Data(bytes) => {
-            // Batch every byte we want to push to xterm across all
-            // ChunkOps from this single Data event into one buffer so
-            // we emit one `session://output` instead of one-per-line.
-            // Tauri events serialize through the bridge and xterm
-            // renders each write on its own frame; without batching a
-            // 50-line response paints line-by-line ("typewriter") at
-            // the speed of Tauri event delivery + xterm framing.
+            // Every byte for the terminal lands in the read's batch, which
+            // goes out as one `session://output` at the end of the read
+            // instead of one per line. Tauri events serialize through the
+            // bridge and xterm renders each write on its own frame, so
+            // without batching a 50-line response paints line by line
+            // ("typewriter") at the speed of event delivery.
             //
             // Triggers, Lua callbacks, route emissions, log writes,
             // and tick-reset bookkeeping still run per-line because
             // they have ordering semantics (a `gag` action mutates the
-            // line's display before it lands in the batch).
-            let mut display_batch: Vec<u8> = Vec::new();
-            // Log rows for this socket read, flushed in one batched
-            // transaction after the loop instead of one INSERT + one
-            // lock acquisition per line.
-            let mut log_entries: Vec<vosh_log::LogEntry> = Vec::new();
+            // line's display before it lands in the batch). Log rows
+            // flush in one transaction at the end of the read.
             for op in accumulator.feed(&bytes) {
                 match op {
                     ChunkOp::RawDisplay(b) => {
-                        display_batch.extend_from_slice(&b);
+                        batch.out.extend_from_slice(&b);
                     }
                     ChunkOp::LineComplete { bytes, clear_first } => {
                         perf.lines_processed += 1;
@@ -938,11 +981,11 @@ async fn handle_event(
                         let mut script_apply = script_apply;
                         if result.display.is_none() && !script_apply.echoes.is_empty() {
                             for line in script_apply.echoes.drain(..) {
-                                display_batch.extend_from_slice(line.as_bytes());
-                                display_batch.extend_from_slice(b"\r\n");
+                                batch.out.extend_from_slice(line.as_bytes());
+                                batch.out.extend_from_slice(b"\r\n");
                             }
                         }
-                        append_line_result(&mut display_batch, &result, clear_first);
+                        append_line_result(&mut batch.out, &result, clear_first);
                         // The custom prompt renders on the gagged prompt's
                         // row, in the same batch — no erased-row flash. No
                         // trailing newline: the cursor sits after the prompt
@@ -951,7 +994,7 @@ async fn handle_event(
                         // Placed after append_line_result so a clear_first
                         // wipe cannot erase it.
                         if let Some(rendered) = &rendered_prompt {
-                            display_batch.extend_from_slice(rendered.as_bytes());
+                            batch.out.extend_from_slice(rendered.as_bytes());
                         }
                         if !result.routes.is_empty() {
                             perf.routed_emits += result.routes.len() as u64;
@@ -966,7 +1009,7 @@ async fn handle_event(
                             // and `bytes` are not used past this point, so
                             // they move into the entry instead of cloning.
                             if let Some(sid) = log_session_id {
-                                log_entries.push(vosh_log::LogEntry {
+                                batch.log.push(vosh_log::LogEntry {
                                     session_id: sid,
                                     ts_ms: now_ms(),
                                     text: plain,
@@ -979,39 +1022,20 @@ async fn handle_event(
                             perf.scrollback_pushes += 1;
                         }
                         send_trigger_outputs(stream, &result.sends).await?;
-                        apply_script_result(app, stream, profile, timers, script_apply).await?;
+                        let mut sink = OutputSink::Batch(batch);
+                        apply_script_result(app, stream, profile, timers, script_apply, &mut sink)
+                            .await?;
                         if let Some(step) = tick_step {
-                            deliver_tick_step(app, stream, profile, step).await?;
+                            deliver_tick_step(app, stream, profile, step, &mut sink).await?;
                         }
                     }
-                }
-            }
-            if !display_batch.is_empty() {
-                perf.output_emits += 1;
-                perf.output_emit_bytes += display_batch.len() as u64;
-                emit_output(app, display_batch);
-            }
-            // Flush this read's log rows in one transaction under one
-            // lock acquisition, instead of per line inside the loop.
-            if !log_entries.is_empty() {
-                let lock_t0 = std::time::Instant::now();
-                let mut guard = logs.lock().await;
-                perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
-                perf.mutex_acquires += 1;
-                if let Some(store) = guard.as_mut() {
-                    let append_t0 = std::time::Instant::now();
-                    perf.log_appends += log_entries.len() as u64;
-                    if let Err(e) = store.append_batch(&log_entries) {
-                        warn!(error = %e, "log append_batch failed");
-                    }
-                    perf.log_append_ns += append_t0.elapsed().as_nanos() as u64;
                 }
             }
             Ok(())
         }
         TelnetEvent::Subnegotiation { option, payload } if option == telnet_option::GMCP => {
             perf.gmcp_packets += 1;
-            handle_gmcp(app, profile, map, timers, stream, &payload, perf).await?;
+            handle_gmcp(app, profile, map, timers, stream, &payload, batch, perf).await?;
             Ok(())
         }
         TelnetEvent::Command(byte) if byte == telnet_codes::EOR || byte == telnet_codes::GA => {
@@ -1029,7 +1053,7 @@ async fn handle_event(
             // Highlight, Send, Route, Script) work identically.
             // Gag here means the on-screen partial is erased with
             // `ESC[2K\r` before the trailing newline ends the row.
-            dispatch_prompt_buffer(app, profile, stream, timers, accumulator).await?;
+            dispatch_prompt_buffer(app, profile, stream, timers, accumulator, batch).await?;
             Ok(())
         }
         TelnetEvent::Will(opt) if opt == telnet_option::GMCP => {
@@ -1263,6 +1287,47 @@ async fn emit_hidden_change(app: &AppHandle, profile: &Arc<Mutex<Profile>>) {
     }
 }
 
+/// Send what one socket read gathered: its output, its log rows in one
+/// transaction, then the prompt vars and the hidden state when they
+/// changed, once per read so the packets of one pulse never show the
+/// panes a state between them.
+async fn finish_read(
+    app: &AppHandle,
+    profile: &Arc<Mutex<Profile>>,
+    logs: &crate::log_state::SharedLogStore,
+    batch: ReadBatch,
+    perf: &mut PerfCounters,
+) {
+    let ReadBatch {
+        out,
+        log,
+        prompt_vars,
+    } = batch;
+    if !out.is_empty() {
+        perf.output_emits += 1;
+        perf.output_emit_bytes += out.len() as u64;
+        emit_output(app, out);
+    }
+    if !log.is_empty() {
+        let lock_t0 = std::time::Instant::now();
+        let mut guard = logs.lock().await;
+        perf.mutex_wait_ns += lock_t0.elapsed().as_nanos() as u64;
+        perf.mutex_acquires += 1;
+        if let Some(store) = guard.as_mut() {
+            let append_t0 = std::time::Instant::now();
+            perf.log_appends += log.len() as u64;
+            if let Err(e) = store.append_batch(&log) {
+                warn!(error = %e, "log append_batch failed");
+            }
+            perf.log_append_ns += append_t0.elapsed().as_nanos() as u64;
+        }
+    }
+    if prompt_vars {
+        emit_prompt_vars(app, profile).await;
+    }
+    emit_hidden_change(app, profile).await;
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn handle_gmcp(
     app: &AppHandle,
@@ -1271,6 +1336,7 @@ async fn handle_gmcp(
     timers: &SharedTimers,
     stream: &mut Stream,
     payload: &[u8],
+    batch: &mut ReadBatch,
     perf: &mut PerfCounters,
 ) -> std::io::Result<()> {
     let msg = match vosh_gmcp::parse(payload) {
@@ -1356,11 +1422,12 @@ async fn handle_gmcp(
             }
         }
     }
+    let mut sink = OutputSink::Batch(batch);
     if let Some(step) = tick_step {
         perf.tick_emits += 1;
-        deliver_tick_step(app, stream, profile, step).await?;
+        deliver_tick_step(app, stream, profile, step, &mut sink).await?;
     }
-    apply_script_result(app, stream, profile, timers, script_apply).await?;
+    apply_script_result(app, stream, profile, timers, script_apply, &mut sink).await?;
     if msg.package == "Room.Info" {
         // Map-store SQLite writes ride a dedicated single-consumer task
         // (ordering preserved) instead of running inline on the io loop,
@@ -1503,6 +1570,7 @@ async fn apply_script_result(
     profile: &Arc<Mutex<Profile>>,
     timers: &SharedTimers,
     apply: ApplyResult,
+    sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
     // Durable Lua mutations (mud.alias / set_var / group toggles fired by
     // triggers or timers) historically never reached disk. Ride the same
@@ -1518,13 +1586,7 @@ async fn apply_script_result(
         stream.flush().await?;
     }
     if !apply.echoes.is_empty() {
-        let mut buf = Vec::new();
-        for line in &apply.echoes {
-            buf.extend_from_slice(b"\r\n");
-            buf.extend_from_slice(line.as_bytes());
-        }
-        buf.extend_from_slice(b"\r\n");
-        emit_output(app, buf);
+        sink.write(app, framed_echoes(&apply.echoes));
     }
     if !apply.inputs.is_empty() {
         let mut input_bytes = Vec::new();
@@ -1550,13 +1612,7 @@ async fn apply_script_result(
             stream.flush().await?;
         }
         if !input_echoes.is_empty() {
-            let mut buf = Vec::new();
-            for line in &input_echoes {
-                buf.extend_from_slice(b"\r\n");
-                buf.extend_from_slice(line.as_bytes());
-            }
-            buf.extend_from_slice(b"\r\n");
-            emit_output(app, buf);
+            sink.write(app, framed_echoes(&input_echoes));
         }
     }
     if !apply.new_timers.is_empty() || !apply.cancel_timers.is_empty() {
@@ -1567,7 +1623,7 @@ async fn apply_script_result(
         guard.extend(apply.new_timers);
     }
     if apply.prompt_vars_changed {
-        emit_prompt_vars(app, profile).await;
+        sink.prompt_vars(app, profile).await;
     }
     Ok(())
 }
@@ -1614,7 +1670,7 @@ async fn fire_due_script_timers(
         }
         script_state::apply_actions(&mut p, outcome)
     };
-    apply_script_result(app, stream, profile, timers, apply).await
+    apply_script_result(app, stream, profile, timers, apply, &mut OutputSink::Direct).await
 }
 
 /// Run `target=prompt` triggers against the partial-prompt buffer the
@@ -1678,6 +1734,7 @@ async fn dispatch_prompt_buffer(
     stream: &mut Stream,
     timers: &SharedTimers,
     accumulator: &mut LineAccumulator,
+    batch: &mut ReadBatch,
 ) -> std::io::Result<()> {
     let Some((bytes, already_shown)) = accumulator.flush_partial() else {
         return Ok(());
@@ -1695,15 +1752,16 @@ async fn dispatch_prompt_buffer(
         // No prompt trigger changed anything. End the row the partial
         // was painted on, as the legacy partial flush did.
         if already_shown {
-            emit_output(app, b"\r\n".to_vec());
+            batch.out.extend_from_slice(b"\r\n");
         }
         return Ok(());
     };
-    // Repaint the visible partial in ONE output batch: erase, then the
-    // replacement. Splitting these across emits (or rendering the prompt in
-    // the frontend, as before) shows the blank erased row for a frame.
+    // Repaint the visible partial in the read's one output batch: erase,
+    // then the replacement. Splitting these across emits (or rendering
+    // the prompt in the frontend, as before) shows the blank erased row
+    // for a frame.
     let mut script_apply = script_apply;
-    let mut out = Vec::new();
+    let out = &mut batch.out;
     if already_shown {
         out.extend_from_slice(b"\x1b[2K\r");
     }
@@ -1731,21 +1789,20 @@ async fn dispatch_prompt_buffer(
             out.extend_from_slice(b"\r\n");
         }
     }
-    if !out.is_empty() {
-        emit_output(app, out);
-    }
     send_trigger_outputs(stream, &result.sends).await?;
-    // Always emit prompt-vars after a prompt-scope trigger has
-    // had effect, even when none of the captured values changed.
-    // The frontend's custom prompt renderer needs to re-paint on
-    // every prompt as a "server is ready for input" indicator;
-    // gating on value-change suppresses the emit when the player
-    // is at full vitals and the prompt repeats unchanged. Clear
-    // the apply flag so apply_script_result doesn't double-emit
-    // when values DID change.
-    emit_prompt_vars(app, profile).await;
-    script_apply.prompt_vars_changed = false;
-    apply_script_result(app, stream, profile, timers, script_apply).await
+    // Always send prompt-vars after a prompt-scope trigger has had
+    // effect, even when none of the captured values changed, so the
+    // webview hears every prompt. The read sends them once.
+    batch.prompt_vars = true;
+    apply_script_result(
+        app,
+        stream,
+        profile,
+        timers,
+        script_apply,
+        &mut OutputSink::Batch(batch),
+    )
+    .await
 }
 
 async fn send_trigger_outputs(stream: &mut Stream, sends: &[String]) -> std::io::Result<()> {
