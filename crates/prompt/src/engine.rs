@@ -372,6 +372,17 @@ impl PromptEngine {
                 let applied = self.take_settings(Some(&text), None, CaptureSource::Session, at);
                 (SeenKind::Prompt, applied)
             }
+            ReplyKind::Channels => {
+                // `channels` turns nothing on. While prompts are off it
+                // shows what an older build's `prompt off` left, which
+                // is no setting of yours.
+                if self.prompts_off {
+                    return;
+                }
+                self.note_session_setting(Some(&text), None, at);
+                let applied = self.take_settings(Some(&text), None, CaptureSource::Session, at);
+                (SeenKind::Prompt, applied)
+            }
             ReplyKind::Fight | ReplyKind::NoFight => {
                 self.note_session_setting(None, Some(&text), at);
                 let applied = self.take_settings(None, Some(&text), CaptureSource::Session, at);
@@ -1082,6 +1093,31 @@ mod tests {
         line(&mut engine, "You will no longer see prompts.", 4_010);
         assert!(engine.prompts_off());
         engine.note_prompt(at());
+        assert!(!engine.prompts_off());
+    }
+
+    #[test]
+    fn channels_shows_your_prompt_and_turns_nothing_on() {
+        // prompt off on an older build stores a buffer it never filled.
+        let mut engine = older_build("<%hhp> ");
+        engine.note_send("prompt off\r\n", SENT);
+        line(&mut engine, "You will no longer see prompts.", 5);
+        line(&mut engine, "Prompt set to \u{1}\u{2}", 6);
+        let _ = engine.take_seen();
+        // channels shows that buffer and leaves prompts off.
+        engine.note_send("channels\r\n", SENT + 3_000);
+        line(&mut engine, "Your current prompt is: \u{1}\u{2}", 3_010);
+        assert!(engine.prompts_off());
+        assert_eq!(engine.status(), Status::PromptsOff);
+        assert_eq!(codes(&engine).prompt, "<%hhp> ");
+        assert!(engine.take_seen().is_empty());
+        // With prompts on, the setting it shows is yours.
+        engine.note_send("prompt %h\r\n", SENT + 4_000);
+        line(&mut engine, "Prompt set to %h ", 4_010);
+        assert!(!engine.prompts_off());
+        engine.note_send("channels\r\n", SENT + 5_000);
+        line(&mut engine, "Your current prompt is: %h %m ", 5_010);
+        assert_eq!(codes(&engine).prompt, "%h %m ");
         assert!(!engine.prompts_off());
     }
 

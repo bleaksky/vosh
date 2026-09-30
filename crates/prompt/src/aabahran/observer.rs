@@ -16,8 +16,13 @@ use super::colors;
 /// What a reply says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReplyKind {
-    /// Your PROMPT setting follows the prefix.
+    /// Your PROMPT setting follows the prefix. `prompt` printed it, and
+    /// every `prompt` but `prompt off` turns prompts on.
     Prompt,
+    /// Your PROMPT setting follows the prefix. `channels` printed it
+    /// (`act_comm.c:335`), which turns nothing on. After `prompt off` on
+    /// an older build it shows the buffer that reply left unfilled.
+    Channels,
     /// Your fight prompt setting follows the prefix.
     Fight,
     /// You have no fight prompt.
@@ -38,7 +43,7 @@ pub struct Reply {
 const SETTINGS: [(&str, ReplyKind); 5] = [
     ("Current prompt: ", ReplyKind::Prompt),
     ("Prompt set to ", ReplyKind::Prompt),
-    ("Your current prompt is: ", ReplyKind::Prompt),
+    ("Your current prompt is: ", ReplyKind::Channels),
     ("Current fight prompt: ", ReplyKind::Fight),
     ("Fight prompt set to ", ReplyKind::Fight),
 ];
@@ -120,10 +125,34 @@ pub struct Found {
     pub at_ms: i64,
 }
 
+/// True when the reply at `i`, a `Prompt set to`, answers `prompt off`:
+/// the older builds print it right after "You will no longer see
+/// prompts."
+fn answers_off(lines: &[Logged<'_>], i: usize) -> bool {
+    lines.get(i + 1).is_some_and(|older| {
+        reply(older.text).is_some_and(|r| r.kind == ReplyKind::Off)
+            && lines[i].ts_ms - older.ts_ms <= WINDOW_MS
+    })
+}
+
+/// True when prompts were off as the game printed line `i`: the newest
+/// `prompt` reply before it turned them off.
+fn off_at(lines: &[Logged<'_>], i: usize) -> bool {
+    for (j, older) in lines.iter().enumerate().skip(i + 1) {
+        match reply(older.text).map(|r| r.kind) {
+            Some(ReplyKind::Off) => return true,
+            Some(ReplyKind::Prompt) => return answers_off(lines, j),
+            _ => {}
+        }
+    }
+    false
+}
+
 /// The newest PROMPT setting among one session's reply lines, newest
 /// first, with the newest fight prompt of the session. A `Prompt set
 /// to` right after "You will no longer see prompts." is the reply to
-/// `prompt off` on the older builds and sets nothing.
+/// `prompt off` on the older builds and sets nothing, and so is what
+/// `channels` shows while prompts are off.
 pub fn latest(lines: &[Logged<'_>]) -> Option<Found> {
     let fight = |line: &Logged<'_>| {
         let found = reply(line.text)?;
@@ -142,11 +171,12 @@ pub fn latest(lines: &[Logged<'_>]) -> Option<Found> {
                 }
             }
             ReplyKind::Off => {}
-            ReplyKind::Prompt => {
-                let off = lines.get(i + 1).is_some_and(|older| {
-                    reply(older.text).is_some_and(|r| r.kind == ReplyKind::Off)
-                        && line.ts_ms - older.ts_ms <= WINDOW_MS
-                });
+            ReplyKind::Prompt | ReplyKind::Channels => {
+                let off = if found.kind == ReplyKind::Channels {
+                    off_at(lines, i)
+                } else {
+                    answers_off(lines, i)
+                };
                 if off {
                     continue;
                 }
@@ -181,7 +211,10 @@ mod tests {
         let kind = |line: &str| reply(line).map(|r| r.kind);
         assert_eq!(kind("Current prompt: %h "), Some(ReplyKind::Prompt));
         assert_eq!(kind("Prompt set to %h "), Some(ReplyKind::Prompt));
-        assert_eq!(kind("Your current prompt is: %h "), Some(ReplyKind::Prompt));
+        assert_eq!(
+            kind("Your current prompt is: %h "),
+            Some(ReplyKind::Channels)
+        );
         assert_eq!(kind("Current fight prompt: %h "), Some(ReplyKind::Fight));
         assert_eq!(kind("Fight prompt set to %h "), Some(ReplyKind::Fight));
         assert_eq!(
@@ -285,6 +318,35 @@ mod tests {
             logged("You will no longer see prompts.", 1_000),
         ];
         assert_eq!(latest(&lines).map(|f| f.prompt), Some("%m ".into()));
+    }
+
+    #[test]
+    fn channels_after_prompt_off_in_the_log_sets_nothing() {
+        // channels shows the buffer an older build left unfilled.
+        let lines = [
+            logged("Your current prompt is: \u{1}\u{2}", 5_000),
+            logged("Prompt set to \u{1}\u{2}", 1_010),
+            logged("You will no longer see prompts.", 1_000),
+            logged("Prompt set to %h ", 500),
+        ];
+        assert_eq!(latest(&lines).map(|f| f.prompt), Some("%h ".into()));
+        // The same after the new build, which prints only the first line.
+        let lines = [
+            logged("Your current prompt is: %m ", 5_000),
+            logged("You will no longer see prompts.", 1_000),
+            logged("Prompt set to %h ", 500),
+        ];
+        assert_eq!(latest(&lines).map(|f| f.prompt), Some("%h ".into()));
+        // With prompts on it shows your setting.
+        let lines = [
+            logged("Your current prompt is: %m ", 5_000),
+            logged("Prompt set to %h ", 500),
+        ];
+        assert_eq!(latest(&lines).map(|f| f.prompt), Some("%m ".into()));
+        assert_eq!(
+            latest(&[logged("Your current prompt is: %m ", 1)]).map(|f| f.prompt),
+            Some("%m ".into())
+        );
     }
 
     #[test]
