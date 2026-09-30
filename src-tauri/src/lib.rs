@@ -90,6 +90,7 @@ mod plugins;
 mod profile;
 mod profile_config;
 mod profile_set;
+mod prompt_migration;
 mod script_state;
 mod session;
 #[cfg(native_surface)]
