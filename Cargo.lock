@@ -5245,6 +5245,7 @@ name = "vosh-prompt"
 version = "0.7.2"
 dependencies = [
  "chrono",
+ "serde",
 ]
 
 [[package]]

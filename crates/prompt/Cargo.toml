@@ -8,6 +8,7 @@ description = "The custom prompt engine for Vosh. Template, renderer and word wr
 rust-version.workspace = true
 
 [dependencies]
+serde = { workspace = true }
 # Local time for the clock pieces (clock only, no default features).
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
