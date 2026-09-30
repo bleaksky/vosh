@@ -11,6 +11,8 @@ use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 use regex::Regex;
+use regex_automata::hybrid::dfa::{Cache, DFA};
+use regex_automata::{Anchored, Input};
 use regex_syntax::hir::{HirKind, Look};
 
 use crate::aabahran::{Compiled, Origin, Shape, ShapeKind, Which, Who};
@@ -146,6 +148,63 @@ pub fn from_trigger(patterns: &[&str], body: &str) -> Result<RegexCapture, NotAC
 #[derive(Debug, Clone)]
 pub struct Recognizer {
     reader: Reader,
+    /// A lazy DFA per line of each shape, in shape order, to tell whether
+    /// a partial can still become that line. A regex capture has one.
+    prefixes: Vec<Vec<Prefix>>,
+}
+
+/// Whether text can still grow into a match of one pattern.
+#[derive(Debug, Clone)]
+struct Prefix {
+    dfa: DFA,
+    cache: Cache,
+    /// The pattern starts with `^`, so a mismatch at the start is final.
+    anchored: bool,
+}
+
+impl Prefix {
+    fn new(pattern: &str) -> Option<Self> {
+        let dfa = DFA::new(pattern).ok()?;
+        let cache = dfa.create_cache();
+        Some(Self {
+            dfa,
+            cache,
+            anchored: anchored_start(pattern),
+        })
+    }
+
+    /// True while `text` is a prefix of some line the pattern matches:
+    /// the DFA state after it is not dead. An unanchored pattern can
+    /// match further on, so it never dies.
+    fn live(&mut self, text: &str) -> bool {
+        let mode = if self.anchored {
+            Anchored::Yes
+        } else {
+            Anchored::No
+        };
+        let input = Input::new(text).anchored(mode);
+        let Ok(mut state) = self.dfa.start_state_forward(&mut self.cache, &input) else {
+            return false;
+        };
+        for &byte in text.as_bytes() {
+            match self.dfa.next_state(&mut self.cache, state, byte) {
+                Ok(next) if !next.is_dead() && !next.is_quit() => state = next,
+                _ => return false,
+            }
+        }
+        true
+    }
+}
+
+/// True when a pattern starts with `^` or `\A`.
+fn anchored_start(pattern: &str) -> bool {
+    let Ok(hir) = regex_syntax::parse(pattern) else {
+        return false;
+    };
+    match hir.kind() {
+        HirKind::Concat(items) => items.first().is_some_and(|first| starts(first.kind())),
+        kind => starts(kind),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -197,7 +256,52 @@ impl Recognizer {
             }
             CaptureConfig::Regex(capture) => regex_reader(capture)?,
         };
-        Some(Self { reader })
+        let prefixes = match &reader {
+            Reader::Regex { line, .. } => vec![Prefix::new(line.as_str()).into_iter().collect()],
+            Reader::Codes(compiled) => compiled
+                .shapes
+                .iter()
+                .map(|shape| {
+                    shape
+                        .lines
+                        .iter()
+                        .filter_map(|line| Prefix::new(line.line.as_str()))
+                        .collect()
+                })
+                .collect(),
+        };
+        Some(Self { reader, prefixes })
+    }
+
+    /// True when `partial`, after the held lines `held`, can still grow
+    /// into your prompt, so the stage holds it a moment rather than paint
+    /// it raw. A partial that no shape can become paints at once.
+    pub fn live(&mut self, held: &[&str], partial: &str) -> bool {
+        match &self.reader {
+            Reader::Regex { .. } => {
+                held.is_empty()
+                    && self
+                        .prefixes
+                        .first_mut()
+                        .and_then(|lines| lines.first_mut())
+                        .is_some_and(|prefix| prefix.live(partial))
+            }
+            Reader::Codes(compiled) => {
+                for (shape, prefixes) in compiled.shapes.iter().zip(self.prefixes.iter_mut()) {
+                    if shape.lines.len() <= held.len() || prefixes.len() != shape.lines.len() {
+                        continue;
+                    }
+                    let heads_match = held
+                        .iter()
+                        .zip(&shape.lines)
+                        .all(|(text, line)| line.line.is_match(text));
+                    if heads_match && prefixes[held.len()].live(partial) {
+                        return true;
+                    }
+                }
+                false
+            }
+        }
     }
 
     /// The compiled codes, for a capture that reads them.
@@ -730,6 +834,43 @@ mod tests {
         .expect("it compiles");
         let read = immortal.partial("<10 not pacified> ").expect("a prompt");
         assert_eq!(read.values["pacify"], "not pacified");
+    }
+
+    #[test]
+    fn a_partial_is_live_while_a_shape_can_still_follow_it() {
+        let mut reader = Recognizer::compile(&codes(JAMES, "")).expect("it compiles");
+        for partial in [
+            "",
+            "[",
+            "[1020/10",
+            "(Wizi 60) [1020/1020hp 800/800mn 930/930mv]",
+        ] {
+            assert!(reader.live(&[], partial), "{partial:?}");
+        }
+        // The tank line and a partial of the prompt under it. %n prints
+        // any name, so any text might yet be a tank line.
+        assert!(reader.live(&[], "Tester: [===|==="));
+        assert!(reader.live(&[], "You are hungry"));
+        assert!(reader.live(&["Tester: [===|===|---|---]"], "[159/10"));
+        assert!(!reader.live(&["Tester: [===|===|---|---]"], "You"));
+        assert!(!reader.live(&["You are hungry."], "[159/10"));
+
+        let mut reader = Recognizer::compile(&codes("<%hhp %mm %vmv> ", "")).expect("it compiles");
+        assert!(reader.live(&[], "<10hp 2"));
+        assert!(reader.live(&[], "<AF"));
+        for partial in ["You are hungry", "<10hp x", "<AFK> x", "<10hp 20m 30mv> x"] {
+            assert!(!reader.live(&[], partial), "{partial:?}");
+        }
+
+        // An anchored pattern dies on a mismatch, and an unanchored one
+        // can match further on, so it never does.
+        let mut anchored =
+            Recognizer::compile(&regex(&[r"^<(?<hp>\d+)hp> $"], true, &[])).expect("it compiles");
+        assert!(anchored.live(&[], "<10h"));
+        assert!(!anchored.live(&[], "x<10h"));
+        assert!(!anchored.live(&["<10hp> "], "<10h"), "one line only");
+        let mut loose = Recognizer::compile(&regex(&[PATTERN], false, &[])).expect("it compiles");
+        assert!(loose.live(&[], "You are hungry"));
     }
 
     #[test]

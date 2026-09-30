@@ -5248,6 +5248,7 @@ version = "0.7.2"
 dependencies = [
  "chrono",
  "regex",
+ "regex-automata",
  "regex-syntax",
  "serde",
  "serde_json",

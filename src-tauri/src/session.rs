@@ -240,6 +240,9 @@ struct ReadBatch {
     /// The character Char.Status named in this read, for the log's
     /// session row.
     character: Option<String>,
+    /// The read ended on a partial that can still become your prompt, so
+    /// it waits a moment for the next read instead of painting raw.
+    hold: bool,
 }
 
 impl ReadBatch {
@@ -253,6 +256,7 @@ impl ReadBatch {
             prompt_vars: false,
             gag_without_reader: Vec::new(),
             character: None,
+            hold: false,
         }
     }
 }
@@ -494,6 +498,9 @@ async fn io_loop(
     // The log's row for this connection, named once the game names the
     // character.
     let mut log_session = LogSession::new(log_session_id);
+    // When a partial that can still become your prompt stops waiting for
+    // the next read and paints raw.
+    let mut hold_until: Option<Instant> = None;
 
     // Phase 1 audit instrumentation. See `PerfCounters` doc.
     let mut perf = PerfCounters::default();
@@ -505,6 +512,11 @@ async fn io_loop(
             biased;
             outgoing = rx_outgoing.recv() => match outgoing {
                 Some(OutgoingMsg::Send { bytes, masked }) => {
+                    // A partial waiting for the next read paints before
+                    // your line leaves, so it never goes unseen.
+                    if hold_until.take().is_some() {
+                        flush_hold(&app, &profile, &mut accumulator, &mut seen_output).await;
+                    }
                     // The send records a prompt candidate and closes the
                     // open row. On a server that sends no Char.Vitals it
                     // also starts the next pulse, after which the values
@@ -566,6 +578,9 @@ async fn io_loop(
                     }
                 }
                 Some(OutgoingMsg::LocalWrite) => {
+                    if hold_until.take().is_some() {
+                        flush_hold(&app, &profile, &mut accumulator, &mut seen_output).await;
+                    }
                     let mut p = profile.lock().await;
                     p.prompt.stage.close();
                     p.prompt.stage.forget_held();
@@ -635,6 +650,14 @@ async fn io_loop(
                     ).await {
                         warn!(error = %e, "prompt handling at the end of a read failed");
                     }
+                    // The next read ends a hold. One that goes on holding
+                    // keeps the first deadline, so a partial waits at most
+                    // HOLD_MS in all.
+                    hold_until = batch.hold.then(|| {
+                        hold_until.unwrap_or_else(|| {
+                            Instant::now() + Duration::from_millis(vosh_prompt::stage::HOLD_MS)
+                        })
+                    });
                     finish_read(
                         &app,
                         &profile,
@@ -707,6 +730,12 @@ async fn io_loop(
                                 {
                                     warn!(error = %e, "prompt handling during drain failed");
                                 }
+                                // The connection is going, so nothing waits.
+                                if batch.hold {
+                                    let mut p = profile.lock().await;
+                                    hold_step(&mut p, &mut accumulator, &mut batch.out);
+                                }
+                                hold_until = None;
                                 finish_read(
                                     &app,
                                     &profile,
@@ -732,6 +761,10 @@ async fn io_loop(
                     break Some(format_disconnect_reason(&e));
                 }
             },
+            () = sleep_until_hold(hold_until), if hold_until.is_some() => {
+                hold_until = None;
+                flush_hold(&app, &profile, &mut accumulator, &mut seen_output).await;
+            }
             _ = tick_interval.tick() => {
                 if let Err(e) = handle_tick(&app, &mut stream, &profile).await {
                     error!(error = %e, "tick handling failed");
@@ -760,6 +793,9 @@ async fn io_loop(
     // scrollback-records it.
     // Flush it now, ahead of the scrollback dump and log close below, so
     // the goodbye is captured like every other client captures it.
+    if hold_until.is_some() {
+        flush_hold(&app, &profile, &mut accumulator, &mut seen_output).await;
+    }
     capture_pending_line(&app, &logs, log_session_id, &scrollback, &mut accumulator).await;
 
     {
@@ -1595,6 +1631,11 @@ fn partial_step(
                     log_session_id,
                 ));
             }
+            // It can still become your prompt, and it was not painted
+            // yet, so it waits a moment for the next read.
+            None if accumulator.painted().is_none() && p.prompt.stage.live(&plain) => {
+                batch.hold = true;
+            }
             None => {
                 let painted =
                     p.prompt
@@ -1608,6 +1649,47 @@ fn partial_step(
     }
     p.prompt.stage.finish(&batch.out);
     step
+}
+
+/// A partial that waited for the next read stops waiting: it paints
+/// raw, with any held lines before it, as a region a later read
+/// replaces.
+fn hold_step(p: &mut Profile, accumulator: &mut LineAccumulator, out: &mut Output) {
+    if let Some(bytes) = accumulator.partial().map(<[u8]>::to_vec) {
+        let painted = p
+            .prompt
+            .stage
+            .paint_partial(out, &bytes, accumulator.painted());
+        accumulator.set_painted(painted);
+    }
+    p.prompt.stage.finish(out);
+}
+
+/// Paint a partial that waited and send it out. `seen` becomes the output
+/// count after it.
+async fn flush_hold(
+    app: &AppHandle,
+    profile: &Arc<Mutex<Profile>>,
+    accumulator: &mut LineAccumulator,
+    seen: &mut u64,
+) {
+    let out = {
+        let mut p = profile.lock().await;
+        let mut out = Output::new(output_count() != *seen);
+        hold_step(&mut p, accumulator, &mut out);
+        out
+    };
+    if !out.is_empty() {
+        *seen = emit_session_output(app, &out);
+    }
+}
+
+/// Wait until `until`, or forever with no deadline.
+async fn sleep_until_hold(until: Option<Instant>) {
+    match until {
+        Some(until) => tokio::time::sleep_until(until).await,
+        None => std::future::pending().await,
+    }
 }
 
 /// A line you sent. The candidates ring records the prompt it answers,
@@ -1837,6 +1919,7 @@ async fn finish_read(
         prompt_vars,
         gag_without_reader,
         character,
+        hold: _,
     } = batch;
     let (vars, hidden, prompt_seen, status) = {
         let mut p = profile.lock().await;
@@ -2777,6 +2860,23 @@ mod tests {
                 let _ = super::marker_step(&mut self.p, &mut self.acc, &mut batch, now, None);
             }
             let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+            // The hold's deadline passes before the next read.
+            if batch.hold {
+                super::hold_step(&mut self.p, &mut self.acc, &mut batch.out);
+            }
+            batch
+        }
+
+        /// One socket read that leaves a partial waiting, as the session
+        /// does until the next read or the deadline. Returns the batch.
+        fn read_holding(&mut self, data: &[u8]) -> super::ReadBatch {
+            let mut batch = super::ReadBatch::new(super::output_count());
+            let now = tokio::time::Instant::now();
+            for line in self.acc.feed(data) {
+                let plain = vosh_ansi::plain_text(&line.bytes);
+                let _ = super::line_step(&mut self.p, &mut batch, line, plain, now, None);
+            }
+            let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
             batch
         }
 
@@ -2826,6 +2926,9 @@ mod tests {
                 }
             }
             let _ = super::partial_step(&mut self.p, &mut self.acc, &mut batch, now, None);
+            if batch.hold {
+                super::hold_step(&mut self.p, &mut self.acc, &mut batch.out);
+            }
             batch.out
         }
     }
@@ -4115,6 +4218,68 @@ mod tests {
         feed(&mut wire.p, "char-vitals.gmcp");
         let _ = wire.read(b"<159hp 310m 489mv> ");
         assert_eq!(wire.p.prompt.status(), vosh_prompt::Status::Matching);
+    }
+
+    #[test]
+    fn a_live_partial_waits_for_the_next_read_and_never_flashes() {
+        let mut wire = Wire::new(codes_profile(CODES, HP));
+        let batch = wire.read_holding(b"You flee.\n\r[1020/1020hp 80");
+        assert!(batch.hold);
+        assert_eq!(batch.out.bytes, b"You flee.\r\n", "nothing raw yet");
+        let out = wire.read(b"0/800mn 930/930mv]\n\r");
+        assert_eq!(out.replace, None);
+        assert_eq!(out.bytes, with(&[&wire.mark(1), b"<1020>\x1b[0m"]));
+
+        // Held tank lines wait with the partial after them.
+        let mut wire = Wire::new(codes_profile(CODES, HP));
+        let batch = wire.read_holding(format!("{TANK_LINE}\n\r[159/10").as_bytes());
+        assert!(batch.hold);
+        assert!(batch.out.bytes.is_empty());
+        let out = wire.read(b"20hp 310/800mn 489/930mv]\n\r");
+        assert_eq!(out.replace, None);
+        assert_eq!(
+            out.bytes,
+            with(&[
+                TANK_LINE.as_bytes(),
+                b"\r\n",
+                &wire.mark(1),
+                b"<159>\x1b[0m"
+            ])
+        );
+    }
+
+    #[test]
+    fn a_partial_no_shape_can_become_paints_at_once() {
+        let mut wire = Wire::new(codes_profile("<%hhp %mm %vmv> ", HP));
+        let batch = wire.read_holding(b"By what name do you wish to be known? ");
+        assert!(!batch.hold);
+        assert_eq!(
+            batch.out.bytes,
+            with(&[&wire.mark(1), b"By what name do you wish to be known? "])
+        );
+        // Nothing reads a prompt in a profile without a capture.
+        let mut wire = Wire::new(Profile::default());
+        assert!(!wire.read_holding(b"<10hp 2").hold);
+    }
+
+    #[test]
+    fn a_partial_that_waited_paints_at_the_deadline() {
+        let mut wire = Wire::new(codes_profile("<%hhp %mm %vmv> ", HP));
+        let batch = wire.read_holding(b"<10hp 2");
+        assert!(batch.hold);
+        let mut out = vosh_prompt::stage::Output::new(false);
+        super::hold_step(&mut wire.p, &mut wire.acc, &mut out);
+        assert_eq!(out.bytes, with(&[&wire.mark(1), b"<10hp 2"]));
+        // The rest of it replaces what painted.
+        let out = wire.read(b"0m 30mv> ");
+        assert_eq!(
+            out.replace,
+            Some(vosh_prompt::stage::Replace {
+                gen: wire.gen0 + 1,
+                bytes: with(&[&wire.mark(2), b"<10>\x1b[0m"]),
+                fresh: true,
+            })
+        );
     }
 
     #[test]
