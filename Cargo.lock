@@ -5252,6 +5252,7 @@ dependencies = [
  "regex-syntax",
  "serde",
  "serde_json",
+ "tokio",
  "vosh-gmcp",
  "vosh-prompt",
 ]

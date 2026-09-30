@@ -22,14 +22,16 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [features]
 # The test kit: the game's own prompt printer and a fake Aabahran that
-# plays pulses from a PROMPT, for the tests here and the session tests in
-# src-tauri.
+# plays pulses from a PROMPT, for the tests here, the session tests in
+# src-tauri and the fake_mud example.
 testkit = []
 
 [dev-dependencies]
 vosh-gmcp = { path = "../gmcp" }
-# The tests here read the test kit.
+# The tests here and the fake_mud example read the test kit.
 vosh-prompt = { path = ".", features = ["testkit"] }
+# The fake_mud example serves the test kit over TCP.
+tokio = { workspace = true }
 
 [lints]
 workspace = true
