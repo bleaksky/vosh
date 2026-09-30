@@ -36,6 +36,10 @@ pub const MARK_OSC: u32 = 7717;
 /// How many candidates the ring keeps.
 pub const RING: usize = 32;
 
+/// How long a partial that can still become your prompt waits for the
+/// next read before it paints raw, in milliseconds.
+pub const HOLD_MS: u64 = 20;
+
 /// The mark that starts region `gen`, `ESC ] 7717 ; o ; G BEL`.
 pub fn mark(gen: u64) -> Vec<u8> {
     format!("\x1b]{MARK_OSC};o;{gen}\x07").into_bytes()
@@ -593,6 +597,17 @@ impl Stage {
             end: End::Settled,
         });
         Some((self.block(lines, read), region))
+    }
+
+    /// True when the partial a read ended on, after any held lines, can
+    /// still grow into your prompt. The session then holds it up to
+    /// [`HOLD_MS`] before painting it raw, so a prompt a read split never
+    /// flashes. Complete lines never wait.
+    pub fn live(&mut self, plain: &str) -> bool {
+        let held: Vec<&str> = self.held.iter().map(|l| l.plain.as_str()).collect();
+        self.recognizer
+            .as_mut()
+            .is_some_and(|recognizer| recognizer.live(&held, plain))
     }
 
     /// Lines are held for the rest of a prompt that spans lines.
