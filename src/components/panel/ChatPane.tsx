@@ -1,15 +1,20 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { chatChannelColor } from '../../lib/chatColors';
 import { getChatLines, subscribeChatLines, type ChatLine } from '../../lib/chatStore';
+import type { XtermPalette } from '../../lib/themes';
+import { useActiveTheme } from '../../lib/useActiveTheme';
 import { MenuItem, MenuSurface } from './MenuSurface';
 import { returnToCommandLine, updateLeafProps, usePaneLeaf } from './paneActions';
 import { PaneHeader } from './PaneHeader';
 import { CheckIcon, ChevronDownIcon } from './paneIcons';
 import { chatTime } from './paneText';
 
-// Channel chat (SPEC 9). Messages sit at the bottom like the terminal:
-// a quiet time and channel line, then the message with the speaker in
-// bold. The channel filter lives in the pane's props, so it follows
-// the profile and two chat panes can each show a different channel.
+// Channel chat, the line you had from May to September on the theme
+// (the approved Chat A board). Messages sit at the bottom like the
+// terminal, one mono line each, [channel] Speaker: text in the color
+// the game prints that channel in. The channel filter lives in the
+// pane's props, so it follows the profile and two chat panes can each
+// show a different channel.
 
 // Distance from the bottom, in pixels, that still counts as reading
 // the newest message. Scrolled further up, new lines leave you be.
@@ -19,6 +24,7 @@ export function ChatPane() {
   const leaf = usePaneLeaf();
   const channel = leaf?.props.channel ?? '';
   const [lines, setLines] = useState<ChatLine[]>(() => getChatLines());
+  const palette = useActiveTheme().xterm;
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickyRef = useRef(true);
 
@@ -81,11 +87,7 @@ export function ChatPane() {
               : 'Chat appears when someone talks on a channel.'}
           </p>
         ) : (
-          <ol className="pane-chat-log">
-            {visible.map((line) => (
-              <ChatMessage key={lineKey(line)} line={line} />
-            ))}
-          </ol>
+          <ChatLog lines={visible} palette={palette} />
         )}
       </div>
     </>
@@ -106,17 +108,34 @@ function lineKey(line: ChatLine): number {
   return id;
 }
 
-function ChatMessage({ line }: { line: ChatLine }) {
+/** The messages, oldest first, each in its channel's color on the
+ *  theme whose terminal palette is given. */
+export function ChatLog({ lines, palette }: { lines: ChatLine[]; palette: XtermPalette }) {
   return (
-    <li className="pane-chat-msg">
-      <div className="pane-chat-when">
-        <time dateTime={new Date(line.ts).toISOString()}>{chatTime(line.ts)}</time>
-        <span className="pane-chat-channel">{line.pane}</span>
-      </div>
-      <p className="pane-chat-text">
-        {line.speaker !== null && <span className="pane-chat-speaker">{line.speaker}</span>}
-        {line.speaker !== null ? ` ${line.text}` : line.text}
-      </p>
+    <ol className="pane-chat-log">
+      {lines.map((line) => (
+        <ChatMessage key={lineKey(line)} line={line} color={chatChannelColor(line.pane, palette)} />
+      ))}
+    </ol>
+  );
+}
+
+// One line per message, [tell] Selune: text, the whole line in the
+// channel's color. A tell you send reads to Selune. A routed line keeps
+// its own words after the tag. The arrival time shows only when you
+// point at the message.
+function ChatMessage({ line, color }: { line: ChatLine; color: string }) {
+  return (
+    <li className="pane-chat-msg" style={{ color }} title={chatTime(line.ts)}>
+      <span className="pane-chat-tag">[{line.pane}]</span>
+      {line.speaker !== null && (
+        <>
+          {line.direction === 'sent' && 'to '}
+          <span className="pane-chat-speaker">{line.speaker}</span>
+          {': '}
+        </>
+      )}
+      {line.text}
     </li>
   );
 }

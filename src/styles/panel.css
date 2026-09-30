@@ -577,44 +577,42 @@
   );
 }
 
+/* Messages are MUD text, so they sit in the terminal face. */
 .pane-chat-log {
   margin: auto 0 0;
   padding: 8px 12px 12px 18px;
   list-style: none;
+  font-family: var(--font-mud);
+  font-size: 12px;
+  line-height: 17px;
 }
 
+/* One line per message in its channel's color, which ChatPane sets on
+   the line. Wrapped lines hang two cells in, so only tags touch the
+   left edge. */
 .pane-chat-msg {
   margin: 0;
-  padding: 0;
-}
-
-.pane-chat-msg + .pane-chat-msg {
-  margin-top: 6px;
-}
-
-.pane-chat-when {
-  height: 15px;
-  font-size: 11px;
-  line-height: 15px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  color: var(--tertiary);
-}
-
-.pane-chat-channel {
-  margin-left: 6px;
-}
-
-.pane-chat-text {
-  margin: 0;
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--text);
+  padding: 0 0 0 2ch;
+  text-indent: -2ch;
+  white-space: pre-wrap;
   overflow-wrap: break-word;
 }
 
-.pane-chat-speaker {
+.pane-chat-msg + .pane-chat-msg {
+  margin-top: 3px;
+}
+
+/* The tag takes the line's color a step back, so the message stays the
+   louder half. */
+.pane-chat-tag {
+  margin-right: 6px;
   font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0.7;
+}
+
+.pane-chat-speaker {
+  font-weight: 700;
 }
 
 /* ── Staff queues ────────────────────────────────────────────────── */
