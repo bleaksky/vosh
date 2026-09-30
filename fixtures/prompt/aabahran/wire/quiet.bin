@@ -1,0 +1,6 @@
+ÿúÉRoom.Info {"num":5279,"name":"The Bank of Aabahran","area":"Fort Blackwatch","terrain":"inside","sector":0,"region":0,"climate":"Temperate","exits":{"south":5233}}ÿðÿúÉChar.Vitals {"hp":1020,"maxhp":1020,"mana":800,"maxmana":800,"move":930,"maxmove":930}ÿðÿúÉChar.Worth {"gold":1250,"bank":5000,"exp":123456,"tnl":2345,"trains":3,"practices":12,"cps":12,"rps":3,"cabal":"none"}ÿðÿúÉChar.Combat {}ÿðÿúÉGroup.Info {"leader":"Tester","members":[{"id":1769388810,"name":"Tester","level":50,"class":"dark-knight","hp_pct":100,"mana_pct":100,"move_pct":100,"tnl":2345},{"id":1769401002,"name":"a loyal wolf","level":32,"class":"mob","hp_pct":91,"mana_pct":100,"move_pct":88,"tnl":0}]}ÿðÿúÉChar.State {"position":"standing","language":"common"}ÿðÿúÉRoom.Weather {"sky":"indoors","temp":68,"unit":"F","region":"Temperate"}ÿðThe Bank of Aabahran
+  Marble counters line the hall, and a clerk nods at you.
+[Exits: south]
+
+[1020/1020hp 800/800mn 930/930mv]
+ÿù

@@ -29,3 +29,6 @@
 *.otf binary
 *.woff binary
 *.woff2 binary
+# Wire fixtures hold raw telnet bytes with \n\r line ends that a checkout
+# must never touch.
+*.bin binary
