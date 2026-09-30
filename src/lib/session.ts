@@ -405,6 +405,12 @@ export async function onHidden(cb: (payload: HiddenPayload) => void): Promise<Un
   });
 }
 
+/** What the backend last reported on session://hidden, for a window
+ *  that opens or reloads after the report. */
+export async function hiddenGet(): Promise<HiddenPayload> {
+  return invoke('hidden_get');
+}
+
 // Keyboard macro bindings. A Macro maps a canonical key string
 // (produced by canonicalKeyFromEvent below) to a command line that
 // the input layer will fire when that key combo is pressed.
