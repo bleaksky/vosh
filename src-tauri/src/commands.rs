@@ -838,12 +838,10 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
         } else {
             let mut combined = vosh_script::ScriptOutcome::default();
             for call in &result.scripts {
-                match script_state::eval_with_captures(
-                    &mut profile.script,
-                    &call.body,
-                    &call.captures,
-                    "alias-script",
-                ) {
+                match profile
+                    .script
+                    .run_body(&call.body, &call.captures, "alias-script")
+                {
                     Ok(o) => combined.actions.extend(o.actions),
                     Err(err) => {
                         tracing::warn!(error = %err, "alias script eval failed");

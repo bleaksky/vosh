@@ -53,6 +53,11 @@ pub enum ScriptError {
     },
 }
 
+/// What [`ScriptEngine::run_body`] puts before a body. It takes the
+/// captures table the chunk is called with and ends without a line break,
+/// so the body's lines keep their numbers.
+const BODY_PREFIX: &str = "local captures = ...; ";
+
 /// Result of running script code or dispatching an event. Carries the
 /// queued [`Action`]s the caller should apply.
 #[derive(Debug, Default)]
@@ -148,6 +153,34 @@ impl ScriptEngine {
     pub fn eval(&mut self, code: &str, chunk_name: &str) -> Result<ScriptOutcome, ScriptError> {
         let result: mlua::Result<()> = self.lua.load(code).set_name(chunk_name).exec();
         result?;
+        Ok(self.drain())
+    }
+
+    /// Run a body that a trigger's Script action or a script alias holds,
+    /// with `captures` bound to a local `captures` table. Lua's
+    /// `captures[1]` holds the first string, `captures[2]` the second,
+    /// and so on.
+    ///
+    /// The captures reach Lua as a value, never as source text, so any
+    /// bytes survive. The local sits on the body's first line, so an
+    /// error names the line the body has it on. A `return` ends the body
+    /// early wherever Lua allows one, and whatever it returns is dropped.
+    pub fn run_body(
+        &mut self,
+        body: &str,
+        captures: &[String],
+        chunk_name: &str,
+    ) -> Result<ScriptOutcome, ScriptError> {
+        let captures = self
+            .lua
+            .create_sequence_from(captures.iter().map(String::as_str))?;
+        let mut source = String::with_capacity(BODY_PREFIX.len() + body.len());
+        source.push_str(BODY_PREFIX);
+        source.push_str(body);
+        self.lua
+            .load(source)
+            .set_name(chunk_name)
+            .call::<()>(captures)?;
         Ok(self.drain())
     }
 
@@ -459,6 +492,84 @@ mod tests {
         assert!(result.is_err());
         let result: Result<_, _> = e.eval("dofile('foo')", "t");
         assert!(result.is_err());
+    }
+
+    /// Run `code` as a body with `captures`, in a fresh engine.
+    fn body(code: &str, captures: &[&str]) -> Result<Vec<Action>, ScriptError> {
+        let captures: Vec<String> = captures.iter().map(|c| (*c).to_string()).collect();
+        let mut e = ScriptEngine::new().unwrap();
+        e.run_body(code, &captures, "body").map(|o| o.actions)
+    }
+
+    #[test]
+    fn a_body_reads_its_captures_from_index_one() {
+        let actions = body(
+            "mud.send(captures[1] .. ' ' .. captures[2] .. ' ' .. #captures)",
+            &["kick", "dragon"],
+        )
+        .unwrap();
+        assert_eq!(actions, vec![Action::Send("kick dragon 2".into())]);
+    }
+
+    #[test]
+    fn a_body_gets_each_capture_byte_for_byte() {
+        // Quotes, backslashes, line breaks, a NUL before a digit and a
+        // closing long bracket. As Lua source text the NUL and the 1
+        // read back as one byte.
+        let odd = "say \"hi\" \\ back\nslash\r\t\u{0}1 ]] end";
+        let actions = body("mud.send(captures[1])", &[odd]).unwrap();
+        assert_eq!(actions, vec![Action::Send(odd.into())]);
+    }
+
+    #[test]
+    fn an_error_names_the_line_of_the_body_it_is_on() {
+        let err = body("mud.echo('one')\nerror('boom')", &[])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("[string \"body\"]:2: boom"), "{err}");
+        let err = body("mud.echo('one')\nlocal = 1", &[])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("[string \"body\"]:2:"), "{err}");
+    }
+
+    #[test]
+    fn a_return_ends_the_body_and_what_it_returns_is_dropped() {
+        let early = "mud.send('a')\nif not captures[1] then return end\nmud.send('b')";
+        assert_eq!(body(early, &[]).unwrap(), vec![Action::Send("a".into())]);
+        assert_eq!(
+            body(early, &["go"]).unwrap(),
+            vec![Action::Send("a".into()), Action::Send("b".into())]
+        );
+        let last = "mud.send('a')\nreturn 'dropped', 2";
+        assert_eq!(body(last, &[]).unwrap(), vec![Action::Send("a".into())]);
+        // A return with more after it in the same block is a syntax
+        // error, as in any Lua chunk, so nothing runs.
+        assert!(body("mud.send('a')\nreturn\nlocal after = 1", &[]).is_err());
+    }
+
+    #[test]
+    fn captures_stay_local_to_the_body_and_its_closures() {
+        let mut e = ScriptEngine::new().unwrap();
+        let actions = e
+            .run_body(
+                "mud.timer(1, function() mud.send(captures[1]) end)",
+                &["later".to_string()],
+                "body",
+            )
+            .unwrap()
+            .actions;
+        let Action::Timer { callback_id, .. } = actions[0] else {
+            panic!("expected a timer, got {actions:?}");
+        };
+        assert_eq!(
+            e.fire_timer(callback_id).unwrap().actions,
+            vec![Action::Send("later".into())]
+        );
+        assert_eq!(
+            e.eval("mud.echo(tostring(captures))", "t").unwrap().actions,
+            vec![Action::Echo("nil".into())]
+        );
     }
 
     #[test]

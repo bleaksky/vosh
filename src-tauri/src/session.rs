@@ -1393,12 +1393,10 @@ fn run_fired_locked(p: &mut Profile, command: &str, shared: Option<&SharedLayer>
     if !result.scripts.is_empty() {
         let mut outcome = vosh_script::ScriptOutcome::default();
         for call in &result.scripts {
-            match script_state::eval_with_captures(
-                &mut p.script,
-                &call.body,
-                &call.captures,
-                "timer-script",
-            ) {
+            match p
+                .script
+                .run_body(&call.body, &call.captures, "timer-script")
+            {
                 Ok(o) => outcome.actions.extend(o.actions),
                 Err(err) => warn!(error = %err, "timer script eval failed"),
             }
@@ -1631,7 +1629,7 @@ fn run_trigger_scripts(
 ) -> Vec<vosh_script::Action> {
     let mut actions = Vec::new();
     for call in &result.scripts {
-        match script_state::eval_with_captures(&mut p.script, &call.body, &call.captures, chunk) {
+        match p.script.run_body(&call.body, &call.captures, chunk) {
             Ok(o) => actions.extend(o.actions),
             Err(err) => {
                 warn!(error = %err, chunk, "trigger script eval failed");
@@ -3523,6 +3521,19 @@ mod tests {
         let run = super::run_fired_locked(&mut p, "greet", None);
         assert_eq!(run.effects, LineEffects::default());
         assert_eq!(run.bytes, b"wave\r\n");
+    }
+
+    #[test]
+    fn a_timer_command_runs_the_body_of_a_lua_alias() {
+        let mut p = Profile::default();
+        p.aliases.set(
+            vosh_alias::Alias::new("kk", "ignored")
+                .with_script("mud.send('kick ' .. captures[1])\nmud.echo('kicked')"),
+        );
+        let run = super::run_fired_locked(&mut p, "kk dragon", None);
+        assert_eq!(run.bytes, b"kick dragon\r\n");
+        assert_eq!(run.echoes, ["kicked"]);
+        assert_eq!(run.effects, LineEffects::default());
     }
 
     #[test]
