@@ -8,6 +8,7 @@ import {
   onPromptStatus,
   promptCandidates,
   promptCaptureCheck,
+  promptCaptureFromLine,
   promptCompile,
   promptConfigGet,
   promptConfigSet,
@@ -103,6 +104,13 @@ describe('the prompt editor commands', () => {
     });
     await promptCandidates();
     expect(sent).toHaveBeenLastCalledWith('prompt_candidates');
+    await promptCaptureFromLine(7);
+    expect(sent).toHaveBeenLastCalledWith('prompt_capture_from_line', { id: 7, names: null });
+    await promptCaptureFromLine(7, ['health', '']);
+    expect(sent).toHaveBeenLastCalledWith('prompt_capture_from_line', {
+      id: 7,
+      names: ['health', ''],
+    });
     await promptCaptureCheck({ kind: 'regex', lines: ['^> $'], settle: true });
     expect(sent).toHaveBeenLastCalledWith('prompt_capture_check', {
       capture: { kind: 'regex', lines: ['^> $'], settle: true },

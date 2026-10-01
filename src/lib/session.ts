@@ -659,6 +659,19 @@ export interface PromptPreset {
   template: string;
 }
 
+/** One number of a line you pointed at, as the card marks it. `span` is
+ *  a byte range in the line, `name` the value it reads into, empty when
+ *  you left it out, and `suggested` the name Vosh read from the letters
+ *  after it. `max` marks the second number of a pair like `100/120hp`. */
+export interface PromptLineNumber {
+  span: [number, number];
+  text: string;
+  name: string;
+  suggested: string;
+  label: string;
+  max: boolean;
+}
+
 /** What a capture compiles to. Spans are byte ranges in the setting as
  *  the game stores it. */
 export interface PromptCompileReport {
@@ -689,6 +702,11 @@ export interface PromptCompileReport {
     message: string;
   }[];
   presets: PromptPreset[];
+  /** The value each group of a pattern feeds where it differs from the
+   *  group's own name, as the capture's `names` keeps it. */
+  names: Record<string, string>;
+  /** Each number of a line you pointed at. Empty otherwise. */
+  numbers: PromptLineNumber[];
 }
 
 /** What a capture compiles to. It changes nothing. */
@@ -729,6 +747,17 @@ export interface PromptCaptureCheck {
   fight_matched: number;
   false_matches: number;
   text: string;
+}
+
+/** What a capture built from one ring entry reads, the line another game
+ *  prints before each command. `names` names its numbers in order, an
+ *  empty name leaves one out, and the rest take the names Vosh suggests.
+ *  The report's shape holds the pattern to save. */
+export async function promptCaptureFromLine(
+  id: number,
+  names?: string[],
+): Promise<PromptCompileReport> {
+  return invoke('prompt_capture_from_line', { id, names: names ?? null });
 }
 
 /** Check a capture against the candidates ring and your scrollback. */
