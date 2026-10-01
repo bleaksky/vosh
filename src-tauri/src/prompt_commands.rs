@@ -67,6 +67,11 @@ pub(crate) fn set_config(p: &mut Profile, mut config: PromptConfig) -> Result<bo
     if config.capture != p.prompt.config().capture {
         vosh_prompt::report::check_capture(&config.capture, p.prompt.who())?;
     }
+    // Turning drawing on with no design draws Vosh's default, as Settings
+    // and #prompt draw do.
+    if config.draw && !p.prompt.config().draw && config.template.is_empty() {
+        config.template = vosh_prompt::DEFAULT_DESIGN.to_string();
+    }
     config.previous_templates.truncate(PREVIOUS_TEMPLATES);
     let before = p.prompt.revision();
     p.set_prompt_config(config);
@@ -542,6 +547,30 @@ mod tests {
         assert_eq!(p.ui.prompt_template, "%hp");
         // The same table again changes nothing.
         assert_eq!(set_config(&mut p, config), Ok(false));
+    }
+
+    #[test]
+    fn turning_drawing_on_with_no_design_takes_vosh_default() {
+        let mut p = Profile::default();
+        let config = PromptConfig {
+            capture: codes("<%hhp> "),
+            ..PromptConfig::from_legacy(false, "")
+        };
+        assert_eq!(set_config(&mut p, config), Ok(true));
+        assert_eq!(p.prompt.config().template, "");
+        let on = PromptConfig {
+            draw: true,
+            ..p.prompt.config().clone()
+        };
+        assert_eq!(set_config(&mut p, on), Ok(true));
+        assert_eq!(p.prompt.config().template, vosh_prompt::DEFAULT_DESIGN);
+        // Start empty while drawing stays on keeps the design empty.
+        let empty = PromptConfig {
+            template: String::new(),
+            ..p.prompt.config().clone()
+        };
+        assert_eq!(set_config(&mut p, empty), Ok(true));
+        assert_eq!(p.prompt.config().template, "");
     }
 
     #[tokio::test]
