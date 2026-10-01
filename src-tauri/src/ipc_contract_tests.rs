@@ -6,10 +6,11 @@
 //! These tests read the page sources in `src` and the app sources here
 //! and hold the names together, the way the preset tests read
 //! presets.ts. Every command the page invokes is registered in
-//! `generate_handler!` in lib.rs. Every event the page listens for has a
-//! sender, the app or the page itself. Every name either side sends has
-//! a page listener, or sits on [`UNHEARD`] with its reason, so a rename
-//! at one of several senders fails too.
+//! `generate_handler!` in lib.rs, and every invoke passes the keys its
+//! `#[tauri::command]` fn reads, in camel case. Every event the page
+//! listens for has a sender, the app or the page itself. Every name
+//! either side sends has a page listener, or sits on [`UNHEARD`] with its
+//! reason, so a rename at one of several senders fails too.
 //!
 //! An event counts as sent by the app when its name is a string in the
 //! app code outside tests. Names reach `emit` through constants, helpers
@@ -156,6 +157,17 @@ enum Name {
     Unknown,
 }
 
+/// The arguments object an invoke passes, as far as the source tells it.
+#[derive(Clone, Debug, PartialEq)]
+enum Args {
+    /// No arguments object.
+    Absent,
+    /// Object literals, one for each branch of a `?:`, each by its keys.
+    Keys(Vec<BTreeSet<String>>),
+    /// Anything else, such as a variable or a spread.
+    Unknown,
+}
+
 /// One call the page makes with a name.
 struct PageCall {
     /// The file, from the repo root.
@@ -175,6 +187,8 @@ struct PageCall {
     /// Which parameter of that function the name argument is, when it is
     /// no more than one.
     param: Option<usize>,
+    /// The arguments object of an invoke. Absent for any other call.
+    args: Args,
 }
 
 impl PageCall {
@@ -185,8 +199,9 @@ impl PageCall {
 
 /// The names both sides use, read from the sources.
 struct Contract {
-    /// The commands registered in `generate_handler!`.
-    commands: BTreeSet<String>,
+    /// The commands registered in `generate_handler!`, each with the keys
+    /// its function reads, or None when the scan cannot read them.
+    commands: BTreeMap<String, Option<Vec<Param>>>,
     /// The strings in the app code outside tests that hold `://`, each
     /// with the files that hold it.
     app_names: BTreeMap<String, BTreeSet<String>>,
@@ -323,12 +338,14 @@ fn unregistered_invokes(contract: &Contract) -> Vec<String> {
     let mut failures = Vec::new();
     for call in contract.calls.iter().filter(|c| c.call == Call::Invoke) {
         match &call.name {
-            Name::Fixed(command) if !contract.commands.contains(command) => failures.push(format!(
-                "{} invokes {command}, and generate_handler! in src-tauri/src/lib.rs \
-                 registers no command by that name.",
-                call.at()
-            )),
-            Name::Family(prefix) if !contract.commands.iter().any(|c| c.starts_with(prefix)) => {
+            Name::Fixed(command) if !contract.commands.contains_key(command) => {
+                failures.push(format!(
+                    "{} invokes {command}, and generate_handler! in src-tauri/src/lib.rs \
+                     registers no command by that name.",
+                    call.at()
+                ));
+            }
+            Name::Family(prefix) if !contract.commands.keys().any(|c| c.starts_with(prefix)) => {
                 failures.push(format!(
                     "{} invokes commands that start {prefix}, and generate_handler! \
                      registers none.",
@@ -336,6 +353,54 @@ fn unregistered_invokes(contract: &Contract) -> Vec<String> {
                 ));
             }
             _ => {}
+        }
+    }
+    failures
+}
+
+/// Every invoke passes the keys its command's function reads and no
+/// other, so a renamed parameter on either side fails.
+fn invoke_arguments(contract: &Contract) -> Vec<String> {
+    let mut failures = Vec::new();
+    for call in contract.calls.iter().filter(|c| c.call == Call::Invoke) {
+        let Name::Fixed(command) = &call.name else {
+            continue;
+        };
+        let Some(Some(params)) = contract.commands.get(command) else {
+            continue;
+        };
+        let objects = match &call.args {
+            Args::Absent => vec![BTreeSet::new()],
+            Args::Keys(objects) => objects.clone(),
+            Args::Unknown => {
+                failures.push(format!(
+                    "{} passes {command} arguments the contract test cannot read. Pass \
+                     an object literal with every key spelled out.",
+                    call.at()
+                ));
+                continue;
+            }
+        };
+        for keys in objects {
+            for key in &keys {
+                if !params.iter().any(|p| p.key == *key) {
+                    failures.push(format!(
+                        "{} passes {command} the key {key}, and its #[tauri::command] fn \
+                         has no parameter by that name.",
+                        call.at()
+                    ));
+                }
+            }
+            for param in params.iter().filter(|p| !p.optional) {
+                if !keys.contains(&param.key) {
+                    failures.push(format!(
+                        "{} invokes {command} without the key {}, which its \
+                         #[tauri::command] fn needs.",
+                        call.at(),
+                        param.key
+                    ));
+                }
+            }
         }
     }
     failures
@@ -449,6 +514,11 @@ fn unheard_sends(contract: &Contract, families: &[AppFamily], unheard: &[Unheard
 #[test]
 fn every_command_the_page_invokes_is_registered() {
     fail_with(unregistered_invokes(contract()));
+}
+
+#[test]
+fn every_invoke_passes_the_keys_its_command_reads() {
+    fail_with(invoke_arguments(contract()));
 }
 
 #[test]
@@ -576,7 +646,7 @@ fn the_scan_follows_every_page_call_and_app_file() {
             "the scan found no {call:?} call in the page"
         );
     }
-    assert!(contract.commands.contains("session_connect"));
+    assert!(contract.commands.contains_key("session_connect"));
     assert!(contract.app_names.contains_key("session://output"));
 }
 
@@ -593,6 +663,7 @@ fn page_call(call: Call, arg: &str, name: Name) -> PageCall {
         via: None,
         within: None,
         param: None,
+        args: Args::Absent,
     }
 }
 
@@ -626,8 +697,23 @@ fn each_check_rejects_the_case_it_guards() {
         via: Some("tell"),
         ..call
     };
+    let invoke = |args: Args| PageCall {
+        args,
+        ..page_call(Call::Invoke, "'registered'", fixed("registered"))
+    };
+    let keys = |keys: &[&str]| Args::Keys(vec![keys.iter().map(|&k| k.into()).collect()]);
+    let param = |key: &str, optional| Param {
+        key: key.into(),
+        optional,
+    };
     let contract = Contract {
-        commands: BTreeSet::from(["registered".to_string()]),
+        commands: BTreeMap::from([
+            (
+                "registered".to_string(),
+                Some(vec![param("presetId", false), param("limit", true)]),
+            ),
+            ("unread".to_string(), None),
+        ]),
         app_names: [
             "vosh://sent",
             "vosh://lost",
@@ -644,7 +730,12 @@ fn each_check_rejects_the_case_it_guards() {
         })
         .collect(),
         calls: vec![
-            page_call(Call::Invoke, "'registered'", fixed("registered")),
+            invoke(keys(&["presetId", "limit"])),
+            invoke(keys(&["presetId"])),
+            invoke(keys(&["id"])),
+            invoke(Args::Absent),
+            invoke(Args::Unknown),
+            page_call(Call::Invoke, "'unread'", fixed("unread")),
             page_call(Call::Invoke, "'unregistered'", fixed("unregistered")),
             page_call(Call::Listen, "'vosh://sent'", fixed("vosh://sent")),
             page_call(Call::Listen, "'vosh://built/x'", fixed("vosh://built/x")),
@@ -678,6 +769,16 @@ fn each_check_rejects_the_case_it_guards() {
         "unregistered_invokes",
         &unregistered_invokes(&contract),
         &["invokes unregistered,"],
+    );
+    assert_rejects(
+        "invoke_arguments",
+        &invoke_arguments(&contract),
+        &[
+            "passes registered the key id,",
+            "invokes registered without the key presetId,",
+            "invokes registered without the key presetId,",
+            "passes registered arguments the contract test cannot read.",
+        ],
     );
     let family = |prefix| AppFamily {
         prefix,
@@ -921,6 +1022,123 @@ listen(EVENT, cb);
     assert_eq!(
         read("emit"),
         [("event".into(), Name::Unknown, some("tell"), Some(0))]
+    );
+}
+
+#[test]
+fn the_page_scan_reads_the_keys_each_invoke_passes() {
+    let source = r"
+export async function search(
+  pattern: string,
+  options: { caseSensitive: boolean; readonly maxResults?: number },
+) {
+  return invoke('a', { pattern, ...options });
+}
+invoke('b', { presetId, 'with-dash': 1, count: n + 1, });
+invoke('c', options?.asIs ? { config, asIs: true } : { config });
+invoke('d');
+invoke('e', args);
+invoke('f', { ...rest });
+invoke('g', { [key]: 1 });
+invoke('h', options?.args ?? { a });
+";
+    let tokens = page_tokens(source, false).unwrap();
+    let fns = page_functions(&tokens);
+    let keys = |objects: &[&[&str]]| {
+        Args::Keys(
+            objects
+                .iter()
+                .map(|keys| keys.iter().map(|&k| k.into()).collect())
+                .collect(),
+        )
+    };
+    let read: Vec<Args> = calls_to(&tokens, "invoke")
+        .iter()
+        .map(|c| read_args(c.args.get(1).copied(), |name| spread_keys(&fns, c.at, name)))
+        .collect();
+    assert_eq!(
+        read,
+        [
+            keys(&[&["caseSensitive", "maxResults", "pattern"]]),
+            keys(&[&["count", "presetId", "with-dash"]]),
+            keys(&[&["asIs", "config"], &["config"]]),
+            Args::Absent,
+            Args::Unknown,
+            Args::Unknown,
+            Args::Unknown,
+            Args::Unknown,
+        ]
+    );
+}
+
+#[test]
+fn the_app_scan_reads_the_keys_each_command_takes() {
+    /// A command's name, its keys with whether each is optional, and
+    /// whether its attribute is plain.
+    type Read = (String, Vec<(String, bool)>, bool);
+    let source = r#"
+#[tauri::command]
+pub(crate) async fn presets_remove(
+    app: AppHandle,
+    state: tauri::State<'_, SharedState>,
+    preset_id: String,
+    limit: Option<u32>,
+) -> Result<usize, String> {
+    Ok(0)
+}
+/// A doc comment.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+fn generic<R: Runtime>(
+    window: tauri::WebviewWindow<R>,
+    mut delta_y: f64,
+    _hide_local: bool,
+    map: HashMap<String, Vec<u8>>,
+    each: Box<dyn Fn(u8) -> u8>,
+    text: &'static str,
+) {}
+#[cfg(test)]
+#[tauri::command]
+fn only_in_tests(x: u8) {}
+#[tauri::command(rename_all = "snake_case")]
+fn renamed(preset_id: String) {}
+"#;
+    let code = app_code(&rust_tokens(source).unwrap());
+    let read: Vec<Read> = code
+        .commands
+        .iter()
+        .map(|&(start, plain)| {
+            let (name, params) = command_fn(&code.tokens, start).unwrap();
+            let params = params.into_iter().map(|p| (p.key, p.optional)).collect();
+            (name, params, plain)
+        })
+        .collect();
+    let keys = |keys: &[(&str, bool)]| {
+        keys.iter()
+            .map(|&(k, optional)| (k.to_string(), optional))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        read,
+        [
+            (
+                "presets_remove".into(),
+                keys(&[("presetId", false), ("limit", true)]),
+                true
+            ),
+            (
+                "generic".into(),
+                keys(&[
+                    ("deltaY", false),
+                    ("hideLocal", false),
+                    ("map", false),
+                    ("each", false),
+                    ("text", false),
+                ]),
+                true
+            ),
+            ("renamed".into(), keys(&[("presetId", false)]), false),
+        ]
     );
 }
 
@@ -1687,13 +1905,21 @@ struct PageFn {
     /// Its name, for a function declaration or a function that a `const`,
     /// `let` or `var` holds.
     name: Option<String>,
-    /// Its parameters in order, each by its name, or None for one the
-    /// scan cannot name, such as a destructured one.
-    params: Vec<Option<String>>,
+    /// Its parameters in order.
+    params: Vec<PageParam>,
     /// Every name its parameters bind, destructured ones too.
     binds: BTreeSet<String>,
     /// Its body, as token indexes.
     body: std::ops::Range<usize>,
+}
+
+/// A parameter of a page function.
+struct PageParam {
+    /// Its name, or None for one the scan cannot name, such as a
+    /// destructured one.
+    name: Option<String>,
+    /// The keys of its type, when that is an object type written out.
+    keys: Option<BTreeSet<String>>,
 }
 
 /// Every function a page file defines.
@@ -1865,9 +2091,9 @@ fn held_by(tokens: &[Token], start: usize) -> Option<String> {
     }
 }
 
-/// The parameters between a function's parentheses, each by its name or
-/// None, and every name they bind.
-fn parameters(tokens: &[Token]) -> (Vec<Option<String>>, BTreeSet<String>) {
+/// The parameters between a function's parentheses, and every name they
+/// bind.
+fn parameters(tokens: &[Token]) -> (Vec<PageParam>, BTreeSet<String>) {
     let mut params = Vec::new();
     let mut binds = BTreeSet::new();
     let mut depth = 0usize;
@@ -1892,11 +2118,17 @@ fn parameters(tokens: &[Token]) -> (Vec<Option<String>>, BTreeSet<String>) {
         match param.first().map(|t| &t.tok) {
             None => {}
             Some(Tok::Ident(name)) => {
-                params.push(Some(name.clone()));
+                params.push(PageParam {
+                    name: Some(name.clone()),
+                    keys: object_type(&param[1..]),
+                });
                 binds.insert(name.clone());
             }
             Some(Tok::Punct('{' | '[')) => {
-                params.push(None);
+                params.push(PageParam {
+                    name: None,
+                    keys: None,
+                });
                 let end = closing(param, 0).unwrap_or(param.len());
                 for t in &param[..end] {
                     if let Tok::Ident(name) = &t.tok {
@@ -1904,10 +2136,62 @@ fn parameters(tokens: &[Token]) -> (Vec<Option<String>>, BTreeSet<String>) {
                     }
                 }
             }
-            Some(_) => params.push(None),
+            Some(_) => params.push(PageParam {
+                name: None,
+                keys: None,
+            }),
         }
     }
     (params, binds)
+}
+
+/// The keys of the type annotation that starts a parameter after its
+/// name, when the type is an object type written out, as in
+/// `options: { caseSensitive: boolean; maxResults?: number }`.
+fn object_type(tokens: &[Token]) -> Option<BTreeSet<String>> {
+    let mut at = 0;
+    if tokens.first()?.tok == Tok::Punct('?') {
+        at += 1;
+    }
+    if tokens.get(at)?.tok != Tok::Punct(':') || tokens.get(at + 1)?.tok != Tok::Punct('{') {
+        return None;
+    }
+    let close = closing(tokens, at + 1)?;
+    if !matches!(
+        tokens.get(close + 1).map(|t| &t.tok),
+        None | Some(Tok::Punct('='))
+    ) {
+        return None;
+    }
+    let mut keys = BTreeSet::new();
+    let mut depth = 0usize;
+    let mut member = true;
+    for token in &tokens[at + 2..close] {
+        match &token.tok {
+            Tok::Punct('(' | '[' | '{' | '<') => depth += 1,
+            Tok::Punct(')' | ']' | '}' | '>') => depth = depth.saturating_sub(1),
+            Tok::Punct(';' | ',') if depth == 0 => member = true,
+            Tok::Ident(w) if depth == 0 && member && w == "readonly" => {}
+            Tok::Ident(w) if depth == 0 && member => {
+                keys.insert(w.clone());
+                member = false;
+            }
+            _ if depth == 0 && member => return None,
+            _ => {}
+        }
+    }
+    Some(keys)
+}
+
+/// The keys of `name` spread into an object at `at`, when it is a
+/// parameter of a function around it whose type is an object type
+/// written out.
+fn spread_keys(fns: &[PageFn], at: usize, name: &str) -> Option<BTreeSet<String>> {
+    around(fns, at)
+        .iter()
+        .find_map(|f| f.params.iter().find(|p| p.name.as_deref() == Some(name)))?
+        .keys
+        .clone()
 }
 
 /// The functions around the token at `at`, innermost first.
@@ -2028,7 +2312,7 @@ fn read_arg(
         [Token {
             tok: Tok::Ident(id),
             ..
-        }] => within.and_then(|f| f.params.iter().position(|p| p.as_ref() == Some(id))),
+        }] => within.and_then(|f| f.params.iter().position(|p| p.name.as_ref() == Some(id))),
         _ => None,
     };
     Arg {
@@ -2037,6 +2321,101 @@ fn read_arg(
         within: within.and_then(|f| f.name.clone()),
         param,
     }
+}
+
+/// The arguments object an invoke passes, from the argument after its
+/// name: an object literal, or two in the branches of a `?:`.
+fn read_args(arg: Option<&[Token]>, spread: impl Fn(&str) -> Option<BTreeSet<String>>) -> Args {
+    let Some(arg) = arg else {
+        return Args::Absent;
+    };
+    let object_keys = |tokens: &[Token]| object_keys(tokens, &spread);
+    if let Some(keys) = object_keys(arg) {
+        return Args::Keys(vec![keys]);
+    }
+    let (mut depth, mut question, mut colon) = (0usize, None, None);
+    for (i, token) in arg.iter().enumerate() {
+        let next = arg.get(i + 1).map(|t| &t.tok);
+        let prev = i.checked_sub(1).map(|j| &arg[j].tok);
+        match token.tok {
+            Tok::Punct('(' | '[' | '{') | Tok::TplOpen(_) => depth += 1,
+            Tok::Punct(')' | ']' | '}') | Tok::TplClose => depth = depth.saturating_sub(1),
+            // Not `?.` or `??`.
+            Tok::Punct('?')
+                if depth == 0
+                    && question.is_none()
+                    && !matches!(next, Some(Tok::Punct('.' | '?')))
+                    && prev != Some(&Tok::Punct('?')) =>
+            {
+                question = Some(i);
+            }
+            Tok::Punct(':') if depth == 0 && question.is_some() && colon.is_none() => {
+                colon = Some(i);
+            }
+            _ => {}
+        }
+    }
+    if let (Some(q), Some(c)) = (question, colon) {
+        if let (Some(yes), Some(no)) = (object_keys(&arg[q + 1..c]), object_keys(&arg[c + 1..])) {
+            return Args::Keys(vec![yes, no]);
+        }
+    }
+    Args::Unknown
+}
+
+/// The keys of an object literal that is all of `tokens`, or None when
+/// it is not one or a key cannot be read. `spread` gives the keys of a
+/// name spread into it, as `...options`.
+fn object_keys(
+    tokens: &[Token],
+    spread: impl Fn(&str) -> Option<BTreeSet<String>>,
+) -> Option<BTreeSet<String>> {
+    if tokens.first()?.tok != Tok::Punct('{') || closing(tokens, 0)? + 1 != tokens.len() {
+        return None;
+    }
+    let inner = &tokens[1..tokens.len() - 1];
+    let mut keys = BTreeSet::new();
+    let (mut depth, mut start) = (0usize, 0usize);
+    let mut props = Vec::new();
+    for (i, token) in inner.iter().enumerate() {
+        match token.tok {
+            Tok::Punct('(' | '[' | '{') | Tok::TplOpen(_) => depth += 1,
+            Tok::Punct(')' | ']' | '}') | Tok::TplClose => depth = depth.saturating_sub(1),
+            Tok::Punct(',') if depth == 0 => {
+                props.push(&inner[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    props.push(&inner[start..]);
+    for prop in props {
+        match prop {
+            [] => {}
+            // `key`, `key: value` and `'key': value`.
+            [Token {
+                tok: Tok::Ident(key),
+                ..
+            }]
+            | [Token {
+                tok: Tok::Ident(key) | Tok::Str(key),
+                ..
+            }, Token {
+                tok: Tok::Punct(':'),
+                ..
+            }, ..] => {
+                keys.insert(key.clone());
+            }
+            [dot1, dot2, dot3, Token {
+                tok: Tok::Ident(name),
+                ..
+            }] if [dot1, dot2, dot3].iter().all(|t| t.tok == Tok::Punct('.')) => {
+                keys.extend(spread(name)?);
+            }
+            _ => return None,
+        }
+    }
+    Some(keys)
 }
 
 /// Whether a page file defines the page function `name` or imports it
@@ -2125,6 +2504,12 @@ fn read_page() -> Page {
                        index: usize,
                        via: Option<&'static str>| {
             let arg = read_arg(&fns, called, index, constant);
+            let args = match (call, via) {
+                (Call::Invoke, None) => read_args(called.args.get(index + 1).copied(), |name| {
+                    spread_keys(&fns, called.at, name)
+                }),
+                _ => Args::Absent,
+            };
             calls.push(PageCall {
                 file: file.path.clone(),
                 line: called.line,
@@ -2135,6 +2520,7 @@ fn read_page() -> Page {
                 via,
                 within: arg.within,
                 param: arg.param,
+                args,
             });
         };
         for &(callee, _, call, index) in CALLEES {
@@ -2358,6 +2744,9 @@ struct ModDecl {
 struct Code {
     tokens: Vec<RustTok>,
     mods: Vec<ModDecl>,
+    /// Where each item marked `#[tauri::command]` starts in `tokens`, and
+    /// whether the attribute is plain, with no arguments.
+    commands: Vec<(usize, bool)>,
 }
 
 /// The attribute that starts at `at`, as the index after it, whether it
@@ -2476,9 +2865,11 @@ fn app_code(t: &[RustTok]) -> Code {
     while i < t.len() {
         let mut end = i;
         let (mut gate, mut inner) = (false, false);
+        let mut command = None;
         while let Some((next, is_inner, attr)) = attribute(t, end) {
             gate |= is_test_gate(attr);
             inner |= is_inner;
+            command = command.or_else(|| command_attribute(attr));
             if let [RustTok::Ident(key), RustTok::Punct('='), RustTok::Str(value)] = attr {
                 if key == "path" {
                     path = Some(value.clone());
@@ -2499,6 +2890,8 @@ fn app_code(t: &[RustTok]) -> Code {
                 }
                 path = None;
                 end = item_end(t, end);
+            } else if let Some(plain) = command.filter(|_| !only_tests) {
+                code.commands.push((code.tokens.len(), plain));
             }
             i = end;
             continue;
@@ -2518,6 +2911,154 @@ fn app_code(t: &[RustTok]) -> Code {
         i += 1;
     }
     code
+}
+
+/// Whether an attribute is `#[tauri::command]`, and if so whether it is
+/// plain. One with arguments can rename the command or its keys.
+fn command_attribute(attr: &[RustTok]) -> Option<bool> {
+    let word = |t: &RustTok, w: &str| matches!(t, RustTok::Ident(x) if x == w);
+    let rest = match attr {
+        [tauri, RustTok::Punct(':'), RustTok::Punct(':'), command, rest @ ..]
+            if word(tauri, "tauri") && word(command, "command") =>
+        {
+            rest
+        }
+        [command, rest @ ..] if word(command, "command") => rest,
+        _ => return None,
+    };
+    Some(rest.is_empty())
+}
+
+/// The parameter types Tauri hands a command itself. They read no key
+/// from the page.
+const INJECTED: &[&str] = &["State", "AppHandle", "Window", "WebviewWindow", "Webview"];
+
+/// A key a command reads from the arguments the page passes.
+#[derive(Clone, Debug, PartialEq)]
+struct Param {
+    /// The parameter's name in lower camel case, as Tauri reads it.
+    key: String,
+    /// Whether the page may leave it out, for an `Option`.
+    optional: bool,
+}
+
+/// A parameter name as the key Tauri reads, `preset_id` as `presetId`.
+fn camel(name: &str) -> String {
+    let mut key = String::new();
+    for word in name.split('_').filter(|w| !w.is_empty()) {
+        let mut chars = word.chars();
+        if key.is_empty() {
+            key.extend(chars.flat_map(char::to_lowercase));
+        } else if let Some(first) = chars.next() {
+            key.extend(first.to_uppercase());
+            key.extend(chars.flat_map(char::to_lowercase));
+        }
+    }
+    key
+}
+
+/// The index of the `>` that closes the `<` at `open`. A `->` inside is
+/// no bracket.
+fn angle_close(t: &[RustTok], open: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    for (i, tok) in t.iter().enumerate().skip(open) {
+        match tok {
+            RustTok::Punct('<') => depth += 1,
+            RustTok::Punct('>') if t[i - 1] != RustTok::Punct('-') => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The parts of `t` between commas outside any bracket.
+fn split_top(t: &[RustTok]) -> Vec<&[RustTok]> {
+    let mut parts = Vec::new();
+    let (mut depth, mut start) = (0usize, 0usize);
+    for (i, tok) in t.iter().enumerate() {
+        match tok {
+            RustTok::Punct('(' | '[' | '{' | '<') => depth += 1,
+            RustTok::Punct('>') if i > 0 && t[i - 1] == RustTok::Punct('-') => {}
+            RustTok::Punct(')' | ']' | '}' | '>') => depth = depth.saturating_sub(1),
+            RustTok::Punct(',') if depth == 0 => {
+                parts.push(&t[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&t[start..]);
+    parts
+}
+
+/// The name of the command fn that starts at `at`, and the keys it reads.
+fn command_fn(t: &[RustTok], mut at: usize) -> Result<(String, Vec<Param>), String> {
+    let word = |i: usize, w: &str| matches!(t.get(i), Some(RustTok::Ident(x)) if x == w);
+    if word(at, "pub") {
+        at += 1;
+        if t.get(at) == Some(&RustTok::Punct('(')) {
+            at = matching(t, at).ok_or("a pub( that never closes")? + 1;
+        }
+    }
+    while word(at, "async") || word(at, "unsafe") || word(at, "const") {
+        at += 1;
+    }
+    let name = match t.get(at + 1) {
+        Some(RustTok::Ident(name)) if word(at, "fn") => name.clone(),
+        _ => return Err("a #[tauri::command] on something other than a fn".into()),
+    };
+    at += 2;
+    if t.get(at) == Some(&RustTok::Punct('<')) {
+        at = angle_close(t, at).ok_or(format!("{name} has generics that never close"))? + 1;
+    }
+    if t.get(at) != Some(&RustTok::Punct('(')) {
+        return Err(format!(
+            "{name} has parameters the contract test cannot find"
+        ));
+    }
+    let close = matching(t, at).ok_or(format!("the parameters of {name} never close"))?;
+    let mut params = Vec::new();
+    for mut param in split_top(&t[at + 1..close]) {
+        while let Some((next, _, _)) = attribute(param, 0) {
+            param = &param[next..];
+        }
+        if param.first() == Some(&RustTok::Ident("mut".into())) {
+            param = &param[1..];
+        }
+        match param {
+            [] => {}
+            [RustTok::Ident(key), RustTok::Punct(':'), ty @ ..]
+                if ty.first() != Some(&RustTok::Punct(':')) =>
+            {
+                let before = ty
+                    .iter()
+                    .position(|t| *t == RustTok::Punct('<'))
+                    .unwrap_or(ty.len());
+                let head = ty[..before].iter().rev().find_map(|t| match t {
+                    RustTok::Ident(w) => Some(w.as_str()),
+                    _ => None,
+                });
+                if head.is_some_and(|h| INJECTED.contains(&h)) {
+                    continue;
+                }
+                params.push(Param {
+                    key: camel(key),
+                    optional: head == Some("Option"),
+                });
+            }
+            _ => {
+                return Err(format!(
+                    "{name} has a parameter the contract test cannot read, {param:?}"
+                ))
+            }
+        }
+    }
+    Ok((name, params))
 }
 
 /// The file a module declared in `parent` lives in.
@@ -2573,7 +3114,7 @@ fn registered(t: &[RustTok]) -> Result<BTreeSet<String>, String> {
 }
 
 struct App {
-    commands: BTreeSet<String>,
+    commands: BTreeMap<String, Option<Vec<Param>>>,
     names: BTreeMap<String, BTreeSet<String>>,
     problems: Vec<String>,
 }
@@ -2584,8 +3125,10 @@ fn read_app() -> App {
     let src = repo().join("src-tauri").join("src");
     let mut queue = vec![(src.join("lib.rs"), false), (src.join("main.rs"), false)];
     let mut seen = BTreeSet::new();
+    let mut defined: BTreeMap<String, Vec<Vec<Param>>> = BTreeMap::new();
+    let mut registered_names = BTreeSet::new();
     let mut app = App {
-        commands: BTreeSet::new(),
+        commands: BTreeMap::new(),
         names: BTreeMap::new(),
         problems: Vec::new(),
     };
@@ -2603,6 +3146,16 @@ fn read_app() -> App {
         }
         if test {
             continue;
+        }
+        for &(start, plain) in &code.commands {
+            match command_fn(&code.tokens, start) {
+                Ok((name, _)) if !plain => app.problems.push(format!(
+                    "{rel} marks {name} with a #[tauri::command] that has arguments. \
+                     The contract test reads only the plain attribute, so teach it these."
+                )),
+                Ok((name, params)) => defined.entry(name).or_default().push(params),
+                Err(e) => app.problems.push(format!("{rel} holds {e}.")),
+            }
         }
         for (i, tok) in code.tokens.iter().enumerate() {
             match tok {
@@ -2626,10 +3179,30 @@ fn read_app() -> App {
         }
         if rel == "src-tauri/src/lib.rs" {
             match registered(&code.tokens) {
-                Ok(commands) => app.commands = commands,
+                Ok(commands) => registered_names = commands,
                 Err(e) => app.problems.push(e),
             }
         }
+    }
+    // A command defined once per platform must read the same keys on each.
+    for name in registered_names {
+        let params = match defined.get(&name).map(Vec::as_slice) {
+            Some([first, rest @ ..]) if rest.iter().all(|p| p == first) => Some(first.clone()),
+            Some([_, ..]) => {
+                app.problems.push(format!(
+                    "{name} has #[tauri::command] fns that read different keys."
+                ));
+                None
+            }
+            _ => {
+                app.problems.push(format!(
+                    "generate_handler! registers {name}, and the contract test finds no \
+                     #[tauri::command] fn by that name."
+                ));
+                None
+            }
+        };
+        app.commands.insert(name, params);
     }
     for file in files_under(&src) {
         if file.extension().is_some_and(|e| e == "rs") && !seen.contains(&file) {
