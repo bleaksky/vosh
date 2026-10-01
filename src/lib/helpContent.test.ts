@@ -228,6 +228,24 @@ describe('the help on reading your prompt with a pattern', () => {
   });
 });
 
+describe('the help on the default prompt design', () => {
+  const howTo =
+    "- Use Vosh's default prompt design with `#prompt default`. It takes the place of the design in this profile, and Vosh keeps yours as an earlier design.";
+  const reference =
+    "- `#prompt default` puts Vosh's default design in place of the design in this profile and keeps yours as an earlier design.";
+
+  it('lists #prompt default with the slash commands, after #prompt show', () => {
+    const automate = body('automate.slash-commands');
+    const listed = body('reference.slash-commands');
+    expect(automate).toContain(`\`#prompt show text|lifted|pinned\`.\n${howTo}\n`);
+    expect(listed).toContain(`above the command line.\n${reference}\n`);
+    expect(helpMd).toContain(howTo);
+    expect(helpMd).toContain(reference);
+    // The writing style keeps colons and semicolons out of the prose.
+    expect(`${howTo} ${reference}`).not.toMatch(/[;:] /);
+  });
+});
+
 describe('the help on the prompt capture move', () => {
   const paragraph =
     "Each profile reads your prompt on its own. Vosh moves the capture trigger that `#prompt` made into each profile that draws your own prompt, turns the trigger off, and tells you once at launch. Profiles that draw nothing then show the game's prompt. On The Forsaken Lands the moved pattern switches to your prompt codes the first time the game shows them, when you log in or when you type `prompt`. From then on Vosh follows each prompt you set in the game and keeps your design and the draw switch as they are. When a color code runs into a code in that prompt, or when the pattern fills a value under a name no prompt code fills, such as `health`, the pattern stays and `#prompt` says why. A pattern you set with `#prompt {regex}` never switches. An older version of Vosh shows the game's prompt in every profile until you turn `prompt-capture` on again under Automation. Back in this version, Vosh moves the capture into your profiles again and turns the trigger off.";

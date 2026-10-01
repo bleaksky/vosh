@@ -171,6 +171,11 @@ mod tests {
         );
         // With nothing to stop, the table stays as it is.
         assert!(changes(&mut p, "#unprompt").events().is_empty());
+        assert_eq!(
+            changes(&mut p, "#prompt default").events(),
+            [PROMPT_CONFIG_CHANGED]
+        );
+        assert!(changes(&mut p, "#prompt default").events().is_empty());
     }
 
     #[test]
