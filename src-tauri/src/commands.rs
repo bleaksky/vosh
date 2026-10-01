@@ -3546,6 +3546,8 @@ pub(crate) struct PromptShowState {
     /// The profile has a capture that reads a prompt. Without one Vosh
     /// finds no prompt to lift or pin.
     pub capture: bool,
+    /// Draw your prompt is on, for the palette's row.
+    pub draw: bool,
     /// The game sent Char.Prompt this session.
     pub game_sent: bool,
     /// The rows the band above the command line keeps while your prompt
@@ -3569,6 +3571,7 @@ fn prompt_show_state(p: &crate::profile::Profile) -> PromptShowState {
     PromptShowState {
         show: p.prompt.show().name().to_string(),
         capture: p.prompt.stage.has_recognizer(),
+        draw: p.prompt.config().draw,
         game_sent: p.prompt.vars.gmcp().prompt_seen(),
         zone: p.prompt.zone(),
         prompts_off: p.prompt.prompts_off(),
@@ -5073,6 +5076,7 @@ mod tests {
             super::PromptShowState {
                 show: "text".into(),
                 capture: false,
+                draw: false,
                 game_sent: false,
                 zone: 1,
                 prompts_off: false,
@@ -5091,6 +5095,7 @@ mod tests {
         let state = super::prompt_show_state(&p);
         assert_eq!(state.show, "lifted");
         assert!(state.capture);
+        assert_eq!(state.draw, p.prompt.config().draw);
         assert!(state.game_sent);
         assert_eq!(state.zone, 1);
         assert!(!state.prompts_off);
