@@ -477,6 +477,7 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
         })
         .collect();
     assert_eq!(spans, [(0, 0, 1), (1, 1, 4), (2, 5, 1)]);
+    assert_eq!(state["open_row"]["plain"], "<1020>");
     let hp = state["catalog"]
         .as_array()
         .expect("the catalog")

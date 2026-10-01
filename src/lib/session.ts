@@ -998,6 +998,16 @@ export interface PromptStatusPayload {
   last_match_at: string | null;
 }
 
+/** The drawn prompt while it is the last thing on screen: its region,
+ *  where each piece landed, and the rows it draws as plain text joined by
+ *  `\n`, which the webview wraps at its renderer's width to put each
+ *  span on screen. */
+export interface PromptOpenRow {
+  gen: number;
+  spans: PromptSpan[];
+  plain: string;
+}
+
 /** Everything the card reads about your prompt now. `open_row` is the
  *  drawn prompt while it is the last thing on screen, with where each
  *  piece landed. */
@@ -1005,7 +1015,7 @@ export interface PromptState {
   catalog: PromptFieldState[];
   status: PromptStatusPayload;
   new_build: boolean;
-  open_row: { gen: number; spans: PromptSpan[] } | null;
+  open_row: PromptOpenRow | null;
   /** The GMCP packages that came this session. */
   packages: string[];
 }

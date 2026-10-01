@@ -703,9 +703,12 @@ pub struct OpenRow {
     /// preview in its place. Renderers hold it as the row's restore.
     pub live: Option<Vec<u8>>,
     /// Where each piece of the design landed in the row, from the render
-    /// that drew it (see [`Stage::set_open_spans`]). Empty while the row
-    /// shows the game's own lines.
+    /// that drew it. Empty while the row shows the game's own lines.
     pub spans: Vec<Span>,
+    /// The rows of the design the row shows, as plain text joined by
+    /// `\n`, which the webview wraps at its own width to put each span
+    /// on screen. Empty while the row shows the game's own lines.
+    pub plain: String,
 }
 
 /// What your prompt shows, handed to [`Stage::draw_view`],
@@ -722,6 +725,12 @@ pub struct View<'a> {
     /// None when your prompt shows the live render. The band above the
     /// command line never needs it, since nothing on it reaches history.
     pub live: Option<&'a str>,
+    /// Where each piece of the design landed in `shown`, from the render
+    /// that drew it. Empty while `shown` is None.
+    pub spans: &'a [Span],
+    /// The rows `shown` draws, as plain text joined by `\n`. Empty while
+    /// `shown` is None.
+    pub plain: &'a str,
 }
 
 impl<'a> View<'a> {
@@ -729,7 +738,28 @@ impl<'a> View<'a> {
     pub fn live(rendered: Option<&'a str>) -> Self {
         Self {
             shown: rendered,
-            live: None,
+            ..Self::default()
+        }
+    }
+
+    /// The open row `gen` showing `body`, with the live render behind it,
+    /// and where the pieces of what it shows landed.
+    fn open_row(self, gen: u64, body: Vec<u8>, live: Option<Vec<u8>>) -> OpenRow {
+        let drawn = self.shown.is_some();
+        OpenRow {
+            gen,
+            body,
+            live,
+            spans: if drawn {
+                self.spans.to_vec()
+            } else {
+                Vec::new()
+            },
+            plain: if drawn {
+                self.plain.to_string()
+            } else {
+                String::new()
+            },
         }
     }
 }
@@ -1051,15 +1081,6 @@ impl Stage {
     /// The open row, when the drawn prompt is the last thing on screen.
     pub fn open_row(&self) -> Option<&OpenRow> {
         self.open.as_ref()
-    }
-
-    /// Keep where each piece of the design landed in the open row, from
-    /// the render the session just drew or repainted it with, so the card
-    /// can map a pointer to a piece. Nothing without an open row.
-    pub fn set_open_spans(&mut self, spans: Vec<Span>) {
-        if let Some(open) = self.open.as_mut() {
-            open.spans = spans;
-        }
     }
 
     /// The last recognized prompt, as sent.
@@ -1390,12 +1411,7 @@ impl Stage {
             out.preview_tail(len, region_bytes(gen, lift, live));
         }
         out.closed = false;
-        self.open = Some(OpenRow {
-            gen,
-            body,
-            live,
-            spans: Vec::new(),
-        });
+        self.open = Some(view.open_row(gen, body, live));
         self.open_lift = lift;
         self.open_heads = block.heads_shown_with_text();
         self.shown_as = self.show;
@@ -1689,16 +1705,21 @@ impl Stage {
             (PromptShow::Pinned, _) => return self.move_from_pinned(out, view),
             _ => {}
         }
-        let Some(open) = &self.open else {
+        // Choosing Lifted lifts the open row, from its region's start.
+        let lifting = self.open_lift.is_none() && self.lifts();
+        let Some(open) = &mut self.open else {
             return;
         };
         let Some(block) = &self.last_raw else {
             return;
         };
         let (body, live) = row_bodies(block, view);
-        // Choosing Lifted lifts the open row, from its region's start.
-        let lifting = self.open_lift.is_none() && self.lifts();
         if body == open.body && live == open.live && !lifting {
+            // The same bytes can come from pieces numbered anew, such as
+            // after an edit, so the row keeps the latest render's.
+            let same = view.open_row(open.gen, Vec::new(), None);
+            open.spans = same.spans;
+            open.plain = same.plain;
             return;
         }
         let old = open.gen;
@@ -1730,12 +1751,7 @@ impl Stage {
         out.replace_above(old, bytes, above);
         out.restore = live.as_ref().map(|live| region_bytes(gen, lift, live));
         out.closed = false;
-        self.open = Some(OpenRow {
-            gen,
-            body,
-            live,
-            spans: Vec::new(),
-        });
+        self.open = Some(view.open_row(gen, body, live));
         self.open_lift = lift;
     }
 
@@ -1827,12 +1843,7 @@ impl Stage {
                     out.preview_tail(len, region_bytes(gen, lift, live));
                 }
                 out.closed = false;
-                self.open = Some(OpenRow {
-                    gen,
-                    body,
-                    live,
-                    spans: Vec::new(),
-                });
+                self.open = Some(view.open_row(gen, body, live));
                 self.open_lift = lift;
                 self.open_heads = block.heads_shown_with_text();
             }
@@ -2098,6 +2109,7 @@ mod tests {
                 body: b"DRAWN".to_vec(),
                 live: None,
                 spans: Vec::new(),
+                plain: String::new(),
             })
         );
         assert_eq!(
@@ -2293,6 +2305,7 @@ mod tests {
                 body: b"DRAWN\r\n".to_vec(),
                 live: None,
                 spans: Vec::new(),
+                plain: String::new(),
             })
         );
         let mut new = Output::new(false);
@@ -2526,41 +2539,94 @@ mod tests {
         assert!(stage.open_row().is_some());
     }
 
-    #[test]
-    fn the_open_row_keeps_the_spans_of_the_render_that_drew_it() {
-        let span = |piece| Span {
+    /// A span of piece `piece` on the first row, `width` cells from
+    /// `col`.
+    fn span_at(piece: usize, col: usize, width: usize) -> Span {
+        Span {
             piece,
             row: 0,
-            col: 0,
-            width: 5,
+            col,
+            width,
             fg: crate::render::SpanColor::Default,
             bg: crate::render::SpanColor::Default,
             bold: false,
             italic: false,
             underline: false,
-        };
-        let mut stage = stage(JAMES, false);
-        stage.set_open_spans(vec![span(0)]);
-        assert_eq!(stage.open_row(), None, "no row to keep them for");
+        }
+    }
 
+    /// `shown` with its pieces, as the session hands a render over.
+    fn drawn_view<'a>(shown: &'a str, spans: &'a [Span]) -> View<'a> {
+        View {
+            shown: Some(shown),
+            spans,
+            plain: shown,
+            ..View::default()
+        }
+    }
+
+    #[test]
+    fn the_open_row_keeps_the_pieces_of_the_render_that_drew_it() {
+        let one = [span_at(0, 0, 5)];
+        let mut stage = stage(JAMES, false);
         let mut out = Output::new(false);
         let block = read(&stage, PROMPT, End::Line);
-        stage.draw(&mut out, block, None, b"", "DRAWN");
-        assert!(stage.open_row().is_some_and(|o| o.spans.is_empty()));
-        stage.set_open_spans(vec![span(0)]);
-        assert_eq!(stage.open_row().map(|o| o.spans.len()), Some(1));
+        stage.draw_view(&mut out, block, None, b"", drawn_view("DRAWN", &one));
+        let open = stage.open_row().expect("the row");
+        assert_eq!(
+            (open.spans.clone(), open.plain.as_str()),
+            (one.to_vec(), "DRAWN")
+        );
 
-        // A repaint that changes nothing keeps them, and one that draws
-        // another design starts a row with none until the session sets
-        // the new render's.
+        // A repaint that draws the same bytes keeps them, and takes the
+        // latest render's pieces, since an edit can number them anew.
+        let renumbered = [span_at(0, 0, 2), span_at(1, 2, 3)];
         let mut same = Output::new(false);
-        stage.repaint(&mut same, Some("DRAWN"));
-        assert_eq!(stage.open_row().map(|o| o.spans.len()), Some(1));
-        let mut new = Output::new(false);
-        stage.repaint(&mut new, Some("NEW"));
-        assert!(stage.open_row().is_some_and(|o| o.spans.is_empty()));
-        stage.set_open_spans(vec![span(0), span(1)]);
-        assert_eq!(stage.open_row().map(|o| o.spans.len()), Some(2));
+        stage.repaint_view(&mut same, drawn_view("DRAWN", &renumbered));
+        assert!(same.is_empty());
+        let open = stage.open_row().expect("the row");
+        assert_eq!(open.spans, renumbered);
+
+        // Another design brings its own.
+        let new = [span_at(0, 0, 3)];
+        let mut out = Output::new(false);
+        stage.repaint_view(&mut out, drawn_view("NEW", &new));
+        let open = stage.open_row().expect("the row");
+        assert_eq!(
+            (open.spans.clone(), open.plain.as_str()),
+            (new.to_vec(), "NEW")
+        );
+
+        // The game's own line has none, drawing off or under the card.
+        let mut off = Output::new(false);
+        stage.repaint_view(&mut off, View::live(None));
+        let open = stage.open_row().expect("the row");
+        assert!(open.spans.is_empty() && open.plain.is_empty());
+        let mut raw = Output::new(false);
+        stage.repaint_view(
+            &mut raw,
+            View {
+                live: Some("NEW"),
+                spans: &new,
+                plain: "NEW",
+                ..View::default()
+            },
+        );
+        let open = stage.open_row().expect("the row");
+        assert!(open.spans.is_empty() && open.plain.is_empty());
+
+        // A prompt that comes back from the band brings them too.
+        let mut stage = self::stage(JAMES, false);
+        stage.set_show(PromptShow::Pinned);
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.pin_view(&mut out, block, None, b"", drawn_view("DRAWN", &one));
+        stage.finish(&mut out);
+        stage.set_show(PromptShow::Text);
+        let mut back = Output::new(false);
+        stage.repaint_view(&mut back, drawn_view("DRAWN", &one));
+        let open = stage.open_row().expect("the row");
+        assert_eq!(open.spans, one);
     }
 
     #[test]
@@ -3535,6 +3601,7 @@ mod tests {
         View {
             shown: Some(shown),
             live: Some(live),
+            ..View::default()
         }
     }
 
@@ -3610,6 +3677,7 @@ mod tests {
         let raw = View {
             shown: None,
             live: Some("LIVE"),
+            ..View::default()
         };
         stage.draw_view(&mut out, block, None, b"", raw);
         assert_eq!(out.bytes, with(&[&mark(1), PROMPT.as_bytes(), b"\r\n"]));
@@ -3688,6 +3756,7 @@ mod tests {
             View {
                 shown: None,
                 live: Some("DRAWN"),
+                ..View::default()
             },
         );
         assert_eq!(
@@ -3798,6 +3867,7 @@ mod tests {
             View {
                 shown: None,
                 live: Some("DRAWN"),
+                ..View::default()
             },
         );
         assert_eq!(raw.pin.as_deref(), Some(PROMPT.as_bytes()));
