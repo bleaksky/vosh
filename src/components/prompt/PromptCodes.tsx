@@ -17,8 +17,10 @@ import {
   type PromptCapture,
   type PromptCaptureCheck,
   type PromptCaptureSource,
+  type PromptCheckRead,
   type PromptCompileReport,
   type PromptLegendRow,
+  type PromptLineTrigger,
 } from '../../lib/session';
 import { pushToast } from '../../lib/toasts';
 import { Button, Field } from '../settings/ui';
@@ -180,6 +182,9 @@ interface CodesReadProps {
   env: BandEnv;
   cellW: number;
   measure: (label: string) => number;
+  /** Hears the newest prompt the codes read, whose values the card marks
+   *  on your prompt. The stepper never moves those marks (D19). */
+  onNewest?: (read: PromptCheckRead | null) => void;
 }
 
 /** P3: what Vosh reads from your codes, shown on your newest prompt with
@@ -194,6 +199,7 @@ export function CodesRead({
   env,
   cellW,
   measure,
+  onNewest,
 }: CodesReadProps) {
   const [report, setReport] = useState<PromptCompileReport | null>(null);
   const [check, setCheck] = useState<PromptCaptureCheck | null>(null);
@@ -240,6 +246,10 @@ export function CodesRead({
   }, [report, refresh]);
 
   const read = check?.reads[index] ?? null;
+  const newest = check?.reads[0] ?? null;
+  useEffect(() => {
+    onNewest?.(newest);
+  }, [newest, onNewest]);
   const runTogether = report?.warnings.find((w) => w.kind === 'run_together')?.message ?? null;
   const legend = report?.legend ?? [];
   const grid = legend.filter((row) => row.warning === null);
@@ -358,6 +368,61 @@ function CommandBox({ command }: { command: string }) {
       >
         Copy
       </Button>
+    </div>
+  );
+}
+
+interface LineTriggersProps {
+  triggers: readonly PromptLineTrigger[];
+  /** Set one to match Prompts. It resolves once the trigger moved. */
+  onMove: (name: string) => Promise<void>;
+}
+
+/** The D6 row: once a profile reads your prompt, Line triggers no longer
+ *  see it, so the first capture a profile saves names the enabled Line
+ *  triggers that matched your recent prompts, each with Move to Prompts.
+ *  A trigger a highlight preset installed changes only with its preset,
+ *  so it has no button. */
+export function LineTriggers({ triggers, onMove }: LineTriggersProps) {
+  const [busy, setBusy] = useState<string | null>(null);
+  if (triggers.length === 0) return null;
+  return (
+    <div className="pc-d6">
+      <p className="pc-d6-text">
+        <span className="pc-warn-dot" aria-hidden="true" />
+        <span>
+          These triggers matched your prompt as a line. Vosh now sends your prompt only to Prompts
+          triggers.
+        </span>
+      </p>
+      <ul className="pc-d6-list">
+        {triggers.map((t) => (
+          <li key={t.name} className="pc-d6-row">
+            <span className="pc-d6-what">
+              <span className="pc-d6-name">{t.name}</span>
+              <span className="pc-d6-pattern">{t.pattern}</span>
+            </span>
+            {!t.preset && (
+              <Button
+                disabled={busy !== null}
+                onClick={() => {
+                  setBusy(t.name);
+                  void onMove(t.name)
+                    .catch((e: unknown) =>
+                      pushToast({
+                        kind: 'error',
+                        message: e instanceof Error ? e.message : String(e),
+                      }),
+                    )
+                    .finally(() => setBusy(null));
+                }}
+              >
+                Move to Prompts
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
