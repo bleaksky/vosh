@@ -6,7 +6,11 @@ import { createStore } from './store';
 // `{enabled, prompt, fprompt}` at login and whenever you change or show
 // your prompt or fight prompt. The text is the raw format string with
 // its colour codes, so Vosh can recognise the prompt line without you
-// pasting it. Nothing shows it yet. The prompt editor reads it later.
+// pasting it. The prompt engine in the backend keeps its own copy to read
+// your prompt. The prompt card and Settings read this one for the codes,
+// `enabled`, and when the game sent them, which their source line names
+// (the game sent them when you logged in, or at 12:58). While it holds
+// nothing they ask the backend with prompt_last_seen.
 
 export interface GamePrompt {
   /** False after `prompt off`. The game still sends the prompt time
@@ -17,6 +21,16 @@ export interface GamePrompt {
   /** The fight prompt, used in place of `prompt` while you fight.
    *  Empty when unset. */
   fprompt: string;
+}
+
+/** The latest Char.Prompt, with when it came. */
+export interface GamePromptSeen extends GamePrompt {
+  /** When it came, in milliseconds since the epoch. */
+  receivedAt: number;
+  /** It is the first one since you connected, which the game sends at
+   *  login. False for any later one, and for one that came before this
+   *  window heard you connect. */
+  atLogin: boolean;
 }
 
 /** Parse a Char.Prompt payload. null when it is not an object. The
@@ -31,22 +45,35 @@ export function parseGamePrompt(data: unknown): GamePrompt | null {
   };
 }
 
-const store = createStore<GamePrompt | null>(null);
+const store = createStore<GamePromptSeen | null>(null);
 let started = false;
+// No Char.Prompt has come since this window heard you connect. It starts
+// false, so a window that loads while you play never calls a packet the
+// login one.
+let awaitingLogin = false;
 
 export function startGamePromptStore(): void {
   if (started) return;
   started = true;
   void onGmcpPackage<unknown>('Char.Prompt', (data) => {
     const next = parseGamePrompt(data);
-    if (next) store.set(next);
+    if (!next) return;
+    store.set({ ...next, receivedAt: Date.now(), atLogin: awaitingLogin });
+    awaitingLogin = false;
   });
   void onState((payload) => {
-    if (payload.kind === 'disconnected') store.set(null);
+    if (payload.kind === 'disconnected') {
+      store.set(null);
+      awaitingLogin = false;
+    } else {
+      // The session says it is connecting before it reads anything, so
+      // the next packet is the one the game sends at login.
+      awaitingLogin = true;
+    }
   });
 }
 
-export function getGamePrompt(): GamePrompt | null {
+export function getGamePrompt(): GamePromptSeen | null {
   return store.get();
 }
 
@@ -55,7 +82,8 @@ export function subscribeGamePrompt(cb: () => void): () => void {
   return store.subscribe(cb);
 }
 
-/** Your prompt settings in the game, or null until it sends them. */
-export function useGamePrompt(): GamePrompt | null {
+/** Your prompt settings in the game with when they came, or null until it
+ *  sends them. */
+export function useGamePrompt(): GamePromptSeen | null {
   return useSyncExternalStore(subscribeGamePrompt, getGamePrompt);
 }
