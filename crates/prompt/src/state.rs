@@ -74,6 +74,9 @@ pub struct PromptState {
     pub catalog: Vec<FieldState>,
     pub status: StatusReport,
     pub new_build: bool,
+    /// The Forsaken Lands rules hold (D17): the host is The Forsaken
+    /// Lands or the capture reads its codes.
+    pub forsaken: bool,
     pub open_row: Option<OpenRowState>,
     /// The GMCP packages that came this session, for More from the game.
     pub packages: Vec<String>,

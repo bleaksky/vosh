@@ -466,6 +466,7 @@ impl PromptEngine {
             catalog: crate::state::catalog(&self.vars, vosh, &reads),
             status: self.status_report(),
             new_build: self.vars.new_build(),
+            forsaken: self.forsaken(),
             open_row: self.stage.open_row().map(|open| OpenRowState {
                 gen: open.gen,
                 spans: open.spans.clone(),
