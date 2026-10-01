@@ -75,11 +75,35 @@ describe('searchSettingsRows', () => {
   it('finds the Input rows, Advanced ones included', () => {
     expect(labels('paste')).toEqual(['Wait between pasted lines']);
     expect(labels('sent command')[0]).toBe('Sent command color');
+    const paste = searchSettingsRows('paste', mac)[0];
+    expect(paste.target).toEqual({ group: 'input', section: 'advanced', anchor: 'paste-delay' });
+  });
+
+  it('finds the Prompt section rows (P12)', () => {
+    const target = (label: string) => SETTINGS_ROWS.find((r) => r.label === label)?.target ?? null;
+    expect(target("Your game's prompt")).toEqual({
+      group: 'input',
+      section: 'prompt',
+      anchor: 'prompt-game',
+    });
+    expect(target('Draw your own prompt')).toEqual({ group: 'input', section: 'prompt' });
+    expect(target('Where your prompt shows')).toEqual({
+      group: 'input',
+      section: 'prompt',
+      anchor: 'prompt-show',
+    });
     expect(labels('prompt template')).toEqual(['Draw your own prompt']);
-    const advanced = searchSettingsRows('prompt', mac).find(
-      (r) => r.label === 'Draw your own prompt',
-    );
-    expect(advanced?.target).toEqual({ group: 'input', section: 'advanced', anchor: 'prompt' });
+    expect(labels('customize')).toContain('Draw your own prompt');
+    // The fight prompt reads in the same block.
+    expect(labels('fight prompt')[0]).toBe("Your game's prompt");
+    expect(labels('fprompt')).toEqual(["Your game's prompt"]);
+    expect(labels('prompt codes')[0]).toBe("Your game's prompt");
+    // Nothing about your prompt is left under Advanced.
+    expect(
+      SETTINGS_ROWS.filter(
+        (r) => r.target.group === 'input' && r.target.section === 'advanced',
+      ).map((r) => r.label),
+    ).toEqual(['Wait between pasted lines']);
   });
 
   it('finds the Layout rows', () => {

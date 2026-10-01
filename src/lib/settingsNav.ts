@@ -81,8 +81,16 @@ const LEGACY_TARGETS: Readonly<Record<string, SettingsTarget>> = {
   logs: { group: 'general', section: 'logs' },
 };
 
-/** Resolve a deep link string. Legacy tab ids map to their new place.
- *  Anything this cannot read opens General. */
+// Rows that moved out of a section, by the anchor they had there, with
+// where they are now. Your prompt left Input, Advanced for its own
+// section (P12), and the switch is the section's own row.
+const MOVED_ANCHORS: Readonly<Record<string, SettingsTarget>> = {
+  'input:advanced#prompt': { group: 'input', section: 'prompt' },
+  'input:advanced#prompt-show': { group: 'input', section: 'prompt', anchor: 'prompt-show' },
+};
+
+/** Resolve a deep link string. Legacy tab ids and rows that moved map to
+ *  their new place. Anything this cannot read opens General. */
 export function resolveSettingsTarget(raw: string): SettingsTarget {
   const text = raw.trim();
   const legacy = LEGACY_TARGETS[text.toLowerCase()];
@@ -101,7 +109,8 @@ export function resolveSettingsTarget(raw: string): SettingsTarget {
   const section = group === 'characters' ? rawSection : rawSection.toLowerCase();
   if (section) target.section = section;
   if (anchor) target.anchor = anchor.toLowerCase();
-  return target;
+  const moved = MOVED_ANCHORS[formatSettingsTarget(target)];
+  return moved ? { ...moved } : target;
 }
 
 /** The string form of a target, the inverse of resolveSettingsTarget. */

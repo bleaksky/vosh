@@ -276,17 +276,25 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     keywords: 'advanced paste pacing delay flood milliseconds',
     target: at('input', 'advanced', 'paste-delay'),
   },
+
+  // Input, Prompt (P12).
+  {
+    label: "Your game's prompt",
+    description: 'Your prompt setting in the game. Vosh reads its codes.',
+    keywords: 'prompt codes setting fight prompt fprompt capture pattern point line',
+    target: at('input', 'prompt', 'prompt-game'),
+  },
   {
     label: 'Draw your own prompt',
-    description: "It takes the place of your MUD's prompt. Capture the prompt with #prompt first.",
-    keywords: 'advanced custom prompt template gag replace preview',
-    target: at('input', 'advanced', 'prompt'),
+    description: 'It takes the place of the prompt the game sends.',
+    keywords: 'custom prompt design template customize gag replace preview',
+    target: at('input', 'prompt'),
   },
   {
     label: 'Where your prompt shows',
     description: 'Your prompt shows in the text, where the game sends it.',
-    keywords: 'advanced prompt pin pinned lift lifted raise band chip bottom',
-    target: at('input', 'advanced', 'prompt-show'),
+    keywords: 'prompt pin pinned lift lifted raise band chip bottom',
+    target: at('input', 'prompt', 'prompt-show'),
   },
 
   // Automation, from the approved board.

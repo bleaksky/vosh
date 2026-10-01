@@ -77,9 +77,9 @@ describe('PromptShowField', () => {
 });
 
 describe('where your prompt shows, found and read', () => {
-  it('has a search entry that opens the row inside Input Advanced', () => {
+  it('has a search entry that opens the row in the Prompt section', () => {
     const entry = SETTINGS_ROWS.find((r) => r.label === 'Where your prompt shows');
-    expect(entry?.target).toEqual({ group: 'input', section: 'advanced', anchor: 'prompt-show' });
+    expect(entry?.target).toEqual({ group: 'input', section: 'prompt', anchor: 'prompt-show' });
     expect(entry?.keywords).toContain('pinned');
     expect(entry?.keywords).toContain('lifted');
   });

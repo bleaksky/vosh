@@ -67,6 +67,29 @@ describe('resolveSettingsTarget', () => {
     expect(resolveSettingsTarget('  THEMES ')).toEqual({ group: 'appearance', section: 'theme' });
   });
 
+  it('sends the prompt rows that left Input Advanced to the Prompt section', () => {
+    expect(resolveSettingsTarget('input:advanced#prompt')).toEqual({
+      group: 'input',
+      section: 'prompt',
+    });
+    expect(resolveSettingsTarget('Input:Advanced#Prompt-Show')).toEqual({
+      group: 'input',
+      section: 'prompt',
+      anchor: 'prompt-show',
+    });
+    // Paste pacing stays under Advanced.
+    expect(resolveSettingsTarget('input:advanced#paste-delay')).toEqual({
+      group: 'input',
+      section: 'advanced',
+      anchor: 'paste-delay',
+    });
+    expect(resolveSettingsTarget('input:prompt#prompt-game')).toEqual({
+      group: 'input',
+      section: 'prompt',
+      anchor: 'prompt-game',
+    });
+  });
+
   it('drops an empty section or anchor', () => {
     expect(resolveSettingsTarget('characters:#tracked')).toEqual({
       group: 'characters',
