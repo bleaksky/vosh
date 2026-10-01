@@ -543,6 +543,25 @@
   opacity: 0.4;
 }
 
+/* Draw your own prompt: Customize… then the switch, 12 apart. Without a
+   capture the switch waits at 40 percent, and Customize… stays whole,
+   since it opens the card that reads your prompt (P13). */
+.st-draw-row .st-row-control {
+  gap: 12px;
+}
+
+.st-row.is-waiting .st-row-label {
+  color: var(--tertiary);
+}
+
+.st-row.is-waiting .st-toggle {
+  opacity: 0.4;
+}
+
+.st-row.is-waiting .st-toggle-input:disabled + .st-toggle-track {
+  opacity: 1;
+}
+
 .st-row-text {
   display: flex;
   flex-direction: column;

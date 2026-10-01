@@ -1,8 +1,17 @@
 import { useEffect, useId, useState } from 'react';
 import { promptPreviewChunks } from '../../../lib/promptPreview';
-import { usePromptShow, type PromptShowState } from '../../../lib/promptShow';
+import {
+  promptShowDisabledHelp,
+  usePromptShow,
+  type PromptShowState,
+} from '../../../lib/promptShow';
 import { styleToCss } from '../../../lib/ansi';
-import { INPUT_CURSOR_STYLES, type InputCursorStyle, type PromptShow } from '../../../lib/session';
+import {
+  INPUT_CURSOR_STYLES,
+  openPromptCard,
+  type InputCursorStyle,
+  type PromptShow,
+} from '../../../lib/session';
 import type { SettingsTarget } from '../../../lib/settingsNav';
 import { useVitals } from '../../../lib/stores/vitalsStore';
 import { getCurrentThemeId } from '../../../lib/theme';
@@ -11,6 +20,7 @@ import { useSettingsAutoSave } from '../legacy/useSettingsAutoSave';
 import type { SettingsPageProps } from '../pageTypes';
 import { PromptShowField } from '../rows/PromptShowRow';
 import {
+  Button,
   Card,
   ColorField,
   Disclosure,
@@ -197,13 +207,22 @@ export function PromptBlock({
   const previewId = useId();
   const vitals = useVitals();
   const chunks = promptPreviewChunks(template, vitals);
+  // Nothing draws until the profile reads a prompt, so the switch waits,
+  // and Customize… opens the card that reads it (P13).
+  const waiting = showState !== null && !showState.capture;
   return (
     <div className="st-block" data-st-anchor="prompt" data-st-flash="" data-interim="">
       <Row
         label="Draw your own prompt"
-        description="It takes the place of your MUD's prompt. Capture the prompt with #prompt first."
+        description={
+          waiting
+            ? promptShowDisabledHelp(showState.gameSent)
+            : "It takes the place of your MUD's prompt. Capture the prompt with #prompt first."
+        }
+        className={waiting ? 'st-draw-row is-waiting' : 'st-draw-row'}
       >
-        <Toggle checked={enabled} onChange={onEnabled} />
+        <Button onClick={() => void openPromptCard()}>Customize…</Button>
+        <Toggle checked={enabled} disabled={waiting} onChange={onEnabled} />
       </Row>
       <PromptShowField value={show} state={showState} onChange={onShow} />
       <label htmlFor={fieldId} className="st-visually-hidden">
