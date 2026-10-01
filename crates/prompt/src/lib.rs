@@ -15,6 +15,7 @@
 //!   look of every other piece.
 //! - [`format`] holds the values a template draws and the plain text of
 //!   each format.
+//! - [`generic`] builds a capture from a line another game prints.
 //! - [`gmcp`] keeps the latest packet of each package, the pulse and the
 //!   latest Char.Prompt.
 //! - [`vars`] holds the catalog of fields, the session's sources and the
@@ -42,6 +43,7 @@ pub mod config;
 pub mod edit;
 pub mod engine;
 pub mod format;
+pub mod generic;
 pub mod gmcp;
 pub mod overrides;
 pub mod presets;
