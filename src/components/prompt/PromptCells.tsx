@@ -71,11 +71,23 @@ export function CellLine({
     return contrast(rgb, ground) < MARKED_MIN_CONTRAST ? env.fg : color;
   };
   const shown = clipped ? kept + 1 : total;
+  // A reader hears the line as its text, as far as it shows: each glyph
+  // is placed on its own, which reads one character at a time with the
+  // spaces between words gone.
+  let col = 0;
+  let text = '';
+  for (const cell of cells) {
+    if (col >= kept) break;
+    text += cell.ch;
+    if (cell.ch !== '') col += cell.width;
+  }
+  text = text.trimEnd() + (clipped ? '…' : '');
   return (
     <div
       className={['pc-cells', className].filter(Boolean).join(' ')}
       style={{ width: cut ? cut.width : shown * cellW, ...style }}
     >
+      <span className="st-visually-hidden">{text}</span>
       {marks.map((mark) => (
         <span
           key={`${mark.from}-${mark.to}`}
@@ -90,6 +102,7 @@ export function CellLine({
             <span
               key={glyph.col}
               className="pc-cells-glyph"
+              aria-hidden="true"
               style={{
                 left: glyph.col * cellW,
                 width: glyph.cols * cellW,
@@ -106,7 +119,11 @@ export function CellLine({
         ),
       )}
       {clipped && (
-        <span className="pc-cells-glyph pc-cells-more" style={{ left: kept * cellW, width: cellW }}>
+        <span
+          className="pc-cells-glyph pc-cells-more"
+          aria-hidden="true"
+          style={{ left: kept * cellW, width: cellW }}
+        >
           …
         </span>
       )}
