@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { bandRuns, type BandEnv } from '../../lib/bandCells';
 import { contrast, parseHex } from '../../lib/color';
+import { sampleCut } from '../../lib/promptCard';
 import type { Cell } from '../../lib/sgrCells';
 
 // One row of terminal text inside the prompt card: a prompt line in the
@@ -27,6 +28,10 @@ interface CellLineProps {
    *  a line that does not fit: the ellipsis needs its cell and a hair
    *  more. */
   limit?: number;
+  /** A column the row is cut to as the boards' samples are, in px: whole
+   *  when it fits, else ending on an ellipsis, and as wide as the column
+   *  (see sampleCut). It takes the place of `limit`. */
+  column?: number;
   marks?: readonly CellMark[];
   className?: string;
   style?: CSSProperties;
@@ -46,14 +51,16 @@ export function CellLine({
   env,
   cellW,
   limit,
+  column,
   marks = [],
   className,
   style,
 }: CellLineProps) {
   const total = cells.reduce((n, c) => n + (c.ch === '' ? 0 : c.width), 0);
-  const max = limit ?? Number.POSITIVE_INFINITY;
+  const cut = column === undefined ? null : sampleCut(total, cellW, column);
+  const max = cut ? cut.kept : (limit ?? Number.POSITIVE_INFINITY);
   const clipped = total > max;
-  const kept = clipped ? Math.max(0, max - 2) : max;
+  const kept = cut ? cut.kept : clipped ? Math.max(0, max - 2) : max;
   const runs = bandRuns(cells, env, kept);
   const ground = parseHex(env.bg);
   const face = (color: string, col: number): string => {
@@ -67,7 +74,7 @@ export function CellLine({
   return (
     <div
       className={['pc-cells', className].filter(Boolean).join(' ')}
-      style={{ width: shown * cellW, ...style }}
+      style={{ width: cut ? cut.width : shown * cellW, ...style }}
     >
       {marks.map((mark) => (
         <span

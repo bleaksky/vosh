@@ -14,6 +14,7 @@ import {
   matchTone,
   migratedNote,
   nextCardRequest,
+  sampleCut,
   moreItems,
   nameChoices,
   namesFor,
@@ -649,5 +650,23 @@ describe('a request to open the card', () => {
     expect(text).toEqual({ view: 'text', at: 2 });
     // Edit prompt as text… again, after you went back to the parts.
     expect(nextCardRequest(text, 'text')).toEqual({ view: 'text', at: 3 });
+  });
+});
+
+describe('a preset sample cut to its column', () => {
+  // JetBrains Mono at 13 is 7.8 wide. The boards cut each sample as a
+  // column with text-overflow ellipsis does.
+  it('keeps what fits with its ellipsis, as P4 and the Presets menu cut', () => {
+    // P4's 429 column: Detailed's 59 cells end "2 m…".
+    expect(sampleCut(59, 7.8, 429)).toEqual({ kept: 53, width: 429 });
+    // The Presets menu's 410: "930/930…".
+    expect(sampleCut(59, 7.8, 410)).toEqual({ kept: 51, width: 410 });
+    // A fight line leaves its tag room: 356.09 keeps 44.
+    expect(sampleCut(60, 7.8, 356.09)).toEqual({ kept: 44, width: 356.09 });
+  });
+
+  it('shows a sample that fits whole, at its own width', () => {
+    expect(sampleCut(55, 7.8, 429)).toEqual({ kept: 55, width: 429 });
+    expect(sampleCut(18, 7.8, 410)).toEqual({ kept: 18, width: 140.4 });
   });
 });

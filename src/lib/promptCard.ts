@@ -619,3 +619,17 @@ export interface CardRequest {
 export function nextCardRequest(prev: CardRequest | null, view: CardRequestView): CardRequest {
   return { view, at: (prev?.at ?? 0) + 1 };
 }
+
+/** A sample cut to a column `column` px wide, as the boards cut it with
+ *  text-overflow ellipsis: whole when its cells fit, else the cells that
+ *  fit with the ellipsis after them, with the hair a fit needs, and the
+ *  column's whole width. */
+export function sampleCut(
+  total: number,
+  cellW: number,
+  column: number,
+): { kept: number; width: number } {
+  const round = (n: number) => Math.round(n * 100) / 100;
+  if (total * cellW <= column + 0.01) return { kept: total, width: round(total * cellW) };
+  return { kept: Math.max(0, Math.ceil(column / cellW - 1e-6) - 2), width: column };
+}

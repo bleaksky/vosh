@@ -89,10 +89,10 @@ interface StartListProps {
   samples: Map<string, Sample>;
   env: BandEnv;
   cellW: number;
-  /** The most cells a sample shows. */
-  limit: number;
-  /** The most cells a fight line shows, which leaves room for its tag. */
-  fightLimit: number;
+  /** The column a sample is cut to, in px. */
+  column: number;
+  /** The column a fight line is cut to, which leaves room for its tag. */
+  fightColumn: number;
   onPick: (row: StartRow) => void;
   /** It sits inside the Presets menu, so it is a group of its items. */
   inMenu?: boolean;
@@ -106,8 +106,8 @@ function StartList({
   samples,
   env,
   cellW,
-  limit,
-  fightLimit,
+  column,
+  fightColumn,
   onPick,
   inMenu = false,
 }: StartListProps) {
@@ -131,7 +131,7 @@ function StartList({
                   cells={line.cells}
                   env={env}
                   cellW={cellW}
-                  limit={line.fight ? fightLimit : limit}
+                  column={line.fight ? fightColumn : column}
                 />
                 {line.fight && <span className="pc-start-tag">in a fight</span>}
               </span>
@@ -202,14 +202,13 @@ function StartList({
 }
 
 /** The sample column of the start list, 429 px, and of the Presets
- *  menu, 410 px (P4 and P0), in whole cells. A sample wider than its
- *  column ends on an ellipsis inside it. */
+ *  menu, 410 px (P4 and P0). A sample wider than its column ends on an
+ *  ellipsis inside it. */
 const LIST_SAMPLE_PX = 429;
 const MENU_SAMPLE_PX = 410;
 /** The row's text column in the start list, where a fight line and its
  *  tag may run past the sample column (P4). */
 const LIST_ROW_PX = 498;
-const sampleCells = (px: number, cellW: number) => Math.max(2, Math.floor(px / cellW));
 
 interface StartsProps {
   mode: 'start' | 'rest';
@@ -281,8 +280,8 @@ export function Starts({
           samples={samples}
           env={env}
           cellW={cellW}
-          limit={sampleCells(LIST_SAMPLE_PX, cellW)}
-          fightLimit={sampleCells(LIST_ROW_PX - tagRoom, cellW)}
+          column={LIST_SAMPLE_PX}
+          fightColumn={LIST_ROW_PX - tagRoom}
           onPick={(row) => onPick(row.template)}
         />
         <div className="pc-actions">{insert}</div>
@@ -328,8 +327,8 @@ export function Starts({
               samples={samples}
               env={env}
               cellW={cellW}
-              limit={sampleCells(MENU_SAMPLE_PX, cellW)}
-              fightLimit={sampleCells(MENU_SAMPLE_PX - tagRoom, cellW)}
+              column={MENU_SAMPLE_PX}
+              fightColumn={MENU_SAMPLE_PX - tagRoom}
               inMenu
               onPick={(row) => {
                 setPresetsAt(null);
