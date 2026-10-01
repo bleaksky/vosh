@@ -36,7 +36,7 @@ export function FontStackRow({ config, update }: FontStackRowProps) {
     >
       <Field
         value={draft ?? config.font_family}
-        placeholder='"BerkeleyMono Bundled", Menlo, monospace'
+        placeholder='"JetBrainsMono Bundled", Menlo, monospace'
         onChange={setDraft}
         onFocus={() => setDraft(config.font_family)}
         onBlur={commit}

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import fixture from '../../fixtures/font-stacks/cases.json';
 
 type ConvertFileSrc = (filePath: string, protocol?: string) => string;
 const calls: Parameters<ConvertFileSrc>[] = [];
@@ -11,7 +12,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 const actual = await vi.importActual<typeof import('@tauri-apps/api/core')>('@tauri-apps/api/core');
-const { fontFaceCss, fontUrl } = await import('./fontLoader');
+const { fontFaceCss, fontUrl, renderFontStack } = await import('./fontLoader');
 
 describe('font scheme URLs', () => {
   beforeEach(() => {
@@ -36,5 +37,34 @@ describe('font scheme URLs', () => {
     expect(css).toContain('font-family: "Fira Code";');
     expect(css).toContain('src: url("http://font.localhost/Fira%20Code");');
     expect(css).not.toContain('font://Fira');
+  });
+});
+
+describe('renderFontStack', () => {
+  const families = (stack: string) =>
+    stack
+      .split(',')
+      .map((piece) => piece.trim().replace(/^["']|["']$/g, ''))
+      .filter((name) => name !== '');
+
+  // The same cases run against rendered_families in cell_render.rs, so
+  // xterm and the native atlas try the same families in the same order.
+  for (const c of fixture.cases) {
+    it(c.name, () => {
+      const rendered = renderFontStack(c.stack);
+      expect(families(rendered)).toEqual(c.families);
+      expect(renderFontStack(rendered)).toBe(rendered);
+    });
+  }
+
+  it('quotes each family but the generic ones', () => {
+    expect(renderFontStack('"BerkeleyMono Bundled", Menlo, monospace')).toBe(
+      '"BerkeleyMono Nerd Font", "Berkeley Mono", "JetBrainsMono Bundled", "Menlo", monospace',
+    );
+  });
+
+  it('hands back a list without Berkeley Mono exactly as saved', () => {
+    const stack = "'Fira Code',Menlo,  monospace";
+    expect(renderFontStack(stack)).toBe(stack);
   });
 });

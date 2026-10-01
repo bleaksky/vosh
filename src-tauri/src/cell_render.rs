@@ -1402,13 +1402,10 @@ fn weighted_face(
     best.map(|(handle, _)| handle)
 }
 
-// Vosh ships these two families and the webview renders with them. font-kit
-// often fails to resolve them by their CSS family name (the file's internal
-// family name differs), so load the bundled regular faces directly to match
-// the webview exactly.
-const BERKELEY_REGULAR: &[u8] =
-    include_bytes!("../../src/assets/fonts/BerkeleyMonoNerdFont-Regular.ttf");
-const BERKELEY_BOLD: &[u8] = include_bytes!("../../src/assets/fonts/BerkeleyMonoNerdFont-Bold.ttf");
+// Vosh ships this family and the webview renders with it. font-kit often
+// fails to resolve it by its CSS family name (the file's internal family
+// name differs), so load the bundled faces directly to match the webview
+// exactly.
 const JETBRAINS_REGULAR: &[u8] =
     include_bytes!("../../src/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf");
 const JETBRAINS_BOLD: &[u8] =
@@ -1508,19 +1505,68 @@ fn load_font(family_stack: &str, bold: bool) -> Option<Font> {
     load_face(family_stack, bold).map(|(font, _)| font)
 }
 
+/// The CSS family of the font Vosh bundles.
+const BUNDLED_FAMILY: &str = "JetBrainsMono Bundled";
+
+/// The family Berkeley Mono went by while Vosh bundled it, which saved
+/// font lists still name.
+const RETIRED_BERKELEY: &str = "BerkeleyMono Bundled";
+
+/// The installed families that stand in for [`RETIRED_BERKELEY`]: the
+/// Nerd Font build Vosh bundled, then the family the foundry sells.
+const BERKELEY_FAMILIES: [&str; 2] = ["BerkeleyMono Nerd Font", "Berkeley Mono"];
+
+/// The families both renderers try, in order, for the saved CSS font
+/// list `stack`. Vosh no longer ships Berkeley Mono, so a Berkeley name
+/// stands for your installed copy, and [`BUNDLED_FAMILY`] follows each
+/// run of Berkeley names for a machine without one.
+/// [`RETIRED_BERKELEY`] becomes [`BERKELEY_FAMILIES`]. A repeated name
+/// drops out. `renderFontStack` in fontLoader.ts gives the webview the
+/// same list, so xterm and the atlas land on the same face and cell.
+fn rendered_families(stack: &str) -> Vec<String> {
+    fn push(out: &mut Vec<String>, name: &str) {
+        if !out.iter().any(|f| f.eq_ignore_ascii_case(name)) {
+            out.push(name.to_string());
+        }
+    }
+    let mut out = Vec::new();
+    let mut after_berkeley = false;
+    for raw in stack.split(',') {
+        let name = raw.trim().trim_matches('"').trim_matches('\'').trim();
+        if name.is_empty() {
+            continue;
+        }
+        let berkeley = name.to_ascii_lowercase().contains("berkeley");
+        if after_berkeley && !berkeley {
+            push(&mut out, BUNDLED_FAMILY);
+        }
+        after_berkeley = berkeley;
+        if name.eq_ignore_ascii_case(RETIRED_BERKELEY) {
+            for family in BERKELEY_FAMILIES {
+                push(&mut out, family);
+            }
+        } else {
+            push(&mut out, name);
+        }
+    }
+    if after_berkeley {
+        push(&mut out, BUNDLED_FAMILY);
+    }
+    out
+}
+
 /// The first face of `family_stack` that loads, with the handle it
 /// loaded from.
 fn load_face(family_stack: &str, bold: bool) -> Option<(Font, font_kit::handle::Handle)> {
     let source = font_kit::source::SystemSource::new();
     let weight = if bold { 700.0 } else { 400.0 };
 
-    for raw in family_stack.split(',') {
-        let name = raw.trim().trim_matches('"').trim_matches('\'').trim();
+    for name in rendered_families(family_stack) {
         let lower = name.to_ascii_lowercase();
         // Skip CSS generics; the Menlo/Courier fallback covers them.
         if matches!(
             lower.as_str(),
-            "" | "monospace"
+            "monospace"
                 | "ui-monospace"
                 | "serif"
                 | "ui-serif"
@@ -1530,19 +1576,7 @@ fn load_face(family_stack: &str, bold: bool) -> Option<(Font, font_kit::handle::
         ) {
             continue;
         }
-        // Bundled families, matched by the webview.
-        if lower.contains("berkeley") {
-            let bytes = if bold {
-                BERKELEY_BOLD
-            } else {
-                BERKELEY_REGULAR
-            };
-            let handle = font_kit::handle::Handle::from_memory(Arc::new(bytes.to_vec()), 0);
-            if let Ok(font) = handle.load() {
-                tracing::info!(bold, "native-surface: atlas font = bundled BerkeleyMono");
-                return Some((font, handle));
-            }
-        }
+        // The bundled family, matched by the webview.
         if lower.contains("jetbrains") {
             let bytes = if bold {
                 JETBRAINS_BOLD
@@ -1556,7 +1590,7 @@ fn load_face(family_stack: &str, bold: bool) -> Option<(Font, font_kit::handle::
             }
         }
         // Otherwise a system font, upright face closest to the weight.
-        if let Some(face) = weighted_face(&source, name, weight).and_then(font_from_handle) {
+        if let Some(face) = weighted_face(&source, &name, weight).and_then(font_from_handle) {
             return Some(face);
         }
     }
@@ -3411,7 +3445,7 @@ mod tests {
 
     #[test]
     fn native_baseline_matches_xterm_at_every_line_height() {
-        for bytes in [BERKELEY_REGULAR, JETBRAINS_REGULAR] {
+        for bytes in [JETBRAINS_REGULAR, JETBRAINS_BOLD] {
             let font = Font::from_bytes(Arc::new(bytes.to_vec()), 0).unwrap();
             let m = font.metrics();
             for css_px in 11..=18u32 {
@@ -3451,17 +3485,63 @@ mod tests {
                 .map(|y| y - sy)
                 .expect("H has ink")
         };
-        // Berkeley Mono at 14 px on a 2x screen: a 34 px glyph box in the
-        // 40 px cell xterm reports at the default line height.
-        let berkeley = || AtlasFonts::load("BerkeleyMono").expect("Vosh bundles BerkeleyMono");
-        let mut flat = GlyphAtlas::with_reported(berkeley(), 28.0, Some((17, 40)), None);
-        let mut centered = GlyphAtlas::with_reported(berkeley(), 28.0, Some((17, 40)), Some(34));
-        assert_eq!(centered.glyph_top, 3);
-        assert_eq!(centered.baseline(), flat.baseline() + 3);
-        assert_eq!(lowest_ink(&mut centered), lowest_ink(&mut flat) + 3);
+        // JetBrains Mono at 14 px on a 2x screen: a 37 px glyph box in the
+        // 44 px cell xterm reports at the default line height.
+        let jetbrains =
+            || AtlasFonts::load("JetBrainsMono Bundled").expect("Vosh bundles JetBrains Mono");
+        let mut flat = GlyphAtlas::with_reported(jetbrains(), 28.0, Some((17, 44)), None);
+        let mut centered = GlyphAtlas::with_reported(jetbrains(), 28.0, Some((17, 44)), Some(37));
+        assert_eq!(centered.glyph_top, 4);
+        assert_eq!(centered.baseline(), flat.baseline() + 4);
+        assert_eq!(lowest_ink(&mut centered), lowest_ink(&mut flat) + 4);
         // No report yet means the font's own cell and no drop.
-        let unreported = GlyphAtlas::with_reported(berkeley(), 28.0, None, Some(34));
+        let unreported = GlyphAtlas::with_reported(jetbrains(), 28.0, None, Some(37));
         assert_eq!(unreported.glyph_top, 0);
+    }
+
+    #[test]
+    fn font_lists_match_the_shared_fixtures() {
+        // The same cases run against renderFontStack in
+        // src/lib/fontLoader.ts, so xterm and the atlas try the same
+        // families in the same order.
+        let text = include_str!("../../fixtures/font-stacks/cases.json");
+        let fixture: serde_json::Value = serde_json::from_str(text).unwrap();
+        let cases = fixture["cases"].as_array().unwrap();
+        assert!(!cases.is_empty());
+        for case in cases {
+            let name = case["name"].as_str().unwrap();
+            let want: Vec<String> = serde_json::from_value(case["families"].clone()).unwrap();
+            let got = rendered_families(case["stack"].as_str().unwrap());
+            assert_eq!(got, want, "case `{name}`");
+            assert_eq!(
+                rendered_families(&got.join(", ")),
+                got,
+                "case `{name}` is not stable under a second pass"
+            );
+        }
+    }
+
+    #[test]
+    fn a_berkeley_name_without_the_font_lands_on_the_bundled_jetbrains_mono() {
+        let fonts = AtlasFonts::load("\"Berkeley Mono Vosh Test\", Menlo, monospace")
+            .expect("Vosh bundles JetBrains Mono");
+        assert_eq!(
+            fonts.regular.postscript_name().as_deref(),
+            Some("JetBrainsMonoNF-Regular")
+        );
+        assert_eq!(
+            fonts.bold.postscript_name().as_deref(),
+            Some("JetBrainsMonoNF-Bold")
+        );
+        // The retired bundled name takes an installed Berkeley Mono, and
+        // JetBrains Mono on a machine without one.
+        let retired = AtlasFonts::load("\"BerkeleyMono Bundled\", Menlo, monospace")
+            .expect("Vosh bundles JetBrains Mono");
+        let face = retired.regular.postscript_name().unwrap_or_default();
+        assert!(
+            face.starts_with("BerkeleyMono") || face == "JetBrainsMonoNF-Regular",
+            "{face}"
+        );
     }
 
     fn paint(r: u8, g: u8, b: u8, a: f32) -> Paint {
@@ -4083,7 +4163,7 @@ mod tests {
 
     #[test]
     fn the_curl_sprite_redraws_only_when_its_size_changes() {
-        let Some(fonts) = AtlasFonts::load("Berkeley Mono") else {
+        let Some(fonts) = AtlasFonts::load("JetBrainsMono Bundled") else {
             return;
         };
         let mut atlas = GlyphAtlas::with_reported(fonts, 24.0, Some((14, 34)), Some(29));
@@ -4195,8 +4275,9 @@ mod tests {
         decor: Decor,
     }
 
-    /// Render `bytes` on a `cols` by `rows` grid at `scale`, in Berkeley
-    /// Mono at 12 CSS px and `line_height` with the cell xterm reports.
+    /// Render `bytes` on a `cols` by `rows` grid at `scale`, in the font
+    /// Vosh bundles at 12 CSS px and `line_height` with the cell xterm
+    /// reports.
     fn render_offscreen(
         bytes: &[u8],
         cols: usize,
@@ -4216,11 +4297,12 @@ mod tests {
         let px = 12.0 * scale;
         // xterm's device cell: the font's advance and glyph box, and the
         // box times the line height.
-        let probe = GlyphAtlas::with_reported(AtlasFonts::load("Berkeley Mono")?, px, None, None);
+        let probe =
+            GlyphAtlas::with_reported(AtlasFonts::load("JetBrainsMono Bundled")?, px, None, None);
         let (cell_w, char_h) = (probe.cell_w(), probe.cell_h());
         let cell_h = (char_h as f32 * line_height).floor() as u32;
         let atlas = GlyphAtlas::with_reported(
-            AtlasFonts::load("Berkeley Mono")?,
+            AtlasFonts::load("JetBrainsMono Bundled")?,
             px,
             Some((cell_w, cell_h)),
             Some(char_h),

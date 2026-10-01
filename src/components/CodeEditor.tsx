@@ -90,8 +90,7 @@ export function CodeEditor({
           '&': {
             background: 'var(--c-surface, #1c1d24)',
             color: 'var(--c-text, #cdd0d6)',
-            fontFamily:
-              "'BerkeleyMono Bundled', 'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace",
+            fontFamily: "'JetBrainsMono Bundled', Menlo, Consolas, ui-monospace, monospace",
             fontSize: '13px',
             borderRadius: '3px',
             border: '1px solid var(--c-border, #2a2c34)',

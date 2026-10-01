@@ -60,7 +60,7 @@ import {
   getCurrentThemeId,
   subscribeThemePrefs,
 } from './lib/theme';
-import { loadFontStack } from './lib/fontLoader';
+import { loadFontStack, renderFontStack } from './lib/fontLoader';
 import { PRESETS, presetTriggers } from './lib/presets';
 import { presetLaunchPlan } from './lib/automationRecords';
 import { listenForQuitFlush } from './lib/pendingWrites';
@@ -235,6 +235,8 @@ function App() {
       return DEFAULT_FONT_FAMILY;
     }
   });
+  // The list the terminal draws with, the one the native atlas walks.
+  const renderFamily = useMemo(() => renderFontStack(fontFamily), [fontFamily]);
   const [fontSize, setFontSize] = useState(() => {
     try {
       const n = Number(localStorage.getItem('vosh.cache.fontSize'));
@@ -1093,8 +1095,8 @@ function App() {
     const root = document.documentElement;
     // Inject @font-face blocks for every named family in the stack so
     // WKWebView can render fonts it would otherwise refuse to match.
-    loadFontStack(fontFamily);
-    root.style.setProperty('--app-font-family', fontFamily);
+    loadFontStack(renderFamily);
+    root.style.setProperty('--app-font-family', renderFamily);
     root.style.setProperty('--app-font-size', `${fontSize}px`);
     try {
       localStorage.setItem('vosh.cache.fontFamily', fontFamily);
@@ -1102,7 +1104,7 @@ function App() {
     } catch {
       // cache only; config remains the source of truth
     }
-  }, [fontFamily, fontSize]);
+  }, [fontFamily, renderFamily, fontSize]);
 
   useEffect(() => {
     // Cross-window emit from the settings save path. window CustomEvents
@@ -1814,7 +1816,7 @@ function App() {
             snapPx={() => termRef.current?.cellHeight() ?? 0}
           >
             <Terminal
-              fontFamily={fontFamily}
+              fontFamily={renderFamily}
               fontSize={fontSize}
               lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
               themeTerminalColors={themeTerminalColors}
@@ -1876,7 +1878,7 @@ function App() {
         )}
         <div className="terminal-pane terminal-pane-live">
           <Terminal
-            fontFamily={fontFamily}
+            fontFamily={renderFamily}
             fontSize={fontSize}
             lineHeight={TERMINAL_LINE_HEIGHTS[terminalLineHeight]}
             themeTerminalColors={themeTerminalColors}
@@ -1962,7 +1964,7 @@ function App() {
           host={promptCardHost}
           show={promptShow}
           cell={cellSize}
-          monoFamily={fontFamily}
+          monoFamily={renderFamily}
           themeTerminalColors={themeTerminalColors}
           brightBold={brightBold}
           renderer={nativeSurfaceEnabled() ? 'native' : 'xterm'}
