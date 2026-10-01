@@ -2676,14 +2676,21 @@ pub(crate) async fn profile_resolve_match(
 
 /// Lay loadout mode's catalog and active loadouts over the live profile
 /// `p`, right after a switch loaded a profile file into it. The catalog
-/// is the authoritative source for aliases, triggers, and macros in
-/// loadout mode, and the profile file holds none of them, so it fills
-/// the stores. The group state of `set` then applies to the result.
+/// fills the stores, and the aliases, triggers, and macros the profile
+/// file still holds go on top, the way launch lays them in
+/// [`crate::launch::load_loadout_mode`]. An item of the file wins over
+/// the catalog item of the same name, or for a macro the same key. The
+/// group state of `set` then applies to the result.
 fn lay_catalog_over(
     p: &mut crate::profile::Profile,
     catalog: &crate::loadout::GlobalCatalog,
     set: Option<&crate::loadout::LoadoutSet>,
 ) {
+    // What the profile file just put into the live stores, to lay over
+    // the catalog.
+    let per_profile_aliases: Vec<_> = p.aliases.list().into_iter().cloned().collect();
+    let per_profile_triggers: Vec<_> = p.triggers.list();
+    let per_profile_macros = p.macros.clone();
     // The per-profile file just restored this profile's group checkbox
     // state into the live stores; carry it across the catalog rebuild
     // (the rebuilt stores would otherwise start with everything
@@ -2694,6 +2701,9 @@ fn lay_catalog_over(
     for a in &catalog.aliases {
         aliases.set(a.clone());
     }
+    for a in per_profile_aliases {
+        aliases.set(a);
+    }
     aliases.set_disabled_groups(alias_disabled);
     p.aliases = aliases;
     let mut triggers = vosh_trigger::TriggerStore::new();
@@ -2702,9 +2712,19 @@ fn lay_catalog_over(
             warn!(error = %e, "catalog trigger rejected during profile switch");
         }
     }
+    for t in per_profile_triggers {
+        if let Err(e) = triggers.set(t) {
+            warn!(error = %e, "per-profile trigger rejected during profile switch");
+        }
+    }
     triggers.set_disabled_groups(trigger_disabled);
     p.triggers = triggers;
-    p.macros.clone_from(&catalog.macros);
+    let mut macros = catalog.macros.clone();
+    for m in per_profile_macros {
+        macros.retain(|x| x.key != m.key);
+        macros.push(m);
+    }
+    p.macros = macros;
     // The presets that are on belong to the catalog with the preset
     // triggers, so the profile's own list gives way to it.
     if let Some(list) = &catalog.enabled_presets {
@@ -2801,10 +2821,9 @@ async fn switch_live_profile(state: &SharedState, name: &str) -> Result<(), Stri
         open_profile_for_switch(set, name)?
     };
 
-    // In loadout mode the profile file holds no aliases, triggers, or
-    // macros, so the catalog fills the stores in the same step. Were a
-    // save to find the stores empty in between, it would write an empty
-    // catalog.
+    // In loadout mode the catalog holds the aliases, triggers, and
+    // macros, so it fills the stores in the same step. Were a save to
+    // find the stores empty in between, it would write an empty catalog.
     let catalog = state.global_catalog.lock().await.clone();
     let loadouts = state.loadout_set.lock().await.clone();
 
@@ -9179,6 +9198,54 @@ mod tests {
                 let state = relaunch_as(dir.path(), name).await;
                 assert_eq!(items_on(&*state.profile.lock().await), before[n], "{name}");
             }
+        }
+
+        #[tokio::test]
+        async fn a_switch_keeps_the_items_a_profile_file_holds_as_launch_does() {
+            use crate::profile_set::DEFAULT_PROFILE_NAME;
+            let dir = tempfile::tempdir().unwrap();
+            let set = james_like_set(dir.path());
+            loadout_mode(&set, dir.path());
+            // The Healer file still holds items of its own.
+            let mut healer = ProfileConfig::default();
+            healer.aliases.push(vosh_alias::Alias::new("hh", "heal %1"));
+            healer
+                .aliases
+                .push(vosh_alias::Alias::new("kk", "kick hard %1"));
+            healer
+                .triggers
+                .push(send_trigger("Healer greet", "^hi$", "say hi"));
+            healer.macros.push(macro_on("f2", "cast heal"));
+            healer.save(&set.profile_path("Healer")).unwrap();
+            // The catalog holds an alias, a trigger, and a macro of the
+            // same name or key, each with another body.
+            let (mut catalog, _) = load_path_b_at_launch(dir.path()).unwrap();
+            catalog
+                .triggers
+                .push(send_trigger("Healer greet", "^hello$", "say shared"));
+            catalog.macros.push(macro_on("f2", "cast shared"));
+            save_global_catalog(dir.path(), &catalog).unwrap();
+
+            // A launch as Healer lays them over the catalog, and the
+            // file wins each time.
+            let launched = relaunch_as(dir.path(), "Healer").await;
+            let rows = live_rows(&launched).await;
+            assert_eq!(
+                rows,
+                item_rows(&healer.aliases, &healer.triggers, &healer.macros)
+            );
+
+            // A switch to Healer does the same.
+            let state = relaunch_as(dir.path(), DEFAULT_PROFILE_NAME).await;
+            super::super::switch_profile(&state, Some(dir.path()), "Healer")
+                .await
+                .unwrap();
+            assert_eq!(live_rows(&state).await, rows);
+
+            // And the save after it keeps them for the next launch.
+            persist(&state, dir.path()).await;
+            let state = relaunch_as(dir.path(), "Healer").await;
+            assert_eq!(live_rows(&state).await, rows);
         }
     }
 }
