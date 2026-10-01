@@ -168,6 +168,7 @@ export function AppearancePage({ target, navSeq, config, setConfig, onError }: S
         id="theme"
         title="Theme"
         card={false}
+        help={{ topic: 'make-it-yours.switch-themes', subject: 'themes' }}
         actions={
           <div className="st-import" data-st-anchor="import-theme" data-st-flash="">
             <span id={hintId} className="st-meta">

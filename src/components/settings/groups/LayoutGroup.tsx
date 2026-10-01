@@ -194,7 +194,11 @@ export function StatusLineSection({
   onError,
 }: Pick<SettingsPageProps, 'config' | 'setConfig' | 'onError'>) {
   return (
-    <Section id="status" title="Status line">
+    <Section
+      id="status"
+      title="Status line"
+      help={{ topic: 'tick.tick-timer', subject: 'the tick timer' }}
+    >
       <TickTimeStyleRow config={config} setConfig={setConfig} onError={onError} />
       <TickCountRow config={config} setConfig={setConfig} onError={onError} />
     </Section>
@@ -241,7 +245,11 @@ export function AffectsSection({
     ? MARKER_OPTIONS.map((option) => ({ ...option, disabled: true }))
     : MARKER_OPTIONS;
   return (
-    <Section id="affects" title="Affects">
+    <Section
+      id="affects"
+      title="Affects"
+      help={{ topic: 'shape.group-affects', subject: 'the affects pane' }}
+    >
       <Row
         label="Style"
         description="Timers first keeps your slots, Countdown sorts by hours left, and Grouped chips puts what to recast first."

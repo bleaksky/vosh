@@ -272,7 +272,12 @@ export function PromptSection({
   };
 
   return (
-    <Section id="prompt" title="Prompt" actions={<span className="st-meta">{owner}</span>}>
+    <Section
+      id="prompt"
+      title="Prompt"
+      actions={<span className="st-meta">{owner}</span>}
+      help={{ topic: 'shape.prompt-show', subject: 'your prompt' }}
+    >
       {block === 'codes' && (
         <CodesBlock
           codes={gameCodesOf(game, data.seen)}

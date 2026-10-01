@@ -17,7 +17,7 @@ export { LinkRow, type LinkRowProps } from './LinkRow';
 export { NumberField, type NumberFieldProps } from './NumberField';
 export { Row, type RowProps } from './Row';
 export { useRowIds, type RowIds } from './rowContext';
-export { Section, type SectionProps } from './Section';
+export { Section, type SectionHelp, type SectionProps } from './Section';
 export { Segmented, type SegmentedOption, type SegmentedProps } from './Segmented';
 export { Select, type SelectOption, type SelectProps } from './Select';
 export { Toggle, type ToggleProps } from './Toggle';
