@@ -2117,3 +2117,45 @@ async fn lua_a_settings_timer_runs_starts_timers_and_runs_input() {
     h.until_shown("the timer ran mud.input").await;
     h.finish(grid).await;
 }
+
+// Lua that changes an alias saves your profile, on whatever path it
+// runs, since every path applies its result the same way. Here a
+// trigger runs the Lua on a line the game sends at login, so no line
+// you type marks the profile for saving. The guard keeps other tests
+// off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lua_that_changes_an_alias_saves_your_profile() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.state
+        .profile
+        .lock()
+        .await
+        .triggers
+        .set(vosh_trigger::Trigger {
+            name: "learn".into(),
+            patterns: vec![vosh_trigger::TriggerPattern {
+                pattern: "a clerk nods at you".into(),
+                enabled: true,
+            }],
+            priority: 0,
+            enabled: true,
+            actions: vec![vosh_trigger::TriggerAction::Script {
+                body: "mud.alias('k', 'kick')".into(),
+            }],
+            preset: None,
+            group: None,
+            target: vosh_trigger::TriggerTarget::Line,
+        })
+        .expect("the trigger compiles");
+    h.connect().await;
+
+    let file = h.profile_file(DEFAULT_PROFILE_NAME).await;
+    h.until("the alias the Lua made, saved", |_| {
+        crate::profile_config::ProfileConfig::load(&file)
+            .is_ok_and(|config| config.aliases.iter().any(|a| a.name == "k"))
+    })
+    .await;
+    h.finish(grid).await;
+}
