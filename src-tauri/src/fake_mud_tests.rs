@@ -2035,9 +2035,11 @@ async fn lua_you_type_starts_timers_runs_input_and_sets_prompt_values() {
     h.finish(grid).await;
 }
 
-// A plugin's entry script does all it asks as it loads, the way the Lua
-// you type does. Here it starts a timer and runs a line through
-// mud.input. The guard keeps other tests off the shared native grid.
+// A plugin you turned on does all its entry script asks as it loads at
+// launch, the way the Lua you type does. Here it runs a line through
+// mud.input, gives your prompt a value and starts a timer, which fires
+// once the game connects. The guard keeps other tests off the shared
+// native grid.
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
@@ -2054,25 +2056,31 @@ async fn lua_a_plugin_runs_as_it_loads_starts_timers_and_runs_input() {
     std::fs::write(
         plugin.join("main.lua"),
         "mud.timer(0, function() mud.echo('the plugin timer fired') end)\n\
-         mud.input('#echo the plugin ran mud.input')\n",
+         mud.input('#alias plugged kick')\n\
+         mud.set_prompt_var('plugin_mark', 'on')\n",
     )
     .expect("the entry script");
-    {
-        let mut mgr = h.state.plugins.lock().await;
-        mgr.set_plugins_dir(plugins);
-        mgr.discover().expect("the plugins");
-    }
-    h.connect().await;
+    h.state.profile.lock().await.plugins.enabled = vec!["on_load".into()];
 
-    crate::commands::plugins_set_enabled(
-        h.app.handle().clone(),
-        h.app.state(),
-        "on_load".into(),
-        true,
-    )
-    .await
-    .expect("the plugin loads");
-    h.until_shown("the plugin ran mud.input").await;
+    crate::load_enabled_plugins(h.app.handle(), &h.state, plugins).await;
+    assert!(
+        h.state
+            .profile
+            .lock()
+            .await
+            .aliases
+            .get("plugged")
+            .is_some(),
+        "the mud.input line ran"
+    );
+    h.until("the value the plugin gave your prompt", |h| {
+        h.events("session://prompt-vars")
+            .iter()
+            .any(|vars| vars["plugin_mark"] == "on")
+    })
+    .await;
+
+    h.connect().await;
     h.until_shown("the plugin timer fired").await;
     h.finish(grid).await;
 }
