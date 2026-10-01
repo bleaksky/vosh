@@ -4,6 +4,7 @@ import { resolveCell, type BandEnv } from '../../lib/bandCells';
 import { planSubmit } from '../../lib/maskedInput';
 import { bandRows, dockHeight, type CellSize } from '../../lib/promptBand';
 import type { PromptShowState } from '../../lib/promptShow';
+import { dockPieceAt, type PieceSpan } from '../../lib/promptPointer';
 import { parseSgrCells, PLAIN, shownColumns } from '../../lib/sgrCells';
 import { PinnedBand } from './PromptDock';
 
@@ -125,6 +126,69 @@ describe('the pinned band', () => {
     );
     expect(lefts.slice(0, 3)).toEqual([4, 4 + 7.8, 4 + 2 * 7.8]);
   });
+});
+
+// The card maps a pointer on the dock from the dock's own grid (addendum
+// item 4). Each glyph the band draws, at its center, maps to the piece
+// whose span covers it, at two cell sizes.
+describe('a pointer on the pinned band', () => {
+  /** Each glyph the markup draws, with its center from the dock's top
+   *  left. */
+  function glyphCenters(html: string, cell: CellSize): { ch: string; x: number; y: number }[] {
+    const dockH = px(style(html, 'class="prompt-dock"'), 'height');
+    const band = style(html, 'data-prompt-band');
+    const bandTop = dockH - px(band, 'bottom') - px(band, 'height');
+    const bandLeft = px(band, 'left');
+    const out: { ch: string; x: number; y: number }[] = [];
+    for (const row of html.split('class="prompt-band-row"').slice(1)) {
+      const rowTop = Number(/^ style="top:([\d.]+)px/.exec(row)?.[1]);
+      for (const m of row.matchAll(
+        /class="prompt-band-glyph" style="[^"]*left:([\d.]+)px;width:([\d.]+)px[^"]*">([^<]*)</g,
+      )) {
+        out.push({
+          ch: m[3].replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'),
+          x: bandLeft + Number(m[1]) + Number(m[2]) / 2,
+          y: bandTop + rowTop + cell.height / 2,
+        });
+      }
+    }
+    return out;
+  }
+
+  const look = {
+    fg: { kind: 'default' as const },
+    bg: { kind: 'default' as const },
+    bold: false,
+    italic: false,
+    underline: false,
+  };
+  // The tank line the design leaves as sent, then two rows of pieces.
+  const text = 'Tester: [===|---]\r\n\x1b[32mHP\x1b[39m 765\r\n<800 mn>';
+  const spans: PieceSpan[] = [
+    { piece: 0, row: 1, col: 0, width: 2 },
+    { piece: 1, row: 1, col: 2, width: 1 },
+    { piece: 2, row: 1, col: 3, width: 3 },
+    { piece: 4, row: 2, col: 0, width: 1 },
+    { piece: 5, row: 2, col: 1, width: 3 },
+    { piece: 6, row: 2, col: 4, width: 4 },
+  ];
+
+  for (const cell of [CELL, { width: 9.6, height: 21, cols: 120 }]) {
+    it(`maps every glyph the dock draws to its piece, ${cell.width} by ${cell.height}`, () => {
+      const html = draw(text, { zone: 3 }, cell);
+      const centers = glyphCenters(html, cell);
+      expect(centers.map((g) => g.ch).join('')).toBe('Tester:[===|---]HP765<800mn>');
+      const pieces = centers.map((g) =>
+        dockPieceAt({ text, spans: spans.map((s) => ({ ...s, ...look })) }, 3, cell, g.x, g.y),
+      );
+      expect(pieces).toEqual([...Array<null>(16).fill(null), 0, 0, 2, 2, 2, 4, 5, 5, 5, 6, 6, 6]);
+      // The zone of two cuts the tank line, and the spans with it.
+      const cut = draw(text, { zone: 2 }, cell);
+      const first = glyphCenters(cut, cell)[0];
+      expect(first.ch).toBe('H');
+      expect(dockPieceAt({ text, spans }, 2, cell, first.x, first.y)).toBe(0);
+    });
+  }
 });
 
 describe('cells and colors on the band', () => {
