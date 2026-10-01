@@ -399,31 +399,37 @@ export class RegionWriter {
   }
 
   /** Hand `data` to xterm, and count it until xterm calls back for it.
-   *  xterm may call back twice, so `then` runs only the first time. */
+   *  xterm may call back twice, so `then` runs only the first time. A
+   *  write xterm refuses does not count. */
   private send(data: string | Uint8Array, then?: () => void): void {
     this.held += 1;
     let done = false;
-    this.term.write(data, () => {
-      if (done) return;
-      done = true;
+    try {
+      this.term.write(data, () => {
+        if (done) return;
+        done = true;
+        this.held -= 1;
+        this.calling = true;
+        try {
+          then?.();
+        } finally {
+          this.calling = false;
+        }
+        // xterm keeps this write until it has parsed every one left, those
+        // `then` wrote included.
+        this.parsing = this.held > 0;
+        // xterm calls back before it lets go of the write, so a size that
+        // waits goes in once its loop is done.
+        if (!this.parsing && this.size) {
+          queueMicrotask(() => {
+            if (this.ready()) this.resizeNow();
+          });
+        }
+      });
+    } catch (err) {
       this.held -= 1;
-      this.calling = true;
-      try {
-        then?.();
-      } finally {
-        this.calling = false;
-      }
-      // xterm keeps this write until it has parsed every one left, those
-      // `then` wrote included.
-      this.parsing = this.held > 0;
-      // xterm calls back before it lets go of the write, so a size that
-      // waits goes in once its loop is done.
-      if (!this.parsing && this.size) {
-        queueMicrotask(() => {
-          if (this.ready()) this.resizeNow();
-        });
-      }
-    });
+      throw err;
+    }
   }
 
   /** Take the size that waits, then let the writes behind it go. */

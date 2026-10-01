@@ -745,4 +745,34 @@ describe('a resize while xterm parses a long backlog', () => {
     ]);
     expect(rows.slice(-3)).toEqual(['END', 'after', 'look']);
   });
+
+  it('stops counting a write xterm refused', () => {
+    // xterm throws a write away while it holds too much it has not
+    // parsed yet.
+    const writes: string[] = [];
+    const callbacks: (() => void)[] = [];
+    const sizes: number[][] = [];
+    const term: RegionTerminal = {
+      cols: 40,
+      buffer: { active: { cursorX: 0, cursorY: 0, baseY: 0, getLine: () => undefined } },
+      parser: { registerOscHandler: () => ({ dispose() {} }) },
+      write(data, callback) {
+        if (data === 'refused') throw new Error('write data discarded');
+        if (typeof data === 'string') writes.push(data);
+        if (callback) callbacks.push(callback);
+      },
+      resize(cols, rows) {
+        sizes.push([cols, rows]);
+      },
+    };
+    const writer = new RegionWriter(term);
+    expect(() => writer.local('refused')).toThrow();
+    writer.local('You are hungry.\r\n');
+    writer.local('look\r\n');
+    for (const callback of callbacks.splice(0)) callback();
+    writer.resize(30, 12);
+    writer.local('You see nothing special.\r\n');
+    expect(sizes).toEqual([[30, 12]]);
+    expect(writes).toEqual(['You are hungry.\r\n', 'look\r\n', 'You see nothing special.\r\n']);
+  });
 });
