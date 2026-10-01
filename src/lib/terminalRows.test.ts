@@ -129,7 +129,12 @@ interface SplitCase {
   fit: number;
   lent: number;
   grid: number;
-  game: number | null;
+  // A pane no taller than what the band borrows names the rows apart for
+  // the macOS grid under the page and for xterm, which tells the game what
+  // a native surface that stops short of the band does.
+  game?: number;
+  game_underlay?: number;
+  game_short?: number;
 }
 
 interface ReportCase {
@@ -146,7 +151,13 @@ describe('the row cases the native grid runs too', () => {
   it.each(split.map((c) => [c.name, c] as const))('%s', (_name, c) => {
     const kept = keptRows(c.fit, c.lent);
     expect(kept).toBe(c.grid);
-    if (c.game !== null) expect(gameSize(120, kept, c.lent).rows).toBe(c.game);
+    // Each case holds game, or game_underlay with game_short.
+    const named = [c.game, c.game_underlay, c.game_short].map((n) => n !== undefined);
+    expect([
+      [true, false, false],
+      [false, true, true],
+    ]).toContainEqual(named);
+    expect(gameSize(120, kept, c.lent).rows).toBe(c.game ?? c.game_short);
   });
 
   it.each(reports.map((c) => [c.name, c] as const))('%s', (_name, c) => {
