@@ -283,7 +283,6 @@ describe('RegionWriter', () => {
         if (typeof data === 'string') writes.push(data);
         if (callback) callbacks.push(callback);
       },
-      registerMarker: () => undefined,
     };
     const parseTwice = () => {
       const pending = callbacks.splice(0);
@@ -527,6 +526,75 @@ describe('where the open region starts', () => {
     const { writer } = setup(40, 10);
     writer.output({ text: `${mark(1)}<1020hp> ` });
     expect(writer.region()).toBeNull();
+  });
+});
+
+// With the scrollback full, a narrower window wraps old lines onto more
+// rows, and xterm trims the oldest to make room.
+describe('the open region through a resize with a full scrollback', () => {
+  /** The buffer row that starts with `text`, from the bottom. */
+  const rowOf = (term: Terminal, text: string) => {
+    const buffer = term.buffer.active;
+    for (let y = buffer.length - 1; y >= 0; y--) {
+      if (buffer.getLine(y)?.translateToString(true).startsWith(text)) return y;
+    }
+    return -1;
+  };
+
+  it('keeps the region on your prompt, narrower and back, and a replace still lands', async () => {
+    const term = new Terminal({ cols: 80, rows: 20, scrollback: 100, allowProposedApi: true });
+    const writer = new RegionWriter(term);
+    const line = (n: number) => `${String(n).padStart(4, '0')} ${'x'.repeat(65)}\r\n`;
+    let text = '';
+    for (let n = 0; n < 300; n++) text += line(n);
+    writer.output({ text: `${text}${mark(1)}<1020hp 800mn 930mv> ` });
+    await parsed(writer);
+    expect(writer.region()?.row).toBe(rowOf(term, '<1020hp'));
+
+    for (const [cols, rows] of [
+      [40, 14],
+      [80, 20],
+      [30, 12],
+    ]) {
+      term.resize(cols, rows);
+      await parsed(writer);
+      const at = rowOf(term, '<1020hp');
+      expect(at, `${cols}x${rows}`).toBeGreaterThan(0);
+      expect(writer.region(), `${cols}x${rows}`).toEqual({ gen: 1, row: at, col: 0 });
+    }
+
+    writer.output(replace(1, `${mark(2)}<100%> `));
+    await parsed(writer);
+    expect(screen(term).slice(-1)).toEqual(['<100%> ']);
+    expect(screen(term).join('\n')).not.toContain('1020hp');
+  });
+
+  it('keeps a two row prompt whole, its long first row wrapped at each width', async () => {
+    const term = new Terminal({ cols: 80, rows: 20, scrollback: 100, allowProposedApi: true });
+    const writer = new RegionWriter(term);
+    let text = '';
+    for (let n = 0; n < 300; n++) text += `${String(n).padStart(4, '0')} ${'x'.repeat(65)}\r\n`;
+    const tank = `Tamwell: ${'='.repeat(50)}`;
+    writer.output({ text: `${text}You hit.${mark(1)}${tank}\r\n<1020hp 800mn> ` });
+    await parsed(writer);
+    expect(writer.region()).toEqual({ gen: 1, row: rowOf(term, 'You hit.Tamwell'), col: 8 });
+
+    for (const [cols, rows] of [
+      [40, 14],
+      [80, 20],
+      [24, 12],
+    ]) {
+      term.resize(cols, rows);
+      await parsed(writer);
+      const at = rowOf(term, 'You hit.');
+      expect(at, `${cols}x${rows}`).toBeGreaterThan(0);
+      expect(writer.region(), `${cols}x${rows}`).toEqual({ gen: 1, row: at, col: 8 });
+    }
+
+    writer.output(replace(1, `${mark(2)}<100%> `));
+    await parsed(writer);
+    expect(screen(term).slice(-1)).toEqual(['You hit.<100%> ']);
+    expect(screen(term).join('\n')).not.toContain('Tamwell');
   });
 });
 

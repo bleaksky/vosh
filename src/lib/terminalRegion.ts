@@ -37,13 +37,6 @@
 /** The private OSC a region mark uses. */
 export const REGION_OSC = 7717;
 
-/** The parts of an xterm marker the writer reads. */
-export interface RegionMarker {
-  readonly line: number;
-  readonly isDisposed: boolean;
-  dispose(): void;
-}
-
 /** The parts of xterm the writer uses. */
 export interface RegionTerminal {
   readonly cols: number;
@@ -52,7 +45,11 @@ export interface RegionTerminal {
       readonly cursorX: number;
       readonly cursorY: number;
       readonly baseY: number;
-      getLine(y: number): { translateToString(trimRight?: boolean): string } | undefined;
+      getLine(
+        y: number,
+      ):
+        | { readonly isWrapped: boolean; translateToString(trimRight?: boolean): string }
+        | undefined;
     };
   };
   readonly parser: {
@@ -62,7 +59,6 @@ export interface RegionTerminal {
     ): { dispose(): void };
   };
   write(data: string | Uint8Array, callback?: () => void): void;
-  registerMarker(cursorYOffset?: number): RegionMarker | undefined;
 }
 
 /** Replace region `gen` with `text`. When the region is closed, a
@@ -166,6 +162,14 @@ export function lastMark(text: string): number | null {
   return gen;
 }
 
+/** The line ends in `text` after its last region mark, which end the
+ *  lines the region spans. */
+export function breaksAfterMark(text: string): number {
+  let after = -1;
+  for (const match of text.matchAll(MARK)) after = (match.index ?? 0) + match[0].length;
+  return after < 0 ? 0 : (text.slice(after).match(/\n/g) ?? []).length;
+}
+
 /** The escape that goes from the cursor at the end of a region back to
  *  its start, `above` rows up at column `col`, then erases to the end of
  *  the screen (rule c). */
@@ -173,13 +177,20 @@ export function eraseBack(above: number, col: number): string {
   return `\r${above > 0 ? `\x1b[${above}A` : ''}${col > 0 ? `\x1b[${col}C` : ''}\x1b[0J`;
 }
 
-/** Where the last mark xterm parsed came. `held` says the cursor sat past
- *  the last column, so the region starts at the next row. */
+/** Where the last mark xterm parsed came, counted in its line, since a
+ *  line is what a resize keeps. xterm's markers can drift after a resize
+ *  narrows a full scrollback, as its reflow moves them by the rows it
+ *  added only to lines it kept and then by every row it trimmed. `rowsIn`
+ *  counts the rows of that line above the row the mark came on, and
+ *  `col` is its column there. `held` says the cursor sat past the last
+ *  column, so the region starts at the next row. `cells` counts the
+ *  cells from the start of the line to where the region starts. */
 interface Mark {
   gen: number;
-  marker: RegionMarker;
+  rowsIn: number;
   col: number;
   held: boolean;
+  cells: number;
 }
 
 type Item =
@@ -193,6 +204,8 @@ export class RegionWriter {
   private readonly term: RegionTerminal;
   /** The region the latest write left open, by the order writes go in. */
   private openGen: number | null = null;
+  /** The line ends the open region wrote after its mark. */
+  private openBreaks = 0;
   /** The live render the open region goes back to, while it shows a
    *  preview. */
   private restore: { gen: number; text: string } | null = null;
@@ -261,12 +274,8 @@ export class RegionWriter {
   region(): { gen: number; row: number; col: number } | null {
     const mark = this.mark;
     if (this.openGen === null || !mark || mark.gen !== this.openGen) return null;
-    if (mark.marker.isDisposed || mark.marker.line < 0) return null;
-    return {
-      gen: mark.gen,
-      row: mark.held ? mark.marker.line + 1 : mark.marker.line,
-      col: mark.held ? 0 : mark.col,
-    };
+    const start = this.startOf(mark);
+    return start ? { gen: mark.gen, ...start } : null;
   }
 
   /** Run `then` once xterm has parsed everything written before it, and
@@ -278,7 +287,6 @@ export class RegionWriter {
   dispose(): void {
     this.disposed = true;
     this.osc.dispose();
-    this.mark?.marker.dispose();
     this.mark = null;
     this.queue.length = 0;
   }
@@ -287,10 +295,52 @@ export class RegionWriter {
   private onMark(data: string): void {
     const match = /^o;(\d+)$/.exec(data);
     if (!match) return;
-    this.mark?.marker.dispose();
-    const marker = this.term.registerMarker(0);
-    const col = this.term.buffer.active.cursorX;
-    this.mark = marker ? { gen: Number(match[1]), marker, col, held: col >= this.term.cols } : null;
+    const buffer = this.term.buffer.active;
+    const row = buffer.baseY + buffer.cursorY;
+    const rowsIn = row - this.lineStart(row);
+    const col = buffer.cursorX;
+    this.mark = {
+      gen: Number(match[1]),
+      rowsIn,
+      col,
+      held: col >= this.term.cols,
+      cells: rowsIn * this.term.cols + col,
+    };
+  }
+
+  /** The first row of the line row `y` is in: up past each row that goes
+   *  on from the row above it. */
+  private lineStart(y: number): number {
+    const buffer = this.term.buffer.active;
+    let row = y;
+    while (row > 0 && buffer.getLine(row)?.isWrapped) row--;
+    return row;
+  }
+
+  /** Where the open region of `mark` starts in xterm's buffer now: the
+   *  line its last line end left the cursor on, up as many lines as it
+   *  wrote line ends. xterm never reflows the line the cursor is on, so a
+   *  region all on that line keeps the rows it was written in. A line
+   *  above it wraps at today's width. Null when its line left the buffer
+   *  or scrolled above the screen. */
+  private startOf(mark: Mark): { row: number; col: number } | null {
+    const buffer = this.term.buffer.active;
+    let line = this.lineStart(buffer.baseY + buffer.cursorY);
+    for (let k = 0; k < this.openBreaks; k++) {
+      if (line <= 0) return null;
+      line = this.lineStart(line - 1);
+    }
+    let start: { row: number; col: number };
+    if (this.openBreaks === 0) {
+      start = mark.held
+        ? { row: line + mark.rowsIn + 1, col: 0 }
+        : { row: line + mark.rowsIn, col: mark.col };
+    } else {
+      const cols = this.term.cols;
+      start = { row: line + Math.floor(mark.cells / cols), col: mark.cells % cols };
+    }
+    if (start.row < buffer.baseY) return null;
+    return start;
   }
 
   private push(item: Item): void {
@@ -446,6 +496,7 @@ export class RegionWriter {
     if (text.length === 0) return;
     this.term.write(text);
     this.openGen = lastMark(text);
+    this.openBreaks = this.openGen === null ? 0 : breaksAfterMark(text);
     if (this.restore && this.restore.gen !== this.openGen) this.restore = null;
   }
 
@@ -460,16 +511,13 @@ export class RegionWriter {
   /** [`locate`], with the buffer row and column the region starts at. */
   private locateAt(gen: number): { escape: string; row: number; col: number } | null {
     const mark = this.mark;
-    if (!mark || mark.gen !== gen || mark.marker.isDisposed || mark.marker.line < 0) {
-      return null;
-    }
+    if (!mark || mark.gen !== gen || gen !== this.openGen) return null;
+    const at = this.startOf(mark);
+    if (!at) return null;
     const buffer = this.term.buffer.active;
     const cursor = buffer.baseY + buffer.cursorY;
-    const start = mark.held ? mark.marker.line + 1 : mark.marker.line;
-    const col = mark.held ? 0 : mark.col;
-    if (start > cursor) return { escape: '', row: start, col };
-    if (start < buffer.baseY) return null;
-    return { escape: eraseBack(cursor - start, col), row: start, col };
+    if (at.row > cursor) return { escape: '', row: at.row, col: at.col };
+    return { escape: eraseBack(cursor - at.row, at.col), row: at.row, col: at.col };
   }
 
   /** The escape back to the first row of the lines `plain` holds, when

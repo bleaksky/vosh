@@ -185,8 +185,9 @@ export interface TerminalHandle {
   selectAll: () => void;
   /** Where the open region starts on this pane's screen, as the renderer
    *  that draws it holds it: the native grid through terminal_cursor, or
-   *  xterm from its own marker. Null while no region is open. The prompt
-   *  card lays your prompt out from it to map a pointer to a piece. */
+   *  xterm from the line its mark came on. Null while no region is open.
+   *  The prompt card lays your prompt out from it to map a pointer to a
+   *  piece. */
   promptRegion: () => Promise<RegionOnScreen | null>;
   /** The screen's rows as text from its top, each with trailing blanks
    *  gone, as the renderer in use holds them, with its width and whether
