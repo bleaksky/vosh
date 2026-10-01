@@ -415,7 +415,7 @@ pub(crate) fn migration_refusal(app_data: &Path) -> Option<&'static str> {
 
 /// What `ui.enabled_presets` holds when you turned every preset off. An
 /// empty list means the defaults. Mirrors `PRESETS_OFF_MARKER` in
-/// src/lib/automationRecords.ts.
+/// src/lib/automationRecords.ts, and a test here reads that line.
 pub(crate) const PRESETS_OFF: &str = "none";
 
 /// The enabled preset lists of the profile files, for a catalog that
@@ -1366,6 +1366,21 @@ mod tests {
         let library = include_str!("../../src/lib/presets.ts");
         assert!(library.contains("defaultEnabled: true"));
         assert!(!library.contains("defaultEnabled: false"));
+    }
+
+    #[test]
+    fn presets_off_is_the_marker_the_page_stores() {
+        // Settings stores PRESETS_OFF_MARKER when you turn every preset
+        // off, and launch reads it back here as PRESETS_OFF.
+        let records = include_str!("../../src/lib/automationRecords.ts");
+        let marker = regex::Regex::new(r"export const PRESETS_OFF_MARKER = '([^']*)';")
+            .unwrap()
+            .captures(records)
+            .expect("automationRecords.ts declares PRESETS_OFF_MARKER");
+        assert_eq!(&marker[1], PRESETS_OFF);
+        // No preset may take the marker as its id.
+        let library = include_str!("../../src/lib/presets.ts");
+        assert!(!library.contains(&format!("id: '{PRESETS_OFF}'")));
     }
 
     #[test]
