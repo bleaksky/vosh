@@ -1586,21 +1586,30 @@ mod tests {
         });
     }
 
-    /// Bug 12. You widen the window while a command holds the session,
-    /// so the frame that sizes the grid finds the session busy. The
-    /// frames after it see no new size, yet the game still hears the new
-    /// width instead of wrapping at the old one.
-    #[tokio::test]
-    async fn a_resize_while_the_session_is_busy_still_reaches_the_game() {
+    /// A live session against a local game that asked for your window
+    /// size and heard the one the session started with, 100 by 40.
+    struct SizedGame {
+        state: crate::commands::SharedState,
+        /// The game's end of the socket.
+        game: tokio::net::TcpStream,
+        /// What the game read so far.
+        heard: Vec<u8>,
+        /// The mock app the session runs in.
+        app: tauri::App<tauri::test::MockRuntime>,
+    }
+
+    /// What the game reads when the client says it is `cols` by 40.
+    fn naws(cols: u8) -> [u8; 9] {
+        use vosh_telnet::codes::{option::NAWS, IAC, SB, SE};
+        [IAC, SB, NAWS, 0, cols, 0, 40, IAC, SE]
+    }
+
+    async fn sized_game() -> SizedGame {
         use tauri::test::{mock_builder, mock_context, noop_assets};
         use tokio::io::AsyncWriteExt;
-        use vosh_telnet::codes::{option::NAWS, DO, IAC, SB, SE};
+        use vosh_telnet::codes::{option::NAWS, DO, IAC};
 
         use crate::commands::{AppState, SharedState};
-
-        // The game's size the frames last reported, as `LAST_GAME_SIZE`
-        // holds it in the app.
-        static LAST: AtomicU32 = AtomicU32::new(0);
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -1634,8 +1643,38 @@ mod tests {
         // The game asks for your window size and hears the one the
         // session started with.
         game.write_all(&[IAC, DO, NAWS]).await.expect("the ask");
-        let naws = |cols: u8| [IAC, SB, NAWS, 0, cols, 0, 40, IAC, SE];
         assert!(game_hears(&mut game, &mut heard, &naws(100)).await);
+        SizedGame {
+            state,
+            game,
+            heard,
+            app,
+        }
+    }
+
+    /// End the session `state` holds.
+    async fn end_session(state: &crate::commands::SharedState) {
+        let handle = state.session.lock().await.take();
+        if let Some(handle) = handle {
+            handle.shutdown().await;
+        }
+    }
+
+    /// Bug 12. You widen the window while a command holds the session,
+    /// so the frame that sizes the grid finds the session busy. The
+    /// frames after it see no new size, yet the game still hears the new
+    /// width instead of wrapping at the old one.
+    #[tokio::test]
+    async fn a_resize_while_the_session_is_busy_still_reaches_the_game() {
+        // The game's size the frames last reported, as `LAST_GAME_SIZE`
+        // holds it in the app.
+        static LAST: AtomicU32 = AtomicU32::new(0);
+        let SizedGame {
+            state,
+            mut game,
+            mut heard,
+            app: _app,
+        } = sized_game().await;
 
         // Frames report the game's size the way `report_sizes` does, on
         // a thread outside any runtime, as the main thread runs them.
@@ -1660,9 +1699,76 @@ mod tests {
             "the game kept wrapping at 100 columns"
         );
 
-        let handle = state.session.lock().await.take();
-        if let Some(handle) = handle {
-            handle.shutdown().await;
+        end_session(&state).await;
+    }
+
+    /// A size that waited on the session never undoes a newer one. The
+    /// frame that finds the session busy leaves a task waiting, and a
+    /// later frame takes the session first and sends a wider size. The
+    /// task then sends the newest size, not the one its frame saw, so
+    /// the game keeps the wider one.
+    #[tokio::test]
+    async fn a_size_that_waited_never_undoes_a_newer_one() {
+        use vosh_telnet::codes::{option::NAWS, IAC, SB};
+
+        static LAST: AtomicU32 = AtomicU32::new(0);
+        let SizedGame {
+            state,
+            mut game,
+            mut heard,
+            app: _app,
+        } = sized_game().await;
+        assert!(changed(&LAST, 100, 40));
+
+        // The waiting task holds a clone of the state until it has sent,
+        // so the count falls back to this once it is done.
+        let idle = Arc::strong_count(&state);
+        {
+            let busy = state.session.lock().await;
+            // You widen the window while a command holds the session.
+            assert!(changed(&LAST, 120, 40));
+            on_a_plain_thread(|| tell_session(&state, &LAST));
+            // You widen it again, and that frame takes the session before
+            // the waiting task does.
+            assert!(changed(&LAST, 130, 40));
+            send_game_size(busy.as_ref(), &LAST);
         }
+        let deadline = tokio::time::Instant::now() + WAIT;
+        while Arc::strong_count(&state) > idle {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "the waiting task never sent"
+            );
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+
+        // What the session sends next lands behind every size it sent
+        // before, so the last size ahead of it is the one the game keeps.
+        let marker = b"after the resize";
+        let sent = state
+            .session
+            .lock()
+            .await
+            .as_ref()
+            .expect("the session")
+            .send(marker.to_vec());
+        assert!(sent);
+        assert!(game_hears(&mut game, &mut heard, marker).await);
+        let at = heard
+            .windows(marker.len())
+            .position(|w| w == marker)
+            .expect("the marker");
+        let ahead = &heard[..at];
+        let last = ahead
+            .windows(3)
+            .rposition(|w| w == [IAC, SB, NAWS])
+            .expect("a size");
+        assert_eq!(
+            ahead.get(last..last + 9),
+            Some(&naws(130)[..]),
+            "an older size went out last"
+        );
+
+        end_session(&state).await;
     }
 }
