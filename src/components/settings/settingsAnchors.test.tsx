@@ -1,11 +1,19 @@
-import { act, createElement, type ComponentType } from 'react';
+import { act, createElement, type ComponentType, type ReactNode } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import golden from '../../../fixtures/links/settings-anchors.json';
 import { HELP_GOTO_EVENT } from '../../lib/helpLink';
 import { resolveHelpTarget } from '../../lib/helpNav';
 import { buildPaletteEntries, type PaletteDeps } from '../../lib/palette';
-import { defaultLayout } from '../../lib/paneLayout';
-import { normalizeUiConfig, type UiConfig } from '../../lib/session';
+import { defaultLayout, type PaneLeaf } from '../../lib/paneLayout';
+import type { GameBlock } from '../../lib/promptSettings';
+import {
+  normalizeUiConfig,
+  type PromptLastSeen,
+  type PromptState,
+  type SessionIdentity,
+  type UiConfig,
+} from '../../lib/session';
+import { SETTINGS_GOTO_EVENT } from '../../lib/settingsLink';
 import {
   formatSettingsTarget,
   resolveSettingsTarget,
@@ -17,6 +25,7 @@ import {
 } from '../../lib/settingsNav';
 import { SETTINGS_ROWS, settingsRowKey } from '../../lib/settingsSearch';
 import { FakeDocument, findAll, type FakeElement } from '../../test/fakeDom';
+import type { PaneMenu as PaneMenuType } from '../panel/PaneMenu';
 import type { SettingsPageProps } from './pageTypes';
 
 // Every way into Settings names a target as a string: a search hit, a
@@ -29,9 +38,15 @@ import type { SettingsPageProps } from './pageTypes';
 // So does a book button whose help topic id goes away.
 //
 // The golden file pins every link string and where it lands, the
-// anchors each page draws, and the help topics the pages link to. This
-// test mounts each page on every link into it, the way the frame does,
-// and checks it draws the anchors the frame scrolls to.
+// strings the pane menu and the links on other pages send, the anchors
+// each page draws, and the help topics the pages link to. This test
+// mounts each page on every link into it, the way the frame does, and
+// checks it draws the anchors the frame scrolls to. It mounts each page
+// twice: cold, as a Settings window opens on the link, and warm, as a
+// window that already shows the group follows the link, since the frame
+// keeps the page and hands it the new target. The Prompt section draws
+// your game's prompt one of four ways, and a search hit on it lands in
+// each, so the Input page mounts on that link in all four.
 
 // What the pages read when they mount. Two profiles, so a link that
 // names one is told apart from the profile in use, and a tick, so the
@@ -55,6 +70,80 @@ const TICK = {
   warn_color: null,
 };
 
+/** What the Prompt section reads: the profile's prompt table, the
+ *  prompt state, where Vosh last saw your codes, and who is connected.
+ *  What a scene leaves out reads as nothing. */
+interface PromptScene {
+  /** The way the section should draw your game's prompt. */
+  block: GameBlock;
+  config?: unknown;
+  state?: PromptState;
+  seen?: PromptLastSeen;
+  identity?: SessionIdentity;
+}
+
+const FORSAKEN: SessionIdentity = {
+  host: 'play.theforsakenlands.com',
+  port: 1848,
+  character: null,
+  profile: 'default',
+  claimed_by: null,
+};
+
+function forsakenState(newBuild: boolean): PromptState {
+  return {
+    catalog: [],
+    status: { status: 'no_capture', last_match_at: null },
+    new_build: newBuild,
+    forsaken: true,
+    open_row: null,
+    packages: [],
+  };
+}
+
+/** The link a search hit on Your game's prompt sends. */
+const PROMPT_LINK = 'input:prompt#prompt-game';
+
+const NO_PROMPT: PromptScene = { block: 'point' };
+
+/** Each way the Prompt section draws your game's prompt, with what it
+ *  reads to draw it that way. The pattern reads a prompt, so the
+ *  preview draws too. */
+const PROMPT_SCENES: Readonly<Record<string, PromptScene>> = {
+  'The Forsaken Lands, once the game sends your codes': {
+    block: 'codes',
+    identity: FORSAKEN,
+    state: forsakenState(true),
+    seen: {
+      prompt: '%n%P%C[%h/%Hhp %m/%Mmn %v/%Vmv]%c',
+      fprompt: '',
+      enabled: true,
+      at: null,
+      at_login: true,
+      source: 'gmcp',
+      character: null,
+    },
+  },
+  'The Forsaken Lands, before the game sends your codes': {
+    block: 'fields',
+    identity: FORSAKEN,
+    state: forsakenState(false),
+  },
+  'another game, reading the line you pointed at': {
+    block: 'line',
+    config: { capture: { kind: 'regex', lines: ['^<(\\d+)hp>$'], settle: false } },
+  },
+  'another game, before you point at its line': NO_PROMPT,
+};
+
+/** What the mocks answer for the page being drawn: the profile in use,
+ *  or null while the list fails to read, and the Prompt section's
+ *  state. */
+const scene: { active: string | null; prompt: PromptScene } = {
+  active: PROFILES.active,
+  prompt: NO_PROMPT,
+};
+
 const calls = vi.hoisted(() => ({
   invoked: [] as { cmd: string; args: Record<string, unknown> | undefined }[],
   emitted: [] as { event: string; payload: unknown }[],
@@ -63,7 +152,11 @@ const calls = vi.hoisted(() => ({
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn((cmd: string, args?: Record<string, unknown>) => {
     calls.invoked.push({ cmd, args });
-    return Promise.resolve(answer(cmd, args));
+    try {
+      return Promise.resolve(answer(cmd, args));
+    } catch (e) {
+      return Promise.reject(e);
+    }
   }),
 }));
 vi.mock('@tauri-apps/api/event', () => ({
@@ -76,17 +169,26 @@ vi.mock('@tauri-apps/api/event', () => ({
 // CodeMirror needs a real DOM. The JSON view carries its anchor on the
 // section around the editor, so nothing takes the editor's place.
 vi.mock('@uiw/react-codemirror', () => ({ default: () => null }));
+// A menu measures itself and portals to the page. The pane menu draws
+// its rows in place here instead. The Settings pages open a menu only
+// on a press, so they draw as they do in the app.
+vi.mock('../panel/MenuSurface', async (actual) => ({
+  ...(await actual<typeof import('../panel/MenuSurface')>()),
+  MenuSurface: ({ label, children }: { label: string; children: ReactNode }) =>
+    createElement('menu', { 'aria-label': label }, children),
+}));
 
 function answer(cmd: string, args: Record<string, unknown> | undefined): unknown {
   switch (cmd) {
     case 'profiles_list':
-      return PROFILES;
+      if (scene.active === null) throw new Error('profiles_list failed');
+      return { ...PROFILES, active: scene.active };
     case 'profile_detail_get': {
       const name = String(args?.name);
       return {
         name,
         display_name: name === 'default' ? 'Default' : name,
-        active: name === PROFILES.active,
+        active: name === scene.active,
         auto_match: PROFILES.profiles.find((p) => p.name === name)?.auto_match ?? null,
         world_name: null,
         tracked_affects: [],
@@ -101,6 +203,14 @@ function answer(cmd: string, args: Record<string, unknown> | undefined): unknown
       return [];
     case 'logs_search_page':
       return { hits: [], total: 0 };
+    case 'prompt_config_get':
+      return scene.prompt.config ?? null;
+    case 'prompt_state_get':
+      return scene.prompt.state ?? null;
+    case 'prompt_last_seen':
+      return scene.prompt.seen ?? null;
+    case 'session_identity_get':
+      return scene.prompt.identity ?? null;
     default:
       return undefined;
   }
@@ -111,6 +221,7 @@ function answer(cmd: string, args: Record<string, unknown> | undefined): unknown
 /** The page each group opens. Keep it in step with PAGES in
  *  SettingsApp.tsx. */
 let PAGES: Record<SettingsGroup, ComponentType<SettingsPageProps>>;
+let PaneMenu: typeof PaneMenuType;
 let createRoot: typeof import('react-dom/client').createRoot;
 const doc = new FakeDocument();
 
@@ -123,6 +234,8 @@ beforeAll(async () => {
     HTMLIFrameElement: class {},
     addEventListener() {},
     removeEventListener() {},
+    // The pane menu hands the caret back to the command line.
+    dispatchEvent: () => true,
     matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }),
     setTimeout: globalThis.setTimeout.bind(globalThis),
     clearTimeout: globalThis.clearTimeout.bind(globalThis),
@@ -152,13 +265,14 @@ beforeAll(async () => {
   // React DOM checks for a DOM once, when it loads, so it and the pages
   // load now.
   ({ createRoot } = await import('react-dom/client'));
-  const [general, appearance, layout, input, automation, characters] = await Promise.all([
+  const [general, appearance, layout, input, automation, characters, paneMenu] = await Promise.all([
     import('./groups/GeneralGroup'),
     import('./pages/AppearancePage'),
     import('./groups/LayoutGroup'),
     import('./groups/InputGroup'),
     import('./pages/AutomationPage'),
     import('./pages/CharactersPage'),
+    import('../panel/PaneMenu'),
   ]);
   PAGES = {
     general: general.GeneralGroup,
@@ -168,6 +282,7 @@ beforeAll(async () => {
     automation: automation.AutomationPage,
     characters: characters.CharactersPage,
   };
+  PaneMenu = paneMenu.PaneMenu;
   await mountEveryLink();
 }, 60_000);
 
@@ -194,6 +309,8 @@ interface Env {
   pathB: boolean;
 }
 
+const MAC: Env = { mac: true, pathB: false };
+
 function envFor(target: SettingsTarget): Env {
   const key = formatSettingsTarget(target);
   const only = SETTINGS_ROWS.find((row) => settingsRowKey(row) === key)?.only;
@@ -209,6 +326,8 @@ interface Landing {
   profile: string | null;
   /** The topics the book buttons open. */
   help: string[];
+  /** The links the page sent through navigate, as strings. */
+  sent: string[];
 }
 
 /** Call an element's click handler. This DOM sends no events, so read
@@ -222,6 +341,13 @@ function press(el: FakeElement) {
   props.onClick({ preventDefault() {}, stopPropagation() {} });
 }
 
+/** The one element under `root` that `match` finds. */
+function only(root: FakeElement, what: string, match: (el: FakeElement) => boolean): FakeElement {
+  const found = findAll(root, match);
+  if (found.length !== 1) throw new Error(`found ${found.length} of ${what}`);
+  return found[0];
+}
+
 async function settle() {
   for (let i = 0; i < 10; i++) {
     await act(async () => {
@@ -230,27 +356,45 @@ async function settle() {
   }
 }
 
-async function land(target: SettingsTarget, env: Env): Promise<Landing> {
+interface LandOptions {
+  /** Draw the group bare first, then hand the same page the link, the
+   *  way a window that already shows the group follows a search hit, a
+   *  palette row, or a link. */
+  warm?: boolean;
+  /** Run once the page draws, to press something on it. */
+  after?: (container: FakeElement) => void;
+}
+
+async function land(
+  target: SettingsTarget,
+  env: Env,
+  { warm = false, after }: LandOptions = {},
+): Promise<Landing> {
   doc.documentElement.dataset.platform = env.mac ? 'macos' : 'windows';
   calls.invoked.length = 0;
   calls.emitted.length = 0;
+  const sent: string[] = [];
   const container = doc.createElement('div');
   doc.body.appendChild(container);
   const root = createRoot(container as unknown as HTMLElement);
-  const props: SettingsPageProps = {
-    target,
-    navSeq: 0,
+  // The frame hands the page the same config and callbacks on every
+  // navigation.
+  const props: Omit<SettingsPageProps, 'target' | 'navSeq'> = {
     config: config(),
     setConfig: () => undefined,
     onError: () => undefined,
     pathB: env.pathB,
-    navigate: () => undefined,
+    navigate: (to) => void sent.push(formatSettingsTarget(to)),
     setLeaveGuard: () => undefined,
   };
-  await act(async () => {
-    root.render(createElement(PAGES[target.group], props));
-  });
-  await settle();
+  const draw = async (to: SettingsTarget, navSeq: number) => {
+    await act(async () => {
+      root.render(createElement(PAGES[target.group], { ...props, target: to, navSeq }));
+    });
+    await settle();
+  };
+  if (warm) await draw({ group: target.group }, 0);
+  await draw(target, warm ? 1 : 0);
 
   const anchors = findAll(container, (el) => el.hasAttribute('data-st-anchor')).map(
     (el) => el.getAttribute('data-st-anchor') ?? '',
@@ -267,26 +411,48 @@ async function land(target: SettingsTarget, env: Env): Promise<Landing> {
   const help = calls.emitted
     .filter((e) => e.event === HELP_GOTO_EVENT)
     .map((e) => String(e.payload));
+  if (after) {
+    await act(async () => {
+      after(container);
+    });
+  }
 
   await act(async () => {
     root.unmount();
   });
   doc.body.removeChild(container);
-  return { anchors, pressed, profile, help };
+  return { anchors, pressed, profile, help, sent };
 }
 
-// ── Every link, once ────────────────────────────────────────────────
+// ── Every link, cold and warm ───────────────────────────────────────
 
 /** Each link string the golden file names, from every group of them,
  *  with where it lands. */
 const LINKS: Readonly<Record<string, string>> = Object.assign({}, ...Object.values(golden.links));
 
-/** What each page drew, by the link string it opened on. */
-const landings = new Map<string, Landing>();
+/** One page drawn for one link: cold, warm, or in a Prompt scene. */
+interface Visit {
+  link: string;
+  how: string;
+  landing: Landing;
+}
+
+const visits: Visit[] = [];
+
+/** What each page drew cold, by the link string it opened on. */
+const cold = new Map<string, Landing>();
+const warmed = new Set<string>();
 
 /** The link each palette row that opens Settings sends, by the row's
  *  id, which is also the id the palette keeps in Recent. */
 let palette: Record<string, string> = {};
+
+/** The links the pane menu and the links on other pages send, by
+ *  sender. */
+let senders: Record<string, string[]> = {};
+
+/** The way the Prompt section drew your game's prompt in each scene. */
+const blocks = new Map<string, GameBlock | null>();
 
 /** Run every palette row and keep the ones that open Settings. */
 async function paletteLinks(): Promise<Record<string, string>> {
@@ -328,14 +494,122 @@ function everyLink(): string[] {
   ];
 }
 
+/** Open a page on `key` cold, and warm unless it names only the group. */
 async function mountOnce(key: string) {
-  if (landings.has(key)) return;
   const target = resolveSettingsTarget(key);
-  landings.set(key, await land(target, envFor(target)));
+  const env = envFor(target);
+  if (!cold.has(key)) {
+    const landing = await land(target, env);
+    cold.set(key, landing);
+    visits.push({ link: key, how: 'cold', landing });
+  }
+  if (!warmed.has(key) && formatSettingsTarget(target) !== target.group) {
+    warmed.add(key);
+    visits.push({ link: key, how: 'warm', landing: await land(target, env, { warm: true }) });
+  }
+}
+
+/** Open the pane menu on an Affects pane, press Edit tracked affects,
+ *  and return the links it sends Settings. */
+async function paneMenuLinks(): Promise<string[]> {
+  calls.emitted.length = 0;
+  const container = doc.createElement('div');
+  doc.body.appendChild(container);
+  const root = createRoot(container as unknown as HTMLElement);
+  const leaf: PaneLeaf = { id: 'leaf-affects', pane: 'affects', weight: 1, props: {} };
+  const anchor = {
+    getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0 }),
+    closest: () => null,
+  } as unknown as HTMLButtonElement;
+  await act(async () => {
+    root.render(createElement(PaneMenu, { leaf, anchor, onClose: () => undefined }));
+  });
+  await settle();
+  const item = only(
+    container,
+    'Edit tracked affects',
+    (el) =>
+      el.getAttribute('role') === 'menuitem' && el.textContent.startsWith('Edit tracked affects'),
+  );
+  await act(async () => {
+    press(item);
+  });
+  await act(async () => {
+    root.unmount();
+  });
+  doc.body.removeChild(container);
+  return calls.emitted.filter((e) => e.event === SETTINGS_GOTO_EVENT).map((e) => String(e.payload));
+}
+
+/** Press each link outside search and the palette: first with the
+ *  profile in use named Erelei, then while the profile list fails to
+ *  read, so no profile is known. */
+async function senderLinks(): Promise<Record<string, string[]>> {
+  const out: Record<string, string[]> = {
+    'pane menu, Edit tracked affects': [],
+    'Layout, Panes and tracked affects': [],
+    'General, Search logs': [],
+  };
+  for (const active of ['Erelei', null]) {
+    scene.active = active;
+    out['pane menu, Edit tracked affects'].push(...(await paneMenuLinks()));
+    const layout = await land({ group: 'layout' }, MAC, {
+      after: (c) =>
+        press(only(c, 'the panes row', (el) => el.getAttribute('data-st-anchor') === 'panes')),
+    });
+    out['Layout, Panes and tracked affects'].push(...layout.sent);
+  }
+  scene.active = PROFILES.active;
+  const general = await land({ group: 'general' }, MAC, {
+    after: (c) =>
+      press(
+        only(
+          c,
+          'Search logs',
+          (el) => el.nodeName === 'BUTTON' && el.textContent === 'Search logs…',
+        ),
+      ),
+  });
+  out['General, Search logs'].push(...general.sent);
+  return out;
+}
+
+/** The way the Prompt section drew your game's prompt, told by its
+ *  markup and not by its anchor. */
+function gameBlockDrawn(root: FakeElement): GameBlock | null {
+  const classes = (el: FakeElement) => (el.getAttribute('class') ?? '').split(' ');
+  const has = (match: (el: FakeElement) => boolean) => findAll(root, match).length > 0;
+  if (has((el) => classes(el).includes('st-prompt-code'))) return 'codes';
+  if (has((el) => el.nodeName === 'INPUT' && el.getAttribute('aria-label') === 'Prompt')) {
+    return 'fields';
+  }
+  if (has((el) => classes(el).includes('st-prompt-line-row'))) return 'line';
+  if (has((el) => classes(el).includes('st-prompt-point'))) return 'point';
+  return null;
+}
+
+/** Open the Input page on the search hit for Your game's prompt in each
+ *  scene. */
+async function promptLinks() {
+  const target = resolveSettingsTarget(PROMPT_LINK);
+  for (const [name, prompt] of Object.entries(PROMPT_SCENES)) {
+    scene.prompt = prompt;
+    let drawn: GameBlock | null = null;
+    const landing = await land(target, envFor(target), {
+      after: (c) => {
+        drawn = gameBlockDrawn(c);
+      },
+    });
+    blocks.set(name, drawn);
+    visits.push({ link: PROMPT_LINK, how: name, landing });
+  }
+  scene.prompt = NO_PROMPT;
 }
 
 async function mountEveryLink() {
   for (const key of everyLink()) await mountOnce(key);
+  senders = await senderLinks();
+  await promptLinks();
   // The palette rows run after the pages draw, so a row that changes a
   // store cannot change what a page draws.
   palette = await paletteLinks();
@@ -353,6 +627,13 @@ describe('Settings links', () => {
     expect(palette).toEqual(golden.palette);
   });
 
+  it('the pane menu and links on other pages send the same links', () => {
+    expect(senders).toEqual(golden.senders);
+    // They are the links from other pages and windows, every one.
+    const sent = [...new Set(Object.values(senders).flat())].sort();
+    expect(sent).toEqual(Object.keys(golden.links['from other pages and windows']).sort());
+  });
+
   it('every link string lands where it did', () => {
     for (const group of Object.values(golden.links)) {
       for (const [from, to] of Object.entries(group)) {
@@ -366,37 +647,44 @@ describe('Settings links', () => {
   });
 
   it('every link opens a page that draws what the frame scrolls to', () => {
-    for (const [key, landing] of landings) {
-      const target = resolveSettingsTarget(key);
+    for (const { link, how, landing } of visits) {
+      const at = `${link}, ${how}`;
+      const target = resolveSettingsTarget(link);
       for (const id of settingsScrollIds(target)) {
-        expect(landing.anchors, `${key} draws ${id}`).toContain(id);
+        expect(landing.anchors, `${at} draws ${id}`).toContain(id);
       }
       // A section the frame does not scroll to names an Automation
       // kind, a profile, or a page inside the group.
       if (target.group === 'automation' && target.section) {
         expect(
           landing.pressed.map((p) => p.toLowerCase()),
-          key,
+          at,
         ).toContain(target.section);
       }
       if (target.group === 'characters') {
         // No section means the profile in use.
         const wanted = target.section ?? PROFILES.active;
-        expect(landing.profile?.toLowerCase(), key).toBe(wanted.toLowerCase());
+        expect(landing.profile?.toLowerCase(), at).toBe(wanted.toLowerCase());
       }
       if (settingsSubpage(target) !== null) {
         // The page inside the group takes the place of the group page.
-        const own = landings.get(target.group)?.anchors ?? [];
-        expect(own.length, key).toBeGreaterThan(0);
-        for (const anchor of own) expect(landing.anchors, key).not.toContain(anchor);
+        const own = cold.get(target.group)?.anchors ?? [];
+        expect(own.length, at).toBeGreaterThan(0);
+        for (const anchor of own) expect(landing.anchors, at).not.toContain(anchor);
       }
+    }
+  });
+
+  it('the Prompt section draws your game prompt where search lands, every way', () => {
+    for (const [name, prompt] of Object.entries(PROMPT_SCENES)) {
+      expect(blocks.get(name), name).toBe(prompt.block);
     }
   });
 
   it('each page draws the same anchors as before', () => {
     const drawn: Record<string, Set<string>> = {};
-    for (const [key, landing] of landings) {
-      const group = resolveSettingsTarget(key).group;
+    for (const { link, landing } of visits) {
+      const group = resolveSettingsTarget(link).group;
       drawn[group] ??= new Set();
       for (const anchor of landing.anchors) drawn[group].add(anchor);
     }
@@ -408,7 +696,7 @@ describe('Settings links', () => {
 
   it('every book button opens a help topic that exists', () => {
     const topics = new Set<string>();
-    for (const landing of landings.values()) for (const t of landing.help) topics.add(t);
+    for (const { landing } of visits) for (const t of landing.help) topics.add(t);
     expect([...topics].sort()).toEqual(golden.help);
     for (const topic of golden.help) {
       expect(resolveHelpTarget(topic)?.kind, topic).toBe('topic');

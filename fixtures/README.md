@@ -32,11 +32,11 @@ fixtures/
              help-topics.json holds every help topic id with its number,
              in rail order, for src/lib/helpTopicIds.test.ts.
              settings-anchors.json holds every Settings link that search,
-             the palette and other windows open, where each lands, the
-             anchors each page draws and the help topics the pages open,
-             for src/components/settings/settingsAnchors.test.tsx. Change
-             either only in a commit tied to a numbered bug or a lettered
-             decision.
+             the palette, the pane menu and other pages open, where each
+             lands, the anchors each page draws and the help topics the
+             pages open, for src/components/settings/settingsAnchors.test.tsx.
+             Change either only in a commit tied to a numbered bug or a
+             lettered decision.
   mccp/      MCCP compressed stream captures.
   pane-layout/  Pane tree cases shared by the Rust and TypeScript sanitize tests.
   prompt-bands/ cases.json, the band under a lifted prompt for a few lifts
