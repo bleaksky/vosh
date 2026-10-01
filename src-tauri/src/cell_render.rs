@@ -713,6 +713,186 @@ fn draws_lines(flags: CellFlags) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Text decorations
+// ---------------------------------------------------------------------------
+
+/// How far the underline sits below the baseline, in CSS pixels. The
+/// Styles board sets `text-underline-offset: 3px`.
+const UNDERLINE_DROP: f32 = 3.0;
+/// The curly underline's band in CSS pixels, from the top of its crest
+/// to the bottom of its trough. Chrome draws the board's wavy line 3.5
+/// CSS pixels tall at a 1 px thickness.
+const CURL_HEIGHT: f32 = 3.5;
+/// A dash's share of its cell. The gap takes the rest, split evenly on
+/// both sides, so a dashed run reads as one dash per character.
+const DASH_SHARE: f32 = 0.65;
+
+/// Where a cell's lines sit, in device pixels from the cell's top left
+/// corner. Every line is one CSS pixel thick, the weight of the Styles
+/// board, and every line stays inside its cell, so no line reaches into
+/// the row below or past a split's edge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Decor {
+    /// Line thickness, one CSS pixel and never under one device pixel.
+    t: u32,
+    /// Top row of the single, dotted, and dashed underlines.
+    under: u32,
+    /// Top rows of the double underline's two lines.
+    double: [u32; 2],
+    /// Top row and height of the curly underline's band.
+    curl_top: u32,
+    curl_h: u32,
+    /// Top row of the strike, through the middle of the cell.
+    strike: u32,
+    /// Where each cell's dash starts, and its length.
+    dash_x: u32,
+    dash_w: u32,
+}
+
+/// The lines for a `cell_w` by `cell_h` cell whose baseline sits on row
+/// `baseline`, at `scale` device pixels per CSS pixel. The underline sits
+/// three CSS pixels under the baseline when the cell has room, and a
+/// line that would hang past the cell's bottom rises until it fits.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn decor(cell_w: u32, cell_h: u32, baseline: u32, scale: f32) -> Decor {
+    let scale = if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        1.0
+    };
+    let cell_h = cell_h.max(1);
+    let t = (scale.round() as u32).clamp(1, cell_h);
+    let want = baseline + (UNDERLINE_DROP * scale).round() as u32;
+    let fit = |ink: u32| want.min(cell_h.saturating_sub(ink));
+    // The double's gap is half a line, at least a pixel: Chrome draws the
+    // board's double at 2x as two 2 px lines 1 px apart.
+    let gap = (t / 2).max(1);
+    let double_top = fit(2 * t + gap);
+    let curl_h = ((CURL_HEIGHT * scale).round() as u32)
+        .max(t + 2)
+        .min(cell_h);
+    let dash_w = ((cell_w as f32 * DASH_SHARE).round() as u32).clamp(1, cell_w.max(2) - 1);
+    Decor {
+        t,
+        under: fit(t),
+        double: [double_top, double_top + t + gap],
+        curl_top: fit(curl_h),
+        curl_h,
+        strike: (cell_h / 2).saturating_sub(t / 2),
+        dash_x: cell_w.saturating_sub(dash_w) / 2,
+        dash_w,
+    }
+}
+
+/// A solid piece of a line: x and y from the cell's top left, then width
+/// and height, in device pixels.
+type LineRect = [u32; 4];
+
+/// The solid pieces of a cell's underline, for the cell whose left edge
+/// sits `x0` pixels from the grid's left. Dots count from the grid's
+/// left edge, so they keep one pitch across neighbouring cells of any
+/// width. Each cell centers one dash, so dashes keep the cell's pitch.
+/// The curl draws from the atlas and has no solid pieces.
+fn underline_rects(kind: Underline, x0: u32, cell_w: u32, d: &Decor) -> Vec<LineRect> {
+    match kind {
+        Underline::None | Underline::Curly => Vec::new(),
+        Underline::Single => vec![[0, d.under, cell_w, d.t]],
+        Underline::Double => vec![[0, d.double[0], cell_w, d.t], [0, d.double[1], cell_w, d.t]],
+        Underline::Dashed => vec![[d.dash_x, d.under, d.dash_w, d.t]],
+        Underline::Dotted => {
+            let pitch = 2 * d.t;
+            let end = x0 + cell_w;
+            let mut dots = Vec::new();
+            let mut dot = x0 / pitch * pitch;
+            while dot < end {
+                let from = dot.max(x0);
+                let to = (dot + d.t).min(end);
+                if from < to {
+                    dots.push([from - x0, d.under, to - from, d.t]);
+                }
+                dot += pitch;
+            }
+            dots
+        }
+    }
+}
+
+/// The quads for a region's marks, as (column, row top, color, kind):
+/// solid pieces sample the solid texel, and a curl samples its sprite at
+/// one texel a pixel. Every quad sits on whole pixels, so each line
+/// stays crisp. Strikes run the cell's width through its middle.
+fn line_instances(
+    underlines: &[(usize, f32, Rgba, Underline)],
+    strikeouts: &[(usize, f32, Rgba, Underline)],
+    d: &Decor,
+    cell_w: u32,
+    solid_uv: ([f32; 2], [f32; 2]),
+    curl_uv: ([f32; 2], [f32; 2]),
+) -> Vec<CellInstance> {
+    let mut out = Vec::new();
+    let solid = |x: u32, y: f32, [rx, ry, rw, rh]: LineRect, color: Rgba| CellInstance {
+        offset: [(x + rx) as f32, y + ry as f32],
+        size: [rw as f32, rh as f32],
+        color,
+        uv_min: solid_uv.0,
+        uv_max: solid_uv.1,
+    };
+    for &(col, y_top, color, kind) in underlines {
+        let x0 = col as u32 * cell_w;
+        if kind == Underline::Curly {
+            out.push(CellInstance {
+                offset: [x0 as f32, y_top + d.curl_top as f32],
+                size: [cell_w as f32, d.curl_h as f32],
+                color,
+                uv_min: curl_uv.0,
+                uv_max: curl_uv.1,
+            });
+        } else {
+            for rect in underline_rects(kind, x0, cell_w, d) {
+                out.push(solid(x0, y_top, rect, color));
+            }
+        }
+    }
+    for &(col, y_top, color, _) in strikeouts {
+        let x0 = col as u32 * cell_w;
+        out.push(solid(x0, y_top, [0, d.strike, cell_w, d.t], color));
+    }
+    out
+}
+
+/// Coverage of the curly underline's sprite: one period of a sine wave
+/// `w` pixels long, so it repeats once a cell and meets its neighbours at
+/// the same height, inside a band `h` rows tall and stroked `t` pixels
+/// thick. Each pixel's coverage falls off with its distance to the curve,
+/// so the wave antialiases the way a canvas stroke does, and the crest
+/// and trough land on whole rows. Row-major, `w * h` bytes.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn curl_coverage(w: u32, h: u32, t: u32) -> Vec<u8> {
+    let (wf, hf, tf) = (w.max(1) as f32, h as f32, t as f32);
+    let amp = ((hf - tf) / 2.0).max(0.0);
+    let mid = hf / 2.0;
+    let curve = |x: f32| mid - amp * (std::f32::consts::TAU * x / wf).sin();
+    // Sample the curve finely across one period around each pixel. The
+    // curve repeats, so the samples run past either edge of the cell.
+    let steps = (w.max(1) * 32) as usize;
+    let mut out = vec![0u8; (w * h) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+            let mut near = f32::MAX;
+            for k in 0..=steps {
+                let sx = px - wf / 2.0 + wf * k as f32 / steps as f32;
+                let (dx, dy) = (sx - px, curve(sx) - py);
+                near = near.min(dx.hypot(dy));
+            }
+            let cov = (tf / 2.0 + 0.5 - near).clamp(0.0, 1.0);
+            out[(y * w + x) as usize] = (cov * 255.0).round() as u8;
+        }
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
 // Glyph atlas
 // ---------------------------------------------------------------------------
 
@@ -805,6 +985,9 @@ pub(crate) struct GlyphAtlas {
     // synthetic slant of each) share one texture.
     slots: HashMap<(char, bool, bool), u32>,
     next: u32,
+    // The thickness and band height the curly underline's sprite was last
+    // drawn at, in the slot kept for it just before the solid block.
+    curl: Option<(u32, u32)>,
 }
 
 impl GlyphAtlas {
@@ -899,6 +1082,7 @@ impl GlyphAtlas {
             solid_uv,
             slots: HashMap::new(),
             next: 0,
+            curl: None,
         }
     }
 
@@ -934,8 +1118,9 @@ impl GlyphAtlas {
         let index = if let Some(&i) = self.slots.get(&key) {
             i
         } else {
-            // Cap two below the count: the last slot is the solid block.
-            let i = self.next.min(self.cols * self.rows - 2);
+            // Cap three below the count: the last slot is the solid block
+            // and the one before it holds the curly underline.
+            let i = self.next.min(self.cols * self.rows - 3);
             self.next += 1;
             self.rasterize_into(c, i, bold, italic);
             self.slots.insert(key, i);
@@ -943,6 +1128,34 @@ impl GlyphAtlas {
         };
         let (x, y, w, h) = slot_rect(index, self.cols, self.slot_w, self.cell_h);
         rect_to_uv(x, y, w, h, self.atlas_w, self.atlas_h)
+    }
+
+    /// The curly underline's sprite, one cell wide and `h` rows tall with
+    /// lines `t` thick, as a UV rect. It is drawn into its slot on first
+    /// use and again when either size changes, and the flag says the
+    /// atlas pixels changed and need uploading.
+    pub(crate) fn curl_uv(&mut self, t: u32, h: u32) -> (([f32; 2], [f32; 2]), bool) {
+        let h = h.min(self.cell_h);
+        let index = self.cols * self.rows - 2;
+        let (sx, sy, sw, sh) = slot_rect(index, self.cols, self.slot_w, self.cell_h);
+        let changed = self.curl != Some((t, h));
+        if changed {
+            for y in sy..sy + sh {
+                let row = (y * self.atlas_w) as usize;
+                self.pixels[row + sx as usize..row + (sx + sw) as usize].fill(0);
+            }
+            let w = self.cell_w as usize;
+            let cov = curl_coverage(self.cell_w, h, t);
+            for (y, src) in cov.chunks_exact(w).enumerate() {
+                let dst = ((sy + y as u32) * self.atlas_w + sx) as usize;
+                self.pixels[dst..dst + w].copy_from_slice(src);
+            }
+            self.curl = Some((t, h));
+        }
+        (
+            rect_to_uv(sx, sy, self.cell_w, h, self.atlas_w, self.atlas_h),
+            changed,
+        )
     }
 
     /// UV rect for an already-rasterized glyph, or `None`. Read-only so the
@@ -1355,8 +1568,9 @@ struct Region {
     line0: i32,
 }
 
-/// Underline/strike marks: (column, row top in pixels, color).
-type Marks = Vec<(usize, f32, Rgba)>;
+/// Underline/strike marks: (column, row top in pixels, color, kind). A
+/// strike carries `Underline::None` as its kind.
+type Marks = Vec<(usize, f32, Rgba, Underline)>;
 
 /// Line-major inclusive containment of a cell in a selection range given as
 /// start and end line/column.
@@ -1799,7 +2013,17 @@ impl CellRenderer {
         fonts: AtlasFonts,
         font_px: f32,
     ) -> Self {
-        let mut atlas = GlyphAtlas::from_fonts(fonts, font_px);
+        let atlas = GlyphAtlas::from_fonts(fonts, font_px);
+        Self::with_atlas(device, queue, format, atlas)
+    }
+
+    /// Build the renderer around `atlas`.
+    fn with_atlas(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        mut atlas: GlyphAtlas,
+    ) -> Self {
         for code in 0x20u8..0x7f {
             let _ = atlas.glyph_uv(code as char, false, false);
         }
@@ -2182,6 +2406,15 @@ impl CellRenderer {
                 }
             }
         }
+        // Where the lines sit at this scale, and the curl's sprite for it.
+        let decor = decor(
+            self.atlas.cell_w(),
+            self.atlas.cell_h(),
+            self.atlas.baseline(),
+            placement.scale,
+        );
+        let (curl_uv, curl_drawn) = self.atlas.curl_uv(decor.t, decor.curl_h);
+        atlas_grew |= curl_drawn;
         if atlas_grew {
             let (aw, ah) = self.atlas.atlas_size();
             queue.write_texture(
@@ -2236,8 +2469,8 @@ impl CellRenderer {
         let slot_w = atlas.slot_w() as f32;
         // Marks carry the absolute pixel y of their row so region offsets
         // apply exactly once.
-        let mut underlines: Vec<(usize, f32, Rgba)> = Vec::new();
-        let mut strikeouts: Vec<(usize, f32, Rgba)> = Vec::new();
+        let mut underlines: Marks = Vec::new();
+        let mut strikeouts: Marks = Vec::new();
         // Shared per-cell styling: colors, selection, find highlight, hover,
         // and the underline/strike marks. Region closures wrap this with
         // their own line/pixel mapping.
@@ -2343,13 +2576,16 @@ impl CellRenderer {
                 fg_rgba = link;
             }
             if draws_lines(flags) {
+                // A link under the pointer reads as a plain underline in
+                // the link color, whatever line the cell carries.
                 if hovered {
-                    underlines.push((col, y_top, link));
+                    underlines.push((col, y_top, link, Underline::Single));
                 } else if flags.underline != Underline::None {
-                    underlines.push((col, y_top, underline_color(flags, fg_rgba)));
+                    let color = underline_color(flags, fg_rgba);
+                    underlines.push((col, y_top, color, flags.underline));
                 }
                 if flags.strikeout {
-                    strikeouts.push((col, y_top, fg_rgba));
+                    strikeouts.push((col, y_top, fg_rgba, Underline::None));
                 }
             }
             (
@@ -2389,26 +2625,16 @@ impl CellRenderer {
                 |ch, bold, italic| atlas.uv_if_cached(ch, bold, italic).unwrap_or(space_uv),
             );
             instances.extend(backgrounds);
-            // Underline quads: a thin line at the bottom of each marked cell.
-            for (col, y_top, color) in underlines.drain(..) {
-                instances.push(CellInstance {
-                    offset: [col as f32 * cell_w, y_top + cell_h - 2.0],
-                    size: [cell_w, 1.5],
-                    color,
-                    uv_min: solid_uv.0,
-                    uv_max: solid_uv.1,
-                });
-            }
-            // Strikethrough quads: a thin line across the cell mid-height.
-            for (col, y_top, color) in strikeouts.drain(..) {
-                instances.push(CellInstance {
-                    offset: [col as f32 * cell_w, y_top + cell_h * 0.5],
-                    size: [cell_w, 1.5],
-                    color,
-                    uv_min: solid_uv.0,
-                    uv_max: solid_uv.1,
-                });
-            }
+            instances.extend(line_instances(
+                &underlines,
+                &strikeouts,
+                &decor,
+                atlas.cell_w(),
+                solid_uv,
+                curl_uv,
+            ));
+            underlines.clear();
+            strikeouts.clear();
             instances.extend(glyphs);
             region_ranges.push(start..instances.len() as u32);
         }
@@ -2795,6 +3021,188 @@ mod tests {
         };
         assert_eq!(drawn_char('H', shown), 'H');
         assert!(draws_lines(shown));
+    }
+
+    /// Berkeley Mono at 12 CSS px and line height 1.2, the cell xterm
+    /// reports: 7 by 18 at 1x with the baseline on row 13, and 14 by 34
+    /// at 2x with the baseline on row 26.
+    fn decor_1x() -> Decor {
+        decor(7, 18, 13, 1.0)
+    }
+
+    fn decor_2x() -> Decor {
+        decor(14, 34, 26, 2.0)
+    }
+
+    /// Paint a run of `n` cells underlined `kind` into a coverage grid one
+    /// cell row tall, the way the renderer lays out each cell's pieces.
+    fn paint_run(kind: Underline, n: u32, cell_w: u32, cell_h: u32, d: &Decor) -> Vec<Vec<u8>> {
+        let mut px = vec![vec![0u8; (n * cell_w) as usize]; cell_h as usize];
+        for c in 0..n {
+            let x0 = c * cell_w;
+            if kind == Underline::Curly {
+                let cov = curl_coverage(cell_w, d.curl_h, d.t);
+                for y in 0..d.curl_h {
+                    for x in 0..cell_w {
+                        px[(d.curl_top + y) as usize][(x0 + x) as usize] =
+                            cov[(y * cell_w + x) as usize];
+                    }
+                }
+            } else {
+                for [x, y, w, h] in underline_rects(kind, x0, cell_w, d) {
+                    for yy in y..y + h {
+                        for xx in x..x + w {
+                            px[yy as usize][(x0 + xx) as usize] = 255;
+                        }
+                    }
+                }
+            }
+        }
+        px
+    }
+
+    /// The rows that carry any ink.
+    fn inked_rows(px: &[Vec<u8>]) -> Vec<usize> {
+        (0..px.len())
+            .filter(|&y| px[y].iter().any(|&c| c > 0))
+            .collect()
+    }
+
+    /// The ink of one row as runs of (start, end).
+    fn runs(row: &[u8]) -> Vec<(usize, usize)> {
+        let mut out = Vec::new();
+        let mut start = None;
+        for (x, &c) in row.iter().chain(std::iter::once(&0)).enumerate() {
+            match (start, c > 0) {
+                (None, true) => start = Some(x),
+                (Some(s), false) => {
+                    out.push((s, x));
+                    start = None;
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn every_line_is_one_css_pixel_thick_and_stays_in_its_cell() {
+        assert_eq!(
+            decor_1x(),
+            Decor {
+                t: 1,
+                under: 16,
+                double: [15, 17],
+                curl_top: 14,
+                curl_h: 4,
+                strike: 9,
+                dash_x: 1,
+                dash_w: 5,
+            }
+        );
+        assert_eq!(
+            decor_2x(),
+            Decor {
+                t: 2,
+                under: 32,
+                double: [29, 32],
+                curl_top: 27,
+                curl_h: 7,
+                strike: 16,
+                dash_x: 2,
+                dash_w: 9,
+            }
+        );
+        // At line height 1 the cell is the glyph box, and every line
+        // still fits inside it.
+        for d in [decor(7, 15, 11, 1.0), decor(14, 29, 23, 2.0)] {
+            let cell_h = if d.t == 1 { 15 } else { 29 };
+            assert!(d.under + d.t <= cell_h);
+            assert!(d.double[1] + d.t <= cell_h);
+            assert!(d.double[1] > d.double[0] + d.t);
+            assert!(d.curl_top + d.curl_h <= cell_h);
+        }
+    }
+
+    #[test]
+    fn single_and_double_underlines_fill_whole_rows_across_a_run() {
+        let d = decor_2x();
+        let single = paint_run(Underline::Single, 3, 14, 34, &d);
+        assert_eq!(inked_rows(&single), vec![32, 33]);
+        assert!(single[32].iter().chain(&single[33]).all(|&c| c == 255));
+        let double = paint_run(Underline::Double, 3, 14, 34, &d);
+        assert_eq!(inked_rows(&double), vec![29, 30, 32, 33]);
+        for y in [29, 30, 32, 33] {
+            assert!(double[y].iter().all(|&c| c == 255), "row {y}");
+        }
+        let d = decor_1x();
+        let double = paint_run(Underline::Double, 3, 7, 18, &d);
+        assert_eq!(inked_rows(&double), vec![15, 17]);
+    }
+
+    #[test]
+    fn dots_keep_one_pitch_across_cells_of_any_width() {
+        for (cell_w, cell_h, d) in [
+            (7, 18, decor_1x()),
+            (14, 34, decor_2x()),
+            (15, 34, decor(15, 34, 26, 2.0)),
+        ] {
+            let px = paint_run(Underline::Dotted, 4, cell_w, cell_h, &d);
+            assert_eq!(
+                inked_rows(&px),
+                (d.under..d.under + d.t)
+                    .map(|y| y as usize)
+                    .collect::<Vec<_>>()
+            );
+            let row = &px[d.under as usize];
+            for (x, &c) in row.iter().enumerate() {
+                let dot = (x as u32 / d.t) % 2 == 0;
+                assert_eq!(c == 255, dot, "cell {cell_w} x {x}");
+            }
+        }
+    }
+
+    #[test]
+    fn each_cell_draws_one_dash_in_the_same_place() {
+        let d = decor_2x();
+        let px = paint_run(Underline::Dashed, 3, 14, 34, &d);
+        assert_eq!(inked_rows(&px), vec![32, 33]);
+        assert_eq!(runs(&px[32]), vec![(2, 11), (16, 25), (30, 39)]);
+        assert_eq!(px[32], px[33]);
+        let d = decor_1x();
+        let px = paint_run(Underline::Dashed, 3, 7, 18, &d);
+        assert_eq!(runs(&px[16]), vec![(1, 6), (8, 13), (15, 20)]);
+    }
+
+    #[test]
+    fn the_curl_repeats_once_a_cell_and_joins_its_neighbours() {
+        for (cell_w, cell_h, d) in [(7, 18, decor_1x()), (14, 34, decor_2x())] {
+            let (w, h) = (cell_w as usize, d.curl_h as usize);
+            let cov = curl_coverage(cell_w, d.curl_h, d.t);
+            let at = |x: usize, y: usize| i32::from(cov[y * w + x]);
+            // An unbroken stroke: every column carries at least a full
+            // line's worth of ink, more where the wave runs steep.
+            for x in 0..w {
+                let ink: i32 = (0..h).map(|y| at(x, y)).sum();
+                assert!(ink >= 255 * d.t as i32 * 9 / 10, "column {x} inks {ink}");
+            }
+            // The wave reaches both edges of its band.
+            assert!((0..w).any(|x| at(x, 0) >= 128));
+            assert!((0..w).any(|x| at(x, h - 1) >= 128));
+            // It leaves a cell at the height it enters the next one: the
+            // last column mirrors the first about the band's middle.
+            for y in 0..h {
+                assert!((at(0, y) - at(w - 1, h - 1 - y)).abs() <= 2, "row {y}");
+            }
+            // A run of cells keeps inside the cells.
+            let px = paint_run(Underline::Curly, 3, cell_w, cell_h, &d);
+            let rows = inked_rows(&px);
+            assert!(*rows.first().unwrap_or(&0) >= d.curl_top as usize);
+            assert!(*rows.last().unwrap_or(&0) < cell_h as usize);
+        }
+        // At 2x the crest lands on whole pixels: two full rows at the top.
+        let cov = curl_coverage(14, 7, 2);
+        assert!(cov[3] >= 240 && cov[14 + 3] >= 240);
     }
 
     #[test]
@@ -3370,5 +3778,362 @@ mod tests {
         );
         assert_eq!(backgrounds[0].offset, [0.0, 0.0]);
         assert_eq!(backgrounds[1].offset, [0.0, 16.0]);
+    }
+
+    #[test]
+    fn marks_become_whole_pixel_quads_and_the_curl_samples_its_sprite() {
+        let d = decor_2x();
+        let solid = ([0.5, 0.5], [0.5, 0.5]);
+        let curl = ([0.25, 0.75], [0.3, 0.8]);
+        let red = [1.0, 0.0, 0.0, 1.0];
+        let under = [
+            (2, 34.0, red, Underline::Curly),
+            (3, 34.0, red, Underline::Double),
+        ];
+        let strike = [(4, 68.0, red, Underline::None)];
+        let quads = line_instances(&under, &strike, &d, 14, solid, curl);
+        assert_eq!(quads.len(), 4);
+        assert_eq!(quads[0].offset, [28.0, 34.0 + 27.0]);
+        assert_eq!(quads[0].size, [14.0, 7.0]);
+        assert_eq!((quads[0].uv_min, quads[0].uv_max), curl);
+        assert_eq!(quads[1].offset, [42.0, 34.0 + 29.0]);
+        assert_eq!(quads[2].offset, [42.0, 34.0 + 32.0]);
+        assert_eq!(quads[2].size, [14.0, 2.0]);
+        assert_eq!(quads[3].offset, [56.0, 68.0 + 16.0]);
+        assert_eq!(quads[3].size, [14.0, 2.0]);
+        assert_eq!((quads[3].uv_min, quads[3].uv_max), solid);
+    }
+
+    #[test]
+    fn the_curl_sprite_redraws_only_when_its_size_changes() {
+        let Some(fonts) = AtlasFonts::load("Berkeley Mono") else {
+            return;
+        };
+        let mut atlas = GlyphAtlas::with_reported(fonts, 24.0, Some((14, 34)), Some(29));
+        let (uv, drawn) = atlas.curl_uv(2, 7);
+        assert!(drawn);
+        assert_eq!(atlas.curl_uv(2, 7), (uv, false));
+        assert!(atlas.curl_uv(1, 4).1);
+        // The sprite sits in the slot before the solid block and holds
+        // exactly the curl's coverage.
+        let (aw, _) = atlas.atlas_size();
+        let (sx, sy, _, _) = slot_rect(32 * 32 - 2, 32, atlas.slot_w(), 34);
+        let cov = curl_coverage(14, 4, 1);
+        for y in 0..4 {
+            let at = ((sy + y) * aw + sx) as usize;
+            assert_eq!(
+                &atlas.pixels()[at..at + 14],
+                &cov[(y * 14) as usize..(y * 14 + 14) as usize]
+            );
+        }
+        // Glyphs never take the curl's slot.
+        for i in 0..1100u32 {
+            let c = char::from_u32(0x4e00 + i).unwrap_or('x');
+            let _ = atlas.glyph_uv(c, false, false);
+        }
+        let (sprite, drawn) = atlas.curl_uv(1, 4);
+        assert!(!drawn);
+        let at = (sy * aw + sx) as usize;
+        assert_eq!(&atlas.pixels()[at..at + 14], &cov[..14]);
+        assert_eq!(
+            sprite.0,
+            [
+                sx as f32 / aw as f32,
+                sy as f32 / atlas.atlas_size().1 as f32
+            ]
+        );
+    }
+
+    // Offscreen renders through the real pipeline. They need a GPU, so
+    // each one returns early when no adapter is around.
+
+    /// Nord, the Styles board's theme, as explicit true color so the
+    /// renders do not lean on the theme other tests set.
+    const NORD: &[u8] = b"\x1b[0;38;2;229;233;240;48;2;46;52;64m";
+
+    /// The Styles board's text style rows, then a probe row of blank
+    /// cells for each line in magenta: single, double, curly, dotted,
+    /// dashed, and strike, eight cells each from column 0, 10, 20, 30,
+    /// 40, and 50.
+    fn styles_specimen() -> Vec<u8> {
+        let mut out = Vec::new();
+        let row = |out: &mut Vec<u8>, parts: &[&[u8]]| {
+            out.extend_from_slice(NORD);
+            out.extend_from_slice(b"\x1b[K");
+            for part in parts {
+                out.extend_from_slice(part);
+                out.extend_from_slice(NORD);
+            }
+            out.extend_from_slice(b"\r\n");
+        };
+        row(
+            &mut out,
+            &[
+                b"\x1b[1mBold",
+                b"   \x1b[2mDim",
+                b"   \x1b[3mItalic",
+                b"   \x1b[1;3mBold italic",
+                b"   \x1b[8mHidden",
+                b"   ",
+            ],
+        );
+        row(
+            &mut out,
+            &[
+                b"\x1b[4mUnderline",
+                b"   \x1b[4:2mDouble",
+                b"   \x1b[4:3mCurly",
+                b"   \x1b[4:4mDotted",
+                b"   \x1b[4:5mDashed",
+            ],
+        );
+        row(
+            &mut out,
+            &[
+                b"\x1b[4:3;58:2::191:97:106mCurly in its own color",
+                b"   \x1b[9mStrikethrough",
+                b"   \x1b[7mReverse",
+                b"   \x1b[5mBlink",
+            ],
+        );
+        let mut probe: Vec<Vec<u8>> = Vec::new();
+        for (i, sgr) in ["4:1", "4:2", "4:3", "4:4", "4:5"].iter().enumerate() {
+            let gap = if i == 0 { "" } else { "  " };
+            probe.push(format!("{gap}\x1b[{sgr};58:2::255:0:255m        ").into_bytes());
+        }
+        probe.push(b"  \x1b[9;38;2;255;0;255m        ".to_vec());
+        let parts: Vec<&[u8]> = probe.iter().map(Vec::as_slice).collect();
+        row(&mut out, &parts);
+        // The last line end would scroll the top row away.
+        out.truncate(out.len() - 2);
+        out
+    }
+
+    /// One offscreen frame: its RGBA pixels, size, cell, and lines.
+    struct Frame {
+        rgba: Vec<u8>,
+        w: u32,
+        h: u32,
+        cell: (u32, u32),
+        decor: Decor,
+    }
+
+    /// Render `bytes` on a `cols` by `rows` grid at `scale`, in Berkeley
+    /// Mono at 12 CSS px and line height 1.2 with the cell xterm reports.
+    fn render_offscreen(bytes: &[u8], cols: usize, rows: usize, scale: f32) -> Option<Frame> {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            compatible_surface: None,
+            force_fallback_adapter: false,
+        }))?;
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
+                .ok()?;
+        let px = 12.0 * scale;
+        // xterm's device cell: the font's advance and glyph box, and the
+        // box times the line height.
+        let probe = GlyphAtlas::with_reported(AtlasFonts::load("Berkeley Mono")?, px, None, None);
+        let (cell_w, char_h) = (probe.cell_w(), probe.cell_h());
+        let cell_h = (char_h as f32 * 1.2).floor() as u32;
+        let atlas = GlyphAtlas::with_reported(
+            AtlasFonts::load("Berkeley Mono")?,
+            px,
+            Some((cell_w, cell_h)),
+            Some(char_h),
+        );
+        let decor = decor(cell_w, cell_h, atlas.baseline(), scale);
+        let format = wgpu::TextureFormat::Rgba8Unorm;
+        let mut renderer = CellRenderer::with_atlas(&device, &queue, format, atlas);
+        let mut grid = crate::term_grid::TermGrid::new(cols, rows);
+        grid.feed(bytes);
+        let (w, h) = (cols as u32 * cell_w, rows as u32 * cell_h);
+        let extent = wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        };
+        let target = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("styles-target"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        let placement = Placement {
+            x: 0,
+            y: 0,
+            vignette: false,
+            indicators: false,
+            scale,
+            target: [w, h],
+        };
+        renderer.draw(
+            &device,
+            &queue,
+            &mut encoder,
+            &view,
+            &grid,
+            w,
+            h,
+            0.5,
+            placement,
+        );
+        let row_bytes = (w * 4).div_ceil(256) * 256;
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("styles-readback"),
+            size: u64::from(row_bytes * h),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        encoder.copy_texture_to_buffer(
+            wgpu::ImageCopyTexture {
+                texture: &target,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyBuffer {
+                buffer: &buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row_bytes),
+                    rows_per_image: Some(h),
+                },
+            },
+            extent,
+        );
+        queue.submit(Some(encoder.finish()));
+        let slice = buffer.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        device.poll(wgpu::Maintain::Wait);
+        let mapped = slice.get_mapped_range();
+        let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+        for row in mapped.chunks_exact(row_bytes as usize) {
+            rgba.extend_from_slice(&row[..(w * 4) as usize]);
+        }
+        Some(Frame {
+            rgba,
+            w,
+            h,
+            cell: (cell_w, cell_h),
+            decor,
+        })
+    }
+
+    /// Write `frame` as a PNG, opaque, through flate2's zlib and CRC.
+    fn write_png(path: &std::path::Path, frame: &Frame) {
+        use std::io::Write;
+        let mut raw = Vec::with_capacity(((frame.w * 4 + 1) * frame.h) as usize);
+        for row in frame.rgba.chunks_exact((frame.w * 4) as usize) {
+            raw.push(0);
+            raw.extend(row.chunks_exact(4).flat_map(|p| [p[0], p[1], p[2], 255]));
+        }
+        let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        z.write_all(&raw).expect("zlib");
+        let idat = z.finish().expect("zlib");
+        let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+        let mut chunk = |kind: &[u8], data: &[u8]| {
+            png.extend_from_slice(&(data.len() as u32).to_be_bytes());
+            let mut crc = flate2::Crc::new();
+            crc.update(kind);
+            crc.update(data);
+            png.extend_from_slice(kind);
+            png.extend_from_slice(data);
+            png.extend_from_slice(&crc.sum().to_be_bytes());
+        };
+        let mut ihdr = Vec::new();
+        ihdr.extend_from_slice(&frame.w.to_be_bytes());
+        ihdr.extend_from_slice(&frame.h.to_be_bytes());
+        ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
+        chunk(b"IHDR", &ihdr);
+        chunk(b"IDAT", &idat);
+        chunk(b"IEND", &[]);
+        std::fs::write(path, png).expect("write png");
+    }
+
+    #[test]
+    fn the_grid_draws_every_line_where_its_geometry_says() {
+        const NORD_BG: [i32; 3] = [46, 52, 64];
+        const MAGENTA: [i32; 3] = [255, 0, 255];
+        for scale in [1.0_f32, 2.0] {
+            let Some(frame) = render_offscreen(&styles_specimen(), 64, 4, scale) else {
+                return;
+            };
+            if let Some(dir) = std::env::var_os("VOSH_TEXT_STYLE_RENDERS") {
+                let name = format!("grid_styles_{}x.png", scale as u32);
+                write_png(&std::path::Path::new(&dir).join(name), &frame);
+            }
+            let (cw, ch) = frame.cell;
+            let d = frame.decor;
+            let pixel = |x: u32, y: u32| {
+                let at = ((y * frame.w + x) * 4) as usize;
+                [0, 1, 2].map(|i| i32::from(frame.rgba[at + i]))
+            };
+            // The probe row: blank cells, so only the lines carry ink.
+            let top = 3 * ch;
+            let kinds = [
+                Underline::Single,
+                Underline::Double,
+                Underline::Curly,
+                Underline::Dotted,
+                Underline::Dashed,
+                Underline::None,
+            ];
+            for (k, kind) in kinds.into_iter().enumerate() {
+                let first = k as u32 * 10;
+                let mut want = vec![0u8; (8 * cw * ch) as usize];
+                for c in 0..8 {
+                    let x0 = (first + c) * cw;
+                    let mut ink = |x: u32, y: u32, cov: u8| {
+                        want[(y * 8 * cw + x - first * cw) as usize] = cov;
+                    };
+                    match kind {
+                        Underline::Curly => {
+                            let cov = curl_coverage(cw, d.curl_h, d.t);
+                            for y in 0..d.curl_h {
+                                for x in 0..cw {
+                                    ink(x0 + x, d.curl_top + y, cov[(y * cw + x) as usize]);
+                                }
+                            }
+                        }
+                        Underline::None => {
+                            for y in d.strike..d.strike + d.t {
+                                for x in 0..cw {
+                                    ink(x0 + x, y, 255);
+                                }
+                            }
+                        }
+                        _ => {
+                            for [rx, ry, rw, rh] in underline_rects(kind, x0, cw, &d) {
+                                for y in ry..ry + rh {
+                                    for x in rx..rx + rw {
+                                        ink(x0 + x, y, 255);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                for y in 0..ch {
+                    for x in 0..8 * cw {
+                        let cov = i32::from(want[(y * 8 * cw + x) as usize]);
+                        let got = pixel(first * cw + x, top + y);
+                        for i in 0..3 {
+                            let expect = NORD_BG[i] + (MAGENTA[i] - NORD_BG[i]) * cov / 255;
+                            assert!(
+                                (got[i] - expect).abs() <= 3,
+                                "{kind:?} at {scale}x, x {x} y {y}: got {got:?}, want {expect} in channel {i}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 }
