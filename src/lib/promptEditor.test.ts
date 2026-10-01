@@ -20,6 +20,7 @@ import {
   promptEdit,
   promptForms,
   promptLineTriggers,
+  promptCodeReaderSet,
   promptPreviewSet,
   promptRender,
   promptRenderMany,
@@ -156,6 +157,10 @@ describe('the prompt editor commands', () => {
     });
     await promptPreviewSet(null);
     expect(sent).toHaveBeenLastCalledWith('prompt_preview_set', { preview: null });
+    await promptCodeReaderSet(true);
+    expect(sent).toHaveBeenLastCalledWith('prompt_code_reader_set', { on: true });
+    await promptCodeReaderSet(false);
+    expect(sent).toHaveBeenLastCalledWith('prompt_code_reader_set', { on: false });
     const requests = [{ template: '%hp' }, { template: '%mana', values: 'sample' as const }];
     await promptRenderMany(requests);
     expect(sent).toHaveBeenLastCalledWith('prompt_render_many', { requests });

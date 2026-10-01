@@ -813,6 +813,43 @@ async fn the_older_build_reads_your_prompt_from_the_game_replies() {
 // session output also feeds. No task of the session takes it.
 #[allow(clippy::await_holding_lock)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_code_reader_the_card_chose_hears_your_prompt_on_another_host() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    // A local server of the older build, which Vosh does not know as The
+    // Forsaken Lands, and a profile that reads no prompt yet.
+    let h = Harness::new(Options::new(Build::Older)).await;
+    h.set_prompt(no_capture()).await;
+    h.connect().await;
+    h.until_shown("[1020/1020hp 800/800mn 930/930mv]").await;
+
+    // Before the card chooses the code reader, the reply is just text.
+    h.type_line("prompt").await;
+    h.until_shown(&format!("Current prompt: {PROMPT}")).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(h.events("session://game-prompt-seen").is_empty());
+
+    // More > Use Forsaken Lands prompt codes… in the card, then prompt in
+    // the game: the reply fills the card's fields (P2).
+    crate::prompt_commands::prompt_code_reader_set(h.app.state(), true)
+        .await
+        .expect("the card chose the code reader");
+    h.type_line("prompt").await;
+    h.until("the reply to prompt", |h| {
+        !h.events("session://game-prompt-seen").is_empty()
+    })
+    .await;
+    assert_eq!(
+        h.events("session://game-prompt-seen"),
+        [serde_json::json!({"kind": "prompt", "text": PROMPT, "applied": false})]
+    );
+    assert!(h.capture().await.is_none(), "nothing saves before you do");
+    h.finish(grid).await;
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_log_lookup_finds_only_the_prompt_of_the_profiles_own_character() {
     let grid = crate::term_grid::lock_shared_grid_for_test();
     let h = Harness::new(Options::new(Build::Older)).await;

@@ -972,6 +972,14 @@ export async function promptPreviewSet(preview: PromptPreview | null): Promise<v
   await invoke('prompt_preview_set', { preview });
 }
 
+/** The open card chose Aabahran's code reader on a host Vosh does not
+ *  know (More > Use Forsaken Lands prompt codes…), or lets it go. While
+ *  it holds, the Forsaken Lands rules hold, so the game's reply to prompt
+ *  fills the card's fields on an older build (D17). */
+export async function promptCodeReaderSet(on: boolean): Promise<void> {
+  await invoke('prompt_code_reader_set', { on });
+}
+
 export type PromptFormatName =
   | 'value'
   | 'cur_max'

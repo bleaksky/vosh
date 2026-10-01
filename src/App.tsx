@@ -47,6 +47,7 @@ import {
   terminalLocalWrite,
   promptConfigGet,
   promptConfigSet,
+  promptCodeReaderSet,
   promptPreviewSet,
   promptStateGet,
   subscribePromptCardOpen,
@@ -405,6 +406,10 @@ function App() {
   useEffect(() => {
     promptPreviewSet(null).catch((e: unknown) =>
       console.error('[main] clearing the prompt preview failed', e),
+    );
+    // And the code reader the card chose on another host.
+    promptCodeReaderSet(false).catch((e: unknown) =>
+      console.error('[main] clearing the code reader failed', e),
     );
   }, []);
 
