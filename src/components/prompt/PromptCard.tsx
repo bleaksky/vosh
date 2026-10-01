@@ -680,7 +680,12 @@ export function PromptCard({
     setStep(openingStep({ capture: next.capture, forsaken, gameSent }));
   };
 
+  // The picker's search takes focus when you reach Insert value… from
+  // the keyboard, so you type at once. A click leaves it at rest.
+  const [pickerKeys, setPickerKeys] = useState(false);
   const openPicker = (from: 'design' | 'text') => {
+    const opener = document.activeElement;
+    setPickerKeys(opener instanceof HTMLElement && opener.matches(':focus-visible'));
     setPickerFor(from);
     setView('picker');
   };
@@ -931,6 +936,7 @@ export function PromptCard({
               refresh={refresh}
               onInsert={insertValue}
               onInsertLayout={insertLayout}
+              focusSearch={pickerKeys}
             />
           );
         } else if (view === 'text') {
