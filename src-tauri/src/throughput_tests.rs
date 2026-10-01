@@ -23,8 +23,12 @@
 //! The numbers alone guard nothing, so the test also holds the session
 //! to what it must deliver under that load. The log keeps every row of
 //! every round in order, and the grid keeps every round its history
-//! holds, each one the same as the others and the last one last.
+//! holds, each one the same as the others and the last one last. The
+//! grid shows each prompt drawn in your design and never the game's
+//! own, so a session that stops drawing fails here and never reads as
+//! a faster run.
 
+use std::collections::HashSet;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -52,6 +56,10 @@ const ROUND: [&str; 3] = ["quiet", "fight-tank", "lament-new"];
 
 /// How long one session may take before the test gives up on it.
 const LIMIT: Duration = Duration::from_secs(600);
+
+/// How the game's own prompt row ends. PROMPT prints as
+/// `[1020/1020hp 800/800mn 930/930mv]`.
+const RAW_PROMPT_END: &str = "mv]";
 
 /// A synthetic socket read from fixtures/prompt/aabahran/wire.
 fn wire(name: &str) -> Vec<u8> {
@@ -270,8 +278,9 @@ fn rounds(rows: &[String], what: &str) -> Vec<Vec<String>> {
         .collect()
 }
 
-/// Every round in `rows` reads the same as the first.
-fn same_rounds(rows: &[String], what: &str) -> usize {
+/// Every round in `rows` reads the same as the first. Returns the
+/// rounds.
+fn same_rounds(rows: &[String], what: &str) -> Vec<Vec<String>> {
     let rounds = rounds(rows, what);
     let first = rounds
         .first()
@@ -286,7 +295,32 @@ fn same_rounds(rows: &[String], what: &str) -> usize {
             "a round in the {what} differs from the first, {at} rounds on"
         );
     }
-    rounds.len()
+    rounds
+}
+
+/// The grid's `round` shows each prompt drawn in your design. The game's
+/// own prompt row never reaches the grid, and the grid shows rows the
+/// log's `logged` round lacks, since the log keeps what the game wrote
+/// and not what Vosh drew. Nothing here reads the design itself, so a
+/// new default design passes too.
+fn drawn(round: &[String], logged: &[String]) {
+    assert!(
+        PROMPT.trim_end_matches("%c").ends_with(RAW_PROMPT_END),
+        "PROMPT no longer ends in {RAW_PROMPT_END}"
+    );
+    let raw: Vec<&String> = round
+        .iter()
+        .filter(|row| row.ends_with(RAW_PROMPT_END))
+        .collect();
+    assert!(
+        raw.is_empty(),
+        "the game's own prompt reached the grid: {raw:#?}"
+    );
+    let written: HashSet<&str> = logged.iter().map(|row| row.trim_end()).collect();
+    assert!(
+        round.iter().any(|row| !written.contains(row.as_str())),
+        "the grid shows nothing the design drew: {round:#?}"
+    );
 }
 
 #[allow(clippy::cast_precision_loss)]
@@ -305,9 +339,11 @@ async fn p2_a_captured_session_reaches_the_grid() {
         let r = play(session.clone()).await;
         // The whole log, every round.
         let logged = same_rounds(&r.log, "log");
-        assert_eq!(logged, CYCLES - 1, "the log holds every round");
-        // The grid's history holds the newest rounds.
+        assert_eq!(logged.len(), CYCLES - 1, "the log holds every round");
+        // The grid's history holds the newest rounds, each with its
+        // prompts drawn.
         let shown = same_rounds(&r.grid, "grid");
+        drawn(&shown[0], &logged[0]);
         assert_eq!(
             r.grid.iter().rev().find_map(|row| pulse_of(row)),
             Some(CYCLES),
@@ -315,7 +351,7 @@ async fn p2_a_captured_session_reaches_the_grid() {
         );
         println!(
             "P2 run {run}: {} bytes, {CYCLES} rounds, to the grid {:.1} ms ({:.2} MB/s, {:.0} log rows/s), \
-             closed {:.1} ms, {} outputs, {} frames, {} log rows, {shown} rounds on the grid",
+             closed {:.1} ms, {} outputs, {} frames, {} log rows, {} rounds on the grid",
             session.len(),
             r.to_grid.as_secs_f64() * 1e3,
             per_second(session.len(), r.to_grid) / 1e6,
@@ -324,6 +360,7 @@ async fn p2_a_captured_session_reaches_the_grid() {
             r.outputs,
             r.frames,
             r.log.len(),
+            shown.len(),
         );
         to_grid.push(r.to_grid);
     }
