@@ -254,7 +254,10 @@ export function PromptMarks({
   // takes it whole, so the terminal neither selects nor takes focus.
   const pointRef = useRef(onPoint);
   pointRef.current = onPoint;
+  const cardRef = useRef(card);
+  cardRef.current = card;
   useEffect(() => {
+    const card = () => cardRef.current();
     const swallow = (e: Event) => {
       e.stopPropagation();
       e.preventDefault();
@@ -262,7 +265,12 @@ export function PromptMarks({
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       const target = e.target instanceof Element ? e.target : null;
-      if (target && (card()?.contains(target) || target.closest('.pc-menu, [role="dialog"]'))) {
+      // The card, its menus and dialogs, and a line break mark handle
+      // their own presses.
+      if (
+        target &&
+        (card()?.contains(target) || target.closest('.pc-menu, [role="dialog"], .pc-mark-return'))
+      ) {
         return;
       }
       const hit = measured.current?.hit?.(e.clientX, e.clientY) ?? null;
@@ -276,6 +284,8 @@ export function PromptMarks({
     // xterm starts a selection on mousedown, which a page may still send
     // after a pointerdown the card took.
     const onMouseDown = (e: MouseEvent) => {
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest('.pc-mark-return')) return;
       if (e.button === 0 && measured.current?.hit?.(e.clientX, e.clientY)) swallow(e);
     };
     window.addEventListener('pointerdown', onDown, true);
@@ -284,7 +294,7 @@ export function PromptMarks({
       window.removeEventListener('pointerdown', onDown, true);
       window.removeEventListener('mousedown', onMouseDown, true);
     };
-  }, [card]);
+  }, []);
 
   if (off) return null;
   return (
