@@ -8,7 +8,7 @@
 //! folder.
 
 use std::fmt::Write as _;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
@@ -40,8 +40,8 @@ struct Harness {
     /// What the game read from the client, as it came.
     from_client: mpsc::UnboundedReceiver<Vec<u8>>,
     heard: Vec<u8>,
-    /// The game's side of the connection.
-    to_client: OwnedWriteHalf,
+    /// The game's side of the connection, which a flood can take.
+    to_client: Arc<tokio::sync::Mutex<OwnedWriteHalf>>,
     _dir: tempfile::TempDir,
 }
 
@@ -118,15 +118,16 @@ impl Harness {
             frames,
             from_client,
             heard: Vec::new(),
-            to_client,
+            to_client: Arc::new(tokio::sync::Mutex::new(to_client)),
             _dir: dir,
         }
     }
 
     /// The game writes `bytes` in one write.
     async fn game_writes(&mut self, bytes: &[u8]) {
-        self.to_client.write_all(bytes).await.expect("the write");
-        self.to_client.flush().await.expect("the flush");
+        let mut to_client = self.to_client.lock().await;
+        to_client.write_all(bytes).await.expect("the write");
+        to_client.flush().await.expect("the flush");
     }
 
     /// Whether the game hears `want` within `wait`.
@@ -502,4 +503,42 @@ async fn an_answer_shows_in_one_frame_however_the_reads_cut_it() {
     assert!(hall_rows[0].starts_with("  Line 000"));
     assert!(hall_rows[99].starts_with("  Line 099"));
     h.disconnect().await;
+}
+
+/// Your line's row goes in the log as the line leaves, even while the
+/// game never pauses. The game floods GMCP, which draws nothing, so the
+/// socket never runs dry and no frame is owed to bring the rows along.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn your_line_reaches_the_log_while_the_game_never_pauses() {
+    let _grid = crate::term_grid::lock_shared_grid_for_test();
+    crate::term_grid::blank_shared_grid_for_test(100, 40);
+    let h = Harness::new().await;
+
+    let mut packet = vec![IAC, 250, 201];
+    packet.extend_from_slice(br#"Test.Flood {"n":1}"#);
+    packet.extend_from_slice(&[IAC, 240]);
+    let chunk = packet.repeat(4096);
+    let stop = Arc::new(AtomicBool::new(false));
+    let flood = {
+        let (to_client, stop) = (h.to_client.clone(), stop.clone());
+        tokio::spawn(async move {
+            let mut to_client = to_client.lock().await;
+            while !stop.load(Ordering::SeqCst) {
+                if to_client.write_all(&chunk).await.is_err() {
+                    break;
+                }
+            }
+        })
+    };
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    h.type_line("look").await;
+    let rows = h.log_rows(1).await;
+    let flooding = !flood.is_finished();
+    stop.store(true, Ordering::SeqCst);
+    h.disconnect().await;
+    let _ = flood.await;
+    assert!(flooding, "the flood ended before the row landed");
+    assert_eq!(rows, vec!["> look".to_string()]);
 }

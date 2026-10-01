@@ -322,8 +322,9 @@ impl ReadBatch {
     }
 }
 
-/// How long a burst of reads can go on with no frame. A game that never
-/// pauses still shows its output this often.
+/// How long a burst of reads can go on with no frame, and how long a log
+/// row waits in it. A game that never pauses still shows its output and
+/// gets its rows written this often, while the log is free.
 const FRAME_BUDGET: Duration = Duration::from_millis(16);
 
 /// The test event a frame request sends, so a test can count frames.
@@ -345,7 +346,9 @@ fn request_frame<R: tauri::Runtime>(app: &AppHandle<R>) {
 /// of the lines you sent between them, in the order they passed. An
 /// answer the game's writes cut into reads, such as a prompt whose GA
 /// comes in the next read, shows in one frame, and the log write never
-/// sits between those reads or ahead of the frame.
+/// sits between those reads or ahead of the frame. A burst that never
+/// ends still owes the frame once output waited [`FRAME_BUDGET`] for it,
+/// and the rows once the oldest of them waited as long, drawn or not.
 #[derive(Default)]
 struct Settle {
     /// Output went to the grid since the last frame was asked for.
@@ -354,6 +357,8 @@ struct Settle {
     since: Option<Instant>,
     /// Log rows waiting for the log, oldest first.
     log: Vec<vosh_log::LogEntry>,
+    /// When the oldest row waiting for the log joined the queue.
+    log_since: Option<Instant>,
 }
 
 impl Settle {
@@ -361,6 +366,14 @@ impl Settle {
     fn drew(&mut self) {
         self.frame = true;
         self.since.get_or_insert_with(Instant::now);
+    }
+
+    /// Rows join the queue for the log, behind the rows before them.
+    fn queue_rows(&mut self, rows: impl IntoIterator<Item = vosh_log::LogEntry>) {
+        self.log.extend(rows);
+        if !self.log.is_empty() {
+            self.log_since.get_or_insert_with(Instant::now);
+        }
     }
 
     /// Ask for the frame the output so far owes, if any.
@@ -371,14 +384,43 @@ impl Settle {
         }
     }
 
-    /// Whether the burst went on so long it shows a frame and writes its
-    /// rows now, before the socket runs dry.
-    fn overdue(&self) -> bool {
+    /// Whether the burst went on so long it shows a frame now, before
+    /// the socket runs dry.
+    fn frame_overdue(&self) -> bool {
         self.since.is_some_and(|t| t.elapsed() >= FRAME_BUDGET)
+    }
+
+    /// Whether rows waited so long they go in the log now, before the
+    /// socket runs dry, whether or not anything drew.
+    fn log_overdue(&self) -> bool {
+        self.log_since.is_some_and(|t| t.elapsed() >= FRAME_BUDGET)
+    }
+
+    /// What a game that never pauses is owed before the socket runs dry:
+    /// the frame once output waited [`FRAME_BUDGET`] for it, and the rows
+    /// once the oldest waited as long, even when nothing drew, such as
+    /// the row of a line you sent or reads of GMCP alone. A busy log
+    /// keeps the rows for the next quiet moment, so the loop never waits
+    /// on it here.
+    fn overdue_now<R: tauri::Runtime>(
+        &mut self,
+        app: &AppHandle<R>,
+        logs: &crate::log_state::SharedLogStore,
+        perf: &mut PerfCounters,
+    ) {
+        if self.frame_overdue() {
+            self.frame_now(app);
+        }
+        if self.log_overdue() {
+            if let Ok(mut guard) = logs.try_lock() {
+                self.write_log(guard.as_mut(), perf);
+            }
+        }
     }
 
     /// Write the waiting rows to the log, in one transaction.
     fn write_log(&mut self, store: Option<&mut vosh_log::LogStore>, perf: &mut PerfCounters) {
+        self.log_since = None;
         let rows = std::mem::take(&mut self.log);
         if rows.is_empty() {
             return;
@@ -778,12 +820,15 @@ async fn io_loop<R: tauri::Runtime>(
                         Ok(()) => stream.flush().await.map_err(|e| ("flush failed", e)),
                     };
                     if let Some((sid, at, rows)) = sent {
-                        settle.log.extend(hidden_input::sent_log_entries(sid, at, rows));
+                        settle.queue_rows(hidden_input::sent_log_entries(sid, at, rows));
                     }
                     if let Err((what, e)) = wrote {
                         error!(error = %e, "{what}");
                         break Some(format!("{what}: {e}"));
                     }
+                    // Lines sent back to back never wait on the log, but
+                    // their rows still go in once they waited too long.
+                    settle.overdue_now(&app, &logs, &mut perf);
                 }
                 Some(OutgoingMsg::WindowSize { cols, rows }) => {
                     {
@@ -936,15 +981,9 @@ async fn io_loop<R: tauri::Runtime>(
                         late_until =
                             late_repaint_after(&p, late_until, gmcp, prompt, wrote, Instant::now());
                     }
-                    // A game that never pauses still shows a frame and
-                    // gets its rows written every FRAME_BUDGET. A busy
-                    // log keeps them for the next quiet moment instead.
-                    if settle.overdue() {
-                        settle.frame_now(&app);
-                        if let Ok(mut guard) = logs.try_lock() {
-                            settle.write_log(guard.as_mut(), &mut perf);
-                        }
-                    }
+                    // A game that never pauses still gets its frame and
+                    // its rows every FRAME_BUDGET.
+                    settle.overdue_now(&app, &logs, &mut perf);
                 }
                 Err(e) => {
                     error!(error = %e, "read failed");
@@ -2704,7 +2743,7 @@ async fn finish_read<R: tauri::Runtime>(
                 as u64;
         *seen = emit_session_output(app, &out, settle);
     }
-    settle.log.extend(log);
+    settle.queue_rows(log);
     if let Some(character) = character {
         log_session.name(logs, &character).await;
     }
@@ -5872,14 +5911,39 @@ mod pointer_tests;
 mod settle_tests {
     use super::{PerfCounters, Settle, FRAME_BUDGET};
 
+    fn row(session_id: i64, text: &str) -> vosh_log::LogEntry {
+        vosh_log::LogEntry {
+            session_id,
+            ts_ms: 0,
+            text: text.to_string(),
+            raw: None,
+        }
+    }
+
     #[test]
     fn a_burst_that_never_pauses_owes_its_frame_once_the_budget_runs_out() {
         let mut settle = Settle::default();
-        assert!(!settle.overdue(), "nothing drew yet");
+        assert!(!settle.frame_overdue(), "nothing drew yet");
         settle.drew();
-        assert!(!settle.overdue());
+        assert!(!settle.frame_overdue());
         std::thread::sleep(FRAME_BUDGET);
-        assert!(settle.overdue());
+        assert!(settle.frame_overdue());
+    }
+
+    #[test]
+    fn rows_with_nothing_drawn_come_due_once_the_budget_runs_out() {
+        let mut settle = Settle::default();
+        settle.queue_rows(Vec::new());
+        assert!(!settle.log_overdue(), "no rows wait yet");
+        settle.queue_rows([row(1, "> east")]);
+        assert!(!settle.log_overdue());
+        std::thread::sleep(FRAME_BUDGET);
+        assert!(settle.log_overdue(), "the row waited out the budget");
+        assert!(!settle.frame_overdue(), "nothing drew");
+        settle.write_log(None, &mut PerfCounters::default());
+        assert!(!settle.log_overdue(), "the clock stops with the write");
+        settle.queue_rows([row(1, "> west")]);
+        assert!(!settle.log_overdue(), "a new row starts a new clock");
     }
 
     #[test]
@@ -5887,14 +5951,8 @@ mod settle_tests {
         let mut store = vosh_log::LogStore::in_memory().expect("a log");
         let id = store.start_session("h", 1, 0).expect("a session");
         let mut settle = Settle::default();
-        for text in ["a room", "> east", "the next room"] {
-            settle.log.push(vosh_log::LogEntry {
-                session_id: id,
-                ts_ms: 0,
-                text: text.to_string(),
-                raw: None,
-            });
-        }
+        settle.queue_rows([row(id, "a room"), row(id, "> east")]);
+        settle.queue_rows([row(id, "the next room")]);
         settle.write_log(Some(&mut store), &mut PerfCounters::default());
         assert!(settle.log.is_empty());
         settle.write_log(Some(&mut store), &mut PerfCounters::default());
