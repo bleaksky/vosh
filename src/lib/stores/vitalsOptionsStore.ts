@@ -10,8 +10,8 @@ import {
 import { createStore } from './store';
 
 // The active profile's vitals options for the panel footer and the
-// status line: Values, Meter, and Warn before you run low from
-// Settings, Layout, Vitals. Seeded from ui_get_config, kept live by
+// status line: Values, Meter, Warn before you run low, and Hide vitals
+// while your prompt is pinned from Settings, Layout, Vitals. Seeded from ui_get_config, kept live by
 // vosh://vitals-options-changed (a save from Settings, the broadcast
 // after a profile switch), and refetched on vosh://profile-switched in
 // case the switch lands without one. Density keeps its own store.
@@ -30,7 +30,8 @@ function put(next: VitalsOptions): void {
   if (
     prev.values === next.values &&
     prev.meter === next.meter &&
-    prev.warn_thirds === next.warn_thirds
+    prev.warn_thirds === next.warn_thirds &&
+    prev.hide_when_pinned === next.hide_when_pinned
   ) {
     return;
   }

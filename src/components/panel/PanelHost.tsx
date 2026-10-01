@@ -8,6 +8,8 @@ import {
   type RefObject,
 } from 'react';
 import { PANE_TYPES, setWeights, type PaneType } from '../../lib/paneLayout';
+import { useVitalsOptions } from '../../lib/stores/vitalsOptionsStore';
+import { panelShowsVitals } from '../../lib/vitalsView';
 import { AffectsPane } from './AffectsPane';
 import { ChatPane } from './ChatPane';
 import { GroupPane } from './GroupPane';
@@ -21,7 +23,9 @@ import { usePaneMins } from './usePaneMins';
 import { VitalsFooter } from './VitalsFooter';
 
 // The right-hand panel (SPEC 9): the active profile's pane tree from
-// the title band down, then the vitals pinned at the bottom. The lines
+// the title band down, then the vitals pinned at the bottom. While your
+// prompt is pinned above the command line and Hide vitals while your
+// prompt is pinned is on, the vitals go and the panes take their room. The lines
 // between panes are handles you drag to share the space. The shell
 // owns the panel's column, its left edge drag, and its label.
 //
@@ -50,8 +54,9 @@ const PANES: Record<PaneType, () => React.ReactNode> = {
   imm: () => <ImmPane />,
 };
 
-export function PanelHost() {
+export function PanelHost({ promptPinned = false }: { promptPinned?: boolean }) {
   const layout = usePanelLayout();
+  const { hide_when_pinned: hideWhenPinned } = useVitalsOptions();
   const areaRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
@@ -112,7 +117,7 @@ export function PanelHost() {
           </p>
         )}
       </div>
-      <VitalsFooter />
+      {panelShowsVitals(promptPinned, hideWhenPinned) && <VitalsFooter />}
     </div>
   );
 }

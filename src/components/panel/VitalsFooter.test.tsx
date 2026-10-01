@@ -35,7 +35,12 @@ const GUARD: CombatOpponent = {
   tank: null,
 };
 
-const DEFAULTS: VitalsOptions = { values: 'current-max', meter: 'line', warn_thirds: false };
+const DEFAULTS: VitalsOptions = {
+  values: 'current-max',
+  meter: 'line',
+  warn_thirds: false,
+  hide_when_pinned: true,
+};
 
 function draw(
   options: Partial<VitalsOptions> = {},

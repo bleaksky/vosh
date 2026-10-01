@@ -3,6 +3,7 @@ import {
   formatVital,
   hiddenVital,
   meterFill,
+  panelShowsVitals,
   targetHealthPercent,
   thirdsTone,
   vitalsFooterHeight,
@@ -180,5 +181,14 @@ describe('targetHealthPercent', () => {
   it('shows nothing while the game withholds the opponent health', () => {
     expect(targetHealthPercent('Blackwatch Guard', { ...guard, hidden: true })).toBeNull();
     expect(targetHealthPercent('Blackwatch Guard', { ...guard, hidden: false })).toBe(38);
+  });
+});
+
+describe('panelShowsVitals', () => {
+  it('drops the footer only while your prompt is pinned and the switch is on', () => {
+    expect(panelShowsVitals(true, true)).toBe(false);
+    expect(panelShowsVitals(true, false)).toBe(true);
+    expect(panelShowsVitals(false, true)).toBe(true);
+    expect(panelShowsVitals(false, false)).toBe(true);
   });
 });

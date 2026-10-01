@@ -340,6 +340,12 @@ pub(crate) struct UiConfig {
     /// default, it stays quiet until it drops under 20 percent.
     #[serde(default)]
     pub vitals_warn_thirds: bool,
+    /// Hide the vitals under the panel's panes while your prompt is
+    /// pinned above the command line, and give their room to the panes.
+    /// On by default, since a pinned prompt usually shows them. A file
+    /// written before this switch reads it on.
+    #[serde(default = "default_true")]
+    pub vitals_hide_when_pinned: bool,
     /// Where to render the World.Moons phase glyphs in the status bar.
     /// Values: `"right-edge"` (the historical placement, far right of
     /// the status bar), `"before-time"` (left of the centered tick +
@@ -1240,6 +1246,7 @@ impl Default for UiConfig {
             vitals_values: default_vitals_values(),
             vitals_meter: default_vitals_meter(),
             vitals_warn_thirds: false,
+            vitals_hide_when_pinned: true,
             moons_position: default_moons_position(),
             chip_style: default_chip_style(),
             tick_count: default_tick_count(),

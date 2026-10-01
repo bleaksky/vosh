@@ -31,6 +31,26 @@ describe('the help on values the game hides', () => {
   });
 });
 
+describe('the help on the vitals', () => {
+  it('says the vitals leave the panel while your prompt is pinned, and how to keep them', () => {
+    const text = body('shape.read-vitals');
+    expect(text).toContain(
+      '- Leave `Hide vitals while your prompt is pinned` on and the panel drops its vitals while `Where your prompt shows` is `Pinned`, so the panes take their room. Turn it off to keep them, or pick another place for your prompt, and they come back at once.',
+    );
+    expect(body('shape.prompt-show')).toContain(
+      'While your prompt is pinned, the panel hides its vitals and gives their room to the panes. Turn off `Hide vitals while your prompt is pinned` under Layout, then Vitals, to keep them.',
+    );
+  });
+
+  it('matches HELP.md word for word', () => {
+    for (const id of ['shape.read-vitals', 'shape.prompt-show']) {
+      const found = HELP_TOPICS.find((t) => t.id === id);
+      if (!found) throw new Error(`no help topic ${id}`);
+      expect(helpMd).toContain(`### ${found.number} ${found.title}\n\n${found.body}\n`);
+    }
+  });
+});
+
 describe('the help on the affects pane', () => {
   const topic = () => {
     const found = HELP_TOPICS.find((t) => t.id === 'shape.group-affects');
@@ -72,7 +92,7 @@ describe('the help on the affects pane', () => {
   it('sends you to Characters for tracked affects everywhere in HELP.md', () => {
     expect(helpMd).not.toMatch(/[Tt]racked affects[^.\n]*`panels` tab/);
     expect(helpMd).toContain(
-      'Tracked affects live in Settings under Characters, then Tracked affects.',
+      'Pick the affects you track in Settings under Characters, then Tracked affects.',
     );
   });
 });

@@ -696,12 +696,14 @@ describe('stores on the event bus', () => {
       values: 'percent',
       meter: 'bar',
       warn_thirds: false,
+      hide_when_pinned: true,
     });
-    fire('vosh://vitals-options-changed', { values: 'current', meter: 'none', warn_thirds: true });
+    const sent = { values: 'current', meter: 'none', warn_thirds: true, hide_when_pinned: false };
+    fire('vosh://vitals-options-changed', sent);
     const heard = s.vitalsOptions.getVitalsOptions();
-    expect(heard).toEqual({ values: 'current', meter: 'none', warn_thirds: true });
+    expect(heard).toEqual(sent);
     // The same options again keep the snapshot, so nothing renders.
-    fire('vosh://vitals-options-changed', { values: 'current', meter: 'none', warn_thirds: true });
+    fire('vosh://vitals-options-changed', { ...sent });
     expect(s.vitalsOptions.getVitalsOptions()).toBe(heard);
     commands.set('ui_get_config', { tracked_affects: [], vitals_warn_thirds: true });
     fire('vosh://profile-switched', 'Erelei');
@@ -710,6 +712,7 @@ describe('stores on the event bus', () => {
       values: 'current-max',
       meter: 'line',
       warn_thirds: true,
+      hide_when_pinned: true,
     });
   });
 });

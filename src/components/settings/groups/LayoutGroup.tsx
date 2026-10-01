@@ -306,9 +306,12 @@ const METERS: readonly SegmentedOption<VitalsMeter>[] = [
 
 /** The vitals under the panel's panes (VitalsOptions.dc.html). Each
  *  default is the panel you had before these rows, so nothing changes
- *  until you pick something. The main window redraws as you click, so
- *  the card carries no preview. Values and the warning also shape the
- *  status line while the panel is hidden. Exported for its test. */
+ *  until you pick something, except the last switch. It starts on and
+ *  drops the vitals while your prompt is pinned above the command line,
+ *  which usually shows them, and you can turn it off. The main window
+ *  redraws as you click, so the card carries no preview. Values and the
+ *  warning also shape the status line while the panel is hidden.
+ *  Exported for its test. */
 export function VitalsSection({
   config,
   update,
@@ -359,6 +362,16 @@ export function VitalsSection({
         <Toggle
           checked={config.vitals_warn_thirds}
           onChange={(on) => update({ vitals_warn_thirds: on })}
+        />
+      </Row>
+      <Row
+        label="Hide vitals while your prompt is pinned"
+        description="While your prompt is pinned, the panes take their room. Turn it off if your prompt leaves your vitals out."
+        anchor="hide-pinned"
+      >
+        <Toggle
+          checked={config.vitals_hide_when_pinned}
+          onChange={(on) => update({ vitals_hide_when_pinned: on })}
         />
       </Row>
     </Section>

@@ -229,6 +229,7 @@ describe('vitals options', () => {
     expect(ui.vitals_values).toBe('current-max');
     expect(ui.vitals_meter).toBe('line');
     expect(ui.vitals_warn_thirds).toBe(false);
+    expect(ui.vitals_hide_when_pinned).toBe(true);
   });
 
   it('keeps the saved values', () => {
@@ -238,6 +239,9 @@ describe('vitals options', () => {
     expect(ui.vitals_values).toBe('percent');
     expect(ui.vitals_meter).toBe('none');
     expect(ui.vitals_warn_thirds).toBe(true);
+    expect(normalizeUiConfig(raw({ vitals_hide_when_pinned: false })).vitals_hide_when_pinned).toBe(
+      false,
+    );
     expect(normalizeUiConfig(raw({ vitals_values: 'current' })).vitals_values).toBe('current');
     expect(normalizeUiConfig(raw({ vitals_meter: 'bar' })).vitals_meter).toBe('bar');
   });
@@ -251,18 +255,30 @@ describe('vitals options', () => {
       values: 'current-max',
       meter: 'line',
       warn_thirds: false,
+      hide_when_pinned: true,
     });
-    expect(normalizeVitalsOptions({ values: 'percent', meter: 'bar', warn_thirds: 'yes' })).toEqual(
-      { values: 'percent', meter: 'bar', warn_thirds: false },
-    );
+    expect(
+      normalizeVitalsOptions({
+        values: 'percent',
+        meter: 'bar',
+        warn_thirds: 'yes',
+        hide_when_pinned: 'no',
+      }),
+    ).toEqual({ values: 'percent', meter: 'bar', warn_thirds: false, hide_when_pinned: true });
+    expect(normalizeVitalsOptions({ hide_when_pinned: false }).hide_when_pinned).toBe(false);
   });
 
-  it('saves all three with the rest of the config', async () => {
+  it('saves each one with the rest of the config', async () => {
     const sent = vi.mocked(invoke);
     sent.mockClear();
     await setUiConfig(
       normalizeUiConfig(
-        raw({ vitals_values: 'current', vitals_meter: 'bar', vitals_warn_thirds: true }),
+        raw({
+          vitals_values: 'current',
+          vitals_meter: 'bar',
+          vitals_warn_thirds: true,
+          vitals_hide_when_pinned: false,
+        }),
       ),
     );
     const [command, args] = sent.mock.calls[0] as [string, { config: Record<string, unknown> }];
@@ -271,6 +287,7 @@ describe('vitals options', () => {
       vitals_values: 'current',
       vitals_meter: 'bar',
       vitals_warn_thirds: true,
+      vitals_hide_when_pinned: false,
     });
   });
 
@@ -284,6 +301,7 @@ describe('vitals options', () => {
       values: 'current-max',
       meter: 'none',
       warn_thirds: false,
+      hide_when_pinned: true,
     });
     sent.mockClear();
     await broadcastUiConfigChanges({ ...base, vitals_meter: 'none' });
@@ -293,6 +311,20 @@ describe('vitals options', () => {
       values: 'current-max',
       meter: 'none',
       warn_thirds: true,
+      hide_when_pinned: true,
+    });
+    sent.mockClear();
+    await broadcastUiConfigChanges({
+      ...base,
+      vitals_meter: 'none',
+      vitals_warn_thirds: true,
+      vitals_hide_when_pinned: false,
+    });
+    expect(sent).toHaveBeenCalledWith('vosh://vitals-options-changed', {
+      values: 'current-max',
+      meter: 'none',
+      warn_thirds: true,
+      hide_when_pinned: false,
     });
   });
 });

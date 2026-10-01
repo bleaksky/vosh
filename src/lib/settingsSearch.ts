@@ -201,6 +201,13 @@ export const SETTINGS_ROWS: readonly SettingsRowEntry[] = [
     target: at('layout', 'vitals', 'warn-low'),
   },
   {
+    label: 'Hide vitals while your prompt is pinned',
+    description:
+      'While your prompt is pinned, the panes take their room. Turn it off if your prompt leaves your vitals out.',
+    keywords: 'vitals hide pinned prompt band panel footer health mana moves',
+    target: at('layout', 'vitals', 'hide-pinned'),
+  },
+  {
     label: 'Divider color',
     keywords: 'split terminal scrollback divider line',
     target: at('layout', 'split', 'divider-color'),
