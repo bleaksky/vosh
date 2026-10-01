@@ -1995,18 +1995,24 @@ async fn lua_you_type_starts_timers_runs_input_and_sets_prompt_values() {
         .await;
     h.until_shown("timer fired").await;
 
+    // A timer cancelled in the chunk that starts it never fires, and
+    // nor does one a later line cancels. The later timer is due after
+    // both would have been.
     h.type_line(
-        "#lua slow = mud.timer(0.5, function() mud.echo('cancelled' .. ' timer fired') end)",
+        "#lua soon = mud.timer(0, function() mud.echo('same chunk' .. ' timer fired') end) \
+         mud.cancel_timer(soon)",
     )
     .await;
+    h.type_line("#lua slow = mud.timer(2, function() mud.echo('cancelled' .. ' timer fired') end)")
+        .await;
     h.type_line("#lua mud.cancel_timer(slow)").await;
-    h.type_line("#lua mud.timer(1, function() mud.echo('later' .. ' timer fired') end)")
+    h.type_line("#lua mud.timer(2.5, function() mud.echo('later' .. ' timer fired') end)")
         .await;
     h.until_shown("later timer fired").await;
     assert!(
-        !h.screen()
-            .iter()
-            .any(|row| row.contains("cancelled timer fired")),
+        !h.screen().iter().any(|row| {
+            row.contains("same chunk timer fired") || row.contains("cancelled timer fired")
+        }),
         "{:#?}",
         h.screen()
     );
