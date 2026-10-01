@@ -107,6 +107,8 @@ mod script_state;
 mod session;
 #[cfg(native_surface)]
 mod term_grid;
+#[cfg(all(test, native_surface))]
+mod throughput_tests;
 mod tick;
 mod tintin_import;
 #[cfg(test)]
