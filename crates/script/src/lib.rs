@@ -9,7 +9,7 @@ mod actions;
 mod api;
 mod state;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use mlua::{Function, Lua, Value};
 use regex::Regex;
@@ -72,8 +72,9 @@ pub struct ScriptEngine {
     gmcp_subs: HashMap<String, Vec<i64>>,
     /// Map script source name to the loaded chunk for #script reload.
     loaded_scripts: HashMap<String, String>,
-    /// GMCP callback ids each loaded script subscribed on its last run.
-    script_gmcp: HashMap<String, Vec<i64>>,
+    /// GMCP subscriptions each loaded script owns, as package and
+    /// callback id, so a later run can replace them.
+    script_gmcp: HashMap<String, Vec<(String, i64)>>,
 }
 
 impl std::fmt::Debug for ScriptEngine {
@@ -198,8 +199,9 @@ impl ScriptEngine {
     }
 
     /// Re-execute every loaded script. A trigger the script sets again
-    /// replaces the one of that name, and the GMCP subscriptions it makes
-    /// replace the ones it made last time. Other state, like a timer the
+    /// replaces the one of that name. A GMCP package the script subscribes
+    /// to again drops the handlers it made for that package before, and a
+    /// package it leaves alone keeps them. Other state, like a timer the
     /// script schedules, is not cleared, so scripts that want clean state
     /// manage it themselves.
     pub fn reload_scripts(&mut self) -> Result<ScriptOutcome, ScriptError> {
@@ -217,9 +219,12 @@ impl ScriptEngine {
     }
 
     /// Run a loaded script's code. `mud.on_gmcp` has no name to replace a
-    /// subscription by, so a run that succeeds drops the subscriptions the
-    /// script made on its previous run. Without that each reload added one
-    /// more handler. A run that fails keeps the old ones and adds none.
+    /// subscription by, so a run that succeeds and subscribes to a package
+    /// drops the handlers the script made for that package on earlier
+    /// runs. Without that each reload added one more handler. A package the
+    /// run does not subscribe to keeps its handlers, so a script that sets
+    /// a global to subscribe only once keeps the one it has. A run that
+    /// fails keeps the old handlers and adds none.
     fn run_script(&mut self, name: &str, code: &str) -> Result<ScriptOutcome, ScriptError> {
         // Only this run's actions sit past `start`. An earlier entry that
         // failed can leave its own actions in front of them.
@@ -229,29 +234,41 @@ impl ScriptEngine {
             self.discard_gmcp_subscriptions_since(start);
             return Err(e.into());
         }
-        let made: Vec<i64> = match self.state.cell.lock() {
+        let made: Vec<(String, i64)> = match self.state.cell.lock() {
             Ok(s) => s
                 .pending
                 .get(start..)
                 .unwrap_or_default()
                 .iter()
                 .filter_map(|action| match action {
-                    Action::SubscribeGmcp { callback_id, .. } => Some(*callback_id),
+                    Action::SubscribeGmcp {
+                        package,
+                        callback_id,
+                    } => Some((package.clone(), *callback_id)),
                     _ => None,
                 })
                 .collect(),
             Err(_) => Vec::new(),
         };
         let outcome = self.drain();
-        if let Some(old) = self.script_gmcp.insert(name.to_string(), made) {
-            for ids in self.gmcp_subs.values_mut() {
-                ids.retain(|id| !old.contains(id));
+        let renewed: HashSet<&str> = made.iter().map(|(package, _)| package.as_str()).collect();
+        let (dropped, mut owned): (Vec<_>, Vec<_>) = self
+            .script_gmcp
+            .remove(name)
+            .unwrap_or_default()
+            .into_iter()
+            .partition(|(package, _)| renewed.contains(package.as_str()));
+        for (package, id) in dropped {
+            if let Some(ids) = self.gmcp_subs.get_mut(&package) {
+                ids.retain(|kept| *kept != id);
+                if ids.is_empty() {
+                    self.gmcp_subs.remove(&package);
+                }
             }
-            self.gmcp_subs.retain(|_, ids| !ids.is_empty());
-            for id in old {
-                self.drop_callback_inline(id);
-            }
+            self.drop_callback_inline(id);
         }
+        owned.extend(made);
+        self.script_gmcp.insert(name.to_string(), owned);
         Ok(outcome)
     }
 
@@ -680,6 +697,32 @@ mod tests {
             ]
         );
         assert_eq!(held_callbacks(&e), 3);
+    }
+
+    #[test]
+    fn reload_keeps_a_gmcp_handler_the_script_guards_with_a_global() {
+        // Lua globals survive a reload, so a script can subscribe once.
+        let mut e = ScriptEngine::new().unwrap();
+        e.load_script(
+            "vitals",
+            r#"
+            if not hooked then
+                mud.on_gmcp("Char.Vitals", function() mud.echo("guarded") end)
+                hooked = true
+            end
+            mud.on_gmcp("Room.Info", function() mud.echo("room") end)
+            "#
+            .into(),
+        )
+        .unwrap();
+        e.reload_scripts().unwrap();
+        e.reload_scripts().unwrap();
+        let data = serde_json::json!({});
+        let vitals = e.dispatch_gmcp("Char.Vitals", &data).unwrap().actions;
+        assert_eq!(vitals, vec![Action::Echo("guarded".into())]);
+        let room = e.dispatch_gmcp("Room.Info", &data).unwrap().actions;
+        assert_eq!(room, vec![Action::Echo("room".into())]);
+        assert_eq!(held_callbacks(&e), 2);
     }
 
     #[test]
