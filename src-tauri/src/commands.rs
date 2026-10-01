@@ -3993,8 +3993,8 @@ pub(crate) async fn plugins_list(state: State<'_, SharedState>) -> Result<Vec<Pl
 }
 
 #[tauri::command]
-pub(crate) async fn plugins_set_enabled<R: tauri::Runtime>(
-    app: AppHandle<R>,
+pub(crate) async fn plugins_set_enabled(
+    app: AppHandle,
     state: State<'_, SharedState>,
     name: String,
     enabled: bool,
@@ -4035,8 +4035,8 @@ pub(crate) async fn plugins_set_enabled<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-pub(crate) async fn plugins_reload<R: tauri::Runtime>(
-    app: AppHandle<R>,
+pub(crate) async fn plugins_reload(
+    app: AppHandle,
     state: State<'_, SharedState>,
     name: String,
 ) -> Result<(), String> {
