@@ -23,6 +23,37 @@ export function keptRows(fit: number, lent: number): number {
   return Math.max(1, fit - Math.max(0, lent));
 }
 
+// While your prompt shows pinned the grid also keeps to the bottom of its
+// pane. A pane is rarely a whole number of rows tall, and the pixels left
+// over used to sit under the last row, between your newest line and the
+// band, up to a row of them. That read as the very blank line the band
+// had lost. They go above the first row instead, so the newest line sits
+// the dock's 6 px gap over the band in any window.
+
+/** How far xterm sits down its pane while it keeps to the bottom: the CSS
+ *  px a pane `paneH` tall leaves over under `fitRows` rows of `cellH`, cut
+ *  to whole device pixels at `dpr` so the text stays sharp. Never up. */
+export function spareAbove(paneH: number, fitRows: number, cellH: number, dpr: number): number {
+  const spare = Math.max(0, paneH - fitRows * cellH);
+  return Math.floor(spare * dpr + 1e-6) / dpr;
+}
+
+/** The native grid's bounds while it keeps to the bottom of its pane: the
+ *  pane's `top` and `height` in CSS px, moved down by the device pixels
+ *  its rows of `cellPx` leave over, counted as the grid counts them, so
+ *  it fits the same rows and its bottom stays the pane's. */
+export function nativeBottomBounds(
+  top: number,
+  height: number,
+  dpr: number,
+  cellPx: number,
+): { top: number; height: number; spare: number } {
+  if (cellPx <= 0) return { top, height, spare: 0 };
+  const px = Math.round(height * dpr);
+  const spare = (px - Math.floor(px / cellPx) * cellPx) / dpr;
+  return { top: top + spare, height: height - spare, spare };
+}
+
 /** A window size in cells. */
 export interface WindowSize {
   cols: number;

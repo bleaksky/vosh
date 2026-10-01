@@ -256,8 +256,12 @@ function App() {
   // The rows the pinned band shows now, and the rows past its first it
   // borrows from the bottom of the live terminal while the dock shows.
   // This reads the same store as the dock, so both change in one commit.
+  // While the dock shows, the live terminal also keeps its grid to the
+  // bottom of its pane, so its newest line sits the dock's gap over the
+  // band in any window.
   const dockShown = usePinnedDockRows(promptShow?.zone ?? 1, promptShow?.promptsOff ?? false);
-  const dockLent = promptPinned && cellSize ? lentRows(dockShown) : 0;
+  const dockShows = promptPinned && cellSize !== null;
+  const dockLent = dockShows ? lentRows(dockShown) : 0;
   // Bright bold, which the native grid and the pinned band over it follow.
   const [brightBold, setBrightBold] = useState(false);
   const panelOpen = panelLayout?.panel_open ?? true;
@@ -1790,6 +1794,7 @@ function App() {
             onCellSize={setCellSize}
             lifted={promptLifted}
             lentRows={dockLent}
+            anchorBottom={dockShows}
           />
         </div>
       </div>

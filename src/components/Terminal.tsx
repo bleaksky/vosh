@@ -35,7 +35,13 @@ import {
   type ScreenCell,
 } from '../lib/promptPointer';
 import { BandLayer, LiftTracker, markLifted } from '../lib/promptBands';
-import { GameSizeReport, gameSize, keptRows } from '../lib/terminalRows';
+import {
+  GameSizeReport,
+  gameSize,
+  keptRows,
+  nativeBottomBounds,
+  spareAbove,
+} from '../lib/terminalRows';
 import { ingestRecentNames } from '../lib/recentNames';
 
 /** Session flag set when the native surface never came up, so the page
@@ -232,6 +238,11 @@ interface Props {
   /// the newest line stays right above the band. The game still hears of
   /// the rows the pane holds with them.
   lentRows?: number;
+  /// Your prompt shows pinned: the grid keeps to the bottom of the live
+  /// pane, so the pixels its whole rows leave over sit above its first row
+  /// and the newest line sits the dock's gap over the band. Off, the grid
+  /// keeps to the top, as in the text and Lifted.
+  anchorBottom?: boolean;
 }
 
 // The terminal's palette lives in src/lib/terminalTheme.ts, which the
@@ -270,6 +281,7 @@ export function Terminal({
   onCellSize,
   lifted = false,
   lentRows = 0,
+  anchorBottom = false,
 }: Props) {
   const quietRef = useRef(quiet);
   quietRef.current = quiet;
@@ -283,12 +295,14 @@ export function Terminal({
   onCellSizeRef.current = onCellSize;
   const liftedRef = useRef(lifted);
   liftedRef.current = lifted;
-  // The rows lent to the pinned band, which the layout effect below keeps
-  // and applies before the page paints.
+  // The rows lent to the pinned band, and whether the grid keeps to the
+  // bottom of its pane, which the layout effect below keeps and applies
+  // before the page paints.
   const lentRef = useRef(lentRows);
-  // Applies a new lent count: refits xterm, or reports the native bounds.
-  // Set by the setup effect.
-  const applyLentRef = useRef<(() => void) | null>(null);
+  const anchorRef = useRef(anchorBottom);
+  // Applies a new lent count or anchoring: refits and places xterm, or
+  // reports the native bounds. Set by the setup effect.
+  const relayoutRef = useRef<(() => void) | null>(null);
   // Fits xterm to its pane less the lent rows. Set by the setup effect.
   const fitKeptRef = useRef<(() => void) | null>(null);
   // The band layer, while this pane can draw bands.
@@ -400,12 +414,36 @@ export function Terminal({
       applyLift(term);
     }
 
+    // Where xterm sits in its pane. While it keeps to the bottom, the host
+    // moves down by the pixels its rows leave over, and the sizer clips
+    // what the host then reaches past its bottom, which the band covers.
+    // xterm maps the pointer from its screen's own box, so selections and
+    // links follow. Under the native surface the bounds carry it instead.
+    let placedTop = '0px';
+    const placeGrid = () => {
+      const pane = sizingRef.current;
+      const box = containerRef.current;
+      if (!pane || !box) return;
+      let top = 0;
+      const cell = term.dimensions?.css?.cell?.height;
+      if (anchorRef.current && !quietRef.current && !nativeSurfaceEnabled() && cell) {
+        const dpr = window.devicePixelRatio || 1;
+        const height = pane.getBoundingClientRect().height;
+        top = spareAbove(height, term.rows + lentRef.current, cell, dpr);
+      }
+      const next = `${top}px`;
+      if (next === placedTop) return;
+      placedTop = next;
+      box.style.top = next;
+    };
+
     // Fit xterm to its pane, less the rows the pinned band borrows. The
     // FitAddon only proposes the size, so the lent rows come off here.
     const fitKept = () => {
       const dims = fit.proposeDimensions();
       if (!dims || Number.isNaN(dims.cols) || Number.isNaN(dims.rows)) return;
       term.resize(dims.cols, keptRows(dims.rows, lentRef.current));
+      placeGrid();
     };
     fitKeptRef.current = fitKept;
 
@@ -556,23 +594,35 @@ export function Terminal({
     //
     // The rows the pinned band borrows go along, so the grid gives them
     // up in the same frame as the new bounds, and the game keeps its size.
+    // While the grid keeps to the bottom of the pane under the underlay,
+    // the bounds start lower by the pixels its rows leave over
+    // (`nativeSpare`), and pointer positions count from there. The on top
+    // surface of Windows and Linux keeps to the top, since moving it would
+    // show xterm through the gap.
     const nativeSurfaceOn = !quietRef.current && nativeSurfaceEnabled();
     let lastNativeBounds = '';
+    let nativeSpare = 0;
     const reportNativeBounds = () => {
       if (!nativeSurfaceOn || !sizer) return;
       const r = sizer.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
       const lent = lentRef.current;
-      const key = `${Math.round(r.left)},${Math.round(r.top)},${Math.round(
-        r.width,
-      )},${Math.round(r.height)},${dpr},${lent}`;
+      let { top, height } = r;
+      nativeSpare = 0;
+      if (anchorRef.current && nativeUnderlay()) {
+        const cellPx = Math.round(term.dimensions?.device?.cell?.height ?? 0);
+        const placed = nativeBottomBounds(r.top, r.height, dpr, cellPx);
+        ({ top, height } = placed);
+        nativeSpare = placed.spare;
+      }
+      const key = `${Math.round(r.left)},${top},${Math.round(r.width)},${height},${dpr},${lent}`;
       if (key === lastNativeBounds) return;
       lastNativeBounds = key;
       void invoke('native_surface_set_bounds', {
         x: r.left,
-        y: r.top,
+        y: top,
         width: r.width,
-        height: r.height,
+        height,
         dpr,
         lent,
       }).catch(() => {});
@@ -627,6 +677,9 @@ export function Terminal({
       reportNativeBounds();
       reportCellMetrics();
       reportCellSize();
+      // A pane a fraction of a pixel taller fits the same rows and leaves
+      // a different spare.
+      placeGrid();
       const rect = sizer.getBoundingClientRect();
       const w = Math.floor(rect.width);
       const h = Math.floor(rect.height);
@@ -641,12 +694,14 @@ export function Terminal({
       reportCellSize();
     };
 
-    // The pinned band borrows more or fewer rows. The pane keeps its size,
-    // so nothing above notices: xterm fits again, or the native grid hears
-    // of the new count with its bounds.
-    applyLentRef.current = () => {
+    // The pinned band borrows more or fewer rows, or the grid starts or
+    // stops keeping to the bottom. The pane keeps its size, so nothing
+    // above notices: xterm fits and places itself again, or the native
+    // grid hears of it with its bounds.
+    relayoutRef.current = () => {
       if (nativeSurfaceOn) reportNativeBounds();
       else safeFit();
+      placeGrid();
     };
 
     // Resizable broadcasts `vosh:resize-progress` { size } from
@@ -732,7 +787,7 @@ export function Terminal({
       };
       const toLocal = (clientX: number, clientY: number) => {
         const r = sizer.getBoundingClientRect();
-        return { x: clientX - r.left, y: clientY - r.top };
+        return { x: clientX - r.left, y: clientY - r.top - nativeSpare };
       };
       let dragging = false;
       let last = { clientX: 0, clientY: 0 };
@@ -957,6 +1012,7 @@ export function Terminal({
     term.onResize(({ cols }) => {
       shaper.setCols(cols);
       reportCellSize();
+      placeGrid();
       // Same tail-anchor rationale as in onOutput below: a resize
       // shifts baseY without moving viewportY, which can land the
       // live pane above its tail. Snap on resize so the freeze
@@ -1160,7 +1216,14 @@ export function Terminal({
           // xterm's device cell rounded to whole pixels.
           const device = term.dimensions?.device?.cell;
           if (!sizer || !device?.width || !device?.height) return null;
-          return cellInGrid(clientX, clientY, sizer.getBoundingClientRect(), {
+          const r = sizer.getBoundingClientRect();
+          const grid = {
+            left: r.left,
+            top: r.top + nativeSpare,
+            width: r.width,
+            height: r.height - nativeSpare,
+          };
+          return cellInGrid(clientX, clientY, grid, {
             width: Math.round(device.width) / dpr,
             height: Math.round(device.height) / dpr,
           });
@@ -1264,7 +1327,7 @@ export function Terminal({
       termRef.current = null;
       fitRef.current = null;
       fitKeptRef.current = null;
-      applyLentRef.current = null;
+      relayoutRef.current = null;
       liveTerminalInstances -= 1;
     };
     // Setup runs exactly once. Font is read from props on initial mount;
@@ -1275,12 +1338,14 @@ export function Terminal({
 
   // A new count of rows lent to the pinned band applies before the page
   // paints, in the same commit that grows or shrinks the band, so the
-  // newest line moves with the band's top and never sits under it.
+  // newest line moves with the band's top and never sits under it. So
+  // does the grid starting or stopping keeping to the bottom.
   useLayoutEffect(() => {
-    if (lentRef.current === lentRows) return;
+    if (lentRef.current === lentRows && anchorRef.current === anchorBottom) return;
     lentRef.current = lentRows;
-    applyLentRef.current?.();
-  }, [lentRows]);
+    anchorRef.current = anchorBottom;
+    relayoutRef.current?.();
+  }, [lentRows, anchorBottom]);
 
   // Apply font changes without rebuilding the terminal so scrollback and
   // listeners survive. xterm reflows on the next fit() call.
