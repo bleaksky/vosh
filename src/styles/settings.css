@@ -9,8 +9,11 @@
 
 /* ── Root ──────────────────────────────────────────────────────────── */
 
-.st-app {
-  /* Control fills from SPEC 4. Light themes swap each one below. */
+/* Control fills from SPEC 4. Light themes swap each one below. A
+   surface outside Settings that draws these controls, such as the prompt
+   card in the main window, takes .st-controls for the same fills. */
+.st-app,
+.st-controls {
   --st-fill: rgba(255, 255, 255, 0.06);
   --st-fill-ring: 0 0 0 0 transparent;
   --st-track-off: rgba(255, 255, 255, 0.16);
@@ -19,7 +22,9 @@
   --st-seg-ring: 0 0 0 0 transparent;
   --st-selrow-ring: 0 0 0 0 transparent;
   --st-edge: rgba(255, 255, 255, 0.18);
+}
 
+.st-app {
   position: fixed;
   inset: 0;
   display: grid;
@@ -35,7 +40,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-:root[data-appearance='light'] .st-app {
+:root[data-appearance='light'] .st-app,
+:root[data-appearance='light'] .st-controls {
   --st-fill: #ffffff;
   --st-fill-ring: inset 0 0 0 1px var(--sep);
   --st-track-off: rgba(0, 0, 0, 0.14);

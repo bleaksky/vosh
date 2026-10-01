@@ -129,3 +129,714 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* The prompt card (section 7 of the prompt build spec, boards P1 to P15).
+   A floating card on the SPEC 3 recipe, 560 wide, its left edge 12 px in
+   from the terminal and its bottom 4 px above the row right above your
+   prompt (PromptCard.tsx places it). Header 46, a hairline, the body, a
+   hairline, footer 52. It composes the Settings primitives, so it carries
+   .st-controls for their fills. */
+.pc-card {
+  position: fixed;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  width: 560px;
+  border-radius: var(--r-float);
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  box-sizing: border-box;
+  overflow: hidden;
+  outline: none;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.pc-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 46px;
+  padding: 0 12px 0 16px;
+  box-sizing: border-box;
+}
+
+.pc-title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.pc-saved {
+  min-width: 0;
+  margin-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+.pc-spacer {
+  flex: 1 1 auto;
+}
+
+.pc-head .st-button {
+  margin-right: 4px;
+}
+
+.pc-head .st-icon-button[aria-expanded='true'] {
+  background: var(--ov-hl);
+}
+
+.pc-rule {
+  flex: none;
+  height: 1px;
+  margin: 0 1px;
+  background: var(--divider);
+}
+
+.pc-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  padding: 12px 16px 16px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+/* The start list runs edge to edge in the palette row recipe. */
+.pc-body.is-list {
+  padding: 12px 0 16px;
+}
+
+.pc-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  padding: 0 12px 0 16px;
+  box-sizing: border-box;
+}
+
+.pc-foot.is-end {
+  justify-content: flex-end;
+}
+
+.pc-foot .pc-done {
+  margin-left: 4px;
+}
+
+.pc-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.pc-question {
+  margin: 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
+}
+
+.pc-copy {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary);
+}
+
+.pc-hint {
+  margin: 0;
+  padding: 0 16px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary);
+}
+
+.pc-body:not(.is-list) .pc-hint {
+  padding: 0;
+}
+
+.pc-note {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--tertiary);
+}
+
+/* P2: a label column of 88 and a field of 440, mono for the codes. */
+.pc-field-row {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  margin-top: 8px;
+}
+
+.pc-field-row.is-first {
+  margin-top: 12px;
+}
+
+.pc-field-row label {
+  flex: none;
+  width: 88px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary);
+}
+
+.pc-field-row + .pc-note {
+  margin-left: 88px;
+}
+
+/* The candidate box (A2's recipe): the terminal ground with the hairline
+   ring, radius 8, the prompt as the game sent it from x 10, each value in
+   the selection token, and its name under it. */
+.pc-box {
+  position: relative;
+  width: 528px;
+  margin-top: 12px;
+  border-radius: var(--r-row);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--sep);
+}
+
+/* A line of the box sits where the box puts it, not in the flow. */
+.pc-cells.pc-box-line {
+  position: absolute;
+  left: 10px;
+}
+
+.pc-box-name {
+  position: absolute;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--secondary);
+  white-space: nowrap;
+}
+
+.pc-box-name.is-warn {
+  color: var(--warn);
+}
+
+.pc-cells {
+  position: relative;
+  flex: none;
+  height: 17.5px;
+  font-family: var(--font-mud);
+  font-size: 13px;
+  line-height: 17.5px;
+  font-kerning: none;
+  font-variant-ligatures: none;
+}
+
+.pc-cells-glyph {
+  position: absolute;
+  top: 0;
+  height: 17.5px;
+  overflow: visible;
+  white-space: pre;
+}
+
+.pc-cells-token,
+.pc-cells-warn {
+  position: absolute;
+  top: 0;
+  height: 17.5px;
+}
+
+.pc-cells-token {
+  background: var(--selection);
+}
+
+.pc-cells-warn {
+  border-radius: var(--r-key);
+  box-shadow: 0 0 0 1px var(--warn);
+}
+
+.pc-cells-more {
+  color: var(--tertiary);
+}
+
+/* The match line beside the stepper. A sentence takes a line, so a fight
+   count sits under the match count (P3c). */
+.pc-match {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.pc-match-text {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 24px;
+  margin: 0;
+  padding-top: 4px;
+  box-sizing: border-box;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary);
+}
+
+.pc-match-text p {
+  margin: 0;
+}
+
+.pc-match-check {
+  display: block;
+  flex: none;
+  color: var(--success);
+}
+
+.pc-match-text.is-warn {
+  color: var(--warn);
+}
+
+.pc-warn-dot {
+  display: block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 4px 4px 0;
+  border-radius: 4px;
+  background: var(--warn);
+}
+
+.pc-match-text.is-wrap {
+  width: 400px;
+  min-height: 32px;
+  padding-top: 0;
+}
+
+.pc-stepper {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.pc-match-text.is-wrap + .pc-stepper {
+  margin-top: -4px;
+}
+
+.pc-stepper-count {
+  margin-right: 4px;
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+/* The setting that fixes codes that run together, with Copy. Vosh never
+   sends it. */
+.pc-command {
+  position: relative;
+  width: 528px;
+  height: 40px;
+  margin-top: 8px;
+  border-radius: var(--r-row);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--sep);
+}
+
+.pc-command-text {
+  position: absolute;
+  top: 11.25px;
+  right: 80px;
+  left: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mud);
+  font-size: 13px;
+  line-height: 17.5px;
+  font-variant-ligatures: none;
+  color: var(--text);
+  white-space: pre;
+}
+
+.pc-command .st-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+/* The code legend: two columns of 256, 16 apart, rows 20. */
+.pc-legend {
+  display: grid;
+  grid-template-columns: 256px 256px;
+  column-gap: 16px;
+  margin-top: 12px;
+}
+
+.pc-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 20px;
+  min-width: 0;
+}
+
+.pc-code {
+  display: block;
+  flex: none;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--r-key);
+  background: var(--st-fill);
+  box-sizing: border-box;
+  font-family: var(--font-mud);
+  font-size: 11.5px;
+  line-height: 18px;
+  font-weight: 500;
+  font-variant-ligatures: none;
+  color: var(--secondary);
+  white-space: pre;
+}
+
+/* On paper the fill is white, so the chip takes the hairline ring the
+   Settings fields take there. */
+:root[data-appearance='light'] .pc-code {
+  box-shadow: var(--st-fill-ring);
+}
+
+.pc-code.is-warn,
+:root[data-appearance='light'] .pc-code.is-warn {
+  box-shadow: 0 0 0 1px var(--warn);
+}
+
+.pc-legend-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.pc-legend-tag {
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+.pc-legend-warning {
+  margin-top: 12px;
+}
+
+.pc-legend-warning p {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--warn);
+}
+
+.pc-legend-warning .pc-warn-dot {
+  margin: 3.5px 0 0;
+}
+
+.pc-notes {
+  margin-top: 8px;
+}
+
+.pc-notes.is-after-fix {
+  margin-top: 12px;
+}
+
+.pc-notes .pc-note:first-child {
+  margin-top: 0;
+}
+
+.pc-fix-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary);
+}
+
+/* B2's line: the check and how often the line came. */
+.pc-seen {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary);
+}
+
+/* P15: a menu button under each number, 20 tall, its name 6 px in so it
+   starts under the first digit. */
+.pc-name-button {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 20px;
+  margin: 0;
+  padding: 0 4px 0 6px;
+  border: 0;
+  border-radius: var(--r-key);
+  background: transparent;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--secondary);
+  white-space: nowrap;
+}
+
+.pc-name-button svg {
+  display: block;
+  flex: none;
+  color: var(--tertiary);
+}
+
+.pc-name-button:hover,
+.pc-name-button[aria-expanded='true'] {
+  background: var(--ov-hl);
+  color: var(--text);
+}
+
+.pc-name-button[aria-expanded='true'] svg {
+  color: var(--secondary);
+}
+
+.pc-name-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* The start list (P4): the palette row recipe, a name over its sample in
+   the terminal's face, slots 48, a two line sample 65.5, the check at 10. */
+.pc-starts {
+  margin: 8px 0 0;
+  padding: 0 8px;
+  list-style: none;
+}
+
+.pc-starts > li {
+  padding: 1px 0;
+}
+
+.pc-starts > li.pc-starts-sep {
+  height: 1px;
+  margin: 6px 12px;
+  padding: 0;
+  background: var(--divider);
+}
+
+.pc-start {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  margin: 0;
+  padding: 5px 12px 5.5px 34px;
+  border: 0;
+  border-radius: var(--r-row);
+  outline: none;
+  background: transparent;
+  box-sizing: border-box;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: default;
+}
+
+.pc-start.is-single {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  min-height: 34px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* The checked start is the row the list stands on, as the palette's
+   selected row is (P4). */
+.pc-start:hover,
+.pc-start:focus-visible,
+.pc-start[aria-checked='true'],
+.pc-start[aria-expanded='true'] {
+  background: var(--ov-hl);
+}
+
+.pc-start-check {
+  position: absolute;
+  top: 15px;
+  left: 10px;
+  display: block;
+  color: var(--accent);
+}
+
+.pc-start.is-single .pc-start-check {
+  top: 9px;
+}
+
+.pc-start-name {
+  display: block;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.pc-start-sample {
+  display: flex;
+  align-items: baseline;
+  height: 17.5px;
+}
+
+.pc-start-tag {
+  margin-left: 8px;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--tertiary);
+  white-space: nowrap;
+}
+
+.pc-start-chevron {
+  display: block;
+  margin-left: auto;
+  color: var(--tertiary);
+}
+
+.pc-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 0 16px;
+}
+
+.pc-body:not(.is-list) .pc-actions {
+  margin-top: 12px;
+  padding: 0;
+}
+
+.pc-presets-button {
+  gap: 4px;
+  padding: 0 8px 0 12px;
+}
+
+.pc-presets-button svg {
+  display: block;
+  color: var(--secondary);
+}
+
+/* P11: the danger text button sits with its text on the copy's edge. */
+.pc-forget {
+  margin: 12px 0 0 -12px;
+}
+
+.pc-forget .st-button[aria-expanded='true'] {
+  background: var(--ov-hl);
+}
+
+/* Menus the card opens: More, Presets, From another profile and the name
+   menu, on the ov-menu recipe. */
+.pc-menu {
+  position: fixed;
+  z-index: 1000;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border-radius: var(--r-float);
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
+  box-sizing: border-box;
+  outline: none;
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+.pc-menu > li {
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+
+.pc-menu > li.pc-menu-sep {
+  height: 1px;
+  margin: 6px 12px;
+  background: var(--divider);
+}
+
+.pc-menu .ov-menu-item:hover,
+.pc-menu .ov-menu-item:focus-visible {
+  background: var(--ov-hl);
+}
+
+.pc-menu .pc-starts {
+  margin: 0;
+  padding: 0;
+}
+
+/* The name menu: radio rows with the check column, and a GMCP name in
+   the terminal's face with its package where a menu puts shortcuts. */
+.pc-name-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  padding: 0 12px 0 36px;
+  border: 0;
+  border-radius: var(--r-row);
+  outline: none;
+  background: transparent;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
+  text-align: left;
+  cursor: default;
+}
+
+.pc-name-item:hover,
+.pc-name-item:focus-visible,
+.pc-name-item[aria-checked='true'] {
+  background: var(--ov-hl);
+}
+
+.pc-name-item .pc-start-check {
+  top: 7px;
+  left: 12px;
+}
+
+.pc-name-mono {
+  font-family: var(--font-mud);
+  font-variant-ligatures: none;
+}
+
+.pc-name-package {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--tertiary);
+}
+
+.pc-name-field {
+  padding: 3px 6px;
+}
