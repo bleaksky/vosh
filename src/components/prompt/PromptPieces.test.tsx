@@ -281,6 +281,21 @@ describe('the picker', () => {
       ['Position', 'standing'],
     ]);
     expect(html).toMatch(/aria-selected="true"[^>]*class="pc-picker-row is-on is-current"/);
+    // The search names the highlighted value as the one a reader is on,
+    // since focus stays in the search while the arrows move the list.
+    const search = /<input[^>]*aria-label="Search values"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(search).toContain('role="combobox"');
+    expect(search).toContain('aria-expanded="true"');
+    const active = /aria-activedescendant="([^"]+)"/.exec(search)?.[1];
+    const controls = /aria-controls="([^"]+)"/.exec(search)?.[1];
+    expect(active).toBeTruthy();
+    expect(html).toMatch(
+      new RegExp(`id="${controls}"[^>]*role="listbox"|role="listbox"[^>]*id="${controls}"`),
+    );
+    expect(html).toMatch(
+      new RegExp(`id="${active}"[^>]*aria-selected="true"|aria-selected="true"[^>]*id="${active}"`),
+    );
+    expect(html).toContain(`id="${active}"`);
     expect(html).toContain('class="pc-picker-title">Health<');
     expect(html).toContain('From your prompt, and from the game when your prompt leaves it out.');
   });
