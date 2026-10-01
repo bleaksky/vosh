@@ -201,14 +201,12 @@ impl Harness {
     }
 
     /// Type `line` and press Enter: the webview echoes it, tells the
-    /// session it wrote, and sends it through the input path.
+    /// session it wrote after the newest output it took, and sends it
+    /// through the input path.
     async fn type_line(&self, line: &str) {
-        self.heard
-            .lock()
-            .expect("the events")
-            .push(Heard::Echo(format!("{line}\r\n")));
+        let after = self.echo(line);
         if let Some(handle) = self.state.session.lock().await.as_ref() {
-            let _ = handle.local_write();
+            let _ = handle.local_write(after);
         }
         crate::commands::session_send_input(
             self.app.handle().clone(),
@@ -217,6 +215,25 @@ impl Harness {
         )
         .await
         .expect("the line goes out");
+    }
+
+    /// The webview echoes `line` on the terminal. Returns the newest
+    /// output of the prompt stage the terminal took before it, which the
+    /// echo follows.
+    fn echo(&self, line: &str) -> u64 {
+        let mut heard = self.heard.lock().expect("the events");
+        let after = heard
+            .iter()
+            .filter_map(|h| match h {
+                Heard::Event("session://output", payload) => {
+                    serde_json::from_str::<Json>(payload).ok()?["id"].as_u64()
+                }
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0);
+        heard.push(Heard::Echo(format!("{line}\r\n")));
+        after
     }
 
     fn heard(&self) -> Vec<Heard> {
@@ -531,6 +548,56 @@ async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
     h.until_shown("Pulse 2 of 2.").await;
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(h.events("session://prompt-state").len(), watched);
+    h.finish(grid).await;
+}
+
+// The webview echoes your line and sends it with two calls nothing
+// orders, so the session can hear of the echo only after the game
+// answered. The echo came before the answer on screen, so the prompt
+// that ends the answer stays the open row and an edit still repaints it.
+// The guard keeps other tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_echo_the_session_hears_of_late_leaves_the_prompt_after_it_open() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(codes(PROMPT)).await;
+    h.state.note_active_profile(DEFAULT_PROFILE_NAME);
+    h.connect().await;
+    h.until_last_row("<1020>").await;
+
+    // Your echo lands on the terminal after the login prompt, but your
+    // line reaches the session first, and the game answers.
+    let after = h.echo("look");
+    crate::commands::session_send_input(h.app.handle().clone(), h.app.state(), "look".into())
+        .await
+        .expect("the line goes out");
+    h.until_shown("[Exits: south]").await;
+    h.until_last_row("<1020>").await;
+
+    // Only now does the session hear of the echo.
+    if let Some(handle) = h.state.session.lock().await.as_ref() {
+        let _ = handle.local_write(after);
+    }
+
+    // The prompt that answered your look is still the open row.
+    let config = vosh_prompt::PromptConfig {
+        template: "<%hp>%mana".into(),
+        ..h.prompt_table().await
+    };
+    crate::prompt_commands::prompt_config_set(h.app.handle().clone(), h.app.state(), config)
+        .await
+        .expect("the table saves");
+    h.until_last_row("<1020>800").await;
+    assert_eq!(
+        h.screen()
+            .iter()
+            .filter(|row| row.starts_with("<1020>"))
+            .count(),
+        2,
+        "{:#?}",
+        h.screen()
+    );
     h.finish(grid).await;
 }
 

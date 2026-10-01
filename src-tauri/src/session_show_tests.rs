@@ -192,9 +192,10 @@ impl Session {
         }
     }
 
-    /// The webview wrote to the terminal itself, such as your echo.
+    /// The webview wrote to the terminal itself, such as your echo, after
+    /// everything the session sent.
     pub(super) fn local_write(&mut self) {
-        self.p.prompt.stage.local_write();
+        self.p.prompt.stage.local_write(u64::MAX);
     }
 
     /// The `[prompt]` table changed, so the open row repaints.

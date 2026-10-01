@@ -1690,22 +1690,33 @@ pub(crate) fn native_surface_set_visible(visible: bool) {
 /// write, so it keeps the same content as xterm whichever renderer shows,
 /// and the session closes the open row, since that text now follows it.
 /// The webview calls it for every such write, on either renderer.
+///
+/// `after` is the newest output of the prompt stage xterm took before the
+/// text, while xterm shows. While the native grid shows it is null, and
+/// the grid names its own as it takes the text. The session can hear of
+/// the text after it sent later output, since your echo and your line
+/// reach it by two calls, and that output stays open.
 #[tauri::command]
 pub(crate) async fn terminal_local_write(
     state: State<'_, SharedState>,
     text: String,
+    after: Option<u64>,
 ) -> Result<(), String> {
     #[cfg(native_surface)]
-    {
-        crate::term_grid::feed_local(text.as_bytes());
+    let taken = {
+        let taken = crate::term_grid::feed_local(text.as_bytes());
         crate::native_surface::request_redraw();
-    }
+        taken
+    };
+    // With no grid, text whose renderer named nothing lands after
+    // everything.
     #[cfg(not(native_surface))]
-    {
+    let taken = {
         let _ = &text;
-    }
+        u64::MAX
+    };
     if let Some(handle) = state.session.lock().await.as_ref() {
-        let _ = handle.local_write();
+        let _ = handle.local_write(after.unwrap_or(taken));
     }
     Ok(())
 }
