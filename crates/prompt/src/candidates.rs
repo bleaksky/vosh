@@ -12,6 +12,7 @@ use std::collections::BTreeSet;
 
 use serde::Serialize;
 
+pub use crate::capture::Mark;
 use crate::capture::Recognizer;
 use crate::stage::Candidate;
 
@@ -119,6 +120,25 @@ pub struct CaptureCheck {
     pub false_matches: usize,
     /// What the card says about it.
     pub text: String,
+    /// Each ring entry it reads, newest first, with its values marked,
+    /// for the card's candidate box and stepper.
+    pub reads: Vec<CheckRead>,
+}
+
+/// A ring entry a capture reads, as the card shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CheckRead {
+    pub id: u64,
+    /// As the game sent it, colors included, lines joined by `\r\n`.
+    pub raw: String,
+    /// Lines joined by `\n`.
+    pub plain: String,
+    /// Milliseconds since the epoch.
+    pub at_ms: i64,
+    /// The game printed it in a fight.
+    pub fight: bool,
+    /// What each value printed, in the order the lines print them.
+    pub marks: Vec<Mark>,
 }
 
 impl CaptureCheck {
@@ -129,6 +149,7 @@ impl CaptureCheck {
             fight_matched,
             false_matches,
             text: String::new(),
+            reads: Vec::new(),
         };
         check.text = check.sentence();
         check
@@ -185,6 +206,7 @@ pub fn check<'a, 'b>(
     let mut matched = 0;
     let mut fight = 0;
     let mut shapes: BTreeSet<String> = BTreeSet::new();
+    let mut reads: Vec<CheckRead> = Vec::new();
     for candidate in &ring {
         let lines: Vec<&str> = candidate.plain.split('\n').collect();
         let read = recognizer
@@ -194,9 +216,21 @@ pub fn check<'a, 'b>(
             continue;
         };
         matched += 1;
-        if read.values.get("fight").is_some_and(|v| v == "1") {
+        let in_fight = read.values.get("fight").is_some_and(|v| v == "1");
+        if in_fight {
             fight += 1;
         }
+        reads.insert(
+            0,
+            CheckRead {
+                id: candidate.id,
+                raw: String::from_utf8_lossy(&candidate.raw).into_owned(),
+                plain: candidate.plain.clone(),
+                at_ms: candidate.at_ms,
+                fight: in_fight,
+                marks: recognizer.marks(&lines).unwrap_or_default(),
+            },
+        );
         shapes.extend(lines.iter().map(|l| shape_of(l)));
     }
     let false_matches = scrollback
@@ -204,5 +238,8 @@ pub fn check<'a, 'b>(
         .filter(|line| recognizer.line(line).is_some())
         .filter(|line| !shapes.contains(&shape_of(line)))
         .count();
-    CaptureCheck::new(matched, total, fight, false_matches)
+    CaptureCheck {
+        reads,
+        ..CaptureCheck::new(matched, total, fight, false_matches)
+    }
 }

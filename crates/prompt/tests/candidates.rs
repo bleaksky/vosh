@@ -1,7 +1,7 @@
 //! The candidates ring as the card reads it: groups by shape, and the
 //! capture check with its match line (section 4).
 
-use vosh_prompt::candidates::{check, groups, shape_of, CaptureCheck};
+use vosh_prompt::candidates::{check, groups, shape_of, CaptureCheck, CheckRead, Mark};
 use vosh_prompt::capture::Recognizer;
 use vosh_prompt::config::{AabahranCapture, CaptureConfig, RegexCapture};
 use vosh_prompt::stage::Candidate;
@@ -91,15 +91,17 @@ fn the_check_counts_prompts_fights_and_other_lines() {
     ];
     let result = check(Some(&recognizer), ring.iter(), scrollback.into_iter());
     assert_eq!(
-        result,
-        CaptureCheck {
-            matched: 3,
-            total: 4,
-            fight_matched: 1,
-            false_matches: 0,
-            text: "Matches your last 3 prompts and no other line. 1 of them is from a fight."
-                .to_string(),
-        }
+        (
+            result.matched,
+            result.total,
+            result.fight_matched,
+            result.false_matches
+        ),
+        (3, 4, 1, 0)
+    );
+    assert_eq!(
+        result.text,
+        "Matches your last 3 prompts and no other line. 1 of them is from a fight."
     );
 }
 
@@ -134,6 +136,7 @@ fn the_match_line_says_each_case_in_a_sentence() {
             fight_matched: fight,
             false_matches: other,
             text: String::new(),
+            reads: Vec::new(),
         }
         .sentence()
     };
@@ -177,4 +180,147 @@ fn with_no_capture_nothing_matches() {
         empty.text,
         "Vosh has not seen your prompt since you connected. Send a command and Vosh checks again."
     );
+}
+
+fn mark(line: usize, start: usize, end: usize, field: Option<&str>, label: &str) -> Mark {
+    Mark {
+        line,
+        start,
+        end,
+        field: field.map(str::to_string),
+        label: label.to_string(),
+        warn: false,
+    }
+}
+
+/// The text each mark covers, by line, for reading a test at a glance.
+fn covered(read: &CheckRead) -> Vec<(usize, String, String)> {
+    let lines: Vec<&str> = read.plain.split('\n').collect();
+    read.marks
+        .iter()
+        .map(|m| {
+            let text: String = lines[m.line]
+                .chars()
+                .skip(m.start)
+                .take(m.end - m.start)
+                .collect();
+            (m.line, text, m.label.clone())
+        })
+        .collect()
+}
+
+#[test]
+fn the_check_marks_every_value_each_prompt_it_reads_holds_newest_first() {
+    let ring = ring();
+    let result = check(Some(&james()), ring.iter(), std::iter::empty());
+    let ids: Vec<u64> = result.reads.iter().map(|r| r.id).collect();
+    assert_eq!(ids, [4, 3, 1]);
+    let fight: Vec<bool> = result.reads.iter().map(|r| r.fight).collect();
+    assert_eq!(fight, [true, false, false]);
+    let quiet = &result.reads[1];
+    assert_eq!(quiet.plain, "[980/1020hp 800/800mn 930/930mv]");
+    assert_eq!(quiet.raw, "[980/1020hp 800/800mn 930/930mv]");
+    assert_eq!(quiet.at_ms, 3000);
+    assert_eq!(
+        quiet.marks,
+        [
+            mark(0, 1, 4, Some("hp"), "Health"),
+            mark(0, 5, 9, Some("maxhp"), "Max health"),
+            mark(0, 12, 15, Some("mana"), "Mana"),
+            mark(0, 16, 19, Some("maxmana"), "Max mana"),
+            mark(0, 22, 25, Some("move"), "Moves"),
+            mark(0, 26, 29, Some("maxmove"), "Max moves"),
+        ]
+    );
+    // A fight prompt marks the tank and the bar inside its brackets, then
+    // the vitals line under it.
+    let tank = covered(&result.reads[0]);
+    assert_eq!(
+        tank[..2],
+        [
+            (0, "Tester".to_string(), "Tank".to_string()),
+            (0, "===|===|===|---".to_string(), "Tank health".to_string()),
+        ]
+    );
+    assert_eq!(tank[2], (1, "700".to_string(), "Health".to_string()));
+    assert_eq!(tank.len(), 8);
+}
+
+#[test]
+fn the_immortal_prefix_marks_its_two_levels() {
+    let ring = [entry(
+        1,
+        "(Wizi 60) (Incog 60) [1020/1020hp 800/800mn 930/930mv]",
+        true,
+    )];
+    let result = check(Some(&james()), ring.iter(), std::iter::empty());
+    let marks = covered(&result.reads[0]);
+    assert_eq!(
+        marks[..3],
+        [
+            (0, "60".to_string(), "Wizi".to_string()),
+            (0, "60".to_string(), "Incog".to_string()),
+            (0, "1020".to_string(), "Health".to_string()),
+        ]
+    );
+    assert_eq!(result.reads[0].marks[0].start, 6);
+    assert_eq!(result.reads[0].marks[1].start, 17);
+    assert_eq!(result.reads[0].marks[0].field.as_deref(), Some("wizi"));
+}
+
+#[test]
+fn codes_that_run_together_mark_their_run_as_one_warning() {
+    let healer = Recognizer::compile(&CaptureConfig::Aabahran(AabahranCapture {
+        prompt: "<%h%m %vmv> ".into(),
+        ..AabahranCapture::default()
+    }))
+    .expect("the codes compile");
+    let ring = [entry(1, "<1020800 930mv> ", true)];
+    let result = check(Some(&healer), ring.iter(), std::iter::empty());
+    assert_eq!(
+        result.reads[0].marks,
+        [
+            Mark {
+                warn: true,
+                ..mark(0, 1, 8, None, "Health and Mana")
+            },
+            mark(0, 9, 12, Some("move"), "Moves"),
+        ]
+    );
+}
+
+#[test]
+fn a_pattern_marks_each_group_by_the_value_it_feeds() {
+    let mut names = std::collections::BTreeMap::new();
+    names.insert("2".to_string(), "maxhp".to_string());
+    names.insert("3".to_string(), String::new());
+    let recognizer = Recognizer::compile(&CaptureConfig::Regex(RegexCapture {
+        lines: vec![r"^<(?<hp>\d+)/(\d+)hp (\d+)m (?<sp>\d+)sp> +$".into()],
+        names,
+        settle: true,
+        ..RegexCapture::default()
+    }))
+    .expect("a pattern");
+    let ring = [entry(1, "<12/40hp 3m 9sp> ", false)];
+    let result = check(Some(&recognizer), ring.iter(), std::iter::empty());
+    assert_eq!(
+        result.reads[0].marks,
+        [
+            mark(0, 1, 3, Some("hp"), "Health"),
+            mark(0, 4, 6, Some("maxhp"), "Max health"),
+            mark(0, 12, 13, Some("sp"), "sp"),
+        ]
+    );
+}
+
+#[test]
+fn a_character_of_several_bytes_counts_once_in_a_mark() {
+    let recognizer = Recognizer::compile(&CaptureConfig::Regex(RegexCapture {
+        lines: vec![r"^é (?<hp>\d+)hp$".into()],
+        ..RegexCapture::default()
+    }))
+    .expect("a pattern");
+    let ring = [entry(1, "é 50hp", false)];
+    let result = check(Some(&recognizer), ring.iter(), std::iter::empty());
+    assert_eq!(result.reads[0].marks, [mark(0, 2, 4, Some("hp"), "Health")]);
 }
