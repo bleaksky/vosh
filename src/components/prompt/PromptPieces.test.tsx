@@ -215,8 +215,6 @@ describe('a picked part', () => {
     expect(html.indexOf('aria-label="Background"')).toBeGreaterThan(html.indexOf(THEME_HINT));
     expect(ground).toMatch(/aria-label="Terminal background"[^>]*aria-pressed="true"/);
     expect(ground).toContain('background:#2e3440');
-    // The theme colors line up with the Color row's, past By value.
-    expect(ground).toContain('class="pc-swatch-slot"');
     const swatches = [...ground.matchAll(/aria-label="(Theme [a-z]+)"/g)].map((m) => m[1]);
     expect(swatches).toHaveLength(7);
     expect(ground).toContain('aria-label="Custom background"');
@@ -228,8 +226,61 @@ describe('a picked part', () => {
     // A theme color presses its swatch.
     const blue = row(draw({ ...HP, background: { kind: 'named', index: 4 } }), 'Background');
     expect(blue).toMatch(/aria-label="Theme blue"[^>]*aria-pressed="true"/);
-    // No By value in it, so no place held for one on text.
-    expect(row(draw({ ...HP, by_value: false }), 'Background')).not.toContain('pc-swatch-slot');
+  });
+
+  it('offers By value on the ground of a value, where the Color row has it', () => {
+    const ground = row(draw(HP), 'Background');
+    expect(ground).toMatch(/aria-label="By value"[^>]*aria-pressed="false"/);
+    expect(ground.indexOf('aria-label="By value"')).toBeLessThan(ground.indexOf('Theme red'));
+    // A ground by value presses it, and the hint gives its rule.
+    const html = draw({ ...HP, background: { kind: 'by_value' } });
+    expect(row(html, 'Background')).toMatch(/aria-label="By value"[^>]*aria-pressed="true"/);
+    expect(row(html, 'Background')).toContain('class="st-color pc-custom"');
+    expect(html).toContain(BY_VALUE_HINT.replace(/'/g, '&#x27;'));
+    // Text has no By value, so its ground has none either.
+    expect(row(draw({ ...HP, by_value: false }), 'Background')).not.toContain('By value');
+  });
+
+  it('names a color by value in the field when no swatch shows it', () => {
+    const named = (html: string, label: string, field: string) => {
+      const part = row(html, label);
+      const at = part.indexOf(`aria-label="${field}"`);
+      return part.slice(part.lastIndexOf('<span class="st-color', at), at);
+    };
+    // The text by Mana on Health, and the ground by the game's colors.
+    const html = draw({
+      ...HP,
+      color: { kind: 'by_value', field: 'mana' },
+      background: { kind: 'by_value', game: true },
+    });
+    const color = row(html, 'Color');
+    expect(color).toContain('placeholder="By mana"');
+    expect(color).toContain('class="st-color pc-custom is-on"');
+    expect(named(html, 'Color', 'Custom color')).toContain(
+      'background:linear-gradient(90deg, #a3be8c 0 33.333%, #ebcb8b 0 66.667%, #bf616a 0)',
+    );
+    expect(row(html, 'Background')).toContain('placeholder="By game"');
+    expect(html).toContain(BY_VALUE_HINT.replace(/'/g, '&#x27;'));
+    expect(row(html, 'Background')).toContain('class="st-color pc-custom is-on"');
+    // A color the field writes keeps its plain placeholder.
+    expect(row(draw(HP), 'Color')).toContain('placeholder="Custom"');
+  });
+
+  it('shows an underline colored by value as By value, its line in full color', () => {
+    const line = row(
+      draw({
+        ...HP,
+        underline: true,
+        underline_style: 'curly',
+        underline_color: { kind: 'by_value' },
+      }),
+      'Underline',
+    );
+    expect(line).toContain('placeholder="By value"');
+    expect(line).toContain('class="st-color pc-custom is-on"');
+    expect(line).toContain('#a3be8c 0 33.333%');
+    expect(line).not.toContain('placeholder="Text color"');
+    expect(line).toMatch(/text-decoration-style:wavy;text-decoration-color:#a3be8c">Curly</);
   });
 
   it('keeps B, I and U and adds More styles after them', () => {

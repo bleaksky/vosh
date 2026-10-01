@@ -1145,15 +1145,6 @@
   text-decoration-skip-ink: none;
 }
 
-/* The Background row holds By value's place, so its theme colors line
-   up with the Color row's. */
-.pc-swatch-slot {
-  display: block;
-  flex: none;
-  width: 20px;
-  height: 20px;
-}
-
 .pc-piece-actions {
   display: flex;
   align-items: center;
