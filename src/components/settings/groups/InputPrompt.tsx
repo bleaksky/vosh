@@ -17,6 +17,7 @@ import {
   gameCodesOf,
   gameDescription,
   lastReadLine,
+  notMatchingLine,
   POINT_DESCRIPTION,
   previewHeight,
   previewMeta,
@@ -245,6 +246,8 @@ export function PromptSection({
   const world = promptWorld({ forsaken, host });
   const connected = identity !== null;
   const promptsOff = (show?.promptsOff ?? false) || state?.status.status === 'prompts_off';
+  const notMatching =
+    state?.status.status === 'not_matching' ? notMatchingLine(state.status.last_match_at) : null;
   const owner = savedForName(identity, active);
   const previews = previewOptions(forsaken);
   // Lament leaves with the Forsaken Lands rules, and the preview goes
@@ -276,6 +279,7 @@ export function PromptSection({
           capture={capture}
           check={data.check}
           promptsOff={promptsOff}
+          notMatching={notMatching}
           description={gameDescription(world)}
         />
       )}
@@ -285,6 +289,7 @@ export function PromptSection({
           seen={data.seen}
           check={data.check}
           promptsOff={promptsOff}
+          notMatching={notMatching}
           description={gameDescription(world)}
           onSave={(next) => save((c) => ({ ...c, capture: next }))}
         />
@@ -294,6 +299,7 @@ export function PromptSection({
           read={data.check?.reads[0] ?? null}
           lastRead={lastReadLine(state?.status.last_match_at ?? null)}
           emptyText={data.check?.text ?? null}
+          notMatching={notMatching}
           onPoint={() => void openPromptCard('point').catch(fail)}
           onForget={() => setConfirmForget(true)}
         />
@@ -459,11 +465,19 @@ interface CodesBlockProps {
   capture: PromptCapture;
   check: PromptCaptureCheck | null;
   promptsOff: boolean;
+  notMatching: string | null;
   description: string;
 }
 
 /** The new build: the codes the game sent this session. */
-function CodesBlock({ codes, capture, check, promptsOff, description }: CodesBlockProps) {
+function CodesBlock({
+  codes,
+  capture,
+  check,
+  promptsOff,
+  notMatching,
+  description,
+}: CodesBlockProps) {
   const prompt = codes?.prompt ?? (capture.kind === 'aabahran' ? capture.prompt : '');
   const fprompt = codes?.fprompt ?? (capture.kind === 'aabahran' ? capture.fprompt : '');
   const { report } = useCompiled(prompt, fprompt, false);
@@ -475,6 +489,7 @@ function CodesBlock({ codes, capture, check, promptsOff, description }: CodesBlo
     check,
     report,
     promptsOff,
+    notMatching,
     now: new Date(),
   });
   return <CodesText prompt={prompt} fprompt={fprompt} description={description} meta={meta} />;
@@ -485,6 +500,7 @@ interface FieldsBlockProps {
   seen: PromptLastSeen | null;
   check: PromptCaptureCheck | null;
   promptsOff: boolean;
+  notMatching: string | null;
   description: string;
   onSave: (capture: PromptCapture) => void;
 }
@@ -496,7 +512,15 @@ const SAVE_AFTER_MS = 400;
 /** Without Char.Prompt this session: your codes in fields. What you type
  *  reads again at once, and once the codes compile they save as you set
  *  them in the game, as #prompt game does. */
-function FieldsBlock({ capture, seen, check, promptsOff, description, onSave }: FieldsBlockProps) {
+function FieldsBlock({
+  capture,
+  seen,
+  check,
+  promptsOff,
+  notMatching,
+  description,
+  onSave,
+}: FieldsBlockProps) {
   const labelId = useId();
   const saved = capture.kind === 'aabahran' ? capture : null;
   const [prompt, setPrompt] = useState(saved?.prompt ?? '');
@@ -541,6 +565,7 @@ function FieldsBlock({ capture, seen, check, promptsOff, description, onSave }: 
     check,
     report,
     promptsOff,
+    notMatching,
     now: new Date(),
   });
   return (
@@ -579,6 +604,8 @@ interface LineRowProps {
   lastRead: string | null;
   /** What the check says when the pattern read no prompt yet. */
   emptyText: string | null;
+  /** The not matching sentence while no prompt has matched, else null. */
+  notMatching?: string | null;
   onPoint: () => void;
   onForget: () => void;
 }
@@ -586,8 +613,18 @@ interface LineRowProps {
 /** The line you pointed at, for a pattern (A4's capture row): the line in
  *  the terminal face at meta size with each value Vosh reads in the
  *  selection token, then when Vosh last read it, and More with Point at
- *  it again… and Forget your game's prompt. */
-export function LineRow({ read, lastRead, emptyText, onPoint, onForget }: LineRowProps) {
+ *  it again… and Forget your game's prompt. Once no prompt has matched
+ *  (P14), the not matching sentence in warn takes the place of when Vosh
+ *  last read it, and Point at it again… leaves More for a button of its
+ *  own before it. */
+export function LineRow({
+  read,
+  lastRead,
+  emptyText,
+  notMatching = null,
+  onPoint,
+  onForget,
+}: LineRowProps) {
   const [menu, setMenu] = useState<{ at: MenuPlacement; anchor: HTMLElement } | null>(null);
   const labelId = useId();
   const lines = read ? read.plain.split('\n') : [];
@@ -602,10 +639,20 @@ export function LineRow({ read, lastRead, emptyText, onPoint, onForget }: LineRo
             {markedLine(line, read?.marks.filter((m) => m.line === i) ?? [])}
           </span>
         ))}
-        {read && lastRead && <span className="st-prompt-line-meta">{lastRead}</span>}
-        {!read && emptyText && <span className="st-row-desc">{emptyText}</span>}
+        {notMatching ? (
+          <span className="st-prompt-line-meta is-warn" role="status">
+            <span className="st-prompt-dot" aria-hidden="true" />
+            <span>{notMatching}</span>
+          </span>
+        ) : (
+          <>
+            {read && lastRead && <span className="st-prompt-line-meta">{lastRead}</span>}
+            {!read && emptyText && <span className="st-row-desc">{emptyText}</span>}
+          </>
+        )}
       </div>
       <div className="st-row-control">
+        {notMatching && <Button onClick={onPoint}>Point at it again…</Button>}
         <IconButton
           label="Prompt options"
           icon={<MoreIcon />}
@@ -636,15 +683,19 @@ export function LineRow({ read, lastRead, emptyText, onPoint, onForget }: LineRo
             if (reason === 'escape') anchor.focus();
           }}
         >
-          <MenuItem
-            onSelect={() => {
-              setMenu(null);
-              onPoint();
-            }}
-          >
-            Point at it again…
-          </MenuItem>
-          <MenuSeparator />
+          {!notMatching && (
+            <>
+              <MenuItem
+                onSelect={() => {
+                  setMenu(null);
+                  onPoint();
+                }}
+              >
+                Point at it again…
+              </MenuItem>
+              <MenuSeparator />
+            </>
+          )}
           <MenuItem
             onSelect={() => {
               // The dialog hands focus back to More when it closes.

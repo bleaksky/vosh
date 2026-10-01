@@ -1609,6 +1609,15 @@
   white-space: nowrap;
 }
 
+/* No prompt has matched (P14): the sentence in warn after its 8 px dot,
+   wrapping in the text column. */
+.st-prompt-line-meta.is-warn {
+  display: flex;
+  gap: 6px;
+  color: var(--warn-text);
+  white-space: normal;
+}
+
 /* The preview: the label line with its Segmented, then your design on
    the terminal ground, 600 wide and 28 tall plus 17.5 for each line
    past the first, with a hairline ring, then the meta:

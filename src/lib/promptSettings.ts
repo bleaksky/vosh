@@ -98,6 +98,15 @@ export const POINT_DESCRIPTION = 'Point at it in Customize prompt and Vosh reads
 export const PROMPTS_OFF =
   'You turned prompts off in the game. Type prompt in the game to turn them back on.';
 
+/** The sentence once three prompts in a row came that Vosh could not
+ *  read (section 5, P14), with when it last read one, as `#prompt` says
+ *  it. */
+export function notMatchingLine(lastMatchAt: string | null): string {
+  const at = lastMatchAt ? new Date(lastMatchAt) : null;
+  const since = at && !Number.isNaN(at.getTime()) ? clockTime(at) : 'you connected';
+  return `No prompt has matched since ${since}. If you changed it in the game, point at it again.`;
+}
+
 /** The meta under the codes. */
 export interface CodesMeta {
   tone: 'normal' | 'warn';
@@ -120,9 +129,9 @@ export function settingsMatchLine(check: PromptCaptureCheck | null): string | nu
 
 const sameCodes = (a: string, b: string) => a.trimEnd() === b.trimEnd();
 
-/** What the meta says under the codes or the fields: prompts off, a
- *  warning with the commands that fix it, or where the codes came from
- *  and how they match. */
+/** What the meta says under the codes or the fields: prompts off, no
+ *  prompt matching, a warning with the commands that fix it, or where the
+ *  codes came from and how they match. */
 export function codesMeta(input: {
   block: 'codes' | 'fields';
   game: GameCodes | null;
@@ -131,10 +140,13 @@ export function codesMeta(input: {
   check: PromptCaptureCheck | null;
   report: PromptCompileReport | null;
   promptsOff: boolean;
+  /** The not matching sentence while no prompt has matched, else null. */
+  notMatching?: string | null;
   now: Date;
 }): CodesMeta {
   const { block, game, seen, capture, check, report, promptsOff, now } = input;
   if (promptsOff) return { tone: 'warn', text: PROMPTS_OFF, fixes: [] };
+  if (input.notMatching) return { tone: 'warn', text: input.notMatching, fixes: [] };
   if (report?.error) return { tone: 'warn', text: report.error.message, fixes: [] };
   const reads = capture.kind !== 'none';
   // Codes that run together need fixing once Vosh reads them (P0's

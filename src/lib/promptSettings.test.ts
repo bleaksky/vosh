@@ -6,6 +6,7 @@ import {
   gameCodesOf,
   gameDescription,
   lastReadLine,
+  notMatchingLine,
   previewHeight,
   previewMeta,
   previewOptions,
@@ -298,6 +299,31 @@ describe('the meta under the game prompt', () => {
     );
   });
 
+  it('says in warn that no prompt matched, after prompts off (P14)', () => {
+    const base = {
+      block: 'codes' as const,
+      game: login,
+      seen: null,
+      capture: codes,
+      check: check(0, 3, 'Does not match any of the 3 lines before your last commands.'),
+      report: report(),
+      promptsOff: false,
+      now,
+    };
+    const line =
+      'No prompt has matched since 8:12. If you changed it in the game, point at it again.';
+    expect(codesMeta({ ...base, notMatching: line })).toEqual({
+      tone: 'warn',
+      text: line,
+      fixes: [],
+    });
+    expect(codesMeta({ ...base, block: 'fields', game: null, notMatching: line }).text).toBe(line);
+    expect(codesMeta({ ...base, notMatching: line, promptsOff: true }).text).toBe(
+      'You turned prompts off in the game. Type prompt in the game to turn them back on.',
+    );
+    expect(codesMeta({ ...base, notMatching: null }).tone).toBe('normal');
+  });
+
   it('says a compile error in warn', () => {
     expect(
       codesMeta({
@@ -338,6 +364,20 @@ describe('the match count in Settings', () => {
       ),
     ).toBe('Does not match any of the 3 lines before your last commands.');
     expect(settingsMatchLine(null)).toBeNull();
+  });
+});
+
+describe('no prompt matching', () => {
+  it('says since when, as #prompt does', () => {
+    expect(notMatchingLine('2026-09-29T08:12:10-05:00')).toMatch(
+      /^No prompt has matched since \d{1,2}:\d{2}\. If you changed it in the game, point at it again\.$/,
+    );
+    expect(notMatchingLine(null)).toBe(
+      'No prompt has matched since you connected. If you changed it in the game, point at it again.',
+    );
+    expect(notMatchingLine('not a time')).toBe(
+      'No prompt has matched since you connected. If you changed it in the game, point at it again.',
+    );
   });
 });
 

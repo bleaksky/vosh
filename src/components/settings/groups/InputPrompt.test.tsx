@@ -133,6 +133,48 @@ describe('the game prompt block', () => {
     expect(html).toContain('aria-haspopup="menu"');
   });
 
+  it('says no prompt matched in warn, with Point at it again… beside More (P14)', () => {
+    const read: PromptCheckRead = {
+      id: 3,
+      raw: '<1020/1020hp 800/800m>',
+      plain: '<1020/1020hp 800/800m>',
+      at_ms: 0,
+      fight: false,
+      marks: [{ line: 0, start: 1, end: 5, field: 'hp', label: 'Health', warn: false }],
+    };
+    const line =
+      'No prompt has matched since 8:12. If you changed it in the game, point at it again.';
+    const html = renderToStaticMarkup(
+      <LineRow
+        read={read}
+        lastRead="Last read at 8:12"
+        emptyText={null}
+        notMatching={line}
+        onPoint={() => undefined}
+        onForget={() => undefined}
+      />,
+    );
+    expect(html).toContain(
+      `<span class="st-prompt-line-meta is-warn" role="status"><span class="st-prompt-dot" aria-hidden="true"></span><span>${line}</span></span>`,
+    );
+    expect(html).not.toContain('Last read at');
+    expect(text(html)).toContain(`${line}Point at it again…`);
+    expect(html).toContain('aria-label="Prompt options"');
+    // Matching, the row keeps Last read at and no button.
+    const matching = renderToStaticMarkup(
+      <LineRow
+        read={read}
+        lastRead="Last read at 8:12"
+        emptyText={null}
+        notMatching={null}
+        onPoint={() => undefined}
+        onForget={() => undefined}
+      />,
+    );
+    expect(matching).not.toContain('Point at it again');
+    expect(matching).toContain('Last read at 8:12');
+  });
+
   it('says why no line shows before the pattern reads a prompt', () => {
     const html = renderToStaticMarkup(
       <LineRow
