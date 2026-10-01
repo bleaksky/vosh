@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import {
+  buildAliasEntries,
   buildPaletteEntries,
   chooseTheme,
   initialSelection,
@@ -294,6 +295,49 @@ describe('settings rows', () => {
       group: 'general',
       section: 'logs',
     });
+  });
+});
+
+describe('alias rows', () => {
+  // What aliases_export sends. The Rust Alias struct names the command
+  // expansion, and a disabled alias stays in the list.
+  const exported = JSON.stringify(
+    [
+      { name: 'k', expansion: 'kill %1', enabled: true },
+      { name: 'rec', expansion: 'recall', enabled: true },
+      { name: 'off', expansion: 'say off', enabled: false },
+    ],
+    null,
+    2,
+  );
+
+  async function aliasRows(over: Partial<PaletteDeps> = {}) {
+    vi.mocked(invoke).mockClear();
+    vi.mocked(invoke).mockImplementationOnce(((command: string) =>
+      Promise.resolve(command === 'aliases_export' ? exported : undefined)) as typeof invoke);
+    return buildAliasEntries(deps(over));
+  }
+
+  it('shows the command each alias sends', async () => {
+    const rows = await aliasRows();
+    expect(invoke).toHaveBeenCalledWith('aliases_export');
+    expect(rows.map((r) => [r.title, r.meta ?? null])).toEqual([
+      ['k', 'kill %1'],
+      ['rec', 'recall'],
+    ]);
+    // Typing part of the command finds the alias.
+    expect(flat(paletteSections(rows, 'kill', [])).map((r) => r.id)).toEqual(['alias-k']);
+  });
+
+  it('fills the command line for an alias that takes arguments', async () => {
+    const inserted: string[] = [];
+    const rows = await aliasRows({ insertInput: (text) => inserted.push(text) });
+    void rows[0].run();
+    expect(inserted).toEqual(['k ']);
+    expect(invoke).not.toHaveBeenCalledWith('session_send_input', expect.anything());
+    void rows[1].run();
+    expect(inserted).toEqual(['k ']);
+    expect(invoke).toHaveBeenCalledWith('session_send_input', { line: 'rec' });
   });
 });
 
