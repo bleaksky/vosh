@@ -1437,6 +1437,28 @@ mod tests {
         lent: usize,
         grid: usize,
         game: Option<usize>,
+        game_underlay: Option<usize>,
+        game_short: Option<usize>,
+    }
+
+    impl SplitCase {
+        /// The rows the case says the game is told, under the underlay or
+        /// short of the band. A pane no taller than what the band borrows
+        /// names each place apart, since the two tell the game different
+        /// rows there today.
+        fn game(&self, underlay: bool) -> usize {
+            match (self.game, self.game_underlay, self.game_short) {
+                (Some(game), None, None) => game,
+                (None, Some(under), Some(short)) => {
+                    if underlay {
+                        under
+                    } else {
+                        short
+                    }
+                }
+                _ => panic!("{} needs game, or game_underlay with game_short", self.name),
+            }
+        }
     }
 
     #[derive(serde::Deserialize)]
@@ -1483,9 +1505,7 @@ mod tests {
                 let (grid, game) = split(case.fit, case.lent, underlay, spare);
                 let at = format!("{}, underlay {underlay}, {spare} px spare", case.name);
                 assert_eq!(grid, case.grid, "{at}");
-                if let Some(want) = case.game {
-                    assert_eq!(game, want, "{at}");
-                }
+                assert_eq!(game, case.game(underlay), "{at}");
             }
         }
     }
