@@ -431,44 +431,34 @@ async fn persist_state_with(
         return;
     }
 
-    // Resolve the active profile's path + global path via ProfileSet
-    // if it's been loaded; fall back to the legacy single-file path
-    // if ProfileSet is somehow missing (shouldn't happen post-
-    // startup; defensive path for very early calls before setup()
-    // finishes).
+    // Resolve the active profile's path and global.toml through the
+    // ProfileSet. Without one, launch could not read profiles.toml (or
+    // has not run yet), so nothing names the file to write and the save
+    // writes nothing. A root profile.toml written here would replace
+    // profiles/default.toml at the next launch that finds no
+    // profiles.toml, see `ProfileSet::load_or_migrate`.
     let (per_profile_path, global_path, scope) = {
         let guard = state.profile_set.lock().await;
-        if let Some(set) = guard.as_ref() {
-            (
-                Some(set.active_path()),
-                Some(set.global_path()),
-                Some(*set.scope()),
-            )
-        } else {
-            let Some(dir) = app_data else {
-                return;
-            };
-            (Some(dir.join("profile.toml")), None, None)
-        }
+        let Some(set) = guard.as_ref() else {
+            tracing::debug!("persist skipped: the profile set is not loaded");
+            return;
+        };
+        (set.active_path(), set.global_path(), *set.scope())
     };
 
     let (per_profile_snapshot, global_snapshot) = {
         let p = state.profile.lock().await;
         (
-            active_profile_file(&p, scope.as_ref()),
-            GlobalConfig::from_profile(&p, &scope.unwrap_or_default()),
+            active_profile_file(&p, Some(&scope)),
+            GlobalConfig::from_profile(&p, &scope),
         )
     };
 
-    if let Some(p) = per_profile_path.as_ref() {
-        if let Err(e) = per_profile_snapshot.save(p) {
-            warn!(error = %e, path = %p.display(), "auto-save per-profile failed");
-        }
+    if let Err(e) = per_profile_snapshot.save(&per_profile_path) {
+        warn!(error = %e, path = %per_profile_path.display(), "auto-save per-profile failed");
     }
-    if let Some(g) = global_path.as_ref() {
-        if let Err(e) = global_snapshot.save(g) {
-            warn!(error = %e, path = %g.display(), "auto-save global failed");
-        }
+    if let Err(e) = global_snapshot.save(&global_path) {
+        warn!(error = %e, path = %global_path.display(), "auto-save global failed");
     }
 }
 
@@ -6117,6 +6107,36 @@ mod tests {
         }
         persist(&state, dir.path()).await;
         assert_eq!(read(&set.profile_path("Cleric")), UNREADABLE);
+    }
+
+    /// Bug 5. A save after a launch that could not read profiles.toml
+    /// writes no root profile.toml, since a launch that finds no
+    /// profiles.toml moves that file over your Default profile.
+    #[tokio::test]
+    async fn a_save_after_profiles_toml_did_not_read_keeps_your_default_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        let set = james_like_set(dir.path());
+        let mut default = ProfileConfig::default();
+        default.ui.tracked_affects = vec![affect("Sanctuary")];
+        default.save(&set.active_path()).unwrap();
+        let index = dir.path().join("profiles.toml");
+        std::fs::write(&index, UNREADABLE).unwrap();
+
+        // Launch cannot read the index, so the session runs on the
+        // defaults. You change a setting and Vosh saves.
+        let state: super::SharedState = std::sync::Arc::new(super::AppState::default());
+        crate::launch::load_profiles(&state, dir.path()).await;
+        assert!(state.profile_set.lock().await.is_none());
+        state.profile.lock().await.ui.tracked_affects = vec![affect("Haste")];
+        persist(&state, dir.path()).await;
+        assert!(!dir.path().join("profile.toml").exists());
+
+        // You delete profiles.toml to recover and launch again.
+        std::fs::remove_file(&index).unwrap();
+        let state = launch_state(dir.path()).await;
+        assert_eq!(live_affects(&state).await, ["Sanctuary"]);
+        let saved = ProfileConfig::load(&set.active_path()).unwrap();
+        assert_eq!(saved.ui.tracked_affects[0].name, "Sanctuary");
     }
 
     /// A Tick block from Settings: off, every minute, with every option
