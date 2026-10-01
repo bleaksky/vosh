@@ -5,7 +5,6 @@
 //! them, take echo for every password prompt. Vosh treats a line sent
 //! while the server holds echo as a secret and writes its text nowhere.
 
-use tracing::warn;
 use vosh_telnet::{option as telnet_option, Event as TelnetEvent};
 
 /// Who echoes your input on one connection. The session task owns one
@@ -94,23 +93,24 @@ pub(crate) fn sent_log_rows(bytes: &[u8], hidden: bool) -> Vec<String> {
     rows
 }
 
-/// Append the rows for one send to a session in the log store.
-pub(crate) fn append_sent_rows(
-    store: &mut vosh_log::LogStore,
+/// The log entries for one send to a session, its rows as plain text
+/// with no raw bytes, all at the time the send left.
+pub(crate) fn sent_log_entries(
     session_id: i64,
     ts_ms: i64,
-    rows: &[String],
-) {
-    for row in rows {
-        if let Err(e) = store.append(session_id, ts_ms, row, None) {
-            warn!(error = %e, "log append (input) failed");
-        }
-    }
+    rows: Vec<String>,
+) -> impl Iterator<Item = vosh_log::LogEntry> {
+    rows.into_iter().map(move |text| vosh_log::LogEntry {
+        session_id,
+        ts_ms,
+        text,
+        raw: None,
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{append_sent_rows, masked_line_bytes, sent_log_rows, ServerEcho};
+    use super::{masked_line_bytes, sent_log_entries, sent_log_rows, ServerEcho};
     use vosh_telnet::{codes, option, Parser, IAC};
 
     // Made up values only. None of these is anyone's password.
@@ -160,7 +160,8 @@ mod tests {
 
         fn leave(&mut self, bytes: &[u8], masked: bool) {
             let rows = sent_log_rows(bytes, self.echo.hides(masked));
-            append_sent_rows(&mut self.store, self.id, 1, &rows);
+            let entries: Vec<_> = sent_log_entries(self.id, 1, rows).collect();
+            self.store.append_batch(&entries).expect("the rows go in");
         }
 
         fn log(&self) -> String {
