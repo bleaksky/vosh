@@ -685,7 +685,7 @@ async fn io_loop<R: tauri::Runtime>(
                 Some(OutgoingMsg::WindowSize { cols, rows }) => {
                     {
                         let mut p = profile.lock().await;
-                        window_size_step(&mut p, &mut negotiator, cols, rows);
+                        window_size_step(&mut p, &mut negotiator, cols, rows, watching_prompt(&app));
                     }
                     if naws_active {
                         let bytes = negotiator.naws_subnegotiation();
@@ -2100,12 +2100,25 @@ fn send_step(p: &mut Profile, accumulator: &LineAccumulator, sent: &[u8], at_ms:
     p.prompt.note_send(&String::from_utf8_lossy(sent), at_ms)
 }
 
-/// A window size message. A new size closes the open row, since each
-/// renderer wraps it again at its new width, and nothing repaints until
-/// the next prompt (D21). The size the session already holds, which the
-/// webview sends again on every connect, leaves the row open.
-fn window_size_step(p: &mut Profile, negotiator: &mut Negotiator, cols: u16, rows: u16) {
-    if negotiator.window_size != (cols, rows) {
+/// A window size message. While the card is closed, a new size closes the
+/// open row, since each renderer wraps it again at its new width, and
+/// nothing repaints until the next prompt (D21). While the card is open,
+/// which `card_open` says when it watches your prompt and a preview on
+/// the row says too, the row stays open: each renderer finds its region
+/// again in its own buffer, so edits and previews keep repainting it and
+/// clearing a preview puts the live render back. The size the session
+/// already holds, which the webview sends again on every connect, leaves
+/// the row open. Pinned, the band is not in the text, so no size closes
+/// it.
+fn window_size_step(
+    p: &mut Profile,
+    negotiator: &mut Negotiator,
+    cols: u16,
+    rows: u16,
+    card_open: bool,
+) {
+    let card_open = card_open || p.prompt.preview().is_some();
+    if negotiator.window_size != (cols, rows) && !card_open {
         p.prompt.stage.close();
     }
     negotiator.set_window_size(cols, rows);
@@ -4209,7 +4222,7 @@ mod tests {
         let _ = wire.read(PROMPT_ROW);
         // The webview sends the size the session already holds on every
         // connect. The row stays open, so turning drawing off repaints it.
-        super::window_size_step(&mut wire.p, &mut negotiator, 94, 41);
+        super::window_size_step(&mut wire.p, &mut negotiator, 94, 41, false);
         assert!(wire.p.prompt.stage.open_row().is_some());
         let config = vosh_prompt::PromptConfig {
             draw: false,
@@ -4224,7 +4237,7 @@ mod tests {
         );
 
         // A new size closes it, and nothing repaints.
-        super::window_size_step(&mut wire.p, &mut negotiator, 94, 40);
+        super::window_size_step(&mut wire.p, &mut negotiator, 94, 40, false);
         assert_eq!(negotiator.window_size, (94, 40));
         assert!(wire.p.prompt.stage.open_row().is_none());
         let config = vosh_prompt::PromptConfig {
