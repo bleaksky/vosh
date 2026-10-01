@@ -223,6 +223,7 @@ fn mud_timer(lua: &Lua, (secs, callback): (f64, Function)) -> LuaResult<u32> {
     let timer_id = alloc_timer_id();
     with_state(lua, |s| {
         s.callbacks.insert(id, key);
+        s.timer_callbacks.insert(timer_id, id);
         s.pending.push(Action::Timer {
             delay: Duration::from_secs_f64(secs.max(0.0)),
             callback_id: id,
@@ -234,6 +235,11 @@ fn mud_timer(lua: &Lua, (secs, callback): (f64, Function)) -> LuaResult<u32> {
 
 fn mud_cancel_timer(lua: &Lua, timer_id: u32) -> LuaResult<()> {
     with_state(lua, |s| {
+        // Free the callback now. The session drops the schedule when it
+        // applies the cancel, and nothing else would ever free it.
+        if let Some(callback_id) = s.timer_callbacks.remove(&timer_id) {
+            s.callbacks.remove(&callback_id);
+        }
         s.pending.push(Action::CancelTimer(timer_id));
         Ok(())
     })

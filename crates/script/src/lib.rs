@@ -9,7 +9,7 @@ mod actions;
 mod api;
 mod state;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use mlua::{Function, Lua, Value};
 use regex::Regex;
@@ -72,6 +72,8 @@ pub struct ScriptEngine {
     gmcp_subs: HashMap<String, Vec<i64>>,
     /// Map script source name to the loaded chunk for #script reload.
     loaded_scripts: HashMap<String, String>,
+    /// GMCP callback ids each loaded script subscribed on its last run.
+    script_gmcp: HashMap<String, Vec<i64>>,
 }
 
 impl std::fmt::Debug for ScriptEngine {
@@ -82,6 +84,7 @@ impl std::fmt::Debug for ScriptEngine {
             .field("trigger_count", &self.triggers.len())
             .field("gmcp_subscriptions", &self.gmcp_subs.len())
             .field("loaded_scripts", &self.loaded_scripts.len())
+            .field("script_gmcp", &self.script_gmcp.len())
             .finish()
     }
 }
@@ -105,6 +108,7 @@ impl ScriptEngine {
             triggers: Vec::new(),
             gmcp_subs: HashMap::new(),
             loaded_scripts: HashMap::new(),
+            script_gmcp: HashMap::new(),
         })
     }
 
@@ -185,17 +189,19 @@ impl ScriptEngine {
     }
 
     /// Load a script as a named chunk so a later `reload` can re-execute
-    /// it. The name is what the user typed.
+    /// it. The name is what the user typed. Loading a name again runs it
+    /// the way a reload does.
     pub fn load_script(&mut self, name: &str, code: String) -> Result<ScriptOutcome, ScriptError> {
-        let outcome = self.eval(&code, name)?;
+        let outcome = self.run_script(name, &code)?;
         self.loaded_scripts.insert(name.to_string(), code);
         Ok(outcome)
     }
 
-    /// Re-execute every loaded script. Triggers and subscriptions are NOT
-    /// cleared automatically; scripts that want clean state should manage
-    /// it themselves with `mud.untrigger` etc. Phase 9 will add proper
-    /// hot-reload semantics.
+    /// Re-execute every loaded script. A trigger the script sets again
+    /// replaces the one of that name, and the GMCP subscriptions it makes
+    /// replace the ones it made last time. Other state, like a timer the
+    /// script schedules, is not cleared, so scripts that want clean state
+    /// manage it themselves.
     pub fn reload_scripts(&mut self) -> Result<ScriptOutcome, ScriptError> {
         let scripts: Vec<(String, String)> = self
             .loaded_scripts
@@ -204,11 +210,36 @@ impl ScriptEngine {
             .collect();
         let mut acc = ScriptOutcome::default();
         for (name, code) in scripts {
-            let result: mlua::Result<()> = self.lua.load(&code).set_name(&name).exec();
-            result?;
-            acc.actions.append(&mut self.drain().actions);
+            acc.actions
+                .append(&mut self.run_script(&name, &code)?.actions);
         }
         Ok(acc)
+    }
+
+    /// Run a loaded script's code. `mud.on_gmcp` has no name to replace a
+    /// subscription by, so a run that succeeds drops the subscriptions the
+    /// script made on its previous run. Without that each reload added one
+    /// more handler. A run that fails keeps the old ones.
+    fn run_script(&mut self, name: &str, code: &str) -> Result<ScriptOutcome, ScriptError> {
+        let before: HashSet<i64> = self.gmcp_subs.values().flatten().copied().collect();
+        let outcome = self.eval(code, name)?;
+        let made: Vec<i64> = self
+            .gmcp_subs
+            .values()
+            .flatten()
+            .copied()
+            .filter(|id| !before.contains(id))
+            .collect();
+        if let Some(old) = self.script_gmcp.insert(name.to_string(), made) {
+            for ids in self.gmcp_subs.values_mut() {
+                ids.retain(|id| !old.contains(id));
+            }
+            self.gmcp_subs.retain(|_, ids| !ids.is_empty());
+            for id in old {
+                self.drop_callback_inline(id);
+            }
+        }
+        Ok(outcome)
     }
 
     /// Run every Lua trigger against `line`. For each match the callback
@@ -253,7 +284,11 @@ impl ScriptEngine {
     /// Fire a one-shot timer callback by its callback id.
     pub fn fire_timer(&mut self, callback_id: i64) -> Result<ScriptOutcome, ScriptError> {
         self.invoke_callback(callback_id, Value::Nil)?;
-        // Drop the callback after firing; it was a one-shot.
+        // Drop the callback after firing; it was a one-shot. Forget its
+        // timer id too, so a late `mud.cancel_timer` has nothing to free.
+        if let Ok(mut s) = self.state.cell.lock() {
+            s.timer_callbacks.retain(|_, id| *id != callback_id);
+        }
         self.drop_callback(callback_id);
         Ok(self.drain())
     }
@@ -482,6 +517,134 @@ mod tests {
             }
             other => panic!("expected timer action, got {other:?}"),
         }
+    }
+
+    /// How many Lua callbacks the engine still holds a registry slot for.
+    fn held_callbacks(e: &ScriptEngine) -> usize {
+        e.state.cell.lock().unwrap().callbacks.len()
+    }
+
+    #[test]
+    fn cancel_timer_frees_its_callback() {
+        let mut e = ScriptEngine::new().unwrap();
+        let scheduled = e
+            .eval(
+                r#"pending = mud.timer(5, function() mud.echo("late") end)"#,
+                "t",
+            )
+            .unwrap()
+            .actions;
+        let Action::Timer {
+            timer_id,
+            callback_id,
+            ..
+        } = scheduled[0]
+        else {
+            panic!("expected timer action, got {:?}", scheduled[0]);
+        };
+        assert_eq!(held_callbacks(&e), 1);
+        let cancelled = e.eval("mud.cancel_timer(pending)", "t").unwrap().actions;
+        // The session still needs the cancel to drop the schedule.
+        assert_eq!(cancelled, vec![Action::CancelTimer(timer_id)]);
+        assert_eq!(held_callbacks(&e), 0);
+        assert!(e.state.cell.lock().unwrap().timer_callbacks.is_empty());
+        // A cancelled timer the session already took as due runs nothing.
+        assert!(e.fire_timer(callback_id).unwrap().actions.is_empty());
+    }
+
+    #[test]
+    fn cancel_timer_leaves_other_timers_alone() {
+        let mut e = ScriptEngine::new().unwrap();
+        let scheduled = e
+            .eval(
+                r#"
+                first = mud.timer(5, function() mud.echo("first") end)
+                second = mud.timer(5, function() mud.echo("second") end)
+                "#,
+                "t",
+            )
+            .unwrap()
+            .actions;
+        let Action::Timer {
+            callback_id: second,
+            ..
+        } = scheduled[1]
+        else {
+            panic!("expected timer action, got {:?}", scheduled[1]);
+        };
+        e.eval("mud.cancel_timer(first)", "t").unwrap();
+        assert_eq!(held_callbacks(&e), 1);
+        let fired = e.fire_timer(second).unwrap().actions;
+        assert_eq!(fired, vec![Action::Echo("second".into())]);
+        // A timer that fired leaves nothing behind for a late cancel.
+        assert_eq!(held_callbacks(&e), 0);
+        assert!(e.state.cell.lock().unwrap().timer_callbacks.is_empty());
+    }
+
+    #[test]
+    fn reload_replaces_gmcp_subscriptions_instead_of_adding() {
+        let mut e = ScriptEngine::new().unwrap();
+        e.load_script(
+            "vitals",
+            r#"mud.on_gmcp("Char.Vitals", function(d) mud.echo("hp " .. d.hp) end)"#.into(),
+        )
+        .unwrap();
+        e.reload_scripts().unwrap();
+        e.reload_scripts().unwrap();
+        let outcome = e
+            .dispatch_gmcp("Char.Vitals", &serde_json::json!({"hp": 80}))
+            .unwrap();
+        assert_eq!(outcome.actions, vec![Action::Echo("hp 80".into())]);
+        assert_eq!(held_callbacks(&e), 1);
+    }
+
+    #[test]
+    fn loading_a_script_again_replaces_its_gmcp_subscriptions() {
+        // A plugin reload loads the script again under the same name.
+        let code = r#"mud.on_gmcp("Room.Info", function() mud.echo("room") end)"#;
+        let mut e = ScriptEngine::new().unwrap();
+        e.load_script("plugin:mapper", code.into()).unwrap();
+        e.load_script("plugin:mapper", code.into()).unwrap();
+        let outcome = e
+            .dispatch_gmcp("Room.Info", &serde_json::json!({}))
+            .unwrap();
+        assert_eq!(outcome.actions, vec![Action::Echo("room".into())]);
+        assert_eq!(held_callbacks(&e), 1);
+    }
+
+    #[test]
+    fn reload_keeps_gmcp_subscriptions_the_script_did_not_make() {
+        let mut e = ScriptEngine::new().unwrap();
+        e.load_script(
+            "vitals",
+            r#"mud.on_gmcp("Char.Vitals", function() mud.echo("script") end)"#.into(),
+        )
+        .unwrap();
+        e.load_script(
+            "other",
+            r#"mud.on_gmcp("Char.Vitals", function() mud.echo("other") end)"#.into(),
+        )
+        .unwrap();
+        e.eval(
+            r#"mud.on_gmcp("Char.Vitals", function() mud.echo("typed") end)"#,
+            "t",
+        )
+        .unwrap();
+        e.reload_scripts().unwrap();
+        let mut echoes = e
+            .dispatch_gmcp("Char.Vitals", &serde_json::json!({}))
+            .unwrap()
+            .actions;
+        echoes.sort_by_key(|a| format!("{a:?}"));
+        assert_eq!(
+            echoes,
+            vec![
+                Action::Echo("other".into()),
+                Action::Echo("script".into()),
+                Action::Echo("typed".into()),
+            ]
+        );
+        assert_eq!(held_callbacks(&e), 3);
     }
 
     #[test]
