@@ -157,6 +157,48 @@ describe('paletteSections', () => {
     expect(invoke).toHaveBeenCalledWith('session_send_input', { line: '#prompt show pinned' });
   });
 
+  it('finds the prompt card in an Input section of its own as you type prompt', () => {
+    const opened: (string | null)[] = [];
+    const drawn: boolean[] = [];
+    const entries = buildPaletteEntries(
+      deps({
+        openPromptCard: (view) => opened.push(view ?? null),
+        promptDraw: true,
+        setPromptDraw: (on) => drawn.push(on),
+      }),
+    );
+    const input = entries.filter((r) => r.section === 'input');
+    expect(input.map((r) => [r.title, r.checked ?? null])).toEqual([
+      ['Customize prompt…', null],
+      ['Draw your prompt', true],
+      ['Edit prompt as text…', null],
+    ]);
+    expect(input.every((r) => r.searchOnly)).toBe(true);
+    const typed = paletteSections(entries, 'prompt', []);
+    expect(typed[0].label).toBe('Input');
+    expect(typed[0].rows.map((r) => r.title)).toEqual([
+      'Customize prompt…',
+      'Draw your prompt',
+      'Edit prompt as text…',
+    ]);
+    // The list you open on stays as it was.
+    expect(paletteSections(entries, '', []).map((s) => s.label)).toEqual(['View', 'Session']);
+    void input[0].run();
+    void input[1].run();
+    void input[2].run();
+    expect(opened).toEqual([null, 'text']);
+    expect(drawn).toEqual([false]);
+  });
+
+  it('leaves Draw your prompt out while the profile reads no prompt', () => {
+    const entries = buildPaletteEntries(deps({ openPromptCard: () => {}, promptDraw: null }));
+    expect(entries.filter((r) => r.section === 'input').map((r) => r.title)).toEqual([
+      'Customize prompt…',
+      'Edit prompt as text…',
+    ]);
+    expect(buildPaletteEntries(deps()).some((r) => r.section === 'input')).toBe(false);
+  });
+
   it('names the world on the connect row when you are offline', () => {
     const rows = buildPaletteEntries(deps({ connected: false }));
     const last = rows[rows.length - 1];

@@ -45,6 +45,8 @@ import {
   subscribeTerminalLineHeightChanged,
   normalizeTerminalLineHeight,
   terminalLocalWrite,
+  promptConfigGet,
+  promptConfigSet,
   promptPreviewSet,
   promptStateGet,
   subscribePromptCardOpen,
@@ -1563,6 +1565,13 @@ function App() {
     disconnect: () => void disconnectSession(),
     insertInput: (text) => inputRef.current?.insert(text),
     promptShow: promptShow?.capture ? promptShow.show : null,
+    openPromptCard: () => setPromptCard(true),
+    promptDraw: promptShow?.capture ? promptShow.draw : null,
+    setPromptDraw: (on) => {
+      void promptConfigGet()
+        .then((config) => promptConfigSet({ ...config, draw: on }))
+        .catch((e: unknown) => pushToast({ kind: 'error', message: String(e) }));
+    },
   });
 
   const closeMainWindow = () => {
