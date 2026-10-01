@@ -1850,3 +1850,35 @@ async fn prompt_default_draws_the_default_design_on_the_pinned_band_at_once() {
     assert_eq!(table.show, vosh_prompt::PromptShow::Pinned);
     h.finish(grid).await;
 }
+
+/// The session sends each GMCP package on the event
+/// `fixtures/ipc/gmcp-events.json` names for it. `onGmcpPackage` on the
+/// page builds its listen from the same file in session.test.ts, so a
+/// change to the encoding on one side alone fails one of the two.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn each_gmcp_package_goes_out_on_the_event_the_page_hears() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let cases: Json =
+        serde_json::from_str(include_str!("../../fixtures/ipc/gmcp-events.json")).expect("cases");
+    let events: Vec<String> = cases["cases"]
+        .as_array()
+        .expect("a list of cases")
+        .iter()
+        .map(|case| case["event"].as_str().expect("an event").to_string())
+        .collect();
+    let h = Harness::new(Options::new(Build::New)).await;
+    let heard = Arc::new(StdMutex::new(std::collections::BTreeSet::new()));
+    for event in &events {
+        let (heard, name) = (heard.clone(), event.clone());
+        h.app.listen_any(event.clone(), move |_| {
+            heard.lock().expect("the events").insert(name.clone());
+        });
+    }
+    h.connect().await;
+    h.until("every GMCP event at login", |_| {
+        heard.lock().expect("the events").len() == events.len()
+    })
+    .await;
+    h.finish(grid).await;
+}

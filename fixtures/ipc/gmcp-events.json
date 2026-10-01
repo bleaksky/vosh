@@ -1,0 +1,17 @@
+{
+  "notes": "Each GMCP package the fake Aabahran in the test kit sends at login and on its first pulse, with the event the session sends it on. The package name keeps its dots on the wire and turns them to dashes in the event name, since Tauri event names allow no dot. The fake MUD test in src-tauri and session.test.ts on the page both read this file.",
+  "cases": [
+    { "package": "Char.Status", "event": "session://gmcp/Char-Status" },
+    { "package": "Char.Prompt", "event": "session://gmcp/Char-Prompt" },
+    { "package": "Char.Affects", "event": "session://gmcp/Char-Affects" },
+    { "package": "Char.Worth", "event": "session://gmcp/Char-Worth" },
+    { "package": "World.Time", "event": "session://gmcp/World-Time" },
+    { "package": "World.Moons", "event": "session://gmcp/World-Moons" },
+    { "package": "Room.Info", "event": "session://gmcp/Room-Info" },
+    { "package": "Char.Vitals", "event": "session://gmcp/Char-Vitals" },
+    { "package": "Char.Combat", "event": "session://gmcp/Char-Combat" },
+    { "package": "Group.Info", "event": "session://gmcp/Group-Info" },
+    { "package": "Char.State", "event": "session://gmcp/Char-State" },
+    { "package": "Room.Weather", "event": "session://gmcp/Room-Weather" }
+  ]
+}

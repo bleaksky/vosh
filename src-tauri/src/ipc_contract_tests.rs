@@ -118,7 +118,8 @@ const APP_FAMILIES: &[AppFamily] = &[AppFamily {
     prefix: "session://gmcp/",
     why: "The session sends each GMCP package on session://gmcp/ and the \
           package name with its dots turned to dashes. onGmcpPackage on the \
-          page builds the same names.",
+          page builds the same names, and fixtures/ipc/gmcp-events.json holds \
+          both sides to that encoding.",
 }];
 
 /// A name the app or the page sends that no page listen hears.
