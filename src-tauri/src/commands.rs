@@ -3359,7 +3359,12 @@ pub(crate) async fn ui_set_config(
         let mut p = state.profile.lock().await;
         apply_ui_save(&mut p, config, ui_config_generation())
     };
-    let UiSave::Applied { prompt, show } = saved else {
+    let UiSave::Applied {
+        prompt,
+        show,
+        filled,
+    } = saved
+    else {
         return Ok(false);
     };
     if prompt {
@@ -3367,8 +3372,9 @@ pub(crate) async fn ui_set_config(
         // turning drawing off shows the game's prompt at once.
         request_prompt_repaint(state.inner()).await;
     }
-    if show {
-        // The main window lays its dock out for the new place.
+    if show || filled {
+        // The main window lays its dock out for the new place, and
+        // Settings takes the design Vosh filled in.
         broadcast_list_changes(&app, ListChanges::PROMPT);
     }
     let shared: SharedState = state.inner().clone();
@@ -3384,7 +3390,13 @@ enum UiSave {
     Refused,
     /// It applied. `prompt` says the prompt switch, the design or where
     /// your prompt shows changed, and `show` says the last one did.
-    Applied { prompt: bool, show: bool },
+    /// `filled` says the save turned drawing on with no design and Vosh
+    /// filled in its default, which the window does not hold yet.
+    Applied {
+        prompt: bool,
+        show: bool,
+        filled: bool,
+    },
 }
 
 /// Write a whole config save onto the live profile `p`, unless it was
@@ -3392,7 +3404,8 @@ enum UiSave {
 /// template go through to the `[prompt]` table, each only when it
 /// differs from what the table holds, so a save that carries them
 /// unchanged leaves a newer table alone, its capture and earlier designs
-/// included. The `[ui]` copy then follows the table.
+/// included. Turning drawing on with no design takes Vosh's default. The
+/// `[ui]` copy then follows the table.
 fn apply_ui_save(p: &mut crate::profile::Profile, config: UiConfigPayload, current: u64) -> UiSave {
     let draw = config.prompt_template_enabled;
     let template = config.prompt_template.clone();
@@ -3402,11 +3415,13 @@ fn apply_ui_save(p: &mut crate::profile::Profile, config: UiConfigPayload, curre
     }
     let mut prompt = p.prompt.config().clone();
     let changed = prompt.take_switch_and_template(draw, &template);
+    let filled = prompt.template != template;
     let show = show.is_some_and(|show| prompt.take_show(&show));
     p.set_prompt_config(prompt);
     UiSave::Applied {
         prompt: changed || show,
         show,
+        filled,
     }
 }
 
@@ -4808,7 +4823,8 @@ mod tests {
             super::apply_ui_save(&mut p, save, 4),
             super::UiSave::Applied {
                 prompt: false,
-                show: false
+                show: false,
+                filled: false
             }
         );
         assert_eq!(p.ui.font_size, 16);
@@ -4826,7 +4842,8 @@ mod tests {
             super::apply_ui_save(&mut p, save, 4),
             super::UiSave::Applied {
                 prompt: true,
-                show: false
+                show: false,
+                filled: false
             }
         );
         let prompt = p.prompt.config();
@@ -4842,7 +4859,8 @@ mod tests {
             super::apply_ui_save(&mut p, save, 4),
             super::UiSave::Applied {
                 prompt: true,
-                show: false
+                show: false,
+                filled: false
             }
         );
         let prompt = p.prompt.config();
@@ -4869,7 +4887,8 @@ mod tests {
             super::apply_ui_save(&mut p, save, 4),
             super::UiSave::Applied {
                 prompt: true,
-                show: true
+                show: true,
+                filled: false
             }
         );
         let prompt = p.prompt.config();
@@ -4888,7 +4907,8 @@ mod tests {
             super::apply_ui_save(&mut p, save, 4),
             super::UiSave::Applied {
                 prompt: false,
-                show: false
+                show: false,
+                filled: false
             }
         );
         assert_eq!(p.prompt.config().show, vosh_prompt::PromptShow::Pinned);
@@ -4900,7 +4920,8 @@ mod tests {
             super::apply_ui_save(&mut p, save, 4),
             super::UiSave::Applied {
                 prompt: false,
-                show: false
+                show: false,
+                filled: false
             }
         );
         assert_eq!(p.prompt.config().show, vosh_prompt::PromptShow::Pinned);
@@ -4915,7 +4936,8 @@ mod tests {
             super::apply_ui_save(&mut p, back, 4),
             super::UiSave::Applied {
                 prompt: false,
-                show: false
+                show: false,
+                filled: false
             }
         );
         assert_eq!(p.prompt.config().show, vosh_prompt::PromptShow::Pinned);
@@ -4926,6 +4948,47 @@ mod tests {
         let text = toml::to_string(&file).unwrap();
         assert!(text.contains("show = \"pinned\""), "{text}");
         assert!(!text.contains("prompt_show"), "{text}");
+    }
+
+    #[test]
+    fn turning_drawing_on_in_settings_with_no_design_takes_the_default() {
+        let mut p = crate::profile::Profile::default();
+        let mut save = super::ui_config_of(&p, 4);
+        save.prompt_template_enabled = true;
+        assert_eq!(save.prompt_template, "");
+        // The window carried no design, so it reads the table again.
+        assert_eq!(
+            super::apply_ui_save(&mut p, save, 4),
+            super::UiSave::Applied {
+                prompt: true,
+                show: false,
+                filled: true
+            }
+        );
+        assert!(p.prompt.config().draw);
+        assert_eq!(p.prompt.config().template, vosh_prompt::DEFAULT_DESIGN);
+        assert_eq!(p.ui.prompt_template, vosh_prompt::DEFAULT_DESIGN);
+        assert_eq!(
+            super::ui_config_of(&p, 4).prompt_template,
+            vosh_prompt::DEFAULT_DESIGN
+        );
+
+        // A design of your own stays as it is.
+        let mut p = prompt_profile();
+        let mut config = p.prompt.config().clone();
+        config.draw = false;
+        p.set_prompt_config(config);
+        let mut save = super::ui_config_of(&p, 4);
+        save.prompt_template_enabled = true;
+        assert_eq!(
+            super::apply_ui_save(&mut p, save, 4),
+            super::UiSave::Applied {
+                prompt: true,
+                show: false,
+                filled: false
+            }
+        );
+        assert_eq!(p.prompt.config().template, "%hp");
     }
 
     #[test]

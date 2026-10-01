@@ -22,6 +22,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::presets::DEFAULT_DESIGN;
+
 /// How many earlier designs `previous_templates` keeps.
 pub const PREVIOUS_TEMPLATES: usize = 2;
 
@@ -132,9 +134,11 @@ impl PromptConfig {
 
     /// Take the switch and the template a Settings save carries, each
     /// only when it differs from what this table holds, so a save that
-    /// carries them unchanged leaves the table alone. Returns whether
-    /// either changed.
+    /// carries them unchanged leaves the table alone. Turning drawing on
+    /// with no design takes Vosh's default, [`DEFAULT_DESIGN`]. Returns
+    /// whether either changed.
     pub fn take_switch_and_template(&mut self, draw: bool, template: &str) -> bool {
+        let turned_on = draw && !self.draw;
         let mut changed = false;
         if self.draw != draw {
             self.draw = draw;
@@ -143,6 +147,9 @@ impl PromptConfig {
         if self.template != template {
             self.template = template.to_string();
             changed = true;
+        }
+        if turned_on && self.template.is_empty() {
+            self.template = DEFAULT_DESIGN.to_string();
         }
         changed
     }
@@ -457,6 +464,43 @@ mod tests {
         assert!(config.take_switch_and_template(false, "%mana"));
         assert_eq!(config.template, "%mana");
         assert_eq!(config.capture, capture);
+    }
+
+    #[test]
+    fn turning_drawing_on_with_no_design_takes_the_default() {
+        let mut config = PromptConfig::default();
+        assert!(config.take_switch_and_template(true, ""));
+        assert!(config.draw);
+        assert_eq!(config.template, DEFAULT_DESIGN);
+        assert!(config.previous_templates.is_empty());
+
+        // The same save the window sends again changes nothing.
+        let mut again = config.clone();
+        assert!(!again.take_switch_and_template(true, DEFAULT_DESIGN));
+        assert_eq!(again, config);
+
+        // A design of your own stays as it is.
+        let mut yours = PromptConfig::from_legacy(false, JAMES);
+        assert!(yours.take_switch_and_template(true, JAMES));
+        assert_eq!(yours.template, JAMES);
+    }
+
+    #[test]
+    fn only_turning_drawing_on_fills_an_empty_design() {
+        // Drawing already on: clearing the field to type a new design
+        // leaves it empty.
+        let mut config = PromptConfig::from_legacy(true, "%hp");
+        assert!(config.take_switch_and_template(true, ""));
+        assert_eq!(config.template, "");
+        assert!(!config.take_switch_and_template(true, ""));
+        assert_eq!(config.template, "");
+
+        // Drawing off: an empty design stays empty until you turn it on.
+        let mut config = PromptConfig::from_legacy(true, "%hp");
+        assert!(config.take_switch_and_template(false, ""));
+        assert_eq!(config.template, "");
+        assert!(config.take_switch_and_template(true, ""));
+        assert_eq!(config.template, DEFAULT_DESIGN);
     }
 
     #[test]
