@@ -2,6 +2,10 @@
 //! the card's previews, Low health, Fight and Lament, and the samples
 //! the start list draws. Overrides never reach `session://prompt-vars`,
 //! so the panes keep the live values.
+//!
+//! [`PromptPreview`] is what the open card shows on your prompt in place
+//! of the live render: one of its [`Preview`]s, values on top, the labels
+//! of values with nothing to show, or the game's own line.
 
 use std::collections::BTreeMap;
 
@@ -58,6 +62,131 @@ impl Overrides {
             };
             (param_matches && same_name(name)).then_some(value)
         })
+    }
+}
+
+/// One of the previews the card's footer offers (section 7 step 8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Preview {
+    /// The live values.
+    Now,
+    /// Health at 180, the maxes kept.
+    LowHealth,
+    /// A sample fight: the opponent Blackwatch Guard at 60 percent with
+    /// quite a few wounds, and you the tank.
+    Fight,
+    /// Every value lamented tears hides, hidden.
+    Lament,
+}
+
+/// The health Low health draws.
+const LOW_HEALTH: i64 = 180;
+
+impl Preview {
+    /// The values the preview draws in place of `live`'s. Fight makes you
+    /// the tank: your name, and your health as the game counts a tank's,
+    /// from `live`, or the catalog's samples when it has neither.
+    pub fn overrides(self, live: &dyn Values) -> Overrides {
+        let mut values = BTreeMap::new();
+        let mut lament = false;
+        match self {
+            Preview::Now => {}
+            Preview::LowHealth => {
+                values.insert("hp".to_string(), Json::from(LOW_HEALTH));
+            }
+            Preview::Fight => {
+                let sample =
+                    |name: &str| vars::entry(name).map_or(Json::Null, |e| Json::from(e.sample));
+                values.insert("fight".to_string(), Json::Bool(true));
+                for name in ["opponent", "opponent_hp", "opponent_cond"] {
+                    values.insert(name.to_string(), sample(name));
+                }
+                let name = match live.resolve(&FieldRef::new("name")) {
+                    Resolved::Value(Value::Text(name)) if !name.is_empty() => Json::from(name),
+                    _ => sample("name"),
+                };
+                let health = match live.resolve(&FieldRef::new("hp")) {
+                    Resolved::Hidden => Json::from("?"),
+                    Resolved::Value(value) => {
+                        tank_pct(&value).map_or(sample("tank_hp"), Json::from)
+                    }
+                    _ => sample("tank_hp"),
+                };
+                values.insert("tank".to_string(), name);
+                values.insert("tank_hp".to_string(), health);
+            }
+            Preview::Lament => lament = true,
+        }
+        Overrides { values, lament }
+    }
+}
+
+/// Your health as the game counts a tank's, `100 * hit / max` with
+/// integer division (correction 28), or the game's own percent when no
+/// max is known.
+fn tank_pct(value: &Value) -> Option<i64> {
+    match value {
+        Value::Gauge {
+            cur,
+            max: Some(max),
+            ..
+        } => Some(100 * cur / (*max).max(1)),
+        Value::Gauge { pct: Some(pct), .. } => Some(*pct),
+        Value::Decimal {
+            value,
+            max: Some(max),
+            ..
+        } if *max > 0.0 => Some((100.0 * value / max) as i64),
+        _ => None,
+    }
+}
+
+/// What the open card shows on your prompt in place of the live render
+/// (sections 4 and 7): one of its previews, values on top of it, the
+/// labels of values with nothing to show while the card is open, or the
+/// game's own line while the card reads your codes. It never saves, and
+/// it goes with the connection.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct PromptPreview {
+    /// The footer's choice.
+    #[serde(default)]
+    pub preview: Option<Preview>,
+    /// Values on top of the preview's.
+    #[serde(default)]
+    pub overrides: Option<Overrides>,
+    /// Draw each value with nothing to show as its label, so the card can
+    /// point at it (D4).
+    #[serde(default)]
+    pub placeholders: bool,
+    /// Show the lines the game sent in place of your design, so the
+    /// card's marks sit on them (P2 and P3).
+    #[serde(default)]
+    pub raw: bool,
+}
+
+impl PromptPreview {
+    /// True when it draws the live prompt as it is.
+    pub fn is_live(&self) -> bool {
+        !self.placeholders
+            && !self.raw
+            && matches!(self.preview, None | Some(Preview::Now))
+            && self.overrides.as_ref().map_or(true, Overrides::is_empty)
+    }
+
+    /// The values it draws in place of `live`'s: the preview's, then the
+    /// values on top.
+    pub fn overrides(&self, live: &dyn Values) -> Overrides {
+        let mut out = self
+            .preview
+            .map(|preview| preview.overrides(live))
+            .unwrap_or_default();
+        if let Some(over) = &self.overrides {
+            out.values
+                .extend(over.values.iter().map(|(k, v)| (k.clone(), v.clone())));
+            out.lament |= over.lament;
+        }
+        out
     }
 }
 

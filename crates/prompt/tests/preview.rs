@@ -3,12 +3,12 @@
 
 mod common;
 
-use common::{capture, feed, now, vosh, DETAILED, JAMES};
+use common::{capture, feed, now, packet, vosh, DETAILED, JAMES};
 use serde_json::json;
-use vosh_prompt::overrides::{lament_hides, Overridden, Overrides};
+use vosh_prompt::overrides::{lament_hides, Overridden, Overrides, Preview, PromptPreview};
 use vosh_prompt::state::{catalog, State};
 use vosh_prompt::vars::{Group, Samples, Source};
-use vosh_prompt::{render_str, FieldRef, RenderOptions, Vars};
+use vosh_prompt::{render_str, FieldRef, PromptEngine, RenderOptions, Vars};
 
 fn overrides(values: serde_json::Value, lament: bool) -> Overrides {
     serde_json::from_value(json!({"values": values, "lament": lament})).expect("overrides")
@@ -200,4 +200,150 @@ fn every_field_reports_its_state_source_and_value() {
     let fields = catalog(&hidden, &vosh(), &[]);
     let hp = fields.iter().find(|f| f.name == "hp").expect("hp");
     assert_eq!((hp.state, hp.value.clone()), (State::Hidden, None));
+}
+
+/// `template` drawn with the card's `preview` over `vars`.
+fn draw_preview(vars: &Vars, preview: &PromptPreview, template: &str) -> String {
+    let vosh = vosh();
+    let live = vars.resolver(&vosh);
+    let over = preview.overrides(&live);
+    render_str(
+        template,
+        &Overridden::new(&live, &over, now()),
+        RenderOptions::default(),
+    )
+    .plain
+}
+
+fn named(preview: Preview) -> PromptPreview {
+    PromptPreview {
+        preview: Some(preview),
+        ..PromptPreview::default()
+    }
+}
+
+#[test]
+fn the_card_previews_draw_now_low_health_a_fight_and_lament() {
+    let mut vars = live();
+    packet(
+        &mut vars,
+        "Char.Status",
+        json!({"name": "Tester", "level": 30}),
+    );
+    let vitals = "%hp/%{maxhp}hp %mana/%{maxmana}mn";
+    assert_eq!(
+        draw_preview(&vars, &named(Preview::Now), vitals),
+        "850/900hp 760/820mn"
+    );
+    // Low health is 180 with the maxes kept.
+    assert_eq!(
+        draw_preview(&vars, &named(Preview::LowHealth), vitals),
+        "180/900hp 760/820mn"
+    );
+    // Fight draws the sample opponent and makes you the tank, at your
+    // own health as the game counts it.
+    let fight = named(Preview::Fight);
+    assert_eq!(
+        draw_preview(&vars, &fight, DETAILED).lines().next(),
+        Some("Blackwatch Guard ██████░░░░ 60% quite a few wounds")
+    );
+    assert_eq!(
+        draw_preview(&vars, &fight, "%{if:fight}%tank %{tank_hp:pct}%%%{end}"),
+        "Tester 94%"
+    );
+    assert_eq!(draw_preview(&vars, &fight, vitals), "850/900hp 760/820mn");
+    // Lament hides every value the song hides.
+    assert_eq!(
+        draw_preview(&vars, &named(Preview::Lament), JAMES),
+        "[?(?%)h ?(?%)m ?(?%)v] "
+    );
+}
+
+#[test]
+fn a_fight_preview_with_nothing_live_takes_the_samples() {
+    let vars = Vars::new(true);
+    assert_eq!(
+        draw_preview(
+            &vars,
+            &named(Preview::Fight),
+            "%tank %{tank_hp:pct}%% %opponent"
+        ),
+        "Tarvik 78% Blackwatch Guard"
+    );
+    // While the game hides your health, the tank health is hidden too.
+    let mut hidden = Vars::new(true);
+    feed(&mut hidden, "char-prompt.gmcp");
+    feed(&mut hidden, "char-vitals-hidden.gmcp");
+    assert_eq!(
+        draw_preview(&hidden, &named(Preview::Fight), "%{tank_hp:pct}"),
+        "?"
+    );
+}
+
+#[test]
+fn values_on_top_of_a_preview_and_the_card_flags() {
+    let vars = live();
+    let preview: PromptPreview = serde_json::from_value(json!({
+        "preview": "low_health",
+        "overrides": {"values": {"mana": 5}},
+        "placeholders": true,
+    }))
+    .expect("a preview");
+    assert_eq!(preview.preview, Some(Preview::LowHealth));
+    assert!(preview.placeholders && !preview.raw);
+    assert_eq!(draw_preview(&vars, &preview, "%hp %mana"), "180 5");
+    // Values on top win over the named preview's.
+    let preview: PromptPreview = serde_json::from_value(json!({
+        "preview": "low_health",
+        "overrides": {"values": {"hp": 20}, "lament": false},
+    }))
+    .expect("a preview");
+    assert_eq!(draw_preview(&vars, &preview, "%hp"), "20");
+    // What draws the live prompt as it is.
+    assert!(PromptPreview::default().is_live());
+    assert!(named(Preview::Now).is_live());
+    assert!(!named(Preview::LowHealth).is_live());
+    for shows_more in [
+        json!({"placeholders": true}),
+        json!({"raw": true}),
+        json!({"overrides": {"lament": true}}),
+    ] {
+        let preview: PromptPreview = serde_json::from_value(shows_more).expect("a preview");
+        assert!(!preview.is_live(), "{preview:?}");
+    }
+    let empty: PromptPreview =
+        serde_json::from_value(json!({"overrides": {"values": {}}})).expect("a preview");
+    assert!(empty.is_live());
+    for (name, preview) in [
+        ("now", Preview::Now),
+        ("low_health", Preview::LowHealth),
+        ("fight", Preview::Fight),
+        ("lament", Preview::Lament),
+    ] {
+        assert_eq!(serde_json::to_value(preview).expect("json"), json!(name));
+    }
+}
+
+#[test]
+fn the_engine_keeps_the_preview_until_the_connection_goes() {
+    let mut engine = PromptEngine::default();
+    engine.connect(true);
+    engine.set_preview(Some(named(Preview::Fight)));
+    assert_eq!(engine.preview(), Some(&named(Preview::Fight)));
+    // A preview that draws the live prompt is no preview.
+    engine.set_preview(Some(named(Preview::Now)));
+    assert_eq!(engine.preview(), None);
+    engine.set_preview(Some(named(Preview::Lament)));
+    engine.set_preview(None);
+    assert_eq!(engine.preview(), None);
+    // Another profile keeps it, since the card still shows it.
+    engine.set_preview(Some(named(Preview::LowHealth)));
+    engine.switch_profile();
+    assert!(engine.preview().is_some());
+    // The connection takes it.
+    engine.disconnect();
+    assert_eq!(engine.preview(), None);
+    engine.set_preview(Some(named(Preview::LowHealth)));
+    engine.connect(false);
+    assert_eq!(engine.preview(), None);
 }

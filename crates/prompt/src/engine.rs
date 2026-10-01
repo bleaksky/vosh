@@ -16,6 +16,7 @@ use crate::aabahran::{and_list, CompileError, Origin, Which, Who};
 use crate::capture;
 use crate::config::{AabahranCapture, CaptureConfig, CaptureSource, PromptConfig};
 use crate::gmcp::{CharPrompt, Observed, CHAR_STATE, CHAR_STATUS};
+use crate::overrides::PromptPreview;
 use crate::stage::Stage;
 use crate::state::{OpenRowState, PromptState};
 use crate::template::Template;
@@ -157,6 +158,9 @@ pub struct PromptEngine {
     /// Why the migrated capture kept its pattern when the game last
     /// showed your PROMPT this session.
     kept_pattern: Option<Kept>,
+    /// What the open card shows on your prompt in place of the live
+    /// render.
+    preview: Option<PromptPreview>,
 }
 
 impl PromptEngine {
@@ -627,6 +631,20 @@ impl PromptEngine {
         }
     }
 
+    /// Show what the open card shows on your prompt in place of the live
+    /// render, or the live render again with None. A preview that draws
+    /// the live prompt as it is counts as None. It lasts until the card
+    /// clears it or the connection goes, and the next repaint shows it.
+    pub fn set_preview(&mut self, preview: Option<PromptPreview>) {
+        self.preview = preview.filter(|p| !p.is_live());
+    }
+
+    /// What the open card shows on your prompt, while it shows anything
+    /// but the live render.
+    pub fn preview(&self) -> Option<&PromptPreview> {
+        self.preview.as_ref()
+    }
+
     /// A count that moves each time the table changes.
     pub fn revision(&self) -> u64 {
         self.revision
@@ -697,6 +715,7 @@ impl PromptEngine {
             ..Misses::default()
         };
         self.kept_pattern = None;
+        self.preview = None;
         self.apply_rules();
     }
 
@@ -709,8 +728,9 @@ impl PromptEngine {
     }
 
     /// The connection closed. Every value, packet and the new build sign
-    /// go with it, and so do the open row and the candidates ring. The
-    /// webview clears its copy of the prompt vars on the disconnect.
+    /// go with it, and so do the open row, the candidates ring and the
+    /// card's preview. The webview clears its copy of the prompt vars on
+    /// the disconnect.
     pub fn disconnect(&mut self) {
         self.vars.disconnect();
         self.stage.reset();
@@ -725,6 +745,7 @@ impl PromptEngine {
             ..Misses::default()
         };
         self.kept_pattern = None;
+        self.preview = None;
         self.apply_rules();
     }
 
