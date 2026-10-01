@@ -233,7 +233,7 @@ pub fn reads_sentence(names: &[&str], fight: bool) -> String {
 }
 
 /// The label a value a setting reads goes by.
-fn value_label(name: &str) -> String {
+pub(crate) fn value_label(name: &str) -> String {
     match name {
         "hp_pct" => "Health percent".into(),
         "mana_pct" => "Mana percent".into(),

@@ -68,6 +68,36 @@ pub struct ShapeLine {
     /// Reads the final segment as a partial with nothing after it. Only
     /// the last line of a setting that ends with no line end has one.
     pub partial: Option<Regex>,
+    /// `line` with a group around what every code prints, named `c` and
+    /// the code's place in [`Shape::codes`], read or not. It matches
+    /// exactly what `line` matches, so the card can mark each code's text
+    /// in a prompt, the ones Vosh cannot tell apart among them. It is
+    /// compiled only when the card asks.
+    pub marker: String,
+}
+
+/// A code one of a shape's lines prints, with where it sits in the
+/// setting and whether Vosh reads its value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShapeCode {
+    pub code: Code,
+    pub span: std::ops::Range<usize>,
+    pub read: bool,
+}
+
+/// What one code printed in a prompt a shape read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShapeMark {
+    /// The line it is on, top line first.
+    pub line: usize,
+    /// Its bytes in that line.
+    pub bytes: std::ops::Range<usize>,
+    /// The code, or None for the immortal prefix's levels and the
+    /// fallback prompt's values, which `name` names.
+    pub code: Option<ShapeCode>,
+    /// The group's name in the shape: the value a read code fills, or
+    /// `wizi`, `incog`, `hp`, `mana` or `move` outside the code loop.
+    pub name: Option<String>,
 }
 
 /// One way the game prints your prompt.
@@ -81,9 +111,55 @@ pub struct Shape {
     /// A partial the last line reads is the prompt at once, since the
     /// setting's final segment ends in a character you wrote.
     pub settle: bool,
+    /// Every code the lines print, in the order they print them.
+    pub codes: Vec<ShapeCode>,
 }
 
 impl Shape {
+    /// What each code printed in `lines`, a prompt this shape read: one
+    /// mark per code that printed anything, and one for each level of
+    /// the immortal prefix, in the order the lines print them. None when
+    /// the shape does not read `lines`.
+    pub fn marks(&self, lines: &[&str]) -> Option<Vec<ShapeMark>> {
+        if lines.len() != self.lines.len() {
+            return None;
+        }
+        let mut out = Vec::new();
+        for (index, (text, line)) in lines.iter().zip(&self.lines).enumerate() {
+            let marker = Regex::new(&line.marker).ok()?;
+            let found = marker.captures(text)?;
+            let mut marks: Vec<ShapeMark> = marker
+                .capture_names()
+                .flatten()
+                .filter_map(|name| {
+                    let m = found.name(name)?;
+                    if m.is_empty() {
+                        return None;
+                    }
+                    let code = name
+                        .strip_prefix('c')
+                        .and_then(|n| n.parse::<usize>().ok())
+                        .and_then(|n| self.codes.get(n))
+                        .cloned();
+                    let name = match &code {
+                        Some(code) if code.read => code.code.name().map(str::to_string),
+                        Some(_) => None,
+                        None => Some(name.to_string()),
+                    };
+                    Some(ShapeMark {
+                        line: index,
+                        bytes: m.range(),
+                        code,
+                        name,
+                    })
+                })
+                .collect();
+            marks.sort_by_key(|m| (m.bytes.start, m.bytes.end));
+            out.extend(marks);
+        }
+        Some(out)
+    }
+
     /// Read whole lines as this shape, the last one without its line end
     /// or ended by a GA or EOR. Every name the shape reads is in the
     /// values, empty where the game printed nothing. The AFK shape reads
@@ -432,12 +508,14 @@ fn build(
     // A final segment that prints nothing leaves the last whole line as
     // the prompt's last line.
     let open = whole.is_empty() || last.iter().any(|p| !matches!(p.piece, Piece::Color(_)));
+    let mut codes: Vec<ShapeCode> = Vec::new();
     let mut out: Vec<ShapeLine> = whole
         .iter()
         .enumerate()
         .map(|(i, line)| ShapeLine {
             line: regex(line, i == 0, End::Line, who, uses),
             partial: None,
+            marker: marker(line, i == 0, who, uses, &mut codes),
         })
         .collect();
     if open {
@@ -445,6 +523,7 @@ fn build(
         out.push(ShapeLine {
             line: regex(last, first, End::Line, who, uses),
             partial: Some(regex(last, first, End::Partial, who, uses)),
+            marker: marker(last, first, who, uses, &mut codes),
         });
     }
     let settle = open
@@ -460,6 +539,7 @@ fn build(
         which,
         lines: out,
         settle,
+        codes,
     }
 }
 
@@ -471,6 +551,53 @@ fn regex(
     who: Who,
     uses: &dyn Fn(&Placed, Code) -> Use,
 ) -> Regex {
+    let pattern = source(line, first, end, who, uses, &mut |_, code, usage| {
+        usage
+            .capture
+            .then(|| code.name())
+            .flatten()
+            .map(str::to_string)
+    });
+    Regex::new(&pattern).expect("a compiled shape is a valid pattern")
+}
+
+/// The pattern for one line with every code in a group of its own,
+/// named `c` and its place in `codes`, which it adds the line's codes
+/// to. See [`ShapeLine::marker`].
+fn marker(
+    line: &[&Placed],
+    first: bool,
+    who: Who,
+    uses: &dyn Fn(&Placed, Code) -> Use,
+    codes: &mut Vec<ShapeCode>,
+) -> String {
+    source(
+        line,
+        first,
+        End::Line,
+        who,
+        uses,
+        &mut |placed, code, usage| {
+            codes.push(ShapeCode {
+                code,
+                span: placed.span.clone(),
+                read: usage.capture && code.name().is_some(),
+            });
+            Some(format!("c{}", codes.len() - 1))
+        },
+    )
+}
+
+/// The source of the pattern for one line. `name` gives the group each
+/// code's value goes in, or None for no group.
+fn source(
+    line: &[&Placed],
+    first: bool,
+    end: End,
+    who: Who,
+    uses: &dyn Fn(&Placed, Code) -> Use,
+    name: &mut dyn FnMut(&Placed, Code, Use) -> Option<String>,
+) -> String {
     // Trailing spaces, past any colors among them, come off the text.
     let mut cut = line.len();
     let mut spaces = 0;
@@ -497,8 +624,8 @@ fn regex(
                 re.push_str(&regex::escape(&text));
                 text.clear();
                 let usage = uses(placed, code);
-                let name = if usage.capture { code.name() } else { None };
-                let pattern = code.pattern(who).regex(name);
+                let group = name(placed, code, usage);
+                let pattern = code.pattern(who).regex(group.as_deref());
                 if usage.optional {
                     re.push_str("(?:");
                     re.push_str(&pattern);
@@ -515,7 +642,7 @@ fn regex(
         End::Partial if spaces > 0 => " +$",
         End::Partial => "$",
     });
-    Regex::new(&re).expect("a compiled shape is a valid pattern")
+    re
 }
 
 /// The one line the game prints while you are away.
@@ -543,9 +670,11 @@ fn fixed(kind: ShapeKind, body: &str) -> Shape {
         kind,
         which: Which::Prompt,
         lines: vec![ShapeLine {
+            marker: line.as_str().to_string(),
             line,
             partial: Some(pattern(" $")),
         }],
         settle: true,
+        codes: Vec::new(),
     }
 }
