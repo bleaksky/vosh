@@ -3537,6 +3537,36 @@ mod tests {
     }
 
     #[test]
+    fn a_trigger_body_reads_the_whole_match_then_each_group() {
+        // Unlike an alias body, captures[1] is the whole match, so a
+        // trigger that reads hp from captures[2] keeps reading it.
+        let mut p = Profile::default();
+        p.triggers
+            .set(vosh_trigger::Trigger {
+                name: "says".into(),
+                patterns: vec![vosh_trigger::TriggerPattern {
+                    pattern: r"^(\w+) says (\w+)".into(),
+                    enabled: true,
+                }],
+                priority: 0,
+                enabled: true,
+                actions: vec![vosh_trigger::TriggerAction::Script {
+                    body: "mud.send(captures[1] .. '|' .. captures[2] .. '|' .. captures[3])"
+                        .into(),
+                }],
+                preset: None,
+                group: None,
+                target: vosh_trigger::TriggerTarget::Line,
+            })
+            .expect("the trigger compiles");
+        let result = vosh_trigger::process(&p.triggers, b"Bob says hi");
+        assert_eq!(
+            super::run_trigger_scripts(&mut p, &result, "t"),
+            [vosh_script::Action::Send("Bob says hi|Bob|hi".into())]
+        );
+    }
+
+    #[test]
     fn tick_and_lua_lines_note_what_they_ask_of_the_profile() {
         let mut p = Profile::default();
         let mut effects = LineEffects::default();
