@@ -14,6 +14,7 @@ import {
   layoutMarks,
   moveOp,
   pickable,
+  rawLayout,
   rawMarks,
   rowsOf,
   step,
@@ -324,5 +325,23 @@ describe('marks on the game own lines', () => {
     // A read of another prompt marks nothing.
     expect(rawMarks(open, { ...read, plain: 'x\n[9/9hp 8/8mn]' }, false)).toEqual([]);
     expect(rawMarks(open, null, false)).toEqual([]);
+  });
+});
+
+describe('the marks on the game own line', () => {
+  it('fills each value with the token alone and rings a run Vosh cannot read', () => {
+    const grid: Grid = { left: 16, top: 38, cellW: 7.8, cellH: 17.5 };
+    const region = { gen: 2, row: 38, col: 0, cols: 80, atBottom: true };
+    const mapper = textMapper('<1020800 930mv> ', region, grid);
+    const marks = rawLayout(
+      [
+        { row: 0, col: 1, width: 7, warn: true },
+        { row: 0, col: 9, width: 3, warn: false },
+      ],
+      mapper,
+    );
+    expect(marks.picked).toEqual([]);
+    expect(marks.values).toEqual([{ left: 16 + 9 * 7.8, top: 703, width: 3 * 7.8, height: 17.5 }]);
+    expect(marks.warn).toEqual([{ left: 16 + 7.8, top: 703, width: 7 * 7.8, height: 17.5 }]);
   });
 });

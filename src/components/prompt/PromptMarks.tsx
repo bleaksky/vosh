@@ -4,9 +4,9 @@ import {
   dockMapper,
   endPlace,
   layoutMarks,
+  rawLayout,
   textMapper,
   type Box,
-  type CellMapper,
   type MarkLayout,
   type Pointing,
   type RawMark,
@@ -71,19 +71,10 @@ interface Measured {
   textRight: number | null;
 }
 
-const NONE: MarkLayout = { picked: [], warn: [], returns: [], caret: null };
+const NONE: MarkLayout = { picked: [], values: [], warn: [], returns: [], caret: null };
 
 function boxStyle(box: Box): CSSProperties {
   return { left: box.left, top: box.top, width: box.width, height: box.height };
-}
-
-/** The marks for raw runs through `mapper`. */
-function rawLayout(raw: readonly RawMark[], mapper: CellMapper): MarkLayout {
-  return {
-    ...NONE,
-    picked: raw.filter((m) => !m.warn).flatMap((m) => mapper.boxes(m.row, m.col, m.width)),
-    warn: raw.filter((m) => m.warn).flatMap((m) => mapper.boxes(m.row, m.col, m.width)),
-  };
 }
 
 export function PromptMarks({
@@ -302,6 +293,9 @@ export function PromptMarks({
       <div className="pc-marks" aria-hidden="true">
         {layout.warn.map((b, i) => (
           <span key={`w${i}`} className="pc-mark-warn" style={boxStyle(b)} />
+        ))}
+        {layout.values.map((b, i) => (
+          <span key={`v${i}`} className="pc-mark-value" style={boxStyle(b)} />
         ))}
         {layout.picked.map((b, i) => (
           <span key={`p${i}`} className="pc-mark-token" style={boxStyle(b)} />
