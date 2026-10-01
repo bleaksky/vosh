@@ -18,8 +18,9 @@ import {
   layoutPrompt,
   pieceAtCell,
 } from '../../lib/promptPointer';
+import { findOnScreen, type ScreenAsk } from '../../lib/promptScreen';
 import type { PromptShowState } from '../../lib/promptShow';
-import type { PromptOpenRow, PromptPiece } from '../../lib/session';
+import { onOutput, type PromptOpenRow, type PromptPiece } from '../../lib/session';
 import { getPinnedBand } from '../../lib/stores/pinnedPromptStore';
 import { setPromptReach } from '../../lib/stores/promptReachStore';
 import { shownColumns } from '../../lib/sgrCells';
@@ -55,6 +56,10 @@ interface PromptMarksProps {
   } | null;
   /** The marks on the game's own lines while the card reads your codes. */
   raw: readonly RawMark[] | null;
+  /** The game's own line to find on screen, where no open row shows it:
+   *  while the profile reads no prompt, and while you point at the line
+   *  on another game. */
+  screen: ScreenAsk | null;
   refresh: number;
   onPoint: (pointing: Pointing) => void;
   /** The card, whose own clicks are its own. */
@@ -84,6 +89,7 @@ export function PromptMarks({
   openRow,
   design,
   raw,
+  screen,
   refresh,
   onPoint,
   card,
@@ -149,7 +155,34 @@ export function PromptMarks({
     }
     const term = host.terminal();
     const grid = term?.grid() ?? null;
-    if (!term || !grid || !openRow) return null;
+    if (!term || !grid) return null;
+    // No open row shows the game's line, so the marks find it on screen:
+    // the last text there while Vosh reads your codes, every row of its
+    // shape while you point at it.
+    if (!design && screen && (screen.mode === 'shape' || !openRow)) {
+      const shown = await term.screenRows().catch(() => null);
+      if (!shown?.atBottom) return null;
+      const layouts = findOnScreen(shown.rows, screen, shown.cols).map((found) =>
+        rawLayout(
+          screen.marks(found.lines),
+          textMapper(
+            found.lines.join('\n'),
+            { gen: 0, row: found.row, col: 0, cols: shown.cols, atBottom: true },
+            grid,
+          ),
+        ),
+      );
+      return {
+        layout: {
+          ...NONE,
+          values: layouts.flatMap((l) => l.values),
+          warn: layouts.flatMap((l) => l.warn),
+        },
+        hit: null,
+        textRight: null,
+      };
+    }
+    if (!openRow) return null;
     const region = await term.promptRegion().catch(() => null);
     if (!region || region.gen !== openRow.gen || !region.atBottom) return null;
     if (!design) {
@@ -195,7 +228,7 @@ export function PromptMarks({
       return null;
     };
     return { layout, hit, textRight: grid.left + rightmost * grid.cellW };
-  }, [off, pinned, host, cell, openRow, design, raw]);
+  }, [off, pinned, host, cell, openRow, design, raw, screen]);
 
   const run = useCallback(() => {
     let alive = true;
@@ -238,6 +271,25 @@ export function PromptMarks({
       area?.removeEventListener('wheel', later);
     };
   }, [host, run]);
+
+  // Found on screen, the line moves as the game's text arrives, so the
+  // marks look again once the terminal has written it.
+  const finding = screen !== null;
+  useEffect(() => {
+    if (!finding) return;
+    let timer = 0;
+    let stop: (() => void) | null = null;
+    let alive = true;
+    void onOutput(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => run(), 60);
+    }).then((fn) => (alive ? (stop = fn) : fn()));
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+      stop?.();
+    };
+  }, [finding, run]);
 
   useEffect(() => () => setPromptReach(0), []);
 
