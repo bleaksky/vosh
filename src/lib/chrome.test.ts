@@ -8,9 +8,11 @@ import {
   STATUS_TEXT_CONTRAST,
   TERTIARY_CONTRAST,
   tokensToCssVars,
+  tokenVarName,
 } from './chrome';
 import { contrast, parseHex, type Rgb } from './color';
-import { findTheme } from './themes';
+import { DEFAULT_THEME_ID, findTheme, themeTokens } from './themes';
+import tokensCss from '../styles/tokens.css?raw';
 
 const hex = (h: string): Rgb => {
   const c = parseHex(h);
@@ -106,5 +108,35 @@ describe('derivation rules', () => {
     expect(vars['--bg']).toBe('#050403');
     expect(vars['--on-accent']).toBe('#050403');
     expect(vars['--inputband']).toBe('#0f0e0d');
+  });
+});
+
+// A window paints from styles/tokens.css until theme.ts writes the
+// derived tokens on :root, so a stylesheet default that drifts from the
+// derivation flashes the wrong color at startup in the default theme.
+describe('the stylesheet defaults', () => {
+  /** The custom properties the first :root block of tokens.css sets. */
+  function rootVars(css: string): Map<string, string> {
+    const block = /:root\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const vars = new Map<string, string>();
+    for (const m of block.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) vars.set(m[1], m[2].trim());
+    return vars;
+  }
+
+  const theme = findTheme(DEFAULT_THEME_ID);
+  const derived = tokensToCssVars(themeTokens(theme));
+  const css = rootVars(tokensCss);
+
+  it('paint every color token as the default theme derives it', () => {
+    expect(theme.id).toBe(DEFAULT_THEME_ID);
+    for (const key of CHROME_COLOR_KEYS) {
+      const name = tokenVarName(key);
+      expect(css.get(name)?.toLowerCase(), name).toBe(derived[name].toLowerCase());
+    }
+  });
+
+  it('paint the terminal ground the default theme gives xterm', () => {
+    expect(css.get('--bg')?.toLowerCase()).toBe(theme.xterm.background?.toLowerCase());
+    expect(tokensCss).toMatch(/--xterm-bg:\s*var\(--bg\);/);
   });
 });
