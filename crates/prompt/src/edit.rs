@@ -19,7 +19,7 @@
 
 use std::fmt;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::template::{
     runs_on, takes_param, write_token, BarColor, Code, ColorSpec, FieldRef, Format, PieceKind,
@@ -98,7 +98,7 @@ impl FormatChoice {
 
 /// The formats of section 1.4, and the two pieces the parser folds:
 /// Current and max (`%hp/%{maxhp}`) and Percent (`%pct_hp%%`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FormatName {
     Value,
@@ -124,7 +124,7 @@ pub enum FormatName {
 }
 
 /// A color the card offers.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ColorChoice {
     /// The terminal's own color, `%c_default`.
@@ -165,7 +165,7 @@ pub enum StyleChoice {
 }
 
 /// When a piece shows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum When {
     Always,
@@ -214,15 +214,15 @@ pub fn apply(
 /// The SGR state the codes leave, with each color as the template names
 /// it. A color by value stands for itself, whatever it draws.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-struct Look {
-    fg: Option<ColorSpec>,
-    bg: Option<ColorSpec>,
-    bold: bool,
-    dim: bool,
-    italic: bool,
-    underline: bool,
-    inverse: bool,
-    strike: bool,
+pub(crate) struct Look {
+    pub(crate) fg: Option<ColorSpec>,
+    pub(crate) bg: Option<ColorSpec>,
+    pub(crate) bold: bool,
+    pub(crate) dim: bool,
+    pub(crate) italic: bool,
+    pub(crate) underline: bool,
+    pub(crate) inverse: bool,
+    pub(crate) strike: bool,
 }
 
 const STYLES: [Style; 6] = [
@@ -395,12 +395,12 @@ impl Item {
 
 /// A piece of the design being edited.
 #[derive(Debug, Clone)]
-struct Piece {
+pub(crate) struct Piece {
     /// Which piece this is, however the pieces move.
     uid: usize,
     /// The piece of the template before the edit, None for a new one.
     origin: Option<usize>,
-    kind: PieceKind,
+    pub(crate) kind: PieceKind,
     codes: Vec<Item>,
     content: Vec<Item>,
 }
@@ -415,12 +415,12 @@ impl Piece {
 
     /// The piece takes cells, or would with a value: not a marker and
     /// not codes alone.
-    fn shows(&self) -> bool {
+    pub(crate) fn shows(&self) -> bool {
         !self.marker() && self.kind != PieceKind::Codes
     }
 
     /// The first value the piece reads.
-    fn value(&self) -> Option<&ValueRef> {
+    pub(crate) fn value(&self) -> Option<&ValueRef> {
         self.content.iter().find_map(|item| match &item.kind {
             TokenKind::Value(value) => Some(value),
             _ => None,
@@ -428,7 +428,7 @@ impl Piece {
     }
 
     /// The field of a fight condition, and whether it is `%{if:fight}`.
-    fn fight(&self) -> Option<PieceKind> {
+    pub(crate) fn fight(&self) -> Option<PieceKind> {
         match self.content.first().map(|item| &item.kind) {
             Some(TokenKind::If(f) | TokenKind::IfNot(f))
                 if f.name == "fight" && f.param.is_none() =>
@@ -448,13 +448,13 @@ struct Looks {
     at: Vec<Look>,
 }
 
-struct Doc {
-    pieces: Vec<Piece>,
+pub(crate) struct Doc {
+    pub(crate) pieces: Vec<Piece>,
     next_uid: usize,
 }
 
 impl Doc {
-    fn of(template: &Template) -> Self {
+    pub(crate) fn of(template: &Template) -> Self {
         let item = |index: usize| Item {
             kind: template.tokens()[index].kind.clone(),
             text: Some(template.token_text(index).to_string()),
@@ -499,7 +499,7 @@ impl Doc {
 
     /// The look before each piece and at its first cell, every condition
     /// holding.
-    fn walk(&self) -> (Vec<Look>, Vec<Look>) {
+    pub(crate) fn walk(&self) -> (Vec<Look>, Vec<Look>) {
         let mut state = Look::default();
         let mut before = Vec::with_capacity(self.pieces.len());
         let mut at = Vec::with_capacity(self.pieces.len());
@@ -783,7 +783,7 @@ impl Doc {
     }
 
     /// The sections around piece `index`, innermost first.
-    fn around(&self, index: usize) -> Vec<(usize, usize)> {
+    pub(crate) fn around(&self, index: usize) -> Vec<(usize, usize)> {
         let mut found: Vec<(usize, usize)> = self
             .sections()
             .into_iter()
@@ -1123,7 +1123,7 @@ fn parse_field(text: &str) -> Result<FieldRef, EditError> {
 }
 
 /// The catalog kind of a field, None for a name only scripts set.
-fn kind_of(field: &FieldRef) -> Option<Kind> {
+pub(crate) fn kind_of(field: &FieldRef) -> Option<Kind> {
     vars::entry_for(field).map(|e| e.kind)
 }
 

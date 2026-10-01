@@ -1,0 +1,254 @@
+//! What the prompt card reads about a design (section 7, steps 6, 7, 9
+//! and 10): each piece's field, form, When, color and style, what it
+//! reads now, the forms Show as and the picker offer, and each token of
+//! the text with its piece.
+
+use chrono::{NaiveDate, NaiveDateTime};
+use vosh_prompt::describe::{describe, forms, PieceKindName, PieceView, TokenKindName};
+use vosh_prompt::edit::{ColorChoice, FormatName, When};
+use vosh_prompt::presets::DEFAULT_DESIGN;
+use vosh_prompt::vars::Samples;
+use vosh_prompt::{FieldRef, Resolved, Template, Values};
+
+const JAMES: &str = "%{c:100,100,100}[%c_reset%s_italic%hp(%c_hp%pct_hp%c_reset%s_italic%)h %mana(%{c:128,200,255}%pct_mana%c_reset%s_italic%)m %move(%{c:200,255,23}%pct_move%c_reset%s_italic%)v%c_reset%{c:100,100,100}] %c_reset";
+
+const DETAILED: &str = "%{if:fight}%opponent %{opponent_hp:bar:10} %{opponent_hp:pct}%% %opponent_cond%nl%{end}%c_hp%hp%c_default/%{maxhp}hp %c_mana%mana%c_default/%{maxmana}mn %c_move%move%c_default/%{maxmove}mv %{c:8}tick%c_default %tick%{if:exits} %{c:8}[%c_default%exits%{c:8}]%c_default%{end} %{gold}g%{if:missing} %c_3%missing missing%c_default%{end}";
+
+fn now() -> NaiveDateTime {
+    NaiveDate::from_ymd_opt(2026, 9, 29)
+        .and_then(|d| d.and_hms_opt(8, 42, 10))
+        .expect("a valid date")
+}
+
+/// The catalog's samples, in a fight or out of one.
+struct Sampled {
+    fight: bool,
+}
+
+impl Values for Sampled {
+    fn resolve(&self, field: &FieldRef) -> Resolved {
+        if !self.fight && field.name == "fight" {
+            return Resolved::Absent;
+        }
+        Samples { now: now() }.resolve(field)
+    }
+
+    fn label(&self, field: &FieldRef) -> String {
+        Samples { now: now() }.label(field)
+    }
+}
+
+/// The piece whose text is `text`.
+fn piece<'a>(pieces: &'a [PieceView], text: &str) -> &'a PieceView {
+    pieces
+        .iter()
+        .find(|p| p.text == text)
+        .unwrap_or_else(|| panic!("no piece {text:?} in {pieces:#?}"))
+}
+
+fn segments(piece: &PieceView) -> Vec<&str> {
+    piece.forms.iter().map(|f| f.segment.as_str()).collect()
+}
+
+#[test]
+fn the_hp_value_reads_as_health_with_its_own_codes_and_inherited_italic() {
+    // P5: the hp value piece picked in his template.
+    let described = describe(&Template::parse(JAMES), &Sampled { fight: false }, false);
+    let hp = piece(&described.pieces, "%c_reset%s_italic%hp");
+    assert_eq!(hp.kind, PieceKindName::Value);
+    assert_eq!(hp.label, "Health");
+    assert_eq!(hp.field.as_deref(), Some("hp"));
+    assert_eq!(hp.format, Some(FormatName::Value));
+    assert_eq!(hp.meta.as_deref(), Some("1020 of 1020"));
+    assert_eq!(hp.color, ColorChoice::Default);
+    assert!(hp.italic && !hp.bold && !hp.underline);
+    assert_eq!((hp.when, hp.when_fixed), (When::Always, false));
+    assert!(hp.by_value && hp.shows);
+    assert_eq!(segments(hp), ["1020", "1020/1020", "100%", "Bar"]);
+    // The percent after it is By value, and Show as adds the percent with
+    // no sign it shows now.
+    let pct = piece(&described.pieces, "%c_hp%pct_hp");
+    assert_eq!(
+        pct.color,
+        ColorChoice::ByValue {
+            field: None,
+            game: false
+        }
+    );
+    assert_eq!(pct.format, Some(FormatName::Pct));
+    assert_eq!(segments(pct), ["1020", "1020/1020", "100%", "Bar", "100"]);
+    // The mana percent keeps its own true color.
+    let mana = piece(&described.pieces, "%{c:128,200,255}%pct_mana");
+    assert_eq!(
+        mana.color,
+        ColorChoice::Rgb {
+            r: 128,
+            g: 200,
+            b: 255
+        }
+    );
+    // The bracket is text in rgb 100 100 100.
+    let bracket = piece(&described.pieces, "%{c:100,100,100}[");
+    assert_eq!(bracket.kind, PieceKindName::Text);
+    assert_eq!(bracket.label, "Text");
+    assert_eq!(bracket.literal.as_deref(), Some("["));
+    assert_eq!(
+        bracket.color,
+        ColorChoice::Rgb {
+            r: 100,
+            g: 100,
+            b: 100
+        }
+    );
+    assert!(!bracket.by_value && bracket.forms.is_empty() && bracket.meta.is_none());
+    // `%)h` stays text, a percent and all.
+    let tail = piece(&described.pieces, "%c_reset%s_italic%)h ");
+    assert_eq!(tail.literal.as_deref(), Some("%)h "));
+}
+
+#[test]
+fn a_bar_in_a_fight_section_reads_in_a_fight_with_its_own_color() {
+    // P8b: the opponent bar of Detailed under the Fight preview.
+    let described = describe(&Template::parse(DETAILED), &Sampled { fight: true }, true);
+    let bar = piece(&described.pieces, "%{opponent_hp:bar:10}");
+    assert_eq!(bar.label, "Opponent health");
+    assert_eq!(bar.format, Some(FormatName::Bar));
+    assert_eq!(bar.width, Some(10));
+    assert_eq!((bar.when, bar.when_fixed), (When::Fight, false));
+    assert_eq!(
+        bar.color,
+        ColorChoice::ByValue {
+            field: None,
+            game: false
+        }
+    );
+    assert_eq!(bar.meta.as_deref(), Some("60 percent in this preview"));
+    assert_eq!(segments(bar), ["60%", "Bar"]);
+    // P10: the line break in the same section.
+    let nl = piece(&described.pieces, "%nl");
+    assert_eq!(nl.kind, PieceKindName::Nl);
+    assert_eq!(nl.label, "Line break");
+    assert_eq!((nl.when, nl.when_fixed), (When::Fight, false));
+    assert!(nl.forms.is_empty() && nl.field.is_none());
+    // The gold out of any fight section shows always.
+    let gold = piece(&described.pieces, "%{gold}");
+    assert_eq!((gold.when, gold.when_fixed), (When::Always, false));
+    // A condition takes no cells.
+    let cond = piece(&described.pieces, "%{if:fight}");
+    assert_eq!(cond.kind, PieceKindName::If);
+    assert!(!cond.shows);
+}
+
+#[test]
+fn a_fight_condition_outside_another_one_holds_the_part_in_place() {
+    // The default design's tank sits in %{if:tank} inside %{if:fight}.
+    let described = describe(
+        &Template::parse(DEFAULT_DESIGN),
+        &Sampled { fight: true },
+        false,
+    );
+    let tank = described
+        .pieces
+        .iter()
+        .find(|p| p.field.as_deref() == Some("tank"))
+        .expect("the tank");
+    assert_eq!((tank.when, tank.when_fixed), (When::Fight, true));
+    assert_eq!(tank.meta.as_deref(), Some("Tarvik"));
+}
+
+#[test]
+fn a_max_alone_shows_as_its_gauge_in_the_form_max() {
+    let described = describe(
+        &Template::parse("%opponent %{maxhp}"),
+        &Sampled { fight: false },
+        false,
+    );
+    let opponent = &described.pieces[0];
+    assert_eq!(opponent.label, "Opponent");
+    // A max alone is Health in the form Max.
+    let max = piece(&described.pieces, "%{maxhp}");
+    assert_eq!(max.field.as_deref(), Some("hp"));
+    assert_eq!(max.format, Some(FormatName::Max));
+    assert_eq!(
+        segments(max),
+        ["1020", "1020/1020", "1020", "100%", "Bar"],
+        "Show as keeps the form it shows now"
+    );
+}
+
+#[test]
+fn the_picker_offers_every_form_with_a_live_sample() {
+    let values = Sampled { fight: false };
+    let hp: Vec<(&str, String)> = forms(&FieldRef::new("hp"), &values)
+        .iter()
+        .map(|f| (f.label, f.sample.plain.clone()))
+        .collect();
+    assert_eq!(
+        hp,
+        [
+            ("Current", "1020".to_string()),
+            ("Current and max", "1020/1020".to_string()),
+            ("Max", "1020".to_string()),
+            ("Percent", "100%".to_string()),
+            ("Bar", "██████████".to_string()),
+            ("Grouped", "1,020".to_string()),
+            ("Short", "1k".to_string()),
+        ]
+    );
+    // The bar draws in theme green at full.
+    let bar = &forms(&FieldRef::new("hp"), &values)[4];
+    assert!(
+        bar.sample.ansi.starts_with("\x1b[32m"),
+        "{:?}",
+        bar.sample.ansi
+    );
+    // Exits read as letters and in the game's style (P6b).
+    let exits: Vec<(&str, String)> = forms(&FieldRef::new("exits"), &values)
+        .iter()
+        .map(|f| (f.label, f.sample.plain.clone()))
+        .collect();
+    assert_eq!(
+        exits,
+        [
+            ("Letters", "S".to_string()),
+            ("Game style", "[Exits: S]".to_string())
+        ]
+    );
+    // Position reads short, as a word and in the game's style.
+    let pos: Vec<&str> = forms(&FieldRef::new("pos"), &values)
+        .iter()
+        .map(|f| f.label)
+        .collect();
+    assert_eq!(pos, ["Short", "Word", "Game style"]);
+    // A name only a script sets reads as text.
+    let script: Vec<&str> = forms(&FieldRef::new("my_count"), &values)
+        .iter()
+        .map(|f| f.label)
+        .collect();
+    assert_eq!(script, ["Text"]);
+}
+
+#[test]
+fn tokens_name_their_piece_in_utf16_units_and_mark_unknown_names() {
+    let template = Template::parse("%c_hp%hp ♥ %nope%nl%{if:fight}x%{end}");
+    let described = describe(&template, &Sampled { fight: false }, false);
+    let tokens: Vec<(usize, usize, usize, TokenKindName, bool)> = described
+        .tokens
+        .iter()
+        .map(|t| (t.start, t.end, t.piece, t.kind, t.known))
+        .collect();
+    assert_eq!(
+        tokens,
+        [
+            (0, 5, 0, TokenKindName::Code, true),
+            (5, 8, 0, TokenKindName::Value, true),
+            (8, 11, 1, TokenKindName::Text, true),
+            (11, 16, 2, TokenKindName::Value, false),
+            (16, 19, 3, TokenKindName::Line, true),
+            (19, 30, 4, TokenKindName::Condition, true),
+            (30, 31, 5, TokenKindName::Text, true),
+            (31, 37, 6, TokenKindName::Condition, true),
+        ]
+    );
+    assert_eq!(described.tokens[3].name.as_deref(), Some("nope"));
+}

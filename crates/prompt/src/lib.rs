@@ -13,6 +13,8 @@
 //!   editor shows.
 //! - [`edit`] writes the template changes the editor makes, keeping the
 //!   look of every other piece.
+//! - [`describe`] says what each piece and token of a design is, for the
+//!   card, with the forms a value takes.
 //! - [`format`] holds the values a template draws and the plain text of
 //!   each format.
 //! - [`generic`] builds a capture from a line another game prints.
@@ -40,6 +42,7 @@ pub mod aabahran;
 pub mod candidates;
 pub mod capture;
 pub mod config;
+pub mod describe;
 pub mod edit;
 pub mod engine;
 pub mod format;
