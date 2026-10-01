@@ -639,6 +639,18 @@ The perf set, recorded in R1 from the latency run's head and checked again after
 | P4  | Opening Settings and the Appearance page                | Release build                                                                                       |
 | P5  | Searching a week of logs                                | A benchmark over a heavy week written through the real LogStore, skipped by default                 |
 
+Running P2 and P5. Both are tests that `cargo test` skips. Run each in a release build, and compare its best run with the numbers recorded before the phase.
+
+```
+cargo test -p vosh-app --release --lib p2_ -- --ignored --nocapture
+cargo test -p vosh-log --release --test p5_search -- --ignored --nocapture
+```
+
+- P2 lives in `src-tauri/src/throughput_tests.rs`. It plays the fake Aabahran's greeting, `login-new` and 3,000 rounds of the `quiet`, `fight-tank` and `lament-new` wire reads, each round closed by a numbered pulse, about 9.5 MB in all. The game writes it at once, and the real session loop takes it to the native grid with the default design drawn and every row logged. Five runs print the time to the grid and MB per second, then the best and the median.
+- P5 lives in `crates/log/tests/p5_search.rs`. It writes the Phase 10 check's heavy week through the real LogStore, 702,987 rows in an 83.5 MB file, then times the session list, nine searches the Settings log view runs and the page before the first. Each search runs once on a fresh connection and five more times warm. Every number has the file in the system cache. To time cold searches, set `VOSH_P5_DB` to a file path, run once to write the week there, run `sudo purge` and run again.
+- Both also check what they time. P2 fails when the log or the grid loses, doubles or changes a round, and P5 fails when a page differs from a plain scan of the week. A failure there is a broken contract, not a slow run.
+- The first release build of the app tests takes about four minutes. Both run in a dev build too, far slower. Numbers from a busy machine swing widely, so record them with nothing else building.
+
 The app check. A dev build launched with a scratch HOME that holds a copy of your profile folder, never your real one. Look at the main window, every Settings page and Help, in one dark and one light theme, with the macOS native surface on and off. Compare against the R1 screenshots.
 
 The golden rule. A golden file changes only in a commit tied to a numbered bug or a lettered decision, and that commit shows you the byte diff. The old inputs that must still load never change. Fixture switches such as `VOSH_WRITE_WIRE` stay unset during refactor commits. If a pure move needs a digest or golden written again, something broke and the phase stops.
