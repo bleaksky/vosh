@@ -1900,9 +1900,20 @@ async fn a_lua_alias_you_type_runs_its_body_and_the_game_hears_it() {
             .with_script("mud.echo('You peer ' .. captures[1] .. '.')\nmud.send(captures[1])"),
     );
 
+    // The login already showed the room, so count rooms to see the
+    // game answer the look the body sends. The game answers in order, so
+    // a raw `peer look` would show its Huh? before that room.
+    let rooms = |h: &Harness| {
+        h.screen()
+            .iter()
+            .filter(|r| r.as_str() == "[Exits: south]")
+            .count()
+    };
+    let before = rooms(&h);
     h.type_line("peer look").await;
     h.until_shown("You peer look.").await;
-    h.until_shown("[Exits: south]").await;
+    h.until("the game's answer to look", |h| rooms(h) > before)
+        .await;
     let screen = h.screen();
     assert!(
         !screen.iter().any(|row| row.contains("Huh?")),
