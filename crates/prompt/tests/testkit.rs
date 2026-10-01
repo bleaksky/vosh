@@ -548,6 +548,32 @@ fn compact_and_telnetga_change_how_a_prompt_ends() {
 }
 
 #[test]
+fn a_game_that_plays_eor_answers_each_ask_and_ends_prompts_with_eor() {
+    let ask = [telnet::IAC, telnet::DO, telnet::TELOPT_EOR];
+    let will = [telnet::IAC, telnet::WILL, telnet::TELOPT_EOR];
+    // A game without it ignores the ask and keeps GA.
+    let mut mud = playing(Build::New);
+    assert!(mud.receive(&ask).is_empty());
+    assert!(run(&mut mud, "").ends_with(&[telnet::IAC, telnet::GA]));
+
+    let mut mud = Mud::playing(Options {
+        eor: true,
+        ..Options::new(Build::New)
+    });
+    assert!(run(&mut mud, "").ends_with(&[telnet::IAC, telnet::GA]));
+    // Each ask gets its own answer, as a game that keeps no state gives.
+    for _ in 0..2 {
+        let writes = mud.receive(&ask);
+        assert_eq!(writes.len(), 1);
+        assert_eq!(writes[0].bytes, will);
+    }
+    let raw = run(&mut mud, "");
+    assert!(raw.ends_with(&[telnet::IAC, telnet::EOR]));
+    assert!(!raw.ends_with(&[telnet::IAC, telnet::GA, telnet::IAC, telnet::EOR]));
+    assert_eq!(shown(&raw), "\n\r[1020/1020hp 800/800mn 930/930mv]\n\r");
+}
+
+#[test]
 fn quit_closes_the_connection() {
     let mut mud = playing(Build::New);
     let writes = mud.command("quit");

@@ -8,6 +8,7 @@
 //! listeners, and a native grid replays the output the way the terminal
 //! shows it. The profile folder and the log live in a temporary folder.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
@@ -43,8 +44,9 @@ const TYPED_X: &str = "<%h/%Hhp %m/%Mmn>";
 const PROMPT_X: &str = "<%h/%Hhp %m/%Mmn> ";
 
 /// Serve the fake game on a local port until the test ends. Each
-/// connection plays the options `options` holds when it connects.
-async fn serve_fake(options: Arc<StdMutex<Options>>) -> u16 {
+/// connection plays the options `options` holds when it connects. `asks`
+/// counts each IAC DO EOR a client sends.
+async fn serve_fake(options: Arc<StdMutex<Options>>, asks: Arc<AtomicUsize>) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("a local port");
@@ -52,14 +54,19 @@ async fn serve_fake(options: Arc<StdMutex<Options>>) -> u16 {
     tokio::spawn(async move {
         while let Ok((socket, _)) = listener.accept().await {
             let options = options.lock().expect("the options").clone();
-            tokio::spawn(play(socket, options));
+            tokio::spawn(play(socket, options, asks.clone()));
         }
     });
     port
 }
 
 /// One connection to the fake game, as `examples/fake_mud.rs` plays it.
-async fn play(mut socket: TcpStream, options: Options) -> std::io::Result<()> {
+async fn play(
+    mut socket: TcpStream,
+    options: Options,
+    asks: Arc<AtomicUsize>,
+) -> std::io::Result<()> {
+    use vosh_prompt::testkit::mud::telnet::{DO, IAC, TELOPT_EOR};
     socket.set_nodelay(true)?;
     let mut mud = Mud::new(options);
     socket.write_all(&mud.greeting()).await?;
@@ -69,6 +76,11 @@ async fn play(mut socket: TcpStream, options: Options) -> std::io::Result<()> {
         if n == 0 {
             return Ok(());
         }
+        let asked = buf[..n]
+            .windows(3)
+            .filter(|w| *w == [IAC, DO, TELOPT_EOR])
+            .count();
+        asks.fetch_add(asked, Ordering::SeqCst);
         for write in mud.receive(&buf[..n]) {
             if write.after_ms > 0 {
                 tokio::time::sleep(Duration::from_millis(write.after_ms)).await;
@@ -98,6 +110,8 @@ struct Harness {
     port: u16,
     /// The fake game serves these options to the next connection.
     fake: Arc<StdMutex<Options>>,
+    /// How many times a client asked the fake game for EOR.
+    eor_asks: Arc<AtomicUsize>,
     /// The fake game counts as The Forsaken Lands while this holds a
     /// guard, which drops with the harness.
     forsaken: StdMutex<Option<crate::session::ForsakenTestPort>>,
@@ -108,7 +122,8 @@ impl Harness {
     /// profiles claim Tester (default) and Healer there, with a log.
     async fn new(options: Options) -> Self {
         let fake = Arc::new(StdMutex::new(options));
-        let port = serve_fake(fake.clone()).await;
+        let eor_asks = Arc::new(AtomicUsize::new(0));
+        let port = serve_fake(fake.clone(), eor_asks.clone()).await;
         let dir = tempfile::tempdir().expect("a temporary folder");
         let state: SharedState = Arc::new(AppState::default());
         let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).expect("a set");
@@ -149,6 +164,7 @@ impl Harness {
             dir,
             port,
             fake,
+            eor_asks,
             forsaken: StdMutex::new(None),
         }
     }
@@ -806,6 +822,44 @@ async fn the_older_build_reads_your_prompt_from_the_game_replies() {
     );
     h.type_line("#prompt").await;
     h.until_shown(PROMPTS_OFF).await;
+    h.finish(grid).await;
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_game_that_answers_each_do_eor_ends_negotiation_in_one_round() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    // A game that answers every DO EOR with WILL EOR and then marks each
+    // prompt with EOR alone. prompt all ends in no line end, and a
+    // pattern that never settles waits for a mark, so only the EOR makes
+    // it your prompt.
+    let h = Harness::new(Options {
+        prompt: PROMPT_ALL.into(),
+        ga: false,
+        eor: true,
+        ..Options::new(Build::Older)
+    })
+    .await;
+    h.set_prompt(vosh_prompt::PromptConfig {
+        capture: vosh_prompt::CaptureConfig::Regex(vosh_prompt::config::RegexCapture {
+            lines: vec![r"^<(?<hp>\d+)hp (?<mana>\d+)m (?<move>\d+)mv> $".into()],
+            settle: false,
+            ..vosh_prompt::config::RegexCapture::default()
+        }),
+        ..no_capture()
+    })
+    .await;
+    h.connect().await;
+    h.until_last_row("<1020>").await;
+    h.type_line("look").await;
+    h.until_shown("look").await;
+    h.until_last_row("<1020>").await;
+    // Long enough for a back and forth to show many asks.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(h.eor_asks.load(Ordering::SeqCst), 1);
+    assert_eq!(h.last_row(), "<1020>");
     h.finish(grid).await;
 }
 

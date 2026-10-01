@@ -5473,6 +5473,39 @@ mod tests {
     }
 
     #[test]
+    fn an_eor_ends_a_prompt_as_a_ga_does() {
+        let ga = wire_fixture("ga");
+        let mark = ga.len() - 2;
+        assert_eq!(ga[mark..], [255, 249]);
+        let mut eor = ga.clone();
+        eor[mark + 1] = 239;
+        // A pattern that never settles, so only the mark makes the
+        // partial your prompt.
+        let profile = || {
+            let mut p = Profile::default();
+            p.set_prompt_config(vosh_prompt::PromptConfig {
+                draw: true,
+                template: HP.into(),
+                capture: vosh_prompt::CaptureConfig::Regex(vosh_prompt::config::RegexCapture {
+                    lines: vec![r"^<(?<hp>\d+)hp (?<mana>\d+)m (?<move>\d+)mv> $".into()],
+                    settle: false,
+                    ..vosh_prompt::config::RegexCapture::default()
+                }),
+                ..vosh_prompt::PromptConfig::default()
+            });
+            super::start_prompt(&mut p, false);
+            p
+        };
+        let (at_ga, _) = wire_same_at_every_split(&profile, &ga);
+        let (at_eor, _) = wire_same_at_every_split(&profile, &eor);
+        assert_eq!(at_eor, at_ga);
+        assert_eq!(at_eor.last().map(String::as_str), Some("<1020>"));
+        // With no mark the game's own prompt shows.
+        let bare = wire_screen(&mut Wire::new(profile()), 80, &[&ga[..mark]]);
+        assert_eq!(bare.last().map(String::as_str), Some("<1020hp 800m 930mv>"));
+    }
+
+    #[test]
     fn the_login_wire_gives_vosh_the_prompt_with_no_typing() {
         let bytes = wire_fixture("login-new");
         // A capture that follows the game, started on another setting.
