@@ -109,6 +109,8 @@ mod session;
 mod term_grid;
 mod tick;
 mod tintin_import;
+#[cfg(test)]
+mod upgrade_order_tests;
 mod window_backdrop;
 
 use commands::{
