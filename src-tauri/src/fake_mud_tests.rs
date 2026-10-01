@@ -24,7 +24,7 @@ use crate::commands::{AppState, SharedState};
 use crate::profile_set::{AutoMatch, ProfileSet, DEFAULT_PROFILE_NAME};
 
 /// The events the tests read, as the webview would hear them.
-const EVENTS: [&str; 9] = [
+const EVENTS: [&str; 10] = [
     "session://output",
     "session://game-prompt-seen",
     "session://prompt-status",
@@ -32,6 +32,7 @@ const EVENTS: [&str; 9] = [
     "session://prompt-vars",
     "session://hidden",
     "session://state",
+    "session://target",
     crate::affect_full::AFFECT_FULL_CHANGED_EVENT,
     crate::list_events::PROMPT_CONFIG_CHANGED,
 ];
@@ -2157,5 +2158,107 @@ async fn lua_that_changes_an_alias_saves_your_profile() {
             .is_ok_and(|config| config.aliases.iter().any(|a| a.name == "k"))
     })
     .await;
+    h.finish(grid).await;
+}
+
+/// The app on the fake game with your design `<1020>` on the band pinned
+/// above the command line, and no line typed yet.
+async fn pinned_band() -> Harness {
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(vosh_prompt::PromptConfig {
+        show: vosh_prompt::PromptShow::Pinned,
+        ..codes(PROMPT)
+    })
+    .await;
+    h.connect().await;
+    h.until("your design on the band", |h| {
+        pins(h).last().map(String::as_str) == Some("<1020>")
+    })
+    .await;
+    h
+}
+
+/// Wait until the target display names goblin and the band shows Vosh's
+/// default design. The fake game sends nothing unless you type, so no
+/// prompt from the game draws the band again.
+async fn until_goblin_and_the_default_band(h: &Harness) {
+    h.until("goblin on the target display", |h| {
+        h.events("session://target")
+            .iter()
+            .any(|target| target["name"] == "goblin")
+    })
+    .await;
+    h.until("the default design on the band", |h| {
+        pins(h)
+            .last()
+            .is_some_and(|pin| pin.starts_with("1020/1020hp 800/800mn 930/930mv"))
+    })
+    .await;
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_timer_line_moves_the_target_display_and_repaints_your_prompt() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = pinned_band().await;
+
+    // Two Settings timers run the lines you would type. The tick command
+    // runs its line the same way.
+    {
+        let mut p = h.state.profile.lock().await;
+        for (id, command) in [(1, "tar goblin"), (2, "#prompt default")] {
+            p.timers.push(crate::profile::Timer {
+                id,
+                name: String::new(),
+                interval_secs: 1,
+                command: command.into(),
+                enabled: true,
+            });
+        }
+    }
+    until_goblin_and_the_default_band(&h).await;
+    h.finish(grid).await;
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_line_from_mud_input_moves_the_target_display_and_repaints_your_prompt() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = pinned_band().await;
+
+    // The game answers Huh? and its prompt. The trigger starts a Lua
+    // timer, so its lines run after that prompt drew the band.
+    h.state
+        .profile
+        .lock()
+        .await
+        .triggers
+        .set(vosh_trigger::Trigger {
+            name: "huh".into(),
+            patterns: vec![vosh_trigger::TriggerPattern {
+                pattern: r"^Huh\?".into(),
+                enabled: true,
+            }],
+            priority: 0,
+            enabled: true,
+            actions: vec![vosh_trigger::TriggerAction::Script {
+                body: r##"mud.timer(0.3, function()
+                    mud.input("tar goblin")
+                    mud.input("#prompt default")
+                end)"##
+                    .into(),
+            }],
+            preset: None,
+            group: None,
+            target: vosh_trigger::TriggerTarget::Line,
+        })
+        .expect("the trigger compiles");
+    h.type_line("xyzzy").await;
+    h.until_shown("Huh?").await;
+    until_goblin_and_the_default_band(&h).await;
     h.finish(grid).await;
 }

@@ -870,8 +870,8 @@ async fn deliver_script_result<R: tauri::Runtime>(
 }
 
 /// What decides how your prompt looks on screen: the switch, the design
-/// and where it shows. A typed line that changes any of them repaints it.
-fn prompt_look(p: &crate::profile::Profile) -> (bool, String, vosh_prompt::PromptShow) {
+/// and where it shows. A line that changes any of them repaints it.
+pub(crate) fn prompt_look(p: &crate::profile::Profile) -> (bool, String, vosh_prompt::PromptShow) {
     let config = p.prompt.config();
     (config.draw, config.template.clone(), config.show)
 }
@@ -3515,7 +3515,7 @@ pub(crate) async fn ui_set_config(
 /// Ask the session to repaint the open row as the `[prompt]` table now
 /// says. Nothing happens with no connection, or when no drawn prompt is
 /// the last thing on screen.
-async fn request_prompt_repaint(state: &SharedState) {
+pub(crate) async fn request_prompt_repaint(state: &SharedState) {
     if let Some(handle) = state.session.lock().await.as_ref() {
         let _ = handle.prompt_repaint();
     }
