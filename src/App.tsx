@@ -94,7 +94,13 @@ import {
 import { getImmState, subscribeImmState } from './lib/immStore';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { openSettingsTab, openSettingsWindow } from './lib/settingsLink';
-import { openHelpWindow } from './lib/helpLink';
+import {
+  HELP_OPEN_EVENT,
+  helpNoMatchNotice,
+  helpOpensOn,
+  openHelpTopic,
+  openHelpWindow,
+} from './lib/helpLink';
 import { showAfterThemePaint } from './lib/reveal';
 import { getNativeScroll, startNativeScroll, subscribeNativeScroll } from './lib/nativeScroll';
 import {
@@ -856,6 +862,35 @@ function App() {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+
+  // `#help <words>` from the command line (src-tauri input::help_query).
+  // A topic id or number opens that topic. Other words open Help on its
+  // search when a topic matches, and the terminal says so when none does.
+  const writeLiveRef = useRef(writeLive);
+  writeLiveRef.current = writeLive;
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    listen<string>(HELP_OPEN_EVENT, (event) => {
+      const words = typeof event.payload === 'string' ? event.payload.trim() : '';
+      if (!helpOpensOn(words)) {
+        if (words.length > 0) {
+          writeLiveRef.current(`\x1b[38;5;244m${helpNoMatchNotice(words)}\x1b[0m\r\n`);
+        }
+        return;
+      }
+      openHelpTopic(words);
+    })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlisten = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, []);
 
   // Menu bar commands (macOS only). Each arrives with its palette id.

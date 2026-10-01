@@ -93,6 +93,7 @@ slash commands:
   #qkey clear <name>                   remove a quick-key
   #qkeys                               list quick-key bindings
   #help                                show this list
+  #help <words>                        open Help on those words
 trigger actions:
   highlight <color> [bold] [underline] [inverse] [wash] [bg:<color>]
   gag
@@ -152,6 +153,17 @@ pub(crate) fn logs_command(line: &str) -> Option<LogsCommand> {
         (Some("forget-passwords"), Some("now"), None) => LogsCommand::Forget,
         _ => LogsCommand::Usage,
     })
+}
+
+/// The words of a `#help <words>` line, or None for any other line.
+/// Typed input opens the Help window on them instead of running the
+/// pipeline, since the topics live in the page. `#help` alone runs the
+/// pipeline and prints the command summary.
+pub(crate) fn help_query(line: &str) -> Option<String> {
+    let rest = line.trim_start().strip_prefix('#')?;
+    let (cmd, words) = split_first_word(rest);
+    let words = words.trim();
+    (cmd == "help" && !words.is_empty()).then(|| words.to_string())
 }
 
 /// True when `line` may replace the live profile: a `#profile reset` or
@@ -3137,6 +3149,47 @@ mod tests {
         ] {
             assert_eq!(logs_command(line), None, "{line:?}");
         }
+    }
+
+    #[test]
+    fn help_with_words_opens_help_on_them() {
+        assert_eq!(help_query("#help prompt"), Some("prompt".to_string()));
+        assert_eq!(
+            help_query("  #help   tick  timer "),
+            Some("tick  timer".to_string())
+        );
+        assert_eq!(help_query("# help map"), Some("map".to_string()));
+    }
+
+    #[test]
+    fn help_alone_still_prints_the_summary() {
+        for line in ["#help", "  #help   ", "# help"] {
+            assert_eq!(help_query(line), None, "{line:?}");
+        }
+        let mut p = Profile::default();
+        let r = process(&mut p, "#help");
+        assert_eq!(r.echo.first().map(String::as_str), Some("slash commands:"));
+        assert!(r.bytes.is_empty());
+    }
+
+    #[test]
+    fn other_lines_never_open_help() {
+        for line in [
+            "#helpme now",
+            "help prompt",
+            "say #help prompt",
+            "#alias help x",
+        ] {
+            assert_eq!(help_query(line), None, "{line:?}");
+        }
+    }
+
+    #[test]
+    fn the_summary_names_help_with_words() {
+        assert!(HELP_TEXT
+            .lines()
+            .any(|l| l.trim_start().starts_with("#help <words> ")
+                && l.contains("open Help on those words")));
     }
 
     #[test]
