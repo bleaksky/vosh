@@ -1,0 +1,11 @@
+active = "default"
+
+[[profile]]
+name = "default"
+
+[scope]
+theme = "global"
+font = "global"
+dock_layout = "global"
+keep_last_command = "global"
+auto_update = "global"

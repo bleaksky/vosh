@@ -69,6 +69,8 @@ mod app_menu;
 mod cell_render;
 mod characters;
 mod commands;
+#[cfg(test)]
+mod config_golden_tests;
 mod connection;
 mod exit_flush;
 #[cfg(test)]

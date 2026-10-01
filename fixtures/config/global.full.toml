@@ -1,0 +1,27 @@
+theme = "custom-dusk"
+auto_update = true
+keep_last_command = true
+font_family = "JetBrains Mono, monospace"
+font_size = 16
+follow_system_appearance = true
+light_theme = "kanso-pearl"
+dark_theme = "tokyo-night"
+terminal_line_height = "compact"
+
+[[dock_layout]]
+id = "map"
+zone = "left"
+align = "bottom"
+
+[[custom_themes]]
+id = "custom-dusk"
+label = "Dusk"
+description = "A warm dark theme"
+
+[custom_themes.xterm]
+background = "#1a1b26"
+foreground = "#c0caf5"
+
+[custom_themes.chrome]
+accent = "#ff9e64"
+surface = "#16161e"

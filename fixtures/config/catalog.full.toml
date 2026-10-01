@@ -1,0 +1,83 @@
+enabled_presets = [
+    "healing_basics",
+    "sent_tells",
+]
+
+[[aliases]]
+name = "kk"
+expansion = "kick %1"
+enabled = true
+group = "combat"
+
+[[aliases]]
+name = "heal"
+expansion = ""
+enabled = false
+script = "mud.send(\"cast heal \" .. args[1])"
+
+[[triggers]]
+name = "tells"
+pattern = '''^(\w+) tells you '(.*)'$'''
+priority = 5
+enabled = true
+preset = "sent_tells"
+group = "comms"
+target = "prompt"
+
+[[triggers.patterns]]
+pattern = '''^(\w+) tells you '(.*)'$'''
+enabled = true
+
+[[triggers.patterns]]
+pattern = '^(\w+) whispers to you'
+enabled = false
+
+[[triggers.actions]]
+kind = "highlight"
+
+[triggers.actions.style]
+fg = "bright_cyan"
+bg = "black"
+bold = true
+underline = true
+inverse = true
+wash = true
+
+[[triggers.actions]]
+kind = "replace"
+template = "$1: $2"
+
+[[triggers.actions]]
+kind = "send"
+template = "reply ok"
+
+[[triggers.actions]]
+kind = "route"
+pane = "chat"
+
+[[triggers.actions]]
+kind = "script"
+body = "mud.echo(captures[1])"
+
+[[triggers]]
+name = "spam"
+pattern = '^You are hungry\.$'
+priority = 0
+enabled = false
+
+[[triggers.patterns]]
+pattern = '^You are hungry\.$'
+enabled = true
+
+[[triggers.actions]]
+kind = "gag"
+
+[[macros]]
+key = "F1"
+command = "score"
+group = "info"
+
+[[macros]]
+key = "F2"
+command = "flee"
+enabled = false
