@@ -882,11 +882,15 @@ fn request_font_rebuild(family: String, font_px: f32) {
     let app = app.clone();
     load_latest(
         &FONT_TICKETS,
-        move || crate::cell_render::AtlasFonts::load(&family),
+        move || crate::cell_render::FontsInTransit::load(&family),
         move |swap| {
             let _ = app.run_on_main_thread(swap);
         },
-        move |fonts| swap_font(fonts, font_px),
+        move |fonts| {
+            if let Some(fonts) = fonts.arrive() {
+                swap_font(fonts, font_px);
+            }
+        },
     );
 }
 
