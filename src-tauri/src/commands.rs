@@ -209,7 +209,7 @@ use crate::profile_config::{
     hand_out_shared, share_custom_themes, strip_global_fields, DockEntryPersist, GlobalConfig,
     HeldCustomThemes, PaneLayoutPersist, ProfileConfig, SharedLayer,
 };
-use crate::script_state::SharedTimers;
+use crate::script_state::{ApplyResult, SharedTimers};
 use crate::session::{self, SessionHandle, TargetPayload};
 
 /// Application-wide state. Phase 1 carries a single optional session and one
@@ -786,7 +786,7 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
     } else {
         None
     };
-    let (result, target_after, lists, look_changed) = {
+    let (apply, target_after, look_changed) = {
         let mut profile = state.profile.lock().await;
         let lists_before = ListRevisions::of(&profile);
         let look_before = prompt_look(&profile);
@@ -803,7 +803,6 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
         if ran.replaced {
             note_ui_config_replaced();
         }
-        let result = ran.result;
         let after_name = profile.target.name.clone();
         let after_idx = profile.target.room_idx;
         let after_keys = profile.target.quick_keys.clone();
@@ -818,13 +817,16 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
         } else {
             None
         };
-        let lists = ListChanges::since(lists_before, &profile);
+        // The line's own bytes and echo lines, with what the Lua bodies
+        // of its script aliases send among them, then all else the Lua it
+        // ran asks for. #trigger, #alias, and the Lua they run change the
+        // lists an open Settings page shows, so the result carries every
+        // list the line changed.
+        let mut apply = session::line_script_result(ran);
+        apply.lists = ListChanges::since(lists_before, &profile);
         let look_changed = prompt_look(&profile) != look_before;
-        (result, payload, lists, look_changed)
+        (apply, payload, look_changed)
     };
-    // #trigger, #alias, and the Lua they run change the lists an open
-    // Settings page shows, so tell it.
-    broadcast_list_changes(&app, lists);
     // `#prompt draw` and `#prompt show` change the prompt on screen at
     // once, and `#prompt default` draws the new design there.
     if look_changed {
@@ -837,18 +839,31 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
         let _ = app.emit("session://target", payload);
     }
 
-    echo_lines(&app, &result.echo);
+    deliver_script_result(&app, state.inner(), apply).await
+}
 
-    if result.bytes.is_empty() {
+/// Apply a script result outside the session loop, the way every path
+/// applies one, then print its echo lines on the terminal and send its
+/// bytes to the game. With no connection the terminal says so.
+async fn deliver_script_result<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    apply: ApplyResult,
+) -> Result<(), String> {
+    let (bytes, echoes) =
+        session::collect_script_result(app, &state.profile, &state.script_timers, apply).await;
+    echo_lines(app, &echoes);
+
+    if bytes.is_empty() {
         return Ok(());
     }
 
     let current = state.session.lock().await;
     let Some(handle) = current.as_ref() else {
-        session::emit_output(&app, NOT_CONNECTED.to_vec());
+        session::emit_output(app, NOT_CONNECTED.to_vec());
         return Ok(());
     };
-    if !handle.send(result.bytes) {
+    if !handle.send(bytes) {
         return Err("session task gone".to_string());
     }
     Ok(())
@@ -3978,8 +3993,8 @@ pub(crate) async fn plugins_list(state: State<'_, SharedState>) -> Result<Vec<Pl
 }
 
 #[tauri::command]
-pub(crate) async fn plugins_set_enabled(
-    app: AppHandle,
+pub(crate) async fn plugins_set_enabled<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, SharedState>,
     name: String,
     enabled: bool,
@@ -4003,7 +4018,7 @@ pub(crate) async fn plugins_set_enabled(
         p.plugins.enabled = mgr.enabled_names();
     }
 
-    let mut lists = ListChanges::default();
+    let mut apply = ApplyResult::default();
     if let Some(code) = body {
         let mut p = state.profile.lock().await;
         crate::script_state::snapshot_vars(&p.script, &p.vars);
@@ -4011,17 +4026,17 @@ pub(crate) async fn plugins_set_enabled(
             .script
             .load_script(&format!("plugin:{name}"), code)
             .map_err(|e| e.to_string())?;
-        lists = crate::script_state::apply_actions(&mut p, outcome).lists;
+        apply = crate::script_state::apply_actions(&mut p, outcome);
     }
     let shared: SharedState = state.inner().clone();
     persist_profile(&app, &shared).await;
-    broadcast_list_changes(&app, lists);
+    deliver_plugin_load(&app, &shared, &name, apply).await;
     Ok(enabled)
 }
 
 #[tauri::command]
-pub(crate) async fn plugins_reload(
-    app: AppHandle,
+pub(crate) async fn plugins_reload<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, SharedState>,
     name: String,
 ) -> Result<(), String> {
@@ -4029,17 +4044,31 @@ pub(crate) async fn plugins_reload(
         let mgr = state.plugins.lock().await;
         mgr.read_entry(&name).map_err(|e| e.to_string())?
     };
-    let lists = {
+    let apply = {
         let mut p = state.profile.lock().await;
         crate::script_state::snapshot_vars(&p.script, &p.vars);
         let outcome = p
             .script
             .load_script(&format!("plugin:{name}"), code)
             .map_err(|e| e.to_string())?;
-        crate::script_state::apply_actions(&mut p, outcome).lists
+        crate::script_state::apply_actions(&mut p, outcome)
     };
-    broadcast_list_changes(&app, lists);
+    deliver_plugin_load(&app, state.inner(), &name, apply).await;
     Ok(())
+}
+
+/// Deliver what a plugin's entry script asked for as it loaded, see
+/// [`deliver_script_result`]. The plugin loaded either way, so a session
+/// that went away only gets a log line.
+async fn deliver_plugin_load<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    state: &SharedState,
+    name: &str,
+    apply: ApplyResult,
+) {
+    if let Err(e) = deliver_script_result(app, state, apply).await {
+        tracing::warn!(plugin = %name, error = %e, "plugin load could not send");
+    }
 }
 
 #[tauri::command]

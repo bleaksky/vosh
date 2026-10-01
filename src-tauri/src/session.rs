@@ -1117,15 +1117,21 @@ async fn io_loop<R: tauri::Runtime>(
                 emit_prompt_state(&app, state);
             }
             _ = tick_interval.tick() => {
-                if let Err(e) = handle_tick(&app, &mut stream, &profile).await {
+                if let Err(e) = handle_tick(&app, &mut stream, &profile, &timers).await {
                     error!(error = %e, "tick handling failed");
                     break Some(format!("tick handling failed: {e}"));
                 }
                 if let Err(e) = fire_due_script_timers(&app, &mut stream, &profile, &timers).await {
                     error!(error = %e, "script timer firing failed");
                 }
-                if let Err(e) =
-                    fire_due_profile_timers(&app, &mut stream, &profile, &mut timer_next).await
+                if let Err(e) = fire_due_profile_timers(
+                    &app,
+                    &mut stream,
+                    &profile,
+                    &timers,
+                    &mut timer_next,
+                )
+                .await
                 {
                     error!(error = %e, "profile timer firing failed");
                 }
@@ -1259,6 +1265,7 @@ async fn handle_tick<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
+    timers: &SharedTimers,
 ) -> std::io::Result<()> {
     // Take the firing decision under the lock, then run the Send each
     // tick command, if the timer fired, after releasing it.
@@ -1272,7 +1279,7 @@ async fn handle_tick<R: tauri::Runtime>(
     if let Some(text) = &step.warn_echo {
         emit_output(app, text.clone().into_bytes());
     }
-    deliver_tick_step(app, stream, profile, step, &mut OutputSink::Direct).await
+    deliver_tick_step(app, stream, profile, timers, step, &mut OutputSink::Direct).await
 }
 
 /// Report a tick step on `session://tick`, so the frontend counts and
@@ -1282,6 +1289,7 @@ async fn deliver_tick_step<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
+    timers: &SharedTimers,
     step: TickStep,
     sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
@@ -1289,7 +1297,7 @@ async fn deliver_tick_step<R: tauri::Runtime>(
         warn!(error = %e, "failed to emit tick payload");
     }
     if let Some(command) = step.command {
-        run_fired_command(app, stream, profile, &command, sink).await?;
+        run_fired_command(app, stream, profile, timers, &command, sink).await?;
     }
     Ok(())
 }
@@ -1305,6 +1313,7 @@ async fn fire_due_profile_timers<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
+    timers: &SharedTimers,
     timer_next: &mut HashMap<u32, Instant>,
 ) -> std::io::Result<()> {
     let now = Instant::now();
@@ -1342,7 +1351,15 @@ async fn fire_due_profile_timers<R: tauri::Runtime>(
         due
     };
     for command in due {
-        run_fired_command(app, stream, profile, &command, &mut OutputSink::Direct).await?;
+        run_fired_command(
+            app,
+            stream,
+            profile,
+            timers,
+            &command,
+            &mut OutputSink::Direct,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -1359,7 +1376,7 @@ fn process_fired_line(
     line: &str,
     effects: &mut input::LineEffects,
     shared: Option<&SharedLayer>,
-) -> input::InputResult {
+) -> input::Ran {
     let ran = match shared.filter(|_| input::may_replace_profile(line)) {
         Some(layer) => layer.keep_across(p, |p| input::run_line(p, line)),
         None => input::run_line(p, line),
@@ -1368,36 +1385,63 @@ fn process_fired_line(
     if ran.replaced {
         crate::commands::note_ui_config_replaced();
     }
-    ran.result
+    ran
 }
 
-/// What one timer command produced under the profile lock.
+/// What one line the input pipeline ran asks for, as one script result:
+/// its own bytes and echo lines, with what the Lua bodies of its script
+/// aliases send among them in the order you typed them, then all else
+/// the Lua it ran asks for.
+pub(crate) fn line_script_result(ran: input::Ran) -> ApplyResult {
+    let input::Ran { result, lua, .. } = ran;
+    let mut apply = ApplyResult {
+        send_bytes: result.bytes,
+        echoes: result.echo,
+        ..ApplyResult::default()
+    };
+    apply.append(lua);
+    apply
+}
+
+/// What lines from a timer, the tick or `mud.input` produced under the
+/// profile lock.
 struct FiredRun {
-    echoes: Vec<String>,
-    bytes: Vec<u8>,
-    lists: ListChanges,
+    /// What the lines ask for, with every list they changed.
+    apply: ApplyResult,
     effects: input::LineEffects,
 }
 
 /// The part of [`run_fired_command`] that runs under the profile lock:
 /// the input pipeline, which runs the Lua bodies of any script aliases
-/// in the command where they stand.
+/// in the command where they stand, and all the Lua it ran asks for.
 fn run_fired_locked(p: &mut Profile, command: &str, shared: Option<&SharedLayer>) -> FiredRun {
+    run_lines_locked(p, [command], shared)
+}
+
+/// Run `lines` through the input pipeline under the profile lock, for a
+/// path other than typed input, each as [`line_script_result`] reads it.
+fn run_lines_locked<'a>(
+    p: &mut Profile,
+    lines: impl IntoIterator<Item = &'a str>,
+    shared: Option<&SharedLayer>,
+) -> FiredRun {
     let lists_before = ListRevisions::of(p);
     let mut effects = input::LineEffects::default();
-    let result = process_fired_line(p, command, &mut effects, shared);
-    FiredRun {
-        echoes: result.echo,
-        bytes: result.bytes,
-        lists: ListChanges::since(lists_before, p),
-        effects,
+    let mut apply = ApplyResult::default();
+    for line in lines {
+        let ran = process_fired_line(p, line, &mut effects, shared);
+        apply.append(line_script_result(ran));
     }
+    apply.lists = ListChanges::since(lists_before, p);
+    FiredRun { apply, effects }
 }
 
 /// Run one command produced by a timer (or any non-typed source) through
-/// the full input pipeline and deliver its results: echo lines to the
-/// terminal and bytes to the server, with what the Lua bodies of its
-/// script aliases send among them in the order the command names them.
+/// the full input pipeline and deliver its results through
+/// [`apply_script_result`]: echo lines to the terminal and bytes to the
+/// server, with what the Lua bodies of its script aliases send among them
+/// in the order the command names them, and all else the Lua it ran asks
+/// for.
 /// Mirrors the typed-input handler so a timer command behaves exactly
 /// like the same line typed at the prompt, including `#lua` and
 /// script-bodied aliases.
@@ -1405,29 +1449,18 @@ async fn run_fired_command<R: tauri::Runtime>(
     app: &AppHandle<R>,
     stream: &mut Stream,
     profile: &Arc<Mutex<Profile>>,
+    timers: &SharedTimers,
     command: &str,
     sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
     let shared = crate::commands::shared_layer_for_lines(app, [command]).await;
-    let FiredRun {
-        echoes,
-        bytes,
-        lists,
-        effects,
-    } = {
+    let FiredRun { apply, effects } = {
         let mut p = profile.lock().await;
         run_fired_locked(&mut p, command, shared.as_ref())
     };
-    broadcast_list_changes(app, lists);
     crate::commands::settle_line_effects(app, effects).await;
-    if !echoes.is_empty() {
-        sink.write(app, framed_echoes(&echoes));
-    }
-    if !bytes.is_empty() {
-        stream.write_all(&bytes).await?;
-        stream.flush().await?;
-    }
-    Ok(())
+    let mut io = ScriptIo::Session(stream, sink);
+    apply_script_result(app, &mut io, profile, timers, apply).await
 }
 
 /// Echo lines outside a trigger's own line, each on its own row with a
@@ -2582,9 +2615,16 @@ async fn deliver_line_step<R: tauri::Runtime>(
     }
     send_trigger_outputs(stream, &result.sends).await?;
     let mut sink = OutputSink::Batch(batch);
-    apply_script_result(app, stream, profile, timers, apply, &mut sink).await?;
+    apply_script_result(
+        app,
+        &mut ScriptIo::Session(stream, &mut sink),
+        profile,
+        timers,
+        apply,
+    )
+    .await?;
     if let Some(step) = tick_step {
-        deliver_tick_step(app, stream, profile, step, &mut sink).await?;
+        deliver_tick_step(app, stream, profile, timers, step, &mut sink).await?;
     }
     Ok(())
 }
@@ -2902,9 +2942,16 @@ async fn handle_gmcp<R: tauri::Runtime>(
     let mut sink = OutputSink::Batch(batch);
     if let Some(step) = tick_step {
         perf.tick_emits += 1;
-        deliver_tick_step(app, stream, profile, step, &mut sink).await?;
+        deliver_tick_step(app, stream, profile, timers, step, &mut sink).await?;
     }
-    apply_script_result(app, stream, profile, timers, script_apply, &mut sink).await?;
+    apply_script_result(
+        app,
+        &mut ScriptIo::Session(stream, &mut sink),
+        profile,
+        timers,
+        script_apply,
+    )
+    .await?;
     if msg.package == "Room.Info" {
         // Map-store SQLite writes ride a dedicated single-consumer task
         // (ordering preserved) instead of running inline on the io loop,
@@ -3076,72 +3123,152 @@ fn emit_line_routes<R: tauri::Runtime>(app: &AppHandle<R>, result: &LineResult) 
     }
 }
 
-/// Perform the IO and timer bookkeeping for the actions a Lua callback
-/// produced. Sends and echoes flow to the server and the terminal pane;
-/// timers register with the shared list; `mud.input` lines are run through
-/// the input pipeline so they pick up aliases and slash commands too.
+/// Where the bytes and echo lines a script result asks for go.
+enum ScriptIo<'a, 'b> {
+    /// The session loop: its connection, and the read's batch or the
+    /// terminal.
+    Session(&'a mut Stream, &'a mut OutputSink<'b>),
+    /// Anywhere else, such as a typed line or a plugin load. The bytes
+    /// and echo lines collect for the caller, which sends and prints them
+    /// with its own.
+    Collect {
+        bytes: &'a mut Vec<u8>,
+        echoes: &'a mut Vec<String>,
+    },
+}
+
+impl ScriptIo<'_, '_> {
+    async fn send(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+        match self {
+            ScriptIo::Session(stream, _) => {
+                stream.write_all(bytes).await?;
+                stream.flush().await
+            }
+            ScriptIo::Collect { bytes: out, .. } => {
+                out.extend_from_slice(bytes);
+                Ok(())
+            }
+        }
+    }
+
+    fn echo<R: tauri::Runtime>(&mut self, app: &AppHandle<R>, lines: Vec<String>) {
+        match self {
+            ScriptIo::Session(_, sink) => sink.write(app, framed_echoes(&lines)),
+            ScriptIo::Collect { echoes, .. } => echoes.extend(lines),
+        }
+    }
+
+    async fn prompt_vars<R: tauri::Runtime>(
+        &mut self,
+        app: &AppHandle<R>,
+        profile: &Arc<Mutex<Profile>>,
+    ) {
+        match self {
+            ScriptIo::Session(_, sink) => sink.prompt_vars(app, profile).await,
+            ScriptIo::Collect { .. } => emit_prompt_vars(app, profile, true).await,
+        }
+    }
+}
+
+/// How many rounds of `mud.input` lines one script result runs, each
+/// round the lines the Lua of the round before asked for. Lua that keeps
+/// asking stops here, at the depth an alias may go.
+const MUD_INPUT_DEPTH: usize = vosh_alias::DEFAULT_MAX_DEPTH;
+
+/// Perform the IO and timer bookkeeping a script result asks for. Every
+/// path that runs Lua applies its result here: the game's lines and
+/// GMCP, Lua timers, the lines you type, a Settings timer, the tick
+/// command, and a plugin load. Sends and echoes flow to `io`, timers
+/// register with the shared list, values a script gave your prompt reach
+/// the windows, and `mud.input` lines are run through the input pipeline
+/// so they pick up aliases and slash commands too, with all their own Lua
+/// asks for applied in turn.
 async fn apply_script_result<R: tauri::Runtime>(
     app: &AppHandle<R>,
-    stream: &mut Stream,
+    io: &mut ScriptIo<'_, '_>,
     profile: &Arc<Mutex<Profile>>,
     timers: &SharedTimers,
     apply: ApplyResult,
-    sink: &mut OutputSink<'_>,
 ) -> std::io::Result<()> {
-    // Durable Lua mutations (mud.alias / set_var / group toggles fired by
-    // triggers or timers) historically never reached disk. Ride the same
-    // debounced persist the slash commands use.
-    if apply.durable_changed {
-        crate::commands::mark_profile_dirty(app);
-    }
-    // A Lua `mud.alias` changes the list an open Settings page shows.
-    broadcast_list_changes(app, apply.lists);
+    let mut apply = apply;
+    let mut depth = 0;
+    loop {
+        // Durable Lua mutations (mud.alias / set_var / group toggles
+        // fired by triggers or timers) historically never reached disk.
+        // Ride the same debounced persist the slash commands use.
+        if apply.durable_changed {
+            crate::commands::mark_profile_dirty(app);
+        }
+        // A Lua `mud.alias` changes the list an open Settings page shows.
+        broadcast_list_changes(app, apply.lists);
 
-    if !apply.send_bytes.is_empty() {
-        stream.write_all(&apply.send_bytes).await?;
-        stream.flush().await?;
-    }
-    if !apply.echoes.is_empty() {
-        sink.write(app, framed_echoes(&apply.echoes));
-    }
-    if !apply.inputs.is_empty() {
-        let mut input_bytes = Vec::new();
-        let mut input_echoes: Vec<String> = Vec::new();
+        if !apply.send_bytes.is_empty() {
+            io.send(&apply.send_bytes).await?;
+        }
+        if !apply.echoes.is_empty() {
+            io.echo(app, apply.echoes);
+        }
+        if !apply.new_timers.is_empty() || !apply.cancel_timers.is_empty() {
+            let mut guard = timers.lock().await;
+            for cancel in apply.cancel_timers {
+                guard.retain(|t| t.timer_id != cancel);
+            }
+            guard.extend(apply.new_timers);
+        }
+        if apply.prompt_vars_changed {
+            io.prompt_vars(app, profile).await;
+        }
+        if apply.inputs.is_empty() {
+            return Ok(());
+        }
+        if depth == MUD_INPUT_DEPTH {
+            warn!(depth, "mud.input went too deep");
+            io.echo(
+                app,
+                vec![format!("[mud.input recursion limit hit ({depth})]")],
+            );
+            return Ok(());
+        }
+        depth += 1;
         let shared =
             crate::commands::shared_layer_for_lines(app, apply.inputs.iter().map(String::as_str))
                 .await;
-        let mut effects = input::LineEffects::default();
-        let lists = {
+        let FiredRun {
+            apply: next,
+            effects,
+        } = {
             let mut p = profile.lock().await;
-            let before = ListRevisions::of(&p);
-            for line in apply.inputs {
-                let result = process_fired_line(&mut p, &line, &mut effects, shared.as_ref());
-                input_bytes.extend(result.bytes);
-                input_echoes.extend(result.echo);
-            }
-            ListChanges::since(before, &p)
+            run_lines_locked(
+                &mut p,
+                apply.inputs.iter().map(String::as_str),
+                shared.as_ref(),
+            )
         };
-        broadcast_list_changes(app, lists);
         crate::commands::settle_line_effects(app, effects).await;
-        if !input_bytes.is_empty() {
-            stream.write_all(&input_bytes).await?;
-            stream.flush().await?;
-        }
-        if !input_echoes.is_empty() {
-            sink.write(app, framed_echoes(&input_echoes));
-        }
+        apply = next;
     }
-    if !apply.new_timers.is_empty() || !apply.cancel_timers.is_empty() {
-        let mut guard = timers.lock().await;
-        for cancel in apply.cancel_timers {
-            guard.retain(|t| t.timer_id != cancel);
-        }
-        guard.extend(apply.new_timers);
+}
+
+/// [`apply_script_result`] outside the session loop, as for a typed line
+/// or a plugin load. Returns the bytes for the game and the echo lines
+/// for the terminal, which the caller sends and prints.
+pub(crate) async fn collect_script_result<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    profile: &Arc<Mutex<Profile>>,
+    timers: &SharedTimers,
+    apply: ApplyResult,
+) -> (Vec<u8>, Vec<String>) {
+    let mut bytes = Vec::new();
+    let mut echoes = Vec::new();
+    let mut io = ScriptIo::Collect {
+        bytes: &mut bytes,
+        echoes: &mut echoes,
+    };
+    // Collecting writes to no stream, so it never fails.
+    if let Err(e) = apply_script_result(app, &mut io, profile, timers, apply).await {
+        warn!(error = %e, "applying a script result failed");
     }
-    if apply.prompt_vars_changed {
-        sink.prompt_vars(app, profile).await;
-    }
-    Ok(())
+    (bytes, echoes)
 }
 
 /// Push the prompt vars to the frontend as a single snapshot, the fresh
@@ -3198,7 +3325,9 @@ async fn fire_due_script_timers<R: tauri::Runtime>(
         }
         script_state::apply_actions(&mut p, outcome)
     };
-    apply_script_result(app, stream, profile, timers, apply, &mut OutputSink::Direct).await
+    let mut sink = OutputSink::Direct;
+    let mut io = ScriptIo::Session(stream, &mut sink);
+    apply_script_result(app, &mut io, profile, timers, apply).await
 }
 
 /// Flush a partial line still buffered when the session ends so the MUD's
@@ -3491,17 +3620,36 @@ mod tests {
         let mut p = Profile::default();
         let run = super::run_fired_locked(&mut p, "#alias greet wave", None);
         assert!(run.effects.dirty);
-        assert!(run.lists.aliases);
+        assert!(run.apply.lists.aliases);
         assert!(p.aliases.get("greet").is_some());
 
         let run = super::run_fired_locked(&mut p, "#trigger flee {^You flee} send look", None);
         assert!(run.effects.dirty);
-        assert!(run.lists.triggers);
+        assert!(run.apply.lists.triggers);
 
         // A plain command leaves the saved profile alone.
         let run = super::run_fired_locked(&mut p, "greet", None);
         assert_eq!(run.effects, LineEffects::default());
-        assert_eq!(run.bytes, b"wave\r\n");
+        assert_eq!(run.apply.send_bytes, b"wave\r\n");
+    }
+
+    #[test]
+    fn a_script_alias_body_hands_on_all_it_asks_for() {
+        let mut p = Profile::default();
+        p.aliases
+            .set(vosh_alias::Alias::new("kk", "ignored").with_script(
+                "mud.echo('ready') mud.send(captures[1]) mud.timer(1, function() end) \
+             mud.input('look') mud.set_prompt_var('mark', 'on')",
+            ));
+        let ran = crate::input::run_line(&mut p, "stand;kk orc");
+        let apply = super::line_script_result(ran);
+        // What the body sends goes out where you typed the alias, and all
+        // else it asks for comes with the line.
+        assert_eq!(apply.send_bytes, b"stand\r\norc\r\n");
+        assert_eq!(apply.echoes, ["ready"]);
+        assert_eq!(apply.new_timers.len(), 1);
+        assert_eq!(apply.inputs, ["look"]);
+        assert!(apply.prompt_vars_changed);
     }
 
     #[test]
@@ -3512,14 +3660,14 @@ mod tests {
                 .with_script("mud.send('kick ' .. captures[1])\nmud.echo('kicked')"),
         );
         let run = super::run_fired_locked(&mut p, "kk dragon", None);
-        assert_eq!(run.bytes, b"kick dragon\r\n");
-        assert_eq!(run.echoes, ["kicked"]);
+        assert_eq!(run.apply.send_bytes, b"kick dragon\r\n");
+        assert_eq!(run.apply.echoes, ["kicked"]);
         assert_eq!(run.effects, LineEffects::default());
         // What the body sends goes out where the command names the alias.
         let run = super::run_fired_locked(&mut p, "kk dragon;wave", None);
-        assert_eq!(run.bytes, b"kick dragon\r\nwave\r\n");
+        assert_eq!(run.apply.send_bytes, b"kick dragon\r\nwave\r\n");
         let run = super::run_fired_locked(&mut p, "wave;kk dragon;bow", None);
-        assert_eq!(run.bytes, b"wave\r\nkick dragon\r\nbow\r\n");
+        assert_eq!(run.apply.send_bytes, b"wave\r\nkick dragon\r\nbow\r\n");
     }
 
     #[test]
@@ -3565,11 +3713,11 @@ mod tests {
             enabled: true,
         });
         let run = super::run_fired_locked(&mut p, "#group combat off", None);
-        assert!(run.lists.macro_groups);
+        assert!(run.apply.lists.macro_groups);
         assert!(p.disabled_macro_groups.contains("combat"));
         // Off already, so nothing turned.
         let run = super::run_fired_locked(&mut p, "#group combat off", None);
-        assert!(!run.lists.macro_groups);
+        assert!(!run.apply.lists.macro_groups);
     }
 
     #[test]

@@ -116,8 +116,9 @@ impl ApplyResult {
     }
 }
 
-/// Apply Lua-produced actions to the profile. The caller is responsible
-/// for performing the IO listed in the returned [`ApplyResult`].
+/// Apply Lua-produced actions to the profile. The caller hands the
+/// returned [`ApplyResult`] to `session::apply_script_result`, which
+/// does the IO it lists on every path.
 pub(crate) fn apply_actions(profile: &mut Profile, outcome: ScriptOutcome) -> ApplyResult {
     let mut result = ApplyResult::default();
     let lists_before = ListRevisions::of(profile);
