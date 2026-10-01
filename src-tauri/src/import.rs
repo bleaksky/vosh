@@ -920,7 +920,7 @@ fn cmud_enabled_attr(e: &BytesStart) -> bool {
 /// Substitutions (the table is intentionally not a doc-test):
 ///
 /// ```text
-///   ~X        -> \X            (literal escape)
+///   ~X        -> X             (literal, escaped only if X is a regex special)
 ///   %w        -> (\w+)         (word, capturing)
 ///   %d        -> (\d+)         (digits, capturing)
 ///   %s        -> \s+           (whitespace, not captured)
@@ -941,9 +941,12 @@ fn translate_cmud_wildcards(pattern: &str) -> String {
         let ch = char_at(pattern, i);
         match ch {
             '~' if i + 1 < bytes.len() => {
+                // CMUD quotes the next char as a literal. Escape it only
+                // when the regex engine needs that, because a backslash
+                // before a letter or a non-ASCII char is a different token
+                // or a parse error.
                 let esc = char_at(pattern, i + 1);
-                out.push('\\');
-                out.push(esc);
+                out.push_str(&regex::escape(esc.encode_utf8(&mut [0; 4])));
                 i += 1 + esc.len_utf8();
                 continue;
             }
@@ -1530,7 +1533,20 @@ mod tests {
     #[test]
     fn cmud_escape_with_tilde() {
         let translated = translate_cmud_wildcards("Spell~: foo");
-        assert_eq!(translated, "Spell\\: foo");
+        assert_eq!(translated, "Spell: foo");
+        let re = regex::Regex::new(&translated).unwrap();
+        assert!(re.is_match("Spell: foo"));
+    }
+
+    #[test]
+    fn cmud_tilde_quotes_any_char_as_a_literal() {
+        // A tilde before "é" used to emit a backslash the regex engine
+        // rejects, and one before "<" or "n" became an assertion or a
+        // newline instead of the plain char.
+        let translated = translate_cmud_wildcards("caf~é ~* ~<~n>");
+        assert_eq!(translated, "café \\* <n>");
+        let re = regex::Regex::new(&translated).unwrap();
+        assert!(re.is_match("café * <n>"));
     }
 
     /// One-shot smoke test against a real CMUD export.
