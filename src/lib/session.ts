@@ -1020,7 +1020,20 @@ export interface PromptFormatChoice {
   chars?: number;
 }
 
-export type PromptStyleChoice = 'bold' | 'dim' | 'italic' | 'underline' | 'inverse' | 'strike';
+/** The kinds of underline: `underline` is the single line (SGR 4), and
+ *  `double`, `curly`, `dotted` and `dashed` are SGR 4:2 to 4:5. One kind
+ *  holds at a time. */
+export type PromptUnderlineStyle = 'underline' | 'double' | 'curly' | 'dotted' | 'dashed';
+
+/** A style the card turns on or off. An underline kind replaces the kind
+ *  a part had, and turning any underline kind off ends the underline. */
+export type PromptStyleChoice =
+  | 'bold'
+  | 'dim'
+  | 'italic'
+  | PromptUnderlineStyle
+  | 'inverse'
+  | 'strike';
 
 export type PromptWhen = 'always' | 'fight' | 'not_fight';
 
@@ -1029,7 +1042,13 @@ export type PromptWhen = 'always' | 'fight' | 'not_fight';
  *  before the first to the number of pieces after the last. */
 export type PromptEditOp =
   | { op: 'set_format'; piece: number; format: PromptFormatChoice }
-  | { op: 'set_color'; piece: number; color: PromptColorChoice; background?: boolean }
+  | {
+      op: 'set_color';
+      piece: number;
+      color: PromptColorChoice;
+      background?: boolean;
+      underline?: boolean;
+    }
   | { op: 'set_style'; piece: number; style: PromptStyleChoice; on: boolean }
   | { op: 'set_when'; piece: number; when: PromptWhen }
   | { op: 'set_text'; piece: number; text: string }
@@ -1081,9 +1100,11 @@ export interface PromptForm {
 
 /** One piece of a design as the card shows it. `text` is its template
  *  text with its own codes. A max alone reads as its gauge's field in the
- *  form `max`. The color and styles are its look at its first cell, a
- *  bar's color its cells'. `when_fixed` says a fight condition outside
- *  another one holds it. */
+ *  form `max`. The colors and styles are its look at its first cell, a
+ *  bar's color its cells'. `underline_style` names the kind of underline,
+ *  null with none, and `underline_color` its color, `default` for the
+ *  text's own. `when_fixed` says a fight condition outside another one
+ *  holds it. */
 export interface PromptPiece {
   piece: number;
   kind: PromptPieceKind;
@@ -1095,10 +1116,17 @@ export interface PromptPiece {
   when: PromptWhen;
   when_fixed: boolean;
   color: PromptColorChoice;
+  background: PromptColorChoice;
   bold: boolean;
+  dim: boolean;
   italic: boolean;
   underline: boolean;
+  underline_style: PromptUnderlineStyle | null;
+  underline_color: PromptColorChoice;
+  inverse: boolean;
+  strike: boolean;
   literal: string | null;
+
   meta: string | null;
   forms: PromptForm[];
   by_value: boolean;

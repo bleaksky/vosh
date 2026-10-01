@@ -12,6 +12,7 @@ import type {
   PromptEditOp,
   PromptFormatChoice,
   PromptPiece,
+  PromptUnderlineStyle,
   PromptWhen,
 } from './session';
 
@@ -207,7 +208,20 @@ const hex2 = (n: number) => n.toString(16).padStart(2, '0');
  *  swatch names, with `palette` giving a theme or 256 color its hex, and
  *  empty otherwise. */
 export function customText(color: PromptColorChoice, palette: (index: number) => string): string {
-  if (swatchOf(color) !== 'custom') return '';
+  return swatchOf(color) === 'custom' ? colorHex(color, palette) : '';
+}
+
+/** The swatch the Background row checks. It offers no By value, so a
+ *  ground by how full a value is reads as custom. */
+export function groundSwatchOf(color: PromptColorChoice): Swatch {
+  const swatch = swatchOf(color);
+  return swatch === 'by_value' ? 'custom' : swatch;
+}
+
+/** A color as #rrggbb, a theme color through `palette` too, for a field
+ *  that offers no swatches, as the underline color. Empty for the text's
+ *  own color and for a color by how full a value is. */
+export function colorHex(color: PromptColorChoice, palette: (index: number) => string): string {
   switch (color.kind) {
     case 'rgb':
       return `#${hex2(color.r)}${hex2(color.g)}${hex2(color.b)}`;
@@ -258,24 +272,60 @@ export const WHEN_FIXED_HINT =
   'Another part decides when this part shows. Change it in Edit as text.';
 
 /** The rows a part shows (P5, P7, P10): a value has Show as, a bar Width
- *  and no Style, text its words, and a line break only When. */
-export function rowsOf(piece: Pick<PromptPiece, 'kind' | 'format' | 'forms'>): {
+ *  and no Style, text its words, and a line break only When. Every part
+ *  that takes a color takes a Background, and the Underline row with its
+ *  kind and color shows while an underline is on. */
+export function rowsOf(piece: Pick<PromptPiece, 'kind' | 'format' | 'forms' | 'underline'>): {
   showAs: boolean;
   text: boolean;
   width: boolean;
   color: boolean;
+  background: boolean;
   style: boolean;
+  underline: boolean;
 } {
   const value = piece.kind === 'value' || piece.kind === 'cur_max' || piece.kind === 'percent';
   const bar = piece.format === 'bar';
   const breaks = piece.kind === 'nl';
+  const style = !breaks && !bar;
   return {
     showAs: value && piece.forms.length > 0,
     text: piece.kind === 'text',
     width: bar,
     color: !breaks,
-    style: !breaks && !bar,
+    background: !breaks,
+    style,
+    underline: style && piece.underline,
   };
+}
+
+/** The kinds of underline the Underline row offers, in the order of the
+ *  styles board, each with the CSS line its segment draws. */
+export const UNDERLINE_KINDS: readonly {
+  style: PromptUnderlineStyle;
+  label: string;
+  line: 'solid' | 'double' | 'wavy' | 'dotted' | 'dashed';
+}[] = [
+  { style: 'underline', label: 'Single', line: 'solid' },
+  { style: 'double', label: 'Double', line: 'double' },
+  { style: 'curly', label: 'Curly', line: 'wavy' },
+  { style: 'dotted', label: 'Dotted', line: 'dotted' },
+  { style: 'dashed', label: 'Dashed', line: 'dashed' },
+];
+
+/** The styles the Style row's More styles menu holds, past B, I and U. */
+export const MORE_STYLES: readonly { style: 'strike' | 'dim' | 'inverse'; label: string }[] = [
+  { style: 'strike', label: 'Strikethrough' },
+  { style: 'dim', label: 'Dim' },
+  { style: 'inverse', label: 'Reverse' },
+];
+
+/** What the More styles button reads: the styles it holds that are on,
+ *  so you see them without opening it, or More styles with none on. */
+export function moreLabel(piece: Pick<PromptPiece, 'strike' | 'dim' | 'inverse'>): string {
+  const on = MORE_STYLES.filter((s) => piece[s.style]).map((s) => s.label);
+  if (on.length === 0) return 'More styles';
+  return [on[0], ...on.slice(1).map((label) => label.toLowerCase())].join(', ');
 }
 
 // ---------------------------------------------------------------------

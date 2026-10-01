@@ -3,15 +3,19 @@ import {
   breakHint,
   BY_VALUE_HINT,
   caretAfter,
+  colorHex,
   colorHint,
   customColor,
   customText,
   deleteOp,
   dockMapper,
   endPlace,
+  groundSwatchOf,
   insertOps,
   insertPlace,
   layoutMarks,
+  MORE_STYLES,
+  moreLabel,
   moveBack,
   moveOp,
   pickAnnouncement,
@@ -23,6 +27,7 @@ import {
   swatchOf,
   textMapper,
   THEME_HINT,
+  UNDERLINE_KINDS,
   type Grid,
 } from './promptPieces';
 import type { PromptPiece, PromptPieceKind } from './session';
@@ -42,9 +47,15 @@ function piece(index: number, kind: PromptPieceKind, literal: string | null = nu
     when: 'always',
     when_fixed: false,
     color: { kind: 'default' },
+    background: { kind: 'default' },
     bold: false,
+    dim: false,
     italic: false,
     underline: false,
+    underline_style: null,
+    underline_color: { kind: 'default' },
+    inverse: false,
+    strike: false,
     literal,
     meta: null,
     forms: [],
@@ -202,17 +213,75 @@ describe('the rows of a part', () => {
       text: false,
       width: false,
       color: true,
+      background: true,
       style: true,
+      underline: false,
     });
-    expect(rowsOf({ ...value, format: 'bar' })).toMatchObject({ width: true, style: false });
+    expect(rowsOf({ ...value, format: 'bar' })).toMatchObject({
+      width: true,
+      background: true,
+      style: false,
+    });
     expect(rowsOf(piece(0, 'text', '['))).toMatchObject({ text: true, showAs: false });
     expect(rowsOf(piece(4, 'nl'))).toEqual({
       showAs: false,
       text: false,
       width: false,
       color: false,
+      background: false,
       style: false,
+      underline: false,
     });
+  });
+
+  it('adds the Underline row while an underline is on, and not to a bar', () => {
+    const value = { ...piece(1, 'value'), forms: [{} as never] };
+    expect(rowsOf({ ...value, underline: true })).toMatchObject({ style: true, underline: true });
+    expect(rowsOf({ ...value, underline: true, format: 'bar' })).toMatchObject({
+      style: false,
+      underline: false,
+    });
+  });
+
+  it('offers the five kinds of underline, single first, in the board order', () => {
+    expect(UNDERLINE_KINDS.map((k) => [k.style, k.label, k.line])).toEqual([
+      ['underline', 'Single', 'solid'],
+      ['double', 'Double', 'double'],
+      ['curly', 'Curly', 'wavy'],
+      ['dotted', 'Dotted', 'dotted'],
+      ['dashed', 'Dashed', 'dashed'],
+    ]);
+  });
+
+  it('names More styles by the styles it has on', () => {
+    const off = { strike: false, dim: false, inverse: false };
+    expect(MORE_STYLES.map((s) => [s.style, s.label])).toEqual([
+      ['strike', 'Strikethrough'],
+      ['dim', 'Dim'],
+      ['inverse', 'Reverse'],
+    ]);
+    expect(moreLabel(off)).toBe('More styles');
+    expect(moreLabel({ ...off, dim: true })).toBe('Dim');
+    expect(moreLabel({ ...off, strike: true, inverse: true })).toBe('Strikethrough, reverse');
+    expect(moreLabel({ strike: true, dim: true, inverse: true })).toBe(
+      'Strikethrough, dim, reverse',
+    );
+  });
+
+  it('checks the ground swatch a background names, By value as custom', () => {
+    expect(groundSwatchOf({ kind: 'default' })).toBe('default');
+    expect(groundSwatchOf({ kind: 'named', index: 4 })).toBe(4);
+    expect(groundSwatchOf({ kind: 'by_value' })).toBe('custom');
+    expect(groundSwatchOf({ kind: 'rgb', r: 1, g: 2, b: 3 })).toBe('custom');
+  });
+
+  it('shows the underline color as hex, theme colors too, and empty for the text color', () => {
+    const palette = (i: number) => (i === 1 ? '#bf616a' : '#00d787');
+    expect(colorHex({ kind: 'default' }, palette)).toBe('');
+    expect(colorHex({ kind: 'named', index: 1 }, palette)).toBe('#bf616a');
+    expect(colorHex({ kind: 'index', index: 42 }, palette)).toBe('#00d787');
+    expect(colorHex({ kind: 'rgb', r: 191, g: 97, b: 106 }, palette)).toBe('#bf616a');
+    expect(colorHex({ kind: 'by_value' }, palette)).toBe('');
   });
 });
 

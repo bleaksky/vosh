@@ -6,7 +6,7 @@ import { TEXT_HELP } from '../../lib/promptText';
 import type { PromptFieldState, PromptForm, PromptPiece, PromptState } from '../../lib/session';
 import { LineTriggers } from './PromptCodes';
 import { PromptPicker } from './PromptPicker';
-import { PromptPieceBody } from './PromptPiece';
+import { MoreStyleItems, PromptPieceBody } from './PromptPiece';
 import { Starts } from './PromptStarts';
 import { PromptText } from './PromptText';
 
@@ -62,9 +62,15 @@ const HP: PromptPiece = {
   when: 'always',
   when_fixed: false,
   color: { kind: 'default' },
+  background: { kind: 'default' },
   bold: false,
+  dim: false,
   italic: true,
   underline: false,
+  underline_style: null,
+  underline_color: { kind: 'default' },
+  inverse: false,
+  strike: false,
   literal: null,
   meta: '1020 of 1020',
   forms: [
@@ -81,6 +87,14 @@ const draw = (piece: PromptPiece) =>
   renderToStaticMarkup(
     <PromptPieceBody piece={piece} env={NORD} onEdit={() => {}} onInsertValue={() => {}} />,
   );
+
+/** The markup of the row `label`, up to the row after it. */
+function row(html: string, label: string): string {
+  const start = html.indexOf(`class="pc-piece-row" role="group" aria-label="${label}"`);
+  if (start < 0) return '';
+  const next = html.indexOf('class="pc-piece-row', start + 1);
+  return html.slice(start, next < 0 ? undefined : next);
+}
 
 /** The labels of the pressed buttons of a group, in order. */
 function pressed(html: string, group: string): string[] {
@@ -112,9 +126,9 @@ describe('a picked part', () => {
     expect(html).toContain('Insert value…');
     expect(html).toContain('>Remove<');
     // The theme swatches in board order, in the theme's colors.
-    const swatches = [...html.matchAll(/aria-label="(Theme [a-z]+)"[^>]*background:([^"]*)"/g)].map(
-      (m) => [m[1], m[2]],
-    );
+    const swatches = [
+      ...row(html, 'Color').matchAll(/aria-label="(Theme [a-z]+)"[^>]*background:([^"]*)"/g),
+    ].map((m) => [m[1], m[2]]);
     expect(swatches).toEqual([
       ['Theme red', '#bf616a'],
       ['Theme green', '#a3be8c'],
@@ -191,6 +205,106 @@ describe('a picked part', () => {
     expect(html).not.toContain('aria-label="By value"');
     // A color no swatch names fills Custom with its hex.
     expect(html).toContain('value="#646464"');
+  });
+
+  it('gives every part that takes a color a Background, under Color (styles board)', () => {
+    const html = draw(HP);
+    const ground = row(html, 'Background');
+    // The hint stays right under Color, as P5 draws it.
+    expect(html.indexOf(THEME_HINT)).toBeGreaterThan(html.indexOf('aria-label="Color"'));
+    expect(html.indexOf('aria-label="Background"')).toBeGreaterThan(html.indexOf(THEME_HINT));
+    expect(ground).toMatch(/aria-label="Terminal background"[^>]*aria-pressed="true"/);
+    expect(ground).toContain('background:#2e3440');
+    // The theme colors line up with the Color row's, past By value.
+    expect(ground).toContain('class="pc-swatch-slot"');
+    const swatches = [...ground.matchAll(/aria-label="(Theme [a-z]+)"/g)].map((m) => m[1]);
+    expect(swatches).toHaveLength(7);
+    expect(ground).toContain('aria-label="Custom background"');
+    expect(ground).toContain('placeholder="Custom"');
+    // A true color fills Custom with its hex and rings it.
+    const rgb = draw({ ...HP, background: { kind: 'rgb', r: 0x3b, g: 0x42, b: 0x52 } });
+    expect(row(rgb, 'Background')).toMatch(/class="st-color pc-custom is-on"/);
+    expect(row(rgb, 'Background')).toContain('value="#3b4252"');
+    // A theme color presses its swatch.
+    const blue = row(draw({ ...HP, background: { kind: 'named', index: 4 } }), 'Background');
+    expect(blue).toMatch(/aria-label="Theme blue"[^>]*aria-pressed="true"/);
+    // No By value in it, so no place held for one on text.
+    expect(row(draw({ ...HP, by_value: false }), 'Background')).not.toContain('pc-swatch-slot');
+  });
+
+  it('keeps B, I and U and adds More styles after them', () => {
+    const style = row(draw(HP), 'Style');
+    const order = ['aria-label="Bold"', 'aria-label="Italic"', 'aria-label="Underline"'].map((a) =>
+      style.indexOf(a),
+    );
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(style).toMatch(
+      /class="pc-style-more" aria-haspopup="menu" aria-expanded="false"><span>More styles<\/span>/,
+    );
+    // The button reads the styles it holds that are on, pressed.
+    const on = row(draw({ ...HP, strike: true, dim: true }), 'Style');
+    expect(on).toContain('class="pc-style-more is-on"');
+    expect(on).toContain('aria-label="More styles, Strikethrough, dim on"');
+    expect(on).toContain('<span>Strikethrough, dim</span>');
+  });
+
+  it('lists strikethrough, dim and reverse in More styles, a check on each that is on', () => {
+    const toggled: [string, boolean][] = [];
+    const html = renderToStaticMarkup(
+      <ul>
+        <MoreStyleItems
+          piece={{ strike: true, dim: false, inverse: false }}
+          onToggle={(style, on) => toggled.push([style, on])}
+        />
+      </ul>,
+    );
+    const items = [
+      ...html.matchAll(
+        /role="menuitemcheckbox" aria-checked="(true|false)"[^>]*>(?:<svg[^]*?<\/svg>)?<span class="pc-style-sample is-([a-z]+)">([^<]*)</g,
+      ),
+    ].map((m) => [m[3], m[2], m[1]]);
+    expect(items).toEqual([
+      ['Strikethrough', 'strike', 'true'],
+      ['Dim', 'dim', 'false'],
+      ['Reverse', 'inverse', 'false'],
+    ]);
+    expect(html.match(/pc-start-check/g)).toHaveLength(1);
+  });
+
+  it('shows the Underline row while U is on, its kind and its color (styles board)', () => {
+    expect(draw(HP)).not.toContain('aria-label="Underline color"');
+    const html = draw({
+      ...HP,
+      underline: true,
+      underline_style: 'curly',
+      underline_color: { kind: 'rgb', r: 191, g: 97, b: 106 },
+    });
+    expect(html).toMatch(/aria-label="Underline" aria-pressed="true"/);
+    const line = row(html, 'Underline');
+    // Five kinds, each word in its own line and in the line's color.
+    const kinds = [
+      ...line.matchAll(
+        /aria-pressed="(true|false)"><span class="pc-line" style="text-decoration-style:([a-z]+);text-decoration-color:#bf616a">([A-Za-z]+)</g,
+      ),
+    ].map((m) => [m[3], m[2], m[1]]);
+    expect(kinds).toEqual([
+      ['Single', 'solid', 'false'],
+      ['Double', 'double', 'false'],
+      ['Curly', 'wavy', 'true'],
+      ['Dotted', 'dotted', 'false'],
+      ['Dashed', 'dashed', 'false'],
+    ]);
+    expect(line).toContain('aria-label="Underline color"');
+    expect(line).toContain('value="#bf616a"');
+    expect(line).toContain('class="st-color pc-custom is-on"');
+    // With the text's color, the field is empty and its swatch shows the
+    // text color.
+    const plain = row(draw({ ...HP, underline: true, underline_style: 'underline' }), 'Underline');
+    expect(plain).toContain('placeholder="Text color"');
+    expect(plain).toContain('value=""');
+    expect(plain).toContain('background:#e5e9f0');
+    expect(plain).toMatch(/aria-pressed="true"><span class="pc-line" style="[^"]*">Single</);
   });
 
   it('holds When still for a part another condition decides', () => {
