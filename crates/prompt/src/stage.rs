@@ -186,6 +186,10 @@ pub struct Output {
     row_open: bool,
     /// The open row is no longer the last thing on screen.
     closed: bool,
+    /// The region this output leaves open shows a preview, with the live
+    /// render to put in its place the moment anything is written after
+    /// it, so a preview never reaches history.
+    preview: Option<PreviewTail>,
     /// Output from elsewhere reached the terminal before this output.
     other: bool,
     /// How many writes of this output showed something, so the stage can
@@ -194,6 +198,16 @@ pub struct Output {
     /// Which output this is, so the stage can tell a new one from the one
     /// it pinned in.
     id: OutputId,
+}
+
+/// The region at the end of an output's bytes, or of its replace's bytes
+/// when it wrote no bytes, while it shows a preview: where it starts, and
+/// the region with the live render.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct PreviewTail {
+    in_replace: bool,
+    at: usize,
+    live: Vec<u8>,
 }
 
 /// A number each [`Output::new`] hands out. It never makes two outputs
@@ -238,6 +252,41 @@ impl Output {
             && self.restore.is_none()
     }
 
+    /// Put the live render back in place of the preview this output's
+    /// open region shows, since something is about to be written after
+    /// it. The restore goes with it, since no region is left open.
+    fn unpreview(&mut self) {
+        let Some(tail) = self.preview.take() else {
+            return;
+        };
+        let bytes = match (tail.in_replace, self.replace.as_mut()) {
+            (true, Some(replace)) => &mut replace.bytes,
+            _ => &mut self.bytes,
+        };
+        bytes.truncate(tail.at);
+        bytes.extend(tail.live);
+        self.restore = None;
+    }
+
+    /// The region `region`, which this output just wrote at the very end
+    /// of what it wrote, shows a preview. `live` is the same region with
+    /// the live render, which renderers write back before anything else
+    /// lands, and which this output writes in its place when anything
+    /// follows it here.
+    fn preview_tail(&mut self, region: usize, live: Vec<u8>) {
+        let in_replace = self.bytes.is_empty();
+        let len = match (in_replace, &self.replace) {
+            (true, Some(replace)) => replace.bytes.len(),
+            _ => self.bytes.len(),
+        };
+        self.restore = Some(live.clone());
+        self.preview = Some(PreviewTail {
+            in_replace,
+            at: len - region,
+            live,
+        });
+    }
+
     /// Put the held line ends back at the end of the bytes, since
     /// something is about to be written after them.
     fn unhold(&mut self) {
@@ -254,6 +303,7 @@ impl Output {
         if bytes.is_empty() {
             return;
         }
+        self.unpreview();
         let bytes = if self.row_open {
             let (rest, closed) = close_pin_row(bytes);
             self.row_open = !closed;
@@ -274,6 +324,7 @@ impl Output {
     /// Keep back the line ends this output ends on, the ones a pinned
     /// prompt's row would have followed.
     fn hold_tail(&mut self) {
+        self.unpreview();
         self.unhold();
         let at = trailing_line_ends(&self.bytes);
         if at < self.bytes.len() {
@@ -336,6 +387,7 @@ impl Output {
     /// End the row the cursor sits on, unless this output already left it
     /// at the start of one.
     fn new_row(&mut self) {
+        self.unpreview();
         if self.untouched() || !self.at_row_start() {
             self.push(b"\r\n");
         }
@@ -641,10 +693,39 @@ pub struct OpenRow {
     /// What the row shows: the drawn prompt, or with drawing off the lines
     /// it replaced.
     pub body: Vec<u8>,
+    /// The drawn prompt with the live values, while the row shows a
+    /// preview in its place. Renderers hold it as the row's restore.
+    pub live: Option<Vec<u8>>,
     /// Where each piece of the design landed in the row, from the render
     /// that drew it (see [`Stage::set_open_spans`]). Empty while the row
     /// shows the game's own lines.
     pub spans: Vec<Span>,
+}
+
+/// What your prompt shows, handed to [`Stage::draw_view`],
+/// [`Stage::pin_view`] and [`Stage::repaint_view`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct View<'a> {
+    /// Your design drawn as your prompt shows it, or None for the lines
+    /// the game sent: drawing off, or the card reading your codes.
+    pub shown: Option<&'a str>,
+    /// Your design drawn with the live values, while `shown` is a preview
+    /// of the open card's in its place: other values, the labels of the
+    /// values with nothing to show, or the game's own line. The region
+    /// carries it as its restore, so only live renders reach history.
+    /// None when your prompt shows the live render. The band above the
+    /// command line never needs it, since nothing on it reaches history.
+    pub live: Option<&'a str>,
+}
+
+impl<'a> View<'a> {
+    /// The live render, or the game's lines with drawing off.
+    pub fn live(rendered: Option<&'a str>) -> Self {
+        Self {
+            shown: rendered,
+            live: None,
+        }
+    }
 }
 
 /// One entry of the candidates ring.
@@ -1267,31 +1348,49 @@ impl Stage {
         before: &[u8],
         rendered: &str,
     ) {
+        self.draw_view(out, block, painted, before, View::live(Some(rendered)));
+    }
+
+    /// [`Stage::draw`] with what the open card shows: a preview, the
+    /// labels of values with nothing to show, or the game's own line. The
+    /// region carries the live render as its restore, and anything this
+    /// output writes after it puts the live render back first, so only
+    /// live renders reach history.
+    pub fn draw_view(
+        &mut self,
+        out: &mut Output,
+        block: Block,
+        painted: Option<u64>,
+        before: &[u8],
+        view: View,
+    ) {
         self.sync(out);
-        let lift = self.lifts().then(|| self.next_gen());
+        let lift = self.lifts().then(|| OpenLift {
+            id: self.next_gen(),
+            start_inside: false,
+        });
         let gen = self.next_gen();
-        let body = drawn(&block, rendered);
+        let (body, live) = row_bodies(&block, view);
+        let region = region_bytes(gen, lift, &body);
         let mut bytes = before.to_vec();
-        if let Some(id) = lift {
-            bytes.extend(lift_start(id));
+        if let Some(lift) = lift {
+            bytes.extend(lift_start(lift.id));
         }
         bytes.extend(block.heads_shown());
-        bytes.extend(mark(gen));
-        match lift {
-            Some(id) => bytes.extend(with_lift_end(&body, id)),
-            None => bytes.extend_from_slice(&body),
-        }
+        let len = region.len();
+        bytes.extend(region);
         put(out, painted, bytes, true);
+        if let Some(live) = &live {
+            out.preview_tail(len, region_bytes(gen, lift, live));
+        }
         out.closed = false;
         self.open = Some(OpenRow {
             gen,
             body,
+            live,
             spans: Vec::new(),
         });
-        self.open_lift = lift.map(|id| OpenLift {
-            id,
-            start_inside: false,
-        });
+        self.open_lift = lift;
         self.open_heads = block.heads_shown_with_text();
         self.shown_as = self.show;
         self.note_recognized(block);
@@ -1349,7 +1448,22 @@ impl Stage {
         before: &[u8],
         rendered: &str,
     ) {
-        let body = pin_body(&block, Some(rendered));
+        self.pin_view(out, block, painted, before, View::live(Some(rendered)));
+    }
+
+    /// [`Stage::pin_drawn`] with what the open card shows. The band shows
+    /// it, and needs no restore, since nothing on the band reaches
+    /// history. It shows the live render again at the next repaint
+    /// without a preview.
+    pub fn pin_view(
+        &mut self,
+        out: &mut Output,
+        block: Block,
+        painted: Option<u64>,
+        before: &[u8],
+        view: View,
+    ) {
+        let body = pin_body(&block, view.shown);
         self.pin(out, block, painted, before, body);
         self.pinned_shown = None;
     }
@@ -1516,18 +1630,29 @@ impl Stage {
     /// that. A repaint is dropped by a renderer that wrote anything after
     /// the row.
     pub fn repaint(&mut self, out: &mut Output, rendered: Option<&str>) {
-        self.repaint_row(out, rendered);
+        self.repaint_view(out, View::live(rendered));
+    }
+
+    /// [`Stage::repaint`] with what the open card shows, as a preview the
+    /// card sets or clears asks. In the text and lifted, the row carries
+    /// the live render as its restore while it shows anything else, so a
+    /// renderer writes the live render back before anything lands after
+    /// it. The band shows the preview with no restore.
+    pub fn repaint_view(&mut self, out: &mut Output, view: View) {
+        self.repaint_row(out, view);
         self.seal(out);
     }
 
-    /// [`Stage::repaint`], before the renderers hear about the pinned
+    /// [`Stage::repaint_view`], before the renderers hear about the pinned
     /// prompt's row.
-    fn repaint_row(&mut self, out: &mut Output, rendered: Option<&str>) {
+    fn repaint_row(&mut self, out: &mut Output, view: View) {
         self.sync(out);
         match (self.shown_as, self.show) {
-            (PromptShow::Pinned, PromptShow::Pinned) => return self.repaint_pinned(out, rendered),
-            (_, PromptShow::Pinned) => return self.move_to_pinned(out, rendered),
-            (PromptShow::Pinned, _) => return self.move_from_pinned(out, rendered),
+            (PromptShow::Pinned, PromptShow::Pinned) => {
+                return self.repaint_pinned(out, view.shown)
+            }
+            (_, PromptShow::Pinned) => return self.move_to_pinned(out, view.shown),
+            (PromptShow::Pinned, _) => return self.move_from_pinned(out, view),
             _ => {}
         }
         let Some(open) = &self.open else {
@@ -1536,13 +1661,10 @@ impl Stage {
         let Some(block) = &self.last_raw else {
             return;
         };
-        let body = match rendered {
-            Some(rendered) => drawn(block, rendered),
-            None => block.shown(),
-        };
+        let (body, live) = row_bodies(block, view);
         // Choosing Lifted lifts the open row, from its region's start.
         let lifting = self.open_lift.is_none() && self.lifts();
-        if body == open.body && !lifting {
+        if body == open.body && live == open.live && !lifting {
             return;
         }
         let old = open.gen;
@@ -1555,16 +1677,7 @@ impl Stage {
             None => None,
         };
         let gen = self.next_gen();
-        let mut bytes = mark(gen);
-        match lift {
-            Some(lift) => {
-                if lift.start_inside {
-                    bytes.extend(lift_start(lift.id));
-                }
-                bytes.extend(with_lift_end(&body, lift.id));
-            }
-            None => bytes.extend_from_slice(&body),
-        }
+        let bytes = region_bytes(gen, lift, &body);
         // Choosing Lifted lifts the lines above the region with it, from
         // the first of them, where a renderer finds them.
         let above = match (lifting, lift, &self.open_heads) {
@@ -1581,27 +1694,34 @@ impl Stage {
             _ => None,
         };
         out.replace_above(old, bytes, above);
+        out.restore = live.as_ref().map(|live| region_bytes(gen, lift, live));
         out.closed = false;
         self.open = Some(OpenRow {
             gen,
             body,
+            live,
             spans: Vec::new(),
         });
         self.open_lift = lift;
     }
 
+    /// What the band shows for `block` with `shown`: drawing off, what
+    /// Prompts triggers left of the prompt it pinned.
+    fn band_body(&self, block: &Block, shown: Option<&str>) -> Vec<u8> {
+        let shown = shown.filter(|_| !block.afk);
+        match (shown, &self.pinned_shown) {
+            (None, Some(pinned)) => pinned.band.clone(),
+            _ => pin_body(block, shown),
+        }
+    }
+
     /// Show the band as the `[prompt]` table now says. It never writes to
     /// the text, so it never races your echo.
-    fn repaint_pinned(&mut self, out: &mut Output, rendered: Option<&str>) {
+    fn repaint_pinned(&mut self, out: &mut Output, shown: Option<&str>) {
         let (Some(block), Some(pinned)) = (&self.last_raw, &self.pinned) else {
             return;
         };
-        let rendered = rendered.filter(|_| !block.afk);
-        // Drawing off, the band keeps what Prompts triggers left.
-        let body = match (rendered, &self.pinned_shown) {
-            (None, Some(shown)) => shown.band.clone(),
-            _ => pin_body(block, rendered),
-        };
+        let body = self.band_body(block, shown);
         if body == *pinned {
             return;
         }
@@ -1612,7 +1732,7 @@ impl Stage {
     /// You chose Pinned. The open row, if any, is erased and its prompt
     /// goes to the band, and the next empty line writes nothing. Without
     /// one, the next prompt goes to the band.
-    fn move_to_pinned(&mut self, out: &mut Output, rendered: Option<&str>) {
+    fn move_to_pinned(&mut self, out: &mut Output, shown: Option<&str>) {
         let Some(open) = self.open.take() else {
             self.shown_as = PromptShow::Pinned;
             return;
@@ -1620,8 +1740,7 @@ impl Stage {
         let Some(block) = &self.last_raw else {
             return;
         };
-        let rendered = rendered.filter(|_| !block.afk);
-        let body = pin_body(block, rendered);
+        let body = pin_body(block, shown.filter(|_| !block.afk));
         let settled_line = block.final_line().end == End::SettledLine;
         // The lines above the region leave the text with it.
         let above = self.open_heads.take().map(|(_, plain)| Above {
@@ -1641,7 +1760,7 @@ impl Stage {
     /// While the pinned prompt's row would still be the last thing on
     /// screen, the prompt comes back there, as a fresh open row after the
     /// held line ends. Otherwise the next prompt shows in the text.
-    fn move_from_pinned(&mut self, out: &mut Output, rendered: Option<&str>) {
+    fn move_from_pinned(&mut self, out: &mut Output, view: View) {
         out.pin = Some(Vec::new());
         self.pinned = None;
         let pinned_shown = self.pinned_shown.take();
@@ -1652,32 +1771,35 @@ impl Stage {
         let Some(block) = self.last_raw.clone() else {
             return;
         };
-        match rendered.filter(|_| !block.afk) {
-            Some(rendered) => {
-                let lift = self.lifts().then(|| self.next_gen());
+        let drawing = view.shown.is_some() || view.live.is_some();
+        match (drawing && !block.afk).then_some(view) {
+            Some(view) => {
+                let lift = self.lifts().then(|| OpenLift {
+                    id: self.next_gen(),
+                    start_inside: false,
+                });
                 let gen = self.next_gen();
-                let body = drawn(&block, rendered);
+                let (body, live) = row_bodies(&block, view);
+                let region = region_bytes(gen, lift, &body);
                 let mut bytes = Vec::new();
-                if let Some(id) = lift {
-                    bytes.extend(lift_start(id));
+                if let Some(lift) = lift {
+                    bytes.extend(lift_start(lift.id));
                 }
                 bytes.extend(block.heads_shown());
-                bytes.extend(mark(gen));
-                match lift {
-                    Some(id) => bytes.extend(with_lift_end(&body, id)),
-                    None => bytes.extend_from_slice(&body),
-                }
+                let len = region.len();
+                bytes.extend(region);
                 out.text(&bytes);
+                if let Some(live) = &live {
+                    out.preview_tail(len, region_bytes(gen, lift, live));
+                }
                 out.closed = false;
                 self.open = Some(OpenRow {
                     gen,
                     body,
+                    live,
                     spans: Vec::new(),
                 });
-                self.open_lift = lift.map(|id| OpenLift {
-                    id,
-                    start_inside: false,
-                });
+                self.open_lift = lift;
                 self.open_heads = block.heads_shown_with_text();
             }
             None => {
@@ -1806,6 +1928,39 @@ fn drawn(block: &Block, rendered: &str) -> Vec<u8> {
     body
 }
 
+/// What the open row holds for `block` with `view`: your design as drawn,
+/// or the lines it replaced as the game sent them, and the live render
+/// when the row shows something else. A live render that draws the same
+/// bytes needs no restore.
+fn row_bodies(block: &Block, view: View) -> (Vec<u8>, Option<Vec<u8>>) {
+    let body = match view.shown {
+        Some(shown) => drawn(block, shown),
+        None => block.shown(),
+    };
+    let live = view
+        .live
+        .map(|live| drawn(block, live))
+        .filter(|live| *live != body);
+    (body, live)
+}
+
+/// Region `gen` holding `body`: its mark, then, while it carries a lift,
+/// the lift's start when it sits inside the region, the body and the
+/// lift's end.
+fn region_bytes(gen: u64, lift: Option<OpenLift>, body: &[u8]) -> Vec<u8> {
+    let mut bytes = mark(gen);
+    match lift {
+        Some(lift) => {
+            if lift.start_inside {
+                bytes.extend(lift_start(lift.id));
+            }
+            bytes.extend(with_lift_end(body, lift.id));
+        }
+        None => bytes.extend_from_slice(body),
+    }
+    bytes
+}
+
 /// What the band shows for `block`: the lines above the last one that
 /// show as sent, then `rendered`, or with drawing off every line as the
 /// game sent it. No line end after the last row.
@@ -1907,6 +2062,7 @@ mod tests {
             Some(&OpenRow {
                 gen: 1,
                 body: b"DRAWN".to_vec(),
+                live: None,
                 spans: Vec::new(),
             })
         );
@@ -2101,6 +2257,7 @@ mod tests {
             Some(&OpenRow {
                 gen: 1,
                 body: b"DRAWN\r\n".to_vec(),
+                live: None,
                 spans: Vec::new(),
             })
         );
@@ -3336,5 +3493,280 @@ mod tests {
             back.bytes,
             with(&[&lift_start(1), &mark(2), b"DRAWN", &lift_end(1), b" "])
         );
+    }
+
+    /// What the open row shows with a preview on, and the live render
+    /// behind it.
+    fn preview<'a>(shown: &'a str, live: &'a str) -> View<'a> {
+        View {
+            shown: Some(shown),
+            live: Some(live),
+        }
+    }
+
+    #[test]
+    fn a_prompt_drawn_with_a_preview_carries_the_live_render_as_its_restore() {
+        let mut stage = stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw_view(&mut out, block, None, b"", preview("LOW", "LIVE"));
+        assert_eq!(out.bytes, with(&[&mark(1), b"LOW"]));
+        assert_eq!(out.restore, Some(with(&[&mark(1), b"LIVE"])));
+        let open = stage.open_row().expect("the open row");
+        assert_eq!(open.body, b"LOW");
+        assert_eq!(open.live.as_deref(), Some(&b"LIVE"[..]));
+        // A preview that draws what the live render draws needs none.
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw_view(&mut out, block, None, b"", preview("SAME", "SAME"));
+        assert_eq!(out.restore, None);
+        assert_eq!(stage.open_row().and_then(|o| o.live.clone()), None);
+    }
+
+    #[test]
+    fn anything_written_after_a_preview_in_the_same_output_puts_the_live_render_back_first() {
+        // A line after the prompt in the same read.
+        let mut stage = stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw_view(&mut out, block, None, b"", preview("LOW", "LIVE"));
+        stage.line(&mut out, b"You flee!", "You flee!", None, b"You flee!\r\n");
+        assert_eq!(out.bytes, with(&[&mark(1), b"LIVE", b"You flee!\r\n"]));
+        assert_eq!(out.restore, None);
+        stage.finish(&mut out);
+        assert_eq!(stage.open_row(), None);
+
+        // Two prompts in one read: only the last one shows the preview.
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw_view(&mut out, block, None, b"", preview("LOW", "LIVE"));
+        out.text(b"\r\n");
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw_view(&mut out, block, None, b"", preview("LOW", "LIVE2"));
+        assert_eq!(
+            out.bytes,
+            with(&[&mark(2), b"LIVE", b"\r\n", &mark(3), b"LOW"])
+        );
+        assert_eq!(out.restore, Some(with(&[&mark(3), b"LIVE2"])));
+
+        // A prompt that replaced its painted start, then a line.
+        let mut stage = self::stage(JAMES, false);
+        let mut first = Output::new(false);
+        let _ = stage.paint_partial(&mut first, b"[1020/10", None);
+        let mut second = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw_view(&mut second, block, Some(1), b"", preview("LOW", "LIVE"));
+        assert_eq!(
+            second.replace.as_ref().map(|r| r.bytes.clone()),
+            Some(with(&[&mark(2), b"LOW"]))
+        );
+        assert_eq!(second.restore, Some(with(&[&mark(2), b"LIVE"])));
+        second.text(b"\r\nThe guard arrives.\r\n");
+        assert_eq!(
+            second.replace.map(|r| r.bytes),
+            Some(with(&[&mark(2), b"LIVE"]))
+        );
+        assert_eq!(second.restore, None);
+
+        // The game's own line in the region ends its row, the live render
+        // does not, so a fresh write after it starts a new row.
+        let mut stage = self::stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        let raw = View {
+            shown: None,
+            live: Some("LIVE"),
+        };
+        stage.draw_view(&mut out, block, None, b"", raw);
+        assert_eq!(out.bytes, with(&[&mark(1), PROMPT.as_bytes(), b"\r\n"]));
+        out.replace(9, b"later".to_vec(), true);
+        assert_eq!(out.bytes, with(&[&mark(1), b"LIVE\r\nlater"]));
+        assert_eq!(out.restore, None);
+    }
+
+    #[test]
+    fn a_preview_repaints_the_open_row_with_the_live_render_behind_it() {
+        let mut stage = stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut out, block, None, b"", "LIVE");
+        assert_eq!(out.restore, None);
+
+        let mut low = Output::new(false);
+        stage.repaint_view(&mut low, preview("LOW", "LIVE"));
+        assert_eq!(
+            low.replace,
+            Some(Replace {
+                gen: 1,
+                bytes: with(&[&mark(2), b"LOW"]),
+                fresh: false,
+                above: None,
+            })
+        );
+        assert!(low.bytes.is_empty());
+        assert_eq!(low.restore, Some(with(&[&mark(2), b"LIVE"])));
+        // The same view again writes nothing.
+        let mut same = Output::new(false);
+        stage.repaint_view(&mut same, preview("LOW", "LIVE"));
+        assert!(same.is_empty());
+        // The live render behind the preview moved, so the row carries
+        // the new one.
+        let mut moved = Output::new(false);
+        stage.repaint_view(&mut moved, preview("LOW", "LIVE2"));
+        assert_eq!(
+            moved.replace.map(|r| r.bytes),
+            Some(with(&[&mark(3), b"LOW"]))
+        );
+        assert_eq!(moved.restore, Some(with(&[&mark(3), b"LIVE2"])));
+        // The card closes: the live render, with nothing to restore.
+        let mut live = Output::new(false);
+        stage.repaint_view(&mut live, View::live(Some("LIVE2")));
+        assert_eq!(
+            live.replace.map(|r| r.bytes),
+            Some(with(&[&mark(4), b"LIVE2"]))
+        );
+        assert_eq!(live.restore, None);
+        assert_eq!(stage.open_row().and_then(|o| o.live.clone()), None);
+        // A preview that matches the live render after all writes it with
+        // nothing to restore, so a restore a renderer still holds goes.
+        let mut stage = self::stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw_view(&mut out, block, None, b"", preview("LOW", "LIVE"));
+        let mut back = Output::new(false);
+        stage.repaint_view(&mut back, View::live(Some("LOW")));
+        assert_eq!(
+            back.replace.map(|r| r.bytes),
+            Some(with(&[&mark(2), b"LOW"]))
+        );
+        assert_eq!(back.restore, None);
+    }
+
+    #[test]
+    fn while_the_card_reads_your_codes_the_row_shows_the_game_line_over_your_design() {
+        let mut stage = stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        let mut raw = Output::new(false);
+        stage.repaint_view(
+            &mut raw,
+            View {
+                shown: None,
+                live: Some("DRAWN"),
+            },
+        );
+        assert_eq!(
+            raw.replace.map(|r| r.bytes),
+            Some(with(&[&mark(2), PROMPT.as_bytes(), b"\r\n"]))
+        );
+        assert_eq!(raw.restore, Some(with(&[&mark(2), b"DRAWN"])));
+    }
+
+    #[test]
+    fn a_lifted_preview_and_its_restore_both_end_with_the_lift() {
+        let mut stage = lifted_stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        let mut low = Output::new(false);
+        stage.repaint_view(&mut low, preview("LOW", "DRAWN"));
+        assert_eq!(
+            low.replace.map(|r| r.bytes),
+            Some(with(&[&mark(3), b"LOW", &lift_end(1), b" "]))
+        );
+        assert_eq!(
+            low.restore,
+            Some(with(&[&mark(3), b"DRAWN", &lift_end(1), b" "]))
+        );
+        // A prompt drawn while the preview lasts shows it, and puts the
+        // live render back when text follows.
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw_view(&mut out, block, None, b"", preview("LOW", "DRAWN"));
+        assert_eq!(
+            out.bytes,
+            with(&[&lift_start(4), &mark(5), b"LOW", &lift_end(4), b" "])
+        );
+        assert_eq!(
+            out.restore,
+            Some(with(&[&mark(5), b"DRAWN", &lift_end(4), b" "]))
+        );
+        out.text(b"\r\nmore\r\n");
+        assert_eq!(
+            out.bytes,
+            with(&[
+                &lift_start(4),
+                &mark(5),
+                b"DRAWN",
+                &lift_end(4),
+                b" ",
+                b"\r\nmore\r\n"
+            ])
+        );
+        // A lift that starts inside the region starts again in both.
+        let mut stage = self::stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        stage.set_show(PromptShow::Lifted);
+        let mut lift = Output::new(false);
+        stage.repaint(&mut lift, Some("DRAWN"));
+        let mut low = Output::new(false);
+        stage.repaint_view(&mut low, preview("LOW", "DRAWN"));
+        assert_eq!(
+            low.replace.map(|r| r.bytes),
+            Some(with(&[
+                &mark(4),
+                &lift_start(2),
+                b"LOW",
+                &lift_end(2),
+                b" "
+            ]))
+        );
+        assert_eq!(
+            low.restore,
+            Some(with(&[
+                &mark(4),
+                &lift_start(2),
+                b"DRAWN",
+                &lift_end(2),
+                b" "
+            ]))
+        );
+    }
+
+    #[test]
+    fn a_pinned_preview_changes_only_the_band() {
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        let block = read(&stage, PROMPT, End::Line);
+        stage.pin_view(&mut out, block, None, b"", preview("LOW", "DRAWN"));
+        assert_eq!(out.pin.as_deref(), Some(&b"LOW"[..]));
+        assert_eq!(out.restore, None);
+        assert_eq!(out.bytes, b"room");
+        stage.finish(&mut out);
+        // The card closes, and the band shows the live render.
+        let mut live = Output::new(false);
+        stage.repaint_view(&mut live, View::live(Some("DRAWN")));
+        assert_eq!(live.pin.as_deref(), Some(&b"DRAWN"[..]));
+        assert!(live.replace.is_none() && live.bytes.is_empty() && live.restore.is_none());
+        // A preview on the band needs no restore either.
+        let mut low = Output::new(false);
+        stage.repaint_view(&mut low, preview("LOW", "DRAWN"));
+        assert_eq!(low.pin.as_deref(), Some(&b"LOW"[..]));
+        assert!(low.replace.is_none() && low.bytes.is_empty() && low.restore.is_none());
+        // The game's own line while the card reads your codes.
+        let mut raw = Output::new(false);
+        stage.repaint_view(
+            &mut raw,
+            View {
+                shown: None,
+                live: Some("DRAWN"),
+            },
+        );
+        assert_eq!(raw.pin.as_deref(), Some(PROMPT.as_bytes()));
+        assert!(raw.restore.is_none());
     }
 }
