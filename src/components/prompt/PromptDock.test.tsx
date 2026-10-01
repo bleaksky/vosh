@@ -15,7 +15,7 @@ import type { PromptShowState } from '../../lib/promptShow';
 import { dockPieceAt, type PieceSpan } from '../../lib/promptPointer';
 import { parseSgrCells, PLAIN, shownColumns } from '../../lib/sgrCells';
 import { RegionWriter } from '../../lib/terminalRegion';
-import { keptRows, spareAbove } from '../../lib/terminalRows';
+import { keepTail, keptRows, spareAbove, type TailView } from '../../lib/terminalRows';
 import { PinnedBand } from './PromptDock';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve()) }));
@@ -362,16 +362,42 @@ describe('Enter while your prompt shows pinned', () => {
 // and sizes a real xterm as the live pane does, so the gap between the
 // newest line and the band's top is what the window shows.
 describe('the text above the pinned band', () => {
-  /** The screen's rows, trailing blanks trimmed, up to the last row that
-   *  shows anything. */
+  /** The rows the window shows, trailing blanks trimmed, up to the last
+   *  row that shows anything. */
   function screen(term: Terminal): string[] {
     const buffer = term.buffer.active;
     const rows: string[] = [];
     for (let y = 0; y < term.rows; y++) {
-      rows.push(buffer.getLine(buffer.baseY + y)?.translateToString(true) ?? '');
+      rows.push(buffer.getLine(buffer.viewportY + y)?.translateToString(true) ?? '');
     }
     while (rows.length > 0 && rows[rows.length - 1] === '') rows.pop();
     return rows;
+  }
+
+  /** The live pane's xterm as a window has it. Its scrollbar takes a row
+   *  resize in only on the next frame, and a scroll asked of it before
+   *  then is measured on the old rows and lands a row short, as xterm 6.1
+   *  does at 2x. The pane follows its newest rows after every resize and
+   *  every output, as Terminal.tsx does. */
+  function livePane(term: Terminal): { follow: () => void; frame: () => void } {
+    let lagging = false;
+    const view: TailView = {
+      buffer: term.buffer,
+      scrollToBottom: () => {
+        const b = term.buffer.active;
+        term.scrollToLine(lagging ? b.baseY - 1 : b.baseY);
+      },
+    };
+    term.onResize(() => {
+      lagging = true;
+    });
+    term.onResize(() => keepTail(view));
+    return {
+      follow: () => keepTail(view),
+      frame: () => {
+        lagging = false;
+      },
+    };
   }
 
   function parsed(writer: RegionWriter): Promise<void> {
@@ -385,6 +411,7 @@ describe('the text above the pinned band', () => {
       const fit = Math.floor(paneHeight / CELL.height);
       const term = new Terminal({ cols: 60, rows: fit, scrollback: 100, allowProposedApi: true });
       const writer = new RegionWriter(term);
+      const live = livePane(term);
       // Forty lines, the line end before the pinned prompt held back as
       // the session holds it, so the newest line is the last on screen.
       const lines = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`);
@@ -398,6 +425,11 @@ describe('the text above the pinned band', () => {
         const lent = lentRows(dockRows(pin, 2, false));
         term.resize(60, keptRows(fit, lent));
         await parsed(writer);
+        // More output lands before the next frame, and the pane follows
+        // its newest rows again.
+        live.follow();
+        // The window shows the newest rows, not the row above them.
+        expect(term.buffer.active.viewportY).toBe(term.buffer.active.baseY);
         // The dock's place starts where the pane ends, and the dock
         // reaches up over the pane by the rows it borrows.
         const box = dockBox(html);
@@ -410,6 +442,7 @@ describe('the text above the pinned band', () => {
         const textBottom = gridTop + term.rows * CELL.height;
         const rows = screen(term);
         seen.push({ gap: bandTop - textBottom, first: rows[0], last: rows[rows.length - 1] });
+        live.frame();
       }
       // The newest line never moves off the row right above the band,
       // 6 px over it each time, whatever the pane leaves over. The grid
