@@ -1510,6 +1510,10 @@ mod tests {
         }
     }
 
+    /// Runs `changed` on a slot of its own, the way `report_sizes` does
+    /// for the game, and never runs `report_sizes` itself, which keeps its
+    /// slots in statics and reaches the app. A change to the rows
+    /// `report_sizes` hands `changed` passes here unseen.
     #[test]
     fn sizes_reach_the_game_as_the_cases_xterm_runs() {
         let cases = row_cases();
