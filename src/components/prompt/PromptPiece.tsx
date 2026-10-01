@@ -3,12 +3,17 @@ import type { BandEnv } from '../../lib/bandCells';
 import { indexedRgb } from '../../lib/bandCells';
 import {
   breakHint,
+  colorHex,
   colorHint,
   customColor,
   customText,
+  groundSwatchOf,
+  MORE_STYLES,
+  moreLabel,
   rowsOf,
   swatchOf,
   THEME_SWATCHES,
+  UNDERLINE_KINDS,
   WHEN_FIXED_HINT,
 } from '../../lib/promptPieces';
 import type {
@@ -17,10 +22,13 @@ import type {
   PromptFormatName,
   PromptPiece,
   PromptStyleChoice,
+  PromptUnderlineStyle,
   PromptWhen,
 } from '../../lib/session';
 import {
   Button,
+  CheckIcon,
+  ChevronDownIcon,
   ColorField,
   cx,
   Field,
@@ -29,6 +37,7 @@ import {
   Segmented,
   type SegmentedOption,
 } from '../settings/ui';
+import { CardMenu } from './CardMenu';
 
 // The part you picked on your prompt (P5, P7, P8a, P8b, P10). The name line
 // says what it is and what it reads now, with the part's own codes as you
@@ -37,6 +46,12 @@ import {
 // draws now, a bar Width in place of Style, text its words, and a line
 // break only When. Every change goes through prompt_edit, which keeps
 // every other part's look.
+//
+// The colors and styles follow the styles board: Color and Background
+// each take the terminal's own, a theme color or any true color. Style
+// keeps B, I and U, and More styles holds strikethrough, dim and reverse.
+// While an underline is on, the Underline row picks its kind, each drawn
+// in its own line, and its color, empty for the text color.
 
 const WHEN_OPTIONS: SegmentedOption<PromptWhen>[] = [
   { value: 'always', label: 'Always' },
@@ -53,6 +68,9 @@ interface PromptPieceProps {
   onEdit: (op: PromptEditOp) => void;
   onInsertValue: () => void;
 }
+
+/** What a color paints: the text, its ground, or its underline. */
+type Layer = 'text' | 'background' | 'underline';
 
 /** One row of the part: a label column of 88 and its control. */
 function PieceRow({
@@ -86,9 +104,20 @@ export function PromptPieceBody({ piece, env, onEdit, onInsertValue }: PromptPie
   const rows = rowsOf(piece);
   const at = piece.piece;
   const swatch = swatchOf(piece.color);
+  const ground = groundSwatchOf(piece.background);
   const palette = (index: number) => rgbHex(indexedRgb(index, env.palette));
   const custom = customText(piece.color, palette);
-  const setColor = (color: PromptColorChoice) => onEdit({ op: 'set_color', piece: at, color });
+  const groundCustom = customText(piece.background, palette);
+  const paint = (layer: Layer) => (color: PromptColorChoice) =>
+    onEdit({
+      op: 'set_color',
+      piece: at,
+      color,
+      ...(layer === 'background' ? { background: true } : {}),
+      ...(layer === 'underline' ? { underline: true } : {}),
+    });
+  const setColor = paint('text');
+  const setGround = paint('background');
   const setStyle = (style: PromptStyleChoice, on: boolean) =>
     onEdit({ op: 'set_style', piece: at, style, on });
   const breaks = piece.kind === 'nl';
@@ -209,9 +238,57 @@ export function PromptPieceBody({ piece, env, onEdit, onInsertValue }: PromptPie
               }}
             />
           </PieceRow>
+          {/* The hint stays right under Color, as P5 draws it, since By
+              value's rule is the Color row's alone. */}
           <p className={cx('pc-piece-hint', swatchOf(piece.color) !== 'by_value' && 'is-nowrap')}>
             {colorHint(piece.color)}
           </p>
+          {rows.background && (
+            <PieceRow label="Background">
+              <span className="pc-swatches">
+                <button
+                  type="button"
+                  className="pc-swatch"
+                  aria-label="Terminal background"
+                  title="Terminal background"
+                  aria-pressed={ground === 'default'}
+                  style={{ background: env.bg }}
+                  onClick={() => setGround({ kind: 'default' })}
+                />
+                {/* Holds By value's place, so the theme colors line up
+                    with the Color row's. */}
+                {piece.by_value && <span className="pc-swatch-slot" aria-hidden="true" />}
+              </span>
+              <span className="pc-swatches is-theme">
+                {THEME_SWATCHES.map((s) => (
+                  <button
+                    key={s.index}
+                    type="button"
+                    className="pc-swatch"
+                    aria-label={s.label}
+                    title={s.label}
+                    aria-pressed={ground === s.index}
+                    style={{ background: env.palette[s.index] }}
+                    onClick={() => setGround({ kind: 'named', index: s.index })}
+                  />
+                ))}
+              </span>
+              <ColorField
+                className={cx('pc-custom', ground === 'custom' && 'is-on')}
+                value={groundCustom}
+                width={112}
+                placeholder="Custom"
+                aria-label="Custom background"
+                pickerLabel="Choose a custom background"
+                hexOnly
+                allowEmpty
+                onChange={(hex) => {
+                  const color = customColor(hex);
+                  if (color) setGround(color);
+                }}
+              />
+            </PieceRow>
+          )}
         </>
       )}
       {rows.style && (
@@ -245,7 +322,17 @@ export function PromptPieceBody({ piece, env, onEdit, onInsertValue }: PromptPie
               <span>U</span>
             </button>
           </span>
+          <MoreStyles piece={piece} onStyle={setStyle} />
         </PieceRow>
+      )}
+      {rows.underline && (
+        <UnderlineRow
+          piece={piece}
+          text={textHex(piece.color, env, palette)}
+          palette={palette}
+          onStyle={(style) => setStyle(style, true)}
+          onColor={paint('underline')}
+        />
       )}
       <div className="pc-piece-actions">
         <Button icon={<PlusIcon />} onClick={onInsertValue}>
@@ -259,8 +346,156 @@ export function PromptPieceBody({ piece, env, onEdit, onInsertValue }: PromptPie
   );
 }
 
+/** The color a part's text draws in, as #rrggbb: the terminal's text for
+ *  its own color, and the full color of By value. */
+function textHex(color: PromptColorChoice, env: BandEnv, palette: (index: number) => string) {
+  if (color.kind === 'default') return env.fg;
+  if (color.kind === 'by_value') return env.palette[2];
+  return colorHex(color, palette) || env.fg;
+}
+
+/** The Style row's More styles button and its menu: strikethrough, dim
+ *  and reverse, each drawn in its own look with a check while it is on.
+ *  The button reads the ones that are on, in the pressed look of B, I
+ *  and U, so you see them without opening it. */
+function MoreStyles({
+  piece,
+  onStyle,
+}: {
+  piece: PromptPiece;
+  onStyle: (style: PromptStyleChoice, on: boolean) => void;
+}) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const label = moreLabel(piece);
+  const on = MORE_STYLES.some((s) => piece[s.style]);
+  return (
+    <>
+      <button
+        type="button"
+        className={cx('pc-style-more', on && 'is-on')}
+        aria-haspopup="menu"
+        aria-expanded={anchor !== null}
+        aria-label={on ? `More styles, ${label} on` : undefined}
+        onClick={(e) => setAnchor(anchor ? null : e.currentTarget)}
+      >
+        <span>{label}</span>
+        <ChevronDownIcon size={12} />
+      </button>
+      {anchor && (
+        <CardMenu
+          anchor={anchor}
+          place="below-start"
+          width={184}
+          label="More styles"
+          onClose={() => setAnchor(null)}
+        >
+          <MoreStyleItems
+            piece={piece}
+            onToggle={(style, next) => {
+              setAnchor(null);
+              onStyle(style, next);
+            }}
+          />
+        </CardMenu>
+      )}
+    </>
+  );
+}
+
+/** The items of More styles, a check before each one that is on. */
+export function MoreStyleItems({
+  piece,
+  onToggle,
+}: {
+  piece: Pick<PromptPiece, 'strike' | 'dim' | 'inverse'>;
+  onToggle: (style: PromptStyleChoice, on: boolean) => void;
+}) {
+  return (
+    <>
+      {MORE_STYLES.map((s) => {
+        const checked = piece[s.style];
+        return (
+          <li key={s.style} role="none">
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={checked}
+              className="pc-style-item"
+              onClick={() => onToggle(s.style, !checked)}
+            >
+              {checked && <CheckIcon className="pc-start-check" />}
+              <span className={`pc-style-sample is-${s.style}`}>{s.label}</span>
+            </button>
+          </li>
+        );
+      })}
+    </>
+  );
+}
+
+/** The Underline row, while an underline is on: its kind, each segment
+ *  drawn in its own line and in the underline's color, then the color.
+ *  An empty color draws the line in the text's color, which its swatch
+ *  shows. */
+function UnderlineRow({
+  piece,
+  text,
+  palette,
+  onStyle,
+  onColor,
+}: {
+  piece: PromptPiece;
+  text: string;
+  palette: (index: number) => string;
+  onStyle: (style: PromptUnderlineStyle) => void;
+  onColor: (color: PromptColorChoice) => void;
+}) {
+  const hex = colorHex(piece.underline_color, palette);
+  return (
+    <PieceRow label="Underline">
+      <Segmented
+        label="Underline"
+        className="pc-seg pc-lines"
+        options={UNDERLINE_KINDS.map((k) => ({
+          value: k.style,
+          label: (
+            <span
+              className="pc-line"
+              style={{ textDecorationStyle: k.line, textDecorationColor: hex || undefined }}
+            >
+              {k.label}
+            </span>
+          ),
+        }))}
+        value={piece.underline_style}
+        onChange={onStyle}
+      />
+      <ColorField
+        className={cx('pc-custom', hex !== '' && 'is-on')}
+        value={hex}
+        width={112}
+        placeholder="Text color"
+        emptySwatch={text}
+        aria-label="Underline color"
+        pickerLabel="Choose the underline color"
+        hexOnly
+        allowEmpty
+        onChange={(next) => {
+          if (next === '') {
+            onColor({ kind: 'default' });
+            return;
+          }
+          const color = customColor(next);
+          if (color) onColor(color);
+        }}
+      />
+    </PieceRow>
+  );
+}
+
 /** A text part's words, in the terminal's face. Each change saves as you
  *  type. Emptying it removes the part. */
+
 function TextRow({
   piece,
   first,

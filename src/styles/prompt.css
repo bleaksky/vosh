@@ -1031,6 +1031,129 @@
   outline-offset: 2px;
 }
 
+/* More styles, 12 after U: the style toggles' height and radius, the
+   segment type, and the 12 px chevron of the card's other menu buttons.
+   It reads the styles it holds that are on, in the toggles' pressed
+   look. */
+.pc-style-more {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  margin: 0 0 0 12px;
+  padding: 0 6px 0 8px;
+  border: 0;
+  border-radius: var(--r-row);
+  background: transparent;
+  color: var(--secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pc-style-more svg {
+  display: block;
+  flex: none;
+  color: var(--tertiary);
+}
+
+.pc-style-more:hover,
+.pc-style-more[aria-expanded='true'] {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.pc-style-more.is-on,
+.pc-style-more.is-on:hover {
+  background: var(--selrow);
+  color: var(--text);
+  box-shadow: var(--st-selrow-ring);
+}
+
+.pc-style-more:hover svg,
+.pc-style-more[aria-expanded='true'] svg,
+.pc-style-more.is-on svg {
+  color: var(--secondary);
+}
+
+.pc-style-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Its menu: rows of the name menu with the check column at 12, each
+   style drawn as the styles board draws it. A check marks what is on,
+   and the highlight follows the pointer and the keys alone. */
+.pc-style-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 30px;
+  margin: 0;
+  padding: 0 12px 0 36px;
+  border: 0;
+  border-radius: var(--r-row);
+  outline: none;
+  background: transparent;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
+  text-align: left;
+  cursor: default;
+}
+
+.pc-style-item:hover,
+.pc-style-item:focus-visible {
+  background: var(--ov-hl);
+}
+
+.pc-style-item .pc-start-check {
+  top: 7px;
+  left: 12px;
+}
+
+.pc-style-sample.is-strike {
+  text-decoration-line: line-through;
+  text-decoration-thickness: 1px;
+}
+
+/* Dim is the text color at half strength, a render rule and no color of
+   its own. */
+.pc-style-sample.is-dim {
+  opacity: 0.5;
+}
+
+.pc-style-sample.is-inverse {
+  padding: 0 3px;
+  background: var(--text);
+  color: var(--raised);
+}
+
+/* The Underline row's kinds, each word drawn in its own line: 1 px, 3
+   below the baseline, through the descenders, as the styles board draws
+   them. A color of its own draws the line in it. */
+.pc-line {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+}
+
+/* The Background row holds By value's place, so its theme colors line
+   up with the Color row's. */
+.pc-swatch-slot {
+  display: block;
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
 .pc-piece-actions {
   display: flex;
   align-items: center;
