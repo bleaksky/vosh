@@ -193,6 +193,8 @@ export function PromptCard({
   const [step, setStep] = useState<CardStep | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [preview, setPreview] = useState<PromptPreviewName>('now');
+  const previewRef = useRef(preview);
+  previewRef.current = preview;
   const [moreAt, setMoreAt] = useState<HTMLElement | null>(null);
   const [confirmForget, setConfirmForget] = useState(false);
   // The code reader for another game, once you choose it in More.
@@ -357,16 +359,17 @@ export function PromptCard({
     };
   }, [template, step, preview, refresh]);
 
-  const pieces = useMemo(
-    () => (described?.template === template ? described.data.pieces : []),
-    [described, template],
-  );
+  // The parts as last described. Right after a change they can trail the
+  // design for a moment, and the card keeps showing them meanwhile, so the
+  // part you work on never blinks away or loses focus.
+  const pieces = useMemo(() => described?.data.pieces ?? [], [described]);
+  const fresh = described?.template === template;
   // A part the design no longer has is no longer picked.
   useEffect(() => {
-    if (pointing.picked !== null && described?.template === template) {
+    if (pointing.picked !== null && fresh) {
       if (!pickable(pieces).includes(pointing.picked)) setPointing(NOWHERE);
     }
-  }, [pieces, pointing.picked, described, template]);
+  }, [pieces, pointing.picked, fresh]);
 
   // Parts no value fills: a code your prompt in the game does not show,
   // or a name Vosh has no value for.
@@ -488,7 +491,12 @@ export function PromptCard({
           text = result.template;
           if (i === 0 || placed.op !== 'insert_text') landed = result.piece;
         }
+        // The parts of the new design come with it, so the card shows
+        // the part it follows at once.
+        const shown = previewRef.current;
+        const data = await promptDescribe(text, shown === 'now' ? null : shown).catch(() => null);
         if (text !== base.template) save({ ...base, template: text });
+        if (data) setDescribed({ template: text, data });
         const first = ops[0];
         if (landed === null || first.op === 'remove') {
           setPointing({ picked: null, caret: caretAfter(first, null) });
@@ -643,6 +651,9 @@ export function PromptCard({
       target.isContentEditable;
     if (typingInField) return false;
     const onCard = target === cardRef.current;
+    // A control you just used keeps focus, so Delete and typing reach the
+    // design from it too. Space and Return stay the control's own.
+    const onButton = target instanceof HTMLButtonElement;
     const mod = e.metaKey || e.ctrlKey;
     if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !mod) {
       const dir = e.key === 'ArrowLeft' ? -1 : 1;
@@ -655,12 +666,14 @@ export function PromptCard({
       return true;
     }
     // The rest work at the caret or the part you picked.
-    if (!onCard || mod || (pointing.picked === null && pointing.caret === null)) return false;
+    if (!(onCard || onButton) || mod) return false;
+    if (pointing.picked === null && pointing.caret === null) return false;
     if (e.key === 'Backspace' || e.key === 'Delete') {
       const op = deleteOp(pieces, pointing, e.key === 'Backspace' ? -1 : 1);
       if (op) edit([op]);
       return true;
     }
+    if (onButton && (e.key === 'Enter' || e.key === ' ')) return false;
     if (e.key === 'Enter') {
       edit([{ op: 'insert_nl', at: place }]);
       return true;
