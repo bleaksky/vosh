@@ -17,6 +17,17 @@ describe('toasts', () => {
     expect(setTimeout).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps a meta set in the terminal face, such as prompt codes (P14)', () => {
+    pushToast({
+      kind: 'info',
+      message: 'Vosh reads your new prompt.',
+      meta: '%h ',
+      metaMono: true,
+    });
+    pushToast({ kind: 'success', message: 'Connected', meta: 'example.net:4000' });
+    expect(getToasts().map((t) => t.metaMono)).toEqual([true, undefined]);
+  });
+
   it('keeps a sticky toast up until you close it', () => {
     const id = pushToast({ kind: 'info', message: 'Quit Vosh now', sticky: true });
     expect(setTimeout).not.toHaveBeenCalled();

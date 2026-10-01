@@ -10,7 +10,12 @@ import { pushToast, type ToastInput } from './toasts';
 /** The toast for one report, or null when the capture took nothing. */
 export function gamePromptToast(payload: GamePromptSeenPayload): ToastInput | null {
   if (!payload.applied || payload.kind === 'off') return null;
-  return { kind: 'info', message: 'Vosh reads your new prompt.', meta: payload.text };
+  return {
+    kind: 'info',
+    message: 'Vosh reads your new prompt.',
+    meta: payload.text,
+    metaMono: true,
+  };
 }
 
 /** How the sentence names a part your prompt fed, by its catalog name. */

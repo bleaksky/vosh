@@ -76,7 +76,9 @@ export function Toasts() {
             <span className="ov-toast-dot" aria-hidden="true" />
           )}
           <span className="ov-toast-msg">{t.message}</span>
-          {t.meta && <span className="ov-toast-meta">{t.meta}</span>}
+          {t.meta && (
+            <span className={t.metaMono ? 'ov-toast-meta is-mono' : 'ov-toast-meta'}>{t.meta}</span>
+          )}
         </button>
       ))}
     </div>
