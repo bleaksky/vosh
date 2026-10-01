@@ -20,6 +20,7 @@
 //! - [`aabahran`] holds what Vosh knows about Aabahran alone, the PROMPT
 //!   compiler among it.
 //! - [`render`] draws a template as ANSI text with a span per piece.
+//! - [`presets`] holds the designs Vosh ships, its default among them.
 //! - [`stage`] decides what Vosh writes around your prompt, in one output
 //!   per socket read, with the regions a later output replaces.
 //! - [`wrap`] is the word wrap both renderers share.
@@ -32,6 +33,7 @@ pub mod config;
 pub mod engine;
 pub mod format;
 pub mod gmcp;
+pub mod presets;
 pub mod render;
 pub mod stage;
 pub mod template;
@@ -43,6 +45,7 @@ pub mod wrap;
 pub use config::{CaptureConfig, PromptConfig, PromptShow};
 pub use engine::{GamePromptSeen, PromptEngine, SeenKind, Status, StatusReport};
 pub use format::{Position, Resolved, Value};
+pub use presets::DEFAULT_DESIGN;
 pub use render::{render, render_str, MapValues, RenderOptions, Rendered, Span, SpanColor, Values};
 pub use template::{FieldRef, Format, Template};
 pub use vars::{Capture, Hidden, Resolver, Vars, Vosh};
