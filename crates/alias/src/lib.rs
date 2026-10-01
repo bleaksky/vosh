@@ -32,10 +32,11 @@ pub struct Alias {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
     /// Optional Lua body. When `Some`, the alias evaluates the body
-    /// via the session's `ScriptEngine` with capture args bound to a
-    /// local `args` table, and `expansion` is ignored. Lets aliases
-    /// branch / loop / call `mud.send` rather than just expand a
-    /// template. `None` keeps the legacy template-substitution path.
+    /// via the session's `ScriptEngine` with the words typed after its
+    /// name bound to a local `captures` table, and `expansion` is
+    /// ignored. Lets aliases branch / loop / call `mud.send` rather
+    /// than just expand a template. `None` keeps the legacy
+    /// template-substitution path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub script: Option<String>,
 }
@@ -74,9 +75,9 @@ impl Alias {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AliasScriptCall {
     pub body: String,
-    /// Capture vector. `[0]` is the entire input line; `[1..]` are
-    /// whitespace-split positional args (analogous to `%1`, `%2`, …
-    /// in the legacy template expansion).
+    /// The words typed after the alias name, split on whitespace. Lua
+    /// reads them as `captures[1]`, `captures[2]`, ..., the words `%1`,
+    /// `%2`, ... pick out of a template.
     pub captures: Vec<String>,
 }
 
@@ -294,18 +295,12 @@ impl AliasStore {
         };
 
         // Script-bodied aliases bypass template expansion entirely.
-        // The captures vector mirrors trigger captures: [0] is the
-        // whole input, [1..] are whitespace-split positional args.
-        // Lua callers reach them as `captures[1]`, `captures[2]`, ...
+        // Lua reads the words after the name as `captures[1]`,
+        // `captures[2]`, ..., the words `%1`, `%2`, ... would take.
         if let Some(body) = &alias.script {
-            let mut captures = Vec::with_capacity(1 + rest.split_whitespace().count());
-            captures.push(command.to_string());
-            for arg in rest.split_whitespace() {
-                captures.push(arg.to_string());
-            }
             out.scripts.push(AliasScriptCall {
                 body: body.clone(),
-                captures,
+                captures: rest.split_whitespace().map(str::to_string).collect(),
             });
             return Ok(());
         }
@@ -729,6 +724,30 @@ mod tests {
         let s = store(&[("zeta", "z"), ("alpha", "a"), ("mu", "m")]);
         let names: Vec<_> = s.list().iter().map(|a| a.name.as_str()).collect();
         assert_eq!(names, vec!["alpha", "mu", "zeta"]);
+    }
+
+    #[test]
+    fn a_script_alias_queues_its_body_with_the_words_after_its_name() {
+        let mut s = store(&[("hunt", "kk %1")]);
+        let body = "mud.send('kick ' .. captures[1])";
+        s.set(Alias::new("kk", "ignored").with_script(body));
+        let out = s
+            .expand_line_full("look;kk  big   dragon;hunt rat")
+            .unwrap();
+        assert_eq!(out.commands, vec!["look".to_string()]);
+        assert_eq!(
+            out.scripts,
+            vec![
+                AliasScriptCall {
+                    body: body.into(),
+                    captures: vec!["big".into(), "dragon".into()],
+                },
+                AliasScriptCall {
+                    body: body.into(),
+                    captures: vec!["rat".into()],
+                },
+            ]
+        );
     }
 
     #[test]

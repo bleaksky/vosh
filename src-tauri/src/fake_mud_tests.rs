@@ -1882,3 +1882,31 @@ async fn each_gmcp_package_goes_out_on_the_event_the_page_hears() {
     .await;
     h.finish(grid).await;
 }
+
+// An alias set to run Lua runs its body when you type it, with the words
+// after its name in captures, and the game hears what the body sends. It
+// used to swallow the line, so nothing went out and no Lua ran. The guard
+// keeps other tests off the shared native grid.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_lua_alias_you_type_runs_its_body_and_the_game_hears_it() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(codes(PROMPT)).await;
+    h.connect().await;
+    h.until_last_row("<1020>").await;
+    h.state.profile.lock().await.aliases.set(
+        vosh_alias::Alias::new("peer", "ignored")
+            .with_script("mud.echo('You peer ' .. captures[1] .. '.')\nmud.send(captures[1])"),
+    );
+
+    h.type_line("peer look").await;
+    h.until_shown("You peer look.").await;
+    h.until_shown("[Exits: south]").await;
+    let screen = h.screen();
+    assert!(
+        !screen.iter().any(|row| row.contains("Huh?")),
+        "{screen:#?}"
+    );
+    h.finish(grid).await;
+}

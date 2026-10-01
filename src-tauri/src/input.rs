@@ -341,23 +341,24 @@ fn process_line(profile: &mut Profile, line: &str, replaced: &mut bool) -> Input
     }
 
     // Plain input. Interpolate variables, then expand aliases, then encode.
+    // An alias that runs Lua queues its body for the caller to run.
     let interpolated = profile.vars.interpolate(trimmed);
-    let commands = match profile.aliases.expand_line(&interpolated) {
-        Ok(cmds) => cmds,
+    let expanded = match profile.aliases.expand_line_full(&interpolated) {
+        Ok(expanded) => expanded,
         Err(ExpandError::RecursionLimit(depth)) => {
             return error_echo(format!("alias recursion limit hit ({depth})"));
         }
     };
 
     let mut bytes = Vec::new();
-    for cmd in commands {
+    for cmd in expanded.commands {
         bytes.extend_from_slice(cmd.as_bytes());
         bytes.extend_from_slice(b"\r\n");
     }
     InputResult {
         bytes,
         echo: Vec::new(),
-        scripts: Vec::new(),
+        scripts: expanded.scripts,
     }
 }
 
@@ -2761,6 +2762,25 @@ mod tests {
         p.aliases.set(Alias::new("greet", "wave;bow"));
         let r = process(&mut p, "greet");
         assert_eq!(r.bytes, b"wave\r\nbow\r\n");
+    }
+
+    #[test]
+    fn a_lua_alias_queues_its_body_with_the_words_you_typed() {
+        let mut p = Profile::default();
+        p.vars.set(Scope::Session, "target", "goblin");
+        let body = "mud.send('kick ' .. captures[1])";
+        p.aliases.set(Alias::new("kk", "ignored").with_script(body));
+        let r = process(&mut p, "look;kk $target");
+        // The template part goes out, and the body waits for the caller
+        // to run it with the words after the alias name.
+        assert_eq!(r.bytes, b"look\r\n");
+        assert_eq!(
+            r.scripts,
+            [vosh_alias::AliasScriptCall {
+                body: body.into(),
+                captures: vec!["goblin".into()],
+            }]
+        );
     }
 
     #[test]
