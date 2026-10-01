@@ -7,11 +7,13 @@
 //! maps.sqlite and skips. It copies only when the map store did not open.
 //! Then `launch::load` finishes a shared catalog wizard run that stopped,
 //! moves the prompt capture triggers into the profiles, turns on the
-//! presets a build adds, and only then loads the profiles. Each step reads
-//! what the steps before it wrote, so the order is part of what a refactor
-//! keeps. R12 gathers the steps into one list, and this order holds there
-//! too. R8 retires the map store and the copy (D3, D15), and its commit
-//! changes the copy cases here on purpose.
+//! presets a build adds, and loads the profile set. Then it moves the
+//! custom themes older profile files hold into global.toml, and only then
+//! loads the active profile. Each step reads what the steps before it
+//! wrote, so the order is part of what a refactor keeps. R12 gathers the
+//! steps into one list, and this order holds there too. R8 retires the
+//! map store and the copy (D3, D15), and its commit changes the copy cases
+//! here on purpose.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -19,13 +21,14 @@ use std::sync::Arc;
 use vosh_prompt::config::CaptureSource;
 use vosh_prompt::CaptureConfig;
 
-use crate::commands::{AppState, SharedState};
+use crate::commands::{persist_state, AppState, SharedState, PERSIST_LOCK};
 use crate::launch::Launch;
 use crate::loadout_store::{
     journal_path, load_global_catalog, save_wizard_journal, JournalFile, WizardJournal,
     WIZARD_FINISHED_NOTICE, WIZARD_UNFINISHED_NOTICE,
 };
-use crate::profile_config::{before_prompt_editor_path, ProfileConfig};
+use crate::profile_config::{before_prompt_editor_path, CustomTheme, GlobalConfig, ProfileConfig};
+use crate::profile_set::ProfileSet;
 
 /// The profile file the stopped wizard run still had to write: a capture
 /// trigger that is on, and one preset turned on.
@@ -66,6 +69,22 @@ triggers = []
 macros = []
 enabled_presets = ["healing_basics"]
 "#;
+
+/// A second profile's file as an older build saved it, with a custom
+/// theme of its own.
+const ALT_PROFILE: &str = r##"aliases = []
+macros = []
+triggers = []
+
+[[ui.custom_themes]]
+id = "custom-dusk"
+label = "Dusk"
+description = "A warm dark theme"
+
+[ui.custom_themes.xterm]
+background = "#1a1b26"
+foreground = "#c0caf5"
+"##;
 
 const WIZARD_LOADOUTS: &str = r#"active = ["default"]
 dormant = false
@@ -109,6 +128,19 @@ fn migrations(app_data: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn theme_ids(themes: &[CustomTheme]) -> Vec<&str> {
+    themes.iter().map(|t| t.id.as_str()).collect()
+}
+
+/// The ids of the custom themes global.toml shares.
+fn shared_theme_ids(set: &ProfileSet) -> Vec<String> {
+    let global = GlobalConfig::load(&set.global_path()).unwrap();
+    let themes = global
+        .custom_themes
+        .expect("global.toml lists custom themes");
+    themes.into_iter().map(|t| t.id).collect()
+}
+
 /// Open the map store over `app_data` the way `open_map_store` in lib.rs
 /// does, which creates maps.sqlite.
 fn open_map_store(app_data: &Path) {
@@ -141,10 +173,15 @@ async fn launch_without_map_store(app_data: &Path) -> (SharedState, Launch) {
 #[tokio::test]
 async fn launch_runs_the_upgrades_in_order() {
     let dir = tempfile::tempdir().unwrap();
-    // A wizard run that stopped before it wrote any file.
+    // A wizard run that stopped before it wrote any file, and a second
+    // profile whose file holds a custom theme. The theme scope stays at
+    // its global default.
     let app_data = dir.path().join("com.example.vosh");
     save_wizard_journal(&app_data, &journal()).unwrap();
-    let profile_path = app_data.join("profiles").join("default.toml");
+    let mut set = ProfileSet::load_or_migrate(app_data.clone()).unwrap();
+    set.create("alt").unwrap();
+    std::fs::write(set.profile_path("alt"), ALT_PROFILE).unwrap();
+    let profile_path = set.profile_path("default");
 
     let (state, launched) = launch(&app_data).await;
     assert!(launched.loadout_mode);
@@ -197,13 +234,33 @@ async fn launch_runs_the_upgrades_in_order() {
         with_rollout
     );
 
-    // 5. The profiles loaded last, so the live profile holds what every
-    //    step wrote.
-    let p = state.profile.lock().await;
-    assert_eq!(p.ui.enabled_presets, with_rollout);
-    assert!(p.prompt.config().capture.is_migrated());
-    let trigger = p.triggers.get("prompt-capture").expect("the moved trigger");
-    assert!(!trigger.enabled);
+    // 5. The custom theme move took the theme out of the alt file and
+    //    into global.toml.
+    let alt = ProfileConfig::load(&set.profile_path("alt")).unwrap();
+    assert!(
+        alt.ui.custom_themes.is_empty(),
+        "the theme left the alt file"
+    );
+    assert_eq!(shared_theme_ids(&set), ["custom-dusk"]);
+
+    // 6. The active profile loaded last, so the live profile holds what
+    //    every step wrote, the moved theme too.
+    {
+        let p = state.profile.lock().await;
+        assert_eq!(p.ui.enabled_presets, with_rollout);
+        assert!(p.prompt.config().capture.is_migrated());
+        let trigger = p.triggers.get("prompt-capture").expect("the moved trigger");
+        assert!(!trigger.enabled);
+        assert_eq!(theme_ids(&p.ui.custom_themes), ["custom-dusk"]);
+    }
+
+    // 7. The next save writes global.toml from the live list, so the theme
+    //    stays.
+    {
+        let _persist = PERSIST_LOCK.lock().await;
+        persist_state(&state, Some(&app_data)).await;
+    }
+    assert_eq!(shared_theme_ids(&set), ["custom-dusk"]);
 }
 
 #[tokio::test]
