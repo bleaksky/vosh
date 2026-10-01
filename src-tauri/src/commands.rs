@@ -753,10 +753,10 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
     } else {
         None
     };
-    let (mut result, target_after, script_apply, lists, show_changed) = {
+    let (mut result, target_after, script_apply, lists, look_changed) = {
         let mut profile = state.profile.lock().await;
         let lists_before = ListRevisions::of(&profile);
-        let show_before = profile.prompt.config().show;
+        let look_before = prompt_look(&profile);
         let before_name = profile.target.name.clone();
         let before_idx = profile.target.room_idx;
         let before_keys = profile.target.quick_keys.clone();
@@ -811,14 +811,15 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
             Some(script_state::apply_actions(&mut profile, combined))
         };
         let lists = ListChanges::since(lists_before, &profile);
-        let show_changed = profile.prompt.config().show != show_before;
-        (result, payload, script_apply, lists, show_changed)
+        let look_changed = prompt_look(&profile) != look_before;
+        (result, payload, script_apply, lists, look_changed)
     };
     // #trigger, #alias, and the Lua they run change the lists an open
     // Settings page shows, so tell it.
     broadcast_list_changes(&app, lists);
-    // `#prompt show` moves the prompt on screen at once.
-    if show_changed {
+    // `#prompt show` moves the prompt on screen at once, and `#prompt
+    // default` draws the new design there.
+    if look_changed {
         request_prompt_repaint(state.inner()).await;
     }
 
@@ -854,6 +855,13 @@ pub(crate) async fn session_send_input<R: tauri::Runtime>(
         return Err("session task gone".to_string());
     }
     Ok(())
+}
+
+/// What decides how your prompt looks on screen: the switch, the design
+/// and where it shows. A typed line that changes any of them repaints it.
+fn prompt_look(p: &crate::profile::Profile) -> (bool, String, vosh_prompt::PromptShow) {
+    let config = p.prompt.config();
+    (config.draw, config.template.clone(), config.show)
 }
 
 /// Send a line typed into the masked password field, the one the input

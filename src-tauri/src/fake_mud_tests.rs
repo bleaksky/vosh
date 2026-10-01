@@ -1375,3 +1375,52 @@ async fn affect_fulls_outlast_quitting_to_the_menu_and_out_of_the_game() {
         .await;
     h.finish(grid).await;
 }
+
+/// The text each pinned prompt the session sent shows, oldest first.
+fn pins(h: &Harness) -> Vec<String> {
+    h.events("session://output")
+        .into_iter()
+        .filter_map(|out| {
+            out["pin"]
+                .as_str()
+                .map(|pin| vosh_prompt::testkit::shown(&base64_decode(pin)))
+        })
+        .collect()
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn prompt_default_draws_the_default_design_on_the_pinned_band_at_once() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(vosh_prompt::PromptConfig {
+        show: vosh_prompt::PromptShow::Pinned,
+        ..codes(PROMPT)
+    })
+    .await;
+    h.connect().await;
+    h.until("your design on the band", |h| {
+        pins(h).last().map(String::as_str) == Some("<1020>")
+    })
+    .await;
+
+    // No prompt comes from the game, and the band shows the default at
+    // once.
+    h.type_line("#prompt default").await;
+    h.until_shown("Your design is now Vosh's default.").await;
+    h.until("the default design on the band", |h| {
+        pins(h)
+            .last()
+            .is_some_and(|pin| pin.starts_with("1020/1020hp 800/800mn 930/930mv  std common"))
+    })
+    .await;
+    let band = pins(&h).pop().expect("a band");
+    assert!(!band.contains(['%', '{']), "{band:?}");
+    let table = h.prompt_table().await;
+    assert_eq!(table.template, vosh_prompt::DEFAULT_DESIGN);
+    assert_eq!(table.previous_templates, ["<%hp>"]);
+    assert_eq!(table.show, vosh_prompt::PromptShow::Pinned);
+    h.finish(grid).await;
+}

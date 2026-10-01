@@ -142,6 +142,20 @@ impl PromptConfig {
         true
     }
 
+    /// Put Vosh's default design, [`DEFAULT_DESIGN`], in place of the one
+    /// you have. Yours goes first among the earlier designs, as when the
+    /// card opens, so the card can offer it back. The switch, the place
+    /// and the capture stay. Returns false when the design already is the
+    /// default.
+    pub fn use_default_design(&mut self) -> bool {
+        if self.template == DEFAULT_DESIGN {
+            return false;
+        }
+        self.note_opened();
+        self.template = DEFAULT_DESIGN.to_string();
+        true
+    }
+
     /// Take the switch and the template a Settings save carries, each
     /// only when it differs from what this table holds, so a save that
     /// carries them unchanged leaves the table alone. Turning drawing on
@@ -517,6 +531,48 @@ mod tests {
         let mut on = fresh.clone();
         assert!(on.take_switch_and_template(true, DEFAULT_DESIGN));
         assert_eq!(on.template, DEFAULT_DESIGN);
+    }
+
+    #[test]
+    fn the_default_design_takes_the_place_of_yours_and_keeps_it() {
+        let mut config = PromptConfig {
+            show: PromptShow::Pinned,
+            ..PromptConfig::from_legacy(true, JAMES)
+        };
+        assert!(config.use_default_design());
+        assert_eq!(config.template, DEFAULT_DESIGN);
+        // Yours goes first among the earlier designs, for the card to
+        // offer back. The switch and the place stay.
+        assert_eq!(config.previous_templates, [JAMES]);
+        assert!(config.draw);
+        assert_eq!(config.show, PromptShow::Pinned);
+
+        // Again changes nothing.
+        assert!(!config.use_default_design());
+        assert_eq!(config.previous_templates, [JAMES]);
+
+        // The oldest of two earlier designs drops.
+        let mut config = PromptConfig {
+            previous_templates: vec!["%hp".into(), "%mana".into()],
+            ..PromptConfig::from_legacy(false, "%move")
+        };
+        assert!(config.use_default_design());
+        assert_eq!(config.previous_templates, ["%move", "%hp"]);
+        assert!(!config.draw);
+
+        // A design already first among them is not kept twice.
+        let mut config = PromptConfig {
+            previous_templates: vec![JAMES.into()],
+            ..PromptConfig::from_legacy(true, JAMES)
+        };
+        assert!(config.use_default_design());
+        assert_eq!(config.previous_templates, [JAMES]);
+
+        // An empty design is never kept.
+        let mut config = PromptConfig::default();
+        assert!(config.use_default_design());
+        assert_eq!(config.template, DEFAULT_DESIGN);
+        assert!(config.previous_templates.is_empty());
     }
 
     #[test]
