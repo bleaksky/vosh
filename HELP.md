@@ -382,7 +382,7 @@ The vitals sit at the bottom of the panel, under the panes. Health, Mana, and Mo
 - Set `Values` to `Current and max` to read `186 / 1020`, to `Current` to read `186`, or to `Percent` to read `18%`.
 - Set `Meter` to `Line` for the thin meter, to `Bar` for a thicker one you can read at a glance in a fight, or to `None` to keep only the numbers on tighter rows.
 - Turn on `Warn before you run low` and a vital turns yellow under two thirds and red under one third, the way the Group pane shows your group's health.
-- Leave `Hide vitals while your prompt is pinned` on and the panel drops its vitals while `Where your prompt shows` is `Pinned`, so the panes take their room. Turn it off to keep them, or pick another place for your prompt, and they come back at once.
+- Leave `Hide vitals while your prompt is pinned` on and the panel drops its vitals while `Where your prompt shows` is `Pinned`, so the panes take their room. Turn it off to keep them, or pick another place for your prompt, and they come back at once. They also come back while you have prompts off in the game, since the band then has no prompt to show.
 
 Each default draws the panel you already know, so nothing changes until you pick something. One line drops the Health, Mana, and Moves labels only when they no longer fit beside the values, under about 360 pt with four digit health, and keeps the values and meters. `Current` and `Percent` keep the labels even on a narrow panel. A panel too narrow for even the values stacks them in rows.
 
