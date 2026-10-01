@@ -913,14 +913,14 @@ export function Terminal({
     let unsubOutput: (() => void) | undefined;
     // The native surface is the size authority while it owns the pane. It
     // emits its grid size; size hidden xterm to match so a dropdown swap
-    // reveals identical content. Live pane only.
+    // reveals identical content. Live pane only. A size equal to xterm's
+    // still goes to the writer, since a size that waits there would land
+    // over it. xterm does nothing for a size it already has.
     let unsubGridSize: (() => void) | undefined;
     if (!quietRef.current && nativeSurfaceEnabled()) {
       void listen<[number, number]>('vosh://native-grid-size', (event) => {
         const [cols, rows] = event.payload;
-        if (cols > 0 && rows > 0 && (cols !== term.cols || rows !== term.rows)) {
-          writer.resize(cols, rows);
-        }
+        if (cols > 0 && rows > 0) writer.resize(cols, rows);
       }).then((un) => {
         unsubGridSize = un;
       });
