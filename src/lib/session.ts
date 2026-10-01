@@ -1889,18 +1889,6 @@ export interface UiConfig {
   spellcheck_prompt: boolean;
   /** Shape of the command-line caret. Defaults to the ember block. */
   input_cursor_style: InputCursorStyle;
-  /** When true, gagged prompts get replaced with a frontend-rendered
-   *  string built from `prompt_template`. Off by default. */
-  prompt_template_enabled: boolean;
-  /** Template string for the custom prompt. Uses the same `%name`
-   *  / `%{name}` / `%name_bar:width:color` token grammar as the
-   *  vitals template. Empty string means no rendering even when
-   *  enabled. */
-  prompt_template: string;
-  /** Where your prompt shows, a copy of the profile's `[prompt] show`.
-   *  In the text (the default), lifted on a band in the text, or pinned
-   *  on a band above the command line. */
-  prompt_show: PromptShow;
   /** Vitals panel appearance. Toggles which columns render and lets
    *  the user pick their own bar glyphs and width. */
   vitals: VitalsConfig;
@@ -2118,9 +2106,6 @@ export interface RawUiConfig {
   paste_line_delay_ms?: number;
   spellcheck_prompt?: boolean;
   input_cursor_style?: string;
-  prompt_template_enabled?: boolean;
-  prompt_template?: string;
-  prompt_show?: string;
   vitals?: Partial<VitalsConfig>;
   vitals_density?: string;
   vitals_values?: string;
@@ -2191,9 +2176,6 @@ export function normalizeUiConfig(cfg: RawUiConfig): UiConfig {
         : 500,
     spellcheck_prompt: Boolean(cfg.spellcheck_prompt),
     input_cursor_style: normalizeInputCursorStyle(cfg.input_cursor_style),
-    prompt_template_enabled: Boolean(cfg.prompt_template_enabled),
-    prompt_template: typeof cfg.prompt_template === 'string' ? cfg.prompt_template : '',
-    prompt_show: normalizePromptShow(cfg.prompt_show),
     vitals: normalizeVitalsConfig(cfg.vitals),
     vitals_density: normalizeVitalsDensity(cfg.vitals_density),
     vitals_values: normalizeVitalsValues(cfg.vitals_values),
@@ -2435,12 +2417,6 @@ export async function broadcastUiConfigChanges(config: UiConfig): Promise<void> 
     config.input_cursor_style,
     prev?.input_cursor_style,
   );
-  await emitChanged(
-    'vosh://prompt-template-changed',
-    { enabled: config.prompt_template_enabled, template: config.prompt_template },
-    { enabled: prev?.prompt_template_enabled, template: prev?.prompt_template },
-    deepEqual,
-  );
   await emitChanged('vosh://vitals-config-changed', config.vitals, prev?.vitals, deepEqual);
   await emitChanged(VITALS_DENSITY_EVENT, config.vitals_density, prev?.vitals_density);
   await emitChanged(
@@ -2559,48 +2535,6 @@ export async function subscribePromptConfigChanged(
     const raw = event.payload as { profile?: unknown } | null;
     cb({ profile: typeof raw?.profile === 'string' ? raw.profile : null });
   });
-}
-
-/** The prompt switch and design, which Settings still holds in its
- *  UiConfig until the Prompt section replaces PromptBlock. */
-export type PromptFields = Pick<
-  UiConfig,
-  'prompt_template_enabled' | 'prompt_template' | 'prompt_show'
->;
-
-export function promptFieldsOf(config: UiConfig): PromptFields {
-  return {
-    prompt_template_enabled: config.prompt_template_enabled,
-    prompt_template: config.prompt_template,
-    prompt_show: config.prompt_show,
-  };
-}
-
-/** The prompt fields in `fresh` that differ from `known`, what a window
- *  last read or saved. Those changed somewhere else and win. The rest
- *  stay as the window holds them, your unsaved typing included. With
- *  nothing known, all of them. */
-export function changedPromptFields(
-  known: PromptFields | null,
-  fresh: PromptFields,
-): Partial<PromptFields> {
-  const patch: Partial<PromptFields> = {};
-  if (!known || known.prompt_template_enabled !== fresh.prompt_template_enabled) {
-    patch.prompt_template_enabled = fresh.prompt_template_enabled;
-  }
-  if (!known || known.prompt_template !== fresh.prompt_template) {
-    patch.prompt_template = fresh.prompt_template;
-  }
-  if (!known || known.prompt_show !== fresh.prompt_show) {
-    patch.prompt_show = fresh.prompt_show;
-  }
-  return patch;
-}
-
-// Adopt prompt fields a command saved, the same way, so this window's
-// next save does not send them on as its own change.
-export function primeUiConfigPrompt(fields: Partial<PromptFields>): void {
-  if (lastSentConfig) lastSentConfig = { ...lastSentConfig, ...fields };
 }
 
 // Adopt a theme another window already applied and broadcast, and
@@ -2725,9 +2659,6 @@ export async function setUiConfig(config: UiConfig): Promise<boolean> {
       paste_line_delay_ms: config.paste_line_delay_ms,
       spellcheck_prompt: config.spellcheck_prompt,
       input_cursor_style: config.input_cursor_style,
-      prompt_template_enabled: config.prompt_template_enabled,
-      prompt_template: config.prompt_template,
-      prompt_show: config.prompt_show,
       vitals: config.vitals,
       vitals_density: config.vitals_density,
       vitals_values: config.vitals_values,
@@ -2850,6 +2781,11 @@ export async function subscribeSplitDividerChanged(
   });
 }
 
+/** The prompt switch and design Settings sent as it saved its whole
+ *  config, before the Prompt section moved them to the prompt commands.
+ *  Nothing sends vosh://prompt-template-changed any more, and nothing
+ *  calls this. It stays for James to delete with the other orphans of
+ *  the prompt editor. */
 export interface PromptTemplateConfig {
   enabled: boolean;
   template: string;

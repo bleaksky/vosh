@@ -6,7 +6,6 @@ import {
   AFFECTS_STYLES,
   affectsDisplayOf,
   broadcastUiConfigChanges,
-  changedPromptFields,
   decodeOutputPayload,
   followReplacedUiConfig,
   getUiConfig,
@@ -37,7 +36,6 @@ import {
   TERMINAL_LINE_HEIGHTS,
   TICK_COUNTS,
   type CustomTheme,
-  type PromptShow,
   type RawUiConfig,
   type UiConfig,
 } from './session';
@@ -538,8 +536,6 @@ describe('a replaced UI config', () => {
       input_echo_color: '#ff8800',
       vitals_density: 'line',
       moons_position: 'before-time',
-      prompt_template_enabled: true,
-      prompt_template: '<%h>',
     });
     await broadcastUiConfigChanges(normalizeUiConfig(loaded));
     const sent = vi.mocked(emit);
@@ -571,10 +567,8 @@ describe('a replaced UI config', () => {
     expect(payloads.get('vosh://input-echo-color-changed')).toBe('#ff8800');
     expect(payloads.get('vosh://vitals-density-changed')).toBe('line');
     expect(payloads.get('vosh://moons-position-changed')).toBe('before-time');
-    expect(payloads.get('vosh://prompt-template-changed')).toEqual({
-      enabled: true,
-      template: '<%h>',
-    });
+    // Your prompt travels through the prompt commands, not the config.
+    expect(payloads.has('vosh://prompt-template-changed')).toBe(false);
   });
 
   /** A backend that hands out its generation with the config and turns
@@ -796,36 +790,6 @@ describe('text the page writes to the terminal itself', () => {
   });
 });
 
-describe('the prompt fields a command changed', () => {
-  const fields = (on: boolean, template: string, show: PromptShow = 'text') => ({
-    prompt_template_enabled: on,
-    prompt_template: template,
-    prompt_show: show,
-  });
-
-  it('takes where your prompt shows when #prompt show moved it', () => {
-    const known = fields(true, '%hp');
-    expect(changedPromptFields(known, fields(true, '%hp', 'pinned'))).toEqual({
-      prompt_show: 'pinned',
-    });
-  });
-
-  it('takes only what changed since the window read or saved it', () => {
-    const known = fields(true, '%hp');
-    expect(changedPromptFields(known, fields(true, '%hp'))).toEqual({});
-    expect(changedPromptFields(known, fields(false, '%hp'))).toEqual({
-      prompt_template_enabled: false,
-    });
-    expect(changedPromptFields(known, fields(true, '[%hp]'))).toEqual({
-      prompt_template: '[%hp]',
-    });
-  });
-
-  it('takes both when the window knows neither', () => {
-    expect(changedPromptFields(null, fields(false, '%mana'))).toEqual(fields(false, '%mana'));
-  });
-});
-
 describe('where your prompt shows', () => {
   it('reads the three places and the text for anything else', () => {
     expect(normalizePromptShow('text')).toBe('text');
@@ -836,8 +800,17 @@ describe('where your prompt shows', () => {
     expect(normalizePromptShow(3)).toBe('text');
   });
 
-  it('defaults to the text in a config that does not say', () => {
-    expect(normalizeUiConfig(raw({})).prompt_show).toBe('text');
-    expect(normalizeUiConfig(raw({ prompt_show: 'lifted' })).prompt_show).toBe('lifted');
+  it('leaves your prompt out of the Settings config', () => {
+    // An older backend still sends the three fields. The config drops
+    // them, so no save sends them back.
+    const config = normalizeUiConfig({
+      ...raw({}),
+      prompt_template_enabled: true,
+      prompt_template: '%hp',
+      prompt_show: 'pinned',
+    } as RawUiConfig);
+    for (const key of ['prompt_template_enabled', 'prompt_template', 'prompt_show']) {
+      expect(key in config).toBe(false);
+    }
   });
 });
