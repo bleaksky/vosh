@@ -184,9 +184,11 @@ fn fail_with(failures: Vec<String>) {
     assert!(failures.is_empty(), "\n{}\n", failures.join("\n"));
 }
 
-#[test]
-fn every_command_the_page_invokes_is_registered() {
-    let contract = contract();
+// The checks. Each one returns what it finds wrong, so a test can run it
+// on a contract built by hand and see that it rejects its case.
+
+/// Every command the page invokes is registered.
+fn unregistered_invokes(contract: &Contract) -> Vec<String> {
     let mut failures = Vec::new();
     for call in contract.calls.iter().filter(|c| c.call == Call::Invoke) {
         match &call.name {
@@ -205,12 +207,11 @@ fn every_command_the_page_invokes_is_registered() {
             _ => {}
         }
     }
-    fail_with(failures);
+    failures
 }
 
-#[test]
-fn every_event_the_page_listens_for_has_a_sender() {
-    let contract = contract();
+/// Every event the page listens for has a sender.
+fn unsent_listens(contract: &Contract) -> Vec<String> {
     let mut failures = Vec::new();
     for call in contract.calls.iter().filter(|c| c.call == Call::Listen) {
         match &call.name {
@@ -226,12 +227,27 @@ fn every_event_the_page_listens_for_has_a_sender() {
             _ => {}
         }
     }
-    fail_with(failures);
+    failures
+}
+
+#[test]
+fn every_command_the_page_invokes_is_registered() {
+    fail_with(unregistered_invokes(contract()));
+}
+
+#[test]
+fn every_event_the_page_listens_for_has_a_sender() {
+    fail_with(unsent_listens(contract()));
 }
 
 #[test]
 fn every_name_built_at_run_time_is_on_the_list() {
-    let contract = contract();
+    fail_with(unlisted_run_time_names(contract(), BUILT_AT_RUN_TIME));
+}
+
+/// Every page call whose name is built at run time is on `list`, and
+/// every entry there matches a call.
+fn unlisted_run_time_names(contract: &Contract, list: &[BuiltAtRunTime]) -> Vec<String> {
     let mut failures = Vec::new();
     for call in &contract.calls {
         if matches!(call.name, Name::Fixed(_)) {
@@ -246,7 +262,7 @@ fn every_name_built_at_run_time_is_on_the_list() {
             ));
             continue;
         }
-        let entry = BUILT_AT_RUN_TIME
+        let entry = list
             .iter()
             .find(|e| e.file == call.file && e.callee == call.callee && e.arg == call.arg);
         match (entry.map(|e| &e.names), &call.name) {
@@ -269,7 +285,7 @@ fn every_name_built_at_run_time_is_on_the_list() {
             _ => {}
         }
     }
-    for entry in BUILT_AT_RUN_TIME {
+    for entry in list {
         if entry.why.trim().is_empty() {
             failures.push(format!(
                 "BUILT_AT_RUN_TIME lists {} in {} with no reason.",
@@ -303,7 +319,7 @@ fn every_name_built_at_run_time_is_on_the_list() {
             }
         }
     }
-    fail_with(failures);
+    failures
 }
 
 #[test]
@@ -323,6 +339,105 @@ fn the_scan_follows_every_page_call_and_app_file() {
     }
     assert!(contract.commands.contains("session_connect"));
     assert!(contract.app_names.contains("session://output"));
+}
+
+/// A page call in `src/page.ts` for a contract built by hand.
+fn page_call(call: Call, arg: &str, name: Name) -> PageCall {
+    let &(callee, ..) = CALLEES.iter().find(|c| c.2 == call).unwrap();
+    PageCall {
+        file: "src/page.ts".into(),
+        line: 1,
+        callee,
+        call,
+        arg: arg.into(),
+        name,
+        via: None,
+    }
+}
+
+/// Assert that `failures` holds one failure for each of `want`, in order,
+/// each naming its case.
+fn assert_rejects(check: &str, failures: &[String], want: &[&str]) {
+    assert_eq!(
+        failures.len(),
+        want.len(),
+        "{check} reports {failures:#?}, and should report {want:?}"
+    );
+    for (failure, want) in failures.iter().zip(want) {
+        assert!(
+            failure.contains(want),
+            "{check} reports {failure:?}, not {want:?}"
+        );
+    }
+}
+
+/// A contract built by hand, with a case each check must reject next to
+/// cases it must pass. An edit that empties a check fails here.
+#[test]
+fn each_check_rejects_the_case_it_guards() {
+    let fixed = |s: &str| Name::Fixed(s.into());
+    let contract = Contract {
+        commands: BTreeSet::from(["registered".to_string()]),
+        app_names: BTreeSet::from(["vosh://sent".to_string(), "vosh://built/{}".to_string()]),
+        calls: vec![
+            page_call(Call::Invoke, "'registered'", fixed("registered")),
+            page_call(Call::Invoke, "'unregistered'", fixed("unregistered")),
+            page_call(Call::Listen, "'vosh://sent'", fixed("vosh://sent")),
+            page_call(Call::Listen, "'vosh://built/x'", fixed("vosh://built/x")),
+            page_call(Call::Emit, "'vosh://page'", fixed("vosh://page")),
+            page_call(Call::Listen, "'vosh://page'", fixed("vosh://page")),
+            page_call(Call::Listen, "'vosh://unsent'", fixed("vosh://unsent")),
+            page_call(Call::Listen, "built", Name::Family("vosh://built/".into())),
+            page_call(
+                Call::Listen,
+                "nobody",
+                Name::Family("vosh://nobody/".into()),
+            ),
+            page_call(Call::Listen, "unlisted", Name::Unknown),
+        ],
+        problems: Vec::new(),
+    };
+    assert_rejects(
+        "unregistered_invokes",
+        &unregistered_invokes(&contract),
+        &["invokes unregistered,"],
+    );
+    assert_rejects(
+        "unsent_listens",
+        &unsent_listens(&contract),
+        &["listens for vosh://unsent,", "start vosh://nobody/,"],
+    );
+    let list = [
+        BuiltAtRunTime {
+            file: "src/page.ts",
+            callee: "listen",
+            arg: "built",
+            names: Names::Family("vosh://built/"),
+            why: "A family the app builds.",
+        },
+        BuiltAtRunTime {
+            file: "src/page.ts",
+            callee: "listen",
+            arg: "nobody",
+            names: Names::Family("vosh://nobody/"),
+            why: "A family nobody builds.",
+        },
+        BuiltAtRunTime {
+            file: "src/page.ts",
+            callee: "listen",
+            arg: "stale",
+            names: Names::Family("vosh://built/"),
+            why: "No call passes it.",
+        },
+    ];
+    assert_rejects(
+        "unlisted_run_time_names",
+        &unlisted_run_time_names(&contract, &list),
+        &[
+            "a name built at run time, unlisted.",
+            "lists stale in src/page.ts",
+        ],
+    );
 }
 
 #[test]
