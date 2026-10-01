@@ -43,14 +43,21 @@ pub(crate) async fn prompt_config_get(
 /// Take a `[prompt]` table for the active profile. A new capture that does
 /// not compile changes nothing, and the error says why in a sentence. A table
 /// that changes anything saves shortly, repaints the open row and tells
-/// every window.
+/// every window. With `as_is`, the design is taken exactly as sent, so
+/// Start empty keeps it empty as drawing turns on.
 #[tauri::command]
 pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
     app: AppHandle<R>,
     state: State<'_, SharedState>,
     config: PromptConfig,
+    as_is: Option<bool>,
 ) -> Result<(), String> {
-    let changed = set_config(&mut *state.profile.lock().await, config)?;
+    let p = &mut *state.profile.lock().await;
+    let changed = if as_is.unwrap_or(false) {
+        set_config_as_is(p, config)?
+    } else {
+        set_config(p, config)?
+    };
     if changed {
         mark_profile_dirty(&app);
         request_repaint(state.inner()).await;
@@ -65,13 +72,19 @@ pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
 /// codes that do not compile (`follow_game`), and the card sends that
 /// capture back with every other change it saves.
 pub(crate) fn set_config(p: &mut Profile, mut config: PromptConfig) -> Result<bool, String> {
-    if config.capture != p.prompt.config().capture {
-        vosh_prompt::report::check_capture(&config.capture, p.prompt.who())?;
-    }
     // Turning drawing on with no design draws Vosh's default, as Settings
     // and #prompt draw do.
     if config.draw && !p.prompt.config().draw && config.template.is_empty() {
         config.template = vosh_prompt::DEFAULT_DESIGN.to_string();
+    }
+    set_config_as_is(p, config)
+}
+
+/// [`set_config`] with the design exactly as sent, an empty one too, for
+/// Start empty in the card.
+pub(crate) fn set_config_as_is(p: &mut Profile, mut config: PromptConfig) -> Result<bool, String> {
+    if config.capture != p.prompt.config().capture {
+        vosh_prompt::report::check_capture(&config.capture, p.prompt.who())?;
     }
     config.previous_templates.truncate(PREVIOUS_TEMPLATES);
     let before = p.prompt.revision();
@@ -709,6 +722,40 @@ mod tests {
             ..p.prompt.config().clone()
         };
         assert_eq!(set_config(&mut p, empty), Ok(true));
+        assert_eq!(p.prompt.config().template, "");
+    }
+
+    #[test]
+    fn start_empty_keeps_the_design_empty_as_drawing_turns_on() {
+        // A fresh profile draws nothing and holds Vosh's default. Start
+        // empty in the card's start list turns drawing on with no design,
+        // and the design stays empty.
+        let mut p = Profile::default();
+        let fresh = PromptConfig {
+            capture: codes("<%hhp> "),
+            ..PromptConfig::fresh()
+        };
+        assert_eq!(set_config(&mut p, fresh), Ok(true));
+        assert!(!p.prompt.config().draw);
+        let empty = PromptConfig {
+            template: String::new(),
+            draw: true,
+            ..p.prompt.config().clone()
+        };
+        assert_eq!(set_config_as_is(&mut p, empty), Ok(true));
+        assert!(p.prompt.config().draw);
+        assert_eq!(p.prompt.config().template, "");
+        // So does a design that was empty already.
+        let off = PromptConfig {
+            draw: false,
+            ..p.prompt.config().clone()
+        };
+        assert_eq!(set_config(&mut p, off), Ok(true));
+        let again = PromptConfig {
+            draw: true,
+            ..p.prompt.config().clone()
+        };
+        assert_eq!(set_config_as_is(&mut p, again), Ok(true));
         assert_eq!(p.prompt.config().template, "");
     }
 
