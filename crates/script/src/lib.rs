@@ -634,6 +634,35 @@ mod tests {
     }
 
     #[test]
+    fn firing_a_timer_leaves_other_timers_cancellable() {
+        let mut e = ScriptEngine::new().unwrap();
+        let scheduled = e
+            .eval(
+                r#"
+                first = mud.timer(5, function() mud.echo("first") end)
+                second = mud.timer(1, function() mud.echo("second") end)
+                "#,
+                "t",
+            )
+            .unwrap()
+            .actions;
+        let Action::Timer {
+            callback_id: second,
+            ..
+        } = scheduled[1]
+        else {
+            panic!("expected timer action, got {:?}", scheduled[1]);
+        };
+        let fired = e.fire_timer(second).unwrap().actions;
+        assert_eq!(fired, vec![Action::Echo("second".into())]);
+        assert_eq!(held_callbacks(&e), 1);
+        // The pending timer still frees its callback when cancelled.
+        e.eval("mud.cancel_timer(first)", "t").unwrap();
+        assert_eq!(held_callbacks(&e), 0);
+        assert!(e.state.cell.lock().unwrap().timer_callbacks.is_empty());
+    }
+
+    #[test]
     fn reload_replaces_gmcp_subscriptions_instead_of_adding() {
         let mut e = ScriptEngine::new().unwrap();
         e.load_script(
