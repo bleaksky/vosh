@@ -1,0 +1,8 @@
+aliases = []
+triggers = []
+macros = []
+
+[ui]
+theme = "vellum"
+prompt_template_enabled = true
+prompt_template = "%hp/%maxhp hp %mana/%maxmana mn > "

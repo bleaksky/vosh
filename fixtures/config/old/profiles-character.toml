@@ -1,0 +1,18 @@
+active = "default"
+
+[[profile]]
+name = "default"
+
+[profile.auto_match]
+host = "play.theforsakenlands.com"
+port = 1848
+character = "Tester"
+
+[[profile]]
+name = "Healer"
+
+[profile.auto_match]
+host = "play.theforsakenlands.com"
+port = 1848
+character = "Testhealer"
+characters = ["Testalt"]
