@@ -3,10 +3,13 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
+  type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import { moveTriggerToPrompts } from '../../lib/automationTriggers';
 import { BAND_OUTSET_Y, DOCK_GAP, type CellSize } from '../../lib/promptBand';
 import {
   cardAnchor,
@@ -20,6 +23,18 @@ import {
   type CardStep,
   type MoreItemId,
 } from '../../lib/promptCard';
+import { needsCode, type LayoutId } from '../../lib/promptPicker';
+import {
+  caretAfter,
+  deleteOp,
+  insertOps,
+  insertPlace,
+  moveOp,
+  pickable,
+  rawMarks,
+  step as stepPick,
+  type Pointing,
+} from '../../lib/promptPieces';
 import type { PromptShowState } from '../../lib/promptShow';
 import {
   onPromptState,
@@ -28,21 +43,29 @@ import {
   promptCompile,
   promptConfigGet,
   promptConfigSet,
+  promptDescribe,
   promptDesignsList,
+  promptEdit,
+  promptLineTriggers,
   promptPreviewSet,
   promptStateGet,
   promptWatch,
   sessionIdentityGet,
   subscribePromptConfigChanged,
+  type PromptCapture,
+  type PromptCheckRead,
   type PromptCompileReport,
   type PromptConfig,
+  type PromptDescribed,
   type PromptDesign,
+  type PromptEditOp,
+  type PromptFormatChoice,
+  type PromptLineTrigger,
   type PromptPreset,
   type PromptPreviewName,
   type PromptState,
   type SessionIdentity,
 } from '../../lib/session';
-import { openSettingsTab } from '../../lib/settingsLink';
 import { useEscape } from '../../lib/escapeStack';
 import { useGamePrompt } from '../../lib/stores/gamePromptStore';
 import { pushToast } from '../../lib/toasts';
@@ -61,9 +84,13 @@ import {
   type SegmentedOption,
 } from '../settings/ui';
 import { CardMenu, MenuSeparator } from './CardMenu';
-import { CodesEntry, CodesRead, type CodesRequest } from './PromptCodes';
+import { CodesEntry, CodesRead, LineTriggers, type CodesRequest } from './PromptCodes';
+import { PromptMarks } from './PromptMarks';
+import { PromptPicker } from './PromptPicker';
+import { PromptPieceBody } from './PromptPiece';
 import { PointName, PointPick, type PointedLine } from './PromptPoint';
 import { DrawOff, Starts } from './PromptStarts';
+import { PromptText } from './PromptText';
 
 // The prompt card (section 7 of the prompt build spec). It opens from the
 // terminal menu on any row, the palette, or Customize… in Settings, over
@@ -74,11 +101,16 @@ import { DrawOff, Starts } from './PromptStarts';
 // With no capture it walks you through the capture steps: the codes the
 // game sent (P3), your setting when the game sent none (P2), or the line
 // another game prints (P15). Then it offers designs to start from (P4),
-// and on every later open it rests with the Presets menu. Every change
-// saves as you make it, and Command Z takes the last one back. While it
-// reads your codes your prompt shows the line the game sent, and once it
-// draws your design it labels each value with nothing to show, so you
-// can point at it. Closing it puts your live prompt back.
+// and on every later open it rests with the Presets menu. Click a part of
+// your prompt to change it (P5, P7, P10), or past its end to place the
+// caret, add a value there with Insert value… (P6), or edit the design as
+// text (P9). Left and Right pick parts, Option with them moves one,
+// Delete removes it, typing adds text at the caret and Return a line
+// break. Every change saves as you make it, and Command Z takes the last
+// one back. While it reads your codes your prompt shows the line the game
+// sent with the values it reads marked, and once it draws your design it
+// labels each value with nothing to show, so you can point at it, over
+// the band of Lifted in the text. Closing it puts your live prompt back.
 
 /** Where the card reaches the terminal it sits over. */
 export interface PromptCardHost {
@@ -89,6 +121,10 @@ export interface PromptCardHost {
   dock: () => HTMLElement | null;
 }
 
+/** What the card shows of your design: the parts, the picker, or the
+ *  text. */
+export type CardView = 'design' | 'picker' | 'text';
+
 interface PromptCardProps {
   host: PromptCardHost;
   show: PromptShowState | null;
@@ -98,6 +134,11 @@ interface PromptCardProps {
   themeTerminalColors: boolean;
   brightBold: boolean;
   renderer: 'xterm' | 'native';
+  /** Open on the design's text, as Edit prompt as text… asks. */
+  initialView?: CardView;
+  /** The card draws your design over the band of Lifted in the text, so
+   *  the page turns the band pass on while it does. */
+  onBand?: (on: boolean) => void;
   onClose: () => void;
 }
 
@@ -113,7 +154,21 @@ function previewOptions(forsaken: boolean): SegmentedOption<PromptPreviewName>[]
   return options;
 }
 
+/** What the Lament preview hides, under the card at rest (P8c). */
+const LAMENT_NOTE =
+  "Lament hides your vitals, your tank's health, your opponent's health, your affects and your group. Vosh draws ? where the game hides a value.";
+
 const UNDO_DEPTH = 50;
+const NOWHERE: Pointing = { picked: null, caret: null };
+
+/** The part a field of a piece names, `aff:sanctuary` as `aff`. */
+const baseName = (field: string) => field.split(':')[0];
+
+/** A capture saved for the first time in this profile: before it the
+ *  profile read nothing, or only the pattern the old trigger left. */
+function firstCapture(was: PromptCapture): boolean {
+  return was.kind === 'none' || (was.kind === 'regex' && was.source === 'migrated');
+}
 
 export function PromptCard({
   host,
@@ -123,11 +178,14 @@ export function PromptCard({
   themeTerminalColors,
   brightBold,
   renderer,
+  initialView = 'design',
+  onBand,
   onClose,
 }: PromptCardProps) {
   const drawId = useId();
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [config, setConfig] = useState<PromptConfig | null>(null);
+  const latest = useRef<PromptConfig | null>(null);
   const [state, setState] = useState<PromptState | null>(null);
   const [identity, setIdentity] = useState<SessionIdentity | null>(null);
   const [active, setActive] = useState('default');
@@ -148,6 +206,18 @@ export function PromptCard({
   const [anchor, setAnchor] = useState<{ left: number; bottom: number; maxHeight: number } | null>(
     null,
   );
+  const [view, setView] = useState<CardView>(initialView);
+  // The view the picker goes back to, and adds into.
+  const [pickerFor, setPickerFor] = useState<'design' | 'text'>('design');
+  const [pointing, setPointing] = useState<Pointing>(NOWHERE);
+  const [described, setDescribed] = useState<{
+    template: string;
+    data: PromptDescribed;
+  } | null>(null);
+  const [newest, setNewest] = useState<PromptCheckRead | null>(null);
+  const [lineTriggers, setLineTriggers] = useState<PromptLineTrigger[]>([]);
+  const insertRef = useRef<((token: string) => void) | null>(null);
+  const edits = useRef<Promise<unknown>>(Promise.resolve());
   const undo = useRef<PromptConfig[]>([]);
   const game = useGamePrompt();
   const env = useBandEnv(themeTerminalColors, brightBold, renderer);
@@ -157,6 +227,11 @@ export function PromptCard({
   const forsaken =
     codesChosen || (state?.forsaken ?? false) || knownHost || config?.capture.kind === 'aabahran';
   const gameSent = (state?.new_build ?? false) || game !== null;
+
+  const take = (next: PromptConfig) => {
+    latest.current = next;
+    setConfig(next);
+  };
 
   // Open: keep the design among the earlier ones, read the state, and
   // name who the card saves for.
@@ -174,7 +249,7 @@ export function PromptCard({
         const entry = list?.profiles.find((p) => p.name === name);
         const host = who?.host ?? entry?.auto_match?.host ?? '';
         const known = knownWorld(host) !== undefined;
-        setConfig(opened);
+        take(opened);
         setState(now);
         setIdentity(who);
         setActive(name);
@@ -202,7 +277,7 @@ export function PromptCard({
       subscribePromptConfigChanged(() => {
         void promptConfigGet()
           .then((next) => {
-            if (alive) setConfig(next);
+            if (alive) take(next);
           })
           .catch(() => {});
       }),
@@ -226,6 +301,21 @@ export function PromptCard({
       reading ? { raw: true } : { placeholders: true, preview: preview === 'now' ? null : preview },
     ).catch(() => {});
   }, [step, reading, preview]);
+
+  // Past the capture steps, with drawing on, the card works on your
+  // design.
+  const designing = (step === 'start' || step === 'rest') && (config?.draw ?? false);
+
+  // The card draws your design over the band of Lifted in the text.
+  useEffect(() => {
+    onBand?.(designing && (show?.show ?? 'text') === 'text');
+  }, [designing, show?.show, onBand]);
+  useEffect(() => () => onBand?.(false), [onBand]);
+
+  // The text view needs a design to work on.
+  useEffect(() => {
+    if (step !== null && !designing && view !== 'design') setView('design');
+  }, [step, designing, view]);
 
   // The designs to start from, for the capture the profile holds.
   const capture = config?.capture;
@@ -251,6 +341,49 @@ export function PromptCard({
       alive = false;
     };
   }, [capture, step]);
+
+  // What each part of your design is, with what it reads in the preview.
+  const template = config?.template ?? '';
+  useEffect(() => {
+    if (step !== 'start' && step !== 'rest') return;
+    let alive = true;
+    void promptDescribe(template, preview === 'now' ? null : preview)
+      .then((data) => {
+        if (alive) setDescribed({ template, data });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [template, step, preview, refresh]);
+
+  const pieces = useMemo(
+    () => (described?.template === template ? described.data.pieces : []),
+    [described, template],
+  );
+  // A part the design no longer has is no longer picked.
+  useEffect(() => {
+    if (pointing.picked !== null && described?.template === template) {
+      if (!pickable(pieces).includes(pointing.picked)) setPointing(NOWHERE);
+    }
+  }, [pieces, pointing.picked, described, template]);
+
+  // Parts no value fills: a code your prompt in the game does not show,
+  // or a name Vosh has no value for.
+  const warn = useMemo(() => {
+    const out = new Set<number>();
+    const unknown = new Set(
+      (described?.data.tokens ?? []).filter((t) => !t.known).map((t) => t.piece),
+    );
+    for (const piece of pieces) {
+      if (!piece.shows) continue;
+      if (unknown.has(piece.piece)) out.add(piece.piece);
+      const field = piece.field ? baseName(piece.field) : null;
+      const entry = field ? state?.catalog.find((f) => f.name === field) : undefined;
+      if (entry && entry.state !== 'value' && needsCode(entry)) out.add(piece.piece);
+    }
+    return out;
+  }, [pieces, described, state?.catalog]);
 
   // Sit over your prompt, and follow it.
   const relayout = useCallback(async () => {
@@ -287,7 +420,7 @@ export function PromptCard({
 
   useLayoutEffect(() => {
     void relayout();
-  }, [relayout, step, refresh]);
+  }, [relayout, step, refresh, view, template, preview]);
 
   useEffect(() => {
     const onResize = () => void relayout();
@@ -306,14 +439,23 @@ export function PromptCard({
     if (step !== null) cardRef.current?.focus({ preventScroll: true });
   }, [step === null]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEscape(true, onClose);
+  // Escape closes a menu, then the picker, then the card. A menu and the
+  // confirm dialog take it first through their own handlers.
+  useEscape(true, () => {
+    if (view === 'picker') {
+      setView(pickerFor);
+      return;
+    }
+    onClose();
+  });
 
   const save = (next: PromptConfig, keepUndo = true) => {
-    if (!config) return;
-    if (keepUndo) undo.current = [...undo.current, config].slice(-UNDO_DEPTH);
-    setConfig(next);
+    const before = latest.current;
+    if (!before) return;
+    if (keepUndo) undo.current = [...undo.current, before].slice(-UNDO_DEPTH);
+    take(next);
     void promptConfigSet(next).catch((e: unknown) => {
-      setConfig(config);
+      take(before);
       pushToast({ kind: 'error', message: String(e) });
     });
   };
@@ -321,6 +463,44 @@ export function PromptCard({
   const takeBack = () => {
     const last = undo.current.pop();
     if (last) save(last, false);
+  };
+
+  /** Make `ops` one after another on the design as it stands, save the
+   *  result once, and follow the part the first one acted on: pick it,
+   *  or with `caret`, put the caret past it. Edits queue, so typing fast
+   *  loses no character. */
+  const edit = (ops: PromptEditOp[], follow: 'pick' | 'caret' = 'pick') => {
+    edits.current = edits.current.then(async () => {
+      const base = latest.current;
+      if (!base || ops.length === 0) return;
+      try {
+        let text = base.template;
+        let landed: number | null = null;
+        for (const [i, op] of ops.entries()) {
+          // Later ops of a run act on the part the first one acted on:
+          // text goes right after it, and a change goes to it.
+          let placed = op;
+          if (i > 0 && landed !== null) {
+            if (op.op === 'insert_text') placed = { ...op, at: landed + 1 };
+            else if ('piece' in op) placed = { ...op, piece: landed };
+          }
+          const result = await promptEdit(text, placed);
+          text = result.template;
+          if (i === 0 || placed.op !== 'insert_text') landed = result.piece;
+        }
+        if (text !== base.template) save({ ...base, template: text });
+        const first = ops[0];
+        if (landed === null || first.op === 'remove') {
+          setPointing({ picked: null, caret: caretAfter(first, null) });
+        } else if (follow === 'caret') {
+          setPointing({ picked: null, caret: caretAfter(first, landed) });
+        } else {
+          setPointing({ picked: landed, caret: null });
+        }
+      } catch (e) {
+        pushToast({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
+      }
+    });
   };
 
   const more =
@@ -367,27 +547,36 @@ export function PromptCard({
         }
       : request;
 
-  const useCodes = (report: PromptCompileReport) => {
-    if (!config || !codes) return;
-    save({ ...config, capture: savedCapture(report, codes.source, codes.seenAt) });
+  /** Save a capture, and the first time this profile reads your prompt,
+   *  name the Line triggers that matched it (D6). */
+  const saveCapture = (next: PromptCapture) => {
+    if (!config) return;
+    const first = firstCapture(config.capture);
+    save({ ...config, capture: next });
     setStep('start');
+    if (first) {
+      void promptLineTriggers(next)
+        .then(setLineTriggers)
+        .catch(() => setLineTriggers([]));
+    }
+  };
+
+  const useCodes = (report: PromptCompileReport) => {
+    if (!codes) return;
+    saveCapture(savedCapture(report, codes.source, codes.seenAt));
   };
 
   const useNames = (report: PromptCompileReport) => {
     const shape = report.shapes[0];
-    if (!config || !shape) return;
-    save({
-      ...config,
-      capture: {
-        kind: 'regex',
-        lines: shape.lines,
-        settle: shape.settle,
-        names: report.names,
-        seen_at: localStamp(new Date()),
-        source: 'session',
-      },
+    if (!shape) return;
+    saveCapture({
+      kind: 'regex',
+      lines: shape.lines,
+      settle: shape.settle,
+      names: report.names,
+      seen_at: localStamp(new Date()),
+      source: 'session',
     });
-    setStep('start');
   };
 
   const forget = () => {
@@ -396,12 +585,97 @@ export function PromptCard({
     const next: PromptConfig = { ...config, capture: { kind: 'none' } };
     save(next);
     setRequest(null);
+    setPointing(NOWHERE);
     setStep(openingStep({ capture: next.capture, forsaken, gameSent }));
   };
 
-  // Interim until the card's own Edit as text and picker land: the
-  // design's text in Settings, under Input, then Advanced.
-  const editAsText = () => openSettingsTab('input:advanced#prompt');
+  const openPicker = (from: 'design' | 'text') => {
+    setPickerFor(from);
+    setView('picker');
+  };
+
+  const place = insertPlace(pieces, pointing);
+
+  /** A value the picker chose goes in at the caret, or into the text. */
+  const insertValue = (field: string, format: PromptFormatChoice) => {
+    if (pickerFor === 'text') {
+      setView('text');
+      void promptEdit('', { op: 'insert_field', at: 0, field, format })
+        .then((result) => insertRef.current?.(result.template))
+        .catch((e: unknown) => pushToast({ kind: 'error', message: String(e) }));
+      return;
+    }
+    setView('design');
+    edit(insertOps(pieces, place, field, format));
+  };
+
+  const insertLayout = (id: LayoutId) => {
+    if (pickerFor === 'text') {
+      setView('text');
+      const token = id === 'nl' ? '%nl' : id === 'nl_fight' ? '%{if:fight}%nl%{end}' : ' ';
+      // The field takes the token once it shows again.
+      requestAnimationFrame(() => insertRef.current?.(token));
+      return;
+    }
+    setView('design');
+    if (id === 'space') {
+      edit([{ op: 'insert_text', at: place, text: ' ' }], 'caret');
+    } else if (id === 'nl') {
+      edit([{ op: 'insert_nl', at: place }]);
+    } else {
+      // A break, then In a fight on it.
+      edit([
+        { op: 'insert_nl', at: place },
+        { op: 'set_when', piece: place, when: 'fight' },
+      ]);
+    }
+  };
+
+  // The keys that work on your design (section 7.1): Left and Right pick
+  // parts, Option with them moves one, Delete removes it, typing adds text
+  // at the caret, and Return adds a line break.
+  const designKeys = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (!designing || view !== 'design') return false;
+    const target = e.target as HTMLElement;
+    const typingInField =
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target.isContentEditable;
+    if (typingInField) return false;
+    const onCard = target === cardRef.current;
+    const mod = e.metaKey || e.ctrlKey;
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !mod) {
+      const dir = e.key === 'ArrowLeft' ? -1 : 1;
+      if (e.altKey) {
+        const op = moveOp(pieces, pointing.picked, dir);
+        if (op) edit([op]);
+      } else {
+        setPointing(stepPick(pieces, pointing, dir));
+      }
+      return true;
+    }
+    // The rest work at the caret or the part you picked.
+    if (!onCard || mod || (pointing.picked === null && pointing.caret === null)) return false;
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      const op = deleteOp(pieces, pointing, e.key === 'Backspace' ? -1 : 1);
+      if (op) edit([op]);
+      return true;
+    }
+    if (e.key === 'Enter') {
+      edit([{ op: 'insert_nl', at: place }]);
+      return true;
+    }
+    if (e.key.length === 1 && !e.altKey) {
+      edit([{ op: 'insert_text', at: place, text: e.key }], 'caret');
+      return true;
+    }
+    return false;
+  };
+
+  const pickedPiece =
+    view === 'design' && pointing.picked !== null
+      ? (pieces.find((p) => p.piece === pointing.picked) ?? null)
+      : null;
 
   let body: ReactNode = null;
   if (config && step) {
@@ -441,6 +715,7 @@ export function PromptCard({
                   }
             }
             onUse={useCodes}
+            onNewest={setNewest}
             refresh={refresh}
             env={env}
             cellW={cellW}
@@ -478,29 +753,81 @@ export function PromptCard({
       case 'start':
       case 'rest': {
         const drawOff = !config.draw && step === 'rest';
+        let content: ReactNode;
+        if (drawOff) {
+          content = (
+            <DrawOff
+              name={owner}
+              other={!forsaken}
+              confirming={confirmForget}
+              onForget={() => setConfirmForget(true)}
+            />
+          );
+        } else if (view === 'picker' && state) {
+          content = (
+            <PromptPicker
+              state={state}
+              preview={preview}
+              env={env}
+              cellW={cellW}
+              refresh={refresh}
+              onInsert={insertValue}
+              onInsertLayout={insertLayout}
+            />
+          );
+        } else if (view === 'text') {
+          content = (
+            <PromptText
+              template={config.template}
+              tokens={described?.data.tokens ?? []}
+              describedFor={described?.template ?? ''}
+              onChange={(next) => save({ ...config, template: next })}
+              onCaretPiece={(piece) => setPointing({ picked: piece, caret: null })}
+              onInsertValue={() => openPicker('text')}
+              insertRef={insertRef}
+            />
+          );
+        } else if (pickedPiece) {
+          content = (
+            <PromptPieceBody
+              key={pickedPiece.piece}
+              piece={pickedPiece}
+              env={env}
+              onEdit={(op) => edit([op])}
+              onInsertValue={() => openPicker('design')}
+            />
+          );
+        } else {
+          content = (
+            <Starts
+              mode={step}
+              config={config}
+              presets={presets}
+              designs={designs}
+              values={(state?.packages.length ?? 0) > 0 ? 'live' : 'sample'}
+              refresh={refresh}
+              env={env}
+              cellW={cellW}
+              note={step === 'rest' && preview === 'lament' ? LAMENT_NOTE : null}
+              onPick={(template) => {
+                setPointing(NOWHERE);
+                save({ ...config, template, draw: true });
+              }}
+              onInsertValue={() => openPicker('design')}
+            >
+              <LineTriggers
+                triggers={lineTriggers}
+                onMove={async (name) => {
+                  await moveTriggerToPrompts(name);
+                  setLineTriggers((list) => list.filter((t) => t.name !== name));
+                }}
+              />
+            </Starts>
+          );
+        }
         body = (
           <>
-            {drawOff ? (
-              <DrawOff
-                name={owner}
-                other={!forsaken}
-                confirming={confirmForget}
-                onForget={() => setConfirmForget(true)}
-              />
-            ) : (
-              <Starts
-                mode={step}
-                config={config}
-                presets={presets}
-                designs={designs}
-                values={(state?.packages.length ?? 0) > 0 ? 'live' : 'sample'}
-                refresh={refresh}
-                env={env}
-                cellW={cellW}
-                onPick={(template) => save({ ...config, template, draw: true })}
-                onInsertValue={editAsText}
-              />
-            )}
+            {content}
             <div className="pc-rule" aria-hidden="true" />
             <div className="pc-foot">
               <Toggle
@@ -531,8 +858,66 @@ export function PromptCard({
     }
   }
 
+  // The marks on your prompt: your design's parts while the card draws
+  // it, or the values Vosh reads on the game's own line while it reads
+  // your codes.
+  const openRow = state?.open_row ?? null;
+  const raw =
+    step === 'codes-entry' && openRow
+      ? rawMarks(openRow, null, true)
+      : step === 'codes' && openRow
+        ? rawMarks(openRow, newest, false)
+        : null;
+
+  const header =
+    view === 'picker' && designing ? (
+      <div className="pc-head">
+        <Button onClick={() => setView(pickerFor)}>Back</Button>
+        <h2 className="pc-title is-picker">Insert value</h2>
+        <span className="pc-spacer" />
+        <IconButton label="Close" icon={<CloseIcon />} onClick={onClose} />
+      </div>
+    ) : (
+      <div className="pc-head">
+        <h2 className="pc-title">Customize prompt</h2>
+        <span className="pc-saved">{saved}</span>
+        <span className="pc-spacer" />
+        {buttons.editAsText && designing && (
+          <Button onClick={() => setView(view === 'text' ? 'design' : 'text')}>
+            {view === 'text' ? 'Edit pieces' : 'Edit as text'}
+          </Button>
+        )}
+        {buttons.more && (
+          <IconButton
+            label="Prompt options"
+            icon={<MoreIcon />}
+            aria-haspopup="menu"
+            aria-expanded={moreAt !== null}
+            onClick={(e) => setMoreAt(moreAt ? null : e.currentTarget)}
+          />
+        )}
+        <IconButton label="Close" icon={<CloseIcon />} onClick={onClose} />
+      </div>
+    );
+
   return (
     <>
+      {step && (
+        <PromptMarks
+          host={host}
+          show={show}
+          cell={cell}
+          openRow={openRow}
+          design={designing ? { pieces, pointing, warn } : null}
+          raw={designing ? null : raw}
+          refresh={refresh}
+          onPoint={(next) => {
+            if (view === 'text') setView('design');
+            setPointing(next);
+          }}
+          card={() => cardRef.current}
+        />
+      )}
       <div
         ref={cardRef}
         className="pc-card st-controls"
@@ -554,25 +939,12 @@ export function PromptCard({
           if (mod && !e.shiftKey && e.key.toLowerCase() === 'z' && !field) {
             e.preventDefault();
             takeBack();
+            return;
           }
+          if (designKeys(e)) e.preventDefault();
         }}
       >
-        <div className="pc-head">
-          <h2 className="pc-title">Customize prompt</h2>
-          <span className="pc-saved">{saved}</span>
-          <span className="pc-spacer" />
-          {buttons.editAsText && <Button onClick={editAsText}>Edit as text</Button>}
-          {buttons.more && (
-            <IconButton
-              label="Prompt options"
-              icon={<MoreIcon />}
-              aria-haspopup="menu"
-              aria-expanded={moreAt !== null}
-              onClick={(e) => setMoreAt(moreAt ? null : e.currentTarget)}
-            />
-          )}
-          <IconButton label="Close" icon={<CloseIcon />} onClick={onClose} />
-        </div>
+        {header}
         <div className="pc-rule" aria-hidden="true" />
         {body}
       </div>

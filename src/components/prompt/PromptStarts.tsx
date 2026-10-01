@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { BandEnv } from '../../lib/bandCells';
 import { startRows, type StartRow } from '../../lib/promptCard';
 import { useLabelMeasure } from '../../lib/useCellWidth';
@@ -222,6 +222,12 @@ interface StartsProps {
   cellW: number;
   onPick: (template: string) => void;
   onInsertValue: () => void;
+  /** A line under the hint at rest, such as what the Lament preview
+   *  hides (P8c). */
+  note?: string | null;
+  /** What goes between the hint and the list on first use: the Line
+   *  triggers that matched your prompt (D6). */
+  children?: ReactNode;
 }
 
 /** P4's body: the start list on first use, or the card at rest with
@@ -237,6 +243,8 @@ export function Starts({
   cellW,
   onPick,
   onInsertValue,
+  note = null,
+  children,
 }: StartsProps) {
   const list = useMemo(() => startRows(presets, config, designs), [presets, config, designs]);
   const templates = useMemo(() => list.rows.map((r) => r.template), [list]);
@@ -263,6 +271,7 @@ export function Starts({
         <p className="pc-hint">
           Start from one of these, or click any part of your prompt to change it.
         </p>
+        {children}
         <StartList
           {...list}
           samples={samples}
@@ -279,6 +288,7 @@ export function Starts({
   return (
     <div className="pc-body">
       <p className="pc-hint">Click any part of your prompt to change it.</p>
+      {note && <p className="pc-rest-note">{note}</p>}
       <div className="pc-actions">
         {insert}
         <Button
