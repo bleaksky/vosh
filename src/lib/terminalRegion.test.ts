@@ -283,6 +283,7 @@ describe('RegionWriter', () => {
         if (typeof data === 'string') writes.push(data);
         if (callback) callbacks.push(callback);
       },
+      resize() {},
     };
     const parseTwice = () => {
       const pending = callbacks.splice(0);
@@ -655,5 +656,80 @@ describe('padding the screen down to its last row', () => {
     await parsed(writer);
     expect(screen(term)).toEqual(['You are hungry.', '<1020> ']);
     expect(writer.region()).toEqual({ gen: 2, row: 1, col: 0 });
+  });
+});
+
+describe('a resize while xterm parses a long backlog', () => {
+  // xterm parses for about 12 ms at a time. A backlog this long fills a
+  // slice of its own, and the line after it waits for the next one.
+  // xterm flushes what it holds before a resize, and that flush starts
+  // from the first write it still keeps, the parsed backlog included.
+  const backlog = ['BEGIN', ...Array.from({ length: 40_000 }, (_, i) => `line ${i}`), 'END'];
+
+  /** Every row xterm holds, scrollback included, trailing blanks
+   *  trimmed. */
+  function allRows(term: Terminal): string[] {
+    const buffer = term.buffer.active;
+    const rows: string[] = [];
+    for (let y = 0; y < buffer.length; y++) {
+      rows.push(buffer.getLine(y)?.translateToString(true) ?? '');
+    }
+    while (rows.length > 0 && rows[rows.length - 1] === '') rows.pop();
+    return rows;
+  }
+
+  /** Write the backlog and a line after it, and call `resize` between
+   *  the slice that parses the backlog and the next. */
+  async function resizeBetweenSlices(resize: (term: Terminal, writer: RegionWriter) => void) {
+    const term = new Terminal({ cols: 40, rows: 10, scrollback: 100_000, allowProposedApi: true });
+    const writer = new RegionWriter(term);
+    const between = new Promise<void>((resolve) => {
+      const first = term.onWriteParsed(() => {
+        first.dispose();
+        queueMicrotask(() => {
+          resize(term, writer);
+          resolve();
+        });
+      });
+    });
+    writer.local(`${backlog.join('\r\n')}\r\n`);
+    writer.local('after\r\n');
+    await between;
+    await parsed(writer);
+    return { term, rows: allRows(term) };
+  }
+
+  it('shows the backlog twice when xterm resizes on its own', async () => {
+    const { rows } = await resizeBetweenSlices((term) => term.resize(40, 14));
+    expect(rows.filter((row) => row === 'BEGIN')).toHaveLength(2);
+  });
+
+  it('shows the backlog once when the writer holds the resize', async () => {
+    const { term, rows } = await resizeBetweenSlices((_, writer) => writer.resize(40, 14));
+    expect(rows.filter((row) => row === 'BEGIN')).toHaveLength(1);
+    expect(rows.slice(-2)).toEqual(['END', 'after']);
+    expect([term.cols, term.rows]).toEqual([40, 14]);
+  });
+
+  it('resizes at once while xterm holds no write', async () => {
+    const { term, writer } = setup(40, 10);
+    writer.local('You are hungry.\r\n');
+    await parsed(writer);
+    writer.resize(30, 12);
+    expect([term.cols, term.rows]).toEqual([30, 12]);
+  });
+
+  it('takes the last size once xterm parsed its writes, before the writes after it', async () => {
+    const { term, writer } = setup(40, 10);
+    writer.local('You are hungry.\r\n');
+    writer.resize(30, 12);
+    writer.resize(20, 14);
+    expect([term.cols, term.rows]).toEqual([40, 10]);
+    const sizes: number[][] = [];
+    writer.whenParsed(() => sizes.push([term.cols, term.rows]));
+    writer.local('look\r\n');
+    await parsed(writer);
+    expect(sizes).toEqual([[20, 14]]);
+    expect(screen(term)).toEqual(['You are hungry.', 'look']);
   });
 });
