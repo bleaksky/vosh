@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -35,6 +35,7 @@ import {
   type ScreenCell,
 } from '../lib/promptPointer';
 import { BandLayer, LiftTracker, markLifted } from '../lib/promptBands';
+import { GameSizeReport, gameSize, keptRows } from '../lib/terminalRows';
 import { ingestRecentNames } from '../lib/recentNames';
 
 /** Session flag set when the native surface never came up, so the page
@@ -123,9 +124,12 @@ export interface TerminalHandle {
   scrollToBottom: () => void;
   /** True when the viewport is anchored at the live tail (no scrollback offset). */
   isAtBottom: () => boolean;
-  /** Current cols × rows. Used by the host to push the size to the
-   *  backend via NAWS after a (re)connect. */
+  /** Current cols × rows the pane shows. */
   getSize: () => { cols: number; rows: number };
+  /** The size the game is told through NAWS: the rows the pane shows
+   *  plus the rows it lends to the pinned prompt band. The host pushes it
+   *  after a (re)connect. */
+  windowSize: () => { cols: number; rows: number };
   /** Force the renderer to redraw the visible rows. The split-scrollback
    *  history pane can mount sized and positioned on real content yet the
    *  DOM renderer leaves it blank until the next scroll triggers a draw;
@@ -222,6 +226,12 @@ interface Props {
   /// live pane only, and only while xterm draws the terminal. The native
   /// grid draws its own bands, and the split history pane draws none.
   lifted?: boolean;
+  /// Rows at the bottom of the live pane the pinned prompt band borrows
+  /// while your prompt takes more than one row (src/lib/terminalRows.ts).
+  /// The pane keeps its size and the grid gives them up from its top, so
+  /// the newest line stays right above the band. The game still hears of
+  /// the rows the pane holds with them.
+  lentRows?: number;
 }
 
 // The terminal's palette lives in src/lib/terminalTheme.ts, which the
@@ -259,6 +269,7 @@ export function Terminal({
   onResultsChanged,
   onCellSize,
   lifted = false,
+  lentRows = 0,
 }: Props) {
   const quietRef = useRef(quiet);
   quietRef.current = quiet;
@@ -272,6 +283,14 @@ export function Terminal({
   onCellSizeRef.current = onCellSize;
   const liftedRef = useRef(lifted);
   liftedRef.current = lifted;
+  // The rows lent to the pinned band, which the layout effect below keeps
+  // and applies before the page paints.
+  const lentRef = useRef(lentRows);
+  // Applies a new lent count: refits xterm, or reports the native bounds.
+  // Set by the setup effect.
+  const applyLentRef = useRef<(() => void) | null>(null);
+  // Fits xterm to its pane less the lent rows. Set by the setup effect.
+  const fitKeptRef = useRef<(() => void) | null>(null);
   // The band layer, while this pane can draw bands.
   const bandsRef = useRef<BandLayer | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -381,6 +400,15 @@ export function Terminal({
       applyLift(term);
     }
 
+    // Fit xterm to its pane, less the rows the pinned band borrows. The
+    // FitAddon only proposes the size, so the lent rows come off here.
+    const fitKept = () => {
+      const dims = fit.proposeDimensions();
+      if (!dims || Number.isNaN(dims.cols) || Number.isNaN(dims.rows)) return;
+      term.resize(dims.cols, keptRows(dims.rows, lentRef.current));
+    };
+    fitKeptRef.current = fitKept;
+
     // GPU renderer. xterm's WebGL addon must run after term.open() and
     // it reads the host element's pixel size when it allocates the
     // glyph atlas — load it after one fit so the host has nonzero
@@ -397,7 +425,7 @@ export function Terminal({
       // FitAddon fight the native grid (it would wrap the MUD too narrow).
       if (!quietRef.current && nativeSurfaceEnabled()) return;
       try {
-        fit.fit();
+        fitKept();
       } catch {
         // ignore resize before layout settles
       }
@@ -525,15 +553,19 @@ export function Terminal({
     // Live pane only, and only when opted in via the localStorage flag,
     // because the surface is opaque and would otherwise occlude xterm.
     // Set vosh.nativesurface to "1" and reload to see it.
+    //
+    // The rows the pinned band borrows go along, so the grid gives them
+    // up in the same frame as the new bounds, and the game keeps its size.
     const nativeSurfaceOn = !quietRef.current && nativeSurfaceEnabled();
     let lastNativeBounds = '';
     const reportNativeBounds = () => {
       if (!nativeSurfaceOn || !sizer) return;
       const r = sizer.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
+      const lent = lentRef.current;
       const key = `${Math.round(r.left)},${Math.round(r.top)},${Math.round(
         r.width,
-      )},${Math.round(r.height)},${dpr}`;
+      )},${Math.round(r.height)},${dpr},${lent}`;
       if (key === lastNativeBounds) return;
       lastNativeBounds = key;
       void invoke('native_surface_set_bounds', {
@@ -542,6 +574,7 @@ export function Terminal({
         width: r.width,
         height: r.height,
         dpr,
+        lent,
       }).catch(() => {});
     };
 
@@ -606,6 +639,14 @@ export function Terminal({
       // Fit may have just established or changed the cell dimensions.
       reportCellMetrics();
       reportCellSize();
+    };
+
+    // The pinned band borrows more or fewer rows. The pane keeps its size,
+    // so nothing above notices: xterm fits again, or the native grid hears
+    // of the new count with its bounds.
+    applyLentRef.current = () => {
+      if (nativeSurfaceOn) reportNativeBounds();
+      else safeFit();
     };
 
     // Resizable broadcasts `vosh:resize-progress` { size } from
@@ -973,14 +1014,20 @@ export function Terminal({
     // Debounce so a rapid resize animation only fires one IPC at the
     // settled size. Only the primary (non-quiet) terminal pushes,
     // since the history pane in the split view shares the same width.
+    // A row the pinned band borrows or gives back sends nothing, since
+    // the game is told the rows the pane holds with the lent ones
+    // (src/lib/terminalRows.ts).
     let naws_timer: ReturnType<typeof setTimeout> | null = null;
+    const gameSizes = new GameSizeReport();
     const pushSize = () => {
       if (quietRef.current) return;
       // When the native surface owns the terminal it advertises its own
       // (larger) grid size as NAWS; xterm must not fight it with the
       // webview-font column count.
       if (nativeSurfaceEnabled()) return;
-      void setWindowSize(term.cols, term.rows).catch(() => {
+      const size = gameSizes.next(term.cols, term.rows, lentRef.current);
+      if (!size) return;
+      void setWindowSize(size.cols, size.rows).catch(() => {
         // Not connected, or session torn down. Either is fine; the
         // initial NAWS handshake on the next connect will send the
         // current size anyway.
@@ -1029,7 +1076,7 @@ export function Terminal({
     const handle: TerminalHandle = {
       write: (data) => writer.local(typeof data === 'string' ? data : localDecoder.decode(data)),
       outputTaken: () => outputTaken,
-      fit: () => fit.fit(),
+      fit: () => fitKept(),
       focus: () => term.focus(),
       clear: () => term.clear(),
       scrollPages: (n) => term.scrollPages(n),
@@ -1054,6 +1101,7 @@ export function Terminal({
       // viewport is anchored to the live tail.
       isAtBottom: () => term.buffer.active.viewportY === term.buffer.active.baseY,
       getSize: () => ({ cols: term.cols, rows: term.rows }),
+      windowSize: () => gameSize(term.cols, term.rows, lentRef.current),
       cellHeight: () => {
         // Read the host's pixel height (set by sync), divide by
         // xterm's current row count, and round UP to whole pixels.
@@ -1071,8 +1119,9 @@ export function Terminal({
         // remainder, and that remainder doesn't move as snaps
         // change. A few unused pixels at the bottom is cheaper
         // than a visible jitter.
+        // The rows lent to the pinned band are still the host's.
         const h = host && host.style.height ? parseFloat(host.style.height) : 0;
-        const rows = term.rows;
+        const rows = term.rows + lentRef.current;
         return rows > 0 ? Math.ceil(h / rows) : 0;
       },
       findNext: (query, opts) =>
@@ -1214,6 +1263,8 @@ export function Terminal({
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
+      fitKeptRef.current = null;
+      applyLentRef.current = null;
       liveTerminalInstances -= 1;
     };
     // Setup runs exactly once. Font is read from props on initial mount;
@@ -1221,6 +1272,15 @@ export function Terminal({
     // the xterm instance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A new count of rows lent to the pinned band applies before the page
+  // paints, in the same commit that grows or shrinks the band, so the
+  // newest line moves with the band's top and never sits under it.
+  useLayoutEffect(() => {
+    if (lentRef.current === lentRows) return;
+    lentRef.current = lentRows;
+    applyLentRef.current?.();
+  }, [lentRows]);
 
   // Apply font changes without rebuilding the terminal so scrollback and
   // listeners survive. xterm reflows on the next fit() call.
@@ -1231,7 +1291,7 @@ export function Terminal({
     term.options.fontFamily = fontFamily;
     term.options.fontSize = fontSize;
     try {
-      fit.fit();
+      fitKeptRef.current?.();
     } catch {
       // ignore
     }
@@ -1260,7 +1320,7 @@ export function Terminal({
       return;
     }
     try {
-      fitRef.current?.fit();
+      fitKeptRef.current?.();
     } catch {
       // ignore resize before layout settles
     }

@@ -1310,7 +1310,7 @@ function App() {
           });
           const handle = termRef.current;
           if (handle) {
-            const { cols, rows } = handle.getSize();
+            const { cols, rows } = handle.windowSize();
             void setWindowSize(cols, rows).catch(() => {});
           }
         }
