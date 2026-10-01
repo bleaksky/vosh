@@ -142,6 +142,32 @@ export function resolveHelpTarget(
   return topic ? { kind: 'topic', topic } : { kind: 'search', query: text };
 }
 
+/** What a landing does to the window: the topic it shows, or null to
+ *  show the best result of the search, the words in the search, the
+ *  section that opens in the sidebar, and whether the caret goes into
+ *  the search. A landing opens its section every time, even on the
+ *  topic you are reading. A search that finds nothing names no
+ *  section and leaves the sidebar as it is. */
+export interface HelpLanding {
+  topicId: string | null;
+  query: string;
+  section: string | null;
+  focusSearch: boolean;
+}
+
+export function landingOf(target: HelpTarget, topics: HelpTopic[] = HELP_TOPICS): HelpLanding {
+  if (target.kind === 'topic') {
+    return {
+      topicId: target.topic.id,
+      query: '',
+      section: target.topic.section,
+      focusSearch: false,
+    };
+  }
+  const best = rankTopics(target.query, topics)[0];
+  return { topicId: null, query: target.query, section: best?.section ?? null, focusSearch: true };
+}
+
 /** What a key in the help search does. */
 export type HelpSearchAction =
   | { kind: 'active'; index: number }
