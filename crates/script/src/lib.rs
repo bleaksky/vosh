@@ -9,7 +9,7 @@ mod actions;
 mod api;
 mod state;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use mlua::{Function, Lua, Value};
 use regex::Regex;
@@ -219,17 +219,30 @@ impl ScriptEngine {
     /// Run a loaded script's code. `mud.on_gmcp` has no name to replace a
     /// subscription by, so a run that succeeds drops the subscriptions the
     /// script made on its previous run. Without that each reload added one
-    /// more handler. A run that fails keeps the old ones.
+    /// more handler. A run that fails keeps the old ones and adds none.
     fn run_script(&mut self, name: &str, code: &str) -> Result<ScriptOutcome, ScriptError> {
-        let before: HashSet<i64> = self.gmcp_subs.values().flatten().copied().collect();
-        let outcome = self.eval(code, name)?;
-        let made: Vec<i64> = self
-            .gmcp_subs
-            .values()
-            .flatten()
-            .copied()
-            .filter(|id| !before.contains(id))
-            .collect();
+        // Only this run's actions sit past `start`. An earlier entry that
+        // failed can leave its own actions in front of them.
+        let start = self.state.cell.lock().map_or(0, |s| s.pending.len());
+        let result: mlua::Result<()> = self.lua.load(code).set_name(name).exec();
+        if let Err(e) = result {
+            self.discard_gmcp_subscriptions_since(start);
+            return Err(e.into());
+        }
+        let made: Vec<i64> = match self.state.cell.lock() {
+            Ok(s) => s
+                .pending
+                .get(start..)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|action| match action {
+                    Action::SubscribeGmcp { callback_id, .. } => Some(*callback_id),
+                    _ => None,
+                })
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+        let outcome = self.drain();
         if let Some(old) = self.script_gmcp.insert(name.to_string(), made) {
             for ids in self.gmcp_subs.values_mut() {
                 ids.retain(|id| !old.contains(id));
@@ -240,6 +253,28 @@ impl ScriptEngine {
             }
         }
         Ok(outcome)
+    }
+
+    /// Take back the GMCP subscriptions a failed script run queued past
+    /// `start` and free their callbacks. Left queued, the next drain from
+    /// any source would install them with no script to own them, so no
+    /// later reload could drop them. The run's other actions stay queued
+    /// as before. A trigger replaces the one of its name and a timer frees
+    /// itself when it fires, so neither piles up the same way.
+    fn discard_gmcp_subscriptions_since(&self, start: usize) {
+        let Ok(mut s) = self.state.cell.lock() else {
+            return;
+        };
+        let start = start.min(s.pending.len());
+        let queued = s.pending.split_off(start);
+        for action in queued {
+            match action {
+                Action::SubscribeGmcp { callback_id, .. } => {
+                    s.callbacks.remove(&callback_id);
+                }
+                other => s.pending.push(other),
+            }
+        }
     }
 
     /// Run every Lua trigger against `line`. For each match the callback
@@ -645,6 +680,56 @@ mod tests {
             ]
         );
         assert_eq!(held_callbacks(&e), 3);
+    }
+
+    #[test]
+    fn failed_script_run_keeps_old_gmcp_handlers_and_adds_none() {
+        let good = r#"mud.on_gmcp("Char.Vitals", function() mud.echo("v") end)"#;
+        let bad = r#"
+            mud.on_gmcp("Char.Vitals", function() mud.echo("v") end)
+            error("typo")
+        "#;
+        let mut e = ScriptEngine::new().unwrap();
+        e.load_script("vitals", good.into()).unwrap();
+        assert!(e.load_script("vitals", bad.into()).is_err());
+        // The handler from the good run still works, and only it.
+        let vitals = serde_json::json!({});
+        let outcome = e.dispatch_gmcp("Char.Vitals", &vitals).unwrap();
+        assert_eq!(outcome.actions, vec![Action::Echo("v".into())]);
+        assert_eq!(held_callbacks(&e), 1);
+        // Fixing the script and reloading leaves exactly one handler.
+        e.load_script("vitals", good.into()).unwrap();
+        e.reload_scripts().unwrap();
+        let outcome = e.dispatch_gmcp("Char.Vitals", &vitals).unwrap();
+        assert_eq!(outcome.actions, vec![Action::Echo("v".into())]);
+        assert_eq!(held_callbacks(&e), 1);
+    }
+
+    #[test]
+    fn failed_first_script_load_leaves_no_gmcp_handler() {
+        let mut e = ScriptEngine::new().unwrap();
+        let bad = r#"
+            mud.on_gmcp("Char.Vitals", function() mud.echo("v") end)
+            mud.echo("before the typo")
+            error("typo")
+        "#;
+        assert!(e.load_script("vitals", bad.into()).is_err());
+        assert_eq!(held_callbacks(&e), 0);
+        // The run's other actions still reach the next drain as before.
+        let outcome = e
+            .dispatch_gmcp("Char.Vitals", &serde_json::json!({}))
+            .unwrap();
+        assert!(outcome.actions.is_empty());
+        let outcome = e.eval("", "t").unwrap();
+        assert_eq!(
+            outcome.actions,
+            vec![Action::Echo("before the typo".into())]
+        );
+        let outcome = e
+            .dispatch_gmcp("Char.Vitals", &serde_json::json!({}))
+            .unwrap();
+        assert!(outcome.actions.is_empty());
+        assert!(e.loaded_script_names().is_empty());
     }
 
     #[test]
