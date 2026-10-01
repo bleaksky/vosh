@@ -46,6 +46,7 @@ import {
 } from '../lib/terminalRows';
 import { noteReader } from '../lib/readerBusy';
 import { ingestRecentNames } from '../lib/recentNames';
+import { underlayShows, XtermMirror } from '../lib/xtermMirror';
 
 /** Session flag set when the native surface never came up, so the page
  *  falls back to xterm instead of leaving a transparent hole. */
@@ -399,8 +400,9 @@ export function Terminal({
     // finds the regions the session marks and replaces them only while
     // nothing was written after them (src/lib/terminalRegion.ts). Every
     // resize goes through it too, so xterm takes a size only once it has
-    // parsed what it holds.
-    const writer = new RegionWriter(term);
+    // parsed what it holds. A copy that fills anew from the scrollback
+    // gets a writer of its own (see the mirror below).
+    let writer = new RegionWriter(term);
     const localDecoder = new TextDecoder('utf-8', { fatal: false });
     // The newest output of the prompt stage the writer took, in the order
     // the session sent them.
@@ -963,17 +965,60 @@ export function Terminal({
       }
     };
 
+    // Decoded across outputs and word wrapped (src/lib/outputShaper.ts).
+    // A copy that fills anew starts a shaper of its own.
+    let shaper = new OutputShaper(term.cols);
+
+    // While the native underlay draws the live terminal, the xterm copy
+    // hides and takes no writes (src/lib/xtermMirror.ts). It keeps its
+    // size, which the native grid sets, and the cell size it measures,
+    // which the grid and the pinned band draw on. Find, selection, copy,
+    // the prompt card and the scroll all go to the native grid then. If
+    // the screen comes back to xterm, the copy fills anew from the
+    // session's scrollback, as a reload onto xterm fills it.
+    const mirror = new XtermMirror({
+      owned: () => !quietRef.current && nativeUnderlay() && underlayShows(document.documentElement),
+      rebuild: (done) => {
+        writer.dispose();
+        term.reset();
+        writer = new RegionWriter(term);
+        if (lifts) writer.onErase((row, col) => lifts.dropFrom(row, col));
+        shaper = new OutputShaper(term.cols);
+        const settle = () => {
+          padToBottom();
+          keepTail(term);
+          done();
+        };
+        loadScrollback(false)
+          .then(({ bytes }) => {
+            if (bytes.length === 0) return settle();
+            writer.local(localDecoder.decode(bytes));
+            writer.local('\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n');
+            // The pad reads where the cursor sits once xterm parsed it all.
+            writer.whenParsed(settle);
+          })
+          .catch(settle);
+      },
+    });
+    const underlayWatch = new MutationObserver(() => mirror.check());
+    underlayWatch.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-underlay'],
+    });
+
     // The live pane seeds the native grid with the persisted scrollback so
     // it has the same history as xterm; the quiet history pane must not.
     loadScrollback(!quietRef.current && nativeSurfaceEnabled())
       .then(({ bytes, seededNative }) => {
+        // A copy the native grid hides takes none of it.
+        const toXterm = mirror.mirrors();
         if (bytes.length > 0) {
-          writer.local(localDecoder.decode(bytes));
+          if (toXterm) writer.local(localDecoder.decode(bytes));
           if (!quietRef.current) {
             // Explicit 256-palette gray, not dim: xterm and the native
             // renderer dim differently, so dim would show two shades.
             const banner = '\r\n\x1b[38;5;244m[scrollback restored]\x1b[0m\r\n';
-            writer.local(banner);
+            if (toXterm) writer.local(banner);
             // Mirror the banner into the native grid so xterm and the surface
             // have the same line count; otherwise a dropdown swap to xterm
             // shifts the content up by these rows. Only when this load
@@ -991,11 +1036,11 @@ export function Terminal({
         // matters for padToBottom: cursorY only reflects the
         // post-restore position after the queued bytes are drained.
         const notify = () => {
-          if (!quietRef.current) padToBottom();
+          if (!quietRef.current) mirror.write(padToBottom);
           notifyPosition();
           onScrollbackLoadedRef.current?.();
         };
-        if (bytes.length > 0) {
+        if (bytes.length > 0 && toXterm) {
           writer.whenParsed(notify);
         } else {
           notify();
@@ -1005,7 +1050,7 @@ export function Terminal({
         // No scrollback yet, or backend not ready; still notify so
         // the host can apply its initial scroll gesture (no-op on
         // an empty terminal, but does not lose the user intent).
-        if (!quietRef.current) padToBottom();
+        if (!quietRef.current) mirror.write(padToBottom);
         notifyPosition();
         onScrollbackLoadedRef.current?.();
       });
@@ -1022,8 +1067,8 @@ export function Terminal({
     // (v0.2.10) each TCP read arrives as one output event, so the
     // line-buffer's wrap math still has the whole line for any line
     // ending in \n; the only thing that flushes "early" is the
-    // already-complete prompt at the chunk tail.
-    const shaper = new OutputShaper(term.cols);
+    // already-complete prompt at the chunk tail. The shaper is made
+    // above, with the mirror.
     term.onResize(({ cols }) => {
       shaper.setCols(cols);
       reportCellSize();
@@ -1043,16 +1088,27 @@ export function Terminal({
         // from mount no longer reaches the new last row, leaving
         // a gap below the cursor. Re-pad so the cursor lands on
         // the new bottom row before any subsequent content writes.
-        padToBottom();
-        keepTail(term);
+        mirror.write(() => {
+          padToBottom();
+          keepTail(term);
+        });
       }
     });
     onOutput((out) => {
       if (out.id !== undefined && out.id > outputTaken) outputTaken = out.id;
-      // Decoded across outputs and word wrapped (src/lib/outputShaper.ts).
+      // A copy the native grid hides writes nothing. It only decodes
+      // the text for the recent names cache below.
+      if (!mirror.mirrors()) {
+        if (!quietRef.current) {
+          const { text, replace } = shaper.text(out);
+          ingestRecentNames(text);
+          if (replace !== null) ingestRecentNames(replace);
+        }
+        return;
+      }
       const { output, text } = shaper.shape(out);
       if (output) {
-        writer.output(output);
+        mirror.write(() => writer.output(output));
         // Live pane is a strict tail of server output. Without this
         // snap, dragging the split-scrollback divider can leave the
         // live pane's viewport above its baseY — xterm preserves
@@ -1068,7 +1124,7 @@ export function Terminal({
         // nothing, since a resize may have left xterm's scrollbar a
         // frame behind (src/lib/terminalRows.ts).
         if (!quietRef.current) {
-          keepTail(term);
+          mirror.write(() => keepTail(term));
         }
       }
       // Feed the decoded text into the recent-names cache so Tab
@@ -1151,7 +1207,10 @@ export function Terminal({
     };
 
     const handle: TerminalHandle = {
-      write: (data) => writer.local(typeof data === 'string' ? data : localDecoder.decode(data)),
+      write: (data) => {
+        const text = typeof data === 'string' ? data : localDecoder.decode(data);
+        mirror.write(() => writer.local(text));
+      },
       outputTaken: () => outputTaken,
       fit: () => fitKept(),
       focus: () => term.focus(),
@@ -1387,6 +1446,7 @@ export function Terminal({
       if (naws_timer) clearTimeout(naws_timer);
       unsubOutput?.();
       unsubGridSize?.();
+      underlayWatch.disconnect();
       writer.dispose();
       bandsRef.current?.dispose();
       bandsRef.current = null;
