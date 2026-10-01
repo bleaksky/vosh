@@ -1021,6 +1021,9 @@ export type PromptEditOp =
 export interface PromptEdited {
   template: string;
   rendered: PromptRendered;
+  /** Where the piece the edit acted on sits now: the piece it changed or
+   *  moved, or the one it added. Null after a removal. */
+  piece: number | null;
 }
 
 /** Apply one edit to a design. Every other piece keeps its look. Save

@@ -662,3 +662,87 @@ fn a_look_set_inside_a_condition_comes_back_inside_it() {
         );
     }
 }
+
+/// The edit's text and where the piece it acted on now sits.
+fn edit_at(template: &str, op: &EditOp) -> (String, Option<usize>) {
+    vosh_prompt::edit::apply_at(template, op, &known)
+        .unwrap_or_else(|e| panic!("{op:?} on {template}: {e}"))
+}
+
+/// The template text of piece `index`.
+fn piece_text(template: &str, index: usize) -> String {
+    Template::parse(template).piece_text(index).to_string()
+}
+
+#[test]
+fn the_card_follows_the_piece_an_edit_acted_on() {
+    // A style keeps the piece where it was.
+    let hp = Template::parse(JAMES)
+        .pieces()
+        .iter()
+        .position(|p| p.kind == PieceKind::Value)
+        .expect("the hp value");
+    let (text, at) = edit_at(
+        JAMES,
+        &EditOp::SetStyle {
+            piece: hp,
+            style: StyleChoice::Bold,
+            on: true,
+        },
+    );
+    assert_eq!(at, Some(hp));
+    assert!(piece_text(&text, hp).ends_with("%hp"));
+    // In a fight puts a condition before it, so it moves on by one.
+    let (text, at) = edit_at(
+        JAMES,
+        &EditOp::SetWhen {
+            piece: hp,
+            when: When::Fight,
+        },
+    );
+    assert_eq!(at, Some(hp + 1));
+    assert!(piece_text(&text, hp + 1).ends_with("%hp"));
+    // A value added at the end is the last piece that shows.
+    let n = Template::parse("[%hp]").pieces().len();
+    let (text, at) = edit_at(
+        "[%hp]",
+        &EditOp::InsertField {
+            at: n,
+            field: "gold".into(),
+            format: None,
+        },
+    );
+    assert_eq!(text, "[%hp]%gold");
+    assert_eq!(at.map(|i| piece_text(&text, i)), Some("%gold".into()));
+    // Text added next to text joins it, and the card picks the whole.
+    let (text, at) = edit_at(
+        "[%hp]",
+        &EditOp::InsertText {
+            at: 3,
+            text: " ok".into(),
+        },
+    );
+    assert_eq!(text, "[%hp] ok");
+    assert_eq!(at.map(|i| piece_text(&text, i)), Some("] ok".into()));
+    // A line break added is picked.
+    let (text, at) = edit_at("[%hp]", &EditOp::InsertNl { at: 2 });
+    assert_eq!(at.map(|i| piece_text(&text, i)), Some("%nl".into()));
+    // A moved piece is where it landed.
+    let (text, at) = edit_at("%hp %mana", &EditOp::Move { piece: 2, to: 0 });
+    assert_eq!(text, "%mana%hp ");
+    assert_eq!(at, Some(0));
+    // A removed one is gone.
+    assert_eq!(edit_at("%hp %mana", &EditOp::Remove { piece: 0 }).1, None);
+    // Empty text removes, and nothing is added.
+    assert_eq!(
+        edit_at(
+            "[%hp]",
+            &EditOp::InsertText {
+                at: 0,
+                text: String::new()
+            }
+        )
+        .1,
+        None
+    );
+}
