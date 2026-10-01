@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { BandEnv } from '../../lib/bandCells';
 import {
   fieldName,
@@ -72,6 +72,14 @@ export function PromptPicker({
   const [forms, setForms] = useState<PromptForm[]>([]);
   const listRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  // Focus stays in the search while the arrows move the highlight, so
+  // the search names the highlighted value or form as the one a reader
+  // is on (the combobox pattern).
+  const ids = useId();
+  const valuesId = `${ids}-values`;
+  const formsId = `${ids}-forms`;
+  const optionId = (key: string) => `${ids}-v-${key.replace(/[^A-Za-z0-9_-]/g, '_')}`;
+  const formId = (index: number) => `${ids}-f-${index}`;
 
   const focusFirst = useRef(focusSearch);
   useEffect(() => {
@@ -151,6 +159,16 @@ export function PromptPicker({
   };
 
   const ask = field?.param ? paramPrompt(field) : null;
+  const activeId =
+    pane === 'forms'
+      ? row?.kind === 'layout'
+        ? formId(0)
+        : forms.length > 0
+          ? formId(formAt)
+          : undefined
+      : row
+        ? optionId(rowKey(row))
+        : undefined;
   return (
     <div className="pc-body pc-picker" onKeyDown={onKeyDown}>
       <div className="pc-picker-list">
@@ -161,6 +179,11 @@ export function PromptPicker({
           icon={<SearchIcon />}
           placeholder="Search values"
           aria-label="Search values"
+          role="combobox"
+          aria-expanded="true"
+          aria-autocomplete="list"
+          aria-controls={pane === 'forms' ? formsId : valuesId}
+          {...(activeId ? { 'aria-activedescendant': activeId } : {})}
           value={query}
           onChange={(text) => {
             setQuery(text);
@@ -168,7 +191,13 @@ export function PromptPicker({
             setPane('list');
           }}
         />
-        <div ref={listRef} className="pc-picker-rows" role="listbox" aria-label="Values">
+        <div
+          ref={listRef}
+          id={valuesId}
+          className="pc-picker-rows"
+          role="listbox"
+          aria-label="Values"
+        >
           <ul>
             {groups.map((group, g) => (
               <li key={group.id} role="presentation">
@@ -185,6 +214,7 @@ export function PromptPicker({
                         <button
                           type="button"
                           role="option"
+                          id={optionId(key)}
                           aria-selected={on}
                           data-key={key}
                           tabIndex={-1}
@@ -220,11 +250,12 @@ export function PromptPicker({
           <>
             <h3 className="pc-picker-title">{row.label}</h3>
             <p className="pc-picker-source">{LAYOUT_HELP[row.id].help}</p>
-            <ul role="listbox" aria-label="Formats" className="pc-forms">
+            <ul id={formsId} role="listbox" aria-label="Formats" className="pc-forms">
               <li role="none">
                 <button
                   type="button"
                   role="option"
+                  id={formId(0)}
                   aria-selected
                   className={cx('pc-form', 'is-on')}
                   onClick={() => onInsertLayout(row.id)}
@@ -272,7 +303,12 @@ export function PromptPicker({
                 )}
               </div>
             )}
-            <ul role="listbox" aria-label="Formats" className={cx('pc-forms', !usable && 'is-dim')}>
+            <ul
+              id={formsId}
+              role="listbox"
+              aria-label="Formats"
+              className={cx('pc-forms', !usable && 'is-dim')}
+            >
               {forms.map((form, i) => {
                 const on = i === formAt;
                 const cells = parseSgrCells(form.sample.ansi)[0] ?? [];
@@ -281,6 +317,7 @@ export function PromptPicker({
                     <button
                       type="button"
                       role="option"
+                      id={formId(i)}
                       aria-selected={on}
                       disabled={!usable}
                       className={cx('pc-form', on && 'is-on')}
