@@ -774,6 +774,9 @@ impl PromptEngine {
         let forsaken = self.rules();
         self.vars.switch_profile(forsaken);
         self.kept_pattern = None;
+        // The triggers the last profile's prompt lost name nothing of
+        // this one's.
+        self.stage.forget_gags_without_reader();
     }
 
     fn rules(&self) -> bool {
