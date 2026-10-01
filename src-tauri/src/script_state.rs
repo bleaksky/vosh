@@ -37,9 +37,14 @@ pub(crate) type SharedTimers = Arc<Mutex<Vec<PendingTimer>>>;
 /// write Lua, and matches what the engine's match/dispatch paths
 /// would do anyway (no-op when nothing is registered).
 pub(crate) fn snapshot_vars(script: &ScriptEngine, vars: &VariableStore) {
-    if !script.has_handlers() {
-        return;
+    if script.has_handlers() {
+        refresh_vars(script, vars);
     }
+}
+
+/// Give Lua the current variables, so `mud.var(name)` reads them. Call
+/// before Lua that runs for certain, such as the body of a script alias.
+fn refresh_vars(script: &ScriptEngine, vars: &VariableStore) {
     let snapshot: std::collections::HashMap<String, String> = vars
         .iter()
         .map(|(k, v, _)| (k.to_string(), v.to_string()))
@@ -48,12 +53,13 @@ pub(crate) fn snapshot_vars(script: &ScriptEngine, vars: &VariableStore) {
 }
 
 /// Run the Lua body of a script alias with the words typed after its
-/// name, and apply what it asks of the profile. A body that fails is
-/// logged and asks for nothing.
+/// name, and apply what it asks of the profile. Lua reads the current
+/// variables. A body that fails is logged and asks for nothing.
 pub(crate) fn run_alias_body(
     profile: &mut Profile,
     call: &vosh_alias::AliasScriptCall,
 ) -> ApplyResult {
+    refresh_vars(&profile.script, &profile.vars);
     match profile
         .script
         .run_body(&call.body, &call.captures, "alias-script")

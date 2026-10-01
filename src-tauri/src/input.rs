@@ -2782,6 +2782,19 @@ mod tests {
     }
 
     #[test]
+    fn a_lua_alias_body_reads_the_variables_as_they_are_now() {
+        // No script is loaded and no Lua trigger is set, so nothing else
+        // gives Lua the variables before the body runs.
+        let mut p = Profile::default();
+        p.aliases
+            .set(Alias::new("kt", "ignored").with_script("mud.send('kick ' .. mud.var('target'))"));
+        let _ = process(&mut p, "#var target goblin");
+        assert_eq!(process(&mut p, "kt").bytes, b"kick goblin\r\n");
+        let _ = process(&mut p, "#var target orc");
+        assert_eq!(process(&mut p, "kt").bytes, b"kick orc\r\n");
+    }
+
+    #[test]
     fn what_else_a_lua_alias_body_asks_for_comes_back_with_the_line() {
         let mut p = Profile::default();
         p.aliases.set(Alias::new("later", "ignored").with_script(
