@@ -263,7 +263,14 @@ fn a_repaint_in_a_payload_carries_the_restore_to_the_webview() {
     let value: serde_json::Value = serde_json::from_str(&json).expect("json");
     let restore = value["restore"].as_str().expect("the restore");
     let bytes = super::show_tests::base64_decode(restore);
-    assert!(String::from_utf8_lossy(&bytes).ends_with("<1020>\x1b[0m"));
+    assert_eq!(drawn_text(&bytes), "<1020>");
+    // The card lends the row the band of Lifted, so its live render ends
+    // the lift too.
+    let text = String::from_utf8_lossy(&bytes);
+    let end = text
+        .rfind("<1020>\x1b[0m\x1b]7717;e;")
+        .expect("the lift ends");
+    assert!(text[end..].ends_with('\x07') && !text[end..].contains(' '));
 }
 
 /// The payloads of every stream in [`pinned_streams`] with Low health on

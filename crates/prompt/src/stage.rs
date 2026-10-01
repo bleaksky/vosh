@@ -715,6 +715,10 @@ impl Block {
 struct OpenLift {
     id: u64,
     start_inside: bool,
+    /// Lifted's lift, whose end keeps your echo a cell away. The card's
+    /// borrowed lift in the text ends with no space, so the row and your
+    /// echo after it sit where they would with the card closed.
+    spaced: bool,
 }
 
 /// The drawn prompt while it is the last thing on screen.
@@ -1009,6 +1013,10 @@ pub struct Stage {
     /// The lines the open row's prompt shows as sent right above its
     /// region, and their plain text, set with every open row.
     open_heads: Option<(Vec<u8>, String)>,
+    /// The prompt card is open, so in the text the row that draws your
+    /// design borrows the band of Lifted (the 2026-09-30 addendum, item
+    /// 2).
+    card: bool,
 }
 
 impl Stage {
@@ -1059,8 +1067,24 @@ impl Stage {
             hides: std::mem::take(&mut self.hides),
             show: self.show,
             shown_as: self.show,
+            card: self.card,
             ..Self::default()
         };
+    }
+
+    /// The prompt card opened or closed. While it is open, the row that
+    /// draws your design in the text carries the lift marks of Lifted, so
+    /// the page can draw the card's edit band under it with the band pass.
+    /// The game's own lines, while the card reads your codes or drawing is
+    /// off, carry none. A row keeps its marks when the card closes, as it
+    /// does when you leave Lifted, and the page turns the band pass off.
+    pub fn set_card(&mut self, open: bool) {
+        self.card = open;
+    }
+
+    /// The prompt card is open.
+    pub fn card_open(&self) -> bool {
+        self.card
     }
 
     /// Take where your prompt shows from the `[prompt]` table. The prompt
@@ -1459,9 +1483,10 @@ impl Stage {
         view: View,
     ) {
         self.sync(out);
-        let lift = self.lifts().then(|| OpenLift {
+        let lift = self.lifts_view(&view).then(|| OpenLift {
             id: self.next_gen(),
             start_inside: false,
+            spaced: self.lifts(),
         });
         let gen = self.next_gen();
         let (body, live) = row_bodies(&block, view);
@@ -1489,6 +1514,13 @@ impl Stage {
     /// Your prompt shows lifted, so each one carries lift marks.
     fn lifts(&self) -> bool {
         self.show == PromptShow::Lifted
+    }
+
+    /// The row that shows `view` carries lift marks: your prompt shows
+    /// lifted, or the open card borrows the band for your design in the
+    /// text.
+    fn lifts_view(&self, view: &View) -> bool {
+        self.lifts() || (self.card && self.show == PromptShow::Text && view.shown.is_some())
     }
 
     /// `bytes`, the lines of a prompt shown as sent, between the marks of
@@ -1801,8 +1833,9 @@ impl Stage {
             (PromptShow::Pinned, _) => return self.move_from_pinned(out, view),
             _ => {}
         }
-        // Choosing Lifted lifts the open row, from its region's start.
-        let lifting = self.open_lift.is_none() && self.lifts();
+        // Choosing Lifted lifts the open row, from its region's start, and
+        // so does the open card in the text.
+        let lifting = self.open_lift.is_none() && self.lifts_view(&view);
         let Some(open) = &mut self.open else {
             return;
         };
@@ -1834,6 +1867,7 @@ impl Stage {
             None if lifting => Some(OpenLift {
                 id: self.next_gen(),
                 start_inside: true,
+                spaced: self.lifts(),
             }),
             None => None,
         };
@@ -1851,7 +1885,7 @@ impl Stage {
             }
             whole.extend(mark(gen));
             match lift {
-                Some(lift) => whole.extend(with_lift_end(&body, lift.id)),
+                Some(lift) => whole.extend(end_lift(&body, lift)),
                 None => whole.extend_from_slice(&body),
             }
             whole
@@ -1953,9 +1987,10 @@ impl Stage {
         let drawing = view.shown.is_some() || view.live.is_some();
         match (drawing && !block.afk).then_some(view) {
             Some(view) => {
-                let lift = self.lifts().then(|| OpenLift {
+                let lift = self.lifts_view(&view).then(|| OpenLift {
                     id: self.next_gen(),
                     start_inside: false,
+                    spaced: self.lifts(),
                 });
                 let gen = self.next_gen();
                 let (body, live) = row_bodies(&block, view);
@@ -2135,11 +2170,25 @@ fn region_bytes(gen: u64, lift: Option<OpenLift>, body: &[u8]) -> Vec<u8> {
             if lift.start_inside {
                 bytes.extend(lift_start(lift.id));
             }
-            bytes.extend(with_lift_end(body, lift.id));
+            bytes.extend(end_lift(body, lift));
         }
         None => bytes.extend_from_slice(body),
     }
     bytes
+}
+
+/// `body` with the end mark of `lift`: with Lifted's space after it, or
+/// for the card's borrowed lift with none, right before the line ends it
+/// finishes on.
+fn end_lift(body: &[u8], lift: OpenLift) -> Vec<u8> {
+    if lift.spaced {
+        return with_lift_end(body, lift.id);
+    }
+    let (shown, ends) = body.split_at(trailing_line_ends(body));
+    let mut out = shown.to_vec();
+    out.extend(lift_end(lift.id));
+    out.extend_from_slice(ends);
+    out
 }
 
 /// What the band shows for `block`: the lines above the last one that
@@ -4138,6 +4187,78 @@ mod tests {
             Some(with(&[&mark(2), b"LOW"]))
         );
         assert_eq!(back.restore, None);
+    }
+
+    #[test]
+    fn the_open_card_lifts_the_row_that_draws_your_design_in_the_text() {
+        let mut stage = stage(JAMES, false);
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut out, block, None, b"", "DRAWN");
+        stage.set_card(true);
+        // The card reads your codes first: the game's line shows with no
+        // band.
+        let mut raw = Output::new(false);
+        stage.repaint_view(
+            &mut raw,
+            View {
+                shown: None,
+                live: Some("DRAWN"),
+                ..View::default()
+            },
+        );
+        assert_eq!(
+            raw.replace.map(|r| r.bytes),
+            Some(with(&[&mark(2), PROMPT.as_bytes(), b"\r\n"]))
+        );
+        // Then it draws your design, and the row lifts from its start,
+        // the live render behind it too, with no space after the lift, so
+        // the row and your echo sit where they would with the card
+        // closed.
+        let mut card = Output::new(false);
+        stage.repaint_view(&mut card, preview("LABELS", "DRAWN"));
+        assert_eq!(
+            card.replace.map(|r| r.bytes),
+            Some(with(&[&mark(4), &lift_start(3), b"LABELS", &lift_end(3)]))
+        );
+        assert_eq!(
+            card.restore,
+            Some(with(&[&mark(4), &lift_start(3), b"DRAWN", &lift_end(3)]))
+        );
+        // A prompt that arrives while the card is open lifts too.
+        let mut next = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw_view(&mut next, block, None, b"", preview("LABELS", "DRAWN"));
+        assert_eq!(
+            next.bytes,
+            with(&[&lift_start(5), &mark(6), b"LABELS", &lift_end(5)])
+        );
+        // The card closes. The row keeps its marks, its lift starting
+        // before the region as that prompt drew it, and the next prompt
+        // draws in the text as before.
+        stage.set_card(false);
+        let mut closed = Output::new(false);
+        stage.repaint_view(&mut closed, View::live(Some("DRAWN")));
+        assert_eq!(
+            closed.replace.map(|r| r.bytes),
+            Some(with(&[&mark(7), b"DRAWN", &lift_end(5)]))
+        );
+        let mut after = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw(&mut after, block, None, b"", "DRAWN");
+        assert_eq!(after.bytes, with(&[&mark(8), b"DRAWN"]));
+        // A connection that opens or closes keeps the card's state.
+        stage.set_card(true);
+        stage.reset();
+        let mut out = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.draw_view(&mut out, block, None, b"", preview("LABELS", "DRAWN"));
+        assert!(out.bytes.starts_with(&lift_start(9)));
+        // Drawing off, the game's line shows as sent with no band.
+        let mut off = Output::new(false);
+        let block = read(&stage, PROMPT, End::Line);
+        stage.show(&mut off, block, None, b"", Some(PROMPT.as_bytes()));
+        assert!(!off.bytes.windows(7).any(|w| w == b"7717;l;"));
     }
 
     #[test]
