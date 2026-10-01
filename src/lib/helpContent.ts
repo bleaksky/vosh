@@ -1,8 +1,9 @@
-// In-client help content. Source of truth for both the Help view
-// (HelpView.tsx) and the standalone HELP.md document at the repo
+// In-client help content. Source of truth for both the Help window
+// (src/HelpApp.tsx) and the standalone HELP.md document at the repo
 // root. Keep them in sync; the markdown file mirrors this catalog
 // one-to-one. Every topic is a task walkthrough in the project
-// writing style. Bodies use the lightweight format HelpView parses:
+// writing style. Bodies use the lightweight format the Help window
+// parses:
 //   - Paragraphs separated by a blank line (\n\n).
 //   - Lines starting with "- " render as bullet list items.
 //   - A block whose lines all start with "|" renders as a table, its
