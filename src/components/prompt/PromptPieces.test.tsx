@@ -294,6 +294,7 @@ describe('Edit as text', () => {
         onCaretPiece={() => {}}
         onInsertValue={() => {}}
         insertRef={{ current: null }}
+        caretRef={{ current: null }}
       />,
     );
     expect(html).toContain('contenteditable="true"');
