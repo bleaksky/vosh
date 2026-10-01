@@ -1816,6 +1816,67 @@ mod tests {
         assert!(g.pending_hold().is_empty());
     }
 
+    /// The rows the grid shows at its display offset, trailing blanks
+    /// trimmed on each.
+    fn shown(g: &TermGrid) -> Vec<String> {
+        (0..g.screen_lines())
+            .map(|line| {
+                let row: String = (0..g.columns()).map(|col| g.cell(line, col).0).collect();
+                row.trim_end().to_string()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_newest_line_stays_above_the_pinned_band_as_it_borrows_a_row() {
+        // Thirty lines and a pinned prompt, whose line end the grid holds,
+        // on a screen of ten rows. A fight grows the band by a row and the
+        // grid gives up a row for it, then takes it back, three times.
+        let lines: Vec<String> = (1..=30).map(|n| format!("line {n}")).collect();
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&held(lines.join("\r\n").as_bytes(), b"\r\n"));
+        let calm = screen(&g);
+        assert_eq!(calm.first().map(String::as_str), Some("line 21"));
+        for _ in 0..3 {
+            g.resize(40, 9);
+            // The top line leaves for the scrollback and the newest stays
+            // on the last row, right above the band.
+            let fight = screen(&g);
+            assert_eq!(fight.len(), 9);
+            assert_eq!(fight.first().map(String::as_str), Some("line 22"));
+            assert_eq!(fight.last().map(String::as_str), Some("line 30"));
+            assert_eq!(cursor(&g), (8, 7), "the cursor stays after the newest line");
+            g.resize(40, 10);
+            // The line comes back at the top, and nothing else moved.
+            assert_eq!(screen(&g), calm);
+            assert_eq!(cursor(&g), (9, 7));
+        }
+        // The held line end still lands first when the next text comes.
+        g.session_output(&held(b"tell", b"\r\n"));
+        assert_eq!(screen(&g).last().map(String::as_str), Some("tell"));
+        assert_eq!(
+            screen(&g).iter().rev().nth(1).map(String::as_str),
+            Some("line 30")
+        );
+    }
+
+    #[test]
+    fn a_reader_scrolled_back_keeps_the_lines_in_view_as_the_band_borrows_a_row() {
+        let lines: Vec<String> = (1..=60).map(|n| format!("line {n}")).collect();
+        let mut g = TermGrid::new(40, 10);
+        g.session_output(&held(lines.join("\r\n").as_bytes(), b"\r\n"));
+        g.scroll(20);
+        let reading = shown(&g);
+        assert_eq!(reading.first().map(String::as_str), Some("line 31"));
+        g.resize(40, 9);
+        // The view keeps its top line, and the row the band took goes
+        // from its bottom.
+        assert_eq!(shown(&g), reading[..9]);
+        g.resize(40, 10);
+        assert_eq!(shown(&g), reading);
+        assert_eq!(g.display_offset(), 20);
+    }
+
     #[test]
     fn an_output_that_writes_nothing_keeps_the_longer_hold() {
         let mut g = TermGrid::new(40, 10);
