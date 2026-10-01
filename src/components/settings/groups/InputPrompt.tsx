@@ -626,7 +626,10 @@ export function LineRow({ read, lastRead, emptyText, onPoint, onForget }: LineRo
           <MenuSeparator />
           <MenuItem
             onSelect={() => {
+              // The dialog hands focus back to More when it closes.
+              const anchor = menu.anchor;
               setMenu(null);
+              anchor.focus();
               onForget();
             }}
           >

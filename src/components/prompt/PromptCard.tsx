@@ -75,6 +75,7 @@ import {
   type SessionIdentity,
 } from '../../lib/session';
 import { useEscape } from '../../lib/escapeStack';
+import { keepFocus, type FocusKeeper } from '../../lib/focusKeeper';
 import { useGamePrompt } from '../../lib/stores/gamePromptStore';
 import { pushToast } from '../../lib/toasts';
 import { useBandEnv } from '../../lib/useBandEnv';
@@ -485,6 +486,22 @@ export function PromptCard({
     if (step !== null) cardRef.current?.focus({ preventScroll: true });
   }, [step === null]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // And stays there when the control that had it goes away, as a part's
+  // rows remount, Remove takes its button, the picker closes or a step
+  // gives way to the next.
+  const keeper = useRef<FocusKeeper | null>(null);
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+    const kept = keepFocus(card);
+    keeper.current = kept;
+    return () => {
+      kept.stop();
+      keeper.current = null;
+    };
+  }, []);
+  useLayoutEffect(() => keeper.current?.check());
+
   // Escape closes a menu, then the picker, then the card. A menu and the
   // confirm dialog take it first through their own handlers.
   useEscape(true, () => {
@@ -569,6 +586,9 @@ export function PromptCard({
   const owner = saved.replace(/^Saved for /, '');
 
   const runMore = (id: MoreItemId) => {
+    // Focus goes back to More first, so the dialog Forget opens hands it
+    // back there, and a step that keeps More keeps it.
+    moreAt?.focus({ preventScroll: true });
     setMoreAt(null);
     switch (id) {
       case 'change-codes':
