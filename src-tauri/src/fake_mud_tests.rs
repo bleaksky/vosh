@@ -1512,11 +1512,26 @@ async fn prompt_default_draws_the_default_design_on_the_pinned_band_at_once() {
     h.until("the default design on the band", |h| {
         pins(h)
             .last()
-            .is_some_and(|pin| pin.starts_with("1020/1020hp 800/800mn 930/930mv  std common"))
+            .is_some_and(|pin| pin.starts_with("1020/1020hp 800/800mn 930/930mv"))
+    })
+    .await;
+    // Out of a fight the band is the vitals row alone, as the gallery
+    // mockup draws it.
+    let band = pins(&h).pop().expect("a band");
+    assert_eq!(band, "1020/1020hp 800/800mn 930/930mv  [S]  1,250g ");
+    // In a fight the tank row comes first. Solo you are the tank.
+    h.type_line("fight").await;
+    h.until("the tank row on the band", |h| {
+        pins(h)
+            .last()
+            .is_some_and(|pin| pin.starts_with("Tester: "))
     })
     .await;
     let band = pins(&h).pop().expect("a band");
-    assert!(!band.contains(['%', '{']), "{band:?}");
+    assert_eq!(
+        band,
+        "Tester: ████████░░\r\n765/1020hp 800/800mn 930/930mv  [S]  1,250g "
+    );
     let table = h.prompt_table().await;
     assert_eq!(table.template, vosh_prompt::DEFAULT_DESIGN);
     assert_eq!(table.previous_templates, ["<%hp>"]);

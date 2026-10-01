@@ -1,4 +1,4 @@
-//! Vosh's default design, At a glance, drawn the way a session draws it.
+//! Vosh's default design, drawn the way a session draws it.
 //!
 //! Each state is what the game holds when it prints a prompt, with the
 //! GMCP packets that reach Vosh before that prompt in the server's wire
@@ -9,10 +9,11 @@
 //! line as the session offers it, and the resolver draws the design from
 //! what it read. Nothing is drawn by hand.
 //!
-//! The states are the ones the design was chosen on, the fight with a
-//! tank, a group, a long mob name, lamented tears, an immortal, the older
-//! server build and missing affects among them, then meditating. Prompts
-//! that give no max, and other games, draw last.
+//! The states are a solo fight, a group fight with another tank, a long
+//! mob name, low health, lamented tears, an immortal, the older server
+//! build with no exits, and missing affects among them. The band of the
+//! gallery mockup the design mirrors draws next. Prompts that give no
+//! max, and other games, draw last.
 
 use chrono::{DateTime, FixedOffset, NaiveDate};
 use serde_json::{json, Value as Json};
@@ -337,20 +338,20 @@ fn condition(pct: i64) -> &'static str {
     }
 }
 
-/// The states the design was chosen on, each with what it draws.
+/// The states the design is drawn in, each with what it draws.
 fn states() -> Vec<(St, &'static str)> {
     let you = |hit| ("Tester", hit, 1020);
     vec![
         (
             St::new("full"),
-            "1020/1020hp 800/800mn 930/930mv  std common  [S]  1,250g ",
+            "1020/1020hp 800/800mn 930/930mv  [S]  1,250g ",
         ),
         (
             St {
                 hit: 180,
                 ..St::new("low")
             },
-            "180/1020hp 800/800mn 930/930mv  std common  [S]  1,250g ",
+            "180/1020hp 800/800mn 930/930mv  [S]  1,250g ",
         ),
         (
             St {
@@ -359,8 +360,9 @@ fn states() -> Vec<(St, &'static str)> {
                 ..St::new("tanking")
             }
             .fight(you(765)),
-            "a Blackwatch guard ██████░░░░ 60% quite a few wounds\n\
-             765/1020hp 640/800mn 930/930mv  fgt common  [S]  1,250g ",
+            // Solo you are the tank, so the row names you.
+            "Tester: ████████░░\n\
+             765/1020hp 640/800mn 930/930mv  [S]  1,250g ",
         ),
         (
             St {
@@ -369,8 +371,8 @@ fn states() -> Vec<(St, &'static str)> {
                 ..St::new("fight-start")
             }
             .fight(you(1002)),
-            "a Blackwatch guard ██████████ 95% a few scratches\n\
-             1002/1020hp 800/800mn 930/930mv  fgt common  [S]  1,250g ",
+            "Tester: ██████████\n\
+             1002/1020hp 800/800mn 930/930mv  [S]  1,250g ",
         ),
         (
             St {
@@ -378,8 +380,8 @@ fn states() -> Vec<(St, &'static str)> {
                 ..St::new("group")
             }
             .fight(("Ally", 781, 1000)),
-            "a Blackwatch guard ██████░░░░ 60% quite a few wounds  tank Ally\n\
-             1020/1020hp 520/800mn 930/930mv  fgt common  [S]  1,250g ",
+            "Ally: ████████░░\n\
+             1020/1020hp 520/800mn 930/930mv  [S]  1,250g ",
         ),
         (
             St {
@@ -389,8 +391,8 @@ fn states() -> Vec<(St, &'static str)> {
                 ..St::new("group-tank")
             }
             .fight(you(765)),
-            "a Blackwatch guard ██████░░░░ 60% quite a few wounds  tank Tester\n\
-             765/1020hp 640/800mn 930/930mv  fgt common  [S]  1,250g ",
+            "Tester: ████████░░\n\
+             765/1020hp 640/800mn 930/930mv  [S]  1,250g ",
         ),
         (
             St {
@@ -399,8 +401,9 @@ fn states() -> Vec<(St, &'static str)> {
                 ..St::new("long-name")
             }
             .fight(you(880)),
-            "Davaius, Captain Commander of the Dragon Guard ██████░░░░ 60% quite a few wounds\n\
-             880/1020hp 800/800mn 930/930mv  fgt common  [S]  1,250g ",
+            // The opponent never shows, however long its name.
+            "Tester: █████████░\n\
+             880/1020hp 800/800mn 930/930mv  [S]  1,250g ",
         ),
         (
             St {
@@ -411,15 +414,17 @@ fn states() -> Vec<(St, &'static str)> {
                 ..St::new("desperate")
             }
             .fight(you(150)),
-            "a Blackwatch guard ██░░░░░░░░ 22% pretty hurt\n\
-             150/1020hp 90/800mn 610/930mv  fgt common  [S]  1,250g ",
+            // The game's %P shows 2 of 12 cells for 14 percent, and Vosh
+            // reads the tank's health from it first, as 16.
+            "Tester: ██░░░░░░░░\n\
+             150/1020hp 90/800mn 610/930mv  [S]  1,250g ",
         ),
         (
             St {
                 lament: true,
                 ..St::new("lament")
             },
-            "?/?hp ?/?mn ?/?mv  std common  [S]  1,250g  missing ? ",
+            "?/?hp ?/?mn ?/?mv  [S]  1,250g ",
         ),
         (
             St {
@@ -427,9 +432,9 @@ fn states() -> Vec<(St, &'static str)> {
                 ..St::new("lament-fight")
             }
             .fight(you(765)),
-            // The game hides your group too, so the tank shows solo.
-            "a Blackwatch guard ·········· ?% ?  tank Tester\n\
-             ?/?hp ?/?mn ?/?mv  fgt common  [S]  1,250g  missing ? ",
+            // The game hides the tank's health and keeps the name.
+            "Tester: ··········\n\
+             ?/?hp ?/?mn ?/?mv  [S]  1,250g ",
         ),
         (
             St {
@@ -437,7 +442,7 @@ fn states() -> Vec<(St, &'static str)> {
                 incog: 60,
                 ..St::new("immortal")
             },
-            "1020/1020hp 800/800mn 930/930mv  std common  [S]  1,250g  wizi 60 incog 60 ",
+            "1020/1020hp 800/800mn 930/930mv  [S]  1,250g ",
         ),
         (
             St {
@@ -447,16 +452,15 @@ fn states() -> Vec<(St, &'static str)> {
                 ..St::new("immortal-fight")
             }
             .fight(("Ally", 781, 1000)),
-            // Out of a fight only.
-            "a Blackwatch guard ██████░░░░ 60% quite a few wounds  tank Ally\n\
-             1020/1020hp 520/800mn 930/930mv  fgt common  [S]  1,250g ",
+            "Ally: ████████░░\n\
+             1020/1020hp 520/800mn 930/930mv  [S]  1,250g ",
         ),
         (
             St {
                 afk: true,
                 ..St::new("afk")
             },
-            "1020/1020hp 800/800mn 930/930mv  std common  [S]  1,250g ",
+            "1020/1020hp 800/800mn 930/930mv  [S]  1,250g ",
         ),
         (
             St {
@@ -465,7 +469,7 @@ fn states() -> Vec<(St, &'static str)> {
                 moves: 388,
                 ..St::new("resting")
             },
-            "1020/1020hp 410/800mn 388/930mv  rst common  [S]  1,250g ",
+            "1020/1020hp 410/800mn 388/930mv  [S]  1,250g ",
         ),
         (
             St {
@@ -474,7 +478,7 @@ fn states() -> Vec<(St, &'static str)> {
                 mana: 220,
                 ..St::new("sleeping")
             },
-            "640/1020hp 220/800mn 930/930mv  slp common  [S]  1,250g ",
+            "640/1020hp 220/800mn 930/930mv  [S]  1,250g ",
         ),
         (
             St {
@@ -482,8 +486,7 @@ fn states() -> Vec<(St, &'static str)> {
                 mana: 260,
                 ..St::new("meditate")
             },
-            // The game's `%S` prints nothing while you meditate.
-            "1020/1020hp 260/800mn 930/930mv  med common  [S]  1,250g ",
+            "1020/1020hp 260/800mn 930/930mv  [S]  1,250g ",
         ),
         (
             St {
@@ -491,37 +494,53 @@ fn states() -> Vec<(St, &'static str)> {
                 position: MEDITATE,
                 ..St::new("older-meditate")
             },
-            "1020/1020hp 800/800mn 930/930mv  med common  1,250g ",
+            "1020/1020hp 800/800mn 930/930mv  1,250g ",
         ),
         (
             St {
                 room: Room::Square,
                 ..St::new("square")
             },
-            "1020/1020hp 800/800mn 930/930mv  std common  [N E S W]  1,250g ",
+            "1020/1020hp 800/800mn 930/930mv  [N E S W]  1,250g ",
         ),
         (
             St {
                 build: Build::Older,
                 ..St::new("older")
             },
-            // No Room.Info exits, and position and language from %S and %s.
-            "1020/1020hp 800/800mn 930/930mv  std common  1,250g ",
+            // The older build sends no exits Vosh shows, so no brackets.
+            "1020/1020hp 800/800mn 930/930mv  1,250g ",
         ),
         (
             St {
-                missing: 1,
-                ..St::new("missing-1")
-            },
-            "1020/1020hp 800/800mn 930/930mv  std common  [S]  1,250g  missing sanctuary ",
+                build: Build::Older,
+                hit: 765,
+                mana: 640,
+                ..St::new("older-fight")
+            }
+            .fight(you(765)),
+            // Char.Combat names no tank there, so the name and the health
+            // come from the game's tank line, %n and %P.
+            "Tester: ████████░░\n\
+             765/1020hp 640/800mn 930/930mv  1,250g ",
+        ),
+        (
+            St {
+                build: Build::Older,
+                mana: 520,
+                ..St::new("older-group")
+            }
+            .fight(("Ally", 781, 1000)),
+            "Ally: ████████░░\n\
+             1020/1020hp 520/800mn 930/930mv  1,250g ",
         ),
         (
             St {
                 missing: 3,
                 ..St::new("missing-3")
             },
-            "1020/1020hp 800/800mn 930/930mv  std common  [S]  1,250g  \
-             missing sanctuary, haste, protection evil ",
+            // Missing affects show in the Affects pane, not here.
+            "1020/1020hp 800/800mn 930/930mv  [S]  1,250g ",
         ),
     ]
 }
@@ -726,6 +745,108 @@ fn strip_sgr(ansi: &str) -> Result<String, String> {
     Ok(out)
 }
 
+/// One cell as a terminal draws it: its character, the SGR parameters of
+/// its foreground (`39` for the terminal's own color), and its styles.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Cell {
+    ch: char,
+    fg: String,
+    bg: String,
+    styles: Vec<u8>,
+}
+
+/// The rows of `ansi` as a terminal draws them, cell by cell.
+fn cells(ansi: &str) -> Vec<Vec<Cell>> {
+    let mut rows = vec![Vec::new()];
+    let mut fg = "39".to_string();
+    let mut bg = "49".to_string();
+    let mut styles: Vec<u8> = Vec::new();
+    let mut chars = ansi.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\x1b' => {
+                assert_eq!(chars.next(), Some('['), "{ansi:?}");
+                let mut params = String::new();
+                for p in chars.by_ref() {
+                    if p == 'm' {
+                        break;
+                    }
+                    params.push(p);
+                }
+                let params: Vec<&str> = params.split(';').collect();
+                let mut i = 0;
+                while i < params.len() {
+                    let p = params[i];
+                    match p {
+                        "" | "0" => {
+                            fg = "39".into();
+                            bg = "49".into();
+                            styles.clear();
+                        }
+                        "38" | "48" => {
+                            let take = if params.get(i + 1) == Some(&"5") {
+                                3
+                            } else {
+                                5
+                            };
+                            let color = params[i..i + take].join(";");
+                            if p == "38" {
+                                fg = color;
+                            } else {
+                                bg = color;
+                            }
+                            i += take - 1;
+                        }
+                        _ => match p.parse::<u8>().expect("an SGR number") {
+                            n @ (30..=37 | 39 | 90..=97) => fg = n.to_string(),
+                            n @ (40..=47 | 49 | 100..=107) => bg = n.to_string(),
+                            22 => styles.retain(|s| !matches!(s, 1 | 2)),
+                            n @ 23..=29 => styles.retain(|s| *s != n - 20),
+                            n @ 1..=9 => {
+                                if !styles.contains(&n) {
+                                    styles.push(n);
+                                    styles.sort_unstable();
+                                }
+                            }
+                            other => panic!("SGR {other} in {ansi:?}"),
+                        },
+                    }
+                    i += 1;
+                }
+            }
+            '\r' => {}
+            '\n' => rows.push(Vec::new()),
+            c => rows.last_mut().expect("a row").push(Cell {
+                ch: c,
+                fg: fg.clone(),
+                bg: bg.clone(),
+                styles: styles.clone(),
+            }),
+        }
+    }
+    rows
+}
+
+/// A row as runs of one look, each run after its foreground in angle
+/// brackets, such as `⟨32⟩864⟨38;5;245⟩/982hp`. No run here has a ground
+/// or a style.
+fn runs(row: &[Cell]) -> String {
+    let mut out = String::new();
+    let mut last: Option<&str> = None;
+    for cell in row {
+        assert_eq!(cell.bg, "49", "{cell:?}");
+        assert!(cell.styles.is_empty(), "{cell:?}");
+        if last != Some(cell.fg.as_str()) {
+            out.push('⟨');
+            out.push_str(&cell.fg);
+            out.push('⟩');
+            last = Some(cell.fg.as_str());
+        }
+        out.push(cell.ch);
+    }
+    out
+}
+
 /// The text of a row with every run of digits, and the commas between
 /// them, as one `#`, and every gauge cell as `▪`. Rows that read the
 /// same this way put every other cell in the same place.
@@ -811,7 +932,7 @@ fn the_default_design_parses_into_fields_and_formats_vosh_knows() {
             TokenKind::Percent | TokenKind::Nl | TokenKind::End | TokenKind::Code(_) => {}
         }
     }
-    // Each condition closes, and the fight row is the only line break.
+    // Each condition closes, and the tank row is the only line break.
     let count = |f: fn(&TokenKind) -> bool| template.tokens().iter().filter(|t| f(&t.kind)).count();
     assert_eq!(
         count(|k| matches!(k, TokenKind::If(_) | TokenKind::IfNot(_))),
@@ -828,19 +949,7 @@ fn every_state_draws_its_text_with_no_code_left_raw() {
         let text = strip_sgr(&drawn.ansi).unwrap_or_else(|e| panic!("{}: {e}", st.name));
         assert_eq!(text, drawn.plain.replace('\n', "\r\n"), "{}", st.name);
         assert!(drawn.ansi.ends_with("\x1b[0m"), "{}", st.name);
-        let mut rest = drawn.plain.as_str();
-        while let Some(at) = rest.find('%') {
-            // A percent sign only ever follows the opponent's health.
-            let before = rest[..at].chars().last();
-            assert!(
-                before.is_some_and(|c| c.is_ascii_digit() || c == '?'),
-                "{}: {:?}",
-                st.name,
-                drawn.plain
-            );
-            rest = &rest[at + 1..];
-        }
-        assert!(!drawn.plain.contains(['{', '}']), "{}", st.name);
+        assert_clean(st.name, &drawn);
         assert_eq!(drawn.rows, if st.fighting { 2 } else { 1 }, "{}", st.name);
         // The game's tank line folds into the fight row, so the band
         // that holds your prompt keeps two rows in every state.
@@ -852,42 +961,88 @@ fn every_state_draws_its_text_with_no_code_left_raw() {
 }
 
 #[test]
-fn health_and_missing_affects_carry_the_only_color() {
+fn only_your_numbers_and_the_tank_gauge_carry_color() {
     let (st, _) = states()
         .into_iter()
         .find(|(st, _)| st.name == "desperate")
         .expect("the desperate state");
-    let ansi = draw(&st).ansi;
-    // Your three numbers by how full, the gauge, and the quiet gray of
-    // every label, max and tag.
-    assert!(ansi.contains("\x1b[31m150"), "{ansi:?}");
-    assert!(ansi.contains("\x1b[31m90"), "{ansi:?}");
-    assert!(ansi.contains("\x1b[33m610"), "{ansi:?}");
-    assert!(ansi.contains("\x1b[38;5;245m/1020hp"), "{ansi:?}");
-    let missing = states()
+    let rows = cells(&draw(&st).ansi);
+    // The tank's name in the terminal's color, then the gauge by how
+    // full, red at 14 percent, its empty cells dim.
+    assert_eq!(runs(&rows[0]), "⟨39⟩Tester: ⟨31⟩██⟨90⟩░░░░░░░░");
+    // Your three numbers by how full, and the quiet gray of every label,
+    // max and tag.
+    assert_eq!(
+        runs(&rows[1]),
+        "⟨31⟩150⟨38;5;245⟩/1020hp⟨39⟩ ⟨31⟩90⟨38;5;245⟩/800mn⟨39⟩ \
+         ⟨33⟩610⟨38;5;245⟩/930mv⟨39⟩  ⟨38;5;245⟩[⟨39⟩S⟨38;5;245⟩]⟨39⟩  \
+         1,250⟨38;5;245⟩g⟨39⟩ "
+    );
+    // The gauge follows the tank's health, not yours.
+    let (st, _) = states()
         .into_iter()
-        .find(|(st, _)| st.name == "missing-1")
-        .expect("one affect missing")
-        .0;
-    let ansi = draw(&missing).ansi;
-    assert!(
-        ansi.contains("\x1b[38;5;245mmissing \x1b[33msanctuary"),
-        "{ansi:?}"
+        .find(|(st, _)| st.name == "group")
+        .expect("another tank");
+    let rows = cells(&draw(&st).ansi);
+    assert_eq!(runs(&rows[0]), "⟨39⟩Ally: ⟨32⟩████████⟨90⟩░░");
+    assert!(runs(&rows[1]).starts_with("⟨32⟩1020⟨38;5;245⟩/1020hp"));
+}
+
+#[test]
+fn low_health_turns_your_health_red_and_nothing_else() {
+    let (st, want) = states()
+        .into_iter()
+        .find(|(st, _)| st.name == "low")
+        .expect("low health");
+    let drawn = draw(&st);
+    assert_eq!(drawn.plain, want);
+    let rows = cells(&drawn.ansi);
+    assert_eq!(
+        runs(&rows[0]),
+        "⟨31⟩180⟨38;5;245⟩/1020hp⟨39⟩ ⟨32⟩800⟨38;5;245⟩/800mn⟨39⟩ \
+         ⟨32⟩930⟨38;5;245⟩/930mv⟨39⟩  ⟨38;5;245⟩[⟨39⟩S⟨38;5;245⟩]⟨39⟩  \
+         1,250⟨38;5;245⟩g⟨39⟩ "
     );
 }
 
 #[test]
-fn the_fight_row_holds_still_as_the_fight_goes() {
+fn lament_hides_every_value_and_dots_the_gauge() {
+    let (st, want) = states()
+        .into_iter()
+        .find(|(st, _)| st.name == "lament-fight")
+        .expect("lamented tears in a fight");
+    let drawn = draw(&st);
+    assert_eq!(drawn.plain, want);
+    let rows = cells(&drawn.ansi);
+    // Each hidden value is the engine's dim mark, and the gauge is
+    // dotted, as the Detailed preset draws them.
+    assert_eq!(runs(&rows[0]), "⟨39⟩Tester: ⟨90⟩··········");
+    assert_eq!(
+        runs(&rows[1]),
+        "⟨90⟩?⟨38;5;245⟩/⟨90⟩?⟨38;5;245⟩hp⟨39⟩ ⟨90⟩?⟨38;5;245⟩/⟨90⟩?⟨38;5;245⟩mn⟨39⟩ \
+         ⟨90⟩?⟨38;5;245⟩/⟨90⟩?⟨38;5;245⟩mv⟨39⟩  ⟨38;5;245⟩[⟨39⟩S⟨38;5;245⟩]⟨39⟩  \
+         1,250⟨38;5;245⟩g⟨39⟩ "
+    );
+    // Nothing turns yellow or red while the values stay hidden.
+    for cell in rows.iter().flatten() {
+        assert!(!matches!(cell.fg.as_str(), "31" | "32" | "33"), "{cell:?}");
+    }
+}
+
+#[test]
+fn the_tank_row_is_the_name_a_colon_and_a_ten_cell_gauge() {
     let mut rows = Vec::new();
-    for opp_pct in [100, 95, 60, 22, 9, 0] {
-        for hit in [1020, 765, 150, 9] {
-            let st = St {
-                hit,
-                opp_pct,
-                ..St::new("fight")
+    for tank in [("Tester", 1020), ("Ally", 1000), ("Tarvik", 640)] {
+        for hit in [1020, 765, 500, 150, 9, 0] {
+            for build in [Build::New, Build::Older] {
+                let st = St {
+                    hit: if tank.0 == "Tester" { hit } else { 1020 },
+                    build,
+                    ..St::new("fight")
+                }
+                .fight((tank.0, hit.min(tank.1), tank.1));
+                rows.push((tank.0, draw(&st).plain));
             }
-            .fight(("Tester", hit, 1020));
-            rows.push(draw(&st).plain);
         }
     }
     let lament = St {
@@ -895,26 +1050,113 @@ fn the_fight_row_holds_still_as_the_fight_goes() {
         ..St::new("lament-fight")
     }
     .fight(("Tester", 765, 1020));
-    rows.push(draw(&lament).plain);
-    let name = OPPONENT.chars().count();
-    for row in &rows {
-        let fight: Vec<char> = row.lines().next().expect("a fight row").chars().collect();
-        // The name, then a ten cell gauge one cell after it, then the
-        // percent one cell after that, in every round.
-        let opponent: String = fight[..name].iter().collect();
-        assert_eq!(opponent, OPPONENT, "{row}");
-        assert_eq!(fight[name], ' ', "{row}");
+    rows.push(("Tester", draw(&lament).plain));
+    for (tank, drawn) in &rows {
+        let row: Vec<char> = drawn.lines().next().expect("a tank row").chars().collect();
+        let name = tank.chars().count();
+        let shown: String = row[..name].iter().collect();
+        assert_eq!(shown, *tank, "{drawn}");
+        assert_eq!(row[name..name + 2], [':', ' '], "{drawn}");
+        // Ten cells, and nothing after them.
+        assert_eq!(row.len(), name + 12, "{drawn}");
         assert!(
-            fight[name + 1..name + 11]
-                .iter()
-                .all(|c| matches!(c, '█' | '░' | '·')),
-            "{row}"
+            row[name + 2..].iter().all(|c| matches!(c, '█' | '░' | '·')),
+            "{drawn}"
         );
-        assert_eq!(fight[name + 11], ' ', "{row}");
-        assert!(
-            fight[name + 12].is_ascii_digit() || fight[name + 12] == '?',
-            "{row}"
-        );
+    }
+}
+
+/// The gallery mockup's design, the template its pinned band was drawn
+/// with (`SCR/gallery/harness/template.txt`).
+const MOCKUP: &str = "%{if:fight}%opponent %{opponent_hp:bar:10} %{opponent_hp:pct}%% %{c:245}%opponent_cond%c_default%{if:group_size}%{if:tank}  %{c:245}tank %c_tank_hp%tank%c_default%{end}%{end}%nl%{end}%c_hp%hp%{c:245}/%{maxhp}hp%c_default %c_mana%mana%{c:245}/%{maxmana}mn%c_default %c_move%move%{c:245}/%{maxmove}mv%c_default%{if:pos}  %{c:245}%pos%c_default%{end}%{if:lang}%{ifnot:pos} %{end} %{c:245}%lang%c_default%{end}%{if:exits}  %{c:245}[%c_default%exits%{c:245}]%c_default%{end}%{if:gold}  %{gold:grouped}%{c:245}g%c_default%{end}%{ifnot:fight}%{if:wizi}  %{c:245}wizi %wizi%c_default%{end}%{if:incog}%{ifnot:wizi} %{end} %{c:245}incog %incog%c_default%{end}%{end}%{if:missing}  %{c:245}missing %c_yellow%{missing:names}%c_default%{end} ";
+
+/// The PROMPT the gallery's healer kept, hour and moons, which sends no
+/// position or language.
+const GALLERY_PROMPT: &str = "%n%P%C`(101)%t [%j1 %j2 %j3]`` ";
+
+/// The hero shot: you tank the dragon at 88 percent in a group of two,
+/// and the dragon is at 58 percent. The gallery sent no Char.State.
+fn hero() -> St {
+    St {
+        hit: 864,
+        max_hit: 982,
+        mana: 522,
+        max_mana: 1199,
+        moves: 636,
+        max_move: 636,
+        gold: 45_000,
+        opponent: "The Ancient Gold Dragon",
+        opp_pct: 58,
+        group: vec![("Thalrin", 54, 100)],
+        ..St::new("hero")
+    }
+    .fight(("Tester", 864, 982))
+}
+
+fn no_state(package: &str) -> bool {
+    package != "Char.State"
+}
+
+#[test]
+fn the_band_mirrors_the_gallery_mockup() {
+    let st = hero();
+    let drawn = draw_with(DEFAULT_DESIGN, GALLERY_PROMPT, &st, no_state);
+    assert_eq!(
+        drawn.plain,
+        "Tester: █████████░\n864/982hp 522/1199mn 636/636mv  [S]  45,000g "
+    );
+    assert_clean("hero", &drawn);
+    let mockup = draw_with(MOCKUP, GALLERY_PROMPT, &st, no_state);
+    assert_eq!(
+        mockup.plain,
+        "The Ancient Gold Dragon ██████░░░░ 58% quite a few wounds  tank Tester\n\
+         864/982hp 522/1199mn 636/636mv  [S]  45,000g "
+    );
+    let ours = cells(&drawn.ansi);
+    let theirs = cells(&mockup.ansi);
+    // The vitals row matches the mockup cell for cell and color for
+    // color: 864 and 636 green, 522 yellow, every max and label gray.
+    assert_eq!(ours[1], theirs[1]);
+    assert_eq!(
+        runs(&ours[1]),
+        "⟨32⟩864⟨38;5;245⟩/982hp⟨39⟩ ⟨33⟩522⟨38;5;245⟩/1199mn⟨39⟩ \
+         ⟨32⟩636⟨38;5;245⟩/636mv⟨39⟩  ⟨38;5;245⟩[⟨39⟩S⟨38;5;245⟩]⟨39⟩  \
+         45,000⟨38;5;245⟩g⟨39⟩ "
+    );
+    // Out of a fight the vitals row is all there is, the same row.
+    let calm = St {
+        fighting: false,
+        position: 9,
+        tank: None,
+        ..hero()
+    };
+    let drawn = draw_with(DEFAULT_DESIGN, GALLERY_PROMPT, &calm, no_state);
+    let mockup = draw_with(MOCKUP, GALLERY_PROMPT, &calm, no_state);
+    assert_eq!(drawn.plain, "864/982hp 522/1199mn 636/636mv  [S]  45,000g ");
+    assert_eq!(cells(&drawn.ansi), cells(&mockup.ansi));
+}
+
+#[test]
+fn the_tank_gauge_draws_as_the_mockup_drew_the_dragon() {
+    // With the tank's health equal to the dragon's, the tank's gauge
+    // holds the cells and colors the mockup gave the dragon's. A PROMPT
+    // with no %P leaves the tank's health to Char.Combat, which sends
+    // the same whole percent it sends for the dragon.
+    let prompt = "[%h/%Hhp %m/%Mmn %v/%Vmv] ";
+    for pct in [100, 88, 66, 58, 41, 33, 22, 5, 0] {
+        let st = St {
+            opp_pct: pct,
+            opponent: "The Ancient Gold Dragon",
+            ..St::new("gauge")
+        }
+        .fight(("Ally", pct, 100));
+        let ours = draw_with(DEFAULT_DESIGN, prompt, &st, no_state);
+        let theirs = draw_with(MOCKUP, prompt, &st, no_state);
+        assert_clean("gauge", &ours);
+        let (ours, theirs) = (cells(&ours.ansi), cells(&theirs.ansi));
+        let dragon = "The Ancient Gold Dragon ".chars().count();
+        assert_eq!(ours[0].len(), "Ally: ".len() + 10, "{pct}");
+        assert_eq!(ours[0][6..], theirs[0][dragon..dragon + 10], "{pct}");
     }
 }
 
@@ -970,6 +1212,34 @@ fn a_prompt_with_no_max_draws_each_value_alone() {
     let drawn = draw_with(DEFAULT_DESIGN, "%hhp> ", &st, no_vitals);
     assert_eq!(drawn.plain, "1020hp  1,250g ");
     assert_clean("health alone", &drawn);
+}
+
+#[test]
+fn a_tank_line_with_no_health_draws_the_name_alone() {
+    // On the older build Char.Combat names no tank, and this PROMPT
+    // prints the tank's name with no %p or %P, so Vosh never learns the
+    // tank's health.
+    let st = St {
+        build: Build::Older,
+        ..St::new("name-only")
+    }
+    .fight(("Ally", 781, 1000));
+    let drawn = draw_with(
+        DEFAULT_DESIGN,
+        "%n%C[%h/%Hhp %m/%Mmn %v/%Vmv] ",
+        &st,
+        |_| true,
+    );
+    assert_eq!(
+        drawn.plain,
+        "Ally:\n1020/1020hp 800/800mn 930/930mv  1,250g "
+    );
+    assert_clean("name only", &drawn);
+
+    // With no tank line at all, the fight draws your vitals alone.
+    let drawn = draw_with(DEFAULT_DESIGN, "[%h/%Hhp %m/%Mmn %v/%Vmv] ", &st, |_| true);
+    assert_eq!(drawn.plain, "1020/1020hp 800/800mn 930/930mv  1,250g ");
+    assert_clean("no tank", &drawn);
 }
 
 #[test]

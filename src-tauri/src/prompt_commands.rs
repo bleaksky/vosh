@@ -91,8 +91,8 @@ pub(crate) struct PromptDesign {
 /// The designs every other profile holds, read from their files, each
 /// with a template that is not empty. These are designs you made, so a
 /// template equal to Vosh's default design, [`vosh_prompt::DEFAULT_DESIGN`],
-/// is left out, as a profile that never saved a file holds it and At a
-/// glance already offers it. A file Vosh cannot read is left out.
+/// is left out, as a profile that never saved a file holds it and the
+/// start list already offers it. A file Vosh cannot read is left out.
 #[tauri::command]
 pub(crate) async fn prompt_designs_list(
     state: State<'_, SharedState>,
