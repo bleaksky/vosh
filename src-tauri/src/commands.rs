@@ -1761,6 +1761,23 @@ pub(crate) fn terminal_cursor() -> Option<()> {
     None
 }
 
+/// The native grid's live screen as text, row by row, so the prompt card
+/// can find the line the game sent while the profile reads no prompt and
+/// no row is open. Null before the grid exists. xterm reads its own
+/// buffer instead.
+#[cfg(native_surface)]
+#[tauri::command]
+pub(crate) fn terminal_screen_rows() -> Option<crate::term_grid::ScreenRows> {
+    crate::term_grid::screen_rows()
+}
+
+/// No native grid on this build, so there is nothing to read.
+#[cfg(not(native_surface))]
+#[tauri::command]
+pub(crate) fn terminal_screen_rows() -> Option<()> {
+    None
+}
+
 /// Tier 3 native renderer (macOS): search the grid and step to the next (or
 /// previous) match, scrolling it into view and highlighting all matches.
 /// Returns `[current, total]` (1-based; `[0, 0]` when no match). A no-op

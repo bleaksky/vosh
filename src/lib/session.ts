@@ -1520,6 +1520,21 @@ export async function terminalCursor(): Promise<TerminalCursor | null> {
   return invoke('terminal_cursor');
 }
 
+/** The native grid's live screen as text: each row with trailing blanks
+ *  gone, its width, and whether it shows the live tail. */
+export interface TerminalScreenRows {
+  rows: string[];
+  cols: number;
+  at_bottom: boolean;
+}
+
+/** The native grid's live screen as text, for the prompt card's marks
+ *  while the profile reads no prompt. Null before the grid exists and on
+ *  a build without it. xterm reads its own buffer instead. */
+export async function terminalScreenRows(): Promise<TerminalScreenRows | null> {
+  return invoke('terminal_screen_rows');
+}
+
 export async function onState(cb: (state: StatePayload) => void): Promise<UnlistenFn> {
   return listen<StatePayload>('session://state', (event) => {
     cb(event.payload);

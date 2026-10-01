@@ -20,6 +20,7 @@ import {
   onOutput,
   setWindowSize,
   terminalCursor,
+  terminalScreenRows,
   terminalLocalWrite,
 } from '../lib/session';
 import { findTheme } from '../lib/themes';
@@ -187,6 +188,11 @@ export interface TerminalHandle {
    *  xterm from its own marker. Null while no region is open. The prompt
    *  card lays your prompt out from it to map a pointer to a piece. */
   promptRegion: () => Promise<RegionOnScreen | null>;
+  /** The screen's rows as text from its top, each with trailing blanks
+   *  gone, as the renderer in use holds them, with its width and whether
+   *  it shows the live tail. The prompt card finds the game's own line in
+   *  them while the profile reads no prompt. Null before it has a size. */
+  screenRows: () => Promise<{ rows: string[]; cols: number; atBottom: boolean } | null>;
   /** The screen cell under a point in client px, on the grid the
    *  renderer in use draws, or null outside it. */
   cellAt: (clientX: number, clientY: number) => ScreenCell | null;
@@ -1223,6 +1229,20 @@ export function Terminal({
           return regionFromCursor(await terminalCursor().catch(() => null));
         }
         return regionFromXterm(writer.region(), term.buffer.active, term.cols);
+      },
+      screenRows: async () => {
+        if (!quietRef.current && nativeSurfaceEnabled()) {
+          const screen = await terminalScreenRows().catch(() => null);
+          return screen
+            ? { rows: screen.rows, cols: screen.cols, atBottom: screen.at_bottom }
+            : null;
+        }
+        const buffer = term.buffer.active;
+        const rows = Array.from(
+          { length: term.rows },
+          (_, row) => buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? '',
+        );
+        return { rows, cols: term.cols, atBottom: buffer.viewportY === buffer.baseY };
       },
       cellAt: (clientX, clientY) => {
         const dpr = window.devicePixelRatio || 1;
