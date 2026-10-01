@@ -430,6 +430,47 @@ fn the_open_row_stays_open_across_a_resize_while_the_card_is_open() {
 }
 
 #[test]
+fn a_new_height_leaves_the_open_row_open_with_the_card_closed() {
+    for show in [PromptShow::Text, PromptShow::Lifted] {
+        let label = format!("{show:?}");
+        let mut session = Session::new(showing(profile(CODES, HP, true), show));
+        let mut negotiator = vosh_telnet::Negotiator::new();
+        negotiator.set_window_size(80, 40);
+        let mut grid = crate::term_grid::TermGrid::new(80, 40);
+        let quiet = session.read(&wire_fixture("quiet"));
+        let _ = grid_after(&mut grid, [&quiet.out]);
+
+        // Your prompt leaves the band for the text and the terminal
+        // grows, then a panel shortens it, all with the card closed. The
+        // width stays, so nothing wraps again and a design change still
+        // repaints the row in place on the native grid.
+        for (rows, template, drawn) in [(44, "[%hp]", "[1020]"), (30, "{%hp}", "{1020}")] {
+            window_size_step(&mut session.p, &mut negotiator, 80, rows, false);
+            grid.resize(80, usize::from(rows));
+            assert!(
+                session.p.prompt.stage.open_row().is_some(),
+                "{label} {rows}"
+            );
+            let mut config = session.p.prompt.config().clone();
+            config.template = template.into();
+            session.p.set_prompt_config(config);
+            let edited = session.repaint();
+            let screen = grid_after(&mut grid, [&edited]);
+            assert_eq!(
+                screen.last().map(String::as_str),
+                Some(drawn),
+                "{label} {rows}"
+            );
+            assert_eq!(
+                screen.iter().filter(|row| row.contains("1020")).count(),
+                1,
+                "{label} {rows} {screen:#?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn the_live_render_comes_back_when_the_connection_ends_during_a_preview() {
     let now = Instant::now();
     for show in [PromptShow::Text, PromptShow::Lifted, PromptShow::Pinned] {
