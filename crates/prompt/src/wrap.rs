@@ -7,6 +7,73 @@
 //! width, the trailing partial line wraps and emits at once, and escape
 //! sequences take no width.
 
+/// The cells `c` takes as the webview lays a prompt out (`sgrCells.ts`
+/// and `promptPointer.ts`): none for a combining mark, which joins the
+/// cell before it, two for a wide character, and one for any other. The
+/// spans of a render count columns this way, so a span's width times the
+/// cell width is the piece on screen.
+pub fn cell_width(c: char) -> usize {
+    if c.is_ascii() {
+        1
+    } else if is_mark(c) {
+        0
+    } else if is_wide(c) {
+        2
+    } else {
+        1
+    }
+}
+
+/// True for a character that takes two columns: CJK, Hangul, fullwidth
+/// forms and pictographs, as a Unicode 11 terminal counts them. The same
+/// ranges as `isWide` in `sgrCells.ts`.
+fn is_wide(c: char) -> bool {
+    matches!(
+        u32::from(c),
+        0x1100..=0x115f
+            | 0x2e80..=0x303e
+            | 0x3041..=0x33ff
+            | 0x3400..=0x4dbf
+            | 0x4e00..=0x9fff
+            | 0xa000..=0xa4cf
+            | 0xac00..=0xd7a3
+            | 0xf900..=0xfaff
+            | 0xfe30..=0xfe4f
+            | 0xff00..=0xff60
+            | 0xffe0..=0xffe6
+            | 0x1f300..=0x1f64f
+            | 0x1f900..=0x1f9ff
+            | 0x20000..=0x3fffd
+    )
+}
+
+/// True for a combining mark, Unicode's `\p{M}`, as the webview tests it.
+fn is_mark(c: char) -> bool {
+    static MARKS: std::sync::OnceLock<Vec<(char, char)>> = std::sync::OnceLock::new();
+    let marks = MARKS.get_or_init(|| {
+        use regex_syntax::hir::{Class, Hir, HirKind};
+        match regex_syntax::parse(r"\p{M}").map(Hir::into_kind) {
+            Ok(HirKind::Class(Class::Unicode(class))) => class
+                .ranges()
+                .iter()
+                .map(|r| (r.start(), r.end()))
+                .collect(),
+            _ => Vec::new(),
+        }
+    });
+    marks
+        .binary_search_by(|&(start, end)| {
+            if end < c {
+                std::cmp::Ordering::Less
+            } else if start > c {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        })
+        .is_ok()
+}
+
 /// Word wrap a chunk of terminal text at `cols`. Complete lines (any `\r`
 /// or `\n` terminator) wrap in place, and the trailing partial line wraps
 /// and emits at once.

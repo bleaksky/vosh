@@ -70,6 +70,20 @@ export function isWide(code: number): boolean {
   );
 }
 
+/** True for a combining mark, which joins the cell before it. */
+export function isMark(glyph: string): boolean {
+  return /\p{M}/u.test(glyph);
+}
+
+/** The cells code point `code` takes in a row: none for a combining mark,
+ *  two for a wide character, one for any other. The spans of a rendered
+ *  prompt count columns the same way (`vosh_prompt::wrap::cell_width`). */
+export function cellWidth(code: number): 0 | 1 | 2 {
+  if (code < 0x80) return 1;
+  if (isMark(String.fromCodePoint(code))) return 0;
+  return isWide(code) ? 2 : 1;
+}
+
 /** Read an extended color after 38, 48 or 58: `5;n` or `2;r;g;b`, with
  *  semicolons or colons. Returns the color and how many parameters it
  *  took after the 38. */
@@ -268,7 +282,7 @@ export function parseSgrCells(text: string): Cell[][] {
     i += glyph.length;
     if (code < 0x20 || code === 0x7f) continue;
     // A combining mark joins the cell before it.
-    if (/\p{M}/u.test(glyph)) {
+    if (isMark(glyph)) {
       const cells = row();
       const last = cells[col - 1];
       if (last) last.ch += glyph;

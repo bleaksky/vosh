@@ -912,3 +912,24 @@ fn raw_draws_the_game_prompt_and_restores_the_look_after_it() {
     let bang = out.spans.last().expect("a span for the text");
     assert!(bang.italic);
 }
+
+#[test]
+fn spans_count_cells_as_the_webview_lays_them_out() {
+    // A wide character takes two cells and a combining mark none, as
+    // sgrCells.ts counts them, so a span's width times the cell width is
+    // the piece on screen.
+    let values = vitals(1020, 800, 930);
+    let out = draw("%hp \u{65e5}\u{672c} e\u{301} %mana", &values);
+    assert_eq!(out.plain, "1020 \u{65e5}\u{672c} e\u{301} 800");
+    let cols: Vec<(usize, usize, usize)> = out
+        .spans
+        .iter()
+        .map(|s| (s.piece, s.col, s.width))
+        .collect();
+    assert_eq!(cols, vec![(0, 0, 4), (1, 4, 8), (2, 12, 3)]);
+    assert_eq!(vosh_prompt::wrap::cell_width('a'), 1);
+    assert_eq!(vosh_prompt::wrap::cell_width('\u{65e5}'), 2);
+    assert_eq!(vosh_prompt::wrap::cell_width('\u{301}'), 0);
+    assert_eq!(vosh_prompt::wrap::cell_width('\u{2588}'), 1);
+    assert_eq!(vosh_prompt::wrap::cell_width('\u{1f600}'), 2);
+}
