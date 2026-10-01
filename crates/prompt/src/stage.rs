@@ -185,7 +185,8 @@ pub struct Output {
     /// would have held is still where the next thing lands once this
     /// output is written, so each renderer drops the line end that would
     /// end it (see [`close_pin_row`]). None in the text and lifted, where
-    /// renderers keep every byte.
+    /// renderers keep every byte, and on a repaint of the band alone,
+    /// which leaves the row as each renderer has it.
     pub pin_row: Option<bool>,
     /// The row a prompt this output pinned left is still open, so the
     /// line end the next write would end it with writes nothing.
@@ -1790,9 +1791,17 @@ impl Stage {
     /// the live render as its restore while it shows anything else, so a
     /// renderer writes the live render back before anything lands after
     /// it. The band shows the preview with no restore.
+    ///
+    /// A repaint of the band alone writes nothing to the text, so it says
+    /// nothing about the pinned prompt's row. Your echo can close that row
+    /// in a renderer before the session hears of it, and a repaint that
+    /// went out in between would open it again there.
     pub fn repaint_view(&mut self, out: &mut Output, view: View) {
+        let band_only = self.shown_as == PromptShow::Pinned && self.show == PromptShow::Pinned;
         self.repaint_row(out, view);
-        self.seal(out);
+        if !band_only {
+            self.seal(out);
+        }
         self.note_sent(out);
     }
 
@@ -3564,6 +3573,30 @@ mod tests {
         let mut again = Output::new(false);
         text.repaint(&mut again, Some("NEW"));
         assert_eq!(again.pin_row, None);
+    }
+
+    #[test]
+    fn a_repaint_of_the_band_alone_says_nothing_about_the_row() {
+        // A renderer can close the row with your echo before the session
+        // hears of it, so a repaint that only changes the band leaves the
+        // row as each renderer has it.
+        let mut stage = pinned_stage();
+        let mut out = Output::new(false);
+        out.text(b"room\r\n\r\n");
+        pin_prompt(&mut stage, &mut out);
+        stage.finish(&mut out);
+        assert_eq!(out.pin_row, Some(true));
+        let mut band = Output::new(false);
+        stage.repaint(&mut band, Some("NEW"));
+        assert!(band.pin.is_some(), "the band repaints");
+        assert!(band.bytes.is_empty() && band.replace.is_none());
+        assert_eq!(band.pin_row, None);
+        // The row is still open for the next output that writes.
+        let mut next = Output::new(false);
+        stage.line(&mut next, b"", "", None, b"\r\n");
+        stage.finish(&mut next);
+        assert_eq!(next.bytes, b"");
+        assert_eq!(next.pin_row, Some(true));
     }
 
     /// A stage whose capture settles, pinning your prompt.
