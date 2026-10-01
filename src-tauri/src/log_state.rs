@@ -29,6 +29,11 @@ impl Scrollback {
         self.lines.push_back(raw_line);
     }
 
+    /// The kept lines, oldest first, colors included.
+    pub(crate) fn lines(&self) -> impl Iterator<Item = &[u8]> {
+        self.lines.iter().map(Vec::as_slice)
+    }
+
     /// Concatenate the buffered lines into one byte stream suitable for
     /// writing to disk or replaying into the terminal. Each line is
     /// separated by `\r\n`.

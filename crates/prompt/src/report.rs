@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::aabahran::lex::{self, Token as GameToken};
 use crate::aabahran::{self, Origin, ShapeKind, Which, Who};
 use crate::capture;
-use crate::config::RegexCapture;
+use crate::config::{CaptureConfig, RegexCapture};
 use crate::presets::{self, Preset};
 
 /// What `prompt_compile` reads.
@@ -251,6 +251,33 @@ fn shape_label(kind: ShapeKind, which: Which) -> &'static str {
     }
 }
 
+/// The one pattern a regex capture reads your prompt with, or why Vosh
+/// cannot read with it.
+fn one_pattern(lines: &[String]) -> Result<&String, String> {
+    let [pattern] = lines else {
+        return Err("Vosh reads your prompt from one line.".to_string());
+    };
+    if pattern.is_empty() || regex::Regex::new(pattern).is_err() {
+        return Err("Vosh cannot read that pattern.".to_string());
+    }
+    Ok(pattern)
+}
+
+/// Check a capture a `[prompt]` table holds before it is saved: the
+/// codes compile for `who`, or the pattern reads. The error is the
+/// sentence the card shows.
+pub fn check_capture(capture: &CaptureConfig, who: Who) -> Result<(), String> {
+    match capture {
+        CaptureConfig::None => Ok(()),
+        CaptureConfig::Aabahran(codes) => {
+            aabahran::compile(&codes.prompt, &codes.fprompt, Origin::Stored, who)
+                .map(|_| ())
+                .map_err(|e| e.text)
+        }
+        CaptureConfig::Regex(capture) => one_pattern(&capture.lines).map(|_| ()),
+    }
+}
+
 fn regex_report(
     lines: &[String],
     names: &BTreeMap<String, String>,
@@ -271,12 +298,10 @@ fn regex_report(
         warnings: Vec::new(),
         presets: presets::other(supplied),
     };
-    let [pattern] = lines else {
-        return fail("Vosh reads your prompt from one line.");
+    let pattern = match one_pattern(lines) {
+        Ok(pattern) => pattern,
+        Err(message) => return fail(&message),
     };
-    if pattern.is_empty() || regex::Regex::new(pattern).is_err() {
-        return fail("Vosh cannot read that pattern.");
-    }
     let capture = RegexCapture {
         lines: vec![pattern.clone()],
         settle: capture::settle(pattern),

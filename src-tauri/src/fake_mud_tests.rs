@@ -23,13 +23,15 @@ use crate::commands::{AppState, SharedState};
 use crate::profile_set::{AutoMatch, ProfileSet, DEFAULT_PROFILE_NAME};
 
 /// The events the tests read, as the webview would hear them.
-const EVENTS: [&str; 6] = [
+const EVENTS: [&str; 8] = [
     "session://output",
     "session://game-prompt-seen",
     "session://prompt-status",
+    "session://prompt-state",
     "session://hidden",
     "session://state",
     crate::affect_full::AFFECT_FULL_CHANGED_EVENT,
+    crate::list_events::PROMPT_CONFIG_CHANGED,
 ];
 
 /// What the prompts off status says in `#prompt`.
@@ -433,6 +435,89 @@ fn base64_decodes_what_the_session_encodes() {
             sample
         );
     }
+}
+
+// The guard keeps other tests off the shared native grid, which every
+// session output also feeds. No task of the session takes it.
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_card_watches_your_prompt_and_an_edit_repaints_it() {
+    let grid = crate::term_grid::lock_shared_grid_for_test();
+    let h = Harness::new(Options::new(Build::New)).await;
+    h.set_prompt(codes(PROMPT)).await;
+    h.state.note_active_profile(DEFAULT_PROFILE_NAME);
+    crate::prompt_commands::prompt_watch(h.app.state(), true);
+    h.connect().await;
+
+    // While the card watches, the state follows each prompt, with the
+    // pieces of the drawn design in the open row.
+    h.until_last_row("<1020>").await;
+    h.until("a prompt state", |h| {
+        h.events("session://prompt-state")
+            .last()
+            .is_some_and(|s| !s["open_row"].is_null())
+    })
+    .await;
+    let state = h
+        .events("session://prompt-state")
+        .pop()
+        .expect("the prompt state");
+    assert_eq!(state["new_build"], true);
+    assert_eq!(state["status"]["status"], "matching");
+    let spans: Vec<(i64, i64, i64)> = state["open_row"]["spans"]
+        .as_array()
+        .expect("spans")
+        .iter()
+        .map(|s| {
+            (
+                s["piece"].as_i64().unwrap(),
+                s["col"].as_i64().unwrap(),
+                s["width"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(spans, [(0, 0, 1), (1, 1, 4), (2, 5, 1)]);
+    let hp = state["catalog"]
+        .as_array()
+        .expect("the catalog")
+        .iter()
+        .find(|f| f["name"] == "hp")
+        .expect("hp");
+    assert_eq!(hp["state"], "value");
+    assert_eq!(hp["in_prompt"], true);
+
+    // The card edits the design and saves it, and the open row repaints
+    // at once. Every window hears which profile's table changed.
+    let op: vosh_prompt::edit::EditOp = serde_json::from_value(serde_json::json!({
+        "op": "insert_field",
+        "at": 3,
+        "field": "mana",
+    }))
+    .expect("an op");
+    let edited = crate::prompt_commands::edit(&*h.state.profile.lock().await, "<%hp>", &op)
+        .expect("the edit");
+    assert_eq!(edited.template, "<%hp>%mana");
+    let config = vosh_prompt::PromptConfig {
+        template: edited.template,
+        ..h.prompt_table().await
+    };
+    crate::prompt_commands::prompt_config_set(h.app.handle().clone(), h.app.state(), config)
+        .await
+        .expect("the table saves");
+    h.until_last_row("<1020>800").await;
+    assert_eq!(
+        h.events(crate::list_events::PROMPT_CONFIG_CHANGED),
+        [serde_json::json!({"profile": DEFAULT_PROFILE_NAME})]
+    );
+
+    // Once the card stops watching, no state follows the prompts.
+    crate::prompt_commands::prompt_watch(h.app.state(), false);
+    let watched = h.events("session://prompt-state").len();
+    h.type_line("pulses 2").await;
+    h.until_shown("Pulse 2 of 2.").await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(h.events("session://prompt-state").len(), watched);
+    h.finish(grid).await;
 }
 
 // The guard keeps other tests off the shared native grid, which every

@@ -104,7 +104,7 @@ fn apply_global_dock(set: &ProfileSet, ui: &mut UiConfig) {
 
 /// Load `name`'s file, or for a profile that never saved one what a
 /// switch to it loads, see [`ProfileConfig::fresh`].
-fn load_profile_file(set: &ProfileSet, name: &str) -> Result<ProfileConfig, String> {
+pub(crate) fn load_profile_file(set: &ProfileSet, name: &str) -> Result<ProfileConfig, String> {
     let path = set.profile_path(name);
     if !path.exists() {
         return Ok(ProfileConfig::fresh());

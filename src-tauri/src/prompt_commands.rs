@@ -1,0 +1,541 @@
+//! The prompt editor's commands (section 6 of the build spec): the active
+//! profile's `[prompt]` table, the designs other profiles hold, what a
+//! capture compiles to, the candidates ring and the capture check, renders
+//! with live or sample values and preview overrides, the edits the card
+//! makes, and the state the card watches.
+//!
+//! Every command reads or writes the live profile under its lock and lets
+//! go before it emits anything. A change to the table repaints the open
+//! row through the session task, since only that task writes session
+//! output, and every window hears `vosh://prompt-config-changed`.
+
+use std::sync::atomic::Ordering;
+
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, State};
+use tokio::time::Instant;
+use vosh_prompt::candidates::{CandidateGroup, CaptureCheck};
+use vosh_prompt::capture::Recognizer;
+use vosh_prompt::config::PREVIOUS_TEMPLATES;
+use vosh_prompt::edit::EditOp;
+use vosh_prompt::overrides::{Overridden, Overrides};
+use vosh_prompt::report::{CompileReport, CompileRequest};
+use vosh_prompt::state::PromptState;
+use vosh_prompt::vars::Samples;
+use vosh_prompt::{
+    CaptureConfig, FieldRef, PromptConfig, RenderOptions, Rendered, Resolved, Template, Values,
+};
+
+use crate::commands::{mark_profile_dirty, SharedState, PERSIST_LOCK, PROFILES_NOT_LOADED};
+use crate::list_events::broadcast_prompt_config_changed;
+use crate::profile::Profile;
+
+/// The active profile's `[prompt]` table.
+#[tauri::command]
+pub(crate) async fn prompt_config_get(
+    state: State<'_, SharedState>,
+) -> Result<PromptConfig, String> {
+    Ok(state.profile.lock().await.prompt.config().clone())
+}
+
+/// Take a `[prompt]` table for the active profile. A capture that does not
+/// compile changes nothing, and the error says why in a sentence. A table
+/// that changes anything saves shortly, repaints the open row and tells
+/// every window.
+#[tauri::command]
+pub(crate) async fn prompt_config_set<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, SharedState>,
+    config: PromptConfig,
+) -> Result<(), String> {
+    let changed = set_config(&mut *state.profile.lock().await, config)?;
+    if changed {
+        mark_profile_dirty(&app);
+        request_repaint(state.inner()).await;
+        broadcast_prompt_config_changed(&app);
+    }
+    Ok(())
+}
+
+/// The body of [`prompt_config_set`]: check and take the table. Returns
+/// whether it changed anything.
+pub(crate) fn set_config(p: &mut Profile, mut config: PromptConfig) -> Result<bool, String> {
+    vosh_prompt::report::check_capture(&config.capture, p.prompt.who())?;
+    config.previous_templates.truncate(PREVIOUS_TEMPLATES);
+    let before = p.prompt.revision();
+    p.set_prompt_config(config);
+    Ok(p.prompt.revision() != before)
+}
+
+/// Ask the session to repaint the open row as the table now says.
+async fn request_repaint(state: &SharedState) {
+    if let Some(handle) = state.session.lock().await.as_ref() {
+        let _ = handle.prompt_repaint();
+    }
+}
+
+/// A design another profile holds, for From another profile.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct PromptDesign {
+    pub profile: String,
+    pub display_name: String,
+    pub template: String,
+}
+
+/// The designs every other profile holds, read from their files, each
+/// with a template that is not empty. A file Vosh cannot read is left
+/// out.
+#[tauri::command]
+pub(crate) async fn prompt_designs_list(
+    state: State<'_, SharedState>,
+) -> Result<Vec<PromptDesign>, String> {
+    designs(state.inner()).await
+}
+
+/// The body of [`prompt_designs_list`]. Holds [`PERSIST_LOCK`] so a
+/// switch cannot land between deciding which profile is live and reading
+/// the others.
+pub(crate) async fn designs(state: &SharedState) -> Result<Vec<PromptDesign>, String> {
+    let _persist_guard = PERSIST_LOCK.lock().await;
+    let guard = state.profile_set.lock().await;
+    let set = guard.as_ref().ok_or(PROFILES_NOT_LOADED)?;
+    let active = set.active_name().to_string();
+    let mut out = Vec::new();
+    for entry in set.list() {
+        if entry.name == active {
+            continue;
+        }
+        let Ok(config) = crate::characters::load_profile_file(set, &entry.name) else {
+            continue;
+        };
+        let template = config.prompt_config().template;
+        if template.is_empty() {
+            continue;
+        }
+        out.push(PromptDesign {
+            display_name: crate::profile_set::display_name(&entry.name),
+            profile: entry.name.clone(),
+            template,
+        });
+    }
+    Ok(out)
+}
+
+/// What a capture compiles to. It changes nothing.
+#[tauri::command]
+pub(crate) async fn prompt_compile(
+    state: State<'_, SharedState>,
+    capture: CompileRequest,
+) -> Result<CompileReport, String> {
+    Ok(compile(&*state.profile.lock().await, &capture))
+}
+
+/// The body of [`prompt_compile`]. Another game's presets read only the
+/// values whose packages came this session.
+pub(crate) fn compile(p: &Profile, request: &CompileRequest) -> CompileReport {
+    let gmcp = p.prompt.vars.gmcp();
+    let supplied = |name: &str| {
+        vosh_prompt::vars::entry(name)
+            .and_then(|e| e.package)
+            .is_some_and(|package| gmcp.has(package))
+    };
+    vosh_prompt::report::report(request, p.prompt.who(), &supplied)
+}
+
+/// The candidates ring grouped by shape, with counts.
+#[tauri::command]
+pub(crate) async fn prompt_candidates(
+    state: State<'_, SharedState>,
+) -> Result<Vec<CandidateGroup>, String> {
+    let p = state.profile.lock().await;
+    Ok(vosh_prompt::candidates::groups(p.prompt.stage.ring()))
+}
+
+/// How a capture matches the candidates ring and the lines in your
+/// scrollback.
+#[tauri::command]
+pub(crate) async fn prompt_capture_check(
+    state: State<'_, SharedState>,
+    capture: CaptureConfig,
+) -> Result<CaptureCheck, String> {
+    let (recognizer, ring) = {
+        let p = state.profile.lock().await;
+        let recognizer = Recognizer::compile_for(&capture, p.prompt.who());
+        let ring: Vec<vosh_prompt::stage::Candidate> = p.prompt.stage.ring().cloned().collect();
+        (recognizer, ring)
+    };
+    let lines: Vec<String> = {
+        let scrollback = state.scrollback.lock().await;
+        scrollback.lines().map(vosh_ansi::plain_text).collect()
+    };
+    Ok(vosh_prompt::candidates::check(
+        recognizer.as_ref(),
+        ring.iter(),
+        lines.iter().map(String::as_str),
+    ))
+}
+
+/// Which values a render draws.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum ValuesFrom {
+    /// The live values: the capture, scripts, GMCP and Vosh.
+    #[default]
+    Live,
+    /// The catalog's samples, for a preview with no live data.
+    Sample,
+}
+
+/// One render `prompt_render_many` draws.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub(crate) struct RenderRequest {
+    pub template: String,
+    #[serde(default)]
+    pub values: ValuesFrom,
+    #[serde(default)]
+    pub overrides: Option<Overrides>,
+    /// Draw each value with nothing to show as its label, as the open
+    /// card does (D4).
+    #[serde(default)]
+    pub placeholders: bool,
+}
+
+/// Draw a design with live or sample values, preview overrides on top.
+#[tauri::command]
+pub(crate) async fn prompt_render(
+    state: State<'_, SharedState>,
+    template: String,
+    values: Option<ValuesFrom>,
+    overrides: Option<Overrides>,
+    placeholders: Option<bool>,
+) -> Result<Rendered, String> {
+    let request = RenderRequest {
+        template,
+        values: values.unwrap_or_default(),
+        overrides,
+        placeholders: placeholders.unwrap_or(false),
+    };
+    Ok(render_all(&*state.profile.lock().await, std::slice::from_ref(&request)).remove(0))
+}
+
+/// Draw several designs at once, such as the start list.
+#[tauri::command]
+pub(crate) async fn prompt_render_many(
+    state: State<'_, SharedState>,
+    requests: Vec<RenderRequest>,
+) -> Result<Vec<Rendered>, String> {
+    Ok(render_all(&*state.profile.lock().await, &requests))
+}
+
+/// The body of [`prompt_render`] and [`prompt_render_many`].
+pub(crate) fn render_all(p: &Profile, requests: &[RenderRequest]) -> Vec<Rendered> {
+    let vosh = crate::session::prompt_supplies(p, Instant::now());
+    let live = p.prompt.vars.resolver(&vosh);
+    let now = chrono::Local::now().naive_local();
+    let samples = Samples { now };
+    requests
+        .iter()
+        .map(|request| {
+            let base: &dyn Values = match request.values {
+                ValuesFrom::Live => &live,
+                ValuesFrom::Sample => &samples,
+            };
+            let options = RenderOptions {
+                placeholders: request.placeholders,
+            };
+            let template = Template::parse(&request.template);
+            match request.overrides.as_ref().filter(|o| !o.is_empty()) {
+                Some(overrides) => {
+                    vosh_prompt::render(&template, &Overridden::new(base, overrides, now), options)
+                }
+                None => vosh_prompt::render(&template, base, options),
+            }
+        })
+        .collect()
+}
+
+/// A design after an edit, and how it draws with the live values and
+/// placeholders, as the open card shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct Edited {
+    pub template: String,
+    pub rendered: Rendered,
+}
+
+/// Apply one edit to a design. It writes nothing to the profile, so the
+/// card saves the result with `prompt_config_set`.
+#[tauri::command]
+pub(crate) async fn prompt_edit(
+    state: State<'_, SharedState>,
+    template: String,
+    op: EditOp,
+) -> Result<Edited, String> {
+    edit(&*state.profile.lock().await, &template, &op)
+}
+
+/// The body of [`prompt_edit`].
+pub(crate) fn edit(p: &Profile, template: &str, op: &EditOp) -> Result<Edited, String> {
+    let vosh = crate::session::prompt_supplies(p, Instant::now());
+    let live = p.prompt.vars.resolver(&vosh);
+    let known = |field: &FieldRef| !matches!(live.resolve(field), Resolved::Unknown);
+    let template = vosh_prompt::edit::apply(template, op, &known).map_err(|e| e.0)?;
+    let rendered = vosh_prompt::render_str(&template, &live, RenderOptions { placeholders: true });
+    Ok(Edited { template, rendered })
+}
+
+/// The catalog with each field's live state and source, the status, the
+/// new build sign and the open row with its spans.
+#[tauri::command]
+pub(crate) async fn prompt_state_get(state: State<'_, SharedState>) -> Result<PromptState, String> {
+    let p = state.profile.lock().await;
+    Ok(prompt_state(&p))
+}
+
+/// The body of [`prompt_state_get`], which `session://prompt-state`
+/// carries too.
+pub(crate) fn prompt_state(p: &Profile) -> PromptState {
+    p.prompt
+        .state(&crate::session::prompt_supplies(p, Instant::now()))
+}
+
+/// Watch your prompt: while on, `session://prompt-state` follows each
+/// prompt Vosh reads.
+#[tauri::command]
+pub(crate) fn prompt_watch(state: State<'_, SharedState>, on: bool) {
+    state.prompt_watch.store(on, Ordering::Release);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use serde_json::json;
+    use vosh_prompt::config::{AabahranCapture, RegexCapture};
+
+    use super::*;
+    use crate::commands::AppState;
+    use crate::profile_config::ProfileConfig;
+    use crate::profile_set::{ProfileSet, DEFAULT_PROFILE_NAME};
+
+    fn codes(prompt: &str) -> CaptureConfig {
+        CaptureConfig::Aabahran(AabahranCapture {
+            prompt: prompt.into(),
+            ..AabahranCapture::default()
+        })
+    }
+
+    #[test]
+    fn a_table_with_a_capture_that_does_not_compile_changes_nothing() {
+        let mut p = Profile::default();
+        let bad = PromptConfig {
+            capture: codes("<`%h> "),
+            ..PromptConfig::from_legacy(true, "%hp")
+        };
+        assert_eq!(
+            set_config(&mut p, bad),
+            Err("A color code runs into %h. Put a space between them in the game.".into())
+        );
+        assert!(p.prompt.config().is_default());
+        let pattern = PromptConfig {
+            capture: CaptureConfig::Regex(RegexCapture {
+                lines: vec![r"\[(?<hp>\d+".into()],
+                ..RegexCapture::default()
+            }),
+            ..PromptConfig::default()
+        };
+        assert_eq!(
+            set_config(&mut p, pattern),
+            Err("Vosh cannot read that pattern.".into())
+        );
+    }
+
+    #[test]
+    fn a_table_that_compiles_is_taken_with_two_earlier_designs_at_most() {
+        let mut p = Profile::default();
+        let config = PromptConfig {
+            previous_templates: vec!["a".into(), "b".into(), "c".into()],
+            capture: codes("<%hhp %mm> "),
+            ..PromptConfig::from_legacy(true, "%hp")
+        };
+        assert_eq!(set_config(&mut p, config.clone()), Ok(true));
+        assert_eq!(p.prompt.config().previous_templates, ["a", "b"]);
+        assert!(p.prompt.stage.has_recognizer());
+        // The [ui] copy follows, for Settings.
+        assert!(p.ui.prompt_template_enabled);
+        assert_eq!(p.ui.prompt_template, "%hp");
+        // The same table again changes nothing.
+        assert_eq!(set_config(&mut p, config), Ok(false));
+    }
+
+    #[tokio::test]
+    async fn designs_list_every_other_profile_with_a_design() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut set = ProfileSet::load_or_migrate(dir.path().to_path_buf()).unwrap();
+        set.create("Second").unwrap();
+        set.create("Third").unwrap();
+        set.create("Fourth").unwrap();
+        let mut second = ProfileConfig::default();
+        second.set_prompt(PromptConfig::from_legacy(false, "[%hp]"));
+        second.save(&set.profile_path("Second")).unwrap();
+        // A design kept only in [ui], as older builds wrote it.
+        let mut third = ProfileConfig::default();
+        third.ui.prompt_template = "%mana".into();
+        third.save(&set.profile_path("Third")).unwrap();
+        // Fourth never saved a file.
+        let mut active = ProfileConfig::default();
+        active.set_prompt(PromptConfig::from_legacy(true, "%move"));
+        active
+            .save(&set.profile_path(DEFAULT_PROFILE_NAME))
+            .unwrap();
+        let state: SharedState = Arc::new(AppState::default());
+        *state.profile_set.lock().await = Some(set);
+        let list = designs(&state).await.unwrap();
+        let got: Vec<(&str, &str, &str)> = list
+            .iter()
+            .map(|d| {
+                (
+                    d.profile.as_str(),
+                    d.display_name.as_str(),
+                    d.template.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            got,
+            [("Second", "Second", "[%hp]"), ("Third", "Third", "%mana")]
+        );
+        let json = serde_json::to_value(&list[0]).unwrap();
+        assert_eq!(
+            json,
+            json!({"profile": "Second", "display_name": "Second", "template": "[%hp]"})
+        );
+
+        // Without a profile set there is nothing to read.
+        let empty: SharedState = Arc::new(AppState::default());
+        assert_eq!(designs(&empty).await, Err(PROFILES_NOT_LOADED.to_string()));
+    }
+
+    #[test]
+    fn compile_reports_with_the_values_this_session_supplies() {
+        let mut p = Profile::default();
+        let request: CompileRequest = serde_json::from_value(json!({
+            "kind": "regex",
+            "lines": [r"^<(?<hp>\d+)hp> $"],
+        }))
+        .unwrap();
+        let ids = |report: &CompileReport| -> Vec<&'static str> {
+            report.presets.iter().map(|preset| preset.id).collect()
+        };
+        assert_eq!(
+            ids(&compile(&p, &request)),
+            ["minimal", "how_full", "detailed", "empty"]
+        );
+        p.prompt.connect(false);
+        p.prompt.observe(
+            "Char.Vitals",
+            json!({"hp": 10, "maxhp": 20, "mana": 5, "maxmana": 9, "move": 1, "maxmove": 2}),
+            chrono::Local::now().fixed_offset(),
+        );
+        assert_eq!(
+            ids(&compile(&p, &request)),
+            ["minimal", "how_full", "percent", "bars", "detailed", "empty"]
+        );
+        let codes: CompileRequest = serde_json::from_value(json!({
+            "kind": "aabahran",
+            "prompt": "[%h/%Hhp]",
+            "typed": true,
+        }))
+        .unwrap();
+        let report = compile(&p, &codes);
+        assert!(report.ok);
+        assert_eq!(report.prompt, "[%h/%Hhp] ");
+    }
+
+    #[test]
+    fn renders_draw_live_or_sample_values_with_overrides() {
+        let mut p = Profile::default();
+        p.prompt.connect(false);
+        p.prompt.observe(
+            "Char.Vitals",
+            json!({"hp": 850, "maxhp": 900}),
+            chrono::Local::now().fixed_offset(),
+        );
+        let requests: Vec<RenderRequest> = serde_json::from_value(json!([
+            {"template": "%hp/%{maxhp}"},
+            {"template": "%hp/%{maxhp}", "values": "sample"},
+            {"template": "%hp/%{maxhp}", "overrides": {"values": {"hp": 180}}},
+            {"template": "%hp/%{maxhp}", "overrides": {"lament": true}},
+            {"template": "[%gold]", "placeholders": true},
+        ]))
+        .unwrap();
+        let plain: Vec<String> = render_all(&p, &requests)
+            .into_iter()
+            .map(|r| r.plain)
+            .collect();
+        assert_eq!(plain, ["850/900", "1020/1020", "180/900", "?/?", "[Gold]"]);
+    }
+
+    #[test]
+    fn an_edit_writes_the_design_and_draws_it_with_placeholders() {
+        let p = Profile::default();
+        let op: EditOp = serde_json::from_value(json!({
+            "op": "insert_field",
+            "at": 1,
+            "field": "gold",
+        }))
+        .unwrap();
+        let edited = edit(&p, "[", &op).unwrap();
+        assert_eq!(edited.template, "[%gold");
+        assert_eq!(edited.rendered.plain, "[Gold");
+        assert_eq!(edited.rendered.spans.len(), 2);
+        let unknown: EditOp = serde_json::from_value(json!({
+            "op": "insert_field",
+            "at": 0,
+            "field": "nope",
+        }))
+        .unwrap();
+        assert_eq!(
+            edit(&p, "[", &unknown),
+            Err("Vosh does not know that value.".into())
+        );
+        // Each op reads from the card in its own shape.
+        for op in [
+            json!({"op": "set_format", "piece": 0, "format": {"format": "bar", "width": 6}}),
+            json!({"op": "set_color", "piece": 0, "color": {"kind": "named", "index": 2}}),
+            json!({"op": "set_style", "piece": 0, "style": "italic", "on": true}),
+            json!({"op": "set_when", "piece": 0, "when": "not_fight"}),
+            json!({"op": "set_text", "piece": 0, "text": "x"}),
+            json!({"op": "remove", "piece": 0}),
+            json!({"op": "insert_text", "at": 0, "text": "x"}),
+            json!({"op": "insert_nl", "at": 0}),
+            json!({"op": "move", "piece": 0, "to": 1}),
+        ] {
+            serde_json::from_value::<EditOp>(op.clone()).unwrap_or_else(|e| panic!("{op}: {e}"));
+        }
+    }
+
+    #[test]
+    fn the_state_lists_the_catalog_with_live_states() {
+        let mut p = Profile::default();
+        p.prompt.connect(true);
+        p.prompt.observe(
+            "Char.Prompt",
+            json!({"enabled": true, "prompt": "%h ", "fprompt": ""}),
+            chrono::Local::now().fixed_offset(),
+        );
+        let state = prompt_state(&p);
+        assert!(state.new_build);
+        let json = serde_json::to_value(&state).unwrap();
+        assert_eq!(json["status"]["status"], "no_capture");
+        assert_eq!(json["open_row"], serde_json::Value::Null);
+        let hp = json["catalog"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["name"] == "hp")
+            .unwrap();
+        assert_eq!(hp["state"], "missing");
+        assert_eq!(hp["group"], "vitals");
+        assert_eq!(hp["label"], "Health");
+    }
+}
