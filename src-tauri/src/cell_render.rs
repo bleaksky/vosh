@@ -696,6 +696,22 @@ fn underline_color(flags: CellFlags, text: Rgba) -> Rgba {
     flags.underline_color.map_or(text, color_to_rgba)
 }
 
+/// The glyph a cell draws. SGR 8 hides the text and keeps the cell's
+/// place and ground, as xterm does.
+fn drawn_char(ch: char, flags: CellFlags) -> char {
+    if flags.hidden {
+        ' '
+    } else {
+        ch
+    }
+}
+
+/// Whether a cell draws its underline and strike. Hidden text draws
+/// neither, the same as xterm, which skips the whole glyph.
+fn draws_lines(flags: CellFlags) -> bool {
+    !flags.hidden
+}
+
 // ---------------------------------------------------------------------------
 // Glyph atlas
 // ---------------------------------------------------------------------------
@@ -2157,6 +2173,7 @@ impl CellRenderer {
                 for col in 0..cols {
                     let grid_line = reg.line0 + row as i32;
                     let (ch, fg, _, flags) = grid.cell_at_line(grid_line, col);
+                    let ch = drawn_char(ch, flags);
                     let bold = wants_bold_font(fg, flags);
                     if ch != ' ' && self.atlas.uv_if_cached(ch, bold, flags.italic).is_none() {
                         self.atlas.glyph_uv(ch, bold, flags.italic);
@@ -2325,16 +2342,18 @@ impl CellRenderer {
             if hovered {
                 fg_rgba = link;
             }
-            if hovered {
-                underlines.push((col, y_top, link));
-            } else if flags.underline != Underline::None {
-                underlines.push((col, y_top, underline_color(flags, fg_rgba)));
-            }
-            if flags.strikeout {
-                strikeouts.push((col, y_top, fg_rgba));
+            if draws_lines(flags) {
+                if hovered {
+                    underlines.push((col, y_top, link));
+                } else if flags.underline != Underline::None {
+                    underlines.push((col, y_top, underline_color(flags, fg_rgba)));
+                }
+                if flags.strikeout {
+                    strikeouts.push((col, y_top, fg_rgba));
+                }
             }
             (
-                ch,
+                drawn_char(ch, flags),
                 fg_rgba,
                 bg_rgba,
                 wants_bold_font(fg, flags),
@@ -2758,6 +2777,24 @@ mod tests {
             underline_color(plain, inverse_text),
             color_to_rgba(Color::Named(NamedColor::Blue))
         );
+    }
+
+    #[test]
+    fn hidden_text_draws_no_glyph_and_no_lines() {
+        let hidden = CellFlags {
+            hidden: true,
+            underline: Underline::Single,
+            strikeout: true,
+            ..CellFlags::default()
+        };
+        assert_eq!(drawn_char('H', hidden), ' ');
+        assert!(!draws_lines(hidden));
+        let shown = CellFlags {
+            hidden: false,
+            ..hidden
+        };
+        assert_eq!(drawn_char('H', shown), 'H');
+        assert!(draws_lines(shown));
     }
 
     #[test]
