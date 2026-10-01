@@ -140,7 +140,13 @@ fn field_state(
         (State::Missing, None, None, None)
     } else {
         let field = FieldRef::new(e.name);
-        let (state, value, max) = shown(&resolver.resolve(&field), e.kind, &resolver.label(&field));
+        let (state, mut value, max) =
+            shown(&resolver.resolve(&field), e.kind, &resolver.label(&field));
+        // The game's prompt reads as text beside its name, not the color
+        // codes it came with.
+        if e.kind == Kind::Raw {
+            value = value.map(|v| crate::stage::plain_text(&v));
+        }
         (state, value, max, vars.source(e, vosh))
     };
     FieldState {

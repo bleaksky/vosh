@@ -471,6 +471,22 @@ pub fn close_pin_row(bytes: &[u8]) -> (std::borrow::Cow<'_, [u8]>, bool) {
     (std::borrow::Cow::Borrowed(bytes), false)
 }
 
+/// `text` with every escape sequence taken out, as it shows.
+pub(crate) fn plain_text(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == 0x1b {
+            i = escape_end(bytes, i);
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// Where the escape sequence that starts at `at` ends: after the final
 /// byte of a CSI, after the BEL or ST of an OSC, after the next byte
 /// otherwise.

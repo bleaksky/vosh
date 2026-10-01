@@ -375,3 +375,16 @@ fn a_package_older_builds_send_feeds_a_new_build_field_only_on_the_new_build() {
     assert!(sent(&vars, "tank_hp"));
     assert!(sent(&vars, "exits"));
 }
+
+#[test]
+fn the_games_prompt_reads_as_plain_text_in_the_picker() {
+    // The picker shows the value beside The game's prompt, so it shows
+    // the prompt as text, not the color codes it came with.
+    let mut vars = live();
+    vars.set_script("raw", "\u{1b}[38;5;240m(Wizi 60)\u{1b}[0m [1020/1020hp] ");
+    let raw = catalog(&vars, &vosh(), &[])
+        .into_iter()
+        .find(|f| f.name == "raw")
+        .expect("the game's prompt");
+    assert_eq!(raw.value.as_deref(), Some("(Wizi 60) [1020/1020hp] "));
+}
