@@ -3209,11 +3209,13 @@ async fn apply_script_result<R: tauri::Runtime>(
             io.echo(app, apply.echoes);
         }
         if !apply.new_timers.is_empty() || !apply.cancel_timers.is_empty() {
+            // New timers go in before the cancels run, so a timer that
+            // one result both starts and cancels never fires. Lua never
+            // gives two timers the same id, so a cancel only ever takes
+            // the timer it names.
             let mut guard = timers.lock().await;
-            for cancel in apply.cancel_timers {
-                guard.retain(|t| t.timer_id != cancel);
-            }
             guard.extend(apply.new_timers);
+            guard.retain(|t| !apply.cancel_timers.contains(&t.timer_id));
         }
         if apply.prompt_vars_changed {
             io.prompt_vars(app, profile).await;
