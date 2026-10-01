@@ -1,4 +1,5 @@
-import { useSyncExternalStore } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
+import { dockRows } from '../promptBand';
 import { onOutput, onState, type PromptSpan, type SessionOutput } from '../session';
 import { closePinRow } from '../terminalRegion';
 import { createStore } from './store';
@@ -101,4 +102,27 @@ export function subscribePinnedPrompt(cb: () => void): () => void {
  *  disconnect. */
 export function usePinnedPrompt(): string | null {
   return useSyncExternalStore(subscribePinnedPrompt, getPinnedPrompt);
+}
+
+// The last count dockRows gave, so a prompt that changes only its values
+// is not parsed again on every read of the snapshot.
+let rowsMemo: { pin: string | null; zone: number; off: boolean; rows: number } | null = null;
+
+/** The rows the dock shows for the latest pinned prompt (dockRows). */
+export function getPinnedDockRows(zone: number, promptsOff: boolean): number {
+  const pin = getPinnedPrompt();
+  const memo = rowsMemo;
+  if (memo && memo.pin === pin && memo.zone === zone && memo.off === promptsOff) return memo.rows;
+  const rows = dockRows(pin, zone, promptsOff);
+  rowsMemo = { pin, zone, off: promptsOff, rows };
+  return rows;
+}
+
+/** The rows the dock shows for the latest pinned prompt. It changes only
+ *  when a prompt takes more or fewer rows, as when a fight starts or
+ *  ends, so a component that reads it renders only then, in the same
+ *  commit as the dock. */
+export function usePinnedDockRows(zone: number, promptsOff: boolean): number {
+  const read = useCallback(() => getPinnedDockRows(zone, promptsOff), [zone, promptsOff]);
+  return useSyncExternalStore(subscribePinnedPrompt, read);
 }

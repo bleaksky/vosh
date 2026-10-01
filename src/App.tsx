@@ -108,8 +108,8 @@ import { useConnection, type ConnectionStatus } from './lib/useConnection';
 import { useEscape } from './lib/escapeStack';
 import { usePromptShow } from './lib/promptShow';
 import { PromptDock } from './components/prompt/PromptDock';
-import { getPinnedBand, notePageWrite } from './lib/stores/pinnedPromptStore';
-import type { CellSize } from './lib/promptBand';
+import { getPinnedBand, notePageWrite, usePinnedDockRows } from './lib/stores/pinnedPromptStore';
+import { lentRows, type CellSize } from './lib/promptBand';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
@@ -253,6 +253,11 @@ function App() {
   // The cell the live terminal draws at, which the pinned band lays its
   // characters out on.
   const [cellSize, setCellSize] = useState<CellSize | null>(null);
+  // The rows the pinned band shows now, and the rows past its first it
+  // borrows from the bottom of the live terminal while the dock shows.
+  // This reads the same store as the dock, so both change in one commit.
+  const dockShown = usePinnedDockRows(promptShow?.zone ?? 1, promptShow?.promptsOff ?? false);
+  const dockLent = promptPinned && cellSize ? lentRows(dockShown) : 0;
   // Bright bold, which the native grid and the pinned band over it follow.
   const [brightBold, setBrightBold] = useState(false);
   const panelOpen = panelLayout?.panel_open ?? true;
@@ -403,12 +408,14 @@ function App() {
             const { promptShow: show, cellSize: cell } = probeRef.current;
             if (!el || !show || !cell) return null;
             const r = el.getBoundingClientRect();
+            // The dock is as tall as the rows it shows now.
+            const rows = Number(el.getAttribute('data-rows')) || show.zone;
             return {
               left: r.left,
               top: r.top,
               right: r.right,
               bottom: r.bottom,
-              zone: show.zone,
+              zone: rows,
               cell,
             };
           },
@@ -1782,11 +1789,13 @@ function App() {
             }
             onCellSize={setCellSize}
             lifted={promptLifted}
+            lentRows={dockLent}
           />
         </div>
       </div>
-      {/* Your prompt pinned above the command line. It takes rows from
-          the terminal only while your prompt shows pinned. */}
+      {/* Your prompt pinned above the command line. It takes one row from
+          the terminal only while your prompt shows pinned, and borrows
+          the rows past its first from the bottom of the live pane. */}
       {promptPinned && promptShow && cellSize && (
         <PromptDock
           state={promptShow}

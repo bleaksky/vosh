@@ -1,8 +1,10 @@
 // The geometry of the pinned prompt band, measured on the prompt boards
 // P4 to P10: the band reaches 4 px past the text on each side and 2 px
 // above and below its rows, and its bottom sits 9.5 px above the input
-// band. The dock above the command line keeps room for the most rows the
-// capture's prompts can take, plus a 6 px gap under the terminal's text.
+// band. The dock above the command line is as tall as the rows the band
+// shows now, plus a 6 px gap under the terminal's text. It takes one row
+// of room under the terminal and borrows the rows past the first from the
+// terminal's bottom (src/lib/terminalRows.ts).
 
 import { parseSgrCells, shownColumns, type Cell } from './sgrCells';
 
@@ -17,9 +19,25 @@ export const BAND_OUTSET_X = 4;
  *  above the input band as the boards draw it. */
 export const BAND_LIFT = 3.5;
 
-/** The dock's height for `zone` rows `cellH` tall. */
-export function dockHeight(zone: number, cellH: number): number {
-  return DOCK_GAP + BAND_OUTSET_Y + zone * cellH + BAND_OUTSET_Y + BAND_LIFT;
+/** The dock's height for `rows` rows `cellH` tall. */
+export function dockHeight(rows: number, cellH: number): number {
+  return DOCK_GAP + BAND_OUTSET_Y + rows * cellH + BAND_OUTSET_Y + BAND_LIFT;
+}
+
+/** The rows the dock shows: the rows of the band, the last `zone` of
+ *  them, and one while it shows no band. That is before your first
+ *  prompt and after you disconnect, so the first prompt never moves the
+ *  text, and while prompts are off, when the row holds the sentence that
+ *  says so. */
+export function dockRows(pin: string | null, zone: number, promptsOff: boolean): number {
+  if (promptsOff || !pin) return 1;
+  return Math.max(1, bandRows(pin, Math.max(1, zone)).length);
+}
+
+/** The rows the dock borrows from the bottom of the terminal while it
+ *  shows `rows`: every row past the first. */
+export function lentRows(rows: number): number {
+  return Math.max(0, rows - 1);
 }
 
 /** The cell the terminal draws at, in CSS px, and its column count. */

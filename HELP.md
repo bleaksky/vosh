@@ -452,7 +452,7 @@ Once Vosh reads your prompt, you choose where it shows. Open Settings, choose In
 
 - `In the text` shows each prompt where the game sends it. The terminal reads as it always has.
 - `Lifted` keeps every prompt in the text on a raised band in the selected row color of your theme, scrollback included. A prompt that ends on a character gains one space after its band, so your echo never touches it.
-- `Pinned` takes your prompts out of the text and shows your latest one on a band above the command line. The band keeps the height of your tallest prompt, so it holds still through a fight. Every prompt still reaches the session log and your Prompts triggers.
+- `Pinned` takes your prompts out of the text and shows your latest one on a band above the command line. The band is only as tall as your prompt. When a fight adds a row, the text above gives up its top line to make room and gets it back when the fight ends, so your newest line always sits right above the band. Every prompt still reaches the session log and your Prompts triggers.
 
 From the input bar, `#prompt show lifted` picks the same place, and `text` or `pinned` in its place picks the others. `#prompt` alone also says where your prompt shows.
 
