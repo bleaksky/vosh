@@ -784,6 +784,8 @@ mod tests {
         );
         let state = prompt_state(&p);
         assert!(state.new_build);
+        // The Forsaken Lands rules hold on its host.
+        assert!(state.forsaken);
         let json = serde_json::to_value(&state).unwrap();
         assert_eq!(json["status"]["status"], "no_capture");
         assert_eq!(json["open_row"], serde_json::Value::Null);
