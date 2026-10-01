@@ -5484,3 +5484,7 @@ mod preview_tests;
 #[cfg(test)]
 #[path = "session_repaint_tests.rs"]
 mod repaint_tests;
+
+#[cfg(test)]
+#[path = "session_pointer_tests.rs"]
+mod pointer_tests;

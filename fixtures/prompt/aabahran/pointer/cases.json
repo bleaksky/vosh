@@ -1,0 +1,2034 @@
+{
+  "cases": [
+    {
+      "native": {
+        "12": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 9,
+            "cols": 12,
+            "line": 23,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 5,
+            "cols": 12,
+            "line": 23,
+            "region": {
+              "col": 0,
+              "gen": 2,
+              "line": 23
+            }
+          },
+          "screen": [
+            "The Bank of",
+            "Aabahran",
+            "  Marble",
+            "counters",
+            "line the",
+            "hall, and a",
+            "clerk nods",
+            "at you.",
+            "[Exits:",
+            "south]",
+            "",
+            "<1020>A Blac",
+            "kwatch",
+            "guard",
+            "attacks you!",
+            "A Blackwatch",
+            "guard has",
+            "quite a few",
+            "wounds.",
+            "",
+            "Tester:",
+            "[===|===|===",
+            "|---]",
+            "<765>"
+          ]
+        },
+        "30": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 9,
+            "cols": 30,
+            "line": 12,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 5,
+            "cols": 30,
+            "line": 12,
+            "region": {
+              "col": 0,
+              "gen": 2,
+              "line": 12
+            }
+          },
+          "screen": [
+            "The Bank of Aabahran",
+            "  Marble counters line the",
+            "hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "<1020>A Blackwatch guard attac",
+            "ks",
+            "you!",
+            "A Blackwatch guard has quite a",
+            "few wounds.",
+            "",
+            "Tester: [===|===|===|---]",
+            "<765>"
+          ]
+        },
+        "80": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 9,
+            "cols": 80,
+            "line": 8,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 5,
+            "cols": 80,
+            "line": 8,
+            "region": {
+              "col": 0,
+              "gen": 2,
+              "line": 8
+            }
+          },
+          "screen": [
+            "The Bank of Aabahran",
+            "  Marble counters line the hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "<1020>A Blackwatch guard attacks you!",
+            "A Blackwatch guard has quite a few wounds.",
+            "",
+            "Tester: [===|===|===|---]",
+            "<765>"
+          ]
+        }
+      },
+      "open_row": {
+        "gen": 2,
+        "plain": "<765>",
+        "spans": [
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 0,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 0,
+            "row": 0,
+            "underline": false,
+            "width": 1
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 1,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 1,
+            "row": 0,
+            "underline": false,
+            "width": 3
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 4,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 2,
+            "row": 0,
+            "underline": false,
+            "width": 1
+          }
+        ]
+      },
+      "payloads": [
+        {
+          "b64": "VGhlIEJhbmsgb2YgQWFiYWhyYW4NCiAgTWFyYmxlIGNvdW50ZXJzIGxpbmUgdGhlIGhhbGwsIGFuZCBhIGNsZXJrIG5vZHMgYXQgeW91Lg0KW0V4aXRzOiBzb3V0aF0NCg0KG103NzE3O287MQc8MTAyMD4bWzBt"
+        },
+        {
+          "b64": "QSBCbGFja3dhdGNoIGd1YXJkIGF0dGFja3MgeW91IQ0KQSBCbGFja3dhdGNoIGd1YXJkIGhhcyBxdWl0ZSBhIGZldyB3b3VuZHMuIA0KDQpUZXN0ZXI6IFs9PT0bWzA7MG18PT09G1swOzBtfD09PRtbMDswbXwtLS0bWzA7MG1dDQobXTc3MTc7bzsyBzw3NjU+G1swbQ=="
+        }
+      ],
+      "show": "text",
+      "template": "<%hp>",
+      "zone": 2
+    },
+    {
+      "native": {
+        "12": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 10,
+            "cols": 12,
+            "line": 23,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 6,
+            "cols": 12,
+            "line": 23,
+            "region": {
+              "col": 0,
+              "gen": 4,
+              "line": 23
+            }
+          },
+          "screen": [
+            "The Bank of",
+            "Aabahran",
+            "  Marble",
+            "counters",
+            "line the",
+            "hall, and a",
+            "clerk nods",
+            "at you.",
+            "[Exits:",
+            "south]",
+            "",
+            "<1020> A Bla",
+            "ckwatch",
+            "guard",
+            "attacks you!",
+            "A Blackwatch",
+            "guard has",
+            "quite a few",
+            "wounds.",
+            "",
+            "Tester:",
+            "[===|===|===",
+            "|---]",
+            "<765>"
+          ]
+        },
+        "30": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 10,
+            "cols": 30,
+            "line": 12,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 6,
+            "cols": 30,
+            "line": 12,
+            "region": {
+              "col": 0,
+              "gen": 4,
+              "line": 12
+            }
+          },
+          "screen": [
+            "The Bank of Aabahran",
+            "  Marble counters line the",
+            "hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "<1020> A Blackwatch guard atta",
+            "cks",
+            "you!",
+            "A Blackwatch guard has quite a",
+            "few wounds.",
+            "",
+            "Tester: [===|===|===|---]",
+            "<765>"
+          ]
+        },
+        "80": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 10,
+            "cols": 80,
+            "line": 8,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 6,
+            "cols": 80,
+            "line": 8,
+            "region": {
+              "col": 0,
+              "gen": 4,
+              "line": 8
+            }
+          },
+          "screen": [
+            "The Bank of Aabahran",
+            "  Marble counters line the hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "<1020> A Blackwatch guard attacks you!",
+            "A Blackwatch guard has quite a few wounds.",
+            "",
+            "Tester: [===|===|===|---]",
+            "<765>"
+          ]
+        }
+      },
+      "open_row": {
+        "gen": 4,
+        "plain": "<765>",
+        "spans": [
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 0,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 0,
+            "row": 0,
+            "underline": false,
+            "width": 1
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 1,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 1,
+            "row": 0,
+            "underline": false,
+            "width": 3
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 4,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 2,
+            "row": 0,
+            "underline": false,
+            "width": 1
+          }
+        ]
+      },
+      "payloads": [
+        {
+          "b64": "VGhlIEJhbmsgb2YgQWFiYWhyYW4NCiAgTWFyYmxlIGNvdW50ZXJzIGxpbmUgdGhlIGhhbGwsIGFuZCBhIGNsZXJrIG5vZHMgYXQgeW91Lg0KW0V4aXRzOiBzb3V0aF0NCg0KG103NzE3O2w7MQcbXTc3MTc7bzsyBzwxMDIwPhtbMG0bXTc3MTc7ZTsxByA="
+        },
+        {
+          "b64": "QSBCbGFja3dhdGNoIGd1YXJkIGF0dGFja3MgeW91IQ0KQSBCbGFja3dhdGNoIGd1YXJkIGhhcyBxdWl0ZSBhIGZldyB3b3VuZHMuIA0KDQobXTc3MTc7bDszB1Rlc3RlcjogWz09PRtbMDswbXw9PT0bWzA7MG18PT09G1swOzBtfC0tLRtbMDswbV0NChtdNzcxNztvOzQHPDc2NT4bWzBtG103NzE3O2U7Mwcg"
+        }
+      ],
+      "show": "lifted",
+      "template": "<%hp>",
+      "zone": 2
+    },
+    {
+      "native": {},
+      "open_row": null,
+      "payloads": [
+        {
+          "b64": "VGhlIEJhbmsgb2YgQWFiYWhyYW4NCiAgTWFyYmxlIGNvdW50ZXJzIGxpbmUgdGhlIGhhbGwsIGFuZCBhIGNsZXJrIG5vZHMgYXQgeW91Lg0KW0V4aXRzOiBzb3V0aF0=",
+          "hold": "DQoNCg==",
+          "pin": "PDEwMjA+G1swbQ==",
+          "pin_row": true,
+          "pin_spans": [
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 0,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 0,
+              "row": 0,
+              "underline": false,
+              "width": 1
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 1,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 1,
+              "row": 0,
+              "underline": false,
+              "width": 4
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 5,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 2,
+              "row": 0,
+              "underline": false,
+              "width": 1
+            }
+          ]
+        },
+        {
+          "b64": "QSBCbGFja3dhdGNoIGd1YXJkIGF0dGFja3MgeW91IQ0KQSBCbGFja3dhdGNoIGd1YXJkIGhhcyBxdWl0ZSBhIGZldyB3b3VuZHMuIA==",
+          "hold": "DQoNCg==",
+          "pin": "VGVzdGVyOiBbPT09G1swOzBtfD09PRtbMDswbXw9PT0bWzA7MG18LS0tG1swOzBtXQ0KPDc2NT4bWzBt",
+          "pin_row": true,
+          "pin_spans": [
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 0,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 0,
+              "row": 1,
+              "underline": false,
+              "width": 1
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 1,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 1,
+              "row": 1,
+              "underline": false,
+              "width": 3
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 4,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 2,
+              "row": 1,
+              "underline": false,
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "show": "pinned",
+      "template": "<%hp>",
+      "zone": 2
+    },
+    {
+      "native": {
+        "12": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 3,
+            "cols": 12,
+            "line": 23,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 11,
+            "cols": 12,
+            "line": 23,
+            "region": {
+              "col": 0,
+              "gen": 2,
+              "line": 21
+            }
+          },
+          "screen": [
+            "line the",
+            "hall, and a",
+            "clerk nods",
+            "at you.",
+            "[Exits:",
+            "south]",
+            "",
+            "[1020/1020hp",
+            "800/800mn",
+            "930/930mv] A",
+            " Blackwatch",
+            "guard",
+            "attacks you!",
+            "A Blackwatch",
+            "guard has",
+            "quite a few",
+            "wounds.",
+            "",
+            "Tester:",
+            "[===|===|===",
+            "|---]",
+            "[765/1020hp",
+            "800/800mn",
+            "930/930mv]"
+          ]
+        },
+        "30": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 15,
+            "cols": 30,
+            "line": 14,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 11,
+            "cols": 30,
+            "line": 14,
+            "region": {
+              "col": 0,
+              "gen": 2,
+              "line": 13
+            }
+          },
+          "screen": [
+            "The Bank of Aabahran",
+            "  Marble counters line the",
+            "hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "[1020/1020hp 800/800mn",
+            "930/930mv] A Blackwatch guard",
+            "attacks",
+            "you!",
+            "A Blackwatch guard has quite a",
+            "few wounds.",
+            "",
+            "Tester: [===|===|===|---]",
+            "[765/1020hp 800/800mn",
+            "930/930mv]"
+          ]
+        },
+        "80": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 37,
+            "cols": 80,
+            "line": 8,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 33,
+            "cols": 80,
+            "line": 8,
+            "region": {
+              "col": 0,
+              "gen": 2,
+              "line": 8
+            }
+          },
+          "screen": [
+            "The Bank of Aabahran",
+            "  Marble counters line the hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "[1020/1020hp 800/800mn 930/930mv] A Blackwatch guard attacks you!",
+            "A Blackwatch guard has quite a few wounds.",
+            "",
+            "Tester: [===|===|===|---]",
+            "[765/1020hp 800/800mn 930/930mv]"
+          ]
+        }
+      },
+      "open_row": {
+        "gen": 2,
+        "plain": "[765/1020hp 800/800mn 930/930mv] ",
+        "spans": [
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 0,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 0,
+            "row": 0,
+            "underline": false,
+            "width": 1
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 1,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 1,
+            "row": 0,
+            "underline": false,
+            "width": 8
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 9,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 2,
+            "row": 0,
+            "underline": false,
+            "width": 3
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 12,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 3,
+            "row": 0,
+            "underline": false,
+            "width": 7
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 19,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 4,
+            "row": 0,
+            "underline": false,
+            "width": 3
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 22,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 5,
+            "row": 0,
+            "underline": false,
+            "width": 7
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 29,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 6,
+            "row": 0,
+            "underline": false,
+            "width": 4
+          }
+        ]
+      },
+      "payloads": [
+        {
+          "b64": "VGhlIEJhbmsgb2YgQWFiYWhyYW4NCiAgTWFyYmxlIGNvdW50ZXJzIGxpbmUgdGhlIGhhbGwsIGFuZCBhIGNsZXJrIG5vZHMgYXQgeW91Lg0KW0V4aXRzOiBzb3V0aF0NCg0KG103NzE3O287MQdbMTAyMC8xMDIwaHAgODAwLzgwMG1uIDkzMC85MzBtdl0gG1swbQ=="
+        },
+        {
+          "b64": "QSBCbGFja3dhdGNoIGd1YXJkIGF0dGFja3MgeW91IQ0KQSBCbGFja3dhdGNoIGd1YXJkIGhhcyBxdWl0ZSBhIGZldyB3b3VuZHMuIA0KDQpUZXN0ZXI6IFs9PT0bWzA7MG18PT09G1swOzBtfD09PRtbMDswbXwtLS0bWzA7MG1dDQobXTc3MTc7bzsyB1s3NjUvMTAyMGhwIDgwMC84MDBtbiA5MzAvOTMwbXZdIBtbMG0="
+        }
+      ],
+      "show": "text",
+      "template": "[%hp/%{maxhp}hp %mana/%{maxmana}mn %move/%{maxmove}mv] ",
+      "zone": 2
+    },
+    {
+      "native": {
+        "12": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 3,
+            "cols": 12,
+            "line": 23,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 11,
+            "cols": 12,
+            "line": 23,
+            "region": {
+              "col": 0,
+              "gen": 4,
+              "line": 21
+            }
+          },
+          "screen": [
+            "line the",
+            "hall, and a",
+            "clerk nods",
+            "at you.",
+            "[Exits:",
+            "south]",
+            "",
+            "[1020/1020hp",
+            "800/800mn",
+            "930/930mv] A",
+            " Blackwatch",
+            "guard",
+            "attacks you!",
+            "A Blackwatch",
+            "guard has",
+            "quite a few",
+            "wounds.",
+            "",
+            "Tester:",
+            "[===|===|===",
+            "|---]",
+            "[765/1020hp",
+            "800/800mn",
+            "930/930mv]"
+          ]
+        },
+        "30": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 15,
+            "cols": 30,
+            "line": 14,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 11,
+            "cols": 30,
+            "line": 14,
+            "region": {
+              "col": 0,
+              "gen": 4,
+              "line": 13
+            }
+          },
+          "screen": [
+            "The Bank of Aabahran",
+            "  Marble counters line the",
+            "hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "[1020/1020hp 800/800mn",
+            "930/930mv] A Blackwatch guard",
+            "attacks",
+            "you!",
+            "A Blackwatch guard has quite a",
+            "few wounds.",
+            "",
+            "Tester: [===|===|===|---]",
+            "[765/1020hp 800/800mn",
+            "930/930mv]"
+          ]
+        },
+        "80": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 37,
+            "cols": 80,
+            "line": 8,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 33,
+            "cols": 80,
+            "line": 8,
+            "region": {
+              "col": 0,
+              "gen": 4,
+              "line": 8
+            }
+          },
+          "screen": [
+            "The Bank of Aabahran",
+            "  Marble counters line the hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "[1020/1020hp 800/800mn 930/930mv] A Blackwatch guard attacks you!",
+            "A Blackwatch guard has quite a few wounds.",
+            "",
+            "Tester: [===|===|===|---]",
+            "[765/1020hp 800/800mn 930/930mv]"
+          ]
+        }
+      },
+      "open_row": {
+        "gen": 4,
+        "plain": "[765/1020hp 800/800mn 930/930mv] ",
+        "spans": [
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 0,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 0,
+            "row": 0,
+            "underline": false,
+            "width": 1
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 1,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 1,
+            "row": 0,
+            "underline": false,
+            "width": 8
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 9,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 2,
+            "row": 0,
+            "underline": false,
+            "width": 3
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 12,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 3,
+            "row": 0,
+            "underline": false,
+            "width": 7
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 19,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 4,
+            "row": 0,
+            "underline": false,
+            "width": 3
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 22,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 5,
+            "row": 0,
+            "underline": false,
+            "width": 7
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 29,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 6,
+            "row": 0,
+            "underline": false,
+            "width": 4
+          }
+        ]
+      },
+      "payloads": [
+        {
+          "b64": "VGhlIEJhbmsgb2YgQWFiYWhyYW4NCiAgTWFyYmxlIGNvdW50ZXJzIGxpbmUgdGhlIGhhbGwsIGFuZCBhIGNsZXJrIG5vZHMgYXQgeW91Lg0KW0V4aXRzOiBzb3V0aF0NCg0KG103NzE3O2w7MQcbXTc3MTc7bzsyB1sxMDIwLzEwMjBocCA4MDAvODAwbW4gOTMwLzkzMG12XSAbWzBtG103NzE3O2U7MQc="
+        },
+        {
+          "b64": "QSBCbGFja3dhdGNoIGd1YXJkIGF0dGFja3MgeW91IQ0KQSBCbGFja3dhdGNoIGd1YXJkIGhhcyBxdWl0ZSBhIGZldyB3b3VuZHMuIA0KDQobXTc3MTc7bDszB1Rlc3RlcjogWz09PRtbMDswbXw9PT0bWzA7MG18PT09G1swOzBtfC0tLRtbMDswbV0NChtdNzcxNztvOzQHWzc2NS8xMDIwaHAgODAwLzgwMG1uIDkzMC85MzBtdl0gG1swbRtdNzcxNztlOzMH"
+        }
+      ],
+      "show": "lifted",
+      "template": "[%hp/%{maxhp}hp %mana/%{maxmana}mn %move/%{maxmove}mv] ",
+      "zone": 2
+    },
+    {
+      "native": {},
+      "open_row": null,
+      "payloads": [
+        {
+          "b64": "VGhlIEJhbmsgb2YgQWFiYWhyYW4NCiAgTWFyYmxlIGNvdW50ZXJzIGxpbmUgdGhlIGhhbGwsIGFuZCBhIGNsZXJrIG5vZHMgYXQgeW91Lg0KW0V4aXRzOiBzb3V0aF0=",
+          "hold": "DQoNCg==",
+          "pin": "WzEwMjAvMTAyMGhwIDgwMC84MDBtbiA5MzAvOTMwbXZdIBtbMG0=",
+          "pin_row": true,
+          "pin_spans": [
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 0,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 0,
+              "row": 0,
+              "underline": false,
+              "width": 1
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 1,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 1,
+              "row": 0,
+              "underline": false,
+              "width": 9
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 10,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 2,
+              "row": 0,
+              "underline": false,
+              "width": 3
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 13,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 3,
+              "row": 0,
+              "underline": false,
+              "width": 7
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 20,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 4,
+              "row": 0,
+              "underline": false,
+              "width": 3
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 23,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 5,
+              "row": 0,
+              "underline": false,
+              "width": 7
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 30,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 6,
+              "row": 0,
+              "underline": false,
+              "width": 4
+            }
+          ]
+        },
+        {
+          "b64": "QSBCbGFja3dhdGNoIGd1YXJkIGF0dGFja3MgeW91IQ0KQSBCbGFja3dhdGNoIGd1YXJkIGhhcyBxdWl0ZSBhIGZldyB3b3VuZHMuIA==",
+          "hold": "DQoNCg==",
+          "pin": "VGVzdGVyOiBbPT09G1swOzBtfD09PRtbMDswbXw9PT0bWzA7MG18LS0tG1swOzBtXQ0KWzc2NS8xMDIwaHAgODAwLzgwMG1uIDkzMC85MzBtdl0gG1swbQ==",
+          "pin_row": true,
+          "pin_spans": [
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 0,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 0,
+              "row": 1,
+              "underline": false,
+              "width": 1
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 1,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 1,
+              "row": 1,
+              "underline": false,
+              "width": 8
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 9,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 2,
+              "row": 1,
+              "underline": false,
+              "width": 3
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 12,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 3,
+              "row": 1,
+              "underline": false,
+              "width": 7
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 19,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 4,
+              "row": 1,
+              "underline": false,
+              "width": 3
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 22,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 5,
+              "row": 1,
+              "underline": false,
+              "width": 7
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 29,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 6,
+              "row": 1,
+              "underline": false,
+              "width": 4
+            }
+          ]
+        }
+      ],
+      "show": "pinned",
+      "template": "[%hp/%{maxhp}hp %mana/%{maxmana}mn %move/%{maxmove}mv] ",
+      "zone": 2
+    },
+    {
+      "native": {
+        "12": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 8,
+            "cols": 12,
+            "line": 23,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 4,
+            "cols": 12,
+            "line": 23,
+            "region": {
+              "col": 0,
+              "gen": 2,
+              "line": 21
+            }
+          },
+          "screen": [
+            "line the",
+            "hall, and a",
+            "clerk nods",
+            "at you.",
+            "[Exits:",
+            "south]",
+            "",
+            "HP 1020",
+            "<800 mn 930",
+            "mv> A Blackw",
+            "atch",
+            "guard",
+            "attacks you!",
+            "A Blackwatch",
+            "guard has",
+            "quite a few",
+            "wounds.",
+            "",
+            "Tester:",
+            "[===|===|===",
+            "|---]",
+            "HP 765",
+            "<800 mn 930",
+            "mv>"
+          ]
+        },
+        "30": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 20,
+            "cols": 30,
+            "line": 14,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 16,
+            "cols": 30,
+            "line": 14,
+            "region": {
+              "col": 0,
+              "gen": 2,
+              "line": 13
+            }
+          },
+          "screen": [
+            "The Bank of Aabahran",
+            "  Marble counters line the",
+            "hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "HP 1020",
+            "<800 mn 930 mv> A Blackwatch g",
+            "uard attacks",
+            "you!",
+            "A Blackwatch guard has quite a",
+            "few wounds.",
+            "",
+            "Tester: [===|===|===|---]",
+            "HP 765",
+            "<800 mn 930 mv>"
+          ]
+        },
+        "80": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 20,
+            "cols": 80,
+            "line": 10,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 16,
+            "cols": 80,
+            "line": 10,
+            "region": {
+              "col": 0,
+              "gen": 2,
+              "line": 9
+            }
+          },
+          "screen": [
+            "The Bank of Aabahran",
+            "  Marble counters line the hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "HP 1020",
+            "<800 mn 930 mv> A Blackwatch guard attacks you!",
+            "A Blackwatch guard has quite a few wounds.",
+            "",
+            "Tester: [===|===|===|---]",
+            "HP 765",
+            "<800 mn 930 mv>"
+          ]
+        }
+      },
+      "open_row": {
+        "gen": 2,
+        "plain": "HP 765\n<800 mn 930 mv> ",
+        "spans": [
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 0,
+            "fg": {
+              "index": 2,
+              "kind": "index"
+            },
+            "italic": false,
+            "piece": 0,
+            "row": 0,
+            "underline": false,
+            "width": 2
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 2,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 1,
+            "row": 0,
+            "underline": false,
+            "width": 1
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 3,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 2,
+            "row": 0,
+            "underline": false,
+            "width": 3
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 6,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 3,
+            "row": 0,
+            "underline": false,
+            "width": 0
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 0,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 4,
+            "row": 1,
+            "underline": false,
+            "width": 1
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 1,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 5,
+            "row": 1,
+            "underline": false,
+            "width": 3
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 4,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 6,
+            "row": 1,
+            "underline": false,
+            "width": 4
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 8,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 7,
+            "row": 1,
+            "underline": false,
+            "width": 3
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 11,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 8,
+            "row": 1,
+            "underline": false,
+            "width": 5
+          }
+        ]
+      },
+      "payloads": [
+        {
+          "b64": "VGhlIEJhbmsgb2YgQWFiYWhyYW4NCiAgTWFyYmxlIGNvdW50ZXJzIGxpbmUgdGhlIGhhbGwsIGFuZCBhIGNsZXJrIG5vZHMgYXQgeW91Lg0KW0V4aXRzOiBzb3V0aF0NCg0KG103NzE3O287MQcbWzM4OzU7Mm1IUBtbMzltIDEwMjANCjw4MDAgbW4gOTMwIG12PiAbWzBt"
+        },
+        {
+          "b64": "QSBCbGFja3dhdGNoIGd1YXJkIGF0dGFja3MgeW91IQ0KQSBCbGFja3dhdGNoIGd1YXJkIGhhcyBxdWl0ZSBhIGZldyB3b3VuZHMuIA0KDQpUZXN0ZXI6IFs9PT0bWzA7MG18PT09G1swOzBtfD09PRtbMDswbXwtLS0bWzA7MG1dDQobXTc3MTc7bzsyBxtbMzg7NTsybUhQG1szOW0gNzY1DQo8ODAwIG1uIDkzMCBtdj4gG1swbQ=="
+        }
+      ],
+      "show": "text",
+      "template": "%{c:2}HP%c_default %hp%nl<%mana mn %move mv> ",
+      "zone": 3
+    },
+    {
+      "native": {
+        "12": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 8,
+            "cols": 12,
+            "line": 23,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 4,
+            "cols": 12,
+            "line": 23,
+            "region": {
+              "col": 0,
+              "gen": 4,
+              "line": 21
+            }
+          },
+          "screen": [
+            "line the",
+            "hall, and a",
+            "clerk nods",
+            "at you.",
+            "[Exits:",
+            "south]",
+            "",
+            "HP 1020",
+            "<800 mn 930",
+            "mv> A Blackw",
+            "atch",
+            "guard",
+            "attacks you!",
+            "A Blackwatch",
+            "guard has",
+            "quite a few",
+            "wounds.",
+            "",
+            "Tester:",
+            "[===|===|===",
+            "|---]",
+            "HP 765",
+            "<800 mn 930",
+            "mv>"
+          ]
+        },
+        "30": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 20,
+            "cols": 30,
+            "line": 14,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 16,
+            "cols": 30,
+            "line": 14,
+            "region": {
+              "col": 0,
+              "gen": 4,
+              "line": 13
+            }
+          },
+          "screen": [
+            "The Bank of Aabahran",
+            "  Marble counters line the",
+            "hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "HP 1020",
+            "<800 mn 930 mv> A Blackwatch g",
+            "uard attacks",
+            "you!",
+            "A Blackwatch guard has quite a",
+            "few wounds.",
+            "",
+            "Tester: [===|===|===|---]",
+            "HP 765",
+            "<800 mn 930 mv>"
+          ]
+        },
+        "80": {
+          "after_echo": {
+            "at_bottom": true,
+            "col": 20,
+            "cols": 80,
+            "line": 10,
+            "region": null
+          },
+          "cursor": {
+            "at_bottom": true,
+            "col": 16,
+            "cols": 80,
+            "line": 10,
+            "region": {
+              "col": 0,
+              "gen": 4,
+              "line": 9
+            }
+          },
+          "screen": [
+            "The Bank of Aabahran",
+            "  Marble counters line the hall, and a clerk nods at you.",
+            "[Exits: south]",
+            "",
+            "HP 1020",
+            "<800 mn 930 mv> A Blackwatch guard attacks you!",
+            "A Blackwatch guard has quite a few wounds.",
+            "",
+            "Tester: [===|===|===|---]",
+            "HP 765",
+            "<800 mn 930 mv>"
+          ]
+        }
+      },
+      "open_row": {
+        "gen": 4,
+        "plain": "HP 765\n<800 mn 930 mv> ",
+        "spans": [
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 0,
+            "fg": {
+              "index": 2,
+              "kind": "index"
+            },
+            "italic": false,
+            "piece": 0,
+            "row": 0,
+            "underline": false,
+            "width": 2
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 2,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 1,
+            "row": 0,
+            "underline": false,
+            "width": 1
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 3,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 2,
+            "row": 0,
+            "underline": false,
+            "width": 3
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 6,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 3,
+            "row": 0,
+            "underline": false,
+            "width": 0
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 0,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 4,
+            "row": 1,
+            "underline": false,
+            "width": 1
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 1,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 5,
+            "row": 1,
+            "underline": false,
+            "width": 3
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 4,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 6,
+            "row": 1,
+            "underline": false,
+            "width": 4
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 8,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 7,
+            "row": 1,
+            "underline": false,
+            "width": 3
+          },
+          {
+            "bg": {
+              "kind": "default"
+            },
+            "bold": false,
+            "col": 11,
+            "fg": {
+              "kind": "default"
+            },
+            "italic": false,
+            "piece": 8,
+            "row": 1,
+            "underline": false,
+            "width": 5
+          }
+        ]
+      },
+      "payloads": [
+        {
+          "b64": "VGhlIEJhbmsgb2YgQWFiYWhyYW4NCiAgTWFyYmxlIGNvdW50ZXJzIGxpbmUgdGhlIGhhbGwsIGFuZCBhIGNsZXJrIG5vZHMgYXQgeW91Lg0KW0V4aXRzOiBzb3V0aF0NCg0KG103NzE3O2w7MQcbXTc3MTc7bzsyBxtbMzg7NTsybUhQG1szOW0gMTAyMA0KPDgwMCBtbiA5MzAgbXY+IBtbMG0bXTc3MTc7ZTsxBw=="
+        },
+        {
+          "b64": "QSBCbGFja3dhdGNoIGd1YXJkIGF0dGFja3MgeW91IQ0KQSBCbGFja3dhdGNoIGd1YXJkIGhhcyBxdWl0ZSBhIGZldyB3b3VuZHMuIA0KDQobXTc3MTc7bDszB1Rlc3RlcjogWz09PRtbMDswbXw9PT0bWzA7MG18PT09G1swOzBtfC0tLRtbMDswbV0NChtdNzcxNztvOzQHG1szODs1OzJtSFAbWzM5bSA3NjUNCjw4MDAgbW4gOTMwIG12PiAbWzBtG103NzE3O2U7Mwc="
+        }
+      ],
+      "show": "lifted",
+      "template": "%{c:2}HP%c_default %hp%nl<%mana mn %move mv> ",
+      "zone": 3
+    },
+    {
+      "native": {},
+      "open_row": null,
+      "payloads": [
+        {
+          "b64": "VGhlIEJhbmsgb2YgQWFiYWhyYW4NCiAgTWFyYmxlIGNvdW50ZXJzIGxpbmUgdGhlIGhhbGwsIGFuZCBhIGNsZXJrIG5vZHMgYXQgeW91Lg0KW0V4aXRzOiBzb3V0aF0=",
+          "hold": "DQoNCg==",
+          "pin": "G1szODs1OzJtSFAbWzM5bSAxMDIwDQo8ODAwIG1uIDkzMCBtdj4gG1swbQ==",
+          "pin_row": true,
+          "pin_spans": [
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 0,
+              "fg": {
+                "index": 2,
+                "kind": "index"
+              },
+              "italic": false,
+              "piece": 0,
+              "row": 0,
+              "underline": false,
+              "width": 2
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 2,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 1,
+              "row": 0,
+              "underline": false,
+              "width": 1
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 3,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 2,
+              "row": 0,
+              "underline": false,
+              "width": 4
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 7,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 3,
+              "row": 0,
+              "underline": false,
+              "width": 0
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 0,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 4,
+              "row": 1,
+              "underline": false,
+              "width": 1
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 1,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 5,
+              "row": 1,
+              "underline": false,
+              "width": 3
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 4,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 6,
+              "row": 1,
+              "underline": false,
+              "width": 4
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 8,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 7,
+              "row": 1,
+              "underline": false,
+              "width": 3
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 11,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 8,
+              "row": 1,
+              "underline": false,
+              "width": 5
+            }
+          ]
+        },
+        {
+          "b64": "QSBCbGFja3dhdGNoIGd1YXJkIGF0dGFja3MgeW91IQ0KQSBCbGFja3dhdGNoIGd1YXJkIGhhcyBxdWl0ZSBhIGZldyB3b3VuZHMuIA==",
+          "hold": "DQoNCg==",
+          "pin": "VGVzdGVyOiBbPT09G1swOzBtfD09PRtbMDswbXw9PT0bWzA7MG18LS0tG1swOzBtXQ0KG1szODs1OzJtSFAbWzM5bSA3NjUNCjw4MDAgbW4gOTMwIG12PiAbWzBt",
+          "pin_row": true,
+          "pin_spans": [
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 0,
+              "fg": {
+                "index": 2,
+                "kind": "index"
+              },
+              "italic": false,
+              "piece": 0,
+              "row": 1,
+              "underline": false,
+              "width": 2
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 2,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 1,
+              "row": 1,
+              "underline": false,
+              "width": 1
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 3,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 2,
+              "row": 1,
+              "underline": false,
+              "width": 3
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 6,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 3,
+              "row": 1,
+              "underline": false,
+              "width": 0
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 0,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 4,
+              "row": 2,
+              "underline": false,
+              "width": 1
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 1,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 5,
+              "row": 2,
+              "underline": false,
+              "width": 3
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 4,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 6,
+              "row": 2,
+              "underline": false,
+              "width": 4
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 8,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 7,
+              "row": 2,
+              "underline": false,
+              "width": 3
+            },
+            {
+              "bg": {
+                "kind": "default"
+              },
+              "bold": false,
+              "col": 11,
+              "fg": {
+                "kind": "default"
+              },
+              "italic": false,
+              "piece": 8,
+              "row": 2,
+              "underline": false,
+              "width": 5
+            }
+          ]
+        }
+      ],
+      "show": "pinned",
+      "template": "%{c:2}HP%c_default %hp%nl<%mana mn %move mv> ",
+      "zone": 3
+    }
+  ],
+  "notes": "Generated from the session's own steps on the synthetic wire fixtures quiet.bin and fight-tank.bin. Written again with VOSH_WRITE_POINTER_CASES=1."
+}
