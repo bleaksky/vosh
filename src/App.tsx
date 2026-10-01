@@ -117,6 +117,7 @@ import { nextCardRequest, type CardRequest, type CardRequestView } from './lib/p
 import { getPinnedBand, notePageWrite, usePinnedDockRows } from './lib/stores/pinnedPromptStore';
 import { usePromptReach } from './lib/stores/promptReachStore';
 import { lentRows, type CellSize } from './lib/promptBand';
+import { noteReader } from './lib/readerBusy';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
 
@@ -517,6 +518,8 @@ function App() {
   useEffect(() => {
     if (!splitOpen) setHistoryScrollPos(null);
     splitOpenRef.current = splitOpen;
+    // Reading back in the split leaves your prompt's clock as it is.
+    noteReader('split', splitOpen);
   }, [splitOpen]);
 
   // Reset history readiness whenever the split closes. The next time
