@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import helpMd from '../../HELP.md?raw';
-import { HELP_TOPICS, parseHelpBody, PROMPT_DESIGN_CODES } from './helpContent';
+import { HELP_SECTIONS, HELP_TOPICS, parseHelpBody, PROMPT_DESIGN_CODES } from './helpContent';
 
 function body(id: string): string {
   const topic = HELP_TOPICS.find((t) => t.id === id);
@@ -477,6 +477,101 @@ describe('the help on prompt design codes', () => {
   it('matches HELP.md word for word', () => {
     const { number, title, body: text } = topic();
     expect(helpMd).toContain(`### ${number} ${title}\n\n${text}\n`);
+  });
+});
+
+describe('HELP.md', () => {
+  // HELP.md mirrors the catalog word for word, every topic under its
+  // section, so the file and the Help window never tell two stories.
+  it('holds every topic word for word', () => {
+    for (const t of HELP_TOPICS) {
+      expect(helpMd, `${t.number} ${t.title}`).toContain(
+        `### ${t.number} ${t.title}\n\n${t.body}\n`,
+      );
+    }
+  });
+
+  it('holds no topic the catalog does not', () => {
+    const headings = [...helpMd.matchAll(/^### (.+)$/gm)].map((m) => m[1]);
+    expect(headings).toEqual(HELP_TOPICS.map((t) => `${t.number} ${t.title}`));
+    const sections = [...helpMd.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+    expect(sections).toEqual(HELP_SECTIONS);
+  });
+
+  it('names the Help window, not the old top bar button', () => {
+    expect(helpMd).not.toContain('top bar');
+    expect(helpMd).toContain('Help window');
+  });
+});
+
+describe('the help on the one window', () => {
+  // The help describes the window as it is: the title band, the session
+  // button, the panel and its panes, the status line, and Settings by
+  // its groups. None of the Ember chrome it replaced.
+  const all = () => HELP_TOPICS.map((t) => `${t.title}\n${t.body}`).join('\n');
+
+  it('never sends you to chrome that is gone', () => {
+    for (const gone of [
+      'top bar',
+      'session chip',
+      'status bar',
+      'room strip',
+      'the well',
+      'gear button',
+      'left rail',
+      'settings window',
+      'combat pane',
+      'Profile scope',
+      'zone select',
+      'Panel layout, where',
+      'clear buffer',
+      'search scrollback',
+      'open splits',
+      'input bar',
+      'input row',
+      'Char.Worth',
+    ]) {
+      expect(all(), gone).not.toContain(gone);
+    }
+  });
+
+  it('opens the session from the title band', () => {
+    const text = body('get-connected.connect');
+    expect(text).toContain('You connect from the session button, centered in the title band');
+    expect(text).toContain('choose `New connection…` instead');
+    expect(body('fix-it.reconnect')).toContain('Choose `Edit connection…` to check the address.');
+  });
+
+  it('arranges panes in the panel itself', () => {
+    const text = body('shape.arrange-panels');
+    expect(text).toContain('Add a pane with `Add a pane`, the plus button in the title band.');
+    expect(text).toContain('`Split right` and `Split down`');
+    expect(text).toContain('`Show here instead`');
+    expect(text).toContain('from 200 to 800 points');
+  });
+
+  it('keeps the room and its people under the map', () => {
+    const text = body('shape.use-the-map');
+    expect(text).toContain('The first names the room you stand in and its exits.');
+    expect(HELP_TOPICS.some((t) => t.id === 'shape.room-strip')).toBe(false);
+    expect(HELP_TOPICS.some((t) => t.id === 'shape.split-the-well')).toBe(false);
+  });
+
+  it('lists #help with words with the slash commands', () => {
+    expect(body('reference.slash-commands')).toContain(
+      '`#help <words>` opens Help on those words.',
+    );
+    expect(body('reference.keyboard-shortcuts')).toContain('`Cmd+/` opens Help.');
+  });
+
+  it('keeps every topic number unique and in order within its section', () => {
+    const numbers = HELP_TOPICS.map((t) => t.number);
+    expect(new Set(numbers).size).toBe(numbers.length);
+    HELP_SECTIONS.forEach((section, s) => {
+      HELP_TOPICS.filter((t) => t.section === section).forEach((t, i) => {
+        expect(t.number).toBe(`${s + 1}.${i + 1}`);
+      });
+    });
   });
 });
 

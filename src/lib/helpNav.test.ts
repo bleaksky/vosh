@@ -9,9 +9,9 @@ import {
   sectionTopics,
 } from './helpNav';
 
-function topic(number: string): HelpTopic {
-  const found = HELP_TOPICS.find((t) => t.number === number);
-  if (!found) throw new Error(`no help topic ${number}`);
+function topic(key: string): HelpTopic {
+  const found = HELP_TOPICS.find((t) => t.number === key || t.id === key);
+  if (!found) throw new Error(`no help topic ${key}`);
   return found;
 }
 
@@ -38,7 +38,7 @@ describe('the help search', () => {
   });
 
   it('counts every match you would see, the title included', () => {
-    const shown = topic('4.9');
+    const shown = topic('shape.prompt-show');
     const words = `${shown.title} ${shown.body.replace(/`/g, '')}`.toLowerCase();
     expect(countMatches(shown, 'prompt')).toBe(words.split('prompt').length - 1);
     expect(countMatches(shown, 'PROMPT')).toBe(countMatches(shown, 'prompt'));
@@ -85,8 +85,13 @@ describe('the outline of a topic', () => {
   });
 
   it('leaves prose and short lists without one', () => {
-    for (const number of ['4.9', '9.3', '5.1', '1.1']) {
-      expect(outlineFor(topic(number)), number).toBeNull();
+    for (const id of [
+      'shape.prompt-show',
+      'reference.prompt-codes',
+      'tick.tick-timer',
+      'get-connected.connect',
+    ]) {
+      expect(outlineFor(topic(id)), id).toBeNull();
     }
   });
 });
