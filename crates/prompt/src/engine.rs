@@ -469,6 +469,7 @@ impl PromptEngine {
             open_row: self.stage.open_row().map(|open| OpenRowState {
                 gen: open.gen,
                 spans: open.spans.clone(),
+                plain: open.plain.clone(),
             }),
             packages: self.vars.gmcp().packages().map(str::to_string).collect(),
         }

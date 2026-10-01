@@ -58,11 +58,14 @@ pub struct FieldState {
     pub in_prompt: bool,
 }
 
-/// The open row and where each piece of the design landed in it.
+/// The open row and where each piece of the design landed in it, with
+/// the rows the design draws as plain text joined by `\n`, which the
+/// webview wraps at its renderer's width to put each span on screen.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct OpenRowState {
     pub gen: u64,
     pub spans: Vec<Span>,
+    pub plain: String,
 }
 
 /// `prompt_state_get`.

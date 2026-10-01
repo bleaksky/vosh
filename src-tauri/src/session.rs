@@ -1704,7 +1704,6 @@ fn prompt_block(
             p.prompt
                 .stage
                 .draw_view(&mut batch.out, block, painted, &before, view.stage());
-            p.prompt.stage.set_open_spans(view.spans());
         }
         for head in &heads_shown {
             keep_shown(batch, &mut scrollback, head, &head.raw, log_session_id);
@@ -2096,7 +2095,6 @@ fn repaint_step(p: &mut Profile, other: bool, now: Instant) -> Output {
     let mut out = Output::new(other);
     let view = prompt_view(p, now);
     p.prompt.stage.repaint_view(&mut out, view.stage());
-    p.prompt.stage.set_open_spans(view.spans());
     out
 }
 
@@ -2154,17 +2152,16 @@ struct PromptView {
 }
 
 impl PromptView {
-    /// The view the stage takes.
+    /// The view the stage takes, with where each piece of the design
+    /// landed in what your prompt shows, which the open row keeps for the
+    /// prompt card.
     fn stage(&self) -> vosh_prompt::stage::View<'_> {
         vosh_prompt::stage::View {
             shown: self.shown.as_ref().map(|r| r.ansi.as_str()),
             live: self.live.as_ref().map(|r| r.ansi.as_str()),
+            spans: self.shown.as_ref().map_or(&[], |r| r.spans.as_slice()),
+            plain: self.shown.as_ref().map_or("", |r| r.plain.as_str()),
         }
-    }
-
-    /// Where each piece of the design landed in what your prompt shows.
-    fn spans(self) -> Vec<vosh_prompt::Span> {
-        self.shown.map(|r| r.spans).unwrap_or_default()
     }
 }
 
@@ -4061,6 +4058,9 @@ mod tests {
                 .unwrap_or_default()
         };
         assert_eq!(spans(&wire), [(0, 0, 1), (1, 1, 9), (2, 10, 2), (3, 12, 3)]);
+        // With the rows they sit in, which the webview wraps at its width.
+        let plain = |wire: &Wire| wire.p.prompt.stage.open_row().map(|o| o.plain.clone());
+        assert_eq!(plain(&wire).as_deref(), Some("<1020/1020> 800"));
 
         // Drawing off shows the game's own line, which has no pieces, and
         // drawing on again brings them back with the repaint.
@@ -4080,6 +4080,7 @@ mod tests {
         wire.p.set_prompt_config(config);
         let _ = super::repaint_step(&mut wire.p, false, now);
         assert_eq!(spans(&wire), [(0, 0, 1), (1, 1, 4), (2, 5, 1)]);
+        assert_eq!(plain(&wire).as_deref(), Some("[1020]"));
 
         // Other output closes the row, and its pieces go with it. A line
         // that is no prompt leaves the flag down.
