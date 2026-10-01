@@ -186,6 +186,24 @@ export function savedCapture(
   };
 }
 
+/** A capture saved for the first time in this profile: before it the
+ *  profile read nothing, or only the pattern the old trigger left. */
+export function firstCapture(was: PromptCapture): boolean {
+  return was.kind === 'none' || (was.kind === 'regex' && was.source === 'migrated');
+}
+
+/** The table once the card saves capture `next`. The first capture in a
+ *  profile turns drawing on, so the start P4 checks draws on your prompt
+ *  and the footer offers its previews, as P4 draws it. Later, the switch
+ *  stays as you set it. */
+export function withCapture(config: PromptConfig, next: PromptCapture): PromptConfig {
+  return {
+    ...config,
+    capture: next,
+    draw: config.draw || firstCapture(config.capture),
+  };
+}
+
 /** `at` as RFC 3339 local time with its offset, as the backend writes
  *  `seen_at`. */
 export function localStamp(at: Date): string {

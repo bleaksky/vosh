@@ -16,6 +16,7 @@ import {
   type CardRequest,
   codeReaderStep,
   codesSourceLine,
+  firstCapture,
   headerButtons,
   localStamp,
   moreItems,
@@ -24,6 +25,7 @@ import {
   savedForName,
   takeBackOnto,
   undoEntry,
+  withCapture,
   type CardStep,
   type MoreItemId,
   type UndoEntry,
@@ -177,12 +179,6 @@ const LAMENT_NOTE =
 
 const UNDO_DEPTH = 50;
 const NOWHERE: Pointing = { picked: null, caret: null };
-
-/** A capture saved for the first time in this profile: before it the
- *  profile read nothing, or only the pattern the old trigger left. */
-function firstCapture(was: PromptCapture): boolean {
-  return was.kind === 'none' || (was.kind === 'regex' && was.source === 'migrated');
-}
 
 export function PromptCard({
   host,
@@ -713,7 +709,7 @@ export function PromptCard({
   const saveCapture = (next: PromptCapture) => {
     if (!config) return;
     const first = firstCapture(config.capture);
-    save({ ...config, capture: next });
+    save(withCapture(config, next));
     setStep('start');
     if (first) {
       void promptLineTriggers(next)

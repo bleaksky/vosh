@@ -27,6 +27,7 @@ import {
   readRows,
   savedCapture,
   savedForName,
+  withCapture,
   startRows,
   takeBackOnto,
   undoEntry,
@@ -239,6 +240,23 @@ describe('where the codes came from', () => {
       seen_at: '2026-09-29T05:04:00-05:00',
       source: 'gmcp',
     });
+  });
+
+  it('turns drawing on with the first capture, so P4 draws the start you check', () => {
+    const fresh: PromptConfig = {
+      draw: false,
+      template: 'DEFAULT',
+      previous_templates: [],
+      capture: none,
+      show: 'text',
+    };
+    expect(withCapture(fresh, codes)).toEqual({ ...fresh, capture: codes, draw: true });
+    // The pattern the old trigger left counts as no capture of yours.
+    expect(withCapture({ ...fresh, capture: migrated }, codes).draw).toBe(true);
+    // Once the profile reads its prompt, the switch stays as you set it.
+    const off = { ...fresh, capture: codes };
+    const other: PromptCapture = { ...codes, prompt: '<%hhp> ' };
+    expect(withCapture(off, other)).toEqual({ ...off, capture: other });
   });
 });
 
