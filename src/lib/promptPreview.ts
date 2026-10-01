@@ -1,6 +1,7 @@
 import { parseAnsi, type AnsiChunk } from './ansi';
 import { renderPromptTemplate, type PromptVars } from './promptTemplate';
 import type { VitalValues } from './stores/vitalsStore';
+import { tokenizeTemplate } from './vitalsTemplate';
 
 // The live preview under the prompt template on Settings, Input. It
 // draws the template the way the terminal would with your vitals full,
@@ -40,8 +41,25 @@ export function promptPreviewVars(vitals: VitalValues | null): PromptVars {
   };
 }
 
-/** The template drawn as styled runs of text, ready for spans. */
+/** Codes only the terminal draws: a condition and its end, a line break,
+ *  and the game's own prompt. The preview predates them and would print
+ *  them as typed, so a design that uses one, such as Vosh's default,
+ *  previews as nothing. */
+function terminalOnly(template: string): boolean {
+  return tokenizeTemplate(template).some(
+    (segment) =>
+      segment.kind === 'token' &&
+      (/^(if|ifnot):/.test(segment.name) ||
+        segment.name === 'end' ||
+        segment.name === 'nl' ||
+        segment.name === 'raw'),
+  );
+}
+
+/** The template drawn as styled runs of text, ready for spans. Empty for
+ *  a design only the terminal draws. */
 export function promptPreviewChunks(template: string, vitals: VitalValues | null): AnsiChunk[] {
+  if (terminalOnly(template)) return [];
   return parseAnsi(renderPromptTemplate(template, promptPreviewVars(vitals))).filter(
     (chunk) => chunk.text.length > 0,
   );
