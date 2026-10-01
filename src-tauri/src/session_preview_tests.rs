@@ -428,3 +428,39 @@ fn the_open_row_stays_open_across_a_resize_while_the_card_is_open() {
         assert!(session.repaint().is_empty(), "{label}");
     }
 }
+
+#[test]
+fn the_live_render_comes_back_when_the_connection_ends_during_a_preview() {
+    let now = Instant::now();
+    for show in [PromptShow::Text, PromptShow::Lifted, PromptShow::Pinned] {
+        let label = format!("{show:?}");
+        let mut session = Session::new(showing(profile(CODES, HP, true), show));
+        let mut grid = crate::term_grid::TermGrid::new(80, 40);
+        let quiet = session.read(&wire_fixture("quiet"));
+        session.p.prompt.set_preview(Some(low_health()));
+        let low = session.repaint();
+        let _ = grid_after(&mut grid, [&quiet.out, &low]);
+        // You disconnect with the card open, and nothing else lands.
+        let out = end_preview_step(&mut session.p, false, now);
+        assert!(session.p.prompt.preview().is_none(), "{label}");
+        assert!(out.restore.is_none(), "{label}");
+        if show == PromptShow::Pinned {
+            assert_eq!(
+                out.pin.as_deref().map(vosh_ansi::plain_text).as_deref(),
+                Some("<1020>"),
+                "{label}"
+            );
+        } else {
+            assert_eq!(
+                grid_after(&mut grid, [&out]).last().map(String::as_str),
+                Some("<1020>"),
+                "{label}"
+            );
+        }
+    }
+
+    // With no preview, the connection ends with nothing to write.
+    let mut session = Session::new(profile(CODES, HP, true));
+    let _ = session.read(&wire_fixture("quiet"));
+    assert!(end_preview_step(&mut session.p, false, now).is_empty());
+}
