@@ -495,10 +495,28 @@ listen(LOCAL_EVENT, cb);
 listen(channel, cb);
 listen(`vosh://fixed`, cb);
 listen(prefix + name, cb);
+for (const ev of LIST) {
+  listen(ev, cb);
+}
+export const LATER_EVENT = 'vosh://later';
+for (const key in TABLE) listen(key, cb);
+const key = 'vosh://key';
+let mutable = 'vosh://let';
+listen(mutable, cb);
+function pick() {
+  const { picked } = names;
+  listen(picked, cb);
+}
+const picked = 'vosh://picked';
+const TWICE = 'vosh://one';
+listen(TWICE, cb);
+function inner() {
+  const TWICE = 'vosh://two';
+}
 ";
     let tokens = page_tokens(source, false).unwrap();
     let (consts, exported) = constants(&tokens);
-    assert_eq!(exported, ["SHARED_EVENT"]);
+    assert_eq!(exported, ["SHARED_EVENT", "LATER_EVENT"]);
     let names: Vec<Name> = calls_to(&tokens, "listen")
         .into_iter()
         .map(|(_, args)| classify(args[0], |id| consts.get(id).cloned().flatten()))
@@ -509,6 +527,14 @@ listen(prefix + name, cb);
             Name::Fixed("vosh://local".into()),
             Name::Family("session://gmcp/".into()),
             Name::Fixed("vosh://fixed".into()),
+            // prefix + name
+            Name::Unknown,
+            // A loop variable takes no later constant's value.
+            Name::Unknown,
+            Name::Unknown,
+            // let, a destructured name and a name given two values.
+            Name::Unknown,
+            Name::Unknown,
             Name::Unknown,
         ]
     );
@@ -1131,60 +1157,108 @@ fn closes_at_end(tokens: &[Token]) -> bool {
 }
 
 /// The constants a file names with a string or a template, and the ones
-/// it exports. A name the file gives two values maps to None.
+/// it exports. A name the file gives two values, or binds any other way,
+/// maps to None. That covers `let`, a `const` with no value the scan can
+/// read such as a loop variable, and a destructured name.
 fn constants(tokens: &[Token]) -> (BTreeMap<String, Option<Name>>, Vec<String>) {
     let mut consts: BTreeMap<String, Option<Name>> = BTreeMap::new();
     let mut exported = Vec::new();
-    for (i, token) in tokens.iter().enumerate() {
-        if !is_word(&token.tok, "const") {
-            continue;
-        }
-        let Some(Tok::Ident(id)) = tokens.get(i + 1).map(|t| &t.tok) else {
-            continue;
-        };
-        // Past a type, to the `=`.
-        let mut j = i + 2;
-        let mut depth = 0usize;
-        while let Some(t) = tokens.get(j) {
-            match t.tok {
-                Tok::Punct('(' | '[' | '{' | '<') => depth += 1,
-                Tok::Punct(')' | ']' | '}' | '>') => depth = depth.saturating_sub(1),
-                Tok::Punct('=' | ';') if depth == 0 => break,
-                _ => {}
-            }
-            j += 1;
-        }
-        if tokens.get(j).map(|t| &t.tok) != Some(&Tok::Punct('=')) {
-            continue;
-        }
-        let rest = &tokens[j + 1..];
-        let end = rest
-            .iter()
-            .position(|t| t.tok == Tok::Punct(';'))
-            .unwrap_or(rest.len());
-        let mut value = &rest[..end];
-        if let [head @ .., as_, c] = value {
-            if is_word(&as_.tok, "as") && is_word(&c.tok, "const") {
-                value = head;
-            }
-        }
-        let name = match classify(value, |_| None) {
-            Name::Unknown => continue,
-            name => name,
-        };
-        if i > 0 && is_word(&tokens[i - 1].tok, "export") {
-            exported.push(id.clone());
-        }
+    let mut bind = |id: &str, name: Option<Name>| {
         consts
-            .entry(id.clone())
+            .entry(id.to_string())
             .and_modify(|old| {
-                if old.as_ref() != Some(&name) {
+                if *old != name {
                     *old = None;
                 }
             })
-            .or_insert(Some(name));
+            .or_insert(name);
+    };
+    for (i, token) in tokens.iter().enumerate() {
+        let Tok::Ident(word) = &token.tok else {
+            continue;
+        };
+        if !matches!(word.as_str(), "const" | "let" | "var")
+            || (i > 0 && tokens[i - 1].tok == Tok::Punct('.'))
+        {
+            continue;
+        }
+        match tokens.get(i + 1).map(|t| &t.tok) {
+            Some(Tok::Ident(id)) => {
+                let name = if word == "const" {
+                    declared(&tokens[i + 2..])
+                } else {
+                    None
+                };
+                if name.is_some() && i > 0 && is_word(&tokens[i - 1].tok, "export") {
+                    exported.push(id.clone());
+                }
+                bind(id, name);
+            }
+            Some(Tok::Punct('{' | '[')) => {
+                let end = closing(tokens, i + 1).unwrap_or(tokens.len());
+                for t in &tokens[i + 2..end] {
+                    if let Tok::Ident(id) = &t.tok {
+                        bind(id, None);
+                    }
+                }
+            }
+            _ => {}
+        }
     }
     (consts, exported)
+}
+
+/// The name a `const` declares, read from just past its identifier: past
+/// any type to the `=`, then a string or a template, with or without `as
+/// const`. None when it declares anything else, or nothing, as the loop
+/// variable of a `for (const x of list)` does.
+fn declared(tokens: &[Token]) -> Option<Name> {
+    let mut depth = 0usize;
+    let mut j = 0;
+    loop {
+        match &tokens.get(j)?.tok {
+            Tok::Punct('(' | '[' | '{' | '<') => depth += 1,
+            Tok::Punct(')' | ']' | '}' | '>') => depth = depth.checked_sub(1)?,
+            Tok::Punct('=') if depth == 0 => break,
+            Tok::Punct(';' | ',') if depth == 0 => return None,
+            Tok::Ident(w) if depth == 0 && (w == "of" || w == "in") => return None,
+            _ => {}
+        }
+        j += 1;
+    }
+    let rest = &tokens[j + 1..];
+    let end = rest
+        .iter()
+        .position(|t| t.tok == Tok::Punct(';'))
+        .unwrap_or(rest.len());
+    let mut value = &rest[..end];
+    if let [head @ .., as_, c] = value {
+        if is_word(&as_.tok, "as") && is_word(&c.tok, "const") {
+            value = head;
+        }
+    }
+    match classify(value, |_| None) {
+        Name::Unknown => None,
+        name => Some(name),
+    }
+}
+
+/// The index of the bracket that closes the one at `open`.
+fn closing(tokens: &[Token], open: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    for (i, token) in tokens.iter().enumerate().skip(open) {
+        match token.tok {
+            Tok::Punct('(' | '[' | '{') => depth += 1,
+            Tok::Punct(')' | ']' | '}') => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// The specifiers of the `import { ... } from` that ends at the module
