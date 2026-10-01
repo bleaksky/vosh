@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import aliasesExport from '../../fixtures/ipc/aliases_export.json?raw';
 import {
   addDraftItem,
   createDraft,
@@ -66,6 +67,27 @@ describe('aliases', () => {
     });
     const back = (JSON.parse(aliasesForSave(list)) as unknown[]).map(normalizeAlias);
     expect(back).toEqual(list);
+  });
+
+  it('reads every field aliases_export sends', async () => {
+    // A Rust test in commands.rs holds this file to aliases_export.
+    const list = await loadAliases({
+      exportAliases: () => Promise.resolve(aliasesExport.trimEnd()),
+      importAliases: () => Promise.resolve(0),
+    });
+    expect(list).toEqual([
+      { name: 'cs', expansion: 'cast %1', enabled: true, group: 'magic' },
+      { name: 'k', expansion: 'kill %1', enabled: true },
+      { name: 'lk', expansion: 'kill %1', enabled: true, script: 'mud.send("look")' },
+      {
+        name: 'lt',
+        expansion: 'look',
+        enabled: true,
+        script: 'mud.send("look " .. captures[1])\nmud.echo("looked")',
+      },
+      { name: 'off', expansion: 'say off', enabled: false },
+      { name: 'rec', expansion: 'recall', enabled: true },
+    ]);
   });
 
   it('keeps an empty Lua body as Lua mode', () => {
