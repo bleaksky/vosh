@@ -46,6 +46,7 @@ import {
   normalizeTerminalLineHeight,
   terminalLocalWrite,
   promptPreviewSet,
+  promptStateGet,
   TERMINAL_LINE_HEIGHTS,
   type StatePayload,
   type TerminalLineHeight,
@@ -107,7 +108,7 @@ import { useConnection, type ConnectionStatus } from './lib/useConnection';
 import { useEscape } from './lib/escapeStack';
 import { usePromptShow } from './lib/promptShow';
 import { PromptDock } from './components/prompt/PromptDock';
-import { notePageWrite } from './lib/stores/pinnedPromptStore';
+import { getPinnedBand, notePageWrite } from './lib/stores/pinnedPromptStore';
 import type { CellSize } from './lib/promptBand';
 
 const RENAME_MIGRATION_KEY = 'vosh.migration.from_mudclient';
@@ -374,6 +375,46 @@ function App() {
     promptPreviewSet(null).catch((e: unknown) =>
       console.error('[main] clearing the prompt preview failed', e),
     );
+  }, []);
+
+  // A dev run gives the Web Inspector __voshPromptPointer, which names the
+  // piece of your prompt under each click, in the text or on the pinned
+  // band (src/lib/promptPointerProbe.ts). A production build leaves it out.
+  const probeRef = useRef({ promptShow, cellSize });
+  probeRef.current = { promptShow, cellSize };
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      let gone = false;
+      let remove: (() => void) | undefined;
+      void import('./lib/promptPointerProbe').then(({ installPromptPointerProbe }) => {
+        if (gone) return;
+        remove = installPromptPointerProbe({
+          renderer: () => (nativeSurfaceEnabled() ? 'native' : 'xterm'),
+          terminal: () => termRef.current,
+          openRow: async () => (await promptStateGet()).open_row,
+          dock: () => {
+            const el = document.querySelector('.prompt-dock');
+            const { promptShow: show, cellSize: cell } = probeRef.current;
+            if (!el || !show || !cell) return null;
+            const r = el.getBoundingClientRect();
+            return {
+              left: r.left,
+              top: r.top,
+              right: r.right,
+              bottom: r.bottom,
+              zone: show.zone,
+              cell,
+            };
+          },
+          band: getPinnedBand,
+        });
+      });
+      return () => {
+        gone = true;
+        remove?.();
+      };
+    }
+    return undefined;
   }, []);
 
   // On quit the backend asks each window for the writes it holds back,
