@@ -511,10 +511,10 @@ Two more colors sit with the rows they belong to. `Sent command color` under Inp
 The terminal font lives in Settings under Appearance, then Terminal text.
 
 - Open Settings and choose Appearance.
-- Pick a font in `Font`. Berkeley Mono and JetBrains Mono ship inside Vosh, so they work on every machine. The rest of the list holds the monospace fonts installed on your computer.
+- Pick a font in `Font`. JetBrains Mono ships inside Vosh, so it works on every machine. The rest of the list holds the monospace fonts installed on your computer. If you own Berkeley Mono, install it and pick it there.
 - Pick a size in `Size`, from 11 to 18 pt. The default is 14.
 - Pick `Compact`, `Default`, or `Loose` in `Line height`.
-- To set a whole list of fonts, open `Advanced` and type it in `Font stack`, like `"BerkeleyMono Bundled", Menlo, monospace`. Vosh uses the first font in the list that you have.
+- To set a whole list of fonts, open `Advanced` and type it in `Font stack`, like `"Fira Code", "JetBrainsMono Bundled", monospace`. Vosh uses the first font in the list that you have.
 - Turn on `Bright text in bold` under Advanced to draw bright colors in the bold weight of your font. It works on macOS.
 
 Each change applies at once and saves. Under General, `Font and size` in Keep the same for every character decides whether every character shares one font.
@@ -622,7 +622,7 @@ The command runs entirely in the frontend and stores your choice locally under t
 
 On Windows and Linux, Settings under General, then Advanced, holds `GPU rendering`, which draws the xterm renderer with your graphics card. Turn it off when the terminal draws wrong, then restart Vosh.
 
-If the text renders in the wrong typeface, open Settings and choose Appearance, then Terminal text. The default font list starts with `BerkeleyMono Nerd Font` and falls through `JetBrains Mono`, `Fira Code`, `Menlo`, and `Consolas` before generic monospace. Your machine renders the first font in that list it has installed, so install the font you want or pick it in `Font`. The size defaults to 14.
+If the text renders in the wrong typeface, open Settings and choose Appearance, then Terminal text. The default font is JetBrains Mono, which ships inside Vosh and works on every machine. Vosh no longer ships Berkeley Mono. A font list that names it uses the copy installed on your computer, and JetBrains Mono when you have none. Install the font you want or pick it in `Font`. The size defaults to 14.
 
 Under General, `Font and size` in Keep the same for every character decides whether every character shares one font. Turn it off to let each character keep its own.
 
