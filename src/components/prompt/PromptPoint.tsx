@@ -17,6 +17,7 @@ import {
   type PromptCheckRead,
   type PromptCompileReport,
 } from '../../lib/session';
+import { numberRuns } from '../../lib/promptScreen';
 import { parseSgrCells } from '../../lib/sgrCells';
 import { Button, CheckIcon, ChevronDownIcon, Field } from '../settings/ui';
 import { CardMenu, MenuSeparator } from './CardMenu';
@@ -38,11 +39,13 @@ interface PointPickProps {
   /** The group to propose first. */
   start: number;
   onRead: (line: PointedLine, group: number) => void;
+  /** The line it proposes now, which the terminal highlights. */
+  onShow?: (plain: string | null) => void;
 }
 
 /** B2: the line that came right before your commands most often, which
  *  Vosh proposes as your prompt. */
-export function PointPick({ start, onRead }: PointPickProps) {
+export function PointPick({ start, onRead, onShow }: PointPickProps) {
   const [groups, setGroups] = useState<PromptCandidateGroup[] | null>(null);
   const [at, setAt] = useState(start);
   useEffect(() => {
@@ -58,6 +61,10 @@ export function PointPick({ start, onRead }: PointPickProps) {
   }, []);
   const count = groups?.length ?? 0;
   const group = count > 0 ? groups![at % count] : null;
+  const proposed = group?.entries[0]?.plain ?? null;
+  useEffect(() => {
+    onShow?.(proposed);
+  }, [proposed, onShow]);
   const seen = group
     ? group.count > 1
       ? `The same line came after each of your last ${group.count} commands.`
@@ -110,6 +117,9 @@ interface PointNameProps {
   refresh: number;
   env: BandEnv;
   cellW: number;
+  /** The line the box shows and which of its numbers carry a name, by
+   *  their place among its numbers, so the terminal marks them too. */
+  onShow?: (shown: { line: string; named: boolean[] } | null) => void;
 }
 
 /** The byte offset `at` of `line` as a character index. */
@@ -120,7 +130,15 @@ function charIndex(line: string, at: number): number {
 
 /** A2: the line with each number marked and a menu under each pair that
  *  names the value it reads. */
-export function PointName({ line, onUse, onPickAnother, refresh, env, cellW }: PointNameProps) {
+export function PointName({
+  line,
+  onUse,
+  onPickAnother,
+  refresh,
+  env,
+  cellW,
+  onShow,
+}: PointNameProps) {
   const id = line.id;
   const [names, setNames] = useState<string[] | null>(null);
   const [report, setReport] = useState<PromptCompileReport | null>(null);
@@ -184,6 +202,21 @@ export function PointName({ line, onUse, onPickAnother, refresh, env, cellW }: P
       to: cellsBefore(plain, charIndex(plain, n.span[1])),
       warn: false,
     }));
+  // Each number of the line, named or not, by its place among them.
+  const named = useMemo(() => {
+    const spans = numbers
+      .filter((n) => n.name.length > 0)
+      .map((n) => [charIndex(plain, n.span[0]), charIndex(plain, n.span[1])]);
+    return numberRuns(plain).map((run) =>
+      spans.some(([from, to]) => run.start < to && from < run.end),
+    );
+  }, [numbers, plain]);
+  const namedKey = named.join(',');
+  useEffect(() => {
+    onShow?.(report ? { line: plain, named } : null);
+    // The names decide the marks, not the array they come in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plain, namedKey, report === null, onShow]);
   const buttons = numberButtons(numbers);
   const choose = (number: number, name: string) => {
     setNames(namesFor(numbers, number, name));

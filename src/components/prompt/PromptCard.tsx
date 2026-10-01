@@ -28,6 +28,7 @@ import {
   type UndoEntry,
 } from '../../lib/promptCard';
 import { followCardProfile } from '../../lib/promptCardSync';
+import { numberMarks, wholeMarks, type ScreenAsk } from '../../lib/promptScreen';
 import { needsCode, type LayoutId } from '../../lib/promptPicker';
 import {
   caretAfter,
@@ -44,6 +45,7 @@ import type { PromptShowState } from '../../lib/promptShow';
 import {
   onPromptState,
   profilesList,
+  promptCandidates,
   promptCardOpen,
   promptCompile,
   promptConfigGet,
@@ -226,6 +228,11 @@ export function PromptCard({
     data: PromptDescribed;
   } | null>(null);
   const [newest, setNewest] = useState<PromptCheckRead | null>(null);
+  // The game's newest line, which P2 marks whole while no row shows it.
+  const [newestLine, setNewestLine] = useState<string | null>(null);
+  // The line B2 proposes, and the one P15 names, as the terminal marks
+  // them.
+  const [pointShown, setPointShown] = useState<ScreenAsk | null>(null);
   const [lineTriggers, setLineTriggers] = useState<PromptLineTrigger[]>([]);
   const insertRef = useRef<((token: string) => void) | null>(null);
   const edits = useRef<Promise<unknown>>(Promise.resolve());
@@ -747,6 +754,64 @@ export function PromptCard({
       ? (pieces.find((p) => p.piece === pointing.picked) ?? null)
       : null;
 
+  // The marks on your prompt: your design's parts while the card draws
+  // it, or the values Vosh reads on the game's own line while it reads
+  // your codes.
+  const openRow = state?.open_row ?? null;
+  // With no row open, as before the profile reads a prompt, the marks
+  // find the game's line on screen.
+  const noRow = openRow === null;
+  useEffect(() => {
+    if (step !== 'codes-entry' || !noRow) return;
+    let alive = true;
+    void promptCandidates()
+      .then((groups) => {
+        const entries = groups.flatMap((g) => g.entries);
+        const latest = entries.reduce<(typeof entries)[number] | null>(
+          (a, b) => (a === null || b.id > a.id ? b : a),
+          null,
+        );
+        if (alive) setNewestLine(latest?.plain ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [step, noRow, refresh]);
+  const screen = useMemo<ScreenAsk | null>(() => {
+    if (step === 'point' || step === 'name') return pointShown;
+    if (!noRow) return null;
+    if (step === 'codes-entry' && newestLine) {
+      return { lines: newestLine.split('\n'), mode: 'tail', marks: wholeMarks };
+    }
+    if (step === 'codes' && newest) {
+      return {
+        lines: newest.plain.split('\n'),
+        mode: 'tail',
+        marks: (shown) => rawMarks({ raw_lines: shown, raw_from: 0 }, newest, false),
+      };
+    }
+    return null;
+  }, [step, noRow, newestLine, newest, pointShown]);
+  const showPick = useCallback(
+    (plain: string | null) =>
+      setPointShown(plain ? { lines: [plain], mode: 'shape', marks: wholeMarks } : null),
+    [],
+  );
+  const showNames = useCallback(
+    (shown: { line: string; named: boolean[] } | null) =>
+      setPointShown(
+        shown
+          ? {
+              lines: [shown.line],
+              mode: 'shape',
+              marks: (found) => numberMarks(found[0] ?? '', shown.named),
+            }
+          : null,
+      ),
+    [],
+  );
+
   let body: ReactNode = null;
   if (config && step) {
     switch (step) {
@@ -802,6 +867,7 @@ export function PromptCard({
               setPickFrom(group);
               setStep('name');
             }}
+            onShow={showPick}
           />
         );
         break;
@@ -817,6 +883,7 @@ export function PromptCard({
             refresh={refresh}
             env={env}
             cellW={cellW}
+            onShow={showNames}
           />
         ) : null;
         break;
@@ -933,7 +1000,7 @@ export function PromptCard({
   // The marks on your prompt: your design's parts while the card draws
   // it, or the values Vosh reads on the game's own line while it reads
   // your codes.
-  const openRow = state?.open_row ?? null;
+
   const raw =
     step === 'codes-entry' && openRow
       ? rawMarks(openRow, null, true)
@@ -982,6 +1049,7 @@ export function PromptCard({
           openRow={openRow}
           design={designing ? { pieces, pointing, warn } : null}
           raw={designing ? null : raw}
+          screen={designing ? null : screen}
           refresh={refresh}
           onPoint={(next) => {
             if (view === 'text') setView('design');
