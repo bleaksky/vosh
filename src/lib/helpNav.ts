@@ -30,10 +30,17 @@ export function topicPieces(topic: HelpTopic): string[] {
   return pieces;
 }
 
+/** The words of a search as the matcher reads them: in lower case,
+ *  with a run of spaces read as one, since the help text sets one
+ *  space between words. */
+export function searchPhrase(query: string): string {
+  return query.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 /** Where `query` matches in `text`, ignoring case, as [start, end)
  *  ranges that never overlap. */
 export function matchRanges(text: string, query: string): Array<[number, number]> {
-  const q = query.trim().toLowerCase();
+  const q = searchPhrase(query);
   if (q.length === 0) return [];
   const hay = text.toLowerCase();
   const ranges: Array<[number, number]> = [];
@@ -53,9 +60,9 @@ export function countMatches(topic: HelpTopic, query: string): number {
 /** The topics a search finds, best first: a title that matches, then
  *  the most matches, then catalog order. */
 export function rankTopics(query: string, topics: HelpTopic[] = HELP_TOPICS): HelpTopic[] {
-  if (query.trim().length === 0) return [];
-  const q = query.trim().toLowerCase();
-  return searchTopics(query, topics)
+  const q = searchPhrase(query);
+  if (q.length === 0) return [];
+  return searchTopics(q, topics)
     .map((topic, index) => ({
       topic,
       index,
