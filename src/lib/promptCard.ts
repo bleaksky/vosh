@@ -573,3 +573,26 @@ export function menuPosition(
     top: Math.max(EDGE, Math.min(top, viewport.height - size.height - EDGE)),
   };
 }
+
+/** What Command Z puts back: the fields one change of yours made, as
+ *  they were before it. */
+export type UndoEntry = Partial<Pick<PromptConfig, 'template' | 'draw' | 'capture'>>;
+
+/** The entry that takes back the change from `before` to `next`, or null
+ *  when it changed none of the design, the switch or the capture. Only
+ *  those, so taking it back never puts back what changed elsewhere
+ *  since: the codes the game sent, or where your prompt shows. */
+export function undoEntry(before: PromptConfig, next: PromptConfig): UndoEntry | null {
+  const entry: UndoEntry = {};
+  if (before.template !== next.template) entry.template = before.template;
+  if (before.draw !== next.draw) entry.draw = before.draw;
+  if (JSON.stringify(before.capture) !== JSON.stringify(next.capture)) {
+    entry.capture = before.capture;
+  }
+  return Object.keys(entry).length > 0 ? entry : null;
+}
+
+/** The table as it stands now with `entry` taken back. */
+export function takeBackOnto(now: PromptConfig, entry: UndoEntry): PromptConfig {
+  return { ...now, ...entry };
+}
