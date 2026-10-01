@@ -328,3 +328,171 @@ fn a_line_another_game_prints_reports_its_numbers_and_the_names_it_reads() {
     assert_eq!(pattern.names, BTreeMap::from([("1".into(), "hp".into())]));
     assert_eq!(pattern.vars, ["hp"]);
 }
+
+/// Each legend row as code, label, tag and whether it carries the warn
+/// ring, for reading a test at a glance.
+fn legend(
+    report: &vosh_prompt::report::CompileReport,
+) -> Vec<(String, String, Option<String>, bool)> {
+    report
+        .legend
+        .iter()
+        .map(|row| {
+            (
+                row.code.clone(),
+                row.label.clone(),
+                row.tag.clone(),
+                row.warn,
+            )
+        })
+        .collect()
+}
+
+fn row(code: &str, label: &str) -> (String, String, Option<String>, bool) {
+    (code.to_string(), label.to_string(), None, false)
+}
+
+#[test]
+fn the_legend_lists_every_code_and_line_end_in_the_order_the_game_prints_them() {
+    let report = codes(JAMES_PROMPT, "", false);
+    assert_eq!(
+        legend(&report),
+        [
+            row("%n", "Tank"),
+            row("%P", "Tank health bar"),
+            row("%C", "New line"),
+            row("%h", "Health"),
+            row("%H", "Max health"),
+            row("%m", "Mana"),
+            row("%M", "Max mana"),
+            row("%v", "Moves"),
+            row("%V", "Max moves"),
+            row("%c", "New line"),
+        ]
+    );
+    // The tank's codes print only in a fight, which the card tags.
+    let fight: Vec<bool> = report.legend.iter().map(|r| r.fight).collect();
+    assert_eq!(
+        fight,
+        [true, true, true, false, false, false, false, false, false, false]
+    );
+    assert!(report.legend.iter().all(|r| r.warning.is_none()));
+    assert_eq!(report.legend[3].span, [7, 9]);
+    assert_eq!(report.legend[3].which, Which::Prompt);
+    assert_eq!(
+        report.shows.as_deref(),
+        Some("It shows Health, Mana, and Moves with their maxes, and your tank and its health in a fight.")
+    );
+    assert_eq!(report.fix_note, None);
+    assert!(report.fixes.is_empty());
+}
+
+#[test]
+fn codes_that_run_together_take_one_legend_row_and_a_command_that_fixes_them() {
+    let report = codes("<%h%m %vmv> ", "", false);
+    assert_eq!(
+        legend(&report),
+        [
+            (
+                "%h%m".to_string(),
+                "Health and Mana".to_string(),
+                Some("run together".to_string()),
+                true
+            ),
+            row("%v", "Moves"),
+        ]
+    );
+    assert_eq!(report.legend[0].span, [1, 5]);
+    assert_eq!(report.shows, None);
+    assert_eq!(
+        report.fix_note.as_deref(),
+        Some("Vosh reads Moves. Health and Mana come from the game until you fix the prompt.")
+    );
+    assert_eq!(report.fixes, ["prompt <%h %m %vmv>"]);
+    // A fight prompt gets its own command.
+    let fight = codes("<%hhp> ", "<%h%v> ", false);
+    assert_eq!(fight.fixes, ["fprompt <%h %v>"]);
+    assert_eq!(
+        fight.fix_note.as_deref(),
+        Some("Vosh reads Health. Moves comes from the game until you fix the prompt.")
+    );
+}
+
+#[test]
+fn other_warnings_take_a_legend_row_with_their_sentence() {
+    let twice = codes("<%hhp %hhp> ", "", false);
+    let second = twice
+        .legend
+        .iter()
+        .find(|r| r.warn)
+        .expect("the second use");
+    assert_eq!(second.code, "%h");
+    assert_eq!(second.tag.as_deref(), Some("second use"));
+    assert_eq!(
+        second.warning.as_deref(),
+        Some("Your prompt shows Health twice. Vosh reads the first one.")
+    );
+    assert_eq!(second.span, [6, 8]);
+
+    let pacify = codes("<%hhp %u> ", "", false);
+    let row = pacify.legend.iter().find(|r| r.code == "%u").expect("%u");
+    assert_eq!((row.tag.as_deref(), row.warn), (Some("immortal"), true));
+    assert!(row
+        .warning
+        .as_deref()
+        .unwrap()
+        .starts_with("Only immortals get a value for %u."));
+
+    let short = codes("> ", "", false);
+    assert_eq!(
+        legend(&short),
+        [(
+            "> ".to_string(),
+            "A prompt with no values".to_string(),
+            None,
+            true
+        )]
+    );
+    assert_eq!(
+        short.legend[0].warning.as_deref(),
+        Some(
+            "This prompt is short enough to match other lines. Vosh can draw over them by mistake."
+        )
+    );
+    assert_eq!(short.shows, None);
+
+    let lone = codes("<%hhp>%", "", true);
+    let row = lone
+        .legend
+        .iter()
+        .find(|r| r.code == "%")
+        .expect("the lone %");
+    assert_eq!(row.label, "A lone %");
+    assert_eq!((row.tag.as_deref(), row.warn), (Some("at the end"), true));
+}
+
+#[test]
+fn the_card_says_what_a_prompt_shows_in_one_sentence() {
+    let shows = |prompt: &str| codes(prompt, "", false).shows;
+    assert_eq!(
+        shows("<%hhp %mm %vmv> ").as_deref(),
+        Some("It shows Health, Mana, and Moves.")
+    );
+    assert_eq!(
+        shows("<%h/%Hhp> ").as_deref(),
+        Some("It shows Health with its max.")
+    );
+    assert_eq!(
+        shows("<%h/%Hhp %ggold %Xtnl> ").as_deref(),
+        Some("It shows Health with its max, Gold, and To next level.")
+    );
+    assert_eq!(
+        shows("%n%C<%hhp> ").as_deref(),
+        Some("It shows Health and your tank in a fight.")
+    );
+    assert_eq!(
+        shows("%p%C<%hhp> ").as_deref(),
+        Some("It shows Health and your tank's health in a fight.")
+    );
+    assert_eq!(shows("<%ggold> ").as_deref(), Some("It shows Gold."));
+}

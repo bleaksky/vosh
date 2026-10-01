@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::aabahran::lex::{self, Token as GameToken};
-use crate::aabahran::{self, Origin, ShapeKind, Which, Who};
+use crate::aabahran::{self, Origin, ShapeKind, WarningKind, Which, Who};
 use crate::capture;
 use crate::config::{CaptureConfig, RegexCapture};
 use crate::generic;
@@ -69,6 +69,43 @@ pub struct CompileReport {
     /// Each number of a line you pointed at, with the name it reads into,
     /// for the card to mark. Empty otherwise.
     pub numbers: Vec<generic::Number>,
+    /// The card's code legend: every code and line end in the order the
+    /// settings print them, codes that run together as one row, and a
+    /// row for each other warning. Empty for a pattern.
+    pub legend: Vec<LegendRow>,
+    /// What the card says the prompt shows, `It shows Health, Mana, and
+    /// Moves.`, or None when codes run together or it reads no value.
+    pub shows: Option<String>,
+    /// While codes run together, what Vosh still reads and which values
+    /// the game supplies until you fix the prompt.
+    pub fix_note: Option<String>,
+    /// While codes run together, the command that sets each setting with a
+    /// space between them, for the card to show with Copy. Vosh never
+    /// sends it.
+    pub fixes: Vec<String>,
+}
+
+/// One row of the card's code legend.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LegendRow {
+    /// As you write it, `%h`, or the run of codes that run together,
+    /// `%h%m`. Empty for a warning about the whole setting, such as the
+    /// cut at 255 characters.
+    pub code: String,
+    pub label: String,
+    pub which: Which,
+    /// Bytes of the setting as the game stores it.
+    pub span: [usize; 2],
+    /// It prints only while someone in your group tanks your opponent.
+    pub fight: bool,
+    /// A few words after the label, such as `run together`.
+    pub tag: Option<String>,
+    /// Vosh cannot read it as written, so the code carries the warn ring.
+    pub warn: bool,
+    /// The warning's sentence, which the card shows under the row. Codes
+    /// that run together leave it out, since the card says it where it
+    /// says how the prompt matches.
+    pub warning: Option<String>,
 }
 
 /// Why a capture does not compile.
@@ -219,6 +256,7 @@ fn codes_report(prompt: &str, fprompt: &str, typed: bool, who: Who) -> CompileRe
         .is_ok()
         .then(|| presets::same_as_the_game(&stored_prompt, &stored_fprompt, who))
         .flatten();
+    let notes = legend_notes(&stored_prompt, &stored_fprompt, &warnings, &codes, &vars);
     CompileReport {
         ok: error.is_none(),
         error,
@@ -239,8 +277,206 @@ fn codes_report(prompt: &str, fprompt: &str, typed: bool, who: Who) -> CompileRe
         presets: presets::aabahran(game),
         names: BTreeMap::new(),
         numbers: Vec::new(),
+        legend: notes.legend,
+        shows: notes.shows,
+        fix_note: notes.fix_note,
+        fixes: notes.fixes,
     }
 }
+
+/// The legend and the sentences the card shows for two settings.
+struct Notes {
+    legend: Vec<LegendRow>,
+    shows: Option<String>,
+    fix_note: Option<String>,
+    fixes: Vec<String>,
+}
+
+fn legend_notes(
+    prompt: &str,
+    fprompt: &str,
+    warnings: &[aabahran::Warning],
+    codes: &[ReportCode],
+    vars: &[String],
+) -> Notes {
+    let mut legend: Vec<LegendRow> = Vec::new();
+    let mut fixes = Vec::new();
+    // The labels of codes that run together, each once.
+    let mut unread: Vec<String> = Vec::new();
+    for (which, setting) in [(Which::Prompt, prompt), (Which::Fight, fprompt)] {
+        if setting.is_empty() {
+            continue;
+        }
+        let own: Vec<&aabahran::Warning> = warnings.iter().filter(|w| w.which == which).collect();
+        let (rows, boundaries) = setting_legend(setting, which, &own);
+        for row in rows
+            .iter()
+            .filter(|r| r.tag.as_deref() == Some(RUN_TOGETHER))
+        {
+            for code in codes
+                .iter()
+                .filter(|c| c.which == which && within(c.span, row.span))
+            {
+                let read = code
+                    .field
+                    .as_deref()
+                    .is_some_and(|f| vars.iter().any(|v| v == f));
+                if !read && !unread.contains(&code.label) {
+                    unread.push(code.label.clone());
+                }
+            }
+        }
+        if !boundaries.is_empty() {
+            let mut fixed = setting.to_string();
+            for at in boundaries.iter().rev() {
+                fixed.insert(*at, ' ');
+            }
+            let command = match which {
+                Which::Prompt => "prompt",
+                Which::Fight => "fprompt",
+            };
+            fixes.push(format!("{command} {}", fixed.trim_end_matches(' ')));
+        }
+        for row in rows {
+            // A fight prompt's row the prompt already lists adds nothing.
+            let listed = row.which == Which::Fight
+                && row.warning.is_none()
+                && legend
+                    .iter()
+                    .any(|r| r.code == row.code && r.label == row.label);
+            if !listed {
+                legend.push(row);
+            }
+        }
+    }
+    let names: Vec<&str> = vars.iter().map(String::as_str).collect();
+    let run_together = !fixes.is_empty();
+    Notes {
+        shows: (!run_together)
+            .then(|| aabahran::shows_sentence(&names))
+            .flatten(),
+        fix_note: run_together.then(|| aabahran::fix_sentence(&names, &unread)),
+        legend,
+        fixes,
+    }
+}
+
+const RUN_TOGETHER: &str = "run together";
+
+fn within(inner: [usize; 2], outer: [usize; 2]) -> bool {
+    outer[0] <= inner[0] && inner[1] <= outer[1]
+}
+
+/// The legend rows of one setting, and where a space would part each run
+/// of codes that run together, in bytes of the setting.
+fn setting_legend(
+    setting: &str,
+    which: Which,
+    warnings: &[&aabahran::Warning],
+) -> (Vec<LegendRow>, Vec<usize>) {
+    let row = |code: String, label: String, span: [usize; 2], fight: bool| LegendRow {
+        code,
+        label,
+        which,
+        span,
+        fight,
+        tag: None,
+        warn: false,
+        warning: None,
+    };
+    let mut rows: Vec<LegendRow> = Vec::new();
+    for lexed in lex::pass_one(setting, which).tokens {
+        let at = span(&lexed.span);
+        match lexed.token {
+            GameToken::Code(code) => {
+                // The legend names the bar itself, as the game prints it.
+                let label = match code {
+                    aabahran::codes::Code::TankBar => "Tank health bar".to_string(),
+                    _ => code.label(),
+                };
+                rows.push(row(code.written(), label, at, code.is_tank()));
+            }
+            GameToken::Break => rows.push(row("%c".into(), "New line".into(), at, false)),
+            GameToken::TankBreak => rows.push(row("%C".into(), "New line".into(), at, true)),
+            GameToken::Lit(_) => {}
+        }
+    }
+    let mut boundaries = Vec::new();
+    let mut extra: Vec<LegendRow> = Vec::new();
+    for warning in warnings {
+        let at = span(&warning.span);
+        match warning.kind {
+            WarningKind::RunTogether => {
+                let inside: Vec<usize> = rows
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, r)| within(r.span, at))
+                    .map(|(i, _)| i)
+                    .collect();
+                let Some(&first) = inside.first() else {
+                    continue;
+                };
+                // The same pair can come from two shapes.
+                if rows[first].tag.as_deref() == Some(RUN_TOGETHER) {
+                    continue;
+                }
+                boundaries.extend(inside.iter().skip(1).map(|&i| rows[i].span[0]));
+                let labels: Vec<String> = inside.iter().map(|&i| rows[i].label.clone()).collect();
+                let fight = inside.iter().any(|&i| rows[i].fight);
+                let merged = LegendRow {
+                    code: setting.get(at[0]..at[1]).unwrap_or_default().to_string(),
+                    label: aabahran::and_list(&labels),
+                    span: at,
+                    fight,
+                    tag: Some(RUN_TOGETHER.into()),
+                    warn: true,
+                    ..row(String::new(), String::new(), at, false)
+                };
+                for &i in inside.iter().rev() {
+                    rows.remove(i);
+                }
+                rows.insert(first, merged);
+            }
+            WarningKind::Twice | WarningKind::PacifyMortal | WarningKind::LangMobile => {
+                let tag = match warning.kind {
+                    WarningKind::Twice => "second use",
+                    WarningKind::PacifyMortal => "immortal",
+                    _ => "while you control a mobile",
+                };
+                if let Some(found) = rows.iter_mut().find(|r| r.span == at) {
+                    found.tag = Some(tag.into());
+                    found.warn = true;
+                    found.warning = Some(warning.text.clone());
+                }
+            }
+            WarningKind::LonePercent => extra.push(LegendRow {
+                tag: Some("at the end".into()),
+                warn: true,
+                warning: Some(warning.text.clone()),
+                ..row("%".into(), "A lone %".into(), at, false)
+            }),
+            WarningKind::Short => {
+                if !extra.iter().any(|r| r.label == SHORT) {
+                    extra.push(LegendRow {
+                        warn: true,
+                        warning: Some(warning.text.clone()),
+                        ..row(setting.to_string(), SHORT.into(), at, false)
+                    });
+                }
+            }
+            WarningKind::Cut => extra.push(LegendRow {
+                warn: true,
+                warning: Some(warning.text.clone()),
+                ..row(String::new(), "The first 255 characters".into(), at, false)
+            }),
+        }
+    }
+    rows.extend(extra);
+    rows.sort_by_key(|r| r.span[0]);
+    (rows, boundaries)
+}
+
+const SHORT: &str = "A prompt with no values";
 
 fn shape_kind(kind: ShapeKind) -> &'static str {
     match kind {
@@ -311,6 +547,10 @@ fn regex_report(
         presets: presets::other(supplied),
         names: names.clone(),
         numbers: Vec::new(),
+        legend: Vec::new(),
+        shows: None,
+        fix_note: None,
+        fixes: Vec::new(),
     };
     let pattern = match one_pattern(lines) {
         Ok(pattern) => pattern,
@@ -342,6 +582,10 @@ fn regex_report(
         presets: presets::other(&reads),
         names: names.clone(),
         numbers: Vec::new(),
+        legend: Vec::new(),
+        shows: None,
+        fix_note: None,
+        fixes: Vec::new(),
     }
 }
 
