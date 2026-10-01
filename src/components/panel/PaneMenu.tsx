@@ -149,35 +149,20 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
     colors: {
       label: 'Channel colors',
       items: () => (
-        <>
-          {CHAT_CHANNELS.map((channel) => (
-            <MenuItem
-              key={channel}
-              itemRef={(el) => {
-                chanRefs.current[channel] = el;
-              }}
-              submenu={{
-                open: chanOpen?.which === channel,
-                controls: chanId(channel),
-                onOpen: (focus) => setChanOpen((prev) => openPaneSubmenu(prev, channel, focus)),
-              }}
-              onFocus={() => setChanOpen((prev) => (prev && prev.which !== channel ? null : prev))}
-              trailing={<ChevronRightIcon className="pane-menu-chevron" />}
-            >
-              <Swatch color={chatChannelColor(channel, palette, chatColors)} />
-              {channel}
-            </MenuItem>
-          ))}
-          <MenuSeparator />
-          <MenuItem
-            disabled={chatColors.size === 0}
-            onHover={() => setChanOpen(null)}
-            onFocus={() => setChanOpen(null)}
-            onSelect={run(() => void resetChatColors().catch(() => undefined))}
-          >
-            Reset all
-          </MenuItem>
-        </>
+        <ChannelColorRows
+          colors={chatColors}
+          palette={palette}
+          open={chanOpen?.which ?? null}
+          listId={chanId}
+          rowRef={(channel, el) => {
+            chanRefs.current[channel] = el;
+          }}
+          onOpen={(channel, focus) => setChanOpen((prev) => openPaneSubmenu(prev, channel, focus))}
+          onLeave={(channel) =>
+            setChanOpen((prev) => (prev && prev.which !== channel ? null : prev))
+          }
+          done={() => close('select')}
+        />
       ),
     },
   };
@@ -234,7 +219,7 @@ export function PaneMenu({ leaf, anchor, onClose }: Props) {
           channel={channel}
           colors={chatColors}
           palette={palette}
-          onPick={(color) => run(() => void setChatColor(channel, color).catch(() => undefined))()}
+          done={() => close('select')}
         />
       </MenuSurface>
     );
@@ -342,24 +327,89 @@ function Swatch({ color }: { color: string }) {
   return <span className="pane-menu-swatch" style={{ background: color }} aria-hidden="true" />;
 }
 
+/** The rows of Channel colors: each channel the pane knows, with a dot
+ *  in the color it shows now, each opening its color list, then Reset
+ *  all, which waits until you recolor a channel. */
+export function ChannelColorRows({
+  colors,
+  palette,
+  open,
+  listId,
+  rowRef,
+  onOpen,
+  onLeave,
+  done,
+}: {
+  colors: ChatColors;
+  palette: XtermPalette;
+  /** The channel whose color list shows, or null. */
+  open: string | null;
+  /** The id of a channel's color list. */
+  listId: (channel: string) => string;
+  rowRef: (channel: string, el: HTMLButtonElement | null) => void;
+  onOpen: (channel: string, focus: boolean) => void;
+  /** The pointer or the caret reached `channel`'s row, or Reset all for
+   *  null. Any other channel's list closes. */
+  onLeave: (channel: string | null) => void;
+  /** Closes the menu after Reset all. */
+  done: () => void;
+}) {
+  return (
+    <>
+      {CHAT_CHANNELS.map((channel) => (
+        <MenuItem
+          key={channel}
+          itemRef={(el) => rowRef(channel, el)}
+          submenu={{
+            open: open === channel,
+            controls: listId(channel),
+            onOpen: (focus) => onOpen(channel, focus),
+          }}
+          onFocus={() => onLeave(channel)}
+          trailing={<ChevronRightIcon className="pane-menu-chevron" />}
+        >
+          <Swatch color={chatChannelColor(channel, palette, colors)} />
+          {channel}
+        </MenuItem>
+      ))}
+      <MenuSeparator />
+      <MenuItem
+        disabled={colors.size === 0}
+        onHover={() => onLeave(null)}
+        onFocus={() => onLeave(null)}
+        onSelect={() => {
+          done();
+          void resetChatColors().catch(() => undefined);
+        }}
+      >
+        Reset all
+      </MenuItem>
+    </>
+  );
+}
+
 /** Default, set apart, then the theme's 16 ANSI colors, each with its
- *  swatch and a check on what the channel shows now. */
-function ChannelColorItems({
+ *  swatch and a check on what the channel shows now. A pick saves that
+ *  channel's color alone for the profile and closes the menu. */
+export function ChannelColorItems({
   channel,
   colors,
   palette,
-  onPick,
+  done,
 }: {
   channel: string;
   colors: ChatColors;
   palette: XtermPalette;
-  onPick: (color: string | null) => void;
+  done: () => void;
 }) {
   const [fallback, ...slots] = chatColorChoices(channel, colors, palette);
   const item = (choice: ChatColorChoice) => (
     <MenuItem
       key={choice.value ?? 'default'}
-      onSelect={() => onPick(choice.value)}
+      onSelect={() => {
+        done();
+        void setChatColor(channel, choice.value).catch(() => undefined);
+      }}
       trailing={choice.checked ? <CheckIcon className="pane-menu-check" /> : null}
     >
       <Swatch color={choice.swatch} />
