@@ -416,9 +416,24 @@ describe('the help on prompt design codes', () => {
     [['%hp_bar:10:auto'], 'A bar ten cells wide, colored by how full it is.'],
     [['%{gold:grouped}'], 'Any value from the picker, in any of its forms.'],
     [['%c_green', '%c_hp'], "A theme color, or Health's color by how full it is."],
+    [
+      ['%{c:#80c8ff}', '%{c:128,200,255}'],
+      'Any color you choose, as hex or as red, green and blue.',
+    ],
+    [['%bg_blue', '%{bg:#3b4252}'], 'The ground behind the text, in any form a text color takes.'],
     [['%c_default'], 'Back to the terminal text color. Bold and italic stay on.'],
     [['%c_reset'], 'Back to plain text with every color and style off.'],
     [['%s_italic', '%s_bold', '%s_underline', '%s_off'], 'Turns a style on, or every style off.'],
+    [
+      ['%s_strike', '%s_dim', '%s_inverse'],
+      'Strikes the text through, dims it, or swaps its color and ground.',
+    ],
+    [
+      ['%s_double', '%s_curly', '%s_dotted', '%s_dashed'],
+      'Underlines with two lines, a wave, dots or dashes.',
+    ],
+    [['%{ul:#bf616a}', '%ul_default'], 'Colors the underline, or gives it the text color again.'],
+
     [['%nl'], 'Starts a new line.'],
     [
       ['%{if:fight}', '%{ifnot:fight}', '%{end}'],

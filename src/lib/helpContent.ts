@@ -50,12 +50,33 @@ export const PROMPT_DESIGN_CODES: readonly PromptDesignCode[] = [
   { codes: ['%hp_bar:10:auto'], text: 'A bar ten cells wide, colored by how full it is.' },
   { codes: ['%{gold:grouped}'], text: 'Any value from the picker, in any of its forms.' },
   { codes: ['%c_green', '%c_hp'], text: "A theme color, or Health's color by how full it is." },
+  {
+    codes: ['%{c:#80c8ff}', '%{c:128,200,255}'],
+    text: 'Any color you choose, as hex or as red, green and blue.',
+  },
+  {
+    codes: ['%bg_blue', '%{bg:#3b4252}'],
+    text: 'The ground behind the text, in any form a text color takes.',
+  },
   { codes: ['%c_default'], text: 'Back to the terminal text color. Bold and italic stay on.' },
   { codes: ['%c_reset'], text: 'Back to plain text with every color and style off.' },
   {
     codes: ['%s_italic', '%s_bold', '%s_underline', '%s_off'],
     text: 'Turns a style on, or every style off.',
   },
+  {
+    codes: ['%s_strike', '%s_dim', '%s_inverse'],
+    text: 'Strikes the text through, dims it, or swaps its color and ground.',
+  },
+  {
+    codes: ['%s_double', '%s_curly', '%s_dotted', '%s_dashed'],
+    text: 'Underlines with two lines, a wave, dots or dashes.',
+  },
+  {
+    codes: ['%{ul:#bf616a}', '%ul_default'],
+    text: 'Colors the underline, or gives it the text color again.',
+  },
+
   { codes: ['%nl'], text: 'Starts a new line.' },
   {
     codes: ['%{if:fight}', '%{ifnot:fight}', '%{end}'],

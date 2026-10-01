@@ -765,20 +765,25 @@ Bind your own keys as macros in Settings under `macros`. Canonical names look li
 
 Your own prompt is a design of text and codes. Customize prompt writes the codes for you as you click the parts of your prompt and pick values. Choose `Edit as text` there to read them or type your own.
 
-| Code                                          | What it does                                                      |
-| --------------------------------------------- | ----------------------------------------------------------------- |
-| `%hp` `%mana` `%move`                         | Your current Health, Mana or Moves.                               |
-| `%maxhp` `%maxmana` `%maxmove`                | The most you can have.                                            |
-| `%pct_hp`                                     | Health as a percent with no sign. Add %% for the sign.            |
-| `%hp_bar:10:auto`                             | A bar ten cells wide, colored by how full it is.                  |
-| `%{gold:grouped}`                             | Any value from the picker, in any of its forms.                   |
-| `%c_green` `%c_hp`                            | A theme color, or Health's color by how full it is.               |
-| `%c_default`                                  | Back to the terminal text color. Bold and italic stay on.         |
-| `%c_reset`                                    | Back to plain text with every color and style off.                |
-| `%s_italic` `%s_bold` `%s_underline` `%s_off` | Turns a style on, or every style off.                             |
-| `%nl`                                         | Starts a new line.                                                |
-| `%{if:fight}` `%{ifnot:fight}` `%{end}`       | Shows what sits between them only in a fight, or only out of one. |
-| `%{raw}`                                      | Your prompt exactly as the game sent it.                          |
-| `%%`                                          | A percent sign.                                                   |
+| Code                                           | What it does                                                      |
+| ---------------------------------------------- | ----------------------------------------------------------------- |
+| `%hp` `%mana` `%move`                          | Your current Health, Mana or Moves.                               |
+| `%maxhp` `%maxmana` `%maxmove`                 | The most you can have.                                            |
+| `%pct_hp`                                      | Health as a percent with no sign. Add %% for the sign.            |
+| `%hp_bar:10:auto`                              | A bar ten cells wide, colored by how full it is.                  |
+| `%{gold:grouped}`                              | Any value from the picker, in any of its forms.                   |
+| `%c_green` `%c_hp`                             | A theme color, or Health's color by how full it is.               |
+| `%{c:#80c8ff}` `%{c:128,200,255}`              | Any color you choose, as hex or as red, green and blue.           |
+| `%bg_blue` `%{bg:#3b4252}`                     | The ground behind the text, in any form a text color takes.       |
+| `%c_default`                                   | Back to the terminal text color. Bold and italic stay on.         |
+| `%c_reset`                                     | Back to plain text with every color and style off.                |
+| `%s_italic` `%s_bold` `%s_underline` `%s_off`  | Turns a style on, or every style off.                             |
+| `%s_strike` `%s_dim` `%s_inverse`              | Strikes the text through, dims it, or swaps its color and ground. |
+| `%s_double` `%s_curly` `%s_dotted` `%s_dashed` | Underlines with two lines, a wave, dots or dashes.                |
+| `%{ul:#bf616a}` `%ul_default`                  | Colors the underline, or gives it the text color again.           |
+| `%nl`                                          | Starts a new line.                                                |
+| `%{if:fight}` `%{ifnot:fight}` `%{end}`        | Shows what sits between them only in a fight, or only out of one. |
+| `%{raw}`                                       | Your prompt exactly as the game sent it.                          |
+| `%%`                                           | A percent sign.                                                   |
 
 Every value in `Insert value…` has codes of its own, and the picker shows them beside each form. Your tick, the time and the date keep counting while your prompt sits idle. Vosh draws it again each second they change, and waits while you select text or read back. Pinned, the band keeps counting through both.

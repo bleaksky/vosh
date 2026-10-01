@@ -1411,6 +1411,53 @@ mod tests {
     }
 
     #[test]
+    fn every_code_the_help_lists_reads_as_a_code() {
+        let help = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../HELP.md"))
+            .expect("HELP.md at the repo root");
+        let topic = help
+            .find(" Prompt design codes\n")
+            .expect("the prompt design codes topic");
+        let rows: Vec<&str> = help[topic..]
+            .lines()
+            .skip_while(|l| !l.starts_with("| Code"))
+            .skip(2)
+            .take_while(|l| l.starts_with('|'))
+            .collect();
+        assert!(rows.len() >= 18, "{rows:?}");
+        for row in rows {
+            let cell = row.split('|').nth(1).expect("a code cell");
+            for code in cell.split('`').skip(1).step_by(2) {
+                let template = Template::parse(code);
+                let tokens = template.tokens();
+                assert!(
+                    tokens
+                        .iter()
+                        .all(|t| t.kind != TokenKind::Unknown
+                            && !matches!(t.kind, TokenKind::Text(_))),
+                    "{code} reads as {tokens:?}"
+                );
+                // A color or style code reads as one, never as a value
+                // by a name nothing has.
+                let painted = [
+                    "%c_", "%bg_", "%ul_", "%s_", "%{c:", "%{bg:", "%{ul:", "%{s:",
+                ];
+                if painted.iter().any(|p| code.starts_with(p)) {
+                    assert!(
+                        matches!(
+                            tokens,
+                            [Token {
+                                kind: TokenKind::Code(_),
+                                ..
+                            }]
+                        ),
+                        "{code} reads as {tokens:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn reads_the_field_an_underline_color_follows() {
         let template = Template::parse("%ul_hp%s_curly%{ul:mana:game}x");
         let names: Vec<String> = template.reads().iter().map(ToString::to_string).collect();
